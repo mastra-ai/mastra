@@ -432,6 +432,84 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
           expect(result.spans).toHaveLength(0);
           expect(result.pagination.total).toBe(0);
         });
+
+        it('should filter by entity id and entity type', async () => {
+          // First, create some test spans with entity-specific names
+          const entitySpans = [
+            createRootSpan({
+              name: "workflow run: 'my-workflow-123'",
+              scope: 'test-scope',
+              spanType: AISpanType.WORKFLOW_RUN,
+              startedAt: new Date('2024-01-05T00:00:00Z'),
+            }),
+            createRootSpan({
+              name: "agent run: 'my-agent-456'",
+              scope: 'test-scope',
+              spanType: AISpanType.AGENT_RUN,
+              startedAt: new Date('2024-01-06T00:00:00Z'),
+            }),
+            createRootSpan({
+              name: "workflow run: 'another-workflow-789'",
+              scope: 'test-scope',
+              spanType: AISpanType.WORKFLOW_RUN,
+              startedAt: new Date('2024-01-07T00:00:00Z'),
+            }),
+          ];
+
+          await storage.batchCreateAISpans({ records: entitySpans });
+
+          // Test filtering by workflow entity
+          const workflowResult = await storage.getAITracesPaginated({
+            filters: {
+              entityId: 'my-workflow-123',
+              entityType: 'workflow',
+            },
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(workflowResult.spans.length).toBeGreaterThan(0);
+          const foundWorkflowSpan = workflowResult.spans.find(span => span.name === "workflow run: 'my-workflow-123'");
+          expect(foundWorkflowSpan).toBeDefined();
+          expect(foundWorkflowSpan?.spanType).toBe(AISpanType.WORKFLOW_RUN);
+
+          // Test filtering by agent entity
+          const agentResult = await storage.getAITracesPaginated({
+            filters: {
+              entityId: 'my-agent-456',
+              entityType: 'agent',
+            },
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(agentResult.spans.length).toBeGreaterThan(0);
+          const foundAgentSpan = agentResult.spans.find(span => span.name === "agent run: 'my-agent-456'");
+          expect(foundAgentSpan).toBeDefined();
+          expect(foundAgentSpan?.spanType).toBe(AISpanType.AGENT_RUN);
+
+          // Test filtering by non-existent entity
+          const emptyResult = await storage.getAITracesPaginated({
+            filters: {
+              entityId: 'non-existent-entity',
+              entityType: 'workflow',
+            },
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(emptyResult.spans).toHaveLength(0);
+          expect(emptyResult.pagination.total).toBe(0);
+        });
+
+        it('should throw error for unsupported entity type', async () => {
+          await expect(
+            storage.getAITracesPaginated({
+              filters: {
+                entityId: 'some-id',
+                entityType: 'unsupported-type' as any,
+              },
+              pagination: { page: 0, perPage: 10 },
+            }),
+          ).rejects.toThrow('Cannot filter by entity type: unsupported-type');
+        });
       });
 
       describe('date range filtering', () => {
