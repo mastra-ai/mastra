@@ -98,7 +98,7 @@ export async function rootHandler(c: Context) {
         <main>
           <h1>Welcome to the Mastra API</h1>
           <p class="subtitle">
-            Discover all available endpoints through Swagger UI. You can also define your own <a href="https://mastra.ai/en/docs/server-db/custom-api-routes" target="_blank" class="link">API routes</a>.
+            Discover all available endpoints through Swagger UI. You can also define your own <a href="https://mastra.ai/docs/server-db/custom-api-routes" target="_blank" class="link">API routes</a>.
           </p>
           <a href="${baseUrl}/swagger-ui" target="_blank" class="docs-link">
             Browse Swagger UI
