@@ -35,6 +35,8 @@ export function createAgenticLoopWorkflow<
 
   // Track accumulated steps across iterations to pass to stopWhen
   const accumulatedSteps: StepResult<Tools>[] = [];
+  // Track previous content to determine what's new in each step
+  let previousContentLength = 0;
 
   const agenticExecutionWorkflow = createAgenticExecutionWorkflow<Tools, OUTPUT>({
     messageId: messageId!,
@@ -60,9 +62,13 @@ export function createAgenticLoopWorkflow<
       const typedInputData = inputData as LLMIterationData<Tools>;
       let hasFinishedSteps = false;
 
-      const currentContent: StepResult<Tools>['content'] = typedInputData.messages.nonUser.flatMap(
+      const allContent: StepResult<Tools>['content'] = typedInputData.messages.nonUser.flatMap(
         message => message.content as unknown as StepResult<Tools>['content'],
       );
+
+      // Only include new content in this step (content added since the previous iteration)
+      const currentContent = allContent.slice(previousContentLength);
+      previousContentLength = allContent.length;
 
       const currentStep: StepResult<Tools> = {
         content: currentContent,

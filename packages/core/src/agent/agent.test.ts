@@ -7867,6 +7867,62 @@ describe('Agent Tests', () => {
         expect(call.stepCount).toBe(index + 1);
       });
     }, 10000);
+
+    it('should contain the correct content in the step results for both stopWhen and stream.steps', async () => {
+      const stopWhenContent: any[] = [];
+      const stream = await agent.streamVNext('What should i be doing in Toronto today?', {
+        stopWhen: ({ steps }) => {
+          stopWhenContent.push(steps.at(-1)?.content);
+          return false;
+        },
+      });
+
+      await stream.consumeStream();
+
+      const steps = await stream.steps;
+
+      expect(stopWhenContent[0].length).toBe(2);
+      expect(stopWhenContent[1].length).toBe(2);
+
+      expect(steps[0].content.length).toBe(2);
+      expect(steps[1].content.length).toBe(2);
+      expect(steps[2].content.length).toBe(1);
+
+      expect(stopWhenContent[1]).not.toEqual(stopWhenContent[0]);
+    }, 10000);
+
+    it('should contain the correct content in the step results for both stopWhen and stream.steps with text and tool calls in the same step', async () => {
+      const agent = new Agent({
+        name: 'test-step-boundaries',
+        instructions:
+          'You are a helpful assistant. Figure out the weather and then using that weather plan some activities. Always use the weather tool first, and then the plan activities tool with the result of the weather tool. Every tool call you make IMMEDIATELY explain the tool results after executing the tool, before moving on to other steps or tool calls',
+        model: openai_v5('gpt-4o-mini'),
+        tools: {
+          weatherTool,
+          planActivities,
+        },
+      });
+
+      const stopWhenContent: any[] = [];
+      const stream = await agent.streamVNext('What should i be doing in Toronto today?', {
+        stopWhen: ({ steps }) => {
+          stopWhenContent.push(steps.at(-1)?.content);
+          return false;
+        },
+      });
+
+      await stream.consumeStream();
+      const steps = await stream.steps;
+
+      expect(stopWhenContent[0].length).toBe(2);
+      expect(stopWhenContent[1].length).toBe(3); // text explaining the previous tool-call-results, tool-call, tool-result
+
+      expect(steps[0].content.length).toBe(2);
+      expect(steps[1].content.length).toBe(3); // text explaining the previous tool-call-results, tool-call, tool-result
+      expect(steps[2].content.length).toBe(1);
+
+      expect(stopWhenContent[1]).not.toEqual(stopWhenContent[0]);
+    }, 10000);
   });
 });
 

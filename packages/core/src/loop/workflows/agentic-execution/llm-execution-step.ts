@@ -654,7 +654,7 @@ export function createLLMExecutionStep<
       // Only include content from this iteration, not all accumulated content
       // Get the number of existing response messages to know where this iteration starts
       const existingResponseCount = inputData.messages?.nonUser?.length || 0;
-      const allResponseContent = messageList.get.response.aiV5.modelContent();
+      const allResponseContent = messageList.get.response.aiV5.modelContent(steps.length);
 
       // Extract only the content added in this iteration
       const currentIterationContent = allResponseContent.slice(existingResponseCount);

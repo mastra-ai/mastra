@@ -54,7 +54,8 @@ export function createAgenticExecutionWorkflow<
             typedInputData.output.toolCalls?.map(toolCall => {
               return {
                 toolCallId: toolCall.toolCallId,
-                args: toolCall.input,
+                // @ts-ignore TODO: look into the type here
+                args: toolCall.args,
                 toolName: toolCall.toolName,
               };
             }),
