@@ -82,7 +82,6 @@
   },
   "changesets": [
     "@mastra_libsql-7742-dependencies",
-    "@mastra_mem0-7752-dependencies",
     "@mastra_rag-7753-dependencies",
     "curly-years-scream",
     "curvy-cycles-train",
