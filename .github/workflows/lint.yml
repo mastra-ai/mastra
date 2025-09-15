@@ -229,4 +229,4 @@ jobs:
           registry-url: 'https://registry.yarnpkg.com'
 
       - name: Run package.json validator
-        run: node .github/scripts/validate-pkg-json.js
+        run: node .github/scripts/validate-pkg-json.mjs
