@@ -130,7 +130,6 @@ export class InngestRun<
       await new Promise(resolve => setTimeout(resolve, 1000));
       runs = await this.getRuns(eventId);
       if (runs?.[0]?.status === 'Failed') {
-        console.log('run', runs?.[0]);
         throw new Error(`Function run ${runs?.[0]?.status}`);
       } else if (runs?.[0]?.status === 'Cancelled') {
         const snapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
@@ -166,6 +165,7 @@ export class InngestRun<
       await this.#mastra?.storage?.persistWorkflowSnapshot({
         workflowName: this.workflowId,
         runId: this.runId,
+        resourceId: this.resourceId,
         snapshot: {
           ...snapshot,
           status: 'canceled' as any,
@@ -183,6 +183,7 @@ export class InngestRun<
     await this.#mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
+      resourceId: this.resourceId,
       snapshot: {
         runId: this.runId,
         serializedStepGraph: this.serializedStepGraph,
@@ -201,6 +202,7 @@ export class InngestRun<
       data: {
         inputData,
         runId: this.runId,
+        resourceId: this.resourceId,
       },
     });
 
@@ -500,6 +502,7 @@ export class InngestWorkflow<
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
+        resourceId: options?.resourceId,
         snapshot: {
           runId: runIdToUse,
           status: 'pending',
@@ -535,7 +538,7 @@ export class InngestWorkflow<
       },
       { event: `workflow.${this.id}` },
       async ({ event, step, attempt, publish }) => {
-        let { inputData, runId, resume } = event.data;
+        let { inputData, runId, resourceId, resume } = event.data;
 
         if (!runId) {
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
@@ -574,6 +577,7 @@ export class InngestWorkflow<
         const result = await engine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
           workflowId: this.id,
           runId,
+          resourceId,
           graph: this.executionGraph,
           serializedStepGraph: this.serializedStepGraph,
           input: inputData,
@@ -698,8 +702,6 @@ export function createStep<
       // @ts-ignore
       inputSchema: z.object({
         prompt: z.string(),
-        // resourceId: z.string().optional(),
-        // threadId: z.string().optional(),
       }),
       // @ts-ignore
       outputSchema: z.object({
@@ -722,8 +724,6 @@ export function createStep<
         };
 
         const { fullStream } = await params.stream(inputData.prompt, {
-          // resourceId: inputData.resourceId,
-          // threadId: inputData.threadId,
           runtimeContext,
           tracingContext,
           onFinish: result => {
@@ -1690,6 +1690,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     workflowId,
     runId,
     stepResults,
+    resourceId,
     executionContext,
     serializedStepGraph,
     workflowStatus,
@@ -1700,6 +1701,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     runId: string;
     stepResults: Record<string, StepResult<any, any, any, any>>;
     serializedStepGraph: SerializedStepFlowEntry[];
+    resourceId?: string;
     executionContext: ExecutionContext;
     workflowStatus: 'success' | 'failed' | 'suspended' | 'running';
     result?: Record<string, any>;
@@ -1712,6 +1714,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         await this.mastra?.getStorage()?.persistWorkflowSnapshot({
           workflowName: workflowId,
           runId,
+          resourceId,
           snapshot: {
             runId,
             value: {},
