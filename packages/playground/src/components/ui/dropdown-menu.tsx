@@ -23,14 +23,7 @@ const DropdownMenuTrigger = React.forwardRef<
     inset?: boolean;
   }
 >(({ className, inset, children, ...props }, ref) => (
-  <DropdownMenuPrimitive.Trigger
-    ref={ref}
-    className={cn(
-      'focus-visible:ring-ring focus:outline-none focus-visible:rounded focus-visible:outline-none focus-visible:ring-1',
-      className,
-    )}
-    {...props}
-  >
+  <DropdownMenuPrimitive.Trigger ref={ref} className={cn(className)} {...props}>
     {children}
   </DropdownMenuPrimitive.Trigger>
 ));
@@ -45,7 +38,7 @@ const DropdownMenuSubTrigger = React.forwardRef<
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
-      'focus:bg-accent data-[state=open]:bg-accent flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none',
+      'focus:bg-accent data-[state=open]:bg-accent flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm',
       inset && 'pl-8',
       className,
     )}
@@ -104,7 +97,7 @@ const DropdownMenuItem = React.forwardRef<
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
-      'focus:text-accent-foreground relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-[0.8125rem] outline-none transition-colors focus:bg-[#66686A]/20 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>span]:truncate',
+      'focus:text-accent-foreground relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-[0.8125rem] transition-colors focus:bg-[#66686A]/20 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>span]:truncate',
       inset && 'pl-8',
       className,
     )}
@@ -120,7 +113,7 @@ const DropdownMenuCheckboxItem = React.forwardRef<
   <DropdownMenuPrimitive.CheckboxItem
     ref={ref}
     className={cn(
-      'focus:bg-accent focus:text-accent-foreground relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'focus:bg-accent focus:text-accent-foreground relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       className,
     )}
     checked={checked}
@@ -143,7 +136,7 @@ const DropdownMenuRadioItem = React.forwardRef<
   <DropdownMenuPrimitive.RadioItem
     ref={ref}
     className={cn(
-      'focus:bg-accent focus:text-accent-foreground relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'focus:bg-accent focus:text-accent-foreground relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       className,
     )}
     {...props}
@@ -244,7 +237,7 @@ function VirtualizedDropdownItems<T>({ itemsCount, items, renderItem, ...props }
         {dropdownVirtualizer?.getVirtualItems().map((item, idx) => (
           <button
             key={item.index}
-            className="text-accent-foreground absolute left-0 top-0 flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-[0.8125rem] outline-none transition-colors hover:bg-[#66686A]/20 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>span]:truncate"
+            className="text-accent-foreground absolute left-0 top-0 flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-[0.8125rem] transition-colors hover:bg-[#66686A]/20 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>span]:truncate"
             style={{
               height: `${item.size}px`,
               transform: `translateY(${item.start}px)`,

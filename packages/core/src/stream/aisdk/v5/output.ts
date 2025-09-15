@@ -57,7 +57,6 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   }
 
   toUIMessageStreamResponse<UI_MESSAGE extends UIMessage>({
-    // @ts-ignore
     generateMessageId,
     originalMessages,
     sendFinish,
@@ -71,7 +70,6 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   }: UIMessageStreamOptions<UI_MESSAGE> & ResponseInit = {}) {
     return createUIMessageStreamResponse({
       stream: this.toUIMessageStream({
-        // @ts-ignore
         generateMessageId,
         originalMessages,
         sendFinish,
@@ -87,7 +85,6 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   }
 
   toUIMessageStream<UI_MESSAGE extends UIMessage>({
-    // @ts-ignore
     generateMessageId,
     originalMessages,
     sendFinish = true,
@@ -98,7 +95,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
     messageMetadata,
     onFinish,
   }: UIMessageStreamOptions<UI_MESSAGE> = {}) {
-    const responseMessageId =
+    let responseMessageId =
       generateMessageId != null
         ? getResponseUIMessageId({
             originalMessages,
@@ -116,7 +113,9 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
 
           const partType = part.type;
 
-          const transformedChunk = convertFullStreamChunkToUIMessageStream({
+          responseMessageId = this.#modelOutput.messageId;
+
+          const transformedChunk = convertFullStreamChunkToUIMessageStream<UI_MESSAGE>({
             part: part as TextStreamPart<ToolSet>,
             sendReasoning,
             messageMetadataValue,

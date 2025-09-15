@@ -57,7 +57,6 @@ import { tools } from '#tools';
 import { mastra } from '#mastra';
 import { MultiLogger } from '@mastra/core/logger';
 import { PinoLogger } from '@mastra/loggers';
-import { UpstashTransport } from '@mastra/loggers/upstash';
 import { HttpTransport } from '@mastra/loggers/http';
 import { evaluate } from '@mastra/core/eval';
 import { AvailableHooks, registerHook } from '@mastra/core/hooks';

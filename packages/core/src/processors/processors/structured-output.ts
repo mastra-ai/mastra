@@ -2,6 +2,7 @@ import type z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import type { StructuredOutputOptions } from '../../agent/types';
+import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { Processor } from '../index';
 
 export type { StructuredOutputOptions } from '../../agent/types';
@@ -26,16 +27,22 @@ export class StructuredOutputProcessor<S extends z.ZodTypeAny> implements Proces
   private errorStrategy: 'strict' | 'warn' | 'fallback';
   private fallbackValue?: z.infer<S>;
 
-  constructor(options: StructuredOutputOptions<S>) {
+  constructor(options: StructuredOutputOptions<S>, fallbackModel?: MastraLanguageModel) {
     this.schema = options.schema;
     this.errorStrategy = options.errorStrategy ?? 'strict';
     this.fallbackValue = options.fallbackValue;
+
+    // Use provided model or fallback model
+    const modelToUse = options.model || fallbackModel;
+    if (!modelToUse) {
+      throw new Error('StructuredOutputProcessor requires a model to be provided either in options or as fallback');
+    }
 
     // Create internal structuring agent
     this.structuringAgent = new Agent({
       name: 'structured-output-structurer',
       instructions: options.instructions || this.generateInstructions(),
-      model: options.model,
+      model: modelToUse,
     });
   }
 

@@ -530,7 +530,7 @@ describe('convertToV1Messages', () => {
         id: testMessage.id,
         role: 'assistant',
         type: 'text',
-        content: 'Multiple tools test',
+        content: 'Let me gather some information for you.',
       }),
       expect.objectContaining({
         ...sharedFields,
@@ -1586,12 +1586,7 @@ describe('convertToV1Messages', () => {
           id: '17949558-8a2b-4841-990d-ce05d29a8afb__split-2',
           role: 'assistant',
           type: 'text',
-          content: expect.arrayContaining([
-            expect.objectContaining({
-              type: 'text',
-              text: expect.stringContaining('The current weather in Los Angeles'),
-            }),
-          ]),
+          content: expect.stringContaining('The current weather in Los Angeles'),
         }),
         // 5. User asks about tool history
         expect.objectContaining({
@@ -1877,5 +1872,248 @@ describe('convertToV1Messages', () => {
     expect(messagesByRole.user).toBe(2);
     expect(messagesByRole.assistant).toBeGreaterThanOrEqual(2);
     expect(messagesByRole.tool).toBe(1);
+  });
+});
+
+describe('convertToV1Messages - Content Duplication Bug (Issue #7271)', () => {
+  it('should NOT duplicate content across split messages when converting complex V2 messages', () => {
+    // This test reproduces the exact bug from issue #7271
+    // Where multiple split messages were created with identical content
+    // instead of properly distributing different parts
+
+    const complexMessage: MastraMessageV2 = {
+      id: 'msg-complex',
+      role: 'assistant',
+      createdAt: new Date('2024-01-01'),
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      content: {
+        format: 2,
+        content: 'Based on my investigation, I can now provide a comprehensive root cause analysis...',
+        parts: [
+          {
+            type: 'text',
+            text: 'Let me analyze the issue step by step.',
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'analysisTool',
+              args: { query: 'root cause' },
+              result: { finding: 'Memory leak detected' },
+            },
+          },
+          {
+            type: 'text',
+            text: 'After running the analysis tool, I found the following:',
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-2',
+              toolName: 'debugTool',
+              args: { target: 'memory' },
+              result: { usage: '95%' },
+            },
+          },
+          {
+            type: 'text',
+            text: 'Based on my investigation, I can now provide a comprehensive root cause analysis of the issue.',
+          },
+        ],
+      },
+    };
+
+    const result = convertToV1Messages([complexMessage]);
+
+    // Should create multiple split messages
+    expect(result.length).toBeGreaterThan(1);
+
+    // Collect all text content from the split messages
+    const textContents: string[] = [];
+
+    result.forEach(msg => {
+      if (msg.role === 'assistant' && msg.type === 'text') {
+        if (typeof msg.content === 'string') {
+          textContents.push(msg.content);
+        } else if (Array.isArray(msg.content)) {
+          msg.content.forEach(part => {
+            if (part.type === 'text') {
+              textContents.push(part.text);
+            }
+          });
+        }
+      }
+    });
+
+    // CRITICAL: Each text content should be DIFFERENT
+    // The bug was that all split messages had the same content
+    expect(textContents.length).toBeGreaterThan(1);
+
+    // Before the fix, this would fail because all text contents were identical
+    // After the fix, each should have unique content from different parts
+    expect(textContents[0]).toBe('Let me analyze the issue step by step.');
+    expect(textContents[1]).toBe('After running the analysis tool, I found the following:');
+    expect(textContents[2]).toBe(
+      'Based on my investigation, I can now provide a comprehensive root cause analysis of the issue.',
+    );
+
+    // Ensure no duplication - all text contents should be unique
+    const uniqueContents = new Set(textContents);
+    expect(uniqueContents.size).toBe(textContents.length);
+
+    // Verify the IDs follow the split pattern
+    const assistantMessages = result.filter(m => m.role === 'assistant');
+    const ids = assistantMessages.map(m => m.id);
+
+    // First message keeps original ID
+    expect(ids[0]).toBe('msg-complex');
+
+    // Subsequent messages should have __split-N suffix
+    for (let i = 1; i < assistantMessages.length; i++) {
+      expect(ids[i]).toMatch(/__split-\d+$/);
+    }
+  });
+
+  it('should handle large complex message with multiple tool invocations and text parts', () => {
+    // Simulating the 24,624 character message from the bug report
+    const largeMessage: MastraMessageV2 = {
+      id: 'large-msg',
+      role: 'assistant',
+      createdAt: new Date('2024-01-01'),
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      content: {
+        format: 2,
+        content: 'A'.repeat(4927), // The bug showed 4,927 chars being duplicated
+        parts: [
+          {
+            type: 'text',
+            text: 'Introduction: Starting the analysis...',
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-intro',
+              toolName: 'searchTool',
+              args: { query: 'initial scan' },
+              result: { status: 'complete' },
+            },
+          },
+          {
+            type: 'text',
+            text: 'Middle section: ' + 'B'.repeat(4900), // Different content
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-middle',
+              toolName: 'analyzeTool',
+              args: { depth: 'deep' },
+              result: { findings: ['issue1', 'issue2'] },
+            },
+          },
+          {
+            type: 'text',
+            text: 'Conclusion: ' + 'C'.repeat(4900), // Different content
+          },
+        ],
+      },
+    };
+
+    const result = convertToV1Messages([largeMessage]);
+
+    // Collect all text contents
+    const textMessages = result.filter(m => m.role === 'assistant' && m.type === 'text');
+
+    // Should have 3 text messages
+    expect(textMessages.length).toBe(3);
+
+    // Each should have DIFFERENT content
+    const contents = textMessages.map(m => {
+      if (typeof m.content === 'string') return m.content;
+      if (Array.isArray(m.content) && m.content[0]?.type === 'text') return m.content[0].text;
+      return '';
+    });
+
+    // Verify each text part is different
+    expect(contents[0]).toContain('Introduction');
+    expect(contents[1]).toContain('Middle section');
+    expect(contents[1]).toContain('B'.repeat(100)); // Should contain the B's
+    expect(contents[2]).toContain('Conclusion');
+    expect(contents[2]).toContain('C'.repeat(100)); // Should contain the C's
+
+    // Ensure NO text contains the original content field value
+    contents.forEach(content => {
+      expect(content).not.toBe('A'.repeat(4927));
+    });
+  });
+
+  it('should properly split messages even when content field is undefined', () => {
+    // From the bug report, content can be undefined in V2 messages
+    const messageWithUndefinedContent: MastraMessageV2 = {
+      id: 'undefined-content-msg',
+      role: 'assistant',
+      createdAt: new Date('2024-01-01'),
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      content: {
+        format: 2,
+        content: undefined, // This is valid in V2
+        parts: [
+          {
+            type: 'text',
+            text: 'First text part with specific content',
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-x',
+              toolName: 'someTool',
+              args: {},
+              result: { data: 'result' },
+            },
+          },
+          {
+            type: 'text',
+            text: 'Second text part with different content',
+          },
+        ],
+      },
+    };
+
+    const result = convertToV1Messages([messageWithUndefinedContent]);
+
+    // Collect text contents
+    const textContents: string[] = [];
+    result.forEach(msg => {
+      if (msg.role === 'assistant' && msg.type === 'text') {
+        if (typeof msg.content === 'string') {
+          textContents.push(msg.content);
+        } else if (Array.isArray(msg.content)) {
+          msg.content.forEach(part => {
+            if (part.type === 'text') {
+              textContents.push(part.text);
+            }
+          });
+        }
+      }
+    });
+
+    // Should have extracted the actual text from parts, not undefined
+    expect(textContents[0]).toBe('First text part with specific content');
+    expect(textContents[1]).toBe('Second text part with different content');
+
+    // Should not have any undefined or empty content
+    textContents.forEach(content => {
+      expect(content).toBeTruthy();
+      expect(content).not.toBe('undefined');
+    });
   });
 });

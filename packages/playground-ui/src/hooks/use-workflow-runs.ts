@@ -1,36 +1,11 @@
 import { useMastraClient } from '@/contexts/mastra-client-context';
-import { GetWorkflowRunsResponse } from '@mastra/client-js';
-import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
+import { useQuery } from '@tanstack/react-query';
 
-export const useWorkflowRuns = (workflowId: string) => {
-  const [runs, setRuns] = useState<GetWorkflowRunsResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
+export const useWorkflowRuns = (workflowId: string, { enabled = true }: { enabled?: boolean } = {}) => {
   const client = useMastraClient();
-
-  useEffect(() => {
-    const fetchWorkflow = async () => {
-      setIsLoading(true);
-      try {
-        if (!workflowId) {
-          setRuns(null);
-          setIsLoading(false);
-          return;
-        }
-        const res = await client.getWorkflow(workflowId).runs({ limit: 50 });
-        setRuns(res);
-      } catch (error) {
-        setRuns(null);
-        console.error('Error fetching workflow', error);
-        toast.error('Error fetching workflow');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchWorkflow();
-  }, [workflowId]);
-
-  return { runs, isLoading };
+  return useQuery({
+    queryKey: ['workflow-runs', workflowId],
+    queryFn: () => client.getWorkflow(workflowId).runs({ limit: 50 }),
+    enabled,
+  });
 };

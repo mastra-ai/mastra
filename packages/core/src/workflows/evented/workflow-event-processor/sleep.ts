@@ -75,7 +75,7 @@ export async function processWorkflowSleep(
     type: 'watch',
     runId,
     data: {
-      type: 'step-waiting',
+      type: 'workflow-step-waiting',
       payload: {
         id: step.id,
         status: 'waiting',
@@ -102,7 +102,7 @@ export async function processWorkflowSleep(
         type: 'watch',
         runId,
         data: {
-          type: 'step-result',
+          type: 'workflow-step-result',
           payload: {
             id: step.id,
             status: 'success',
@@ -118,7 +118,7 @@ export async function processWorkflowSleep(
         type: 'watch',
         runId,
         data: {
-          type: 'step-finish',
+          type: 'workflow-step-finish',
           payload: {
             id: step.id,
             metadata: {},
@@ -186,7 +186,7 @@ export async function processWorkflowSleepUntil(
     type: 'watch',
     runId,
     data: {
-      type: 'step-waiting',
+      type: 'workflow-step-waiting',
       payload: {
         id: step.id,
         status: 'waiting',
@@ -202,7 +202,7 @@ export async function processWorkflowSleepUntil(
         type: 'watch',
         runId,
         data: {
-          type: 'step-result',
+          type: 'workflow-step-result',
           payload: {
             id: step.id,
             status: 'success',
@@ -218,7 +218,7 @@ export async function processWorkflowSleepUntil(
         type: 'watch',
         runId,
         data: {
-          type: 'step-finish',
+          type: 'workflow-step-finish',
           payload: {
             id: step.id,
             metadata: {},

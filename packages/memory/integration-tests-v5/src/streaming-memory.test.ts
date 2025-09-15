@@ -36,7 +36,10 @@ const dom = new JSDOM('<!doctype html><html><body></body></html>', {
 // @ts-ignore - JSDOM types don't match exactly but this works for testing
 global.window = dom.window;
 global.document = dom.window.document;
-global.navigator = dom.window.navigator;
+Object.defineProperty(global, 'navigator', {
+  value: dom.window.navigator,
+  writable: false,
+});
 global.fetch = global.fetch || fetch;
 
 describe('Memory Streaming Tests', () => {
@@ -174,7 +177,7 @@ describe('Memory Streaming Tests', () => {
           console.error('Mastra server error:', data.toString());
         });
 
-        setTimeout(() => reject(new Error('Mastra server failed to start')), 10000);
+        setTimeout(() => reject(new Error('Mastra server failed to start')), 100000);
       });
     });
 

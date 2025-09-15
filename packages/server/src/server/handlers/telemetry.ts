@@ -87,8 +87,16 @@ export async function storeTelemetryHandler({ mastra, body }: Context & { body: 
       };
     }
 
+    const parentSpanIds = collectParentSpanIds(items);
     const allSpans: any[] = items.reduce((acc: any, scopedSpans: any) => {
       const { scope, spans } = scopedSpans;
+
+      // HTTP instrumentation spans are root spans but are not useful.
+      // Remove them entirely and promote their direct children to root spans.
+      if (scope.name === '@opentelemetry/instrumentation-http') {
+        return acc;
+      }
+
       for (const span of spans) {
         const {
           spanId,
@@ -110,7 +118,7 @@ export async function storeTelemetryHandler({ mastra, body }: Context & { body: 
 
         acc.push({
           id: spanId,
-          parentSpanId,
+          parentSpanId: parentSpanIds.has(parentSpanId) ? null : parentSpanId,
           traceId,
           name,
           scope: scope.name,
@@ -167,3 +175,18 @@ export async function storeTelemetryHandler({ mastra, body }: Context & { body: 
     };
   }
 }
+
+export const collectParentSpanIds = (items: any[]) => {
+  const result = new Set<string>();
+  for (const { scope, spans } of items) {
+    if (scope.name !== '@opentelemetry/instrumentation-http') {
+      continue;
+    }
+
+    for (const span of spans) {
+      result.add(span.spanId);
+    }
+  }
+
+  return result;
+};

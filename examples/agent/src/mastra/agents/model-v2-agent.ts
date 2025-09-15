@@ -43,5 +43,41 @@ export const chefModelV2Agent = new Agent({
   workflows: {
     myWorkflow,
   },
+  scorers: ({ mastra }) => {
+    if (!mastra) {
+      throw new Error('Mastra not found');
+    }
+    const scorer1 = mastra.getScorer('testScorer');
+
+    return {
+      scorer1: { scorer: scorer1, sampling: { rate: 1, type: 'ratio' } },
+    };
+  },
+  memory,
+});
+
+const weatherAgent = new Agent({
+  name: 'Weather Agent',
+  instructions: `You are a weather agent that can help you get weather information for a given city`,
+  description: `An agent that can help you get weather information for a given city`,
+  model: openai_v5('gpt-4o-mini'),
+  tools: { weatherInfo },
+  workflows: {
+    myWorkflow,
+  },
+});
+
+export const networkAgent = new Agent({
+  name: 'Chef Network',
+  description:
+    'A chef agent that can help you cook great meals with whatever ingredients you have available based on your location and current weather.',
+  instructions: `You are a the manager of several agent, tools, and workflows. Use the best primitives based on what the user wants to accomplish your task.`,
+  model: openai_v5('gpt-4o-mini'),
+  workflows: {
+    myWorkflow,
+  },
+  agents: {
+    weatherAgent,
+  },
   memory,
 });

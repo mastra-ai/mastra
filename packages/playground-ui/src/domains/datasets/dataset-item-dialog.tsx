@@ -98,6 +98,7 @@ export function DatasetItemDialog({
     <>
       <SideDialog
         dialogTitle="Dataset Item Details"
+        dialogDescription="Manage individual data items within your dataset. "
         isOpen={isOpen}
         onClose={onClose}
         hasCloseButton={!confirmationIsOpen}
@@ -236,6 +237,7 @@ export function DatasetItemDialog({
 
       <SideDialog
         dialogTitle="Deleting Dataset Item Confirmation"
+        dialogDescription="Deleting Dataset Item confirmation"
         variant="confirmation"
         isOpen={confirmationIsOpen}
         onClose={() => setConfirmationIsOpen(false)}

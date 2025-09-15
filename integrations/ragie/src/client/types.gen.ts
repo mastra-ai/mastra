@@ -497,7 +497,7 @@ export type RetrieveParams = {
    */
   rerank?: boolean;
   /**
-   * Maximum number of chunks to retrieve per document. Use this to increase the number of documents the final chunks are retreived from. This feature is in beta and may change in the future.
+   * Maximum number of chunks to retrieve per document. Use this to increase the number of documents the final chunks are retrieved from. This feature is in beta and may change in the future.
    */
   max_chunks_per_document?: number;
   /**

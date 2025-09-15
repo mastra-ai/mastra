@@ -20,6 +20,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   _internal,
   mode = 'stream',
   outputProcessors,
+  returnScorerData,
+  llmAISpan,
   ...rest
 }: LoopOptions<Tools, OUTPUT>) {
   let loggerToUse =
@@ -72,6 +74,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     telemetry_settings,
   });
 
+  const messageId = rest.experimental_generateMessageId?.() || internalToUse.generateId?.();
+
   const workflowLoopProps: LoopRun<Tools, OUTPUT> = {
     model,
     runId: runIdToUse,
@@ -85,6 +89,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     telemetry_settings,
     modelSettings,
     outputProcessors,
+    llmAISpan,
+    messageId: messageId!,
     ...rest,
   };
 
@@ -98,6 +104,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     },
     stream: streamFn,
     messageList,
+    messageId: messageId!,
     options: {
       runId: runIdToUse!,
       telemetry_settings,
@@ -108,6 +115,9 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       includeRawChunks: !!includeRawChunks,
       output: rest.output,
       outputProcessors,
+      outputProcessorRunnerMode: 'result',
+      returnScorerData,
+      tracingContext: { currentSpan: llmAISpan },
     },
   });
 }

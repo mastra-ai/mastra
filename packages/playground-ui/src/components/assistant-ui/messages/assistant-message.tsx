@@ -1,4 +1,4 @@
-import { ActionBarPrimitive, MessagePrimitive, ToolCallContentPartComponent, useMessage } from '@assistant-ui/react';
+import { ActionBarPrimitive, MessagePrimitive, ToolCallMessagePartComponent, useMessage } from '@assistant-ui/react';
 import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
 
 import { MarkdownText } from './markdown-text';
@@ -7,7 +7,7 @@ import { ToolFallback } from '@/components/assistant-ui/tools/tool-fallback';
 import { Reasoning } from './reasoning';
 
 export interface AssistantMessageProps {
-  ToolFallback?: ToolCallContentPartComponent;
+  ToolFallback?: ToolCallMessagePartComponent;
 }
 
 export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom }: AssistantMessageProps) => {
@@ -19,7 +19,7 @@ export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom }: Assistant
   return (
     <MessagePrimitive.Root className="max-w-full" data-message-id={messageId}>
       <div className="text-icon6 text-ui-lg leading-ui-lg">
-        <MessagePrimitive.Content
+        <MessagePrimitive.Parts
           components={{
             Text: MarkdownText,
             tools: { Fallback: ToolFallbackCustom || ToolFallback },
@@ -27,7 +27,6 @@ export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom }: Assistant
           }}
         />
       </div>
-
       {!isToolCallAndOrReasoning && (
         <div className="h-6 pt-1">
           <AssistantActionBar />

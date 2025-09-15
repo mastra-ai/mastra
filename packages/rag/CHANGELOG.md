@@ -1,5 +1,122 @@
 # @mastra/rag
 
+## 1.2.5-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#7753](https://github.com/mastra-ai/mastra/pull/7753))
+  - Updated dependency [`node-html-better-parser@^1.5.3` ↗︎](https://www.npmjs.com/package/node-html-better-parser/v/1.5.3) (from `^1.5.2`, in `dependencies`)
+- Updated dependencies [[`5802bf5`](https://github.com/mastra-ai/mastra/commit/5802bf57f6182e4b67c28d7d91abed349a8d14f3), [`5bda53a`](https://github.com/mastra-ai/mastra/commit/5bda53a9747bfa7d876d754fc92c83a06e503f62), [`f26a8fd`](https://github.com/mastra-ai/mastra/commit/f26a8fd99fcb0497a5d86c28324430d7f6a5fb83), [`1a1fbe6`](https://github.com/mastra-ai/mastra/commit/1a1fbe66efb7d94abc373ed0dd9676adb8122454), [`36f39c0`](https://github.com/mastra-ai/mastra/commit/36f39c00dc794952dc3c11aab91c2fa8bca74b11)]:
+  - @mastra/core@0.16.4-alpha.0
+
+## 1.2.4
+
+### Patch Changes
+
+- 376913a: Update peerdeps
+- Updated dependencies [8fbf79e]
+- Updated dependencies [fd83526]
+- Updated dependencies [d0b90ab]
+- Updated dependencies [6f5eb7a]
+- Updated dependencies [a01cf14]
+- Updated dependencies [a9e50ee]
+- Updated dependencies [5397eb4]
+- Updated dependencies [c9f4e4a]
+- Updated dependencies [0acbc80]
+  - @mastra/core@0.16.0
+
+## 1.2.4-alpha.0
+
+### Patch Changes
+
+- 376913a: Update peerdeps
+- Updated dependencies [8fbf79e]
+  - @mastra/core@0.16.0-alpha.1
+
+## 1.2.3
+
+### Patch Changes
+
+- de3cbc6: Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+- 29de0e1: MastraEmbeddingModel and ts hack
+- f0dfcac: updated core peerdep
+- b415a4e: added providerOptions to createVectorQueryTool and createGraphRAGTool
+- 6ac697e: improveEmbeddingModelStuff
+- Updated dependencies [ab48c97]
+- Updated dependencies [85ef90b]
+- Updated dependencies [aedbbfa]
+- Updated dependencies [ff89505]
+- Updated dependencies [637f323]
+- Updated dependencies [de3cbc6]
+- Updated dependencies [c19bcf7]
+- Updated dependencies [4474d04]
+- Updated dependencies [183dc95]
+- Updated dependencies [a1111e2]
+- Updated dependencies [b42a961]
+- Updated dependencies [61debef]
+- Updated dependencies [9beaeff]
+- Updated dependencies [29de0e1]
+- Updated dependencies [f643c65]
+- Updated dependencies [00c74e7]
+- Updated dependencies [fef7375]
+- Updated dependencies [e3d8fea]
+- Updated dependencies [45e4d39]
+- Updated dependencies [9eee594]
+- Updated dependencies [7149d8d]
+- Updated dependencies [822c2e8]
+- Updated dependencies [979912c]
+- Updated dependencies [7dcf4c0]
+- Updated dependencies [4106a58]
+- Updated dependencies [ad78bfc]
+- Updated dependencies [0302f50]
+- Updated dependencies [6ac697e]
+- Updated dependencies [74db265]
+- Updated dependencies [0ce418a]
+- Updated dependencies [af90672]
+- Updated dependencies [8387952]
+- Updated dependencies [7f3b8da]
+- Updated dependencies [905352b]
+- Updated dependencies [599d04c]
+- Updated dependencies [56041d0]
+- Updated dependencies [3412597]
+- Updated dependencies [5eca5d2]
+- Updated dependencies [f2cda47]
+- Updated dependencies [5de1555]
+- Updated dependencies [cfd377a]
+- Updated dependencies [1ed5a3e]
+  - @mastra/core@0.15.3
+
+## 1.2.3-alpha.2
+
+### Patch Changes
+
+- [#7394](https://github.com/mastra-ai/mastra/pull/7394) [`f0dfcac`](https://github.com/mastra-ai/mastra/commit/f0dfcac4458bdf789b975e2d63e984f5d1e7c4d3) Thanks [@NikAiyer](https://github.com/NikAiyer)! - updated core peerdep
+
+- Updated dependencies [[`7149d8d`](https://github.com/mastra-ai/mastra/commit/7149d8d4bdc1edf0008e0ca9b7925eb0b8b60dbe)]:
+  - @mastra/core@0.15.3-alpha.7
+
+## 1.2.3-alpha.1
+
+### Patch Changes
+
+- [#7343](https://github.com/mastra-ai/mastra/pull/7343) [`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e) Thanks [@LekoArts](https://github.com/LekoArts)! - Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+
+- Updated dependencies [[`85ef90b`](https://github.com/mastra-ai/mastra/commit/85ef90bb2cd4ae4df855c7ac175f7d392c55c1bf), [`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e)]:
+  - @mastra/core@0.15.3-alpha.5
+
+## 1.2.3-alpha.0
+
+### Patch Changes
+
+- [#7124](https://github.com/mastra-ai/mastra/pull/7124) [`29de0e1`](https://github.com/mastra-ai/mastra/commit/29de0e1b0a7173317ae7d1ab0c0993167c659f2b) Thanks [@abhiaiyer91](https://github.com/abhiaiyer91)! - MastraEmbeddingModel and ts hack
+
+- [#7120](https://github.com/mastra-ai/mastra/pull/7120) [`b415a4e`](https://github.com/mastra-ai/mastra/commit/b415a4e05b2546ccb9b5ba31a2bdf23deb1c7fa8) Thanks [@NikAiyer](https://github.com/NikAiyer)! - added providerOptions to createVectorQueryTool and createGraphRAGTool
+
+- [#7125](https://github.com/mastra-ai/mastra/pull/7125) [`6ac697e`](https://github.com/mastra-ai/mastra/commit/6ac697edcc2435482c247cba615277ec4765dcc4) Thanks [@abhiaiyer91](https://github.com/abhiaiyer91)! - improveEmbeddingModelStuff
+
+- Updated dependencies [[`637f323`](https://github.com/mastra-ai/mastra/commit/637f32371d79a8f78c52c0d53411af0915fcec67), [`29de0e1`](https://github.com/mastra-ai/mastra/commit/29de0e1b0a7173317ae7d1ab0c0993167c659f2b), [`6ac697e`](https://github.com/mastra-ai/mastra/commit/6ac697edcc2435482c247cba615277ec4765dcc4)]:
+  - @mastra/core@0.15.3-alpha.1
+
 ## 1.2.2
 
 ### Patch Changes

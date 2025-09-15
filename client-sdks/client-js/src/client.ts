@@ -1,7 +1,6 @@
-import type { AbstractAgent } from '@ag-ui/client';
-import type { AITraceRecord, AITracesPaginatedArg } from '@mastra/core';
+import type { AITraceRecord, AITracesPaginatedArg, WorkflowInfo } from '@mastra/core';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
-import { AGUIAdapter } from './adapters/agui';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import {
   Agent,
   MemoryThread,
@@ -13,6 +12,7 @@ import {
   A2A,
   MCPTool,
   LegacyWorkflow,
+  AgentBuilder,
   Observability,
 } from './resources';
 import { NetworkMemoryThread } from './resources/network-memory-thread';
@@ -50,6 +50,7 @@ import type {
   SaveScoreResponse,
   GetAITracesResponse,
 } from './types';
+import { base64RuntimeContext, parseClientRuntimeContext } from './utils';
 
 export class MastraClient extends BaseResource {
   private observability: Observability;
@@ -60,29 +61,20 @@ export class MastraClient extends BaseResource {
 
   /**
    * Retrieves all available agents
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing map of agent IDs to agent details
    */
-  public getAgents(): Promise<Record<string, GetAgentResponse>> {
-    return this.request('/api/agents');
-  }
+  public getAgents(runtimeContext?: RuntimeContext | Record<string, any>): Promise<Record<string, GetAgentResponse>> {
+    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
 
-  public async getAGUI({ resourceId }: { resourceId: string }): Promise<Record<string, AbstractAgent>> {
-    const agents = await this.getAgents();
+    const searchParams = new URLSearchParams();
 
-    return Object.entries(agents).reduce(
-      (acc, [agentId]) => {
-        const agent = this.getAgent(agentId);
+    if (runtimeContextParam) {
+      searchParams.set('runtimeContext', runtimeContextParam);
+    }
 
-        acc[agentId] = new AGUIAdapter({
-          agentId,
-          agent,
-          resourceId,
-        });
-
-        return acc;
-      },
-      {} as Record<string, AbstractAgent>,
-    );
+    const queryString = searchParams.toString();
+    return this.request(`/api/agents${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -190,10 +182,20 @@ export class MastraClient extends BaseResource {
 
   /**
    * Retrieves all available tools
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing map of tool IDs to tool details
    */
-  public getTools(): Promise<Record<string, GetToolResponse>> {
-    return this.request('/api/tools');
+  public getTools(runtimeContext?: RuntimeContext | Record<string, any>): Promise<Record<string, GetToolResponse>> {
+    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
+
+    const searchParams = new URLSearchParams();
+
+    if (runtimeContextParam) {
+      searchParams.set('runtimeContext', runtimeContextParam);
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/tools${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -224,10 +226,22 @@ export class MastraClient extends BaseResource {
 
   /**
    * Retrieves all available workflows
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing map of workflow IDs to workflow details
    */
-  public getWorkflows(): Promise<Record<string, GetWorkflowResponse>> {
-    return this.request('/api/workflows');
+  public getWorkflows(
+    runtimeContext?: RuntimeContext | Record<string, any>,
+  ): Promise<Record<string, GetWorkflowResponse>> {
+    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
+
+    const searchParams = new URLSearchParams();
+
+    if (runtimeContextParam) {
+      searchParams.set('runtimeContext', runtimeContextParam);
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/workflows${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -237,6 +251,22 @@ export class MastraClient extends BaseResource {
    */
   public getWorkflow(workflowId: string) {
     return new Workflow(this.options, workflowId);
+  }
+
+  /**
+   * Gets all available agent builder actions
+   * @returns Promise containing map of action IDs to action details
+   */
+  public getAgentBuilderActions(): Promise<Record<string, WorkflowInfo>> {
+    return this.request('/api/agent-builder/');
+  }
+
+  /**
+   * Gets an agent builder instance for executing agent-builder workflows
+   * @returns AgentBuilder instance
+   */
+  public getAgentBuilderAction(actionId: string) {
+    return new AgentBuilder(this.options, actionId);
   }
 
   /**

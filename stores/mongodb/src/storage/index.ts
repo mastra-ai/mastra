@@ -318,13 +318,15 @@ export class MongoDBStore extends MastraStorage {
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
-    return this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+    return this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, resourceId, snapshot });
   }
 
   async loadWorkflowSnapshot({

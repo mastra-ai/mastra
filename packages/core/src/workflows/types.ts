@@ -1,5 +1,6 @@
 import type { TextStreamPart } from 'ai';
 import type { z } from 'zod';
+import type { TracingProperties } from '../ai-tracing';
 import type { Mastra } from '../mastra';
 import type { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
@@ -118,6 +119,7 @@ export type VariableReference<
   | { value: any; schema: z.ZodTypeAny };
 
 export type StreamEvent =
+  // old events
   | TextStreamPart<any>
   | {
       type: 'step-suspended';
@@ -133,6 +135,76 @@ export type StreamEvent =
       type: 'step-result';
       payload: any;
       id: string;
+    }
+  // vnext events
+  | WorkflowStreamEvent;
+
+export type WorkflowStreamEvent =
+  | {
+      type: 'workflow-start';
+      payload: {
+        workflowId: string;
+      };
+    }
+  | {
+      type: 'workflow-finish';
+      payload: {};
+    }
+  | {
+      type: 'workflow-canceled';
+      payload: {};
+    }
+  | {
+      type: 'workflow-step-start';
+      id: string;
+      payload: {
+        id: string;
+        stepCallId: string;
+        status: WorkflowStepStatus;
+        output?: Record<string, any>;
+        payload?: Record<string, any>;
+        resumePayload?: Record<string, any>;
+        suspendPayload?: Record<string, any>;
+      };
+    }
+  | {
+      type: 'workflow-step-finish';
+      payload: {
+        id: string;
+        metadata: Record<string, any>;
+      };
+    }
+  | {
+      type: 'workflow-step-suspended';
+      payload: {
+        id: string;
+        status: WorkflowStepStatus;
+        output?: Record<string, any>;
+        payload?: Record<string, any>;
+        resumePayload?: Record<string, any>;
+        suspendPayload?: Record<string, any>;
+      };
+    }
+  | {
+      type: 'workflow-step-waiting';
+      payload: {
+        id: string;
+        payload: Record<string, any>;
+        startedAt: number;
+        status: WorkflowStepStatus;
+      };
+    }
+  | {
+      type: 'workflow-step-result';
+      payload: {
+        id: string;
+        stepCallId: string;
+        status: WorkflowStepStatus;
+        output?: Record<string, any>;
+        payload?: Record<string, any>;
+        resumePayload?: Record<string, any>;
+        suspendPayload?: Record<string, any>;
+      };
     };
 
 export type WorkflowRunStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'pending' | 'canceled';
@@ -305,7 +377,7 @@ export type StepWithComponent = Step<string, any, any, any, any, any> & {
 };
 
 export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<string, any, any>[]> =
-  | {
+  | ({
       status: 'success';
       result: z.infer<TOutput>;
       steps: {
@@ -318,8 +390,8 @@ export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<s
               z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
             >;
       };
-    }
-  | {
+    } & TracingProperties)
+  | ({
       status: 'failed';
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
@@ -332,8 +404,8 @@ export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<s
             >;
       };
       error: Error;
-    }
-  | {
+    } & TracingProperties)
+  | ({
       status: 'suspended';
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
@@ -346,7 +418,7 @@ export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<s
             >;
       };
       suspended: [string[], ...string[][]];
-    };
+    } & TracingProperties);
 
 export type WorkflowConfig<
   TWorkflowId extends string = string,

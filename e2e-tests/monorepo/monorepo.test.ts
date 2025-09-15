@@ -32,7 +32,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     } catch {}
   });
 
-  describe('tsconfig paths', () => {
+  describe('tsconfig paths', { timeout: 60 * 1000 }, () => {
     it('should resolve paths', async () => {
       const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
       const bundle = await rollup({

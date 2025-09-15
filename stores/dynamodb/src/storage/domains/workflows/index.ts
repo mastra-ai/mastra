@@ -75,16 +75,17 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
     this.logger.debug('Persisting workflow snapshot', { workflowName, runId });
 
     try {
-      const resourceId = 'resourceId' in snapshot ? snapshot.resourceId : undefined;
       const now = new Date().toISOString();
       // Prepare data including the 'entity' type
       const data = {

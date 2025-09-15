@@ -97,6 +97,7 @@ export function createOuterLLMWorkflow<
               toolName: toolCall.toolName,
               result: toolCall.result,
               providerMetadata: toolCall.providerMetadata,
+              providerExecuted: toolCall.providerExecuted,
             },
           };
 
@@ -165,7 +166,7 @@ export function createOuterLLMWorkflow<
       }
       return inputData.output.toolCalls || [];
     })
-    .foreach(toolCallStep)
+    .foreach(toolCallStep, { concurrency: 10 })
     .then(llmMappingStep)
     .commit();
 }

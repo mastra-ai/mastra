@@ -1,15 +1,9 @@
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
-import { Pool } from 'pg';
-
-// PostgreSQL client
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL!,
-});
 
 const startStep = createStep({
   id: 'start-step',
-  description: "Generate a famous person's name",
+  description: 'Get the name of a famous person',
   inputSchema: z.object({
     start: z.boolean(),
   }),
@@ -43,7 +37,7 @@ const gameStep = createStep({
     userMessage: z.string(),
   }),
   suspendSchema: z.object({
-    agentResponse: z.string(),
+    suspendResponse: z.string(),
   }),
   outputSchema: z.object({
     famousPerson: z.string(),
@@ -55,52 +49,36 @@ const gameStep = createStep({
     let { famousPerson, guessCount } = inputData;
     const { userMessage } = resumeData ?? {};
 
+    // Return suspend with message to inform the user
     if (!userMessage) {
-      // First time - ask for a question
-      const message = "I'm thinking of a famous person. Ask me yes/no questions to figure out who it is!";
-
-      await suspend({
-        agentResponse: message,
+      return await suspend({
+        suspendResponse: "I'm thinking of a famous person. Ask me yes/no questions to figure out who it is!",
       });
-
-      return { famousPerson, gameWon: false, agentResponse: message, guessCount };
-    } else {
-      // Check if the user's message is a guess by using the guess verifier agent
-      const guessVerifier = mastra.getAgent('guessVerifierAgent');
-      const verificationResponse = await guessVerifier.generate(
-        [
-          {
-            role: 'user',
-            content: `Actual famous person: ${famousPerson}
-              User's guess: "${userMessage}"
-              Is this correct?`,
-          },
-        ],
-        {
-          output: z.object({
-            isCorrect: z.boolean(),
-          }),
-        },
-      );
-
-      const gameWon = verificationResponse.object.isCorrect;
-
-      // Let the agent handle the user's message (question or guess)
-      const agent = mastra.getAgent('gameAgent');
-      const response = await agent.generate(`
-      The famous person is: ${famousPerson}
-      The user asked: "${userMessage}"
-      Is this a correct guess: ${gameWon}
-      Please respond appropriately.
-    `);
-
-      const agentResponse = response.text;
-
-      // Increment the guess count
-      guessCount++;
-
-      return { famousPerson, gameWon, agentResponse, guessCount };
     }
+
+    // Let the agent handle the user's message (question or guess)
+    const agent = mastra.getAgent('gameAgent');
+    const response = await agent.generate(
+      `
+        The famous person is: ${famousPerson}
+        The user said: "${userMessage}"
+        Please respond appropriately. If this is a guess, tell me if it's correct.
+      `,
+      {
+        output: z.object({
+          response: z.string(),
+          gameWon: z.boolean(),
+        }),
+      },
+    );
+
+    // Values from structured output object
+    const { response: agentResponse, gameWon } = response.object;
+
+    // Increment the guess count
+    guessCount++;
+
+    return { famousPerson, gameWon, agentResponse, guessCount };
   },
 });
 
@@ -121,11 +99,9 @@ const winStep = createStep({
   execute: async ({ inputData }) => {
     const { famousPerson, gameWon, guessCount } = inputData;
 
-    await pool.query('INSERT INTO heads_up_games (famous_person, game_won, guess_count) VALUES ($1, $2, $3)', [
-      famousPerson,
-      gameWon,
-      guessCount,
-    ]);
+    console.log('famousPerson: ', famousPerson);
+    console.log('gameWon: ', gameWon);
+    console.log('guessCount: ', guessCount);
 
     return { famousPerson, gameWon, guessCount };
   },

@@ -1,5 +1,4 @@
 import { randomUUID } from 'crypto';
-import type { ReadableStream } from 'stream/web';
 import z from 'zod';
 import type { Agent } from '../../agent';
 import { RuntimeContext } from '../../di';
@@ -9,13 +8,7 @@ import type { ToolExecutionContext } from '../../tools/types';
 import { Workflow, Run } from '../../workflows';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
 import type { ExecuteFunction, Step } from '../../workflows/step';
-import type {
-  SerializedStepFlowEntry,
-  WorkflowConfig,
-  WorkflowResult,
-  StreamEvent,
-  WatchEvent,
-} from '../../workflows/types';
+import type { SerializedStepFlowEntry, WorkflowConfig, WorkflowResult, WatchEvent } from '../../workflows/types';
 import { EMITTER_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
 import { WorkflowEventProcessor } from './workflow-event-processor';
@@ -161,6 +154,7 @@ export function createStep<
         text: z.string(),
       }),
       execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext, abortSignal, abort }) => {
+        // TODO: support streamVNext
         let streamPromise = {} as {
           promise: Promise<string>;
           resolve: (value: string) => void;
@@ -170,14 +164,6 @@ export function createStep<
         streamPromise.promise = new Promise((resolve, reject) => {
           streamPromise.resolve = resolve;
           streamPromise.reject = reject;
-        });
-        const toolData = {
-          name: params.name,
-          args: inputData,
-        };
-        await emitter.emit('watch-v2', {
-          type: 'tool-call-streaming-start',
-          ...toolData,
         });
         const { fullStream } = await params.stream(inputData.prompt, {
           // resourceId: inputData.resourceId,
@@ -193,32 +179,28 @@ export function createStep<
           return abort();
         }
 
+        const toolData = {
+          name: params.name,
+          args: inputData,
+        };
+
+        await emitter.emit('watch-v2', {
+          type: 'tool-call-streaming-start',
+          ...(toolData ?? {}),
+        });
         for await (const chunk of fullStream) {
-          switch (chunk.type) {
-            case 'text-delta':
-              await emitter.emit('watch-v2', {
-                type: 'tool-call-delta',
-                ...toolData,
-                argsTextDelta: chunk.textDelta,
-              });
-              break;
-
-            case 'step-start':
-            case 'step-finish':
-            case 'finish':
-              break;
-
-            case 'tool-call':
-            case 'tool-result':
-            case 'tool-call-streaming-start':
-            case 'tool-call-delta':
-            case 'source':
-            case 'file':
-            default:
-              await emitter.emit('watch-v2', chunk);
-              break;
+          if (chunk.type === 'text-delta') {
+            await emitter.emit('watch-v2', {
+              type: 'tool-call-delta',
+              ...(toolData ?? {}),
+              argsTextDelta: chunk.textDelta,
+            });
           }
         }
+        await emitter.emit('watch-v2', {
+          type: 'tool-call-streaming-finish',
+          ...(toolData ?? {}),
+        });
 
         return {
           text: await streamPromise.promise,
@@ -243,6 +225,8 @@ export function createStep<
           context: inputData,
           mastra,
           runtimeContext,
+          // TODO: Pass proper tracing context when evented workflows support tracing
+          tracingContext: { currentSpan: undefined },
         });
       },
     };
@@ -316,7 +300,7 @@ export class EventedWorkflow<
 
     this.runs.set(runIdToUse, run);
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse);
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
     if (!workflowSnapshotInStorage) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
@@ -426,93 +410,7 @@ export class EventedRun<
     return result;
   }
 
-  /**
-   * Starts the workflow execution with the provided input as a stream
-   * @param input The input data for the workflow
-   * @returns A promise that resolves to the workflow output
-   */
-  stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
-    stream: ReadableStream<StreamEvent>;
-    getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
-  } {
-    const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
-
-    const writer = writable.getWriter();
-    const unwatch = this.watch(async event => {
-      try {
-        // watch-v2 events are data stream events, so we need to cast them to the correct type
-        await writer.write(event as any);
-      } catch {}
-    }, 'watch-v2');
-
-    this.closeStreamAction = async () => {
-      unwatch();
-
-      try {
-        await writer.close();
-      } catch (err) {
-        console.error('Error closing stream:', err);
-      } finally {
-        writer.releaseLock();
-      }
-    };
-
-    this.executionResults = this.start({ inputData, runtimeContext }).then(result => {
-      if (result.status !== 'suspended') {
-        this.closeStreamAction?.().catch(() => {});
-      }
-
-      return result;
-    });
-
-    return {
-      stream: readable as ReadableStream<StreamEvent>,
-      getWorkflowState: () => this.executionResults!,
-    };
-  }
-
-  async streamAsync({
-    inputData,
-    runtimeContext,
-  }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): Promise<{
-    stream: ReadableStream<StreamEvent>;
-    getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
-  }> {
-    const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
-
-    const writer = writable.getWriter();
-    const unwatch = await this.watchAsync(async event => {
-      try {
-        // watch-v2 events are data stream events, so we need to cast them to the correct type
-        await writer.write(event as any);
-      } catch {}
-    }, 'watch-v2');
-
-    this.closeStreamAction = async () => {
-      await unwatch();
-
-      try {
-        await writer.close();
-      } catch (err) {
-        console.error('Error closing stream:', err);
-      } finally {
-        writer.releaseLock();
-      }
-    };
-
-    this.executionResults = this.start({ inputData, runtimeContext }).then(result => {
-      if (result.status !== 'suspended') {
-        this.closeStreamAction?.().catch(() => {});
-      }
-
-      return result;
-    });
-
-    return {
-      stream: readable as ReadableStream<StreamEvent>,
-      getWorkflowState: () => this.executionResults!,
-    };
-  }
+  // TODO: streamVNext
 
   async resume<TResumeSchema extends z.ZodType<any>>(params: {
     resumeData?: z.infer<TResumeSchema>;

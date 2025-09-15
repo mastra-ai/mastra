@@ -1,11 +1,12 @@
 import { randomUUID } from 'crypto';
+import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import { Agent, MessageList } from '../../agent';
 import type { MessageListInput } from '../../agent/message-list';
 import { MastraBase } from '../../base';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import { RegisteredLogger } from '../../logger';
+import { RESOURCE_TYPES } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import type { MastraMessageV2, MastraMemory } from '../../memory';
 import { RuntimeContext } from '../../runtime-context';
@@ -26,8 +27,6 @@ interface NewAgentNetworkConfig {
   memory?: DynamicArgument<MastraMemory>;
   defaultAgent?: DynamicArgument<Agent>;
 }
-
-const RESOURCE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool', 'none']);
 
 export class NewAgentNetwork extends MastraBase {
   id: string;
@@ -56,6 +55,10 @@ export class NewAgentNetwork extends MastraBase {
       component: RegisteredLogger.NETWORK,
       name: name || 'NewAgentNetwork',
     });
+
+    console.warn(
+      `⚠️  DEPRECATION WARNING: AgentNetwork vNext will be deprecated on September 16th, 2025 and will be removed in a future version. Please use agent.network() instead.`,
+    );
 
     this.id = id;
     this.name = name;
@@ -941,6 +944,8 @@ export class NewAgentNetwork extends MastraBase {
           threadId: runId,
           runId,
           context: inputDataToUse,
+          // TODO: Pass proper tracing context when network supports tracing
+          tracingContext: { currentSpan: undefined },
         });
 
         const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });

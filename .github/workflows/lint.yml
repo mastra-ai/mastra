@@ -140,10 +140,6 @@ jobs:
     runs-on: ubuntu-latest
     # Run on main repository or for trusted bot PRs
     if: ${{ github.repository == 'mastra-ai/mastra' && !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:rw
     permissions:
       pull-requests: read
 
@@ -158,7 +154,58 @@ jobs:
           registry-url: 'https://registry.yarnpkg.com'
 
       - name: Install dependencies
-        run: npm install globby
+        run: npm install globby --no-package-lock
 
       - name: Run examples validator
         run: node .github/scripts/validate-examples.js
+
+  peerdeps-check:
+    name: Validate peer dependencies
+    runs-on: ubuntu-latest
+    # Run on main repository or for trusted bot PRs
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    permissions:
+      pull-requests: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          # Fetch entire git history so Changesets can generate changelogs
+          # with the correct commits
+          fetch-depth: 0
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.1
+          registry-url: 'https://registry.yarnpkg.com'
+
+      - name: Install dependencies
+        run: npm install semver --no-package-lock
+
+      - name: bump versions
+        run: npx changeset version
+
+      - name: Configure git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+      - name: Commit changes
+        run: git commit -am "Bump versions" || true
+
+      - name: Run peerdeps validator
+        run: node ./scripts/validate-peerdeps.mjs
+
+      - name: Run update perdeps
+        run: node ./scripts/update-peerdeps.mjs
+
+      - name: Check for git changes
+        run: |
+          if ! git diff --quiet --ignore-space-at-eol -- ':!package.json' || ! git diff --cached --quiet --ignore-space-at-eol -- ':!package.json'; then
+            echo "Error: Peerdependency mismatch"
+            echo "The following files have been modified:"
+            git diff --name-only -- ':!package.json'
+            exit 1
+          fi

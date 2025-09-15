@@ -48,7 +48,7 @@ export function DatasetDialog({
   };
 
   return (
-    <SideDialog dialogTitle="Dataset Details" isOpen={isOpen} onClose={onClose}>
+    <SideDialog dialogTitle="Dataset Details" dialogDescription="Dataset Details" isOpen={isOpen} onClose={onClose}>
       <SideDialogTop>
         <span className="flex items-center gap-[0.5rem]">
           <DatabaseIcon /> New

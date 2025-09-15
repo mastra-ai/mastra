@@ -5,14 +5,21 @@ import type { ZodType as ZodSchemaV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import zodToJsonSchemaOriginal from 'zod-to-json-schema';
 
-export function zodToJsonSchema(zodSchema: ZodSchemaV3 | ZodSchemaV4, target: Targets = 'jsonSchema7') {
-  if ('toJSONSchema' in z) {
-    // @ts-expect-error - type not present main zod v3
-    return z.toJSONSchema(zodSchema, {
+export function zodToJsonSchema(
+  zodSchema: ZodSchemaV3 | ZodSchemaV4,
+  target: Targets = 'jsonSchema7',
+  strategy: 'none' | 'seen' | 'root' | 'relative' = 'relative',
+) {
+  const fn = 'toJSONSchema';
+
+  if (fn in z) {
+    // Use dynamic property access to avoid import errors in Zod v3
+    return (z as any)[fn](zodSchema, {
       unrepresentable: 'any',
       override: (ctx: any) => {
-        const def = ctx.zodSchema._zod.def;
-        if (def.type === 'date') {
+        // Safe access to handle cases where _zod might be undefined
+        const def = ctx.zodSchema?._zod?.def;
+        if (def && def.type === 'date') {
           ctx.jsonSchema.type = 'string';
           ctx.jsonSchema.format = 'date-time';
         }
@@ -20,7 +27,7 @@ export function zodToJsonSchema(zodSchema: ZodSchemaV3 | ZodSchemaV4, target: Ta
     }) as JSONSchema7;
   } else {
     return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
-      $refStrategy: 'none',
+      $refStrategy: strategy,
       target,
     }) as JSONSchema7;
   }

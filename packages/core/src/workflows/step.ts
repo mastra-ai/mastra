@@ -6,12 +6,13 @@ import type { MastraScorers } from '../scores';
 import type { ChunkType } from '../stream/types';
 import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
-import type { EMITTER_SYMBOL } from './constants';
+import type { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import type { Emitter } from './types';
 import type { Workflow } from './workflow';
 
 export type ExecuteFunctionParams<TStepInput, TResumeSchema, TSuspendSchema, EngineType> = {
   runId: string;
+  resourceId?: string;
   workflowId: string;
   mastra: Mastra;
   runtimeContext: RuntimeContext;
@@ -35,6 +36,7 @@ export type ExecuteFunctionParams<TStepInput, TResumeSchema, TSuspendSchema, Eng
     resumePayload: any;
   };
   [EMITTER_SYMBOL]: Emitter;
+  [STREAM_FORMAT_SYMBOL]: 'aisdk' | 'mastra' | undefined;
   engine: EngineType;
   abortSignal: AbortSignal;
   writer: ToolStream<ChunkType>;

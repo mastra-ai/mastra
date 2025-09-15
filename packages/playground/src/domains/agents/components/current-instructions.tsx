@@ -4,7 +4,6 @@ import { Icon } from '@mastra/playground-ui';
 import { CodeDisplay } from '@/components/ui/code-display';
 
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { Txt } from '@mastra/playground-ui';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import clsx from 'clsx';
 
@@ -101,7 +100,7 @@ export function CurrentInstructions({
                   value={userComment}
                   onChange={e => onCommentChange(e.target.value)}
                   placeholder="Add your comments or requirements for enhancing your agent's prompt..."
-                  className="resize-none text-ui-sm w-full placeholder:text-icon3 bg-transparent block disabled:text-icon3 outline-none focus-visible:ring-1 focus-visible:ring-accent3"
+                  className="resize-none text-ui-sm w-full placeholder:text-icon3 bg-transparent block disabled:text-icon3"
                   disabled={Boolean(isEnhancing || enhancedPrompt)}
                 />
 

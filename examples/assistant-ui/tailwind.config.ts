@@ -7,11 +7,7 @@ const config = {
     './components/**/*.{js,ts,jsx,tsx,mdx}',
     './app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
-  plugins: [
-    require('tailwindcss-animate'),
-    require('@assistant-ui/react/tailwindcss'),
-    require('@assistant-ui/react-markdown/tailwindcss'),
-  ],
+  plugins: [require('tailwindcss-animate'), require('@assistant-ui/react-ui/tailwindcss')],
 } satisfies Config;
 
 export default config;

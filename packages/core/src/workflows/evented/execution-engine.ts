@@ -43,6 +43,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       delay?: number;
     };
     abortController: AbortController;
+    format?: 'aisdk' | 'mastra' | undefined;
   }): Promise<TOutput> {
     const pubsub = this.mastra?.pubsub;
     if (!pubsub) {
@@ -65,6 +66,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           prevResult: { status: 'success', output: prevResult?.payload },
           resumeData: params.resume.resumePayload,
           runtimeContext: Object.fromEntries(params.runtimeContext.entries()),
+          format: params.format,
         },
       });
     } else {
@@ -76,6 +78,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           runId: params.runId,
           prevResult: { status: 'success', output: params.input },
           runtimeContext: Object.fromEntries(params.runtimeContext.entries()),
+          format: params.format,
         },
       });
     }

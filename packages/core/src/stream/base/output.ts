@@ -7,10 +7,13 @@ import type { FinishReason, TelemetrySettings } from 'ai-v5';
 import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
 import type { AIV5Type } from '../../agent/message-list/types';
+import { getValidTraceId } from '../../ai-tracing';
+import type { TracingContext } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import type { OutputProcessor } from '../../processors';
-import type { ProcessorState } from '../../processors/runner';
+import type { ProcessorRunnerMode, ProcessorState } from '../../processors/runner';
 import { ProcessorRunner } from '../../processors/runner';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
 import { DelayedPromise } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
@@ -43,6 +46,9 @@ type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   includeRawChunks?: boolean;
   output?: OUTPUT;
   outputProcessors?: OutputProcessor[];
+  outputProcessorRunnerMode?: ProcessorRunnerMode;
+  returnScorerData?: boolean;
+  tracingContext?: TracingContext;
 };
 export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
   #aisdkv5: AISDKV5OutputStream<OUTPUT>;
@@ -110,6 +116,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   };
 
   #streamConsumed = false;
+  #returnScorerData = false;
 
   /**
    * Unique identifier for this execution run.
@@ -120,31 +127,40 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * The processor runner for this stream.
    */
   public processorRunner?: ProcessorRunner;
+  private outputProcessorRunnerMode: ProcessorRunnerMode = false;
   /**
    * The message list for this stream.
    */
   public messageList: MessageList;
+  /**
+   * Trace ID used on the execution (if the execution was traced).
+   */
+  public traceId?: string;
+  public messageId: string;
 
   constructor({
-    stream,
-    options,
     model: _model,
+    stream,
     messageList,
+    options,
+    messageId,
   }: {
     model: {
-      modelId: string;
-      provider: string;
+      modelId: string | undefined;
+      provider: string | undefined;
       version: 'v1' | 'v2';
     };
     stream: ReadableStream<ChunkType<OUTPUT>>;
     messageList: MessageList;
     options: MastraModelOutputOptions<OUTPUT>;
+    messageId: string;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
     this.#options = options;
-
+    this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
-
+    this.traceId = getValidTraceId(options.tracingContext?.currentSpan);
+    this.messageId = messageId;
     // Create processor runner if outputProcessors are provided
     if (options.outputProcessors?.length) {
       this.processorRunner = new ProcessorRunner({
@@ -155,11 +171,46 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       });
     }
 
+    if (options.outputProcessorRunnerMode) {
+      this.outputProcessorRunnerMode = options.outputProcessorRunnerMode;
+    }
+
     this.messageList = messageList;
 
     const self = this;
 
-    this.#baseStream = stream.pipeThrough(
+    // Apply output processors if they exist
+    let processedStream = stream;
+    const processorRunner = this.processorRunner;
+    if (processorRunner && options.outputProcessorRunnerMode === `stream`) {
+      const processorStates = new Map<string, ProcessorState>();
+      processedStream = stream.pipeThrough(
+        new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
+          async transform(chunk, controller) {
+            const {
+              part: processed,
+              blocked,
+              reason,
+            } = await processorRunner.processPart(chunk as any, processorStates);
+            if (blocked) {
+              // Emit a tripwire chunk so downstream knows about the abort
+              controller.enqueue({
+                type: 'tripwire',
+                payload: {
+                  tripwireReason: reason || 'Output processor blocked content',
+                },
+              } as ChunkType<OUTPUT>);
+              return;
+            }
+            if (processed) {
+              controller.enqueue(processed as ChunkType<OUTPUT>);
+            }
+          },
+        }),
+      );
+    }
+
+    this.#baseStream = processedStream.pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
         transform: async (chunk, controller) => {
           switch (chunk.type) {
@@ -284,6 +335,37 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               break;
             }
+            case 'tripwire':
+              // Handle tripwire chunks from processors
+              self.#tripwire = true;
+              self.#tripwireReason = chunk.payload?.tripwireReason || 'Content blocked';
+              self.#finishReason = 'other';
+
+              // Resolve all delayed promises before terminating
+              self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
+              self.#delayedPromises.finishReason.resolve('other');
+              self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
+              self.#delayedPromises.usage.resolve(self.#usageCount);
+              self.#delayedPromises.warnings.resolve(self.#warnings);
+              self.#delayedPromises.providerMetadata.resolve(undefined);
+              self.#delayedPromises.response.resolve({});
+              self.#delayedPromises.request.resolve({});
+              self.#delayedPromises.reasoning.resolve('');
+              self.#delayedPromises.reasoningText.resolve(undefined);
+              self.#delayedPromises.sources.resolve([]);
+              self.#delayedPromises.files.resolve([]);
+              self.#delayedPromises.toolCalls.resolve([]);
+              self.#delayedPromises.toolResults.resolve([]);
+              self.#delayedPromises.steps.resolve(self.#bufferedSteps);
+              self.#delayedPromises.totalUsage.resolve(self.#usageCount);
+              self.#delayedPromises.content.resolve([]);
+              self.#delayedPromises.reasoningDetails.resolve([]);
+
+              // Pass the tripwire chunk through
+              controller.enqueue(chunk);
+              // Terminate the stream
+              controller.terminate();
+              return;
             case 'finish':
               if (chunk.payload.stepResult.reason) {
                 self.#finishReason = chunk.payload.stepResult.reason;
@@ -296,6 +378,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 response = {
                   ...otherMetadata,
                   messages: messageList.get.response.aiV5.model(),
+                  uiMessages: messageList.get.response.aiV5.ui(),
                 };
               }
 
@@ -304,8 +387,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               chunk.payload.output.usage = self.#usageCount as any;
 
               try {
-                if (self.processorRunner) {
-                  await self.processorRunner.runOutputProcessors(self.messageList);
+                if (self.processorRunner && self.outputProcessorRunnerMode === `result`) {
+                  self.messageList = await self.processorRunner.runOutputProcessors(self.messageList);
                   const outputText = self.messageList.get.response.aiV4
                     .core()
                     .map(m => MessageList.coreContentToString(m.content))
@@ -328,10 +411,36 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
                   self.#delayedPromises.text.resolve(outputText);
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
+
+                  // Update response with processed messages after output processors have run
+                  if (chunk.payload.metadata) {
+                    const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
+                    response = {
+                      ...otherMetadata,
+                      messages: messageList.get.response.aiV5.model(),
+                      uiMessages: messageList.get.response.aiV5.ui(),
+                    };
+                  }
                 } else {
-                  self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
+                  const textContent = self.#bufferedText.join('');
+                  self.#delayedPromises.text.resolve(textContent);
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
-                  if (!self.#options.output) {
+
+                  // Check for structuredOutput in metadata (from output processors in stream mode)
+                  const messages = self.messageList.get.response.v2();
+                  const messagesWithStructuredData = messages.filter(
+                    msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
+                  );
+
+                  if (
+                    messagesWithStructuredData[0] &&
+                    // this is to make typescript happy
+                    messagesWithStructuredData[0].content.metadata?.structuredOutput
+                  ) {
+                    const structuredOutput = messagesWithStructuredData[0].content.metadata.structuredOutput;
+                    self.#delayedPromises.object.resolve(structuredOutput as InferSchemaOutput<OUTPUT>);
+                  } else if (!self.#options.output && self.#delayedPromises.object.status.type !== 'resolved') {
+                    // Resolve object promise to avoid hanging
                     self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
                   }
                 }
@@ -340,9 +449,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   self.#tripwire = true;
                   self.#tripwireReason = error.message;
                   self.#delayedPromises.finishReason.resolve('other');
+                  self.#delayedPromises.text.resolve('');
                 } else {
                   self.#error = error instanceof Error ? error.message : String(error);
                   self.#delayedPromises.finishReason.resolve('error');
+                  self.#delayedPromises.text.resolve('');
                 }
                 self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
               }
@@ -401,6 +512,18 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   dynamicToolResults: (await self.aisdk.v5.toolResults).filter(
                     (toolResult: any) => toolResult.dynamic === true,
                   ),
+                  object:
+                    self.#delayedPromises.object.status.type === 'resolved'
+                      ? self.#delayedPromises.object.status.value
+                      : self.#options.output && baseFinishStep.text
+                        ? (() => {
+                            try {
+                              return JSON.parse(baseFinishStep.text);
+                            } catch {
+                              return undefined;
+                            }
+                          })()
+                        : undefined,
                 };
 
                 await options?.onFinish?.(onFinishPayload);
@@ -548,41 +671,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
     let fullStream = this.teeStream();
 
-    const processorStates = new Map<string, ProcessorState>();
-
     return fullStream
-      .pipeThrough(
-        new TransformStream({
-          async transform(chunk, controller) {
-            // Process all stream parts through output processors
-            if (self.processorRunner) {
-              const {
-                part: processedPart,
-                blocked,
-                reason,
-              } = await self.processorRunner.processPart(chunk as any, processorStates);
-
-              if (blocked) {
-                // Send tripwire part and close stream for abort
-                controller.enqueue({
-                  type: 'tripwire',
-                  payload: {
-                    tripwireReason: reason || 'Output processor blocked content',
-                  },
-                });
-                controller.terminate();
-                return;
-              }
-
-              if (processedPart) {
-                controller.enqueue(processedPart);
-              }
-            } else {
-              controller.enqueue(chunk);
-            }
-          },
-        }),
-      )
       .pipeThrough(
         createObjectStreamTransformer({
           schema: self.#options.output,
@@ -733,6 +822,25 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       },
     });
 
+    let scoringData:
+      | {
+          input: Omit<ScorerRunInputForAgent, 'runId'>;
+          output: ScorerRunOutputForAgent;
+        }
+      | undefined;
+
+    if (this.#returnScorerData) {
+      scoringData = {
+        input: {
+          inputMessages: this.messageList.getPersisted.input.ui(),
+          rememberedMessages: this.messageList.getPersisted.remembered.ui(),
+          systemMessages: this.messageList.getSystemMessages(),
+          taggedSystemMessages: this.messageList.getPersisted.taggedSystemMessages,
+        },
+        output: this.messageList.getPersisted.response.ui(),
+      };
+    }
+
     const fullOutput = {
       text: await this.text,
       usage: await this.usage,
@@ -753,9 +861,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       error: this.error,
       tripwire: this.#tripwire,
       tripwireReason: this.#tripwireReason,
+      ...(scoringData ? { scoringData } : {}),
+      traceId: this.traceId,
     };
-
-    fullOutput.response.messages = this.messageList.get.response.aiV5.model();
 
     return fullOutput;
   }

@@ -1,4 +1,5 @@
 import { openai } from '@ai-sdk/openai';
+import { createTool } from '@mastra/core';
 import { describe, expect, it, vi } from 'vitest';
 import { createAgentTestRun, createToolInvocation, createUIMessage, extractToolCalls } from '../../utils';
 import { createToolCallAccuracyScorerLLM } from './index';
@@ -7,10 +8,10 @@ describe('createToolCallAccuracyScorerLLM', () => {
   const mockModel = openai('gpt-4o-mini');
 
   const availableTools = [
-    { name: 'weather-tool', description: 'Get weather information for a location' },
-    { name: 'calculator-tool', description: 'Perform mathematical calculations' },
-    { name: 'search-tool', description: 'Search the web for information' },
-    { name: 'calendar-tool', description: 'Manage calendar events' },
+    createTool({ id: 'calculator-tool', description: 'Perform mathematical calculations' }),
+    createTool({ id: 'search-tool', description: 'Search the web for information' }),
+    createTool({ id: 'calendar-tool', description: 'Manage calendar events' }),
+    createTool({ id: 'weather-tool', description: 'Get weather information' }),
   ];
 
   describe('Basic Configuration', () => {
@@ -544,7 +545,7 @@ describe('createToolCallAccuracyScorerLLM', () => {
     it('should evaluate multi-step tool usage correctly', async () => {
       const scorer = createToolCallAccuracyScorerLLM({
         model: mockModel,
-        availableTools: [...availableTools, { name: 'email-tool', description: 'Send emails' }],
+        availableTools: [...availableTools, createTool({ id: 'email-tool', description: 'Send emails' })],
       });
 
       // Mock the run method to return expected results

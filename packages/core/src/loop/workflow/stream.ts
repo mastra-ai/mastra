@@ -19,6 +19,8 @@ export function workflowLoopStream<
   modelSettings,
   _internal,
   modelStreamSpan,
+  llmAISpan,
+  messageId,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType>({
@@ -28,8 +30,6 @@ export function workflowLoopStream<
           controller.enqueue(chunk);
         },
       });
-
-      const messageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
 
       modelStreamSpan.setAttributes({
         ...(telemetry_settings?.recordInputs !== false
@@ -154,6 +154,7 @@ export function workflowLoopStream<
             nonUser: [],
           },
         },
+        tracingContext: { currentSpan: llmAISpan, isInternal: true },
       });
 
       if (executionResult.status !== 'success') {
@@ -162,7 +163,6 @@ export function workflowLoopStream<
       }
 
       if (executionResult.result.stepResult.reason === 'abort') {
-        console.log('aborted_result', JSON.stringify(executionResult.result, null, 2));
         controller.close();
         return;
       }

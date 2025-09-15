@@ -108,6 +108,13 @@ const queryTool = createVectorQueryTool({
         "Database-specific configuration options for optimizing queries. (Can be set at creation or overridden at runtime.)",
       isOptional: true,
     },
+    {
+      name: "providerOptions",
+      type: "Record<string, Record<string, any>>",
+      description:
+        "Provider-specific options for the embedding model (e.g., outputDimensionality). **Important**: Only works with AI SDK EmbeddingModelV2 models. For V1 models, configure options when creating the model itself.",
+      isOptional: true,
+    },
   ]}
 />
 
@@ -551,8 +558,8 @@ const response = await agent.generate(
 
 For more information on runtime context, please see:
 
-- [Runtime Variables](../../docs/agents/runtime-variables.mdx)
-- [Dynamic Context](../../docs/tools-mcp/dynamic-context.mdx)
+- [Agent Runtime Context](../../docs/agents/runtime-context.mdx)
+- [Tool Runtime Context](../../docs/tools-mcp/runtime-context.mdx)
 
 ## Usage Without a Mastra Server
 

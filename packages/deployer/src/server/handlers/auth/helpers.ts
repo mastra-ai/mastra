@@ -6,6 +6,30 @@ export const isDevPlaygroundRequest = (req: HonoRequest): boolean => {
   return req.header('x-mastra-dev-playground') === 'true' && process.env.MASTRA_DEV === 'true';
 };
 
+export const isCustomRoutePublic = (
+  path: string,
+  method: string,
+  customRouteAuthConfig?: Map<string, boolean>,
+): boolean => {
+  if (!customRouteAuthConfig) {
+    return false;
+  }
+
+  // Check exact match first
+  const routeKey = `${method}:${path}`;
+  if (customRouteAuthConfig.has(routeKey)) {
+    return !customRouteAuthConfig.get(routeKey); // Return true if requiresAuth is false
+  }
+
+  // Check ALL method
+  const allRouteKey = `ALL:${path}`;
+  if (customRouteAuthConfig.has(allRouteKey)) {
+    return !customRouteAuthConfig.get(allRouteKey);
+  }
+
+  return false;
+};
+
 export const isProtectedPath = (path: string, method: string, authConfig: MastraAuthConfig): boolean => {
   const protectedAccess = [...(defaultAuthConfig.protected || []), ...(authConfig.protected || [])];
   return isAnyMatch(path, method, protectedAccess);

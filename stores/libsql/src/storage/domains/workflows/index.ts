@@ -259,15 +259,18 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }) {
     const data = {
       workflow_name: workflowName,
       run_id: runId,
+      resourceId,
       snapshot,
       createdAt: new Date(),
       updatedAt: new Date(),

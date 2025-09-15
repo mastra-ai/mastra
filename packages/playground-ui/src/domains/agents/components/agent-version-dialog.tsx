@@ -56,7 +56,12 @@ export function AgentVersionDialog({
 
   return (
     <>
-      <SideDialog dialogTitle="Dataset Details" isOpen={isOpen} onClose={onClose}>
+      <SideDialog
+        dialogTitle="Agent Version Details"
+        dialogDescription="See and manage different versions of your agents."
+        isOpen={isOpen}
+        onClose={onClose}
+      >
         <SideDialogTop onNext={onNext} onPrevious={onPrevious} showInnerNav={mode === 'view'}>
           <div className="flex items-center gap-[0.5rem] text-icon4 text-[0.875rem]">
             {['edit', 'view', 'delete', 'create'].includes(mode) && (
@@ -138,7 +143,8 @@ export function AgentVersionDialog({
         </SideDialogContent>
       </SideDialog>
       <SideDialog
-        dialogTitle="Deleting Dataset Item Confirmation"
+        dialogTitle="Deleting Agent Version"
+        dialogDescription="Deleting Agent Version confirmation"
         variant="confirmation"
         isOpen={confirmationIsOpen}
         onClose={() => setConfirmationIsOpen(false)}
