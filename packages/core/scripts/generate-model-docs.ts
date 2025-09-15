@@ -241,12 +241,18 @@ for await (const chunk of stream) {
   console.log(chunk);
 }
 \`\`\`
+
+## Models
+
+<ProviderModelsTable 
+  models={${modelDataJson}}
+/>
 ${
   provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible'
     ? `
-### Vercel AI SDK
+## Vercel AI SDK
 
-This provider also has a dedicated Vercel AI SDK model provider which can be installed with:
+This provider also has an installable model provider which can be used instead of the Mastra model router string:
 
 <Tabs items={["npm", "yarn", "pnpm", "bun"]}>
   <Tab>
@@ -273,12 +279,6 @@ This provider also has a dedicated Vercel AI SDK model provider which can be ins
 `
     : ''
 }
-## Models
-
-<ProviderModelsTable 
-  models={${modelDataJson}}
-/>
-
 ## Advanced Configuration
 
 ### Custom Headers
