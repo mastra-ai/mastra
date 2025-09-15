@@ -10,12 +10,12 @@ import {
   Tab,
   TabContent,
   EntityHeader,
+  useWorkflow,
 } from '@mastra/playground-ui';
 
 import { WorkflowLogs } from './workflow-logs';
 import {
   useLegacyWorkflow,
-  useWorkflow,
   useExecuteWorkflow,
   useResumeWorkflow,
   useStreamWorkflow,
