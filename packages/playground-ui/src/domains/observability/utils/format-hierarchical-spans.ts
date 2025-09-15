@@ -48,7 +48,6 @@ export const formatHierarchicalSpans = (spans: AISpanRecord[]): UISpan[] => {
         const overallEndTime = new Date(overallEndDate).getTime();
         const spanStartTime = new Date(uiSpan.startTime).getTime();
         uiSpan.latency = overallEndTime - spanStartTime;
-        console.log('Root span endTime patched to overall endTime due to inconsistency in data', 'Span ID:', uiSpan.id);
       }
       rootSpans.push(uiSpan);
     } else {
