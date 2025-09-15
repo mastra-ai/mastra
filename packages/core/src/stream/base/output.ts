@@ -22,6 +22,7 @@ import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
+import type { WorkflowRunStatus } from '../../workflows';
 
 export class JsonToSseTransformStream extends TransformStream<unknown, string> {
   constructor() {
@@ -51,6 +52,7 @@ type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   tracingContext?: TracingContext;
 };
 export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
+  #status: WorkflowRunStatus = 'running';
   #aisdkv5: AISDKV5OutputStream<OUTPUT>;
   #error: Error | string | { message: string; stack: string } | undefined;
   #baseStream: ReadableStream<ChunkType<OUTPUT>>;
@@ -214,6 +216,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
         transform: async (chunk, controller) => {
           switch (chunk.type) {
+            case 'tool-call-approval':
+              self.#status = 'suspended';
+              break;
             case 'source':
               self.#bufferedSources.push(chunk);
               self.#bufferedByStep.sources.push(chunk);
@@ -367,6 +372,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               controller.terminate();
               return;
             case 'finish':
+              self.#status = 'success';
               if (chunk.payload.stepResult.reason) {
                 self.#finishReason = chunk.payload.stepResult.reason;
               }
@@ -590,6 +596,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               break;
 
             case 'error':
+              self.#status = 'failed';
               self.#error = chunk.payload.error as any;
 
               // Reject all delayed promises on error
@@ -1032,5 +1039,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       ...this.#usageCount,
       totalTokens: total,
     };
+  }
+
+  get status() {
+    return this.#status;
   }
 }

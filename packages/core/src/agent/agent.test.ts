@@ -656,8 +656,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         }
         response = stream.response;
         console.log('response', JSON.stringify(response.toolResults, null, 2));
-        // TODO: send approval
-        toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'findUserTool').payload;
+        console.log('status', stream.status);
+        // TODO: resume agent stream with approval
+        // TODO: consume the chunks
+        // toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'findUserTool').payload;
       }
 
       const name = toolCall?.result?.name;
