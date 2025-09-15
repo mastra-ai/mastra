@@ -211,7 +211,7 @@ jobs:
           fi
 
   validate-pkg-json:
-    name: Validate /packages package.json files
+    name: Validate package.json files
     runs-on: ubuntu-latest
     # Run on main repository or for trusted bot PRs
     if: ${{ github.repository == 'mastra-ai/mastra' && !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
