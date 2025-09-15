@@ -149,7 +149,7 @@ export const AgentMetadata = ({
       </AgentMetadataSection>
 
       <AgentMetadataSection title="Scorers">
-        <AgentMetadataScorerList entityId={agent.name} />
+        <ScorerList entityId={agent.name} entityType="AGENT" />
       </AgentMetadataSection>
       <AgentMetadataSection title="System Prompt">{promptSlot}</AgentMetadataSection>
     </AgentMetadataWrapper>
@@ -178,14 +178,6 @@ export const AgentMetadataToolList = ({ tools, computeToolLink }: AgentMetadataT
         </AgentMetadataListItem>
       ))}
     </AgentMetadataList>
-  );
-};
-
-export const AgentMetadataScorerList = ({ entityId }: { entityId: string }) => {
-  return (
-    <div className="px-5 pb-5">
-      <ScorerList entityId={entityId} entityType="AGENT" />
-    </div>
   );
 };
 
