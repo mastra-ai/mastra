@@ -7728,6 +7728,146 @@ describe('Agent Tests', () => {
 
   agentTests({ version: 'v1' });
   agentTests({ version: 'v2' });
+
+  describe('agent.stopWhen', () => {
+    const weatherTool = createTool({
+      id: 'weather-tool',
+      description: 'Get weather for a location',
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      execute: async context => {
+        const { location } = context;
+        return {
+          temperature: 70,
+          feelsLike: 65,
+          humidity: 50,
+          windSpeed: 10,
+          windGust: 15,
+          conditions: 'sunny',
+          location,
+        };
+      },
+    });
+
+    const planActivities = createTool({
+      id: 'plan-activities',
+      description: 'Plan activities based on the weather',
+      inputSchema: z.object({
+        temperature: z.string(),
+      }),
+      execute: async () => {
+        return { activities: 'Plan activities based on the weather' };
+      },
+    });
+
+    const agent = new Agent({
+      name: 'test-step-boundaries',
+      instructions:
+        'You are a helpful assistant. Figure out the weather and then using that weather plan some activities. Always use the weather tool first, and then the plan activities tool with the result of the weather tool',
+      model: openai_v5('gpt-4o-mini'),
+      tools: {
+        weatherTool,
+        planActivities,
+      },
+    });
+
+    it('should demonstrate that stopWhen gets the proper step results in the first step', async () => {
+      let stopWhenCallCount = 0;
+      const stopWhenCalls: { callNumber: number; steps: any[] }[] = [];
+
+      const stream = await agent.streamVNext('What should i be doing in Toronto today?', {
+        stopWhen: ({ steps }) => {
+          stopWhenCallCount++;
+          // Store the call details
+          stopWhenCalls.push({
+            callNumber: stopWhenCallCount,
+            steps: JSON.parse(JSON.stringify(steps)), // Deep copy to preserve state
+          });
+
+          // Check if any step has tool calls
+          const hasToolCalls = steps.some(step => {
+            return step.content && step.content.some(item => item.type === 'tool-call' || item.type === 'tool-result');
+          });
+
+          if (hasToolCalls) {
+            console.log(`Found tool calls in steps, attempting to stop...`);
+            // Try to stop immediately after finding tool calls
+            return true;
+          }
+
+          return false;
+        },
+      });
+
+      const chunks: ChunkType[] = [];
+      let stepStartCount = 0;
+      let foundToolCallChunk = false;
+      let foundTextChunk = false;
+      for await (const chunk of stream.fullStream) {
+        chunks.push(chunk);
+
+        if (chunk.type === 'step-start') {
+          stepStartCount++;
+        } else if (chunk.type === 'tool-call') {
+          foundToolCallChunk = true;
+        } else if (chunk.type === 'text-delta' && chunk.payload.text.trim()) {
+          foundTextChunk = true;
+        }
+      }
+
+      expect(foundToolCallChunk).toBe(true);
+
+      expect(stepStartCount).toBe(1);
+      expect(foundTextChunk).toBe(false);
+
+      expect(stopWhenCallCount).toBe(1);
+    }, 10000);
+
+    it('should not call stopWhen on the final step', async () => {
+      let stopWhenCallCount = 0;
+      const stopWhenCalls: { callNumber: number; stepCount: number }[] = [];
+
+      const trackStopWhenCalls = ({ steps }: { steps: any[] }) => {
+        stopWhenCallCount++;
+        stopWhenCalls.push({
+          callNumber: stopWhenCallCount,
+          stepCount: steps.length,
+        });
+
+        return false;
+      };
+
+      const stream = await agent.streamVNext('What should i be doing in Toronto today?', {
+        stopWhen: trackStopWhenCalls,
+      });
+
+      let stepStartCount = 0;
+      let stepFinishCount = 0;
+
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'step-start') {
+          stepStartCount++;
+          console.log(`Step ${stepStartCount} started`);
+        } else if (chunk.type === 'step-finish') {
+          stepFinishCount++;
+          console.log(`Step ${stepFinishCount} finished`);
+        }
+      }
+
+      await stream.consumeStream();
+
+      // Verify that stopWhen is called n-1 times for n steps
+      expect(stepStartCount).toBe(stepFinishCount);
+      expect(stepStartCount).toBeGreaterThanOrEqual(2);
+
+      expect(stopWhenCallCount).toBe(stepStartCount - 1);
+
+      stopWhenCalls.forEach((call, index) => {
+        expect(call.stepCount).toBe(index + 1);
+      });
+    }, 10000);
+  });
 });
 
 //     it('should accept and execute both Mastra and Vercel tools in Agent constructor', async () => {
@@ -8043,181 +8183,7 @@ describe('Stream ID Consistency', () => {
     expect(customIdGenerator).toHaveBeenCalled();
   });
 
-  describe('Tool calls and text in same step (Issue #7771)', () => {
-    const weatherTool = createTool({
-      id: 'weather-tool',
-      description: 'Get weather for a location',
-      inputSchema: z.object({
-        location: z.string(),
-      }),
-      execute: async context => {
-        const { location } = context;
-        return {
-          temperature: 70,
-          feelsLike: 65,
-          humidity: 50,
-          windSpeed: 10,
-          windGust: 15,
-          conditions: 'sunny',
-          location,
-        };
-      },
-    });
-
-    const planActivities = createTool({
-      id: 'plan-activities',
-      description: 'Plan activities based on the weather',
-      inputSchema: z.object({
-        temperature: z.string(),
-      }),
-      execute: async () => {
-        return { activities: 'Plan activities based on the weather' };
-      },
-    });
-
-    const agent = new Agent({
-      name: 'test-step-boundaries',
-      instructions:
-        'You are a helpful assistant. Figure out the weather and then using that weather plan some activities. Always use the weather tool first, and then the plan activities tool with the result of the weather tool',
-      model: openai_v5('gpt-4o-mini'),
-      tools: {
-        weatherTool,
-        planActivities,
-      },
-    });
-
-    it('should demonstrate that stopWhen gets the proper step results in the first step', async () => {
-      let stopWhenCallCount = 0;
-      const stopWhenCalls: { callNumber: number; steps: any[] }[] = [];
-
-      const stream = await agent.streamVNext('What should i be doing in Toronto today?', {
-        stopWhen: ({ steps }) => {
-          console.log('stopwhen steps', JSON.stringify(steps, null, 2));
-          stopWhenCallCount++;
-          // Store the call details
-          stopWhenCalls.push({
-            callNumber: stopWhenCallCount,
-            steps: JSON.parse(JSON.stringify(steps)), // Deep copy to preserve state
-          });
-
-          console.log('steps', steps);
-
-          // Check if any step has tool calls
-          const hasToolCalls = steps.some(step => {
-            return step.content && step.content.some(item => item.type === 'tool-call' || item.type === 'tool-result');
-          });
-
-          if (hasToolCalls) {
-            console.log(`Found tool calls in steps, attempting to stop...`);
-            // Try to stop immediately after finding tool calls
-            return true;
-          }
-
-          return false;
-        },
-      });
-
-      const chunks: ChunkType[] = [];
-      const chunkOrder: string[] = [];
-      let stepStartCount = 0;
-      let foundToolCallChunk = false;
-      let foundTextChunk = false;
-      // Collect all chunks to analyze the structure
-      for await (const chunk of stream.fullStream) {
-        console.log('chunk', JSON.stringify(chunk.type, null, 2));
-        chunks.push(chunk);
-
-        // Log chunk types for analysis
-        chunkOrder.push(chunk.type);
-
-        if (chunk.type === 'step-start') {
-          stepStartCount++;
-        } else if (chunk.type === 'tool-call') {
-          foundToolCallChunk = true;
-        } else if (chunk.type === 'text-delta' && chunk.payload.text.trim()) {
-          foundTextChunk = true;
-        }
-      }
-      // Assertions to demonstrate the issue
-
-      // 1. Both tool call and text chunks should be found
-      expect(foundToolCallChunk).toBe(true);
-      // Note: Text might still be generated even with toolChoice: 'required'
-
-      // 2. We should see only one step start because we are stopping after the first tool call
-      expect(stepStartCount).toBe(1);
-
-      expect(foundTextChunk).toBe(false);
-
-      // 4. stopWhen should now receive accumulated steps properly
-      expect(stopWhenCallCount).toBe(1);
-    }, 10000);
-
-    it('should not call stopWhen on the final step (matching AI SDK behavior)', async () => {
-      // This test verifies that stopWhen is only called n-1 times for n steps
-      // matching the AI SDK v5 behavior where stopWhen isn't called on the final step
-      let stopWhenCallCount = 0;
-      const stopWhenCalls: { callNumber: number; stepCount: number }[] = [];
-
-      // Track all stopWhen calls but never stop
-      const trackStopWhenCalls = ({ steps }: { steps: any[] }) => {
-        stopWhenCallCount++;
-        stopWhenCalls.push({
-          callNumber: stopWhenCallCount,
-          stepCount: steps.length,
-        });
-
-        console.log(`\n=== stopWhen Call #${stopWhenCallCount} ===`);
-        console.log(`Received ${steps.length} step(s)`);
-
-        // Never stop, let it run to completion
-        return false;
-      };
-
-      // Stream the response and count steps
-      const stream = await agent.streamVNext('What should i be doing in Toronto today?', {
-        stopWhen: trackStopWhenCalls,
-      });
-
-      let stepStartCount = 0;
-      let stepFinishCount = 0;
-
-      // Collect all chunks to count steps
-      for await (const chunk of stream.fullStream) {
-        if (chunk.type === 'step-start') {
-          stepStartCount++;
-          console.log(`Step ${stepStartCount} started`);
-        } else if (chunk.type === 'step-finish') {
-          stepFinishCount++;
-          console.log(`Step ${stepFinishCount} finished`);
-        }
-      }
-
-      await stream.consumeStream();
-
-      console.log('\n=== Final Results ===');
-      console.log(`Total steps started: ${stepStartCount}`);
-      console.log(`Total steps finished: ${stepFinishCount}`);
-      console.log(`stopWhen called: ${stopWhenCallCount} times`);
-
-      // Verify that stopWhen is called n-1 times for n steps
-      expect(stepStartCount).toBe(stepFinishCount); // All steps should complete
-      expect(stepStartCount).toBeGreaterThanOrEqual(2); // At least 2 steps (tool call + text)
-
-      // The key assertion: stopWhen should be called one less time than the number of steps
-      // because it's not called on the final step
-      expect(stopWhenCallCount).toBe(stepStartCount - 1);
-
-      // Verify the pattern of accumulated steps in each call
-      stopWhenCalls.forEach((call, index) => {
-        console.log(`Call ${call.callNumber}: Received ${call.stepCount} step(s)`);
-        // Each call should have one more step than the previous
-        expect(call.stepCount).toBe(index + 1);
-      });
-    }, 10000);
-  });
-
-  describe('onFinish callback with structured output (Issue #7722)', () => {
+  describe('onFinish callback with structured output', () => {
     it('should include object field in onFinish callback when using structured output', async () => {
       const mockModel = new MockLanguageModelV2({
         doStream: async () => ({
