@@ -15,6 +15,7 @@ import type {
   StorageGetTracesArg,
   StoragePagination,
   StorageDomains,
+  ThreadSortOptions,
 } from '@mastra/core/storage';
 
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
@@ -163,8 +164,12 @@ export class UpstashStore extends MastraStorage {
   /**
    * @deprecated use getThreadsByResourceIdPaginated instead
    */
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    return this.stores.memory.getThreadsByResourceId({ resourceId });
+  async getThreadsByResourceId({
+    resourceId,
+    orderBy,
+    sortDirection,
+  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
+    return this.stores.memory.getThreadsByResourceId({ resourceId, orderBy, sortDirection });
   }
 
   public async getThreadsByResourceIdPaginated(args: {
