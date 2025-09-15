@@ -512,7 +512,7 @@ export function createLLMExecutionStep<
           includeRawChunks,
           output,
           outputProcessors,
-          outputProcessorRunnerMode: 'stream',
+          outputProcessorRunnerMode: outputProcessors?.some(p => p.name === 'structured-output') ? 'result' : 'stream',
           tracingContext,
         },
       });
