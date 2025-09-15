@@ -11,7 +11,6 @@ import yoctoSpinner from 'yocto-spinner';
 
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
-import { logger } from '../../utils/logger';
 import {
   cursorGlobalMCPConfigPath,
   globalMCPIsAlreadyInstalled,
@@ -654,23 +653,22 @@ export const interactivePrompt = async () => {
   return mastraProject;
 };
 
-export const checkPkgJson = async () => {
+/**
+ * Check if the current directory has a package.json file. If not, we should alert the user to create one or run "mastra create" to create a new project. The package.json file is required to install dependencies in the next steps.
+ */
+export const checkForPkgJson = async () => {
   const cwd = process.cwd();
   const pkgJsonPath = path.join(cwd, 'package.json');
 
-  let isPkgJsonPresent = false;
-
   try {
-    await fsExtra.readJSON(pkgJsonPath);
-    isPkgJsonPresent = true;
+    await fs.access(pkgJsonPath);
+
+    // Do nothing
   } catch {
-    isPkgJsonPresent = false;
-  }
+    p.log.error(
+      'No package.json file found in the current directory. Please run "npm init -y" to create one, or run "npx create-mastra@latest" to create a new Mastra project.',
+    );
 
-  if (isPkgJsonPresent) {
-    return;
+    process.exit(1);
   }
-
-  logger.debug('package.json not found, create one or run "mastra create" to create a new project');
-  process.exit(0);
 };
