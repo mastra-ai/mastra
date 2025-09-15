@@ -133,6 +133,9 @@ export type AgentExecutionOptions<
 
   /** Callback function called before each step of multi-step execution */
   prepareStep?: PrepareStepFunction<any>;
+
+  /** Require approval for all tool calls */
+  requireToolArroval?: boolean;
 };
 
 export type InnerAgentExecutionOptions<

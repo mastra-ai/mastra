@@ -69,6 +69,7 @@ export interface ToolAction<
     options?: ToolExecutionOptions,
   ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
   mastra?: Mastra;
+  requireApproval?: boolean;
   onInputStart?: (options: ToolCallOptions) => void | PromiseLike<void>;
   onInputDelta?: (
     options: {

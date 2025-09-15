@@ -18,6 +18,7 @@ export class Tool<
   outputSchema?: TSchemaOut;
   execute?: ToolAction<TSchemaIn, TSchemaOut, TContext>['execute'];
   mastra?: Mastra;
+  requireApproval?: boolean;
 
   constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TContext>) {
     this.id = opts.id;
@@ -25,6 +26,7 @@ export class Tool<
     this.inputSchema = opts.inputSchema;
     this.outputSchema = opts.outputSchema;
     this.mastra = opts.mastra;
+    this.requireApproval = opts.requireApproval || false;
 
     // Wrap the execute function with validation if it exists
     if (opts.execute) {

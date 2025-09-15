@@ -13,7 +13,7 @@ import { createToolCallStep } from './tool-call-step';
 export function createOuterLLMWorkflow<
   Tools extends ToolSet = ToolSet,
   OUTPUT extends OutputSchema | undefined = undefined,
->({ model, telemetry_settings, _internal, modelStreamSpan, ...rest }: OuterLLMRun<Tools, OUTPUT>) {
+>({ model, telemetry_settings, _internal, modelStreamSpan, requireToolArroval, ...rest }: OuterLLMRun<Tools, OUTPUT>) {
   const llmExecutionStep = createLLMExecutionStep({
     model,
     _internal,
@@ -27,6 +27,7 @@ export function createOuterLLMWorkflow<
     telemetry_settings,
     _internal,
     modelStreamSpan,
+    requireToolArroval,
     ...rest,
   });
 

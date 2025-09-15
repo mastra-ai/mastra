@@ -1,5 +1,6 @@
 import type { ToolCallOptions, ToolSet } from 'ai-v5';
 import type { OutputSchema } from '../../stream/base/schema';
+import { ChunkFrom } from '../../stream/types';
 import { createStep } from '../../workflows';
 import { assembleOperationName, getTracer } from '../telemetry';
 import type { OuterLLMRun } from '../types';
@@ -8,12 +9,21 @@ import { toolCallInputSchema, toolCallOutputSchema } from './schema';
 export function createToolCallStep<
   Tools extends ToolSet = ToolSet,
   OUTPUT extends OutputSchema | undefined = undefined,
->({ tools, messageList, options, telemetry_settings, writer }: OuterLLMRun<Tools, OUTPUT>) {
+>({
+  tools,
+  messageList,
+  options,
+  telemetry_settings,
+  writer,
+  requireToolApproval,
+  controller,
+  runId,
+}: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
-    execute: async ({ inputData }) => {
+    execute: async ({ inputData, suspend }) => {
       // If the tool was already executed by the provider, skip execution
       if (inputData.providerExecuted) {
         // Still emit telemetry for provider-executed tools
@@ -89,6 +99,26 @@ export function createToolCallStep<
       });
 
       try {
+        if (requireToolApproval || (tool as any).requireApproval) {
+          controller.enqueue({
+            type: 'tool-call-approval',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {
+              toolCallId: inputData.toolCallId,
+              toolName: inputData.toolName,
+              args: inputData.args,
+            },
+          });
+          await suspend({
+            requireToolApproval: {
+              toolCallId: inputData.toolCallId,
+              toolName: inputData.toolName,
+              args: inputData.args,
+            },
+          });
+        }
+
         const result = await tool.execute(inputData.args, {
           abortSignal: options?.abortSignal,
           toolCallId: inputData.toolCallId,

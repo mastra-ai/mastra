@@ -21,6 +21,7 @@ export function workflowLoopStream<
   modelStreamSpan,
   llmAISpan,
   messageId,
+  requireToolArroval,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType>({
@@ -49,6 +50,7 @@ export function workflowLoopStream<
         modelStreamSpan,
         controller,
         writer,
+        requireToolArroval,
         ...rest,
       });
 

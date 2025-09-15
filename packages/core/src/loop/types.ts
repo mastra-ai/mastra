@@ -78,6 +78,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   downloadRetries?: number;
   downloadConcurrency?: number;
   llmAISpan?: AISpan<AISpanType.LLM_GENERATION>;
+  requireToolArroval?: boolean;
 };
 
 export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = LoopOptions<
@@ -95,6 +96,7 @@ export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   messageId: string;
   controller: ReadableStreamDefaultController<ChunkType>;
   writer: WritableStream<ChunkType>;
+  requireToolApproval?: boolean;
 } & LoopRun<Tools, OUTPUT>;
 
 export const RESOURCE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool']);
