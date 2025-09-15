@@ -10,8 +10,8 @@ const memory = new Memory({
   }),
 });
 
-export const pdfContentAgent = new Agent({
-  name: 'PDF Educational Content Agent',
+export const pdfProcessorAgent = new Agent({
+  name: 'PDF Content Processor',
   description:
     'An agent specialized in processing and extracting educational content from PDF documents for learning and flash card generation',
   instructions: `
