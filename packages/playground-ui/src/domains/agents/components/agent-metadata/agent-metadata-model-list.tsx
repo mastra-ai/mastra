@@ -38,6 +38,26 @@ export const AgentMetadataModelList = ({
     reorderModelList({ reorderedModelIds: items.map(item => item.id) });
   };
 
+  const updateModel = (params: UpdateModelInModelListParams) => {
+    setModelConfigs(prev =>
+      prev.map(modelConfig =>
+        modelConfig.id === params.modelConfigId
+          ? {
+              ...modelConfig,
+              enabled: params.enabled || modelConfig.enabled,
+              maxRetries: params.maxRetries || modelConfig.maxRetries,
+              model: {
+                modelId: params.model?.modelId || modelConfig.model.modelId,
+                provider: params.model?.provider || modelConfig.model.provider,
+                modelVersion: modelConfig.model.modelVersion,
+              },
+            }
+          : modelConfig,
+      ),
+    );
+    return updateModelInModelList(params);
+  };
+
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
       <Droppable droppableId="model-list">
@@ -55,7 +75,7 @@ export const AgentMetadataModelList = ({
                     <AgentMetadataModelListItem
                       modelConfig={modelConfig}
                       modelProviders={modelProviders}
-                      updateModelInModelList={updateModelInModelList}
+                      updateModelInModelList={updateModel}
                     />
                   </div>
                 )}
@@ -115,6 +135,7 @@ const AgentMetadataModelListItem = ({
         onClick={() => setIsEditingModel(true)}
         className="text-icon3 hover:text-icon6"
         title="Edit model"
+        type="button"
         aria-label="Edit model"
       >
         <Icon>
