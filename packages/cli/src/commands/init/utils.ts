@@ -22,6 +22,7 @@ const exec = util.promisify(child_process.exec);
 export type LLMProvider = 'openai' | 'anthropic' | 'groq' | 'google' | 'cerebras' | 'mistral';
 export type Components = 'agents' | 'workflows' | 'tools';
 
+// TODO: Once the switch to AI SDK v5 is complete, this needs to be updated
 export const getAISDKPackageVersion = (llmProvider: LLMProvider) => {
   switch (llmProvider) {
     case 'cerebras':
@@ -413,24 +414,30 @@ export const checkInitialization = async (dirPath: string) => {
 };
 
 export const checkAndInstallCoreDeps = async (addExample: boolean) => {
-  const depsService = new DepsService();
-  let depCheck = await depsService.checkDependencies(['@mastra/core']);
+  const depService = new DepsService();
+  const needsCore = (await depService.checkDependencies(['@mastra/core'])) !== `ok`;
+  const needsZod = (await depService.checkDependencies(['zod'])) !== `ok`;
 
-  if (depCheck !== 'ok') {
+  if (needsCore) {
     await installCoreDeps('@mastra/core');
   }
 
-  if (addExample) {
-    depCheck = await depsService.checkDependencies(['@mastra/libsql']);
+  if (needsZod) {
+    // TODO: Once the switch to AI SDK v5 is complete, this needs to be updated
+    await installCoreDeps('zod', '^3');
+  }
 
-    if (depCheck !== 'ok') {
+  if (addExample) {
+    const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
+
+    if (needsLibsql) {
       await installCoreDeps('@mastra/libsql');
     }
   }
 };
 
 const spinner = yoctoSpinner({ text: 'Installing Mastra core dependencies\n' });
-export async function installCoreDeps(pkg: string) {
+export async function installCoreDeps(pkg: string, version = 'latest') {
   try {
     const confirm = await p.confirm({
       message: `You do not have the ${pkg} package installed. Would you like to install it?`,
@@ -451,8 +458,8 @@ export async function installCoreDeps(pkg: string) {
 
     const depsService = new DepsService();
 
-    await depsService.installPackages([`${pkg}@latest`]);
-    spinner.success('@mastra/core installed successfully');
+    await depsService.installPackages([`${pkg}@${version}`]);
+    spinner.success(`${pkg} installed successfully`);
   } catch (err) {
     console.error(err);
   }
