@@ -1,4 +1,4 @@
-import { MemorySearch } from '@mastra/playground-ui';
+import { MemorySearch, useThreadInput } from '@mastra/playground-ui';
 import { useMemorySearch, useMemoryConfig } from '@/hooks/use-memory';
 import { AgentWorkingMemory } from './agent-working-memory';
 import { AgentMemoryConfig } from './agent-memory-config';
@@ -9,10 +9,11 @@ import { ExternalLink } from 'lucide-react';
 
 interface AgentMemoryProps {
   agentId: string;
-  chatInputValue?: string;
 }
 
-export function AgentMemory({ agentId, chatInputValue }: AgentMemoryProps) {
+export function AgentMemory({ agentId }: AgentMemoryProps) {
+  const { threadInput: chatInputValue } = useThreadInput();
+
   const { threadId } = useParams();
   const navigate = useNavigate();
   const [searchScope, setSearchScope] = useState<string | null>(null);
