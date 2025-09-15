@@ -52,12 +52,12 @@ export function getTraceInfo(
     {
       key: 'startedAt',
       label: 'Started at',
-      value: trace?.startedAt ? format(new Date(trace?.startedAt), 'PPpp') : '-',
+      value: trace?.startedAt ? format(new Date(trace?.startedAt), 'MMM dd, hh:mm:ss.SSS aaa') : '-',
     },
     {
       key: 'endedAt',
       label: 'Ended at',
-      value: trace?.endedAt ? format(new Date(trace?.endedAt), 'PPpp') : '-',
+      value: trace?.endedAt ? format(new Date(trace?.endedAt), 'MMM dd, hh:mm:ss.SSS aaa') : '-',
     },
   ];
 }
@@ -82,12 +82,12 @@ export function getSpanInfo({ span, withTraceId = true, withSpanId = true }: get
     {
       key: 'startedAt',
       label: 'Started At',
-      value: span?.startedAt ? format(new Date(span.startedAt), 'MMM dd, HH:mm:ss.SSS') : '-',
+      value: span?.startedAt ? format(new Date(span.startedAt), 'MMM dd, hh:mm:ss.SSS aaa') : '-',
     },
     {
       key: 'endedAt',
       label: 'Ended At',
-      value: span?.endedAt ? format(new Date(span.endedAt), 'MMM dd, HH:mm:ss.SSS') : '-',
+      value: span?.endedAt ? format(new Date(span.endedAt), 'MMM dd, hh:mm:ss.SSS aaa') : '-',
     },
   ];
 
