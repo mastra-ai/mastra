@@ -224,7 +224,8 @@ const aiSdkResult = await agent.generateVNext("message for agent", {
       name: "output",
       type: "Zod schema | JsonSchema7",
       isOptional: true,
-      description: "Schema for structured output generation (Zod schema or JSON Schema).",
+      description: 
+        "**Deprecated.** Use structuredOutput with maxSteps:1 to achieve the same thing. Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
     },
     {
       name: "memory",

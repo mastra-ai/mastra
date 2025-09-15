@@ -1,5 +1,30 @@
 # @mastra/dane
 
+## 0.0.54-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`60c9cec`](https://github.com/mastra-ai/mastra/commit/60c9cec7048a79a87440f7840c383875bd710d93), [`897995e`](https://github.com/mastra-ai/mastra/commit/897995e630d572fe2891e7ede817938cabb43251)]:
+  - @mastra/core@0.16.4-alpha.2
+
+## 0.0.54-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`547c621`](https://github.com/mastra-ai/mastra/commit/547c62104af3f7a551b3754e9cbdf0a3fbba15e4)]:
+  - @mastra/core@0.16.4-alpha.1
+  - @mastra/libsql@0.14.2-alpha.1
+  - @mastra/upstash@0.15.1-alpha.0
+
+## 0.0.54-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`2cecf62`](https://github.com/mastra-ai/mastra/commit/2cecf62739e6107d6f6a10de51bf7de88ff6d9e6), [`2ebe4c4`](https://github.com/mastra-ai/mastra/commit/2ebe4c4c34dd3e16b94cf66f6d5ce03a286e322a), [`5802bf5`](https://github.com/mastra-ai/mastra/commit/5802bf57f6182e4b67c28d7d91abed349a8d14f3), [`5bda53a`](https://github.com/mastra-ai/mastra/commit/5bda53a9747bfa7d876d754fc92c83a06e503f62), [`f26a8fd`](https://github.com/mastra-ai/mastra/commit/f26a8fd99fcb0497a5d86c28324430d7f6a5fb83), [`1a1fbe6`](https://github.com/mastra-ai/mastra/commit/1a1fbe66efb7d94abc373ed0dd9676adb8122454), [`36f39c0`](https://github.com/mastra-ai/mastra/commit/36f39c00dc794952dc3c11aab91c2fa8bca74b11)]:
+  - @mastra/libsql@0.14.2-alpha.0
+  - @mastra/rag@1.2.5-alpha.0
+  - @mastra/core@0.16.4-alpha.0
+
 ## 0.0.53
 
 ### Patch Changes
