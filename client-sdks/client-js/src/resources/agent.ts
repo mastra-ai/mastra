@@ -29,7 +29,7 @@ import type {
   NetworkStreamParams,
 } from '../types';
 
-import { base64RuntimeContext, parseClientRuntimeContext } from '../utils';
+import { parseClientRuntimeContext, runtimeContextQueryString } from '../utils';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
@@ -161,39 +161,23 @@ export class AgentVoice extends BaseResource {
   /**
    * Get available speakers for the agent's voice provider
    * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing list of available speakers
    */
   getSpeakers(
     runtimeContext?: RuntimeContext | Record<string, any>,
   ): Promise<Array<{ voiceId: string; [key: string]: any }>> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
-
-    const searchParams = new URLSearchParams();
-
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
-    }
-
-    const queryString = searchParams.toString();
-    return this.request(`/api/agents/${this.agentId}/voice/speakers${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/agents/${this.agentId}/voice/speakers${runtimeContextQueryString(runtimeContext)}`);
   }
 
   /**
    * Get the listener configuration for the agent's voice provider
    * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing a check if the agent has listening capabilities
    */
   getListener(runtimeContext?: RuntimeContext | Record<string, any>): Promise<{ enabled: boolean }> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
-
-    const searchParams = new URLSearchParams();
-
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
-    }
-
-    const queryString = searchParams.toString();
-    return this.request(`/api/agents/${this.agentId}/voice/listener${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/agents/${this.agentId}/voice/listener${runtimeContextQueryString(runtimeContext)}`);
   }
 }
 
@@ -210,20 +194,11 @@ export class Agent extends BaseResource {
 
   /**
    * Retrieves details about the agent
-   * @param runtimeContext - Runtime context to use for the agent
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing agent details including model and instructions
    */
   details(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetAgentResponse> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
-
-    const searchParams = new URLSearchParams();
-
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
-    }
-
-    const queryString = searchParams.toString();
-    return this.request(`/api/agents/${this.agentId}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/agents/${this.agentId}${runtimeContextQueryString(runtimeContext)}`);
   }
 
   /**
@@ -351,7 +326,34 @@ export class Agent extends BaseResource {
   async generateVNext<
     T extends OutputSchema | undefined = undefined,
     STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  >(params: StreamVNextParams<T, STRUCTURED_OUTPUT>): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
+  >(
+    messages: MessageListInput,
+    options?: Omit<StreamVNextParams<T, STRUCTURED_OUTPUT>, 'messages'>,
+  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
+  // Backward compatibility overload
+  async generateVNext<
+    T extends OutputSchema | undefined = undefined,
+    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(params: StreamVNextParams<T, STRUCTURED_OUTPUT>): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
+  async generateVNext<
+    T extends OutputSchema | undefined = undefined,
+    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    messagesOrParams: MessageListInput | StreamVNextParams<T, STRUCTURED_OUTPUT>,
+    options?: Omit<StreamVNextParams<T, STRUCTURED_OUTPUT>, 'messages'>,
+  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
+    // Handle both new signature (messages, options) and old signature (single param object)
+    let params: StreamVNextParams<T, STRUCTURED_OUTPUT>;
+    if (typeof messagesOrParams === 'object' && 'messages' in messagesOrParams) {
+      // Old signature: single parameter object
+      params = messagesOrParams;
+    } else {
+      // New signature: messages as first param, options as second
+      params = {
+        messages: messagesOrParams as MessageListInput,
+        ...options,
+      } as StreamVNextParams<T, STRUCTURED_OUTPUT>;
+    }
     const processedParams = {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
@@ -1344,6 +1346,22 @@ export class Agent extends BaseResource {
     T extends OutputSchema | undefined = undefined,
     STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
+    messages: MessageListInput,
+    options?: Omit<StreamVNextParams<T, STRUCTURED_OUTPUT>, 'messages'>,
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  >;
+  // Backward compatibility overload
+  async streamVNext<
+    T extends OutputSchema | undefined = undefined,
+    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
     params: StreamVNextParams<T, STRUCTURED_OUTPUT>,
   ): Promise<
     Response & {
@@ -1353,7 +1371,34 @@ export class Agent extends BaseResource {
         onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
       }) => Promise<void>;
     }
+  >;
+  async streamVNext<
+    T extends OutputSchema | undefined = undefined,
+    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    messagesOrParams: MessageListInput | StreamVNextParams<T, STRUCTURED_OUTPUT>,
+    options?: Omit<StreamVNextParams<T, STRUCTURED_OUTPUT>, 'messages'>,
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
   > {
+    // Handle both new signature (messages, options) and old signature (single param object)
+    let params: StreamVNextParams<T, STRUCTURED_OUTPUT>;
+    if (typeof messagesOrParams === 'object' && 'messages' in messagesOrParams) {
+      // Old signature: single parameter object
+      params = messagesOrParams;
+    } else {
+      // New signature: messages as first param, options as second
+      params = {
+        messages: messagesOrParams as MessageListInput,
+        ...options,
+      } as StreamVNextParams<T, STRUCTURED_OUTPUT>;
+    }
     const processedParams = {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
@@ -1557,16 +1602,7 @@ export class Agent extends BaseResource {
    * @returns Promise containing tool details
    */
   getTool(toolId: string, runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetToolResponse> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
-
-    const searchParams = new URLSearchParams();
-
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
-    }
-
-    const queryString = searchParams.toString();
-    return this.request(`/api/agents/${this.agentId}/tools/${toolId}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/agents/${this.agentId}/tools/${toolId}${runtimeContextQueryString(runtimeContext)}`);
   }
 
   /**
@@ -1595,16 +1631,7 @@ export class Agent extends BaseResource {
    * @returns Promise containing agent evaluations
    */
   evals(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetEvalsByAgentIdResponse> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
-
-    const searchParams = new URLSearchParams();
-
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
-    }
-
-    const queryString = searchParams.toString();
-    return this.request(`/api/agents/${this.agentId}/evals/ci${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/agents/${this.agentId}/evals/ci${runtimeContextQueryString(runtimeContext)}`);
   }
 
   /**
@@ -1613,16 +1640,7 @@ export class Agent extends BaseResource {
    * @returns Promise containing live agent evaluations
    */
   liveEvals(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetEvalsByAgentIdResponse> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
-
-    const searchParams = new URLSearchParams();
-
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
-    }
-
-    const queryString = searchParams.toString();
-    return this.request(`/api/agents/${this.agentId}/evals/live${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/agents/${this.agentId}/evals/live${runtimeContextQueryString(runtimeContext)}`);
   }
   /**
    * Updates the model for the agent

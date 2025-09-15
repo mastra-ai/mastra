@@ -22,11 +22,13 @@ describe('DefaultConsoleExporter', () => {
       traceId: 'trace-123',
       trace: { traceId: 'trace-123' },
       attributes: { agentId: 'agent-123', normalField: 'visible-data' },
+      isRootSpan: false,
+      isEvent: false,
     };
 
     await exporter.exportEvent({
       type: AITracingEventType.SPAN_STARTED,
-      span: mockSpan as any,
+      exportedSpan: mockSpan,
     });
 
     // Should log with proper formatting (no filtering happens in exporter anymore)
@@ -54,7 +56,7 @@ describe('DefaultConsoleExporter', () => {
 
     await exporter.exportEvent({
       type: 'unknown_event' as any,
-      span: {} as any,
+      exportedSpan: {} as any,
     });
 
     expect(logger.warn).toHaveBeenCalledWith('Tracing event type not implemented: unknown_event');
