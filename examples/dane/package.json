@@ -32,7 +32,6 @@
     "@ai-sdk/anthropic": "^1.2.12",
     "@inquirer/prompts": "^7.8.4",
     "@mastra/core": "workspace:*",
-    "@mastra/github": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
