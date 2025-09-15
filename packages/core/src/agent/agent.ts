@@ -140,6 +140,9 @@ export class Agent<
   public name: TAgentId;
   #instructions: DynamicArgument<string>;
   readonly #description?: string;
+  /**
+   * Array of model config objects is only allowed when using v2 models.
+   */
   model:
     | DynamicArgument<MastraLanguageModel>
     | {
@@ -777,6 +780,21 @@ export class Agent<
           throw mastraError;
         }
         modelToUse = this.model[0].model;
+
+        if (typeof modelToUse !== 'function' && modelToUse.specificationVersion !== 'v2') {
+          const mastraError = new MastraError({
+            id: 'AGENT_GET_MODEL_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: {
+              agentName: this.name,
+            },
+            text: `[Agent:${this.name}] - Only v2 models are allowed when an array of models is provided`,
+          });
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
+        }
       } else {
         modelToUse = this.model;
       }
@@ -793,6 +811,21 @@ export class Agent<
                 agentName: this.name,
               },
               text: `[Agent:${this.name}] - Function-based model returned empty value`,
+            });
+            this.logger.trackException(mastraError);
+            this.logger.error(mastraError.toString());
+            throw mastraError;
+          }
+
+          if (Array.isArray(this.model) && model.specificationVersion !== 'v2') {
+            const mastraError = new MastraError({
+              id: 'AGENT_GET_MODEL_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+              details: {
+                agentName: this.name,
+              },
+              text: `[Agent:${this.name}] - Only v2 models are allowed when an array of models is provided`,
             });
             this.logger.trackException(mastraError);
             this.logger.error(mastraError.toString());
@@ -2803,6 +2836,21 @@ export class Agent<
       const modelToUse = model ?? this.model;
       const resolvedModel =
         typeof modelToUse === 'function' ? await modelToUse({ runtimeContext, mastra: this.#mastra }) : modelToUse;
+
+      if ((resolvedModel as MastraLanguageModel).specificationVersion !== 'v2') {
+        const mastraError = new MastraError({
+          id: 'AGENT_PREPARE_MODELS_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Only v2 models are allowed when an array of models is provided`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
       return [
         {
           id: 'main',
@@ -2819,6 +2867,21 @@ export class Agent<
           typeof modelConfig.model === 'function'
             ? await modelConfig.model({ runtimeContext, mastra: this.#mastra })
             : modelConfig.model;
+
+        if (model.specificationVersion !== 'v2') {
+          const mastraError = new MastraError({
+            id: 'AGENT_PREPARE_MODELS_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: {
+              agentName: this.name,
+            },
+            text: `[Agent:${this.name}] - Only v2 models are allowed when an array of models is provided`,
+          });
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
+        }
 
         return {
           id: modelConfig.id,

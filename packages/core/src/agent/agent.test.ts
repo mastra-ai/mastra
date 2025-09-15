@@ -7041,13 +7041,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           instructions: 'test agent instructions',
           model: [
             {
-              model: openaiModel,
+              model: openai_v5('gpt-4o'),
             },
             {
-              model: openai('gpt-4o-mini'),
+              model: openai_v5('gpt-4o-mini'),
             },
             {
-              model: openai('gpt-4.1'),
+              model: openai_v5('gpt-4.1'),
             },
           ],
         });
@@ -7068,13 +7068,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           instructions: 'test agent instructions',
           model: [
             {
-              model: openaiModel,
+              model: openai_v5('gpt-4o'),
             },
             {
-              model: openai('gpt-4o-mini'),
+              model: openai_v5('gpt-4o-mini'),
             },
             {
-              model: openai('gpt-4.1'),
+              model: openai_v5('gpt-4.1'),
             },
           ],
         });
@@ -7105,13 +7105,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           instructions: 'test agent instructions',
           model: [
             {
-              model: openaiModel,
+              model: openai_v5('gpt-4o'),
             },
             {
-              model: openai('gpt-4o-mini'),
+              model: openai_v5('gpt-4o-mini'),
             },
             {
-              model: openai('gpt-4.1'),
+              model: openai_v5('gpt-4.1'),
             },
           ],
         });
@@ -7121,7 +7121,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         agent.updateModelInModelList({
           id: model1Id,
-          model: openai('gpt-4'),
+          model: openai_v5('gpt-4'),
           maxRetries: 5,
         });
         const updatedModelList = await agent.getModelList();
@@ -7139,8 +7139,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let usedModelName = '';
 
         // Create two different models
-        let premiumModel: MockLanguageModelV1 | MockLanguageModelV2;
-        let standardModel: MockLanguageModelV1 | MockLanguageModelV2;
+        let premiumModel: MockLanguageModelV2;
+        let standardModel: MockLanguageModelV2;
 
         premiumModel = new MockLanguageModelV2({
           doGenerate: async () => {
@@ -7231,8 +7231,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let usedModelName = '';
 
         // Create two different models
-        let premiumModel: MockLanguageModelV1 | MockLanguageModelV2;
-        let standardModel: MockLanguageModelV1 | MockLanguageModelV2;
+        let premiumModel: MockLanguageModelV2;
+        let standardModel: MockLanguageModelV2;
 
         const streamErrorFn = vi.fn(() => {
           throw new Error('Simulated stream error');
@@ -7328,9 +7328,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let usedModelName = '';
 
         // Create two different models
-        let premiumModel: MockLanguageModelV1 | MockLanguageModelV2;
-        let standardModel: MockLanguageModelV1 | MockLanguageModelV2;
-        let standardModel2: MockLanguageModelV1 | MockLanguageModelV2;
+        let premiumModel: MockLanguageModelV2;
+        let standardModel: MockLanguageModelV2;
+        let standardModel2: MockLanguageModelV2;
 
         const streamErrorFn = vi.fn(() => {
           throw new Error('Simulated stream error');
@@ -7450,9 +7450,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let usedModelName = '';
 
         // Create two different models
-        let premiumModel: MockLanguageModelV1 | MockLanguageModelV2;
-        let standardModel: MockLanguageModelV1 | MockLanguageModelV2;
-        let standardModel2: MockLanguageModelV1 | MockLanguageModelV2;
+        let premiumModel: MockLanguageModelV2;
+        let standardModel: MockLanguageModelV2;
+        let standardModel2: MockLanguageModelV2;
 
         const streamErrorFn = vi.fn(() => {
           throw new Error('Simulated stream error');
@@ -7573,9 +7573,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let usedModelName = '';
 
         // Create two different models
-        let premiumModel: MockLanguageModelV1 | MockLanguageModelV2;
-        let premiumModel2: MockLanguageModelV1 | MockLanguageModelV2;
-        let standardModel: MockLanguageModelV1 | MockLanguageModelV2;
+        let premiumModel: MockLanguageModelV2;
+        let premiumModel2: MockLanguageModelV2;
+        let standardModel: MockLanguageModelV2;
 
         const streamErrorFn = vi.fn(() => {
           throw new Error('Simulated stream error');
@@ -7723,6 +7723,113 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(streamErrorFn).toHaveBeenCalledTimes(4);
         expect(premiumModel2Fn).toHaveBeenCalledTimes(0);
         expect(usedModelName).toBe('premium');
+      });
+
+      it('should throw an error if a v1 model is provided in an array of models', async () => {
+        const v1Model = new MockLanguageModelV1({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              initialDelayInMs: 0,
+              chunkDelayInMs: 1,
+              chunks: [
+                { type: 'text-delta', textDelta: 'Hello! ' },
+                { type: 'text-delta', textDelta: 'I am ' },
+                { type: 'text-delta', textDelta: 'a helpful assistant.' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { promptTokens: 10, completionTokens: 20 },
+                },
+              ],
+            }),
+            rawCall: { rawPrompt: [], rawSettings: {} },
+          }),
+        });
+        const v2Model = new MockLanguageModelV2({
+          doGenerate: async () => {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: `Hello, Premium Title`,
+              content: [
+                {
+                  type: 'text',
+                  text: `Hello, Premium Title`,
+                },
+              ],
+              warnings: [],
+            };
+          },
+          doStream: async () => {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'stream-start',
+                  warnings: [],
+                },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Hello' },
+                { type: 'text-delta', id: '1', delta: ', ' },
+                { type: 'text-delta', id: '1', delta: 'Premium Title' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                },
+              ]),
+            };
+          },
+        });
+        const agent = new Agent({
+          name: 'update-model-agent',
+          instructions: 'test agent',
+          model: [{ model: v2Model }, { model: v1Model }],
+        });
+
+        try {
+          await agent.getLLM();
+          expect.fail('Expected getLLM() to throw an error');
+        } catch (err) {
+          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+        }
+
+        try {
+          await agent.generate('Hello');
+          expect.fail('Expected getLLM() to throw an error');
+        } catch (err) {
+          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+        }
+
+        try {
+          await agent.stream('Hello');
+          expect.fail('Expected getLLM() to throw an error');
+        } catch (err) {
+          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+        }
+
+        try {
+          await agent.generateVNext('Hello');
+          expect.fail('Expected getLLM() to throw an error');
+        } catch (err) {
+          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+        }
+
+        try {
+          await agent.streamVNext('Hello');
+          expect.fail('Expected getLLM() to throw an error');
+        } catch (err) {
+          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+        }
       });
     },
   );
