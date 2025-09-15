@@ -35,33 +35,6 @@ for await (const chunk of stream) {
 }
 ```
 
-### Vercel AI SDK
-
-This provider also has a dedicated Vercel AI SDK model provider which can be installed with:
-
-<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
-  <Tab>
-    ```bash copy
-    npm install @ai-sdk/mistral
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    yarn add @ai-sdk/mistral
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    pnpm add @ai-sdk/mistral
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    bun add @ai-sdk/mistral
-    ```
-  </Tab>
-</Tabs>
-
 ## Models
 
 <ProviderModelsTable 
@@ -334,6 +307,33 @@ This provider also has a dedicated Vercel AI SDK model provider which can be ins
   }
 ]}
 />
+
+## Vercel AI SDK
+
+This provider also has an installable model provider which can be used instead of the Mastra model router string:
+
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+  <Tab>
+    ```bash copy
+    npm install @ai-sdk/mistral
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    yarn add @ai-sdk/mistral
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    pnpm add @ai-sdk/mistral
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    bun add @ai-sdk/mistral
+    ```
+  </Tab>
+</Tabs>
 
 ## Advanced Configuration
 
