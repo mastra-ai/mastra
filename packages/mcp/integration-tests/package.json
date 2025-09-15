@@ -9,29 +9,28 @@
   "dependencies": {
     "@ai-sdk/openai": "^1.3.24",
     "@ai-sdk/react": "^1.2.12",
-    "@mastra/client-js": "latest",
-    "@mastra/mcp": "latest",
+    "@mastra/client-js": "*",
+    "@mastra/mcp": "*",
     "dotenv": "^16.6.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@mastra/core": "latest",
+    "@mastra/core": "*",
     "@testing-library/react": "^16.3.0",
     "@types/node": "^20.17.57",
     "get-port": "^7.1.0",
-    "mastra": "latest",
+    "mastra": "*",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=0.10.7-0 <0.17.0-0"
   },
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../core",
-      "@mastra/loggers": "link:../../loggers",
-      "@mastra/memory": "link:../../memory",
-      "@mastra/client-js": "link:../../client-sdks/client-js",
       "@mastra/mcp": "link:../",
-      "@mastra/libsql": "link:../../stores/libsql",
-      "@mastra/evals": "link:../../evals",
+      "@mastra/client-js": "link:../../../client-sdks/client-js",
       "mastra": "link:../../cli"
     }
   }

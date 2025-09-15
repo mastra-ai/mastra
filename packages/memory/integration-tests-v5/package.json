@@ -37,19 +37,16 @@
     "typescript": "^5.8.2",
     "vitest": "^3.2.4"
   },
+  "peerDependencies": {
+    "@mastra/core": ">=0.10.7-0 <0.17.0-0"
+  },
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../core",
-      "@mastra/loggers": "link:../../loggers",
+      "mastra": "link:../../cli",
       "@mastra/memory": "link:../../memory",
-      "@mastra/client-js": "link:../../client-sdks/client-js",
-      "@mastra/mcp": "link:../../mcp",
-      "@mastra/libsql": "link:../../stores/libsql",
-      "@mastra/evals": "link:../../evals",
       "@mastra/fastembed": "link:../../fastembed",
-      "@mastra/pg": "link:../../../stores/pg",
-      "@mastra/upstash": "link:../../../stores/upstash",
-      "mastra": "link:../../cli"
+      "@mastra/libsql": "link:../../../stores/libsql"
     }
   }
 }
