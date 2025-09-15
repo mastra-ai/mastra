@@ -37,16 +37,18 @@ import type {
   StreamObjectResult,
   StreamReturn,
 } from './base.types';
-import type { inferOutput } from './shared.types';
+import type { inferOutput, MastraModelOptions } from './shared.types';
 
 export class MastraLLMV1 extends MastraBase {
   #model: LanguageModel;
   #mastra?: Mastra;
+  #options?: MastraModelOptions;
 
-  constructor({ model, mastra }: { model: LanguageModel; mastra?: Mastra }) {
+  constructor({ model, mastra, options }: { model: LanguageModel; mastra?: Mastra; options?: MastraModelOptions }) {
     super({ name: 'aisdk' });
 
     this.#model = model;
+    this.#options = options;
 
     if (mastra) {
       this.#mastra = mastra;
@@ -183,7 +185,7 @@ export class MastraLLMV1 extends MastraBase {
         threadId,
         resourceId,
       },
-      isInternal: false,
+      tracingPolicy: this.#options?.tracingPolicy,
     });
 
     const argsForExecute: OriginalGenerateTextOptions<Tools, Z> = {
@@ -332,7 +334,7 @@ export class MastraLLMV1 extends MastraBase {
         threadId,
         resourceId,
       },
-      isInternal: false,
+      tracingPolicy: this.#options?.tracingPolicy,
     });
 
     try {
@@ -489,7 +491,7 @@ export class MastraLLMV1 extends MastraBase {
         threadId,
         resourceId,
       },
-      isInternal: false,
+      tracingPolicy: this.#options?.tracingPolicy,
     });
 
     const argsForExecute: OriginalStreamTextOptions<Tools, Z> = {
@@ -675,7 +677,7 @@ export class MastraLLMV1 extends MastraBase {
         threadId,
         resourceId,
       },
-      isInternal: false,
+      tracingPolicy: this.#options?.tracingPolicy,
     });
 
     try {

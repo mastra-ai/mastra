@@ -1,5 +1,6 @@
 import type { ToolSet } from 'ai-v5';
 import z from 'zod';
+import { InternalSpans } from '../../ai-tracing';
 import { convertMastraChunkToAISDKv5 } from '../../stream/aisdk/v5/transform';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
@@ -147,6 +148,13 @@ export function createOuterLLMWorkflow<
     id: 'executionWorkflow',
     inputSchema: llmIterationOutputSchema,
     outputSchema: z.any(),
+    options: {
+      tracingPolicy: {
+        // mark all workflow spans related to the
+        // VNext execution as internal
+        internal: InternalSpans.WORKFLOW,
+      },
+    },
   })
     .then(llmExecutionStep)
     .map(({ inputData }) => {

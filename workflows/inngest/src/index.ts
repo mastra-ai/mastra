@@ -26,6 +26,7 @@ import type {
   WatchEvent,
   StreamEvent,
   ChunkType,
+  ExecutionEngineOptions,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
@@ -862,8 +863,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   private inngestStep: BaseContext<Inngest>['step'];
   private inngestAttempts: number;
 
-  constructor(mastra: Mastra, inngestStep: BaseContext<Inngest>['step'], inngestAttempts: number = 0) {
-    super({ mastra });
+  constructor(
+    mastra: Mastra,
+    inngestStep: BaseContext<Inngest>['step'],
+    inngestAttempts: number = 0,
+    options?: ExecutionEngineOptions,
+  ) {
+    super({ mastra, options });
     this.inngestStep = inngestStep;
     this.inngestAttempts = inngestAttempts;
   }
@@ -1031,7 +1037,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         durationMs: duration,
         sleepType: fn ? 'dynamic' : 'fixed',
       },
-      isInternal: tracingContext?.isInternal,
+      tracingPolicy: this.options?.tracingPolicy,
     });
 
     if (fn) {
@@ -1046,7 +1052,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           runCount: -1,
           tracingContext: {
             currentSpan: sleepSpan,
-            isInternal: sleepSpan?.isInternal,
           },
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
@@ -1150,7 +1155,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         durationMs: date ? Math.max(0, date.getTime() - Date.now()) : undefined,
         sleepType: fn ? 'dynamic' : 'fixed',
       },
-      isInternal: tracingContext?.isInternal,
+      tracingPolicy: this.options?.tracingPolicy,
     });
 
     if (fn) {
@@ -1165,7 +1170,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           runCount: -1,
           tracingContext: {
             currentSpan: sleepUntilSpan,
-            isInternal: sleepUntilSpan?.isInternal,
           },
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
@@ -1279,7 +1283,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       attributes: {
         stepId: step.id,
       },
-      isInternal: tracingContext?.isInternal,
+      tracingPolicy: this.options?.tracingPolicy,
     });
 
     const startedAt = await this.inngestStep.run(
@@ -1540,7 +1544,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           tracingContext: {
             currentSpan: stepAISpan,
-            isInternal: stepAISpan?.isInternal,
           },
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
@@ -1675,7 +1678,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             stepId: step.id,
             runtimeContext,
             disableScorers,
-            tracingContext: { currentSpan: stepAISpan, isInternal: true },
+            tracingContext: { currentSpan: stepAISpan },
           });
         }
       });
@@ -1787,7 +1790,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       attributes: {
         conditionCount: entry.conditions.length,
       },
-      isInternal: tracingContext?.isInternal,
+      tracingPolicy: this.options?.tracingPolicy,
     });
 
     let execResults: any;
@@ -1802,7 +1805,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               attributes: {
                 conditionIndex: index,
               },
-              isInternal: tracingContext?.isInternal,
+              tracingPolicy: this.options?.tracingPolicy,
             });
 
             try {
@@ -1815,7 +1818,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 inputData: prevOutput,
                 tracingContext: {
                   currentSpan: evalSpan,
-                  isInternal: evalSpan?.isInternal,
                 },
                 getInitData: () => stepResults?.input as any,
                 getStepResult: (step: any) => {
@@ -1912,7 +1914,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           disableScorers,
           tracingContext: {
             currentSpan: conditionalSpan,
-            isInternal: conditionalSpan?.isInternal,
           },
         }),
       ),
