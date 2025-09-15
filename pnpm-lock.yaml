@@ -903,7 +903,7 @@ importers:
         version: link:../mcp
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
-        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -1100,7 +1100,7 @@ importers:
         version: 1.9.0
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
-        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -2646,8 +2646,8 @@ importers:
   stores/chroma:
     dependencies:
       chromadb:
-        specifier: ^3.0.14
-        version: 3.0.14
+        specifier: ^3.0.15
+        version: 3.0.15
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -10762,38 +10762,38 @@ packages:
     resolution: {integrity: sha512-+IxzY9BZOQd/XuYPRmrvEVjF/nqj5kgT4kEq7VofrDoM1MxoRjEWkrCC3EtLi59TVawxTAn+orJwFQcrqEN1+g==}
     engines: {node: '>=18'}
 
-  chromadb-js-bindings-darwin-arm64@1.0.5:
-    resolution: {integrity: sha512-uPZa/pDzj5Qcc+r9Nd0pU31UEO7vhe9jOg3mL7LhAG2zBlLOpIofQS4deYy6q4ruQS4FGtL2DQDI7Q3RDE/1pg==}
+  chromadb-js-bindings-darwin-arm64@1.0.6:
+    resolution: {integrity: sha512-QO2r3RUknivwGih5kN5BQrtV25Fu23pL1EVrERwXDvGLPSmUJxZChWGg8nCWYhm1hVhwVGofCemuEvOZz+j10A==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [darwin]
 
-  chromadb-js-bindings-darwin-x64@1.0.5:
-    resolution: {integrity: sha512-E6nfKsJRFB1weEbmjg+kXbEE51fD4IvPVlrjXuPY+82E5Zns2uJmEqlwzc8IztQ6wRfUn2xF/RADfVw3vR/Asw==}
+  chromadb-js-bindings-darwin-x64@1.0.6:
+    resolution: {integrity: sha512-UFcIwjx53HvHetiCNbQj47UM6UPi1mK57DXi732x52rIawUbgxUeG2u4lg4pzDOEDN5fEOxAZCIATyUNOazIEA==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [darwin]
 
-  chromadb-js-bindings-linux-arm64-gnu@1.0.5:
-    resolution: {integrity: sha512-HYzMxU2uGk4h47EP6nlscDRabQ1mwAuRC+JNsMm7fwqHs7VH7L7sGa1fQR4ydUCPjT9cl0y8eUWQfPz7GAw+HA==}
+  chromadb-js-bindings-linux-arm64-gnu@1.0.6:
+    resolution: {integrity: sha512-uG9SYh51NxO22zmZYxz8ffT5s4L8p1e7LTFYBNd0QfO1XWTexQqd4hLmbjdzoz0BOLwKObr/FKiV7iKuX3kwww==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
 
-  chromadb-js-bindings-linux-x64-gnu@1.0.5:
-    resolution: {integrity: sha512-bIigJ+gyNZz8p3wr/zcJZTlKL7p2TVEyT7EfW9lWpdvkajPke8Q+b87aDJaPs6NuGxLcXxPHMRpS3zHWplZbdw==}
+  chromadb-js-bindings-linux-x64-gnu@1.0.6:
+    resolution: {integrity: sha512-ZV9wD38SvrLKgm+igqWCkiuycewCRTuxsg+01Zku56NjJeccg//Puj/IFnnJUQVkTP8JwkrkPNZPwHTlOlQuVQ==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
 
-  chromadb-js-bindings-win32-x64-msvc@1.0.5:
-    resolution: {integrity: sha512-3HJxXw5GmuDqLNjc1cd9/cwqRq3eqaAuPvv+xvBt5/rtq9mPAaXchcKkGJfYQh+fmq46X2r5fM8civpoBQF1sw==}
+  chromadb-js-bindings-win32-x64-msvc@1.0.6:
+    resolution: {integrity: sha512-ymm/iYpnqBsAkc0DxO1rWB/uDykQH4vub2HZ0yMYVKwWCsDHDNvfF7XTs+uDLUQY/BC4pUiqfXFL6ZQ7lpO2Iw==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [win32]
 
-  chromadb@3.0.14:
-    resolution: {integrity: sha512-szeY35U+Yf9O6hiK7Jw5Vyea6SIPJa4HoyBnywkjY//iIb+hkLgrneef8JClfoQC2MJkZu6SbMPVN7lR2LnhVQ==}
+  chromadb@3.0.15:
+    resolution: {integrity: sha512-HSR6SX//1ZEHz/DdnK+RDMdQv/4ADanwM+rr++sv0qbNjX3MWg46VI/4GGkFMiyP0nmqtqHzG4dwvkHfIxqrCg==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -20473,7 +20473,7 @@ snapshots:
       '@ai-sdk/ui-utils': 1.2.11(zod@4.1.5)
       '@mastra/schema-compat': 0.11.2-alpha.3(ai@4.3.19(react@19.1.1)(zod@4.1.5))(zod@4.1.5)
       '@opentelemetry/api': 1.9.0
-      '@opentelemetry/auto-instrumentations-node': 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+      '@opentelemetry/auto-instrumentations-node': 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-grpc': 0.203.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-http': 0.203.0(@opentelemetry/api@1.9.0)
@@ -20894,7 +20894,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))':
+  '@opentelemetry/auto-instrumentations-node@0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -20943,7 +20943,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.3.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.10.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.3(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
       '@opentelemetry/resources': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.203.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -22024,7 +22024,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -25227,30 +25227,30 @@ snapshots:
 
   chownr@3.0.0: {}
 
-  chromadb-js-bindings-darwin-arm64@1.0.5:
+  chromadb-js-bindings-darwin-arm64@1.0.6:
     optional: true
 
-  chromadb-js-bindings-darwin-x64@1.0.5:
+  chromadb-js-bindings-darwin-x64@1.0.6:
     optional: true
 
-  chromadb-js-bindings-linux-arm64-gnu@1.0.5:
+  chromadb-js-bindings-linux-arm64-gnu@1.0.6:
     optional: true
 
-  chromadb-js-bindings-linux-x64-gnu@1.0.5:
+  chromadb-js-bindings-linux-x64-gnu@1.0.6:
     optional: true
 
-  chromadb-js-bindings-win32-x64-msvc@1.0.5:
+  chromadb-js-bindings-win32-x64-msvc@1.0.6:
     optional: true
 
-  chromadb@3.0.14:
+  chromadb@3.0.15:
     dependencies:
       semver: 7.7.2
     optionalDependencies:
-      chromadb-js-bindings-darwin-arm64: 1.0.5
-      chromadb-js-bindings-darwin-x64: 1.0.5
-      chromadb-js-bindings-linux-arm64-gnu: 1.0.5
-      chromadb-js-bindings-linux-x64-gnu: 1.0.5
-      chromadb-js-bindings-win32-x64-msvc: 1.0.5
+      chromadb-js-bindings-darwin-arm64: 1.0.6
+      chromadb-js-bindings-darwin-x64: 1.0.6
+      chromadb-js-bindings-linux-arm64-gnu: 1.0.6
+      chromadb-js-bindings-linux-x64-gnu: 1.0.6
+      chromadb-js-bindings-win32-x64-msvc: 1.0.6
 
   ci-info@3.9.0: {}
 
