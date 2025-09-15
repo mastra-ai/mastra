@@ -7,11 +7,11 @@ import {
   MainContentLayout,
   MastraResizablePanel,
   MainContentContent,
+  useWorkflow,
 } from '@mastra/playground-ui';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
-import { useWorkflow } from '@/hooks/use-workflows';
 import { cn } from '@/lib/utils';
 
 import { WorkflowHeader } from './workflow-header';
