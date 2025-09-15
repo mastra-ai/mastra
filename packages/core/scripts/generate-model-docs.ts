@@ -247,38 +247,7 @@ for await (const chunk of stream) {
 <ProviderModelsTable 
   models={${modelDataJson}}
 />
-${
-  provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible'
-    ? `
-## Vercel AI SDK
 
-This provider also has an installable model provider which can be used instead of the Mastra model router string:
-
-<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
-  <Tab>
-    \`\`\`bash copy
-    npm install ${provider.packageName}
-    \`\`\`
-  </Tab>
-  <Tab>
-    \`\`\`bash copy
-    yarn add ${provider.packageName}
-    \`\`\`
-  </Tab>
-  <Tab>
-    \`\`\`bash copy
-    pnpm add ${provider.packageName}
-    \`\`\`
-  </Tab>
-  <Tab>
-    \`\`\`bash copy
-    bun add ${provider.packageName}
-    \`\`\`
-  </Tab>
-</Tabs>
-`
-    : ''
-}
 ## Advanced Configuration
 
 ### Custom Headers
@@ -310,7 +279,38 @@ const agent = new Agent({
   }
 });
 \`\`\`
-`;
+${
+  provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible'
+    ? `
+## Direct Provider Installation
+
+This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string:
+
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+  <Tab>
+    \`\`\`bash copy
+    npm install ${provider.packageName}
+    \`\`\`
+  </Tab>
+  <Tab>
+    \`\`\`bash copy
+    yarn add ${provider.packageName}
+    \`\`\`
+  </Tab>
+  <Tab>
+    \`\`\`bash copy
+    pnpm add ${provider.packageName}
+    \`\`\`
+  </Tab>
+  <Tab>
+    \`\`\`bash copy
+    bun add ${provider.packageName}
+    \`\`\`
+  </Tab>
+</Tabs>
+`
+    : ''
+}`;
 }
 
 function getLogoUrl(providerId: string): string {
