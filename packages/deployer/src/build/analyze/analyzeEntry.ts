@@ -78,6 +78,7 @@ function getInputPlugins(
 async function captureDependenciesToOptimize(
   output: OutputChunk,
   workspaceMap: Map<string, WorkspacePackageInfo>,
+  projectRoot: string,
   {
     logger,
   }: {
@@ -92,13 +93,17 @@ async function captureDependenciesToOptimize(
     }
 
     // The `getPackageName` helper also handles subpaths so we only get the proper package name
-    const pkgName = getPackageName(dependency);
     let rootPath: string | null = null;
     let isWorkspace = false;
 
-    if (pkgName) {
-      rootPath = await getPackageRootPath(pkgName);
-      isWorkspace = workspaceMap.has(pkgName);
+    if (workspaceMap.has(dependency)) {
+      rootPath = workspaceMap.get(dependency)!.location;
+      isWorkspace = true;
+    } else {
+      const pkgName = getPackageName(dependency);
+      if (pkgName) {
+        rootPath = await getPackageRootPath(pkgName);
+      }
     }
 
     depsToOptimize.set(dependency, { exports: bindings, rootPath, isWorkspace });
@@ -130,7 +135,7 @@ async function captureDependenciesToOptimize(
 
       try {
         // Absolute path to the dependency
-        const resolvedPath = resolveFrom(process.cwd(), dep);
+        const resolvedPath = resolveFrom(projectRoot, dep);
 
         if (!resolvedPath) {
           logger.warn(`Could not resolve path for workspace dependency ${dep}`);
@@ -139,6 +144,7 @@ async function captureDependenciesToOptimize(
 
         const analysis = await analyzeEntry({ entry: resolvedPath, isVirtualFile: false }, '', {
           workspaceMap,
+          projectRoot,
           logger: noopLogger,
           sourcemapEnabled: false,
         });
@@ -212,10 +218,12 @@ export async function analyzeEntry(
     logger,
     sourcemapEnabled,
     workspaceMap,
+    projectRoot,
   }: {
     logger: IMastraLogger;
     sourcemapEnabled: boolean;
     workspaceMap: Map<string, WorkspacePackageInfo>;
+    projectRoot: string;
   },
 ): Promise<{
   dependencies: Map<string, DependencyMetadata>;
@@ -240,7 +248,9 @@ export async function analyzeEntry(
 
   await optimizerBundler.close();
 
-  const depsToOptimize = await captureDependenciesToOptimize(output[0] as OutputChunk, workspaceMap, { logger });
+  const depsToOptimize = await captureDependenciesToOptimize(output[0] as OutputChunk, workspaceMap, projectRoot, {
+    logger,
+  });
 
   return {
     dependencies: depsToOptimize,
