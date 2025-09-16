@@ -45,12 +45,20 @@ export function ScoreDialog({ scorer, score, isOpen, onClose, onNext, onPrevious
           />
           <SideDialogCodeSection title="Input" codeStr={JSON.stringify(score?.input || null, null, 2)} />
           <SideDialogCodeSection title="Output" codeStr={JSON.stringify(score?.output || null, null, 2)} />
-          <SideDialogCodeSection title="Preprocess Prompt" codeStr={score?.preprocessPrompt} simplified={true} />
-          <SideDialogCodeSection title="Analyze Prompt" codeStr={score?.analyzePrompt} simplified={true} />
-          <SideDialogCodeSection title="Generate Score Prompt" codeStr={score?.generateScorePrompt} simplified={true} />
+          <SideDialogCodeSection
+            title="Preprocess Prompt"
+            codeStr={score?.preprocessPrompt || 'null'}
+            simplified={true}
+          />
+          <SideDialogCodeSection title="Analyze Prompt" codeStr={score?.analyzePrompt || 'null'} simplified={true} />
+          <SideDialogCodeSection
+            title="Generate Score Prompt"
+            codeStr={score?.generateScorePrompt || 'null'}
+            simplified={true}
+          />
           <SideDialogCodeSection
             title="Generate Reason Prompt"
-            codeStr={score?.generateReasonPrompt}
+            codeStr={score?.generateReasonPrompt || 'null'}
             simplified={true}
           />
         </div>
