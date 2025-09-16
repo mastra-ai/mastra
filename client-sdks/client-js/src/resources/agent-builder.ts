@@ -69,7 +69,7 @@ export class AgentBuilder extends BaseResource {
    * @deprecated Use createRunAsync() instead.
    * @throws {Error} Always throws an error directing users to use createRunAsync()
    */
-  async createRun(params?: { runId?: string }): Promise<{ runId: string }> {
+  async createRun(_params?: { runId?: string }): Promise<{ runId: string }> {
     throw new Error(
       'createRun() has been deprecated. ' +
         'Please use createRunAsync() instead.\n\n' +
