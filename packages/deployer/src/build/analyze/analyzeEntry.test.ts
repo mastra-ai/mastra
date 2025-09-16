@@ -15,6 +15,7 @@ describe('analyzeEntry', () => {
       logger: noopLogger,
       sourcemapEnabled: false,
       workspaceMap: new Map(),
+      projectRoot: process.cwd(),
     });
 
     expect(result.dependencies.size).toBe(4);
@@ -55,6 +56,7 @@ describe('analyzeEntry', () => {
       logger: noopLogger,
       sourcemapEnabled: false,
       workspaceMap: new Map(),
+      projectRoot: process.cwd(),
     });
 
     expect(result.dependencies.size).toBe(4);
@@ -84,16 +86,17 @@ describe('analyzeEntry', () => {
       logger: noopLogger,
       sourcemapEnabled: false,
       workspaceMap,
+      projectRoot: process.cwd(),
     });
 
-    const loggerDep = result.dependencies.get('@mastra/core/logger');
-    expect(loggerDep?.isWorkspace).toBe(true);
-
-    const mastraDep = result.dependencies.get('@mastra/core/mastra');
+    const mastraDep = result.dependencies.get('@mastra/core');
     expect(mastraDep?.isWorkspace).toBe(true);
 
+    const loggerDep = result.dependencies.get('@mastra/core/logger');
+    expect(loggerDep?.isWorkspace).toBe(false);
+
     const agentDep = result.dependencies.get('@mastra/core/agent');
-    expect(agentDep?.isWorkspace).toBe(true);
+    expect(agentDep?.isWorkspace).toBe(false);
 
     // External package should not be workspace
     const openaiDep = result.dependencies.get('@ai-sdk/openai');
@@ -117,6 +120,7 @@ describe('analyzeEntry', () => {
       logger: noopLogger,
       sourcemapEnabled: false,
       workspaceMap: new Map(),
+      projectRoot: process.cwd(),
     });
 
     expect(result.dependencies.has('@mastra/core/mastra')).toBe(true);
@@ -138,6 +142,7 @@ describe('analyzeEntry', () => {
       logger: noopLogger,
       sourcemapEnabled: true,
       workspaceMap: new Map(),
+      projectRoot: process.cwd(),
     });
 
     // Note: Sourcemaps might be null depending on Rollup configuration
@@ -164,6 +169,7 @@ describe('analyzeEntry', () => {
       logger: noopLogger,
       sourcemapEnabled: false,
       workspaceMap: new Map(),
+      projectRoot: process.cwd(),
     });
 
     expect(result.dependencies.size).toBe(0);
