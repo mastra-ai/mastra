@@ -74,7 +74,3 @@ Checks if a user has the required permissions (currently checks for admin status
 - Node.js 16 or higher
 - Supabase project with authentication enabled
 - Supabase URL and anonymous key
-
-## License
-
-Elastic-2.0
