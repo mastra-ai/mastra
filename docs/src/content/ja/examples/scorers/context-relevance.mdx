@@ -1,0 +1,463 @@
+---
+title: "例: コンテキスト関連度スコアラー | スコアラー | Mastra ドキュメント"
+description: コンテキスト関連度スコアラーを使用して、提供されたコンテキストがエージェントの応答生成にどれだけ関連し有用かを評価する例。
+---
+
+
+
+# コンテキスト関連度スコアラー
+
+`createContextRelevanceScorerLLM` を使用して、提供したコンテキストがエージェントの応答生成にどれだけ関連性が高く、有用かを評価します。このスコアラーは重み付けされた関連度レベルを用い、使用されなかった関連コンテキストや不足情報に対してペナルティを適用します。
+
+
+
+## インストール
+
+```bash
+npm install @mastra/evals
+```
+
+
+
+## 高い関連性の例
+
+この例は、すべてのコンテキストが直接応答を支えている、優れた文脈的関連性を示しています:
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { createContextRelevanceScorerLLM } from '@mastra/evals';
+
+const scorer = createContextRelevanceScorerLLM({
+  model: openai('gpt-4o-mini'),
+  options: {
+    context: [
+      'Einstein won the Nobel Prize for his discovery of the photoelectric effect in 1921.',
+      'He published his theory of special relativity in 1905.',
+      'His general relativity theory, published in 1915, revolutionized our understanding of gravity.',
+    ],
+    scale: 1,
+  },
+});
+
+const result = await scorer.run({
+  input: {
+    inputMessages: [
+      {
+        id: '1',
+        role: 'user',
+        content: 'What were Einstein\'s major scientific achievements?',
+      },
+    ],
+  },
+  output: [
+    {
+      id: '2',
+      role: 'assistant',
+      content: 'Einstein\'s major achievements include the Nobel Prize for the photoelectric effect, special relativity in 1905, and general relativity in 1915.',
+    },
+  ],
+});
+
+console.log(result);
+// 出力:
+// {
+//   score: 1.0,
+//   reason: "スコアが1.0であるのは、すべてのコンテキストがアインシュタインの業績と高い関連性を持ち、包括的な応答の生成に効果的に活用されたためです。"
+// }
+```
+
+
+
+## 関連性が混在する例
+
+この例は、一部のコンテキストが無関係または未使用であるため、全体として中程度の関連性となるケースを示します:
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { createContextRelevanceScorerLLM } from '@mastra/evals';
+
+const scorer = createContextRelevanceScorerLLM({
+  model: openai('gpt-4o-mini'),
+  options: {
+    context: [
+      'Solar eclipses occur when the Moon blocks the Sun.',
+      'The Moon moves between the Earth and Sun during eclipses.',
+      'The Moon is visible at night.',
+      'Stars twinkle due to atmospheric interference.',
+      'Total eclipses can last up to 7.5 minutes.',
+    ],
+    scale: 1,
+  },
+});
+
+const result = await scorer.run({
+  input: {
+    inputMessages: [
+      {
+        id: '1',
+        role: 'user',
+        content: 'What causes solar eclipses?',
+      },
+    ],
+  },
+  output: [
+    {
+      id: '2',
+      role: 'assistant',
+      content: 'Solar eclipses happen when the Moon moves between Earth and the Sun, blocking sunlight.',
+    },
+  ],
+});
+
+console.log(result);
+// 既定のペナルティでの出力:
+// {
+//   score: 0.64,
+//   reason: "スコアが0.64である理由: コンテキスト1と2は関連性が高く使用されています。コンテキスト5は関連していますが未使用（10%のペナルティ）。一方、コンテキスト3と4は無関係です。"
+// }
+
+// カスタムのペナルティ設定
+const customScorer = createContextRelevanceScorerLLM({
+  model: openai('gpt-4o-mini'),
+  options: {
+    context: [
+      'Solar eclipses occur when the Moon blocks the Sun.',
+      'The Moon moves between the Earth and Sun during eclipses.',
+      'The Moon is visible at night.',
+      'Stars twinkle due to atmospheric interference.',
+      'Total eclipses can last up to 7.5 minutes.',
+    ],
+    penalties: {
+      unusedHighRelevanceContext: 0.05, // 未使用の高関連コンテキストに対するペナルティを軽減
+      missingContextPerItem: 0.1,
+      maxMissingContextPenalty: 0.3,
+    },
+  },
+});
+
+const customResult = await customScorer.run({
+  input: { inputMessages: [{ id: '1', role: 'user', content: 'What causes solar eclipses?' }] },
+  output: [{ id: '2', role: 'assistant', content: 'Solar eclipses happen when the Moon moves between Earth and the Sun, blocking sunlight.' }],
+});
+
+console.log(customResult);
+// 寛容なペナルティでの出力:
+// {
+//   score: 0.69, // 未使用コンテキストに対するペナルティを軽減したためスコアが高い
+//   reason: "スコアが0.69である理由: コンテキスト1と2は関連性が高く使用されています。コンテキスト5は関連していますが未使用（5%のペナルティ）。一方、コンテキスト3と4は無関係です。"
+// }
+```
+
+
+
+## 関連性が低い例
+
+この例は、ほとんどが無関係な情報で、文脈との関連性が低いことを示しています：
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { createContextRelevanceScorerLLM } from '@mastra/evals';
+
+const scorer = createContextRelevanceScorerLLM({
+  model: openai('gpt-4o-mini'),
+  options: {
+    context: [
+      'The Great Barrier Reef is located in Australia.',
+      'Coral reefs need warm water to survive.',
+      'Many fish species live in coral reefs.',
+      'Australia has six states and two territories.',
+      'The capital of Australia is Canberra.',
+    ],
+    scale: 1,
+  },
+});
+
+const result = await scorer.run({
+  input: {
+    inputMessages: [
+      {
+        id: '1',
+        role: 'user',
+        content: 'What is the capital of Australia?',
+      },
+    ],
+  },
+  output: [
+    {
+      id: '2',
+      role: 'assistant',
+      content: 'The capital of Australia is Canberra.',
+    },
+  ],
+});
+
+console.log(result);
+// 出力:
+// {
+//   score: 0.26,
+//   reason: "スコアが 0.26 なのは、オーストラリアの首都に関する質問に関連するのは文脈5のみで、他のサンゴ礁に関する文脈は完全に無関係だからです。"
+// }
+```
+
+
+
+## 動的なコンテキスト抽出
+
+実行時の入力に基づいてコンテキストを動的に抽出します:
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { createContextRelevanceScorerLLM } from '@mastra/evals';
+
+const scorer = createContextRelevanceScorerLLM({
+  model: openai('gpt-4o-mini'),
+  options: {
+    contextExtractor: (input, output) => {
+      // 入力からクエリを抽出
+      const query = input?.inputMessages?.[0]?.content || '';
+      
+      // クエリに基づいてコンテキストを動的に取得
+      if (query.toLowerCase().includes('einstein')) {
+        return [
+          'アインシュタインは E=mc² を提唱した',
+          '彼は1921年にノーベル賞を受賞した',
+          '彼の理論は物理学に革命をもたらした',
+        ];
+      }
+      
+      if (query.toLowerCase().includes('climate')) {
+        return [
+          '世界の平均気温は上昇している',
+          'CO2 濃度は気候に影響を与える',
+          '再生可能エネルギーは排出量を削減する',
+        ];
+      }
+      
+      return ['一般的なナレッジベースの項目'];
+    },
+    penalties: {
+      unusedHighRelevanceContext: 0.15, // 高い関連性があるのに未使用のコンテキストに対して 15% のペナルティ
+      missingContextPerItem: 0.2, // コンテキスト項目の欠落 1 件ごとに 20% のペナルティ
+      maxMissingContextPenalty: 0.4, // 欠落コンテキストの合計ペナルティの上限を 40% に設定
+    },
+    scale: 1,
+  },
+});
+```
+
+
+
+## RAG システム統合
+
+取得コンテキストを評価するために RAG パイプラインと統合します:
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { createContextRelevanceScorerLLM } from '@mastra/evals';
+
+const scorer = createContextRelevanceScorerLLM({
+  model: openai('gpt-4o-mini'),
+  options: {
+    contextExtractor: (input, output) => {
+      // RAG の取得結果から抽出
+      const ragResults = input.metadata?.ragResults || [];
+      
+      // 取得したドキュメントのテキストを返す
+      return ragResults
+        .filter(doc => doc.relevanceScore > 0.5)
+        .map(doc => doc.content);
+    },
+    penalties: {
+      unusedHighRelevanceContext: 0.12, // 高関連コンテキストの未使用に対する中程度のペナルティ
+      missingContextPerItem: 0.18, // 項目ごとの情報不足に対する高めのペナルティ
+      maxMissingContextPenalty: 0.45, // RAG システム向けにやや高めの上限
+    },
+    scale: 1,
+  },
+});
+
+// RAG システムの評価
+const evaluateRAG = async (testCases) => {
+  const results = [];
+  
+  for (const testCase of testCases) {
+    const score = await scorer.run(testCase);
+    results.push({
+      query: testCase.input.inputMessages[0].content,
+      relevanceScore: score.score,
+      feedback: score.reason,
+      unusedContext: score.reason.includes('unused'),
+      missingContext: score.reason.includes('missing'),
+    });
+  }
+  
+  return results;
+};
+```
+
+
+
+## スコアラーの構成
+
+### カスタムペナルティの構成
+
+未使用および欠落しているコンテキストへのペナルティ適用方法を制御します:
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { createContextRelevanceScorerLLM } from '@mastra/evals';
+
+// より厳格なペナルティ設定
+const strictScorer = createContextRelevanceScorerLLM({
+  model: openai('gpt-4o-mini'),
+  options: {
+    context: [
+      'Einstein won the Nobel Prize for photoelectric effect',
+      'He developed the theory of relativity',
+      'Einstein was born in Germany',
+    ],
+    penalties: {
+      unusedHighRelevanceContext: 0.2, // 高関連のコンテキストを未使用の場合、1項目につき20%の減点
+      missingContextPerItem: 0.25, // コンテキスト項目の欠落1つにつき25%の減点
+      maxMissingContextPenalty: 0.6, // 欠落コンテキストによる減点の上限は60%
+    },
+    scale: 1,
+  },
+});
+
+// より寛容なペナルティ設定
+const lenientScorer = createContextRelevanceScorerLLM({
+  model: openai('gpt-4o-mini'),
+  options: {
+    context: [
+      'Einstein won the Nobel Prize for photoelectric effect',
+      'He developed the theory of relativity',
+      'Einstein was born in Germany',
+    ],
+    penalties: {
+      unusedHighRelevanceContext: 0.05, // 高関連のコンテキストを未使用の場合、1項目につき5%の減点
+      missingContextPerItem: 0.1, // コンテキスト項目の欠落1つにつき10%の減点
+      maxMissingContextPenalty: 0.3, // 欠落コンテキストによる減点の上限は30%
+    },
+    scale: 1,
+  },
+});
+
+const testRun = {
+  input: {
+    inputMessages: [
+      {
+        id: '1',
+        role: 'user',
+        content: 'What did Einstein achieve in physics?',
+      },
+    ],
+  },
+  output: [
+    {
+      id: '2',
+      role: 'assistant',
+      content: 'Einstein won the Nobel Prize for his work on the photoelectric effect.',
+    },
+  ],
+};
+
+const strictResult = await strictScorer.run(testRun);
+const lenientResult = await lenientScorer.run(testRun);
+
+console.log('Strict penalties:', strictResult.score); // 未使用のコンテキストによりスコアが低くなる
+console.log('Lenient penalties:', lenientResult.score); // 減点が少ないためスコアが高くなる
+```
+
+### カスタムスケール係数
+
+```typescript
+const scorer = createContextRelevanceScorerLLM({
+  model: openai('gpt-4o-mini'),
+  options: {
+    context: [
+      'Relevant information...',
+      'Supporting details...',
+    ],
+    scale: 100, // スコアを0〜1ではなく0〜100でスケーリング
+  },
+});
+
+// 結果はスケーリングされます: score: 85（0.85ではなく）
+```
+
+### 複数のコンテキストソースの統合
+
+```typescript
+const scorer = createContextRelevanceScorerLLM({
+  model: openai('gpt-4o-mini'),
+  options: {
+    contextExtractor: (input, output) => {
+      const query = input?.inputMessages?.[0]?.content || '';
+      
+      // 複数のソースを統合
+      const kbContext = knowledgeBase.search(query);
+      const docContext = documentStore.retrieve(query);
+      const cacheContext = contextCache.get(query);
+      
+      return [
+        ...kbContext,
+        ...docContext,
+        ...cacheContext,
+      ];
+    },
+    scale: 1,
+  },
+});
+```
+
+
+
+## 結果の理解
+
+### スコアの解釈
+
+- **0.9–1.0**: きわめて良い — すべてのコンテキストが高い関連性を持ち、活用されている
+- **0.7–0.8**: 良い — 概ね関連しているが、軽微な抜けがある
+- **0.4–0.6**: ばらつきあり — 無関係または未使用のコンテキストが多い
+- **0.2–0.3**: 不十分 — ほとんどが無関係なコンテキスト
+- **0.0–0.1**: きわめて不十分 — 関連するコンテキストが見つからない
+
+### 理由の分析
+
+reason フィールドは次の点に関する示唆を提供します:
+- 各コンテキスト要素の関連度（高/中/低/なし）
+- 実際に応答で使用されたコンテキスト
+- 未使用の高関連度コンテキストに対するペナルティ（`unusedHighRelevanceContext` で設定可能）
+- 応答の質を高め得た不足コンテキスト（`missingContextPerItem` により、`maxMissingContextPenalty` を上限としてペナルティ）
+
+### 最適化戦略
+
+結果を活用してシステムを改善する:
+- **無関係なコンテキストの除外**: 処理前に関連度が低/なしの要素を取り除く
+- **コンテキストの活用徹底**: 高関連度のコンテキストを確実に取り込む
+- **コンテキストの補完**: スコアラーが特定した不足情報を追加する
+- **コンテキスト量の最適化**: 最適な関連性を得られる適切な量を見極める
+- **ペナルティ感度の調整**: 未使用または不足コンテキストの許容度に応じて `unusedHighRelevanceContext`、`missingContextPerItem`、`maxMissingContextPenalty` を調整する
+
+
+
+## Context Precision との比較
+
+ニーズに合ったスコアラーを選びましょう:
+
+| ユースケース | コンテキスト関連性 | コンテキスト精度 |
+|----------|-------------------|-------------------|
+| **RAG の評価** | 利用状況が重要な場合 | ランキングが重要な場合 |
+| **コンテキスト品質** | ニュアンスのある段階的評価 | 二値の関連性判定 |
+| **欠落検出** | ✓ ギャップを特定 | ✗ 評価対象外 |
+| **利用状況の追跡** | ✓ 利用状況を追跡 | ✗ 対象外 |
+| **位置への感度** | ✗ 位置非依存 | ✓ 早い配置を高く評価 |
+
+
+
+## 関連例
+
+- [コンテキスト精度の例](/examples/scorers/context-precision) - コンテキストのランキングを評価
+- [忠実性の例](/examples/scorers/faithfulness) - コンテキストへの根拠づけの度合いを測定
+- [回答関連性の例](/examples/scorers/answer-relevancy) - 回答の質を評価

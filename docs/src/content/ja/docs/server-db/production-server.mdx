@@ -1,0 +1,88 @@
+---
+title: "Mastra の本番サーバーを構築する"
+description: "API や CORS などのカスタム設定を用いて、本番運用に適した Mastra サーバーを構成し、デプロイする方法を学ぶ"
+---
+
+# Mastra の本番サーバーを作成する
+
+Mastra アプリケーションを本番環境にデプロイすると、エージェント、ワークフロー、その他の機能を API エンドポイントとして公開する HTTP サーバーとして動作します。このページでは、本番環境向けにサーバーを構成・カスタマイズする方法を説明します。
+
+## サーバーアーキテクチャ
+
+Mastra は基盤となる HTTP サーバーフレームワークとして [Hono](https://hono.dev) を使用しています。`mastra build` で Mastra アプリケーションをビルドすると、`.mastra` ディレクトリに Hono ベースの HTTP サーバーが生成されます。
+
+このサーバーでは次の機能を提供します：
+
+- すべての登録済みエージェント向けの API エンドポイント
+- すべての登録済みワークフロー向けの API エンドポイント
+- カスタム API ルートのサポート
+- カスタムミドルウェアのサポート
+- タイムアウトの設定
+- ポートの設定
+- リクエストボディサイズ制限の設定
+
+追加のサーバー機能の追加方法については、[Middleware](/docs/server-db/middleware) および
+[Custom API Routes](/docs/server-db/custom-api-routes) のページを参照してください。
+
+## サーバー構成
+
+Mastra インスタンスでサーバーの `port` と `timeout` を設定できます。
+
+```typescript filename="src/mastra/index.ts" copy showLineNumbers
+import { Mastra } from "@mastra/core/mastra";
+
+export const mastra = new Mastra({
+  // ...
+  server: {
+    port: 3000, // 既定値は 4111
+    timeout: 10000, // 既定値は 30000（30秒）
+  },
+});
+```
+
+`method` オプションには `"GET"`, `"POST"`, `"PUT"`, `"DELETE"` または `"ALL"` を指定できます。`"ALL"` を使用すると、パスに一致する任意の HTTP メソッドでハンドラーが呼び出されます。
+
+## TypeScript の設定
+
+Mastra では、最新の Node.js に対応した `module` と `moduleResolution` の設定が必要です。`CommonJS` や `node` といった旧来の設定は Mastra のパッケージと互換性がなく、解決時のエラーを引き起こします。
+
+```json {4-5} filename="tsconfig.json" copy
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "outDir": "dist"
+  },
+  "include": [
+    "src/**/*"
+  ]
+}
+```
+
+> この TypeScript 設定は、最新のモジュール解決方式と厳密な型チェックを採用し、Mastra プロジェクト向けに最適化されています。
+
+## CORS の設定
+
+Mastra では、サーバーの CORS（クロスオリジンリソース共有）を設定できます。
+
+```typescript filename="src/mastra/index.ts" copy showLineNumbers
+import { Mastra } from "@mastra/core/mastra";
+
+export const mastra = new Mastra({
+  // ...
+  server: {
+    cors: {
+      origin: ["https://example.com"], // 特定のオリジンを許可。すべてを許可する場合は '*'
+      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      allowHeaders: ["Content-Type", "Authorization"],
+      credentials: false,
+    },
+  },
+});
+```

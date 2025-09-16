@@ -1,0 +1,114 @@
+---
+title: "リファレンス: Run クラス | Workflows | Mastra ドキュメント"
+description: Mastra における Run クラスのドキュメント。ワークフローの実行インスタンスを表します。
+---
+
+
+
+# Run クラス
+
+`Run` クラスはワークフローの実行インスタンスを表し、実行の開始、再開、ストリーミング、および監視のためのメソッドを提供します。
+
+
+
+## 使用例
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+const result = await run.start({
+  inputData: { value: "初期データ" }
+});
+
+if (result.status === "suspended") {
+  const resumedResult = await run.resume({
+    resumeData: { value: "再開データ" }
+  });
+}
+```
+
+
+
+## 実行メソッド
+
+<PropertiesTable
+  content={[
+    {
+      name: "start",
+      type: "(options?: StartOptions) => Promise<WorkflowResult>",
+      description: "入力データを用いてワークフローの実行を開始します",
+      required: true,
+    },
+    {
+      name: "resume",
+      type: "(options?: ResumeOptions) => Promise<WorkflowResult>",
+      description: "特定のステップから一時停止中のワークフローを再開します",
+      required: true,
+    },
+    {
+      name: "stream",
+      type: "(options?: StreamOptions) => Promise<StreamResult>",
+      description: "イベントストリームとしてワークフローの実行を監視します",
+      required: true,
+    },
+    {
+      name: "streamVNext",
+      type: "(options?: StreamOptions) => MastraWorkflowStream",
+      description: "拡張機能によりリアルタイムストリーミングを有効化します",
+      required: true,
+    },
+    {
+      name: "watch",
+      type: "(callback: WatchCallback, type?: WatchType) => UnwatchFunction",
+      description: "コールバックベースのイベントでワークフローの実行を監視します",
+      required: true,
+    },
+    {
+      name: "cancel",
+      type: "() => Promise<void>",
+      description: "ワークフローの実行を取り消します",
+      required: true,
+    }
+  ]}
+/>
+
+
+
+## 実行ステータス
+
+ワークフロー実行の`status`は、現在の実行状態を示します。取りうる値は次のとおりです：
+
+<PropertiesTable
+  content={[
+    {
+      name: "success",
+      type: "string",
+      description:
+        "すべてのステップが正常に完了し、有効な結果が出力されました",
+    },
+    {
+      name: "failed",
+      type: "string",
+      description:
+        "実行中にエラーが発生し、エラーの詳細を参照できます",
+    },
+    {
+      name: "suspended",
+      type: "string",
+      description:
+        "再開待ちのため実行が一時停止されており、一時停止中のステップ情報があります",
+    },
+  ]}
+/>
+
+
+
+## 関連項目
+
+- [ワークフローの実行](../../examples/workflows/running-workflows.mdx)
+- [Run.start()](./run-methods/start.mdx)
+- [Run.resume()](./run-methods/resume.mdx)
+- [Run.stream()](./run-methods/stream.mdx)
+- [Run.streamVNext()](./run-methods/streamVNext.mdx)
+- [Run.watch()](./run-methods/watch.mdx)
+- [Run.cancel()](./run-methods/cancel.mdx)

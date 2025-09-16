@@ -1,172 +1,181 @@
 ---
-title: "例: テキスト差分 | Evals | Mastra Docs"
-description: テキスト差分メトリクスを使用して、テキスト文字列間の類似性をシーケンスの違いや変更点から評価する例です。
+title: "例: Textual Difference | Evals | Mastra Docs"
+description: テキスト列の差分や変更を解析し、文字列間の類似度を評価するために Textual Difference 指標を用いる例。
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
 
 # テキスト差分評価
 
-この例では、Mastra のテキスト差分メトリックを使用して、シーケンスの違いや変更を分析することでテキスト文字列間の類似度を評価する方法を示します。
+<ScorerCallout />
 
-## 概要
+`TextualDifferenceMetric` を使用して、シーケンス差分や編集操作を解析し、2つのテキスト文字列の類似度を評価します。メトリクスは `query` と `response` を受け取り、スコアと、confidence、ratio、変更数、長さ差を含む `info` オブジェクトを返します。
 
-この例では、以下の方法を示します：
 
-1. Textual Differenceメトリクスの設定方法
-2. テキストシーケンスの差分比較
-3. 類似度スコアと変更点の分析
-4. 異なる比較シナリオへの対応
 
-## セットアップ
+## インストール
 
-### 依存関係
-
-必要な依存関係をインポートします：
-
-```typescript copy showLineNumbers filename="src/index.ts"
-import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+```bash copy
+npm install @mastra/evals
 ```
 
-## メトリックの設定
 
-Textual Differenceメトリックを設定します：
 
-```typescript copy showLineNumbers{4} filename="src/index.ts"
+## 差分なしの例
+
+この例では、テキストは完全に同一です。メトリクスは完全一致を判定し、満点のスコアと変更なしを示します。
+
+
+```typescript filename="src/example-no-differences.ts" showLineNumbers copy
+import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+
+const metric = new TextualDifferenceMetric();
+
+const query = "The quick brown fox jumps over the lazy dog.";
+const response = "The quick brown fox jumps over the lazy dog.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 差分なしの出力
+
+メトリクスは高いスコアを返し、テキストが同一であることを示します。詳細情報は、変更がゼロで長さの差もないことを確認しています。
+
+```typescript
+{
+  score: 1,
+  info: {
+    confidence: 1,
+    ratio: 1,
+    changes: 0,
+    lengthDiff: 0
+  }
+}
+```
+## 軽微な差分の例
+
+この例では、テキストに小さな差異があります。メトリクスはこれらの軽微な差分を検出し、類似度は中程度のスコアとして返されます。
+
+```typescript filename="src/example-minor-differences.ts" showLineNumbers copy
+import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+
+const metric = new TextualDifferenceMetric();
+
+const query = "Hello world! How are you?";
+const response = "Hello there! How is it going?";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 軽微な差分の出力
+
+メトリクスは、テキスト間の小さな差異を反映した中程度のスコアを返します。詳細情報には、検出された変更数と長さの差が含まれます。
+
+```typescript
+{
+  score: 0.5925925925925926,
+  info: {
+    confidence: 0.8620689655172413,
+    ratio: 0.5925925925925926,
+    changes: 5,
+    lengthDiff: 0.13793103448275862
+  }
+}
+```
+
+
+
+## 大きな差異の例
+
+この例では、テキストに大きな差があります。メトリックは大幅な変更を検出し、低い類似度スコアを返します。
+
+```typescript filename="src/example-major-differences.ts" showLineNumbers copy
+import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+
+const metric = new TextualDifferenceMetric();
+
+const query = "Python is a high-level programming language.";
+const response = "JavaScript is used for web development";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 大きな差異の出力
+
+テキスト間の差異が大きいため、メトリックは低いスコアを返します。詳細情報には多数の変更点と顕著な長さの違いが示されます。
+
+```typescript
+{
+  score: 0.3170731707317073,
+  info: {
+    confidence: 0.8636363636363636,
+    ratio: 0.3170731707317073,
+    changes: 8,
+    lengthDiff: 0.13636363636363635
+  }
+}
+```
+
+
+
+## メトリクスの設定
+
+`TextualDifferenceMetric` のインスタンスはデフォルト設定で作成できます。追加の設定は不要です。
+
+```typescript
 const metric = new TextualDifferenceMetric();
 ```
 
-## 使用例
+> 設定可能なオプションの一覧は [TextualDifferenceMetric](/reference/evals/textual-difference.mdx) を参照してください。
 
-### 完全一致テキストの例
 
-まったく同じテキストを評価します：
-
-```typescript copy showLineNumbers{7} filename="src/index.ts"
-const input1 = "The quick brown fox jumps over the lazy dog";
-const output1 = "The quick brown fox jumps over the lazy dog";
-
-console.log("Example 1 - Identical Texts:");
-console.log("Input:", input1);
-console.log("Output:", output1);
-
-const result1 = await metric.measure(input1, output1);
-console.log("Metric Result:", {
-  score: result1.score,
-  info: {
-    confidence: result1.info.confidence,
-    ratio: result1.info.ratio,
-    changes: result1.info.changes,
-    lengthDiff: result1.info.lengthDiff,
-  },
-});
-// Example Output:
-// Metric Result: {
-//   score: 1,
-//   info: { confidence: 1, ratio: 1, changes: 0, lengthDiff: 0 }
-// }
-```
-
-### 小さな違いの例
-
-わずかな違いがあるテキストを評価します：
-
-```typescript copy showLineNumbers{26} filename="src/index.ts"
-const input2 = "Hello world! How are you?";
-const output2 = "Hello there! How is it going?";
-
-console.log("Example 2 - Minor Differences:");
-console.log("Input:", input2);
-console.log("Output:", output2);
-
-const result2 = await metric.measure(input2, output2);
-console.log("Metric Result:", {
-  score: result2.score,
-  info: {
-    confidence: result2.info.confidence,
-    ratio: result2.info.ratio,
-    changes: result2.info.changes,
-    lengthDiff: result2.info.lengthDiff,
-  },
-});
-// Example Output:
-// Metric Result: {
-//   score: 0.5925925925925926,
-//   info: {
-//     confidence: 0.8620689655172413,
-//     ratio: 0.5925925925925926,
-//     changes: 5,
-//     lengthDiff: 0.13793103448275862
-//   }
-// }
-```
-
-### 大きな違いの例
-
-大きな違いがあるテキストを評価します：
-
-```typescript copy showLineNumbers{45} filename="src/index.ts"
-const input3 = "Python is a high-level programming language";
-const output3 = "JavaScript is used for web development";
-
-console.log("Example 3 - Major Differences:");
-console.log("Input:", input3);
-console.log("Output:", output3);
-
-const result3 = await metric.measure(input3, output3);
-console.log("Metric Result:", {
-  score: result3.score,
-  info: {
-    confidence: result3.info.confidence,
-    ratio: result3.info.ratio,
-    changes: result3.info.changes,
-    lengthDiff: result3.info.lengthDiff,
-  },
-});
-// Example Output:
-// Metric Result: {
-//   score: 0.32098765432098764,
-//   info: {
-//     confidence: 0.8837209302325582,
-//     ratio: 0.32098765432098764,
-//     changes: 8,
-//     lengthDiff: 0.11627906976744186
-//   }
-// }
-```
 
 ## 結果の理解
 
-この指標は以下を提供します：
+`TextualDifferenceMetric` は次の形式の結果を返します:
 
-1. 0から1までの類似度スコア：
-
-   - 1.0: 完全に同一のテキスト - 違いなし
-   - 0.7-0.9: 軽微な違い - わずかな修正が必要
-   - 0.4-0.6: 中程度の違い - かなりの修正が必要
-   - 0.1-0.3: 大きな違い - 大幅な修正が必要
-   - 0.0: 完全に異なるテキスト
-
-2. 詳細な指標：
-
-   - 信頼度: テキストの長さに基づく比較の信頼性
-   - 比率: シーケンスマッチングによる生の類似度スコア
-   - 変更数: 必要な編集操作の数
-   - 長さの差: テキスト長の正規化された差
-
-3. 以下の分析：
-   - 文字レベルの違い
-   - シーケンスマッチングのパターン
-   - 編集距離の計算
-   - 長さの正規化の影響
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/textual-difference"
+```typescript
+{
+  score: number,
+  info: {
+    confidence: number,
+    ratio: number,
+    changes: number,
+    lengthDiff: number
   }
+}
+```
+
+### テキスト差分スコア
+
+0 から 1 の範囲のテキスト差分スコア:
+
+- **1.0**: テキストは同一 — 差分なし。
+- **0.7–0.9**: 軽微な差分 — わずかな修正が必要。
+- **0.4–0.6**: 中程度の差分 — 目立つ修正が必要。
+- **0.1–0.3**: 大きな差分 — 大幅な修正が必要。
+- **0.0**: 完全に異なるテキスト。
+
+### テキスト差分情報
+
+スコアの根拠となる説明。以下の詳細を含みます:
+
+- テキスト長の比較に基づく信頼度。
+- シーケンスマッチングから算出される類似度比。
+- テキストを一致させるために必要な編集操作の回数。
+- テキスト長の正規化された差分。
+
+<GithubLink
+  outdated={true}
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/textual-difference"
 />

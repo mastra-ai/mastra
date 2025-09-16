@@ -5,9 +5,13 @@ description: OpenAI と PGVector を使用し、Mastra で chain-of-thought 推�
 
 import { GithubLink } from "@/components/github-link";
 
+
+
 # チェーン・オブ・ソート・プロンプティング
 
 この例では、Mastra、OpenAIの埋め込み、そしてベクトルストレージとしてPGVectorを使用し、チェーン・オブ・ソート推論に重点を置いた検索拡張生成（RAG）システムの実装方法を示します。
+
+
 
 ## 概要
 
@@ -20,6 +24,8 @@ import { GithubLink } from "@/components/github-link";
 5. それらを PostgreSQL ベクターデータベースに保存する
 6. ベクタークエリツールを使ってクエリに基づき関連するセグメントを取得する
 7. chain-of-thought 推論を用いてコンテキストに応じた応答を生成する
+
+
 
 ## セットアップ
 
@@ -45,6 +51,8 @@ import { createVectorQueryTool, MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
 ```
 
+
+
 ## ベクタークエリツールの作成
 
 @mastra/rag からインポートした createVectorQueryTool を使用すると、ベクターデータベースをクエリできるツールを作成できます。
@@ -56,6 +64,8 @@ const vectorQueryTool = createVectorQueryTool({
   model: openai.embedding("text-embedding-3-small"),
 });
 ```
+
+
 
 ## エージェント設定
 
@@ -91,12 +101,16 @@ FINAL ANSWER:
 });
 ```
 
+
+
 ## PgVector と Mastra のインスタンス化
 
-すべてのコンポーネントを使って PgVector と Mastra をインスタンス化します。
+すべてのコンポーネントを使って PgVector と Mastra をインスタンス化します：
 
 ```typescript copy showLineNumbers{36} filename="index.ts"
-const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
+const pgVector = new PgVector({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+});
 
 export const mastra = new Mastra({
   agents: { ragAgent },
@@ -104,6 +118,8 @@ export const mastra = new Mastra({
 });
 const agent = mastra.getAgent("ragAgent");
 ```
+
+
 
 ## ドキュメント処理
 
@@ -121,6 +137,8 @@ const chunks = await doc.chunk({
   separator: "\n",
 });
 ```
+
+
 
 ## 埋め込みの作成と保存
 
@@ -143,6 +161,8 @@ await vectorStore.upsert({
   metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
 });
 ```
+
+
 
 ## チェーン・オブ・ソート クエリ
 

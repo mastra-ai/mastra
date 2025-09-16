@@ -1,0 +1,60 @@
+---
+title: "ランタイムコンテキスト | Tools & MCP | Mastra ドキュメント"
+description: Mastra の RuntimeContext を用いて、ツールに動的かつリクエストごとの設定を提供する方法を学びます。
+---
+
+import { Callout } from "nextra/components";
+
+
+# ツールのランタイムコンテキスト
+
+Mastra には `RuntimeContext` という、実行時の変数を用いてツールを構成できる依存性注入システムが用意されています。似たようなタスクを実行するツールを複数作っている場合は、ランタイムコンテキストを使うことで、それらをより柔軟な単一のツールにまとめられます。
+
+## 概要
+
+依存性注入システムにより、次のことが可能になります：
+
+1. 型安全な `runtimeContext` を介して、実行時の設定変数をツールに渡す。
+2. ツールの実行コンテキスト内でこれらの変数にアクセスする。
+3. 基盤となるコードを変更せずにツールの挙動を調整する。
+4. 同一エージェント内の複数ツール間で設定を共有する。
+
+<Callout>
+  **注:** `RuntimeContext` は主にデータをツールの実行*に*渡すために使用されます。これは、複数回の呼び出しにわたる会話履歴や状態の永続化を扱うエージェントメモリとは異なります。
+</Callout>
+
+## ツールでの `runtimeContext` へのアクセス
+
+ツールは親エージェントと同じ `runtimeContext` にアクセスでき、実行時の設定に基づいて挙動を調整できます。この例では、ツールの `execute` 関数内で `temperature-unit` を取得し、エージェントの指示に沿った一貫したフォーマットを担保しています。
+
+```typescript {14-15} filename="src/mastra/tools/test-weather-tool" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+type WeatherRuntimeContext = {
+  "temperature-unit": "celsius" | "fahrenheit";
+};
+
+export const testWeatherTool = createTool({
+  id: "getWeather",
+  description: "Get the current weather for a location",
+  inputSchema: z.object({
+    location: z.string().describe("The location to get weather for")
+  }),
+  execute: async ({ context, runtimeContext }) => {
+    const temperatureUnit = runtimeContext.get("temperature-unit") as WeatherRuntimeContext["temperature-unit"];
+
+    const weather = await fetchWeather(context.location, temperatureUnit);
+
+    return { result: weather };
+  }
+});
+
+async function fetchWeather(location: string, temperatureUnit: WeatherRuntimeContext["temperature-unit"]) {
+  // ...
+}
+```
+
+## 関連項目
+
+[エージェントのランタイムコンテキスト](../agents/runtime-context.mdx)

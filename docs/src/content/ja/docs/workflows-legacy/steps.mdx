@@ -1,0 +1,119 @@
+---
+title: "ステップの作成とワークフローへの追加（レガシー） | Mastra ドキュメント"
+description: "Mastra のワークフローにおけるステップは、入力、出力、実行ロジックを定義することで、業務を体系的に管理する方法を提供します。"
+---
+
+
+
+# ワークフロー内のステップの定義（レガシー）
+
+ワークフローを構築する際には、通常、操作をより小さなタスクに分割し、それらを連携させて再利用できるようにします。ステップは、入力、出力、および実行ロジックを定義することで、これらのタスクを体系的に管理する方法を提供します。
+
+以下のコードは、これらのステップをインラインまたは個別に定義する方法を示しています。
+
+
+
+## インラインステップの作成
+
+`.step()` と `.then()` を使って、ワークフロー内で直接ステップを作成できます。以下のコードは、2つのステップを順番に定義し、リンクし、実行する方法を示しています。
+
+```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
+import { Mastra } from "@mastra/core";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
+
+export const myWorkflow = new LegacyWorkflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+
+myWorkflow
+  .step(
+    new LegacyStep({
+      id: "stepOne",
+      outputSchema: z.object({
+        doubledValue: z.number(),
+      }),
+      execute: async ({ context }) => ({
+        doubledValue: context.triggerData.inputValue * 2,
+      }),
+    }),
+  )
+  .then(
+    new LegacyStep({
+      id: "stepTwo",
+      outputSchema: z.object({
+        incrementedValue: z.number(),
+      }),
+      execute: async ({ context }) => {
+        if (context.steps.stepOne.status !== "success") {
+          return { incrementedValue: 0 };
+        }
+
+        return {
+          incrementedValue: context.steps.stepOne.output.doubledValue + 1,
+        };
+      },
+    }),
+  )
+  .commit();
+
+// Register the workflow with Mastra
+export const mastra = new Mastra({
+  legacy_workflows: { myWorkflow },
+});
+```
+
+
+
+## ステップを個別に作成する
+
+ステップのロジックを別々のエンティティで管理したい場合は、ステップを外部で定義し、その後ワークフローに追加することができます。以下のコードは、ステップを独立して定義し、後からリンクする方法を示しています。
+
+```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
+import { Mastra } from "@mastra/core";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
+
+// Define steps separately
+const stepOne = new LegacyStep({
+  id: "stepOne",
+  outputSchema: z.object({
+    doubledValue: z.number(),
+  }),
+  execute: async ({ context }) => ({
+    doubledValue: context.triggerData.inputValue * 2,
+  }),
+});
+
+const stepTwo = new LegacyStep({
+  id: "stepTwo",
+  outputSchema: z.object({
+    incrementedValue: z.number(),
+  }),
+  execute: async ({ context }) => {
+    if (context.steps.stepOne.status !== "success") {
+      return { incrementedValue: 0 };
+    }
+    return { incrementedValue: context.steps.stepOne.output.doubledValue + 1 };
+  },
+});
+
+// Build the workflow
+const myWorkflow = new LegacyWorkflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+
+myWorkflow.step(stepOne).then(stepTwo);
+myWorkflow.commit();
+
+// Register the workflow with Mastra
+export const mastra = new Mastra({
+  legacy_workflows: { myWorkflow },
+});
+```

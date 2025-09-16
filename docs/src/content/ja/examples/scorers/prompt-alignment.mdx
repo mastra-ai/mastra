@@ -1,0 +1,352 @@
+---
+title: "例：Prompt Alignment | Scorers | Mastra Docs"
+description: Prompt Alignment スコアラーを使って、応答がユーザーのプロンプトの意図や要件にどの程度沿っているかを評価する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+
+
+# プロンプト整合性スコアラー
+
+`createPromptAlignmentScorerLLM` を使って、意図・要件・網羅性・形式の観点から、応答がユーザープロンプトにどの程度整合しているかをスコアリングします。
+
+
+
+## インストール
+
+```bash copy
+npm install @mastra/evals
+```
+
+> API の完全なドキュメントと設定オプションについては、[`createPromptAlignmentScorerLLM`](/reference/scorers/prompt-alignment)を参照してください。
+
+
+
+## 優れたアラインメントの例
+
+この例では、レスポンスがユーザーのプロンプトに完全に応え、すべての要件を満たしています。
+
+```typescript filename="src/example-excellent-prompt-alignment.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
+
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: openai("gpt-4o-mini") 
+});
+
+const inputMessages = [{ 
+  role: 'user', 
+  content: "Write a Python function to calculate factorial with error handling for negative numbers" 
+}];
+
+const outputMessage = { 
+  text: `def factorial(n):
+    """Calculate factorial of a number."""
+    if n < 0:
+        raise ValueError("Factorial not defined for negative numbers")
+    if n == 0 or n == 1:
+        return 1
+    return n * factorial(n - 1)` 
+};
+
+const result = await scorer.run({
+  input: inputMessages,
+  output: outputMessage,
+});
+
+console.log(result);
+```
+
+### 優れたアラインメントの出力
+
+この出力は、意図に的確に対応し、すべての要件を満たし、適切な形式を用いているため高評価となります。
+
+```typescript
+{
+  score: 0.95,
+  reason: 'The score is 0.95 because the response perfectly addresses the primary intent of creating a factorial function and fulfills all requirements including Python implementation, error handling for negative numbers, and proper documentation. The code format is appropriate and the implementation is complete.'
+}
+```
+
+
+
+## 部分的なアラインメントの例
+
+この例では、応答は核心的な意図には対応しているものの、いくつかの要件を満たしていなかったり、形式に問題があります。
+
+```typescript filename="src/example-partial-prompt-alignment.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
+
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: openai("gpt-4o-mini") 
+});
+
+const inputMessages = [{ 
+  role: 'user', 
+  content: "List the benefits of TypeScript in bullet points" 
+}];
+
+const outputMessage = { 
+  text: "TypeScript provides static typing, better IDE support, and enhanced code reliability through compile-time error checking." 
+};
+
+const result = await scorer.run({
+  input: inputMessages,
+  output: outputMessage,
+});
+
+console.log(result);
+```
+
+### 部分的なアラインメントの出力
+
+内容自体は正確である一方で、要求された形式（箇条書き）に従っていないため、出力のスコアは低くなります。
+
+```typescript
+{
+  score: 0.75,
+  reason: 'The score is 0.75 because the response addresses the intent of explaining TypeScript benefits and provides accurate information, but fails to use the requested bullet point format, resulting in lower appropriateness scoring.'
+}
+```
+
+
+
+## アラインメントが不十分な例
+
+この例では、応答がユーザーの具体的な要件に対応していません。
+
+```typescript filename="src/example-poor-prompt-alignment.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
+
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: openai("gpt-4o-mini") 
+});
+
+const inputMessages = [{ 
+  role: 'user', 
+  content: "Write a Python class with initialization, validation, error handling, and documentation" 
+}];
+
+const outputMessage = { 
+  text: `class Example:
+    def __init__(self, value):
+        self.value = value` 
+};
+
+const result = await scorer.run({
+  input: inputMessages,
+  output: outputMessage,
+});
+
+console.log(result);
+```
+
+### アラインメントが不十分な出力
+
+この出力は要件を一部しか満たしておらず、検証、エラー処理、ドキュメンテーションが欠落しているため、スコアが低くなっています。
+
+```typescript
+{
+  score: 0.35,
+  reason: 'スコアが 0.35 なのは、初期化を備えた Python クラスを作成するという基本的な意図には応えているものの、明示的に求められていた検証、エラー処理、ドキュメンテーションが含まれておらず、要件の充足が不完全だからです。'
+}
+```
+
+
+
+## スコアラーの設定
+
+スケールパラメータと評価モードを調整して、Prompt Alignment Scorer をニーズに合わせてカスタマイズできます。
+
+```typescript showLineNumbers copy
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: openai("gpt-4o-mini"), 
+  options: { 
+    scale: 10, // 0-1 ではなく 0-10 のスコア
+    evaluationMode: 'both' // 'user'、'system'、または 'both'（既定）
+  }
+});
+```
+
+### 評価モードの例
+
+#### ユーザーモード - ユーザープロンプトのみに注目
+
+システムの指示は無視し、ユーザーのリクエストにどれだけ適切に応答しているかを評価します:
+
+```typescript filename="src/example-user-mode.ts" showLineNumbers copy
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: openai("gpt-4o-mini"),
+  options: { evaluationMode: 'user' }
+});
+
+const result = await scorer.run({
+  input: {
+    inputMessages: [{ 
+      role: 'user', 
+      content: "Explain recursion with an example" 
+    }],
+    systemMessages: [{ 
+      role: 'system', 
+      content: "Always provide code examples in Python" 
+    }]
+  },
+  output: { 
+    text: "Recursion is when a function calls itself. For example: factorial(5) = 5 * factorial(4)" 
+  }
+});
+// Python のコード例がなくても、ユーザーの要望に応えているため高評価
+```
+
+#### システムモード - システムガイドラインのみに注目
+
+システムの行動ガイドラインや制約への準拠を評価します:
+
+```typescript filename="src/example-system-mode.ts" showLineNumbers copy
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: openai("gpt-4o-mini"),
+  options: { evaluationMode: 'system' }
+});
+
+const result = await scorer.run({
+  input: {
+    systemMessages: [{ 
+      role: 'system', 
+      content: "You are a helpful assistant. Always be polite, concise, and provide examples." 
+    }],
+    inputMessages: [{ 
+      role: 'user', 
+      content: "What is machine learning?" 
+    }]
+  },
+  output: { 
+    text: "Machine learning is a subset of AI where computers learn from data. For example, spam filters learn to identify unwanted emails by analyzing patterns in previously marked spam." 
+  }
+});
+// 丁寧さ、簡潔さ、例示の有無を評価
+```
+
+#### 両方のモード - 組み合わせ評価（既定）
+
+ユーザー意図の充足度とシステム準拠の両方を、重み付け（ユーザー 70%、システム 30%）で評価します:
+
+```typescript filename="src/example-both-mode.ts" showLineNumbers copy
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: openai("gpt-4o-mini"),
+  options: { evaluationMode: 'both' } // 既定設定
+});
+
+const result = await scorer.run({
+  input: {
+    systemMessages: [{ 
+      role: 'system', 
+      content: "Always provide code examples when explaining programming concepts" 
+    }],
+    inputMessages: [{ 
+      role: 'user', 
+      content: "Explain how to reverse a string" 
+    }]
+  },
+  output: { 
+    text: `To reverse a string, you can iterate through it backwards. Here's an example in Python:
+    
+    def reverse_string(s):
+        return s[::-1]
+    
+    # Usage: reverse_string("hello") returns "olleh"` 
+  }
+});
+// ユーザーの要望への対応とシステムガイドラインの遵守の両面で高評価
+```
+
+> 設定オプションの一覧は [createPromptAlignmentScorerLLM](/reference/scorers/prompt-alignment) を参照してください。
+
+
+
+## 結果の読み解き方
+
+`.run()` は次の形の結果を返します:
+
+```typescript
+{
+  runId: string,
+  score: number,
+  reason: string,
+  analyzeStepResult: {
+    intentAlignment: {
+      score: number,
+      primaryIntent: string,
+      isAddressed: boolean,
+      reasoning: string
+    },
+    requirementsFulfillment: {
+      requirements: Array<{
+        requirement: string,
+        isFulfilled: boolean,
+        reasoning: string
+      }>,
+      overallScore: number
+    },
+    completeness: {
+      score: number,
+      missingElements: string[],
+      reasoning: string
+    },
+    responseAppropriateness: {
+      score: number,
+      formatAlignment: boolean,
+      toneAlignment: boolean,
+      reasoning: string
+    },
+    overallAssessment: string
+  }
+}
+```
+
+### score
+
+0 から scale（デフォルトは 0–1）までの多次元アラインメントスコア:
+
+- **0.9-1.0**: すべての側面で卓越した整合
+- **0.8-0.9**: 軽微な抜けはあるが非常に良好
+- **0.7-0.8**: 良好だが一部要件が未充足
+- **0.6-0.7**: 目立つ抜けのある中程度
+- **0.4-0.6**: 重大な問題がある不十分な整合
+- **0.0-0.4**: 極めて不十分で、プロンプトに十分対処できていない
+
+### Scoring dimensions
+
+評価モードに応じて重み付けされた4つの側面を評価します:
+
+**User Mode Weights:**
+- **Intent Alignment (40%)**: 応答がユーザーの核心的な要望に応えているか
+- **Requirements Fulfillment (30%)**: ユーザー要件がすべて満たされているか
+- **Completeness (20%)**: ユーザーのニーズに対して十分に網羅的か
+- **Response Appropriateness (10%)**: 形式やトーンがユーザーの期待に合っているか
+
+**System Mode Weights:**
+- **Intent Alignment (35%)**: 応答がシステムの行動ガイドラインに従っているか
+- **Requirements Fulfillment (35%)**: システムの制約がすべて守られているか
+- **Completeness (15%)**: システムのルールに過不足なく準拠しているか
+- **Response Appropriateness (15%)**: 形式やトーンがシステム仕様に適合しているか
+
+**Both Mode (Default):**
+- ユーザー整合（70%）とシステム順守（30%）を組み合わせる
+- ユーザー満足とシステム順守の双方をバランスよく評価
+
+### runId
+このスコアラー実行の一意の識別子。
+
+### reason
+各側面の内訳と特定された問題点を含むスコアの詳細な説明。
+
+### analyzeStepResult
+各側面のスコアと根拠を示す詳細な分析結果。
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/scorers/prompt-alignment"
+/>

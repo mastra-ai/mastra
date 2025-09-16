@@ -1,0 +1,99 @@
+---
+title: "リファレンス: start() | ワークフローの実行（レガシー） | Mastra ドキュメント"
+description: "ワークフロー内の `start()` メソッドのドキュメント。ワークフローの実行を開始します。"
+---
+
+
+
+# start()
+
+start関数は、ワークフローの実行を開始します。定義されたワークフローの順序に従ってすべてのステップを処理し、並列実行、分岐ロジック、ステップ間の依存関係を管理します。
+
+
+
+## 使用方法
+
+```typescript copy showLineNumbers
+const { runId, start } = workflow.createRun();
+const result = await start({
+  triggerData: { inputValue: 42 },
+});
+```
+
+
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "config",
+      type: "object",
+      description: "ワークフロー実行を開始するための設定",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### config
+
+<PropertiesTable
+  content={[
+    {
+      name: "triggerData",
+      type: "Record<string, any>",
+      description: "ワークフローの triggerSchema に一致する初期データ",
+      isOptional: false,
+    },
+  ]}
+/>
+
+
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "results",
+      type: "Record<string, any>",
+      description: "完了したすべてのワークフローステップからの統合出力",
+    },
+    {
+      name: "status",
+      type: "'completed' | 'error' | 'suspended'",
+      description: "ワークフロー実行の最終ステータス",
+    },
+  ]}
+/>
+
+
+
+## エラー処理
+
+start関数は、いくつかの種類のバリデーションエラーをスローする可能性があります。
+
+```typescript copy showLineNumbers
+try {
+  const result = await start({ triggerData: data });
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.log(error.type); // 'circular_dependency' | 'no_terminal_path' | 'unreachable_step'
+    console.log(error.details);
+  }
+}
+```
+
+
+
+## 関連
+
+- [例：ワークフローの作成](../../examples/workflows_legacy/creating-a-workflow.mdx)
+- [例：一時停止と再開](../../examples/workflows_legacy/suspend-and-resume.mdx)
+- [createRun リファレンス](./createRun.mdx)
+- [Workflow クラスリファレンス](./workflow.mdx)
+- [Step クラスリファレンス](./step-class.mdx)
+
+```
+
+```
