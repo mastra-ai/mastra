@@ -46,11 +46,11 @@ const step2 = createStep({
   outputSchema: z.object({
     result: z.string(),
   }),
-  scorers: {
-    recipeMaker: {
-      scorer,
-    },
-  },
+  // scorers: {
+  //   recipeMaker: {
+  //     scorer,
+  //   },
+  // },
   execute: async () => {
     return {
       result: 'suh',
