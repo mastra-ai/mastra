@@ -1,3 +1,4 @@
+import { createScorer } from '@mastra/core/scores';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
@@ -10,6 +11,13 @@ export const myWorkflow = createWorkflow({
   outputSchema: z.object({
     result: z.string(),
   }),
+});
+
+const scorer = createScorer({
+  name: 'recipe-maker123',
+  description: 'Returns a recipe based on an ingredient',
+}).generateScore(() => {
+  return 1;
 });
 
 const step = createStep({
@@ -38,8 +46,12 @@ const step2 = createStep({
   outputSchema: z.object({
     result: z.string(),
   }),
+  scorers: {
+    recipeMaker: {
+      scorer,
+    },
+  },
   execute: async () => {
-    await new Promise(resolve => setTimeout(resolve, 3000));
     return {
       result: 'suh',
     };

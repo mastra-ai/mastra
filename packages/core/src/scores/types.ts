@@ -124,10 +124,10 @@ export const saveScorePayloadSchema = z.object({
   input: z.any().optional(),
   output: z.any(),
   source: z.enum(['LIVE', 'TEST']),
+  scorer: z.record(z.string(), z.any()),
   entityType: z.enum(['AGENT', 'WORKFLOW']).optional(),
 
   traceId: z.string().optional(),
-  scorer: z.record(z.string(), z.any()).optional(),
   preprocessStepResult: z.record(z.string(), z.any()).optional(),
   extractStepResult: z.record(z.string(), z.any()).optional(),
   analyzeStepResult: z.record(z.string(), z.any()).optional(),

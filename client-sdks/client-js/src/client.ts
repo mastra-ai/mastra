@@ -671,4 +671,11 @@ export class MastraClient extends BaseResource {
   getAITraces(params: AITracesPaginatedArg): Promise<GetAITracesResponse> {
     return this.observability.getTraces(params);
   }
+
+  score(params: {
+    scorerName: string;
+    targets: Array<{ traceId: string; spanId?: string }>;
+  }): Promise<{ status: string; message: string }> {
+    return this.observability.score(params);
+  }
 }
