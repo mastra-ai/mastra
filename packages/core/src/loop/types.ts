@@ -53,6 +53,7 @@ export type LoopConfig = {
 };
 
 export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
+  resumeContext?: any;
   model: LanguageModelV2;
   logger?: IMastraLogger;
   mode?: 'generate' | 'stream';

@@ -8,6 +8,7 @@ import type { LoopOptions, LoopRun, StreamInternal } from './types';
 import { workflowLoopStream } from './workflow/stream';
 
 export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
+  resumeContext,
   model,
   logger,
   runId,
@@ -78,6 +79,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   const messageId = rest.experimental_generateMessageId?.() || internalToUse.generateId?.();
 
   const workflowLoopProps: LoopRun<Tools, OUTPUT> = {
+    resumeContext,
     model,
     runId: runIdToUse,
     logger: loggerToUse,

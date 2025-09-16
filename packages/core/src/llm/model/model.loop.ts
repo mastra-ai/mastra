@@ -118,6 +118,7 @@ export class MastraLLMVNext extends MastraBase {
   }
 
   stream<Tools extends ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
+    resumeContext,
     stopWhen = stepCountIs(5),
     maxSteps,
     tools = {} as Tools,
@@ -179,6 +180,7 @@ export class MastraLLMVNext extends MastraBase {
 
     try {
       const loopOptions: LoopOptions<Tools, OUTPUT> = {
+        resumeContext,
         messageList,
         model: this.#model,
         tools: tools as Tools,

@@ -13,6 +13,7 @@ export function workflowLoopStream<
   Tools extends ToolSet = ToolSet,
   OUTPUT extends OutputSchema | undefined = undefined,
 >({
+  resumeContext,
   telemetry_settings,
   model,
   toolChoice,
@@ -136,28 +137,34 @@ export function workflowLoopStream<
         'stream.response.msToFirstChunk': msToFirstChunk,
       });
 
-      controller.enqueue({
-        type: 'start',
-        runId: rest.runId,
-        from: ChunkFrom.AGENT,
-        payload: {},
-      });
+      if (!resumeContext) {
+        controller.enqueue({
+          type: 'start',
+          runId: rest.runId,
+          from: ChunkFrom.AGENT,
+          payload: {},
+        });
+      }
 
       const run = await mainWorkflow.createRunAsync({
         runId: rest.runId,
       });
 
-      const executionResult = await run.start({
-        inputData: {
-          messageId: messageId!,
-          messages: {
-            all: rest.messageList.get.all.aiV5.model(),
-            user: rest.messageList.get.input.aiV5.model(),
-            nonUser: [],
-          },
-        },
-        tracingContext: { currentSpan: llmAISpan, isInternal: true },
-      });
+      const executionResult = resumeContext
+        ? await run.resume({
+            resumeData: resumeContext,
+          })
+        : await run.start({
+            inputData: {
+              messageId: messageId!,
+              messages: {
+                all: rest.messageList.get.all.aiV5.model(),
+                user: rest.messageList.get.input.aiV5.model(),
+                nonUser: [],
+              },
+            },
+            tracingContext: { currentSpan: llmAISpan, isInternal: true },
+          });
 
       if (executionResult.status === 'suspended') {
         if (executionResult.suspendPayload?.requireToolApproval) {

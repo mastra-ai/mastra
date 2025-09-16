@@ -147,4 +147,6 @@ export type InnerAgentExecutionOptions<
   methodType: 'generate' | 'stream' | 'streamVNext';
   /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
   model?: MastraLanguageModel;
+  /** Internal: Whether the execution is a resume */
+  resumeContext?: any;
 };
