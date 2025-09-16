@@ -9539,7 +9539,7 @@ describe('Agent structuredOutput to output deprecation mapping', () => {
   });
 });
 
-describe.only('Agent usage tracking', () => {
+describe('Agent usage tracking', () => {
   describe('Agent usage tracking (VNext paths)', () => {
     describe('generateVNext', () => {
       it('should expose usage with inputTokens and outputTokens (AI SDK v5 format)', async () => {
