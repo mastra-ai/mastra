@@ -903,7 +903,7 @@ importers:
         version: link:../mcp
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
-        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -1100,7 +1100,7 @@ importers:
         version: 1.9.0
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
-        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -2048,8 +2048,8 @@ importers:
         specifier: ^2.2.2
         version: 2.2.2
       swr:
-        specifier: ^2.3.4
-        version: 2.3.4(react@19.1.1)
+        specifier: ^2.3.6
+        version: 2.3.6(react@19.1.1)
       tailwind-merge:
         specifier: ^2.6.0
         version: 2.6.0
@@ -2289,8 +2289,8 @@ importers:
         specifier: ^2.2.2
         version: 2.2.2
       swr:
-        specifier: ^2.3.4
-        version: 2.3.4(react@19.1.1)
+        specifier: ^2.3.6
+        version: 2.3.6(react@19.1.1)
       tailwindcss-animate:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@20.19.14)(typescript@5.8.3)))
@@ -2559,8 +2559,8 @@ importers:
         specifier: ^1.9.0
         version: 1.9.0
       inngest:
-        specifier: ^3.40.2
-        version: 3.40.2(encoding@0.1.13)(express@5.1.0)(hono@4.9.7)(next@15.4.7(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(typescript@5.8.3)
+        specifier: ^3.40.3
+        version: 3.40.3(encoding@0.1.13)(express@5.1.0)(hono@4.9.7)(next@15.4.7(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(typescript@5.8.3)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -2646,8 +2646,8 @@ importers:
   stores/chroma:
     dependencies:
       chromadb:
-        specifier: ^3.0.14
-        version: 3.0.14
+        specifier: ^3.0.15
+        version: 3.0.15
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2837,8 +2837,8 @@ importers:
         specifier: 3.2.3
         version: 3.2.3(vitest@3.2.4)
       axios:
-        specifier: ^1.11.0
-        version: 1.12.0(debug@4.4.1)
+        specifier: ^1.12.1
+        version: 1.12.2(debug@4.4.1)
       eslint:
         specifier: ^9.30.1
         version: 9.34.0(jiti@2.4.2)
@@ -2889,8 +2889,8 @@ importers:
         specifier: 3.2.3
         version: 3.2.3(vitest@3.2.4)
       axios:
-        specifier: ^1.11.0
-        version: 1.12.0(debug@4.4.1)
+        specifier: ^1.12.1
+        version: 1.12.2(debug@4.4.1)
       eslint:
         specifier: ^9.30.1
         version: 9.34.0(jiti@2.4.2)
@@ -3884,8 +3884,8 @@ importers:
         specifier: ^1.9.0
         version: 1.9.0
       inngest:
-        specifier: ^3.40.2
-        version: 3.40.2(encoding@0.1.13)(express@5.1.0)(hono@4.9.7)(next@15.4.7(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(typescript@5.8.3)
+        specifier: ^3.40.3
+        version: 3.40.3(encoding@0.1.13)(express@5.1.0)(hono@4.9.7)(next@15.4.7(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(typescript@5.8.3)
       zod:
         specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76
@@ -10488,8 +10488,8 @@ packages:
   aws4@1.13.2:
     resolution: {integrity: sha512-lHe62zvbTB5eEABUVi/AwVh0ZKY9rMMDhmm+eeyuuUQbQ3+J+fONVQOZyj+DdrvD4BY33uYniyRJ4UJIaSKAfw==}
 
-  axios@1.12.0:
-    resolution: {integrity: sha512-oXTDccv8PcfjZmPGlWsPSwtOJCZ/b6W5jAMCNcfwJbCzDckwG0jrYJFaWH1yvivfCXjVzV/SPDEhMB3Q+DSurg==}
+  axios@1.12.2:
+    resolution: {integrity: sha512-vMJzPewAlRyOgxV2dU0Cuz2O8zzzx9VYtbJOaBgXFeLc4IV/Eg50n4LowmehOOR61S8ZMpc2K5Sa7g6A4jfkUw==}
 
   babel-plugin-polyfill-corejs2@0.4.14:
     resolution: {integrity: sha512-Co2Y9wX854ts6U8gAAPXfn0GmAyctHuK8n0Yhfjd6t30g7yvKjspvvOo9yG+z52PZRgFErt7Ka2pYnXCjLKEpg==}
@@ -10762,38 +10762,38 @@ packages:
     resolution: {integrity: sha512-+IxzY9BZOQd/XuYPRmrvEVjF/nqj5kgT4kEq7VofrDoM1MxoRjEWkrCC3EtLi59TVawxTAn+orJwFQcrqEN1+g==}
     engines: {node: '>=18'}
 
-  chromadb-js-bindings-darwin-arm64@1.0.5:
-    resolution: {integrity: sha512-uPZa/pDzj5Qcc+r9Nd0pU31UEO7vhe9jOg3mL7LhAG2zBlLOpIofQS4deYy6q4ruQS4FGtL2DQDI7Q3RDE/1pg==}
+  chromadb-js-bindings-darwin-arm64@1.0.6:
+    resolution: {integrity: sha512-QO2r3RUknivwGih5kN5BQrtV25Fu23pL1EVrERwXDvGLPSmUJxZChWGg8nCWYhm1hVhwVGofCemuEvOZz+j10A==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [darwin]
 
-  chromadb-js-bindings-darwin-x64@1.0.5:
-    resolution: {integrity: sha512-E6nfKsJRFB1weEbmjg+kXbEE51fD4IvPVlrjXuPY+82E5Zns2uJmEqlwzc8IztQ6wRfUn2xF/RADfVw3vR/Asw==}
+  chromadb-js-bindings-darwin-x64@1.0.6:
+    resolution: {integrity: sha512-UFcIwjx53HvHetiCNbQj47UM6UPi1mK57DXi732x52rIawUbgxUeG2u4lg4pzDOEDN5fEOxAZCIATyUNOazIEA==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [darwin]
 
-  chromadb-js-bindings-linux-arm64-gnu@1.0.5:
-    resolution: {integrity: sha512-HYzMxU2uGk4h47EP6nlscDRabQ1mwAuRC+JNsMm7fwqHs7VH7L7sGa1fQR4ydUCPjT9cl0y8eUWQfPz7GAw+HA==}
+  chromadb-js-bindings-linux-arm64-gnu@1.0.6:
+    resolution: {integrity: sha512-uG9SYh51NxO22zmZYxz8ffT5s4L8p1e7LTFYBNd0QfO1XWTexQqd4hLmbjdzoz0BOLwKObr/FKiV7iKuX3kwww==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
 
-  chromadb-js-bindings-linux-x64-gnu@1.0.5:
-    resolution: {integrity: sha512-bIigJ+gyNZz8p3wr/zcJZTlKL7p2TVEyT7EfW9lWpdvkajPke8Q+b87aDJaPs6NuGxLcXxPHMRpS3zHWplZbdw==}
+  chromadb-js-bindings-linux-x64-gnu@1.0.6:
+    resolution: {integrity: sha512-ZV9wD38SvrLKgm+igqWCkiuycewCRTuxsg+01Zku56NjJeccg//Puj/IFnnJUQVkTP8JwkrkPNZPwHTlOlQuVQ==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
 
-  chromadb-js-bindings-win32-x64-msvc@1.0.5:
-    resolution: {integrity: sha512-3HJxXw5GmuDqLNjc1cd9/cwqRq3eqaAuPvv+xvBt5/rtq9mPAaXchcKkGJfYQh+fmq46X2r5fM8civpoBQF1sw==}
+  chromadb-js-bindings-win32-x64-msvc@1.0.6:
+    resolution: {integrity: sha512-ymm/iYpnqBsAkc0DxO1rWB/uDykQH4vub2HZ0yMYVKwWCsDHDNvfF7XTs+uDLUQY/BC4pUiqfXFL6ZQ7lpO2Iw==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [win32]
 
-  chromadb@3.0.14:
-    resolution: {integrity: sha512-szeY35U+Yf9O6hiK7Jw5Vyea6SIPJa4HoyBnywkjY//iIb+hkLgrneef8JClfoQC2MJkZu6SbMPVN7lR2LnhVQ==}
+  chromadb@3.0.15:
+    resolution: {integrity: sha512-HSR6SX//1ZEHz/DdnK+RDMdQv/4ADanwM+rr++sv0qbNjX3MWg46VI/4GGkFMiyP0nmqtqHzG4dwvkHfIxqrCg==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -12464,8 +12464,8 @@ packages:
     resolution: {integrity: sha512-2mKDkdqnQh7C2Hk2+CEs60Ezy/apf6/BmX0OK0XG1IeRXrtJsE8VuHTEr8sq7YqZ61Aeb3x0TgNiOPmpAbwyMA==}
     hasBin: true
 
-  inngest@3.40.2:
-    resolution: {integrity: sha512-Zq6Fbs9Qib8hEcVaRNjnuV+mri/ksctyyr2LwuevqEjtW6QvlM0GMbTzyPgNCHQIasPsgLdDYYBKd8rQUPGkEQ==}
+  inngest@3.40.3:
+    resolution: {integrity: sha512-e1mfMITUx+bVyNhbcPlqGhW7VEDF8NnpC/kB+hfbT5rBuKztgQZQ2i+6wV3pFKvpLih2dGG5XQFLbFrkJU0wQg==}
     engines: {node: '>=14'}
     peerDependencies:
       '@sveltejs/kit': '>=1.27.3'
@@ -15418,8 +15418,8 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
-  swr@2.3.4:
-    resolution: {integrity: sha512-bYd2lrhc+VarcpkgWclcUi92wYCpOgMws9Sd1hG1ntAu0NEy+14CbotuFjshBU2kt9rYj9TSmDcybpxpeTU1fg==}
+  swr@2.3.6:
+    resolution: {integrity: sha512-wfHRmHWk/isGNMwlLGlZX5Gzz/uTgo0o2IRuTMcf4CPuPFJZlq0rDaKUx+ozB5nBOReNV1kiOyzMfj+MBMikLw==}
     peerDependencies:
       react: ^16.11.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
@@ -16660,7 +16660,7 @@ snapshots:
       '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
       '@ai-sdk/ui-utils': 1.2.11(zod@3.25.76)
       react: 19.1.1
-      swr: 2.3.4(react@19.1.1)
+      swr: 2.3.6(react@19.1.1)
       throttleit: 2.1.0
     optionalDependencies:
       zod: 3.25.76
@@ -16670,7 +16670,7 @@ snapshots:
       '@ai-sdk/provider-utils': 2.2.8(zod@4.1.5)
       '@ai-sdk/ui-utils': 1.2.11(zod@4.1.5)
       react: 19.1.1
-      swr: 2.3.4(react@19.1.1)
+      swr: 2.3.6(react@19.1.1)
       throttleit: 2.1.0
     optionalDependencies:
       zod: 4.1.5
@@ -19171,7 +19171,7 @@ snapshots:
       glob-to-regexp: 0.4.1
       js-cookie: 3.0.5
       std-env: 3.9.0
-      swr: 2.3.4(react@19.1.1)
+      swr: 2.3.6(react@19.1.1)
     optionalDependencies:
       react: 19.1.1
       react-dom: 19.1.1(react@19.1.1)
@@ -20095,7 +20095,7 @@ snapshots:
     dependencies:
       '@standard-schema/spec': 1.0.0
       debug: 4.4.1
-      inngest: 3.40.2(encoding@0.1.13)(express@5.1.0)(hono@4.9.7)(next@15.4.7(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(typescript@5.8.3)
+      inngest: 3.40.3(encoding@0.1.13)(express@5.1.0)(hono@4.9.7)(next@15.4.7(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(typescript@5.8.3)
       react: 19.1.1
       zod: 3.25.76
     transitivePeerDependencies:
@@ -20473,7 +20473,7 @@ snapshots:
       '@ai-sdk/ui-utils': 1.2.11(zod@4.1.5)
       '@mastra/schema-compat': 0.11.2-alpha.3(ai@4.3.19(react@19.1.1)(zod@4.1.5))(zod@4.1.5)
       '@opentelemetry/api': 1.9.0
-      '@opentelemetry/auto-instrumentations-node': 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+      '@opentelemetry/auto-instrumentations-node': 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-grpc': 0.203.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-http': 0.203.0(@opentelemetry/api@1.9.0)
@@ -20553,7 +20553,7 @@ snapshots:
 
   '@mendable/firecrawl-js@1.29.3':
     dependencies:
-      axios: 1.12.0(debug@4.4.1)
+      axios: 1.12.2(debug@4.4.1)
       typescript-event-target: 1.1.1
       zod: 3.25.76
       zod-to-json-schema: 3.24.6(zod@3.25.76)
@@ -20894,7 +20894,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))':
+  '@opentelemetry/auto-instrumentations-node@0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -20943,7 +20943,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.3.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.10.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.3(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
       '@opentelemetry/resources': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.203.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -22024,7 +22024,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -24864,7 +24864,7 @@ snapshots:
 
   aws4@1.13.2: {}
 
-  axios@1.12.0(debug@4.4.1):
+  axios@1.12.2(debug@4.4.1):
     dependencies:
       follow-redirects: 1.15.11(debug@4.4.1)
       form-data: 4.0.4
@@ -25227,30 +25227,30 @@ snapshots:
 
   chownr@3.0.0: {}
 
-  chromadb-js-bindings-darwin-arm64@1.0.5:
+  chromadb-js-bindings-darwin-arm64@1.0.6:
     optional: true
 
-  chromadb-js-bindings-darwin-x64@1.0.5:
+  chromadb-js-bindings-darwin-x64@1.0.6:
     optional: true
 
-  chromadb-js-bindings-linux-arm64-gnu@1.0.5:
+  chromadb-js-bindings-linux-arm64-gnu@1.0.6:
     optional: true
 
-  chromadb-js-bindings-linux-x64-gnu@1.0.5:
+  chromadb-js-bindings-linux-x64-gnu@1.0.6:
     optional: true
 
-  chromadb-js-bindings-win32-x64-msvc@1.0.5:
+  chromadb-js-bindings-win32-x64-msvc@1.0.6:
     optional: true
 
-  chromadb@3.0.14:
+  chromadb@3.0.15:
     dependencies:
       semver: 7.7.2
     optionalDependencies:
-      chromadb-js-bindings-darwin-arm64: 1.0.5
-      chromadb-js-bindings-darwin-x64: 1.0.5
-      chromadb-js-bindings-linux-arm64-gnu: 1.0.5
-      chromadb-js-bindings-linux-x64-gnu: 1.0.5
-      chromadb-js-bindings-win32-x64-msvc: 1.0.5
+      chromadb-js-bindings-darwin-arm64: 1.0.6
+      chromadb-js-bindings-darwin-x64: 1.0.6
+      chromadb-js-bindings-linux-arm64-gnu: 1.0.6
+      chromadb-js-bindings-linux-x64-gnu: 1.0.6
+      chromadb-js-bindings-win32-x64-msvc: 1.0.6
 
   ci-info@3.9.0: {}
 
@@ -25329,7 +25329,7 @@ snapshots:
 
   cmake-js@7.3.1:
     dependencies:
-      axios: 1.12.0(debug@4.4.1)
+      axios: 1.12.2(debug@4.4.1)
       debug: 4.4.1
       fs-extra: 11.3.1
       memory-stream: 1.0.0
@@ -27314,7 +27314,7 @@ snapshots:
       - encoding
       - supports-color
 
-  inngest@3.40.2(encoding@0.1.13)(express@5.1.0)(hono@4.9.7)(next@15.4.7(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(typescript@5.8.3):
+  inngest@3.40.3(encoding@0.1.13)(express@5.1.0)(hono@4.9.7)(next@15.4.7(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(typescript@5.8.3):
     dependencies:
       '@bufbuild/protobuf': 2.5.2
       '@inngest/ai': 0.1.4
@@ -28776,7 +28776,7 @@ snapshots:
 
   node-ical@0.20.1:
     dependencies:
-      axios: 1.12.0(debug@4.4.1)
+      axios: 1.12.2(debug@4.4.1)
       moment-timezone: 0.5.48
       rrule: 2.8.1
       uuid: 10.0.0
@@ -29379,7 +29379,7 @@ snapshots:
 
   posthog-node@4.18.0:
     dependencies:
-      axios: 1.12.0(debug@4.4.1)
+      axios: 1.12.2(debug@4.4.1)
     transitivePeerDependencies:
       - debug
 
@@ -30675,7 +30675,7 @@ snapshots:
       update-notifier: 7.0.0
       yargs: 17.7.2
 
-  swr@2.3.4(react@19.1.1):
+  swr@2.3.6(react@19.1.1):
     dependencies:
       dequal: 2.0.3
       react: 19.1.1
