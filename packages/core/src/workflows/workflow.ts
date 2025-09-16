@@ -874,50 +874,22 @@ export class Workflow<
   }
 
   /**
-   * Creates a new workflow run instance
-   * @param options Optional configuration for the run
-   * @param options.runId Optional custom run ID, defaults to a random UUID
-   * @param options.resourceId Optional resource ID to associate with this run
-   * @param options.disableScorers Optional flag to disable scorers for this run
-   * @returns A Run instance that can be used to execute the workflow
+   * @deprecated Use createRunAsync() instead. This method will be removed on September 16th, 2025.
+   * @throws {Error} Always throws an error directing users to use createRunAsync()
    */
   createRun(options?: {
     runId?: string;
     resourceId?: string;
     disableScorers?: boolean;
   }): Run<TEngineType, TSteps, TInput, TOutput> {
-    if (this.stepFlow.length === 0) {
-      throw new Error(
-        'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
-      );
-    }
-    if (!this.executionGraph.steps) {
-      throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
-    }
-    const runIdToUse = options?.runId || this.#mastra?.generateId() || randomUUID();
-
-    // Return a new Run instance with object parameters
-    const run =
-      this.#runs.get(runIdToUse) ??
-      new Run({
-        workflowId: this.id,
-        runId: runIdToUse,
-        resourceId: options?.resourceId,
-        executionEngine: this.executionEngine,
-        executionGraph: this.executionGraph,
-        mastra: this.#mastra,
-        retryConfig: this.retryConfig,
-        serializedStepGraph: this.serializedStepGraph,
-        disableScorers: options?.disableScorers,
-        tracingPolicy: this.options?.tracingPolicy,
-        cleanup: () => this.#runs.delete(runIdToUse),
-      });
-
-    this.#runs.set(runIdToUse, run);
-
-    this.mastra?.getLogger().warn('createRun() will be removed on September 16th, 2025. Use createRunAsync() instead.');
-
-    return run;
+    throw new Error(
+      'createRun() has been deprecated and will be removed on September 16th, 2025. ' +
+        'Please use createRunAsync() instead.\n\n' +
+        'Migration guide:\n' +
+        '  Before: const run = workflow.createRun();\n' +
+        '  After:  const run = await workflow.createRunAsync();\n\n' +
+        'Note: createRunAsync() is an async method, so make sure your calling function is async.',
+    );
   }
 
   /**

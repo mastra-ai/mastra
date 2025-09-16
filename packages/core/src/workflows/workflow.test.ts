@@ -2362,7 +2362,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should throw error when execution flow not defined', () => {
+    it('should throw error when execution flow not defined', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
@@ -2380,12 +2380,12 @@ describe('Workflow', () => {
         steps: [step1],
       });
 
-      expect(() => workflow.createRun()).toThrowError(
+      await expect(workflow.createRunAsync()).rejects.toThrowError(
         'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
       );
     });
 
-    it('should throw error when execution graph is not committed', () => {
+    it('should throw error when execution graph is not committed', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
@@ -2405,8 +2405,33 @@ describe('Workflow', () => {
 
       workflow.then(step1);
 
-      expect(() => workflow.createRun()).toThrowError(
+      await expect(workflow.createRunAsync()).rejects.toThrowError(
         'Uncommitted step flow changes detected. Call .commit() to register the steps.',
+      );
+    });
+
+    it('should throw deprecation error when using createRun', () => {
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).commit();
+
+      expect(() => workflow.createRun()).toThrowError(
+        'createRun() has been deprecated and will be removed on September 16th, 2025',
       );
     });
 
@@ -8011,7 +8036,7 @@ describe('Workflow', () => {
 
       workflow.parallel([nestedWorkflow1, nestedWorkflow2]).then(finalStep).commit();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({
         inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
       });
@@ -8153,7 +8178,7 @@ describe('Workflow', () => {
 
         .commit();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({
         inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
       });
@@ -8276,7 +8301,7 @@ describe('Workflow', () => {
         )
         .commit();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({
         inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
       });
@@ -8379,7 +8404,7 @@ describe('Workflow', () => {
         )
         .commit();
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { startValue: 0 } });
 
       expect(start).toHaveBeenCalledTimes(2);
@@ -8499,7 +8524,7 @@ describe('Workflow', () => {
         )
         .commit();
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { startValue: 0 } });
 
       expect(start).toHaveBeenCalledTimes(2);
@@ -8626,7 +8651,7 @@ describe('Workflow', () => {
         )
         .commit();
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { startValue: 0 } });
 
       expect(start).toHaveBeenCalledTimes(2);
@@ -8758,7 +8783,7 @@ describe('Workflow', () => {
           )
           .commit();
 
-        const run = counterWorkflow.createRun();
+        const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 0 } });
 
         expect(start).toHaveBeenCalledTimes(1);
@@ -8893,7 +8918,7 @@ describe('Workflow', () => {
           )
           .commit();
 
-        const run = counterWorkflow.createRun();
+        const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 0 } });
 
         expect(start).toHaveBeenCalledTimes(1);
@@ -9066,7 +9091,7 @@ describe('Workflow', () => {
           )
           .commit();
 
-        const run = counterWorkflow.createRun();
+        const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 1 } });
 
         expect(start).toHaveBeenCalledTimes(1);
@@ -9204,7 +9229,7 @@ describe('Workflow', () => {
           workflows: { counterWorkflow },
         });
 
-        const run = counterWorkflow.createRun();
+        const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 0 } });
         expect(begin).toHaveBeenCalledTimes(1);
         expect(start).toHaveBeenCalledTimes(1);
@@ -9293,7 +9318,7 @@ describe('Workflow', () => {
           workflows: { mainWorkflow },
         });
 
-        const run = mainWorkflow.createRun();
+        const run = await mainWorkflow.createRunAsync();
 
         const initialResult = await run.start({ inputData: { suspect: 'initial-suspect' } });
 
@@ -9438,7 +9463,7 @@ describe('Workflow', () => {
           workflows: { mainWorkflow, nestedWorkflow },
         });
 
-        const run = mainWorkflow.createRun();
+        const run = await mainWorkflow.createRunAsync();
 
         // Start workflow (should suspend)
         const suspendResult = await run.start({ inputData: {} });
@@ -9542,7 +9567,7 @@ describe('Workflow', () => {
           )
           .commit();
 
-        const run = counterWorkflow.createRun();
+        const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 0 } });
         const results = result.steps;
 
@@ -9700,7 +9725,7 @@ describe('Workflow', () => {
         workflows: { counterWorkflow },
       });
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRunAsync();
       const passthroughSpy = vi.spyOn(passthroughStep, 'execute');
       const result = await run.start({ inputData: { startValue: 0 } });
       expect(passthroughSpy).toHaveBeenCalledTimes(2);
@@ -10027,7 +10052,7 @@ describe('Workflow', () => {
       const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
       workflow.then(step).commit();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({ runtimeContext });
 
       // @ts-ignore
@@ -10069,7 +10094,7 @@ describe('Workflow', () => {
       });
       workflow.then(step).commit();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       await run.start({ runtimeContext });
 
       const resumeruntimeContext = new RuntimeContext();
@@ -10326,7 +10351,7 @@ describe('Workflow', () => {
       // This tests the fix: consecutive parallel calls should work with proper type inference
       workflow.parallel([step1, step2]).parallel([step3, step4]).commit();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const step1Spy = vi.spyOn(step1, 'execute');
       const step2Spy = vi.spyOn(step2, 'execute');
       const step3Spy = vi.spyOn(step3, 'execute');
@@ -10423,7 +10448,8 @@ describe('Workflow', () => {
         .dountil(repeatingStep, async ({ inputData }) => inputData.count === 3)
         .commit();
 
-      const result = await workflow.createRun().start({ inputData: {} });
+      const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: {} });
 
       expect(result.status).toBe('success');
       expect(result.steps.repeatingStep).toHaveProperty('output', { count: 3 });
@@ -10461,7 +10487,8 @@ describe('Workflow', () => {
         .dountil(step2, async ({ inputData }) => inputData.count === 10)
         .commit();
 
-      const result = await workflow.createRun().start({ inputData: {} });
+      const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: {} });
 
       expect(result.status).toBe('success');
       expect(result.steps.step1).toHaveProperty('output', { count: 3 });
@@ -10489,7 +10516,7 @@ describe('Workflow', () => {
         .then(step)
         .commit();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       await run.start({ inputData: {} });
 
       expect(mockExec).toHaveBeenCalledTimes(1);
