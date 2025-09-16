@@ -1,0 +1,129 @@
+---
+title: "MastraAuthSupabase クラス"
+description: "Supabase Auth を用いて Mastra アプリケーションを認証する MastraAuthSupabase クラスのドキュメント。"
+---
+
+import { Tabs, Tab } from "@/components/tabs";
+
+
+# MastraAuthSupabase クラス
+
+`MastraAuthSupabase` クラスは、Supabase Auth を用いて Mastra の認証を提供します。Supabase の認証システムで受信リクエストを検証し、`experimental_auth` オプションを介して Mastra サーバーと統合します。
+
+## 前提条件
+
+この例では Supabase Auth を使用します。`.env` ファイルに Supabase の認証情報を追加し、Supabase プロジェクトが正しく設定されていることを確認してください。
+
+```env filename=".env" copy
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+```
+
+> **注:** 適切なデータアクセス制御を行うために、Supabase の Row Level Security（RLS）設定を確認してください。
+
+## インストール
+
+`MastraAuthSupabase` クラスを使用する前に、`@mastra/auth-supabase` パッケージをインストールする必要があります。
+
+```bash copy
+npm install @mastra/auth-supabase@latest
+```
+
+## 使用例
+
+```typescript {2,7-9} filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthSupabase } from '@mastra/auth-supabase';
+
+export const mastra = new Mastra({
+  // ..
+  server: {
+    experimental_auth: new MastraAuthSupabase({
+      url: process.env.SUPABASE_URL,
+      anonKey: process.env.SUPABASE_ANON_KEY
+    }),
+  },
+});
+```
+
+> 注: 既定の `authorizeUser` メソッドは、`public` スキーマ内の `users` テーブルにある `isAdmin` カラムを確認します。ユーザーの認可をカスタマイズするには、プロバイダーを構築する際にカスタムの `authorizeUser` 関数を指定してください。
+
+> 利用可能なすべての設定オプションについては、[MastraAuthSupabase](/reference/auth/supabase.mdx) の API リファレンスをご覧ください。
+
+## クライアント側のセットアップ
+
+Supabase の認証を利用する場合は、クライアント側で Supabase からアクセストークンを取得し、それを Mastra へのリクエストに渡す必要があります。
+
+### アクセストークンの取得
+
+Supabase クライアントを使ってユーザーを認証し、アクセストークンを取得します:
+
+```typescript filename="lib/auth.ts" showLineNumbers copy
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient("<supabase-url>", "<supabase-key>");
+
+const authTokenResponse = await supabase.auth.signInWithPassword({
+  email: "<user's email>",
+  password: "<user's password>",
+});
+
+const accessToken = authTokenResponse.data?.session?.access_token;
+```
+
+> OAuth やマジックリンクなど、その他の認証方法については [Supabase のドキュメント](https://supabase.com/docs/guides/auth) を参照してください。
+
+## `MastraClient` の設定
+
+`experimental_auth` が有効な場合、`MastraClient` を使って行うすべてのリクエストには、`Authorization` ヘッダーに有効な Supabase のアクセストークンを含める必要があります。
+
+```typescript {6} filename="lib/mastra/mastra-client.ts" showLineNumbers copy
+import { MastraClient } from "@mastra/client-js";
+
+export const mastraClient = new MastraClient({
+  baseUrl: "https://<mastra-api-url>",
+  headers: {
+    Authorization: `Bearer ${accessToken}`
+  }
+});
+```
+
+> 注: Authorization ヘッダーでは、アクセストークンの前に `Bearer` を付けて指定してください。
+
+> そのほかの設定オプションについては、[Mastra Client SDK](/docs/server-db/mastra-client.mdx) を参照してください。
+
+### 認証付きリクエストの実行
+
+`MastraClient` に Supabase のアクセストークンを設定すると、認証付きリクエストを送信できます:
+
+<Tabs items={["MastraClient", "curl"]}>
+  <Tab>
+    ```tsx filename="src/components/test-agent.tsx" showLineNumbers copy
+    import { mastraClient } from "../../lib/mastra-client";
+
+    export const TestAgent = () => {
+      async function handleClick() {
+        const agent = mastraClient.getAgent("weatherAgent");
+
+        const response = await agent.generate({
+          messages: "What's the weather like in New York"
+        });
+
+        console.log(response);
+      }
+
+      return <button onClick={handleClick}>Test Agent</button>;
+    };
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <your-supabase-access-token>" \
+      -d '{
+        "messages": "Weather in London"
+      }'
+    ```
+  </Tab>
+</Tabs>

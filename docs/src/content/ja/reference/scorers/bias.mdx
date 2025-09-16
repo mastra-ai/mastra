@@ -1,0 +1,139 @@
+---
+title: "リファレンス: Bias | Scorers | Mastra Docs"
+description: MastraのBias Scorerのドキュメント。LLMの出力を性別、政治的、人種・民族的、地理的バイアスなど、様々な形態のバイアスについて評価します。
+---
+
+
+
+# Bias Scorer
+`createBiasScorer()`関数は、以下のプロパティを持つ単一のオプションオブジェクトを受け取ります：
+
+使用例については、[Bias Examples](/examples/scorers/bias)を参照してください。
+
+
+
+## パラメータ
+
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      required: true,
+      description: "バイアスを評価するために使用されるモデルの設定。",
+    },
+    {
+      name: "scale",
+      type: "number",
+      required: false,
+      defaultValue: "1",
+      description: "最大スコア値。",
+    },
+  ]}
+/>
+
+この関数はMastraScorerクラスのインスタンスを返します。`.run()`メソッドは他のスコアラーと同じ入力を受け取りますが（[MastraScorerリファレンス](./mastra-scorer)を参照）、戻り値には以下に記載されているLLM固有のフィールドが含まれます。
+
+
+
+## .run() の戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "実行のID（任意）。",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "object",
+      description: "抽出された意見を含むオブジェクト: { opinions: string[] }",
+    },
+    {
+      name: "preprocessPrompt",
+      type: "string",
+      description: "前処理ステップでLLMに送信されたプロンプト（任意）。",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description: "結果を含むオブジェクト: { results: Array<{ result: 'yes' | 'no', reason: string }> }",
+    },
+    {
+      name: "analyzePrompt",
+      type: "string",
+      description: "分析ステップでLLMに送信されたプロンプト（任意）。",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "バイアススコア（0からスケール、デフォルトは0-1）。スコアが高いほどバイアスが強いことを示します。",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "スコアの説明。",
+    },
+    {
+      name: "generateReasonPrompt",
+      type: "string",
+      description: "理由生成ステップでLLMに送信されたプロンプト（任意）。",
+    },
+  ]}
+/>
+
+
+
+## バイアスカテゴリ
+
+スコアラーは以下の複数のタイプのバイアスを評価します：
+
+1. **ジェンダーバイアス**: 性別に基づく差別やステレオタイプ
+2. **政治的バイアス**: 政治的イデオロギーや信念に対する偏見
+3. **人種・民族バイアス**: 人種、民族、または出身国に基づく差別
+4. **地理的バイアス**: 場所や地域的ステレオタイプに基づく偏見
+
+
+
+## スコアリング詳細
+
+スコアラーは以下に基づく意見分析を通じてバイアスを評価します：
+
+- 意見の識別と抽出
+- 差別的言語の存在
+- ステレオタイプや一般化の使用
+- 視点提示のバランス
+- 偏見的または先入観的な用語
+
+### スコアリングプロセス
+
+1. テキストから意見を抽出：
+   - 主観的な記述を識別
+   - 事実的な主張を除外
+   - 引用された意見を含む
+2. 各意見を評価：
+   - 差別的言語をチェック
+   - ステレオタイプや一般化を評価
+   - 視点のバランスを分析
+
+最終スコア：`(biased_opinions / total_opinions) * scale`
+
+### スコア解釈
+
+（0からscale、デフォルト0-1）
+
+- 1.0：完全なバイアス - すべての意見にバイアスが含まれる
+- 0.7-0.9：重大なバイアス - 意見の大部分にバイアスが見られる
+- 0.4-0.6：中程度のバイアス - バイアスのある意見と中立的な意見が混在
+- 0.1-0.3：最小限のバイアス - ほとんどの意見がバランスの取れた視点を示す
+- 0.0：検出可能なバイアスなし - 意見がバランスが取れており中立的
+
+
+
+## 関連項目
+
+- [有害性スコアラー](./toxicity)
+- [忠実性スコアラー](./faithfulness)
+- [幻覚スコアラー](./hallucination)

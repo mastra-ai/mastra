@@ -1,0 +1,168 @@
+---
+title: "ランタイム変数 - 依存性注入 | Workflows（レガシー） | Mastra ドキュメント"
+description: Mastra の依存性注入システムを使用して、ワークフローやステップにランタイム設定を提供する方法を学びます。
+---
+
+
+
+# ワークフローランタイム変数（レガシー）
+
+Mastraは、ランタイム変数を使用してワークフローとステップを設定できる強力な依存性注入システムを提供しています。この機能は、ランタイム構成に基づいて動作を適応できる柔軟で再利用可能なワークフローを作成するために不可欠です。
+
+
+
+## 概要
+
+依存性注入システムにより、以下のことが可能になります：
+
+1. 型安全なruntimeContextを通じてランタイム設定変数をワークフローに渡す
+2. ステップ実行コンテキスト内でこれらの変数にアクセスする
+3. 基盤となるコードを変更せずにワークフローの動作を変更する
+4. 同じワークフロー内の複数のステップ間で設定を共有する
+
+
+
+## 基本的な使用方法
+
+```typescript
+const myWorkflow = mastra.legacy_getWorkflow("myWorkflow");
+const { runId, start, resume } = myWorkflow.createRun();
+
+// Define your runtimeContext's type structure
+type WorkflowRuntimeContext = {
+  multiplier: number;
+};
+
+const runtimeContext = new RuntimeContext<WorkflowRuntimeContext>();
+runtimeContext.set("multiplier", 5);
+
+// Start the workflow execution with runtimeContext
+await start({
+  triggerData: { inputValue: 45 },
+  runtimeContext,
+});
+```
+
+
+
+## REST APIでの使用
+
+HTTPヘッダーから乗数値を動的に設定する方法は次のとおりです：
+
+```typescript filename="src/index.ts"
+import { Mastra } from "@mastra/core";
+import { RuntimeContext } from "@mastra/core/di";
+import { workflow as myWorkflow } from "./workflows";
+
+// Define runtimeContext type with clear, descriptive types
+type WorkflowRuntimeContext = {
+  multiplier: number;
+};
+
+export const mastra = new Mastra({
+  legacy_workflows: {
+    myWorkflow,
+  },
+  server: {
+    middleware: [
+      async (c, next) => {
+        const multiplier = c.req.header("x-multiplier");
+        const runtimeContext = c.get<WorkflowRuntimeContext>("runtimeContext");
+
+        // Parse and validate the multiplier value
+        const multiplierValue = parseInt(multiplier || "1", 10);
+        if (isNaN(multiplierValue)) {
+          throw new Error("Invalid multiplier value");
+        }
+
+        runtimeContext.set("multiplier", multiplierValue);
+
+        await next(); // Don't forget to call next()
+      },
+    ],
+  },
+});
+```
+
+
+
+## 変数を使用したステップの作成
+
+ステップはruntimeContext変数にアクセスでき、ワークフローのruntimeContextタイプに準拠する必要があります：
+
+```typescript
+import { LegacyStep } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
+
+// Define step input/output types
+interface StepInput {
+  inputValue: number;
+}
+
+interface StepOutput {
+  incrementedValue: number;
+}
+
+const stepOne = new LegacyStep({
+  id: "stepOne",
+  description: "Multiply the input value by the configured multiplier",
+  execute: async ({ context, runtimeContext }) => {
+    try {
+      // Type-safe access to runtimeContext variables
+      const multiplier = runtimeContext.get("multiplier");
+      if (multiplier === undefined) {
+        throw new Error("Multiplier not configured in runtimeContext");
+      }
+
+      // Get and validate input
+      const inputValue =
+        context.getStepResult<StepInput>("trigger")?.inputValue;
+      if (inputValue === undefined) {
+        throw new Error("Input value not provided");
+      }
+
+      const result: StepOutput = {
+        incrementedValue: inputValue * multiplier,
+      };
+
+      return result;
+    } catch (error) {
+      console.error(`Error in stepOne: ${error.message}`);
+      throw error;
+    }
+  },
+});
+```
+
+
+
+## エラー処理
+
+ワークフローでランタイム変数を使用する際には、潜在的なエラーを処理することが重要です：
+
+1. **変数の欠落**: runtimeContextに必要な変数が存在するかを常に確認する
+2. **型の不一致**: TypeScriptの型システムを使用してコンパイル時に型エラーを捕捉する
+3. **無効な値**: ステップで使用する前に変数の値を検証する
+
+```typescript
+// runtimeContext変数を使用した防御的プログラミングの例
+const multiplier = runtimeContext.get("multiplier");
+if (multiplier === undefined) {
+  throw new Error("Multiplier not configured in runtimeContext");
+}
+
+// 型と値の検証
+if (typeof multiplier !== "number" || multiplier <= 0) {
+  throw new Error(`Invalid multiplier value: ${multiplier}`);
+}
+```
+
+
+
+## ベストプラクティス
+
+1. **型安全性**: runtimeContextやステップの入力／出力には必ず適切な型を定義してください
+2. **バリデーション**: すべての入力値とruntimeContext変数を使用前に検証してください
+3. **エラーハンドリング**: 各ステップで適切なエラーハンドリングを実装してください
+4. **ドキュメント化**: 各ワークフローで想定されるruntimeContext変数を文書化してください
+5. **デフォルト値**: 可能な場合は妥当なデフォルト値を設定してください

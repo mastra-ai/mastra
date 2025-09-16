@@ -1,5 +1,32 @@
 # @mastra/deployer-cloudflare
 
+## 0.14.0-alpha.1
+
+### Minor Changes
+
+- The `IBundler` and subsequently the `IDeployer` interface changed, making the third argument of `bundle()` an object. ([#7619](https://github.com/mastra-ai/mastra/pull/7619))
+
+  ```diff
+  - bundle(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void>;
+  + bundle(entryFile: string, outputDirectory: string, options: { toolsPaths: (string | string[])[]; projectRoot: string }): Promise<void>;
+  ```
+
+  If you're just using the deployer inside `src/mastra/index.ts` you're safe to upgrade, no changes needed.
+
+### Patch Changes
+
+- dependencies updates: ([#6887](https://github.com/mastra-ai/mastra/pull/6887))
+  - Updated dependency [`@babel/core@^7.28.4` ↗︎](https://www.npmjs.com/package/@babel/core/v/7.28.4) (from `^7.28.0`, in `dependencies`)
+
+- dependencies updates: ([#7803](https://github.com/mastra-ai/mastra/pull/7803))
+  - Updated dependency [`rollup@~4.50.1` ↗︎](https://www.npmjs.com/package/rollup/v/4.50.1) (from `~4.50.0`, in `dependencies`)
+
+- Fix `postgres-store-instance-checker` babel bug when `@mastra/pg` was not used. ([#7832](https://github.com/mastra-ai/mastra/pull/7832))
+
+- Updated dependencies [[`b1c155b`](https://github.com/mastra-ai/mastra/commit/b1c155b57ce702674f207f1d4c6a4ebf94225f44), [`790f7d1`](https://github.com/mastra-ai/mastra/commit/790f7d17895d7a5f75b6b5d2d794c2e820b99d4c), [`3cd6538`](https://github.com/mastra-ai/mastra/commit/3cd6538811fc94f84a19dbd1064f46cb42e38c1d), [`a1bb887`](https://github.com/mastra-ai/mastra/commit/a1bb887e8bfae44230f487648da72e96ef824561), [`7e82fbf`](https://github.com/mastra-ai/mastra/commit/7e82fbf3715175e274d2015eb59fb7f57dc9b09d), [`a0f5f1c`](https://github.com/mastra-ai/mastra/commit/a0f5f1ca39c3c5c6d26202e9fcab986b4fe14568), [`b356f5f`](https://github.com/mastra-ai/mastra/commit/b356f5f7566cb3edb755d91f00b72fc1420b2a37), [`f5ce05f`](https://github.com/mastra-ai/mastra/commit/f5ce05f831d42c69559bf4c0fdb46ccb920fc3a3), [`9f6f30f`](https://github.com/mastra-ai/mastra/commit/9f6f30f04ec6648bbca798ea8aad59317c40d8db), [`d706fad`](https://github.com/mastra-ai/mastra/commit/d706fad6e6e4b72357b18d229ba38e6c913c0e70), [`8a3f5e4`](https://github.com/mastra-ai/mastra/commit/8a3f5e4212ec36b302957deb4bd47005ab598382), [`5c3768f`](https://github.com/mastra-ai/mastra/commit/5c3768fa959454232ad76715c381f4aac00c6881), [`8a3f5e4`](https://github.com/mastra-ai/mastra/commit/8a3f5e4212ec36b302957deb4bd47005ab598382)]:
+  - @mastra/deployer@0.17.0-alpha.3
+  - @mastra/core@0.17.0-alpha.3
+
 ## 0.13.8-alpha.0
 
 ### Patch Changes

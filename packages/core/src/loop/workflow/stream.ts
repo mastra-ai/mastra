@@ -1,6 +1,7 @@
 import { ReadableStream } from 'stream/web';
 import type { ToolSet } from 'ai-v5';
 import z from 'zod';
+import { InternalSpans } from '../../ai-tracing';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
@@ -14,7 +15,7 @@ export function workflowLoopStream<
   OUTPUT extends OutputSchema | undefined = undefined,
 >({
   telemetry_settings,
-  model,
+  models,
   toolChoice,
   modelSettings,
   _internal,
@@ -41,7 +42,7 @@ export function workflowLoopStream<
 
       const outerLLMWorkflow = createOuterLLMWorkflow<Tools, OUTPUT>({
         messageId: messageId!,
-        model,
+        models,
         telemetry_settings,
         _internal,
         modelSettings,
@@ -56,6 +57,13 @@ export function workflowLoopStream<
         id: 'agentic-loop',
         inputSchema: llmIterationOutputSchema,
         outputSchema: z.any(),
+        options: {
+          tracingPolicy: {
+            // mark all workflow spans related to the
+            // VNext execution as internal
+            internal: InternalSpans.WORKFLOW,
+          },
+        },
       })
         .dowhile(outerLLMWorkflow, async ({ inputData }) => {
           let hasFinishedSteps = false;
@@ -87,7 +95,7 @@ export function workflowLoopStream<
 
           modelStreamSpan.setAttributes({
             'stream.response.id': inputData.metadata.id,
-            'stream.response.model': model.modelId,
+            'stream.response.model': inputData.metadata.modelId,
             ...(inputData.metadata.providerMetadata
               ? { 'stream.response.providerMetadata': JSON.stringify(inputData.metadata.providerMetadata) }
               : {}),
@@ -154,7 +162,7 @@ export function workflowLoopStream<
             nonUser: [],
           },
         },
-        tracingContext: { currentSpan: llmAISpan, isInternal: true },
+        tracingContext: { currentSpan: llmAISpan },
       });
 
       if (executionResult.status !== 'success') {

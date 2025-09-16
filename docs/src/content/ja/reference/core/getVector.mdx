@@ -1,0 +1,43 @@
+---
+title: "リファレンス: Mastra.getVector() | Core | Mastra ドキュメント"
+description: "Mastra の `Mastra.getVector()` メソッドに関するドキュメント。指定した名前のベクターストアを取得します。"
+---
+
+# Mastra.getVector()
+
+`.getVector()` メソッドは、名前を指定してベクターストアを取得します。このメソッドは、ベクターストア名を表す `string` 型のパラメーターを 1 つ受け取ります。
+
+## 使い方の例
+
+```typescript copy
+mastra.getVector("testVectorStore");
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "TVectorName extends keyof TVectors",
+      description: "取得するベクターストアの名前。Mastra の構成に存在する有効なベクターストア名である必要があります。",
+    },
+  ]}
+/>
+
+## 返り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "vector",
+      type: "TVectors[TVectorName]",
+      description: "指定された名前のベクトルストアのインスタンス。ベクトルストアが見つからない場合はエラーを送出します。",
+    },
+  ]}
+/>
+
+## 関連項目
+
+- [ベクターストアの概要](../../docs/rag/vector-databases.mdx)
+- [RAGの概要](../../docs/rag/overview.mdx)

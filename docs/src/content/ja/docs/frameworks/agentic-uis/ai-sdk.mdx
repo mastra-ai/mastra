@@ -1,0 +1,567 @@
+---
+title: "Vercel AI SDK と一緒に使う"
+description: "Mastra が Vercel AI SDK ライブラリをどのように活用しているか、また Mastra と組み合わせてさらに活用する方法を学びましょう"
+---
+
+import { Callout, Tabs } from "nextra/components";
+
+
+# Vercel AI SDK の利用
+
+Mastra は [Vercel の AI SDK](https://sdk.vercel.ai) と統合されており、モデルのルーティング、React Hooks、データストリーミングの手法をサポートします。
+
+## AI SDK v5
+
+Mastra は AI SDK v5 もサポートしています。v5 固有のメソッドについては次のセクションをご覧ください: [Vercel AI SDK v5](/docs/frameworks/agentic-uis/ai-sdk#vercel-ai-sdk-v5)
+
+<Callout type="warning">
+  このページのコード例は、プロジェクトのルートで Next.js の App Router を使用していることを前提としています。
+  例: `src/app` ではなく `app`
+</Callout>
+
+## モデルルーティング
+
+Mastra でエージェントを作成する際は、AI SDK がサポートしている任意のモデルを指定できます。
+
+```typescript {7} filename="agents/weather-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+export const weatherAgent = new Agent({
+  name: "Weather Agent",
+  instructions: "Instructions for the agent...",
+  model: openai("gpt-4-turbo"),
+});
+```
+
+> 詳細は [Model Providers](/docs/getting-started/model-providers) および [Model Capabilities](/docs/getting-started/model-capability) を参照してください。
+
+## React Hooks
+
+Mastraは、HTTPストリーミングを用いてフロントエンドのコンポーネントをエージェントに直接接続するためのAI SDKのフックをサポートしています。
+
+必要なAI SDKのReactパッケージをインストールします：
+
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+  <Tabs.Tab>
+    ```bash copy
+    npm install @ai-sdk/react
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn add @ai-sdk/react
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm add @ai-sdk/react
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    bun add @ai-sdk/react
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+### `useChat()` フックの使用
+
+`useChat` フックは、フロントエンドと Mastra エージェント間のリアルタイムなチャットを扱い、HTTP 経由でプロンプトを送信し、ストリーミングで応答を受け取れるようにします。
+
+```typescript {6} filename="app/test/chat.tsx" showLineNumbers copy
+"use client";
+
+import { useChat } from "@ai-sdk/react";
+
+export function Chat() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: "/api/chat"
+  });
+  return (
+    <div>
+      <pre>{JSON.stringify(messages, null, 2)}</pre>
+      <form onSubmit={handleSubmit}>
+        <input value={input} onChange={handleInputChange} placeholder="Name of city" />
+      </form>
+    </div>
+  );
+}
+```
+
+`useChat` フックで送信したリクエストは、標準的なサーバールートで処理されます。次の例は、Next.js の Route Handler を使って POST ルートを定義する方法を示しています。
+
+```typescript filename="app/api/chat/route.ts" showLineNumbers copy
+import { mastra } from "../../mastra";
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const myAgent = mastra.getAgent("weatherAgent");
+  const stream = await myAgent.stream(messages);
+
+  return stream.toDataStreamResponse();
+}
+```
+
+> `useChat` をエージェントのメモリ機能と併用する場合は、実装上の重要なポイントについて [Agent Memory セクション](/docs/agents/agent-memory#usechat) を参照してください。
+
+### `useCompletion()` フックの使用
+
+`useCompletion` フックは、フロントエンドと Mastra エージェント間の単一ターンの補完を扱い、プロンプトを送信して HTTP 経由でストリーミング応答を受け取れるようにします。
+
+```typescript {6} filename="app/test/completion.tsx" showLineNumbers copy
+"use client";
+
+import { useCompletion } from "@ai-sdk/react";
+
+export function Completion() {
+  const { completion, input, handleInputChange, handleSubmit } = useCompletion({
+    api: "api/completion"
+  });
+
+  return (
+    <div>
+      <form onSubmit={handleSubmit}>
+        <input value={input} onChange={handleInputChange} placeholder="Name of city" />
+      </form>
+      <p>Completion result: {completion}</p>
+    </div>
+  );
+}
+```
+
+`useCompletion` フックで送信されたリクエストは、標準的なサーバールートで処理されます。次の例は、Next.js の Route Handler を使って POST ルートを定義する方法を示します。
+
+```typescript filename="app/api/completion/route.ts" showLineNumbers copy
+import { mastra } from "../../../mastra";
+
+export async function POST(req: Request) {
+  const { prompt } = await req.json();
+  const myAgent = mastra.getAgent("weatherAgent");
+  const stream = await myAgent.stream([{ role: "user", content: prompt }]);
+
+  return stream.toDataStreamResponse();
+}
+```
+
+### `useObject()` フックの使用
+
+`useObject` フックは、Mastra エージェントからストリーミングされるテキストを取り込み、定義したスキーマに基づいて構造化された JSON オブジェクトにパースします。
+
+```typescript {7} filename="app/test/object.tsx" showLineNumbers copy
+"use client";
+
+import { experimental_useObject as useObject } from "@ai-sdk/react";
+import { z } from "zod";
+
+export function Object() {
+  const { object, submit } = useObject({
+    api: "api/object",
+    schema: z.object({
+      weather: z.string()
+    })
+  });
+
+  return (
+    <div>
+      <button onClick={() => submit("London")}>Generate</button>
+      {object ? <pre>{JSON.stringify(object, null, 2)}</pre> : null}
+    </div>
+  );
+}
+```
+
+`useObject` フックで送信されたリクエストは、標準的なサーバーのルートで処理されます。次の例は、Next.js の Route Handler を使って POST ルートを定義する方法を示しています。
+
+```typescript filename="app/api/object/route.ts" showLineNumbers copy
+import { mastra } from "../../../mastra";
+import { z } from "zod";
+
+export async function POST(req: Request) {
+  const body = await req.json();
+  const myAgent = mastra.getAgent("weatherAgent");
+  const stream = await myAgent.stream(body, {
+    output: z.object({
+      weather: z.string()
+    })
+  });
+
+  return stream.toTextStreamResponse();
+}
+```
+
+### `sendExtraMessageFields` で追加データを渡す
+
+`sendExtraMessageFields` オプションを使うと、フロントエンドから Mastra に追加データを渡せます。このデータはサーバー側で `RuntimeContext` として利用できます。
+
+```typescript {8,14-20} filename="app/test/chat-extra.tsx" showLineNumbers copy
+"use client";
+
+import { useChat } from "@ai-sdk/react";
+
+export function ChatExtra() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: "/api/chat-extra",
+    sendExtraMessageFields: true
+  });
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleSubmit(e, {
+      data: {
+        userId: "user123",
+        preferences: {
+          language: "en",
+          temperature: "celsius"
+        }
+      }
+    });
+  };
+
+  return (
+    <div>
+      <pre>{JSON.stringify(messages, null, 2)}</pre>
+      <form onSubmit={handleFormSubmit}>
+        <input value={input} onChange={handleInputChange} placeholder="Name of city" />
+      </form>
+    </div>
+  );
+}
+```
+
+`sendExtraMessageFields` を使って送信されたリクエストは、標準的なサーバールートで処理されます。次の例では、カスタムデータを取り出して `RuntimeContext` インスタンスに設定する方法を示します。
+
+```typescript {8,12} filename="app/api/chat-extra/route.ts" showLineNumbers copy
+import { mastra } from "../../../mastra";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+
+export async function POST(req: Request) {
+  const { messages, data } = await req.json();
+  const myAgent = mastra.getAgent("weatherAgent");
+
+  const runtimeContext = new RuntimeContext();
+
+  if (data) {
+    for (const [key, value] of Object.entries(data)) {
+      runtimeContext.set(key, value);
+    }
+  }
+
+  const stream = await myAgent.stream(messages, { runtimeContext });
+  return stream.toDataStreamResponse();
+}
+```
+
+### `server.middleware` での `runtimeContext` の扱い
+
+サーバーのミドルウェアでカスタムデータを読み込み、`RuntimeContext` を設定することもできます。
+
+```typescript {6} filename="mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+  server: {
+    middleware: [
+      async (c, next) => {
+        const runtimeContext = c.get("runtimeContext");
+
+        if (c.req.method === "POST") {
+          try {
+            const clonedReq = c.req.raw.clone();
+            const body = await clonedReq.json();
+
+            if (body?.data) {
+              for (const [key, value] of Object.entries(body.data)) {
+                runtimeContext.set(key, value);
+              }
+            }
+          } catch {
+          }
+        }
+        await next();
+      },
+    ],
+  },
+});
+```
+
+> その後、ツール内から `runtimeContext` パラメータ経由でこのデータにアクセスできます。詳しくは [Agent Runtime Context のドキュメント](/docs/agents/runtime-context) を参照してください。
+
+## ストリーミングデータ
+
+`ai` パッケージは、カスタムデータストリームを管理するためのユーティリティを提供します。場合によっては、エージェントの `dataStream` を使って、構造化された更新情報や注釈をクライアントに送信したいことがあります。
+
+必要なパッケージをインストールします:
+
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+  <Tabs.Tab>
+    ```bash copy
+    npm install ai
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn add ai
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm add ai
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    bun add ai
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+### `createDataStream()` の使用
+
+`createDataStream` 関数を使うと、追加データをクライアントへストリーミングできます。
+
+```typescript {1, 6} filename="mastra/agents/weather-agent.ts" showLineNumbers copy
+import { createDataStream } from "ai";
+import { Agent } from "@mastra/core/agent";
+
+export const weatherAgent = new Agent({...});
+
+createDataStream({
+  async execute(dataStream) {
+    dataStream.writeData({ value: "Hello" });
+
+    dataStream.writeMessageAnnotation({ type: "status", value: "processing" });
+
+    const agentStream = await weatherAgent.stream("What is the weather");
+
+    agentStream.mergeIntoDataStream(dataStream);
+  },
+  onError: (error) => `Custom error: ${error}`
+});
+```
+
+### `createDataStreamResponse()` を使用する
+
+`createDataStreamResponse` 関数は、クライアントにデータをストリーミングするレスポンスオブジェクトを作成します。
+
+```typescript {2,9} filename="app/api/chat-stream/route.ts" showLineNumbers copy
+import { mastra } from "../../../mastra";
+import { createDataStreamResponse } from "ai";
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const myAgent = mastra.getAgent("weatherAgent");
+  const agentStream = await myAgent.stream(messages);
+
+  const response = createDataStreamResponse({
+    status: 200,
+    statusText: "OK",
+    headers: {
+      "Custom-Header": "value"
+    },
+    async execute(dataStream) {
+      dataStream.writeData({ value: "Hello" });
+
+      dataStream.writeMessageAnnotation({
+        type: "status",
+        value: "processing"
+      });
+
+      agentStream.mergeIntoDataStream(dataStream);
+    },
+    onError: (error) => `Custom error: ${error}`
+  });
+
+  return response;
+}
+```
+
+## Vercel AI SDK v5
+
+このガイドでは、AI SDK v4 から v5 への移行時における Mastra 特有の考慮事項を説明します。
+
+> フィードバックやバグ報告は、[GitHub の AI SDK v5 メガイシュー](https://github.com/mastra-ai/mastra/issues/5470)にお寄せください。
+
+### 実験的な streamVNext のサポート
+
+Mastra の実験的な `streamVNext` メソッドは、`format` パラメータ経由で AI SDK v5 をネイティブにサポートするようになりました。これにより、互換用のラッパーを用意することなく、AI SDK v5 のストリーミングインターフェースとシームレスに統合できます。
+
+```typescript
+// AI SDK v5 形式で streamVNext を使用
+const stream = await agent.streamVNext(messages, {
+  format: 'aisdk'  // AI SDK v5 互換モードを有効化
+});
+
+// ストリームは AI SDK v5 のインターフェースと互換になります
+return stream.toUIMessageStreamResponse();
+```
+
+### 公式移行ガイド
+
+AI SDK のコアにおける破壊的変更、パッケージ更新、API 変更については、公式の [AI SDK v5 Migration Guide](https://v5.ai-sdk.dev/docs/migration-guides/migration-guide-5-0) に従ってください。
+
+本ガイドでは、移行に関する Mastra 固有の事項のみを扱います。
+
+- **データ互換性**: v5 形式で保存された新しいデータは、v5 から v4 にダウングレードすると利用できません
+- **バックアップの推奨**: v5 へアップグレードする前の DB のバックアップを保持してください
+
+### メモリとストレージ
+
+Mastra は内部の `MessageList` クラスで AI SDK v4 のデータを自動処理し、フォーマット変換（v4 から v5 への変換を含む）を管理します。データベースの移行は不要で、既存のメッセージはその場で変換され、アップグレード後も引き続き動作します。
+
+### メッセージ形式の変換
+
+AI SDK と Mastra の形式間でメッセージを手動で変換する必要がある場合は、`convertMessages` ユーティリティを使用してください:
+
+```typescript
+import { convertMessages } from '@mastra/core/agent';
+
+// AI SDK v4 のメッセージを v5 に変換
+const aiv5Messages = convertMessages(aiv4Messages).to('AIV5.UI');
+
+// Mastra のメッセージを AI SDK v5 に変換
+const aiv5Messages = convertMessages(mastraMessages).to('AIV5.Core');
+
+// 対応している出力形式:
+// 'Mastra.V2', 'AIV4.UI', 'AIV5.UI', 'AIV5.Core', 'AIV5.Model'
+```
+
+このユーティリティは、ストレージ DB からメッセージを直接取得し、AI SDK で使えるように変換したい場合に役立ちます。
+
+### ストリーム互換性の有効化
+
+AI SDK v5 との互換性を有効にするには、`@mastra/ai-sdk` パッケージを使用します:
+
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+  <Tabs.Tab>
+    ```bash copy
+    npm install @mastra/ai-sdk
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn add @mastra/ai-sdk
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm add @mastra/ai-sdk
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    bun add @mastra/ai-sdk
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from '@mastra/core/mastra';
+import { chatRoute } from '@mastra/ai-sdk';
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: '/chat',
+        agent: 'weatherAgent',
+      }),
+    ],
+  },
+});
+```
+
+アプリケーションで `useChat()` フックを呼び出します。
+
+```typescript
+const { error, status, sendMessage, messages, regenerate, stop } =
+  useChat({
+    transport: new DefaultChatTransport({
+      api: 'http://localhost:4111/chat',
+    }),
+  });
+```
+
+<Callout type="info">
+  **注**: フォーマット対応の `streamVNext` メソッドは実験的機能であり、フィードバックに基づく改良の過程で変更される可能性があります。`streamVNext` の詳細は [Agent Streaming ドキュメント](/docs/agents/streaming) を参照してください。
+</Callout>
+
+### ツールの型推論
+
+AI SDK v5 で TypeScript を用いてツールを使う場合、Mastra はツールの入力と出力の型安全性を担保する型推論ヘルパーを提供します。
+
+#### InferUITool
+
+`InferUITool` 型ヘルパーは、単一の Mastra ツールの入力型と出力型を推論します。
+
+```typescript filename="app/types.ts" showLineNumbers copy
+import { InferUITool, createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const weatherTool = createTool({
+  id: "get-weather",
+  description: "Get the current weather",
+  inputSchema: z.object({
+    location: z.string().describe("The city and state"),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+    conditions: z.string(),
+  }),
+  execute: async ({ context }) => {
+    return {
+      temperature: 72,
+      conditions: "sunny",
+    };
+  },
+});
+
+// ツールから型を推論
+type WeatherUITool = InferUITool<typeof weatherTool>;
+// 生成される型:
+// {
+//   input: { location: string };
+//   output: { temperature: number; conditions: string };
+// }
+```
+
+#### InferUITools
+
+`InferUITools` 型ヘルパーは、複数ツールの入力型と出力型を推論します：
+
+```typescript filename="app/mastra/tools.ts" showLineNumbers copy
+import { InferUITools, createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+// 前の例の weatherTool を使用
+const tools = {
+  weather: weatherTool,
+  calculator: createTool({
+    id: "calculator",
+    description: "基本的な四則演算を実行",
+    inputSchema: z.object({
+      operation: z.enum(["add", "subtract", "multiply", "divide"]),
+      a: z.number(),
+      b: z.number(),
+    }),
+    outputSchema: z.object({
+      result: z.number(),
+    }),
+    execute: async ({ context }) => {
+      // 実装...
+      return { result: 0 };
+    },
+  }),
+};
+
+// ツールセットから型を推論
+export type MyUITools = InferUITools<typeof tools>;
+// これにより以下の型が生成されます:
+// {
+//   weather: { input: { location: string }; output: { temperature: number; conditions: string } };
+//   calculator: { input: { operation: "add" | "subtract" | "multiply" | "divide"; a: number; b: number }; output: { result: number } };
+// }
+```
+
+これらの型ヘルパーは、Mastra ツールを AI SDK v5 の UI コンポーネントと併用する際に、TypeScript を完全にサポートし、アプリケーション全体で型安全性を確保します。

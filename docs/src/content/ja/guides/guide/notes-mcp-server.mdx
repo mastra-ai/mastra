@@ -1,0 +1,445 @@
+---
+title: "MCP サーバー: Notes MCP サーバーの構築 | Mastra ガイド"
+description: "Mastra フレームワークを用いて、ノート管理向けのフル機能の MCP（Model Context Protocol）サーバーを構築するためのステップバイステップガイド。"
+---
+
+import { FileTree, Steps } from "nextra/components";
+
+
+
+# Notes MCP サーバーの構築
+
+このガイドでは、ゼロから完全な MCP（Model Context Protocol）サーバーを構築する方法を学びます。このサーバーは Markdown ノートのコレクションを管理し、次の機能を備えています:
+
+1. **ノートの一覧と閲覧**: クライアントがサーバーに保存された Markdown ファイルを参照・表示できるようにします
+2. **ノートの作成・更新**: ノートを新規作成または更新するためのツールを提供します
+3. **スマートプロンプトの提供**: 日次ノートのテンプレート作成や既存コンテンツの要約など、文脈に応じたプロンプトを生成します
+
+
+
+## 前提条件
+
+- Node.js `v20.0` 以降がインストールされていること
+- サポート対象の[モデルプロバイダー](/docs/getting-started/model-providers)の API キー
+- 既存の Mastra プロジェクト（新規プロジェクトのセットアップは[インストールガイド](/docs/getting-started/installation)をご参照ください）
+
+
+
+## 必要な依存関係とファイルの追加
+
+MCP サーバーを作成する前に、追加の依存関係をインストールし、ボイラープレートとなるフォルダ構成を用意します。
+
+<Steps>
+
+### `@mastra/mcp` をインストール
+
+`@mastra/mcp` をプロジェクトに追加します:
+
+```bash copy
+npm install @mastra/mcp
+```
+
+### デフォルトのプロジェクトを整理
+
+デフォルトの[インストールガイド](/docs/getting-started/installation)に従うと、このガイドには不要なファイルがプロジェクトに含まれます。これらは安全に削除できます:
+
+```bash copy
+rm -rf src/mastra/agents src/mastra/workflows src/mastra/tools/weather-tool.ts
+```
+
+また、`src/mastra/index.ts` ファイルを次のように変更してください:
+
+```ts copy filename="src/mastra/index.ts"
+import { Mastra } from "@mastra/core/mastra";
+import { PinoLogger } from "@mastra/loggers";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    // テレメトリや評価などをメモリストレージに保存します。永続化が必要な場合は file:../mastra.db に変更してください
+    url: ":memory:",
+  }),
+  logger: new PinoLogger({
+    name: "Mastra",
+    level: "info",
+  }),
+});
+```
+
+### ディレクトリ構成のセットアップ
+
+MCP サーバーのロジック用の専用ディレクトリと、ノート用の `notes` ディレクトリを作成します:
+
+```bash copy
+mkdir notes src/mastra/mcp
+```
+
+次のファイルを作成します:
+
+```bash copy
+touch src/mastra/mcp/{server,resources,prompts}.ts
+```
+
+- `server.ts`: MCP サーバーのメイン設定を含みます
+- `resources.ts`: ノートファイルの一覧取得と読み込みを担当します
+- `prompts.ts`: スマートプロンプトのロジックを含みます
+
+最終的なディレクトリ構成は次のとおりです:
+
+<FileTree>
+  <FileTree.Folder name="<your-project-name>" defaultOpen>
+    <FileTree.Folder name="notes" defaultOpen />
+    <FileTree.Folder name="src" defaultOpen>
+      <FileTree.Folder name="mastra" defaultOpen>
+        <FileTree.File name="index.ts" />
+        <FileTree.Folder name="mcp" defaultOpen>
+          <FileTree.File name="server.ts" />
+          <FileTree.File name="resources.ts" />
+          <FileTree.File name="prompts.ts" />
+        </FileTree.Folder>
+        <FileTree.Folder name="tools" defaultOpen />
+      </FileTree.Folder>
+    </FileTree.Folder>
+  </FileTree.Folder>
+</FileTree>
+
+</Steps>
+
+
+
+## MCP サーバーの作成
+
+MCP サーバーを追加してみましょう！
+
+
+
+<Steps>
+  ### MCP サーバーを作成して登録する
+
+  `src/mastra/mcp/server.ts` で、MCP サーバーのインスタンスを定義します:
+
+  ```typescript copy filename="src/mastra/mcp/server.ts"
+  import { MCPServer } from "@mastra/mcp";
+
+  export const notes = new MCPServer({
+    name: "notes",
+    version: "0.1.0",
+    tools: {},
+  });
+  ```
+
+  この MCP サーバーを `src/mastra/index.ts` の Mastra インスタンスに登録します。キー `notes` は MCP サーバーの公開用識別子です:
+
+  ```typescript copy filename="src/mastra/index.ts" {4, 15-17}
+  import { Mastra } from "@mastra/core";
+  import { PinoLogger } from "@mastra/loggers";
+  import { LibSQLStore } from "@mastra/libsql";
+  import { notes } from "./mcp/server";
+
+  export const mastra = new Mastra({
+    storage: new LibSQLStore({
+      // テレメトリや評価結果などをメモリストレージに保存します。永続化が必要な場合は file:../mastra.db に変更してください
+      url: ":memory:",
+    }),
+    logger: new PinoLogger({
+      name: "Mastra",
+      level: "info",
+    }),
+    mcpServers: {
+      notes,
+    },
+  });
+  ```
+
+  ### リソースハンドラーを実装して登録する
+
+  リソースハンドラーにより、クライアントはサーバーが管理するコンテンツを発見・参照できます。`notes` ディレクトリ内の Markdown ファイルを扱うハンドラーを実装します。`src/mastra/mcp/resources.ts` に追加します:
+
+  ```typescript copy filename="src/mastra/mcp/resources.ts"
+  import fs from "fs/promises";
+  import path from "path";
+  import { fileURLToPath } from "url";
+  import type { MCPServerResources, Resource } from "@mastra/mcp";
+
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const NOTES_DIR = path.resolve(__dirname, "../../notes"); // デフォルトの出力ディレクトリからの相対パス
+
+  const listNoteFiles = async (): Promise<Resource[]> => {
+    try {
+      await fs.mkdir(NOTES_DIR, { recursive: true });
+      const files = await fs.readdir(NOTES_DIR);
+      return files
+        .filter((file) => file.endsWith(".md"))
+        .map((file) => {
+          const title = file.replace(".md", "");
+          return {
+            uri: `notes://${title}`,
+            name: title,
+            description: `${title} に関するノート`,
+            mime_type: "text/markdown",
+          };
+        });
+    } catch (error) {
+      console.error("ノートのリソース一覧取得中にエラーが発生しました:", error);
+      return [];
+    }
+  };
+
+  const readNoteFile = async (uri: string): Promise<string | null> => {
+    const title = uri.replace("notes://", "");
+    const notePath = path.join(NOTES_DIR, `${title}.md`);
+    try {
+      return await fs.readFile(notePath, "utf-8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        console.error(`リソース ${uri} の読み取り中にエラーが発生しました:`, error);
+      }
+      return null;
+    }
+  };
+
+  export const resourceHandlers: MCPServerResources = {
+    listResources: listNoteFiles,
+    getResourceContent: async ({ uri }: { uri: string }) => {
+      const content = await readNoteFile(uri);
+      if (content === null) return { text: "" };
+      return { text: content };
+    },
+  };
+  ```
+
+  これらのリソースハンドラーを `src/mastra/mcp/server.ts` に登録します:
+
+  ```typescript copy filename="src/mastra/mcp/server.ts" {2, 8}
+  import { MCPServer } from "@mastra/mcp";
+  import { resourceHandlers } from "./resources";
+
+  export const notes = new MCPServer({
+    name: "notes",
+    version: "0.1.0",
+    tools: {},
+    resources: resourceHandlers,
+  });
+  ```
+
+  ### ツールを実装して登録する
+
+  ツールはサーバーが実行できるアクションです。`write` ツールを作成しましょう。
+  まず、`src/mastra/tools/write-note.ts` にツールを定義します:
+
+  ```typescript copy filename="src/mastra/tools/write-note.ts"
+  import { createTool } from "@mastra/core/tools";
+  import { z } from "zod";
+  import { fileURLToPath } from "url";
+  import path from "node:path";
+  import fs from "fs/promises";
+
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const NOTES_DIR = path.resolve(__dirname, "../../../notes");
+
+  export const writeNoteTool = createTool({
+    id: "write",
+    description: "新しいノートを書き込むか、既存のノートを上書きします。",
+    inputSchema: z.object({
+      title: z
+        .string()
+        .nonempty()
+        .describe("ノートのタイトル。ファイル名として使用されます。"),
+      content: z
+        .string()
+        .nonempty()
+        .describe("ノートの Markdown コンテンツ。"),
+    }),
+    outputSchema: z.string().nonempty(),
+    execute: async ({ context }) => {
+      try {
+        const { title, content } = context;
+        const filePath = path.join(NOTES_DIR, `${title}.md`);
+        await fs.mkdir(NOTES_DIR, { recursive: true });
+        await fs.writeFile(filePath, content, "utf-8");
+        return `ノート「${title}」への書き込みに成功しました。`;
+      } catch (error: any) {
+        return `ノートの書き込み中にエラーが発生しました: ${error.message}`;
+      }
+    },
+  });
+  ```
+
+  このツールを `src/mastra/mcp/server.ts` に登録します:
+
+  ```typescript copy filename="src/mastra/mcp/server.ts"
+  import { MCPServer } from "@mastra/mcp";
+  import { resourceHandlers } from "./resources";
+  import { writeNoteTool } from "../tools/write-note";
+
+  export const notes = new MCPServer({
+    name: "notes",
+    version: "0.1.0",
+    resources: resourceHandlers,
+    tools: {
+      write: writeNoteTool,
+    },
+  });
+  ```
+
+  ### プロンプトの実装と登録
+
+  プロンプトハンドラーは、クライアントでそのまま使えるプロンプトを提供します。次の3つを追加します:
+
+  * デイリーノート
+  * ノートの要約
+  * アイデアのブレインストーミング
+
+  これには、いくつかの Markdown 解析ライブラリのインストールが必要です:
+
+  ```bash copy
+  npm install unified remark-parse gray-matter @types/unist
+  ```
+
+  `src/mastra/mcp/prompts.ts` にプロンプトを実装します:
+
+  ```typescript copy filename="src/mastra/mcp/prompts.ts"
+  import type { MCPServerPrompts } from "@mastra/mcp";
+  import { unified } from "unified";
+  import remarkParse from "remark-parse";
+  import matter from "gray-matter";
+  import type { Node } from "unist";
+
+  const prompts = [
+    {
+      name: "new_daily_note",
+      description: "日次ノートを新規作成します。",
+      version: "1.0.0",
+    },
+    {
+      name: "summarize_note",
+      description: "ノートの要約（TL;DR）を提示します。",
+      version: "1.0.0",
+    },
+    {
+      name: "brainstorm_ideas",
+      description: "ノートをもとに新しいアイデアをブレインストーミングします。",
+      version: "1.0.0",
+    },
+  ];
+
+  function stringifyNode(node: Node): string {
+    if ("value" in node && typeof node.value === "string") return node.value;
+    if ("children" in node && Array.isArray(node.children))
+      return node.children.map(stringifyNode).join("");
+    return "";
+  }
+
+  export async function analyzeMarkdown(md: string) {
+    const { content } = matter(md);
+    const tree = unified().use(remarkParse).parse(content);
+    const headings: string[] = [];
+    const wordCounts: Record<string, number> = {};
+    let currentHeading = "untitled";
+    wordCounts[currentHeading] = 0;
+    tree.children.forEach((node) => {
+      if (node.type === "heading" && node.depth === 2) {
+        currentHeading = stringifyNode(node);
+        headings.push(currentHeading);
+        wordCounts[currentHeading] = 0;
+      } else {
+        const textContent = stringifyNode(node);
+        if (textContent.trim()) {
+          wordCounts[currentHeading] =
+            (wordCounts[currentHeading] || 0) + textContent.split(/\\s+/).length;
+        }
+      }
+    });
+    return { headings, wordCounts };
+  }
+
+  const getPromptMessages: MCPServerPrompts["getPromptMessages"] = async ({
+    name,
+    args,
+  }) => {
+    switch (name) {
+      case "new_daily_note":
+        const today = new Date().toISOString().split("T")[0];
+        return [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: `タイトルを「${today}」とし、「## Tasks」「## Meetings」「## Notes」というセクションを含む新しいノートを作成してください。`,
+            },
+          },
+        ];
+      case "summarize_note":
+        if (!args?.noteContent) throw new Error("No content provided");
+        const metaSum = await analyzeMarkdown(args.noteContent as string);
+        return [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: `各セクションを3項目以内の箇条書きで要約してください。\\n\\n### アウトライン\\n${metaSum.headings.map((h) => `- ${h} (${metaSum.wordCounts[h] || 0} words)`).join("\\n")}`.trim(),
+            },
+          },
+        ];
+      case "brainstorm_ideas":
+        if (!args?.noteContent) throw new Error("No content provided");
+        const metaBrain = await analyzeMarkdown(args.noteContent as string);
+        return [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: `以下の未整理・未成熟なセクションについて、${args?.topic ? `「${args.topic}」に関して` : ""}アイデアを3つブレインストーミングしてください。\\n\\n未成熟なセクション:\\n${metaBrain.headings.length ? metaBrain.headings.map((h) => `- ${h}`).join("\\n") : "- (none, pick any)"}`,
+            },
+          },
+        ];
+      default:
+        throw new Error(`Prompt \"${name}\" not found`);
+    }
+  };
+
+  export const promptHandlers: MCPServerPrompts = {
+    listPrompts: async () => prompts,
+    getPromptMessages,
+  };
+  ```
+
+  `src/mastra/mcp/server.ts` にこれらのプロンプトハンドラーを登録します:
+
+  ```typescript copy filename="src/mastra/mcp/server.ts"
+  import { MCPServer } from "@mastra/mcp";
+  import { resourceHandlers } from "./resources";
+  import { writeNoteTool } from "../tools/write-note";
+  import { promptHandlers } from "./prompts";
+
+  export const notes = new MCPServer({
+    name: "notes",
+    version: "0.1.0",
+    resources: resourceHandlers,
+    prompts: promptHandlers,
+    tools: {
+      write: writeNoteTool,
+    },
+  });
+  ```
+</Steps>
+
+
+
+
+
+## サーバーを実行する
+
+素晴らしいですね。これで最初の MCP サーバーを作成できました！[playground](../../docs/server-db/local-dev-playground.mdx) を起動して試してみましょう:
+
+```bash copy
+npm run dev
+```
+
+ブラウザで [`http://localhost:4111`](http://localhost:4111) を開きます。左側のサイドバーで **MCP Servers** を選択し、**notes** MCP サーバーを選びます。
+
+IDE に MCP サーバーを追加するための手順が表示されます。この MCP サーバーは任意の MCP クライアントで使用できます。右側の **Available Tools** の下で **write** ツールも選択できます。
+
+**write** ツールで、名前に `test`、Markdown の内容に `this is a test` を入力して試してみてください。**Submit** をクリックすると、`notes` 内に新しい `test.md` ファイルが作成されます。

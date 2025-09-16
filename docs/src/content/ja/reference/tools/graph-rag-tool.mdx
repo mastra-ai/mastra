@@ -1,11 +1,14 @@
 ---
 title: "リファレンス: createGraphRAGTool() | RAG | Mastra Tools ドキュメント"
-description: Mastra の Graph RAG Tool のドキュメント。これは、ドキュメント間のセマンティックな関係のグラフを構築することで RAG を強化します。
+description: Mastra の Graph RAG ツールのドキュメント。ドキュメント間の意味的関係をグラフ化することで、RAG を強化します。
 ---
+
+import { Callout } from "nextra/components";
+
 
 # createGraphRAGTool()
 
-`createGraphRAGTool()` は、ドキュメント間のセマンティックな関係のグラフを構築することでRAGを強化するツールを作成します。内部的には `GraphRAG` システムを利用してグラフベースの検索を提供し、直接的な類似性だけでなく、関連する接続関係を通じて適切なコンテンツを見つけ出します。
+`createGraphRAGTool()` は、ドキュメント間の意味的関係のグラフを構築することで RAG を強化するツールを作成します。内部では `GraphRAG` システムを用いてグラフベースの検索を行い、直接的な類似性だけでなく、接続関係にもとづいて関連コンテンツを見つけます。
 
 ## 使用例
 
@@ -28,38 +31,78 @@ const graphTool = createGraphRAGTool({
 
 ## パラメーター
 
+<Callout>
+  **パラメーター要件:** ほとんどのフィールドは作成時にデフォルトとして設定できます。
+  一部のフィールドは実行時コンテキストまたは入力で上書きできます。
+  必須フィールドが作成時と実行時の双方で欠けている場合はエラーになります。
+  なお、`model`、`id`、`description` は作成時にのみ設定可能です。
+</Callout>
+
 <PropertiesTable
   content={[
     {
-      name: "vectorStoreName",
+      name: "id",
       type: "string",
-      description: "クエリを実行するベクトルストアの名前",
-      isOptional: false,
-    },
-    {
-      name: "indexName",
-      type: "string",
-      description: "ベクトルストア内のインデックス名",
-      isOptional: false,
-    },
-    {
-      name: "model",
-      type: "EmbeddingModel",
-      description: "ベクトル検索に使用する埋め込みモデル",
-      isOptional: false,
-    },
-    {
-      name: "graphOptions",
-      type: "GraphOptions",
-      description: "グラフベースの検索のための設定",
+      description:
+        "ツールのカスタム ID。デフォルト: 'GraphRAG {vectorStoreName} {indexName} Tool'。（作成時のみ設定可能）",
       isOptional: true,
-      defaultValue: "デフォルトのグラフオプション",
     },
     {
       name: "description",
       type: "string",
       description:
-        "ツールのカスタム説明。デフォルト: 'ナレッジベース内の情報間の関係性をアクセス・分析し、接続やパターンに関する複雑な質問に答えます'",
+        "ツールのカスタム説明。デフォルト: 'ナレッジベース内の情報間の関係にアクセスして分析し、つながりやパターンに関する複雑な質問に回答します。'（作成時のみ設定可能）",
+      isOptional: true,
+    },
+    {
+      name: "vectorStoreName",
+      type: "string",
+      description:
+        "クエリ対象のベクターストア名。（作成時に設定、または実行時に上書き可能）",
+      isOptional: false,
+    },
+    {
+      name: "indexName",
+      type: "string",
+      description:
+        "ベクターストア内のインデックス名。（作成時に設定、または実行時に上書き可能）",
+      isOptional: false,
+    },
+    {
+      name: "model",
+      type: "EmbeddingModel",
+      description:
+        "ベクトル検索に使用する埋め込みモデル。（作成時のみ設定可能）",
+      isOptional: false,
+    },
+    {
+      name: "enableFilter",
+      type: "boolean",
+      description:
+        "メタデータに基づく結果のフィルタリングを有効化します。（作成時のみ設定可能ですが、実行時コンテキストでフィルターが指定された場合は自動的に有効化されます）",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "includeSources",
+      type: "boolean",
+      description:
+        "結果に取得オブジェクト一式を含めます。（作成時に設定、または実行時に上書き可能）",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
+      name: "graphOptions",
+      type: "GraphOptions",
+      description: "グラフベース取得の設定",
+      isOptional: true,
+      defaultValue: "デフォルトのグラフオプション",
+    },
+    {
+      name: "providerOptions",
+      type: "Record<string, Record<string, any>>",
+      description:
+        "埋め込みモデルのプロバイダー固有オプション（例: outputDimensionality）。**重要**: AI SDK の EmbeddingModelV2 でのみ有効です。V1 モデルの場合はモデル作成時にオプションを設定してください。",
       isOptional: true,
     },
   ]}
@@ -72,28 +115,31 @@ const graphTool = createGraphRAGTool({
     {
       name: "dimension",
       type: "number",
-      description: "埋め込みベクトルの次元数",
+      description: "埋め込みベクトルの次元",
       isOptional: true,
       defaultValue: "1536",
     },
     {
       name: "threshold",
       type: "number",
-      description: "ノード間のエッジ作成のための類似度しきい値（0-1）",
+      description:
+        "ノード間にエッジを作成する際の類似度のしきい値（0〜1）",
       isOptional: true,
       defaultValue: "0.7",
     },
     {
       name: "randomWalkSteps",
       type: "number",
-      description: "グラフ探索のためのランダムウォークのステップ数",
+      description:
+        "グラフ探索におけるランダムウォークのステップ数。（作成時に設定、または実行時に上書き可能）",
       isOptional: true,
       defaultValue: "100",
     },
     {
       name: "restartProb",
       type: "number",
-      description: "クエリノードからランダムウォークを再開する確率",
+      description:
+        "クエリノードからランダムウォークを再開する確率。（作成時に設定、または実行時に上書き可能）",
       isOptional: true,
       defaultValue: "0.15",
     },
@@ -102,7 +148,7 @@ const graphTool = createGraphRAGTool({
 
 ## 戻り値
 
-このツールは以下のオブジェクトを返します：
+このツールは次のプロパティを持つオブジェクトを返します:
 
 <PropertiesTable
   content={[
@@ -110,18 +156,36 @@ const graphTool = createGraphRAGTool({
       name: "relevantContext",
       type: "string",
       description:
-        "グラフベースのランキングを用いて取得した、最も関連性の高いドキュメントチャンクから結合されたテキスト",
+        "グラフベースのランキングで取得した、最も関連性の高いドキュメントチャンクのテキストを結合したもの",
+    },
+    {
+      name: "sources",
+      type: "QueryResult[]",
+      description:
+        "完全な検索結果オブジェクトの配列。各オブジェクトには、元のドキュメント、チャンク、類似度スコアを参照するために必要な情報がすべて含まれます。",
     },
   ]}
 />
 
-## デフォルトツールの説明
+### QueryResult オブジェクトの構造
 
-デフォルトの説明は以下に重点を置いています：
+```typescript
+{
+  id: string;         // チャンク／ドキュメントの一意な識別子
+  metadata: any;      // すべてのメタデータフィールド（ドキュメント ID など）
+  vector: number[];   // 埋め込みベクトル（取得可能な場合）
+  score: number;      // この検索での類似度スコア
+  document: string;   // チャンク／ドキュメントの本文全体（取得可能な場合）
+}
+```
 
-- ドキュメント間の関係性の分析
-- パターンやつながりの発見
-- 複雑なクエリへの回答
+## 既定のツールの説明
+
+既定の説明では次の点に焦点を当てます:
+
+- 文書間の関係を分析すること
+- パターンや関連性を見つけ出すこと
+- 複雑な問い合わせに答えること
 
 ## 応用例
 
@@ -132,14 +196,14 @@ const graphTool = createGraphRAGTool({
   model: openai.embedding("text-embedding-3-small"),
   graphOptions: {
     dimension: 1536,
-    threshold: 0.8, // Higher similarity threshold
-    randomWalkSteps: 200, // More exploration steps
-    restartProb: 0.2, // Higher restart probability
+    threshold: 0.8, // 類似度のしきい値を高める
+    randomWalkSteps: 200, // 探索ステップを増やす
+    restartProb: 0.2, // 再開確率を高める
   },
 });
 ```
 
-## カスタム説明付きの例
+## カスタム説明の例
 
 ```typescript
 const graphTool = createGraphRAGTool({
@@ -147,13 +211,52 @@ const graphTool = createGraphRAGTool({
   indexName: "docs",
   model: openai.embedding("text-embedding-3-small"),
   description:
-    "Analyze document relationships to find complex patterns and connections in our company's historical data",
+    "当社の履歴データにおける複雑なパターンやつながりを見つけるため、ドキュメント間の関係を分析します",
 });
 ```
 
-この例では、関係性分析という基本的な目的を維持しつつ、特定のユースケースに合わせてツールの説明をカスタマイズする方法を示しています。
+この例は、関係分析という本来の目的を保ちながら、特定のユースケースに合わせてツールの説明をカスタマイズする方法を示しています。
 
-## 関連
+## 例: ランタイムコンテキストの利用
+
+```typescript
+const graphTool = createGraphRAGTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding("text-embedding-3-small"),
+});
+```
+
+ランタイムコンテキストを使う場合は、実行時にランタイムコンテキスト経由で必要なパラメータを指定します。
+
+```typescript
+const runtimeContext = new RuntimeContext<{
+  vectorStoreName: string;
+  indexName: string;
+  topK: number;
+  filter: any;
+}>();
+runtimeContext.set("vectorStoreName", "my-store");
+runtimeContext.set("indexName", "my-index");
+runtimeContext.set("topK", 5);
+runtimeContext.set("filter", { category: "docs" });
+runtimeContext.set("randomWalkSteps", 100);
+runtimeContext.set("restartProb", 0.15);
+
+const response = await agent.generate(
+  "Find documentation from the knowledge base.",
+  {
+    runtimeContext,
+  },
+);
+```
+
+ランタイムコンテキストの詳細は、次をご覧ください。
+
+- [Agent Runtime Context](../../docs/agents/runtime-context.mdx)
+- [Tool Runtime Context](../../docs/tools-mcp/runtime-context.mdx)
+
+## 関連項目
 
 - [createVectorQueryTool](./vector-query-tool)
 - [GraphRAG](../rag/graph-rag)

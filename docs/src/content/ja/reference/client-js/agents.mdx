@@ -1,49 +1,44 @@
 ---
 title: Mastra クライアントエージェント API
-description: Mastra AIエージェントとの対話方法を学びましょう。レスポンスの生成、ストリーミング対話、client-js SDKを使用したエージェントツールの管理などが含まれます。
+description: client-js SDK を使って、応答の生成、ストリーミングでの対話、エージェントツールの管理など、Mastra の AI エージェントとのやり取り方法を学びます。
 ---
+
+import { StreamVNextCallout } from "@/components/streamVNext-callout.tsx"
+
 
 # Agents API
 
-Agents APIは、Mastra AIエージェントと対話するためのメソッドを提供し、レスポンスの生成、ストリーミング対話、エージェントツールの管理などが含まれます。
+Agents API は、応答の生成、ストリーミングでのやり取り、エージェントツールの管理など、Mastra の AI エージェントと対話するためのメソッドを提供します。
 
-## Mastraクライアントの初期化
+## すべてのエージェントを取得する
 
-```typescript
-import { MastraClient } from "@mastra/client-js";
-
-const client = new MastraClient();
-```
-
-## すべてのエージェントの取得
-
-利用可能なすべてのエージェントのリストを取得します：
+利用可能なすべてのエージェント一覧を取得します：
 
 ```typescript
-const agents = await client.getAgents();
+const agents = await mastraClient.getAgents();
 ```
 
-## 特定のエージェントの操作
+## 特定のエージェントを扱う
 
-特定のエージェントのインスタンスを取得する：
+特定のエージェントのインスタンスを取得します:
 
 ```typescript
-const agent = client.getAgent("agent-id");
+const agent = mastraClient.getAgent("agent-id");
 ```
 
-## エージェントメソッド
+## エージェントのメソッド
 
-### エージェントの詳細を取得
+### エージェントの詳細を取得する
 
-エージェントの詳細情報を取得します：
+エージェントの詳細情報を取得します:
 
 ```typescript
 const details = await agent.details();
 ```
 
-### 応答を生成
+### レスポンスを生成
 
-エージェントから応答を生成します：
+エージェントからレスポンスを生成します:
 
 ```typescript
 const response = await agent.generate({
@@ -53,15 +48,15 @@ const response = await agent.generate({
       content: "Hello, how are you?",
     },
   ],
-  threadId: "thread-1", // オプション: 会話コンテキスト用のスレッドID
-  resourceid: "resource-1", // オプション: リソースID
-  output: {}, // オプション: 出力設定
+  threadId: "thread-1", // 任意: 会話コンテキスト用のスレッド ID
+  resourceid: "resource-1", // 任意: リソース ID
+  output: {}, // 任意: 出力設定
 });
 ```
 
-### 応答をストリーム
+### ストリーム応答
 
-リアルタイムのやり取りのために、エージェントからの応答をストリーミングします：
+リアルタイムのやり取りに向けて、エージェントからの応答をストリーミングします:
 
 ```typescript
 const response = await agent.stream({
@@ -73,7 +68,7 @@ const response = await agent.stream({
   ],
 });
 
-// processDataStreamユーティリティでデータストリームを処理
+// processDataStream ユーティリティでデータストリームを処理
 response.processDataStream({
   onTextPart: (text) => {
     process.stdout.write(text);
@@ -89,7 +84,15 @@ response.processDataStream({
   },
 });
 
-// response bodyから直接読み取ることも可能です
+// processTextStream ユーティリティでテキストストリームを処理
+// （構造化出力と併用）
+response.processTextStream({
+  onTextPart: (text) => {
+    process.stdout.write(text);
+  },
+});
+
+// 応答ボディから直接読み取ることもできます
 const reader = response.body.getReader();
 while (true) {
   const { done, value } = await reader.read();
@@ -98,22 +101,115 @@ while (true) {
 }
 ```
 
-### エージェントツールを取得
+### クライアントツール
 
-エージェントが利用可能な特定のツールの情報を取得します：
+クライアント側のツールを使うと、エージェントからの要求に応じて、クライアント側でカスタム関数を実行できます。
+
+#### 基本的な使い方
+
+```typescript
+import { createTool } from '@mastra/client-js';
+import { z } from 'zod';
+
+const colorChangeTool = createTool({
+  id: 'changeColor',
+  description: '背景色を変更する',
+  inputSchema: z.object({
+    color: z.string(),
+  }),
+  execute: async ({ context }) => {
+    document.body.style.backgroundColor = context.color;
+    return { success: true };
+  }
+})
+
+
+// generate で使用
+const response = await agent.generate({
+  messages: '背景を青にして',
+  clientTools: {colorChangeTool},
+});
+
+// stream で使用
+const response = await agent.stream({
+  messages: '背景を緑にして',
+  clientTools: {colorChangeTool},
+});
+
+response.processDataStream({
+  onTextPart: (text) => console.log(text),
+  onToolCallPart: (toolCall) => console.log('ツールが呼び出されました:', toolCall.toolName),
+});
+```
+
+### エージェントのツールを取得
+
+エージェントで利用可能な特定のツールの情報を取得します。
 
 ```typescript
 const tool = await agent.getTool("tool-id");
 ```
 
-### エージェント評価を取得
+### エージェントの評価を取得する
 
 エージェントの評価結果を取得します：
 
 ```typescript
-// CI評価を取得
+// CI の評価を取得
 const evals = await agent.evals();
 
 // ライブ評価を取得
 const liveEvals = await agent.liveEvals();
+```
+
+### Stream VNext（実験的）
+
+<StreamVNextCallout />
+
+強化されたメソッドシグネチャを備えた拡張版の VNext API を使い、応答をストリーミングします。この方法は、Mastra のネイティブ形式と AI SDK v5 互換形式の両方をサポートし、より強力な機能と柔軟なフォーマット指定を提供します。
+
+```typescript
+const response = await agent.streamVNext(
+  "Tell me a story",
+  {
+    format: 'mastra', // Default: Mastra's native format
+    threadId: "thread-1",
+    clientTools: { colorChangeTool },
+  }
+);
+
+// AI SDK v5 compatible format
+const response = await agent.streamVNext(
+  "Tell me a story",
+  {
+    format: 'aisdk', // Enable AI SDK v5 compatibility
+    threadId: "thread-1",
+  }
+);
+
+// Process the stream
+response.processDataStream({
+  onChunk: (chunk) => {
+    console.log(chunk);
+  },
+});
+```
+
+`format` パラメータは出力ストリームの形式を指定します。
+
+- `'mastra'`（デフォルト）：Mastra のネイティブ形式を返します
+- `'aisdk'`：フロントエンド統合向けの AI SDK v5 互換形式を返します
+
+### Generate VNext（実験的）
+
+強化された VNext API を使用し、改良されたメソッドシグネチャと AI SDK v5 との互換性によりレスポンスを生成します：
+
+```typescript
+const response = await agent.generateVNext(
+  "Hello, how are you?",
+  {
+    threadId: "thread-1",
+    resourceid: "resource-1",
+  }
+);
 ```

@@ -3,9 +3,13 @@ title: "リファレンス: MDocument | ドキュメント処理 | RAG | Mastra 
 description: ドキュメント処理とチャンク化を担当するMastraのMDocumentクラスのドキュメントです。
 ---
 
+
+
 # MDocument
 
 MDocumentクラスは、RAGアプリケーション向けにドキュメントを処理します。主なメソッドは `.chunk()` と `.extractMetadata()` です。
+
+
 
 ## コンストラクタ
 
@@ -24,6 +28,8 @@ MDocumentクラスは、RAGアプリケーション向けにドキュメント�
     },
   ]}
 />
+
+
 
 ## 静的メソッド
 
@@ -58,6 +64,8 @@ JSONコンテンツからドキュメントを作成します。
 ```typescript
 static fromJSON(json: string, metadata?: Record<string, any>): MDocument
 ```
+
+
 
 ## インスタンスメソッド
 
@@ -102,6 +110,8 @@ getMetadata(): Record<string, any>[]
 ```typescript
 async extractMetadata(params: ExtractParams): Promise<MDocument>
 ```
+
+
 
 ## 例
 

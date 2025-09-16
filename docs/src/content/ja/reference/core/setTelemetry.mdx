@@ -1,0 +1,35 @@
+---
+title: "リファレンス: Mastra.setTelemetry() | Core | Mastra ドキュメント"
+description: "Mastra の `Mastra.setTelemetry()` メソッドのドキュメント。すべてのコンポーネントのテレメトリー設定を一括で設定します。"
+---
+
+# Mastra.setTelemetry()
+
+`.setTelemetry()` メソッドは、Mastra インスタンス内のすべてのコンポーネントに適用するテレメトリー設定を行うために使用します。このメソッドは、テレメトリー設定を表す単一のオブジェクトを受け取ります。
+
+## 使い方の例
+
+```typescript copy
+mastra.setTelemetry({ export: { type: "console" } });
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "telemetry",
+      type: "OtelConfig",
+      description: "すべてのコンポーネントに適用するテレメトリーの構成オブジェクト。",
+    },
+  ]}
+/>
+
+## 戻り値
+
+このメソッドは値を返しません。
+
+## 関連項目
+
+- [テレメトリーの概要](../../docs/observability/telemetry.mdx)
+- [テレメトリー リファレンス](../../reference/observability/telemetry.mdx)

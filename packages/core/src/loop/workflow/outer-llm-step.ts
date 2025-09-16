@@ -1,5 +1,6 @@
 import type { ToolSet } from 'ai-v5';
 import z from 'zod';
+import { InternalSpans } from '../../ai-tracing';
 import { convertMastraChunkToAISDKv5 } from '../../stream/aisdk/v5/transform';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
@@ -13,9 +14,9 @@ import { createToolCallStep } from './tool-call-step';
 export function createOuterLLMWorkflow<
   Tools extends ToolSet = ToolSet,
   OUTPUT extends OutputSchema | undefined = undefined,
->({ model, telemetry_settings, _internal, modelStreamSpan, ...rest }: OuterLLMRun<Tools, OUTPUT>) {
+>({ models, telemetry_settings, _internal, modelStreamSpan, ...rest }: OuterLLMRun<Tools, OUTPUT>) {
   const llmExecutionStep = createLLMExecutionStep({
-    model,
+    models,
     _internal,
     modelStreamSpan,
     telemetry_settings,
@@ -23,7 +24,7 @@ export function createOuterLLMWorkflow<
   });
 
   const toolCallStep = createToolCallStep({
-    model,
+    models,
     telemetry_settings,
     _internal,
     modelStreamSpan,
@@ -103,7 +104,7 @@ export function createOuterLLMWorkflow<
 
           rest.controller.enqueue(chunk);
 
-          if (model.specificationVersion === 'v2') {
+          if (initialResult?.metadata?.modelVersion === 'v2') {
             await rest.options?.onChunk?.({
               chunk: convertMastraChunkToAISDKv5({
                 chunk,
@@ -147,6 +148,13 @@ export function createOuterLLMWorkflow<
     id: 'executionWorkflow',
     inputSchema: llmIterationOutputSchema,
     outputSchema: z.any(),
+    options: {
+      tracingPolicy: {
+        // mark all workflow spans related to the
+        // VNext execution as internal
+        internal: InternalSpans.WORKFLOW,
+      },
+    },
   })
     .then(llmExecutionStep)
     .map(({ inputData }) => {
