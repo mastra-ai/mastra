@@ -1944,10 +1944,10 @@ export class Agent<
           messageList,
         });
 
+        const systemMessages = messageList.getSystemMessages();
+
         const systemMessage =
-          [...messageList.getSystemMessages(), ...messageList.getSystemMessages('memory')]
-            ?.map(m => m.content)
-            ?.join(`\n`) ?? undefined;
+          [...systemMessages, ...messageList.getSystemMessages('memory')]?.map(m => m.content)?.join(`\n`) ?? undefined;
 
         const processedMemoryMessages = await memory.processMessages({
           // these will be processed
@@ -1968,6 +1968,7 @@ export class Agent<
         })
           .addSystem(instructions || `${this.instructions}.`)
           .addSystem(memorySystemMessage)
+          .addSystem(systemMessages)
           .add(context || [], 'context')
           .add(processedMemoryMessages, 'memory')
           .add(messageList.get.input.v2(), 'user')
@@ -2181,7 +2182,7 @@ export class Agent<
           overrideScorers,
           threadId,
           resourceId,
-          tracingContext: { currentSpan: agentAISpan },
+          tracingContext: { currentSpan: agentAISpan, isInternal: true },
         });
 
         const scoringData: {
@@ -2696,7 +2697,7 @@ export class Agent<
       );
     }
 
-    const llm = (await this.getLLM({ runtimeContext })) as MastraLLMVNext;
+    const llm = (await this.getLLM({ runtimeContext, model: options.model })) as MastraLLMVNext;
 
     const runId = options.runId || this.#mastra?.generateId() || randomUUID();
     const instructions = options.instructions || (await this.getInstructions({ runtimeContext }));
@@ -2974,10 +2975,10 @@ export class Agent<
           messageList,
         });
 
+        const systemMessages = messageList.getSystemMessages();
+
         const systemMessage =
-          [...messageList.getSystemMessages(), ...messageList.getSystemMessages('memory')]
-            ?.map(m => m.content)
-            ?.join(`\n`) ?? undefined;
+          [...systemMessages, ...messageList.getSystemMessages('memory')]?.map(m => m.content)?.join(`\n`) ?? undefined;
 
         const processedMemoryMessages = await memory.processMessages({
           // these will be processed
@@ -2998,6 +2999,7 @@ export class Agent<
         })
           .addSystem(instructions || `${this.instructions}.`)
           .addSystem(memorySystemMessage)
+          .addSystem(systemMessages)
           .add(options.context || [], 'context')
           .add(processedMemoryMessages, 'memory')
           .add(messageList.get.input.v2(), 'user');
@@ -3209,6 +3211,7 @@ export class Agent<
                   instructions,
                   thread: result.thread,
                   threadId: result.threadId,
+                  readOnlyMemory: options.memory?.readOnly,
                   resourceId,
                   memoryConfig,
                   runtimeContext,
@@ -3228,7 +3231,7 @@ export class Agent<
               }
 
               await options?.onFinish?.({
-                ...result,
+                ...payload,
                 runId,
                 messages: messageList.get.response.aiV5.model(),
                 usage: payload.usage,
@@ -3257,7 +3260,7 @@ export class Agent<
       .commit();
 
     const run = await executionWorkflow.createRunAsync();
-    const result = await run.start({ tracingContext: { currentSpan: agentAISpan } });
+    const result = await run.start({ tracingContext: { currentSpan: agentAISpan, isInternal: true } });
 
     return result;
   }
@@ -3265,6 +3268,7 @@ export class Agent<
   async #executeOnFinish({
     result,
     instructions,
+    readOnlyMemory,
     thread: threadAfter,
     threadId,
     resourceId,
@@ -3283,6 +3287,7 @@ export class Agent<
     runId: string;
     result: Record<string, any>;
     thread: StorageThreadType | null | undefined;
+    readOnlyMemory?: boolean;
     threadId?: string;
     resourceId?: string;
     runtimeContext: RuntimeContext;
@@ -3330,7 +3335,7 @@ export class Agent<
     const memory = await this.getMemory({ runtimeContext });
     const thread = usedWorkingMemory ? (threadId ? await memory?.getThreadById({ threadId }) : undefined) : threadAfter;
 
-    if (memory && resourceId && thread) {
+    if (memory && resourceId && thread && !readOnlyMemory) {
       try {
         // Add LLM response messages to the list
         let responseMessages = result.response.messages;
@@ -3453,7 +3458,7 @@ export class Agent<
       runtimeContext,
       structuredOutput,
       overrideScorers,
-      tracingContext: { currentSpan: agentAISpan },
+      tracingContext: { currentSpan: agentAISpan, isInternal: true },
     });
 
     agentAISpan?.end({
@@ -3531,13 +3536,32 @@ export class Agent<
       runtimeContext: streamOptions?.runtimeContext,
     });
 
-    const mergedStreamOptions = {
+    let mergedStreamOptions = {
       ...defaultStreamOptions,
       ...streamOptions,
       onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
 
-    const llm = await this.getLLM({ runtimeContext: mergedStreamOptions.runtimeContext });
+    // Map structuredOutput to output when maxSteps is explicitly set to 1
+    // This allows the new structuredOutput API to use the existing output implementation
+    let modelOverride: MastraLanguageModel | undefined;
+    if (mergedStreamOptions.structuredOutput && mergedStreamOptions.maxSteps === 1) {
+      // If structuredOutput has a model, use it to override the agent's model
+      if (mergedStreamOptions.structuredOutput.model) {
+        modelOverride = mergedStreamOptions.structuredOutput.model;
+      }
+
+      mergedStreamOptions = {
+        ...mergedStreamOptions,
+        output: mergedStreamOptions.structuredOutput.schema as OUTPUT,
+        structuredOutput: undefined, // Remove structuredOutput to avoid confusion downstream
+      };
+    }
+
+    const llm = await this.getLLM({
+      runtimeContext: mergedStreamOptions.runtimeContext,
+      model: modelOverride,
+    });
 
     if (llm.getModel().specificationVersion !== 'v2') {
       throw new MastraError({
@@ -3552,6 +3576,7 @@ export class Agent<
       ...mergedStreamOptions,
       messages,
       methodType: 'streamVNext',
+      model: modelOverride,
     });
 
     if (result.status !== 'success') {
@@ -3600,7 +3625,7 @@ export class Agent<
     generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
     this.logger.warn(
-      "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 16th, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
+      "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 23rd, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
     );
     // @ts-expect-error - generic type issues
     return this.generateLegacy(messages, generateOptions);
@@ -3967,7 +3992,7 @@ export class Agent<
     | (StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties)
   > {
     this.logger.warn(
-      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 16th, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
+      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 23rd, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
     );
     // @ts-expect-error - generic type issues
     return this.streamLegacy(messages, streamOptions);

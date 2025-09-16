@@ -922,6 +922,72 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
     });
+
+    it('should persist a workflow run with resourceId', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRunAsync({ resourceId: 'test-resource-id' });
+      const result = await run.start({ inputData: {} });
+
+      const runById = await workflow.getWorkflowRunById(run.runId);
+      expect(runById?.resourceId).toBe('test-resource-id');
+
+      expect(execute).toHaveBeenCalled();
+      expect(result.steps['step1']).toMatchObject({
+        status: 'success',
+        output: { result: 'success' },
+      });
+
+      srv.close();
+    });
   });
 
   describe('abort', () => {
@@ -6882,7 +6948,6 @@ describe('MastraInngestWorkflow', () => {
           payload: {
             id: expect.any(String),
             endedAt: expect.any(Number),
-            startedAt: expect.any(Number),
             status: 'success',
             output: {
               result: 'success1',
@@ -7091,7 +7156,6 @@ describe('MastraInngestWorkflow', () => {
           payload: {
             id: expect.any(String),
             endedAt: expect.any(Number),
-            startedAt: expect.any(Number),
             status: 'success',
             output: {
               value: 1000,
@@ -7654,7 +7718,7 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      expect(values).toMatchObject([
+      const expectedValues = [
         {
           payload: {
             runId: 'test-run-id',
@@ -7664,12 +7728,19 @@ describe('MastraInngestWorkflow', () => {
         {
           payload: {
             id: 'start',
+            payload: {
+              prompt1: 'Capital of France, just the name',
+              prompt2: 'Capital of UK, just the name',
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
           },
           type: 'step-start',
         },
         {
           payload: {
             id: 'start',
+            endedAt: expect.any(Number),
             output: {
               prompt1: 'Capital of France, just the name',
               prompt2: 'Capital of UK, just the name',
@@ -7728,6 +7799,13 @@ describe('MastraInngestWorkflow', () => {
           argsTextDelta: 'Paris',
           name: 'test-agent-1',
           type: 'tool-call-delta',
+        },
+        {
+          args: {
+            prompt: 'Capital of France, just the name',
+          },
+          name: 'test-agent-1',
+          type: 'tool-call-streaming-finish',
         },
         {
           payload: {
@@ -7791,6 +7869,13 @@ describe('MastraInngestWorkflow', () => {
           type: 'tool-call-delta',
         },
         {
+          args: {
+            prompt: 'Capital of UK, just the name',
+          },
+          name: 'test-agent-2',
+          type: 'tool-call-streaming-finish',
+        },
+        {
           payload: {
             id: expect.any(String),
             output: {
@@ -7813,7 +7898,11 @@ describe('MastraInngestWorkflow', () => {
           },
           type: 'finish',
         },
-      ]);
+      ];
+      values.forEach((value, i) => {
+        const expectedValue = expectedValues[i];
+        expect(value).toMatchObject(expectedValue);
+      });
     });
 
     describe('Workflow integration', () => {

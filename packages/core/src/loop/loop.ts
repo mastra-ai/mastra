@@ -74,6 +74,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     telemetry_settings,
   });
 
+  const messageId = rest.experimental_generateMessageId?.() || internalToUse.generateId?.();
+
   const workflowLoopProps: LoopRun<Tools, OUTPUT> = {
     model,
     runId: runIdToUse,
@@ -88,6 +90,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     modelSettings,
     outputProcessors,
     llmAISpan,
+    messageId: messageId!,
     ...rest,
   };
 
@@ -101,6 +104,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     },
     stream: streamFn,
     messageList,
+    messageId: messageId!,
     options: {
       runId: runIdToUse!,
       telemetry_settings,

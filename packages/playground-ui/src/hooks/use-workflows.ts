@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { LegacyWorkflowRunResult, WorkflowWatchResult, GetWorkflowResponse } from '@mastra/client-js';
 import type { LegacyWorkflow } from '@mastra/core/workflows/legacy';
 import { useMastraClient } from '@/contexts/mastra-client-context';
+import { usePlaygroundStore } from '@/store/playground-store';
 import { useQuery } from '@tanstack/react-query';
 
 export type ExtendedLegacyWorkflowRunResult = LegacyWorkflowRunResult & {
@@ -22,12 +23,16 @@ export type ExtendedWorkflowWatchResult = WorkflowWatchResult & {
   } | null;
 };
 
-export const useWorkflow = (workflowId: string) => {
+export const useWorkflow = (workflowId: string, enabled = true) => {
   const client = useMastraClient();
+  const { runtimeContext } = usePlaygroundStore();
   return useQuery({
     queryKey: ['workflow', workflowId],
-    queryFn: () => client.getWorkflow(workflowId).details(),
+    queryFn: () => client.getWorkflow(workflowId).details(runtimeContext),
     retry: false,
+    refetchOnWindowFocus: false,
+    throwOnError: false,
+    enabled,
   });
 };
 
@@ -46,7 +51,8 @@ export const useLegacyWorkflow = (workflowId: string) => {
           setIsLoading(false);
           return;
         }
-        const res = await client.getLegacyWorkflow(workflowId).details();
+        const { runtimeContext } = usePlaygroundStore.getState();
+        const res = await client.getLegacyWorkflow(workflowId).details(runtimeContext);
         if (!res) {
           setLegacyWorkflow(null);
           console.error('Error fetching legacy workflow');
@@ -58,7 +64,7 @@ export const useLegacyWorkflow = (workflowId: string) => {
           Object.values(steps)?.map(async step => {
             if (!step.workflowId) return step;
 
-            const wFlow = await client.getLegacyWorkflow(step.workflowId).details();
+            const wFlow = await client.getLegacyWorkflow(step.workflowId).details(runtimeContext);
 
             if (!wFlow) return step;
 
