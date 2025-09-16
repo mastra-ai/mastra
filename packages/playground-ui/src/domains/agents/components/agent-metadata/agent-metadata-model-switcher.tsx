@@ -154,7 +154,23 @@ export const AgentMetadataModelSwitcher = ({
             <div className="relative w-[180px]">
               {!isSearching && currentModelProvider && (
                 <div className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none z-10">
-                  <ProviderLogo providerId={currentModelProvider} size={16} />
+                  <div className="relative">
+                    <ProviderLogo providerId={currentModelProvider} size={16} />
+                    {(() => {
+                      const provider = providers.find(p => p.id === currentModelProvider);
+                      if (provider) {
+                        return (
+                          <div
+                            className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
+                              provider.connected ? 'bg-green-500' : 'bg-red-500'
+                            }`}
+                            title={provider.connected ? 'Connected' : 'Not connected'}
+                          />
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
                 </div>
               )}
               <Input
