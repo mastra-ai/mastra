@@ -14,7 +14,7 @@ The `.network()` method enables multi-agent collaboration and routing. This meth
 ## Usage example
 
 ```typescript copy
-const networkStream = await agent.network(`
+await agent.network(`
   Find me the weather in Tokyo. 
   Based on the weather, plan an activity for me.
 `);
@@ -213,8 +213,23 @@ const networkStream = await agent.network(`
   content={[
     {
       name: "stream",
-      type: "ReadableStream<NetworkChunkType>",
-      description: "A stream that returns network chunks",
+      type: "MastraAgentNetworkStream<NetworkChunkType>",
+      description: "A custom stream that extends ReadableStream<NetworkChunkType> with additional network-specific properties",
+    },
+    {
+      name: "status",
+      type: "Promise<RunStatus>",
+      description: "A promise that resolves to the current workflow run status",
+    },
+    {
+      name: "result",
+      type: "Promise<WorkflowResult<TOutput, TSteps>>",
+      description: "A promise that resolves to the final workflow result",
+    },
+    {
+      name: "usage",
+      type: "Promise<{ promptTokens: number; completionTokens: number; totalTokens: number }>",
+      description: "A promise that resolves to token usage statistics",
     },
   ]}
 />
