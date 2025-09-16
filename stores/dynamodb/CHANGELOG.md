@@ -1,5 +1,14 @@
 # @mastra/dynamodb
 
+## 0.15.2-alpha.2
+
+### Patch Changes
+
+- Update package.json and README ([#7886](https://github.com/mastra-ai/mastra/pull/7886))
+
+- Updated dependencies [[`fb84c21`](https://github.com/mastra-ai/mastra/commit/fb84c21859d09bdc8f158bd5412bdc4b5835a61c), [`9d4fc09`](https://github.com/mastra-ai/mastra/commit/9d4fc09b2ad55caa7738c7ceb3a905e454f74cdd), [`d75ccf0`](https://github.com/mastra-ai/mastra/commit/d75ccf06dfd2582b916aa12624e3cd61b279edf1), [`0fed8f2`](https://github.com/mastra-ai/mastra/commit/0fed8f2aa84b167b3415ea6f8f70755775132c8d), [`87fd07f`](https://github.com/mastra-ai/mastra/commit/87fd07ff35387a38728967163460231b5d33ae3b)]:
+  - @mastra/core@0.17.0-alpha.4
+
 ## 0.15.2-alpha.1
 
 ### Patch Changes
