@@ -892,6 +892,9 @@ importers:
       '@clack/prompts':
         specifier: ^0.11.0
         version: 0.11.0
+      '@expo/devcert':
+        specifier: ^1.2.0
+        version: 1.2.0
       '@mastra/deployer':
         specifier: workspace:^
         version: link:../deployer
@@ -972,10 +975,10 @@ importers:
         version: 0.2.3
       zod:
         specifier: ^3.25.0 || ^4.0.0
-        version: 3.25.76
+        version: 4.1.5
       zod-to-json-schema:
         specifier: ^3.24.6
-        version: 3.24.6(zod@3.25.76)
+        version: 3.24.6(zod@4.1.5)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -6147,6 +6150,12 @@ packages:
   '@eslint/plugin-kit@0.3.5':
     resolution: {integrity: sha512-Z5kJ+wU3oA7MMIqVR9tyZRtjYPr4OC004Q4Rw7pgOKUOKkJfZ3O24nz3WYfGRpMDNmcOi3TwQOmgm7B7Tpii0w==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
+  '@expo/devcert@1.2.0':
+    resolution: {integrity: sha512-Uilcv3xGELD5t/b0eM4cxBFEKQRIivB3v7i+VhWLV/gL98aw810unLKKJbGAxAIhY6Ipyz8ChWibFsKFXYwstA==}
+
+  '@expo/sudo-prompt@9.3.2':
+    resolution: {integrity: sha512-HHQigo3rQWKMDzYDLkubN5WQOYXJJE2eNqIQC2axC2iO3mHdwnIR7FgZVvHWtBwAdzBgAP0ECp8KqS8TiMKvgw==}
 
   '@fastify/busboy@3.1.1':
     resolution: {integrity: sha512-5DGmA8FTdB2XbDeEwc/5ZXBl6UbBAyBOOLlPuBnZ/N1SwdH9Ii+cOX3tBROlDgcTXxjOYnLMVoKk9+FXAw0CJw==}
@@ -19694,6 +19703,16 @@ snapshots:
     dependencies:
       '@eslint/core': 0.15.2
       levn: 0.4.1
+
+  '@expo/devcert@1.2.0':
+    dependencies:
+      '@expo/sudo-prompt': 9.3.2
+      debug: 3.2.7
+      glob: 10.4.5
+    transitivePeerDependencies:
+      - supports-color
+
+  '@expo/sudo-prompt@9.3.2': {}
 
   '@fastify/busboy@3.1.1': {}
 
