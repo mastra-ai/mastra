@@ -903,7 +903,7 @@ importers:
         version: link:../mcp
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
-        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -1100,7 +1100,7 @@ importers:
         version: 1.9.0
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
-        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -2048,8 +2048,8 @@ importers:
         specifier: ^2.2.2
         version: 2.2.2
       swr:
-        specifier: ^2.3.4
-        version: 2.3.4(react@19.1.1)
+        specifier: ^2.3.6
+        version: 2.3.6(react@19.1.1)
       tailwind-merge:
         specifier: ^2.6.0
         version: 2.6.0
@@ -2289,8 +2289,8 @@ importers:
         specifier: ^2.2.2
         version: 2.2.2
       swr:
-        specifier: ^2.3.4
-        version: 2.3.4(react@19.1.1)
+        specifier: ^2.3.6
+        version: 2.3.6(react@19.1.1)
       tailwindcss-animate:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@20.19.14)(typescript@5.8.3)))
@@ -15418,8 +15418,8 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
-  swr@2.3.4:
-    resolution: {integrity: sha512-bYd2lrhc+VarcpkgWclcUi92wYCpOgMws9Sd1hG1ntAu0NEy+14CbotuFjshBU2kt9rYj9TSmDcybpxpeTU1fg==}
+  swr@2.3.6:
+    resolution: {integrity: sha512-wfHRmHWk/isGNMwlLGlZX5Gzz/uTgo0o2IRuTMcf4CPuPFJZlq0rDaKUx+ozB5nBOReNV1kiOyzMfj+MBMikLw==}
     peerDependencies:
       react: ^16.11.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
@@ -16660,7 +16660,7 @@ snapshots:
       '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
       '@ai-sdk/ui-utils': 1.2.11(zod@3.25.76)
       react: 19.1.1
-      swr: 2.3.4(react@19.1.1)
+      swr: 2.3.6(react@19.1.1)
       throttleit: 2.1.0
     optionalDependencies:
       zod: 3.25.76
@@ -16670,7 +16670,7 @@ snapshots:
       '@ai-sdk/provider-utils': 2.2.8(zod@4.1.5)
       '@ai-sdk/ui-utils': 1.2.11(zod@4.1.5)
       react: 19.1.1
-      swr: 2.3.4(react@19.1.1)
+      swr: 2.3.6(react@19.1.1)
       throttleit: 2.1.0
     optionalDependencies:
       zod: 4.1.5
@@ -19171,7 +19171,7 @@ snapshots:
       glob-to-regexp: 0.4.1
       js-cookie: 3.0.5
       std-env: 3.9.0
-      swr: 2.3.4(react@19.1.1)
+      swr: 2.3.6(react@19.1.1)
     optionalDependencies:
       react: 19.1.1
       react-dom: 19.1.1(react@19.1.1)
@@ -20473,7 +20473,7 @@ snapshots:
       '@ai-sdk/ui-utils': 1.2.11(zod@4.1.5)
       '@mastra/schema-compat': 0.11.2-alpha.3(ai@4.3.19(react@19.1.1)(zod@4.1.5))(zod@4.1.5)
       '@opentelemetry/api': 1.9.0
-      '@opentelemetry/auto-instrumentations-node': 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+      '@opentelemetry/auto-instrumentations-node': 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-grpc': 0.203.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-http': 0.203.0(@opentelemetry/api@1.9.0)
@@ -20894,7 +20894,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))':
+  '@opentelemetry/auto-instrumentations-node@0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -20943,7 +20943,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.3.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.10.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.3(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
       '@opentelemetry/resources': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.203.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -22024,7 +22024,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -30675,7 +30675,7 @@ snapshots:
       update-notifier: 7.0.0
       yargs: 17.7.2
 
-  swr@2.3.4(react@19.1.1):
+  swr@2.3.6(react@19.1.1):
     dependencies:
       dequal: 2.0.3
       react: 19.1.1
