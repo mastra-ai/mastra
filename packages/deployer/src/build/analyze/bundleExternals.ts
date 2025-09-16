@@ -4,6 +4,7 @@ import nodeResolve from '@rollup/plugin-node-resolve';
 import virtual from '@rollup/plugin-virtual';
 import esmShim from '@rollup/plugin-esm-shim';
 import { basename } from 'node:path/posix';
+import resolveFrom from 'resolve-from';
 import * as path from 'node:path';
 import { rollup, type OutputChunk, type OutputAsset, type Plugin } from 'rollup';
 import { esbuild } from '../plugins/esbuild';
@@ -48,14 +49,16 @@ export function createVirtualDependencies(
   const optimizedDependencyEntries = new Map<string, VirtualDependency>();
   const rootDir = workspaceRoot || projectRoot;
 
-  for (const [dep, { exports }] of depsToOptimize.entries()) {
+  for (const [dep, { exports, isWorkspace, rootPath }] of depsToOptimize.entries()) {
     const fileName = dep.replaceAll('/', '-');
     const virtualFile: string[] = [];
     const exportStringBuilder = [];
 
+    const importSource = isWorkspace && rootPath ? resolveFrom(rootPath, dep) : dep;
+
     for (const local of exports) {
       if (local === '*') {
-        virtualFile.push(`export * from '${dep}';`);
+        virtualFile.push(`export * from '${importSource}';`);
         continue;
       } else if (local === 'default') {
         exportStringBuilder.push('default');
@@ -69,7 +72,7 @@ export function createVirtualDependencies(
       chunks.push(`{ ${exportStringBuilder.join(', ')} }`);
     }
     if (chunks.length) {
-      virtualFile.push(`export ${chunks.join(', ')} from '${dep}';`);
+      virtualFile.push(`export ${chunks.join(', ')} from '${importSource}';`);
     }
 
     // Determine the entry name based on the complexity of exports
@@ -116,6 +119,7 @@ async function getInputPlugins(
   virtualDependencies: Map<string, { virtual: string; name: string }>,
   transpilePackages: Set<string>,
   rootDir: string,
+  depsToOptimize: Map<string, DependencyMetadata>,
   {
     enableEsmShim,
     isDev = false,
@@ -138,6 +142,12 @@ async function getInputPlugins(
       name: 'alias-optimized-deps',
       resolveId(id: string) {
         if (!virtualDependencies.has(id)) {
+          return null;
+        }
+
+        const depMeta = depsToOptimize.get(id);
+
+        if (depMeta?.isWorkspace) {
           return null;
         }
 
@@ -200,6 +210,7 @@ async function buildExternalDependencies(
     rootDir,
     outputDir,
     bundlerOptions,
+    depsToOptimize,
   }: {
     externals: string[];
     packagesToTranspile: Set<string>;
@@ -209,6 +220,7 @@ async function buildExternalDependencies(
       enableEsmShim: boolean;
       isDev: boolean;
     };
+    depsToOptimize: Map<string, DependencyMetadata>;
   },
 ) {
   /**
@@ -229,7 +241,7 @@ async function buildExternalDependencies(
     ),
     external: externals,
     treeshake: 'smallest',
-    plugins: getInputPlugins(virtualDependencies, packagesToTranspile, rootDir, bundlerOptions),
+    plugins: getInputPlugins(virtualDependencies, packagesToTranspile, rootDir, depsToOptimize, bundlerOptions),
   });
 
   const outputDirRelative = prepareEntryFileName(outputDir, rootDir);
@@ -327,6 +339,7 @@ export async function bundleExternals(
   const output = await buildExternalDependencies(optimizedDependencyEntries, {
     externals: allExternals,
     packagesToTranspile,
+    depsToOptimize,
     rootDir: workspaceRoot || projectRoot,
     outputDir,
     bundlerOptions: {
