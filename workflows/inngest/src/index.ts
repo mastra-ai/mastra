@@ -451,7 +451,7 @@ export class InngestWorkflow<
    * @deprecated Use createRunAsync() instead.
    * @throws {Error} Always throws an error directing users to use createRunAsync()
    */
-  createRun(options?: { runId?: string }): Run<TEngineType, TSteps, TInput, TOutput> {
+  createRun(_options?: { runId?: string }): Run<TEngineType, TSteps, TInput, TOutput> {
     throw new Error(
       'createRun() has been deprecated. ' +
         'Please use createRunAsync() instead.\n\n' +
