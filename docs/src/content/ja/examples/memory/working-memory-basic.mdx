@@ -1,0 +1,177 @@
+---
+title: "例: 基本的なワーキングメモリ | メモリ | Mastra ドキュメント"
+description: エージェントが会話のコンテキストを維持できるよう、基本的なワーキングメモリを有効にする方法を示す例。
+---
+
+
+
+# 基本的なワーキングメモリ
+
+ワーキングメモリを使うと、エージェントが重要な事実を覚え、ユーザー情報を把握し、会話全体の文脈を保てるようになります。
+
+ワーキングメモリは、`.stream()` を用いたストリーミング応答と、`.generate()` を用いた生成応答の両方で機能し、セッション間でデータを保持するために PostgreSQL、LibSQL、Redis などのストレージプロバイダーが必要です。
+
+この例では、エージェントでワーキングメモリを有効化し、同じスレッド内の複数のメッセージにまたがってそれを活用・参照する方法を示します。
+
+
+
+## 前提条件
+
+この例では `openai` モデルを使用します。`OPENAI_API_KEY` を `.env` ファイルに追加してください。
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+```
+
+次のパッケージをインストールしてください:
+
+```bash copy
+npm install @mastra/libsql
+```
+
+
+
+## エージェントにメモリを追加する
+
+エージェントに LibSQL のメモリを追加するには、`Memory` クラスを使用し、`LibSQLStore` を用いて `storage` インスタンスを渡します。`url` はリモートの場所またはローカルファイルを指せます。
+
+### ワーキングメモリの設定
+
+`workingMemory.enabled` を `true` に設定してワーキングメモリを有効にします。これにより、エージェントは過去の会話の情報を保持し、セッション間で構造化データを永続化できます。
+
+スレッドは関連するメッセージを個別の会話としてまとめます。`generateTitle` を有効にすると、各スレッドは内容に基づいて自動的に命名されます。
+
+```typescript filename="src/mastra/agents/example-working-memory-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const workingMemoryAgent = new Agent({
+  name: "working-memory-agent",
+  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:working-memory.db"
+    }),
+    options: {
+      workingMemory: {
+        enabled: true
+      },
+      threads: {
+        generateTitle: true
+      }
+    }
+  })
+});
+```
+
+
+
+## 使用例
+
+この例では、ワーキングメモリが有効なエージェントとのやり取り方法を示します。エージェントは、同じスレッド内の複数の対話で共有された情報を記憶します。
+
+### `.stream()` を使ったストリーミング応答
+
+この例では、同じスレッド内でエージェントに 2 件のメッセージを送信します。応答はストリーミングされ、最初のメッセージの内容を記憶した情報が含まれます。
+
+```typescript filename="src/test-working-memory-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("workingMemoryAgent");
+
+await agent.stream("My name is Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  }
+});
+
+const stream = await agent.stream("What do you know about me?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  }
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+### `.generate()` で応答を生成
+
+この例では、同じスレッド内でエージェントに 2 件のメッセージを送信します。応答は 1 件のメッセージとして返され、最初のメッセージの内容を記憶した情報が含まれます。
+
+```typescript filename="src/test-working-memory-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("workingMemoryAgent");
+
+await agent.generate("My name is Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  }
+});
+
+const response = await agent.generate("What do you know about me?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  }
+});
+
+console.log(response.text);
+```
+
+
+
+## 出力例
+
+この出力は、エージェントが記憶を用いて情報を想起したことを示しています。
+
+```text
+あなたの名前（ファーストネーム）が Mastra であることを把握しています。
+ほかに共有したいことや更新したいことがあれば、遠慮なくお知らせください。
+```
+
+
+
+## ストレージオブジェクトの例
+
+Working memory はデータを `.json` 形式で保存し、次のようになります:
+
+```json
+{
+  // ...
+  "toolInvocations": [
+    {
+      // ...
+      "args": {
+        "memory": "# User Information\n- **First Name**: Mastra\n-"
+      },
+    }
+  ],
+}
+```
+
+
+
+## 関連情報
+
+- [エージェントの呼び出し](../agents/calling-agents.mdx#from-the-command-line)
+- [エージェントのメモリ](../../docs/agents/agent-memory.mdx)
+- [サーバーレスのデプロイ](../../docs/deployment/server-deployment.mdx#libsqlstore)

@@ -87,7 +87,7 @@
     "typescript": "^5.8.3",
     "@types/node": "^20.17.57",
     "cookie": ">=0.7.2",
-    "tmp": ">=0.2.4"
+    "tmp": ">=0.2.5"
   },
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.12.4",

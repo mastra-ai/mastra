@@ -1,10 +1,11 @@
 {
   "name": "@mastra/s3vectors",
-  "version": "0.2.1",
+  "version": "0.2.2-alpha.0",
   "description": "Amazon S3 Vectors store provider for Mastra",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -46,6 +47,15 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.15.3-0 <0.17.0-0"
+    "@mastra/core": ">=0.15.3-0 <0.18.0-0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "stores/s3vectors"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

@@ -1,4 +1,3 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import {
   AnthropicSchemaCompatLayer,
   applyCompatLayer,
@@ -21,24 +20,50 @@ import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { OutputSchema } from '../../stream/base/schema';
+import type { ModelManagerModelConfig } from '../../stream/types';
 import { delay } from '../../utils';
 
 import type { ModelLoopStreamArgs } from './model.loop.types';
+import type { MastraModelOptions } from './shared.types';
 
 export class MastraLLMVNext extends MastraBase {
-  #model: LanguageModelV2;
+  #models: ModelManagerModelConfig[];
   #mastra?: Mastra;
+  #options?: MastraModelOptions;
+  #firstModel: ModelManagerModelConfig;
 
-  constructor({ model, mastra }: { model: LanguageModelV2; mastra?: Mastra }) {
+  constructor({
+    mastra,
+    models,
+    options,
+  }: {
+    mastra?: Mastra;
+    models: ModelManagerModelConfig[];
+    options?: MastraModelOptions;
+  }) {
     super({ name: 'aisdk' });
 
-    this.#model = model;
+    this.#options = options;
 
     if (mastra) {
       this.#mastra = mastra;
       if (mastra.getLogger()) {
         this.__setLogger(this.#mastra.getLogger());
       }
+    }
+
+    if (models.length === 0 || !models[0]) {
+      const mastraError = new MastraError({
+        id: 'LLM_LOOP_MODELS_EMPTY',
+        domain: ErrorDomain.LLM,
+        category: ErrorCategory.USER,
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
+    } else {
+      this.#models = models;
+      this.#firstModel = models[0];
     }
   }
 
@@ -57,19 +82,19 @@ export class MastraLLMVNext extends MastraBase {
   }
 
   getProvider() {
-    return this.#model.provider;
+    return this.#firstModel.model.provider;
   }
 
   getModelId() {
-    return this.#model.modelId;
+    return this.#firstModel.model.modelId;
   }
 
   getModel() {
-    return this.#model;
+    return this.#firstModel.model;
   }
 
   private _applySchemaCompat(schema: OutputSchema): Schema {
-    const model = this.#model;
+    const model = this.#firstModel.model;
 
     const schemaCompatLayers = [];
 
@@ -147,7 +172,7 @@ export class MastraLLMVNext extends MastraBase {
 
     const messages = messageList.get.all.aiV5.model();
 
-    const model = this.#model;
+    const firstModel = this.#firstModel.model;
     this.logger.debug(`[LLM] - Streaming text`, {
       runId,
       threadId,
@@ -157,14 +182,14 @@ export class MastraLLMVNext extends MastraBase {
     });
 
     const llmAISpan = tracingContext?.currentSpan?.createChildSpan({
-      name: `llm: '${model.modelId}'`,
+      name: `llm: '${firstModel.modelId}'`,
       type: AISpanType.LLM_GENERATION,
       input: {
         messages: [...messageList.getSystemMessages(), ...messages],
       },
       attributes: {
-        model: model.modelId,
-        provider: model.provider,
+        model: firstModel.modelId,
+        provider: firstModel.provider,
         streaming: true,
         parameters: modelSettings,
       },
@@ -173,13 +198,13 @@ export class MastraLLMVNext extends MastraBase {
         threadId,
         resourceId,
       },
-      isInternal: false,
+      tracingPolicy: this.#options?.tracingPolicy,
     });
 
     try {
       const loopOptions: LoopOptions<Tools, OUTPUT> = {
         messageList,
-        model: this.#model,
+        models: this.#models,
         tools: tools as Tools,
         stopWhen: stopWhenToUse,
         toolChoice,
@@ -206,8 +231,8 @@ export class MastraLLMVNext extends MastraBase {
                   domain: ErrorDomain.LLM,
                   category: ErrorCategory.USER,
                   details: {
-                    modelId: model.modelId,
-                    modelProvider: model.provider,
+                    modelId: props.model.modelId,
+                    modelProvider: props.model.provider,
                     runId: runId ?? 'unknown',
                     threadId: threadId ?? 'unknown',
                     resourceId: resourceId ?? 'unknown',
@@ -252,8 +277,8 @@ export class MastraLLMVNext extends MastraBase {
                   domain: ErrorDomain.LLM,
                   category: ErrorCategory.USER,
                   details: {
-                    modelId: model.modelId,
-                    modelProvider: model.provider,
+                    modelId: props.model.modelId,
+                    modelProvider: props.model.provider,
                     runId: runId ?? 'unknown',
                     threadId: threadId ?? 'unknown',
                     resourceId: resourceId ?? 'unknown',
@@ -311,8 +336,8 @@ export class MastraLLMVNext extends MastraBase {
           domain: ErrorDomain.LLM,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            modelId: model.modelId,
-            modelProvider: model.provider,
+            modelId: firstModel.modelId,
+            modelProvider: firstModel.provider,
             runId: runId ?? 'unknown',
             threadId: threadId ?? 'unknown',
             resourceId: resourceId ?? 'unknown',

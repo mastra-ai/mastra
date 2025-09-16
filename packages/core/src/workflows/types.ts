@@ -1,6 +1,6 @@
 import type { TextStreamPart } from 'ai';
 import type { z } from 'zod';
-import type { TracingProperties } from '../ai-tracing';
+import type { TracingPolicy, TracingProperties } from '../ai-tracing';
 import type { Mastra } from '../mastra';
 import type { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
@@ -274,6 +274,10 @@ export interface WorkflowRunState {
   timestamp: number;
 }
 
+export interface WorkflowOptions {
+  tracingPolicy?: TracingPolicy;
+}
+
 export type WorkflowInfo = {
   steps: Record<string, SerializedStep>;
   allSteps: Record<string, SerializedStep>;
@@ -282,6 +286,7 @@ export type WorkflowInfo = {
   stepGraph: SerializedStepFlowEntry[];
   inputSchema: string | undefined;
   outputSchema: string | undefined;
+  options?: WorkflowOptions;
 };
 
 export type DefaultEngineType = {};
@@ -437,4 +442,5 @@ export type WorkflowConfig<
     attempts?: number;
     delay?: number;
   };
+  options?: WorkflowOptions;
 };

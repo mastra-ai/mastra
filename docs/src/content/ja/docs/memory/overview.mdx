@@ -1,128 +1,233 @@
+---
+title: "メモリの概要 | メモリ | Mastra ドキュメント"
+description: "Mastra のメモリシステムが、ワーキングメモリ、会話履歴、セマンティックリコールによってどのように機能するかを学ぶ。"
+---
+
+import { Steps, Callout } from "nextra/components";
+
+
 # メモリの概要
 
-メモリは、エージェントが利用可能なコンテキストを管理する方法であり、すべてのチャットメッセージをコンテキストウィンドウに凝縮したものです。
+Mastra におけるメモリは、関連情報を要約して言語モデルのコンテキストウィンドウに取り込むことで、会話をまたいだコンテキスト管理を支援します。
 
-## コンテキストウィンドウ
+Mastra は、相互補完する3つのメモリシステムをサポートします: [ワーキングメモリ](./working-memory.mdx)、[会話履歴](#conversation-history)、[セマンティックリコール](./semantic-recall.mdx)。これらを組み合わせることで、エージェントはユーザーの嗜好を把握し、会話の流れを維持し、関連する過去メッセージを取得できます。
 
-コンテキストウィンドウは、言語モデルが任意の時点で見ることができる情報の総量です。
+会話間で情報を保存・想起するには、メモリにストレージアダプタが必要です。
 
-Mastraでは、コンテキストは3つの部分に分かれています：システム指示とユーザーに関する情報（[ワーキングメモリ](./working-memory.mdx)）、最近のメッセージ（[メッセージ履歴](#conversation-history)）、そしてユーザーのクエリに関連する古いメッセージ（[セマンティック検索](./semantic-recall.mdx)）です。
+サポートされているオプションは次のとおりです:
 
-さらに、コンテキストが長すぎる場合にコンテキストをトリミングしたり情報を削除したりするための[メモリプロセッサ](./memory-processors.mdx)も提供しています。
+- [LibSQL を用いたメモリ](/examples/memory/memory-with-libsql)
+- [Postgres を用いたメモリ](/examples/memory/memory-with-pg)
+- [Upstash を用いたメモリ](/examples/memory/memory-with-upstash)
 
-## クイックスタート
+## メモリの種類
 
-メモリを動作させる最速の方法は、組み込みの開発プレイグラウンドを使用することです。
+すべてのメモリタイプは、デフォルトでは[スレッドスコープ](./working-memory.mdx#thread-scoped-memory-default)で、単一の会話にのみ適用されます。[リソーススコープ](./working-memory.mdx#resource-scoped-memory)の設定にすると、同じユーザーまたはエンティティを用いるすべてのスレッド間で、ワーキングメモリとセマンティックリコールを持続させられます。
 
-まだ行っていない場合は、メインの[使い方ガイド](/docs/getting-started/installation)に従って新しいMastraプロジェクトを作成してください。
+### ワーキングメモリ
 
-**1. メモリパッケージをインストールします：**
+ユーザーごとの名前、好み、目標、その他の構造化データなどの詳細を永続的に保存します。構造の定義には [Markdown テンプレート](./working-memory-template.mdx) または [Zod スキーマ](./working-memory-schema.mdx) を使用します。
 
-```bash npm2yarn copy
-npm install @mastra/memory@latest
+### 会話履歴
+
+現在の会話で直近のメッセージを取り込み、短期的な一貫性を確保して対話の流れを維持します。
+
+### セマンティックリコール
+
+意味的な関連性に基づいて、過去の会話から古いメッセージを取得します。ベクトル検索で一致を見つけ、理解を深めるために周辺の文脈も含めることができます。
+
+## メモリはどのように連携するか
+
+Mastra は、すべてのメモリ種別を単一のコンテキストウィンドウにまとめます。合計がモデルのトークン上限を超える場合は、モデルに送信する前にメッセージをトリミングまたはフィルタリングするために、[memory processors](./memory-processors.mdx) を使用してください。
+
+## はじめに
+
+Memory を使用するには、必要な依存関係をインストールしてください:
+
+```bash copy
+npm install @mastra/core @mastra/memory @mastra/libsql
 ```
 
-**2. エージェントを作成し、`Memory`インスタンスを接続します：**
+### 共有ストレージ
 
-```typescript filename="src/mastra/agents/index.ts" {6-18}
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { openai } from "@ai-sdk/openai";
+エージェント間でメモリを共有するには、Mastra のメインインスタンスにストレージアダプターを追加します。メモリが有効なエージェントは、この共有ストレージを使って対話を保存・参照します。
+
+```typescript {6-8} filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
 import { LibSQLStore } from "@mastra/libsql";
 
-// Initialize memory with LibSQLStore for persistence
-const memory = new Memory({
+export const mastra = new Mastra({
+  // ...
   storage: new LibSQLStore({
-    url: "file:../mastra.db", // Or your database URL
-  }),
-});
-
-export const myMemoryAgent = new Agent({
-  name: "MemoryAgent",
-  instructions: "...",
-  model: openai("gpt-4o"),
-  memory,
+    url: ":memory:"
+  })
 });
 ```
 
-**3. 開発サーバーを起動します：**
+### エージェントにワーキングメモリを追加する
 
-```bash npm2yarn copy
-npm run dev
+エージェントの `memory` パラメータに `Memory` インスタンスを渡し、`workingMemory.enabled` を `true` に設定してワーキングメモリを有効にします:
+
+```typescript {1,6-12} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+export const testAgent = new Agent({
+  // ..
+  memory: new Memory({
+    options: {
+      workingMemory: {
+        enabled: true
+      }
+    }
+  })
+})
 ```
 
-**4. プレイグラウンド（http://localhost:4111）を開き、`MemoryAgent`を選択します：**
+## 専用ストレージ
 
-いくつかのメッセージを送信して、ターン間で情報を記憶していることを確認してください：
+エージェントごとに専用のストレージを設定でき、タスク、会話、想起した情報をエージェント間で分離して保持できます。
 
-```
-➡️ あなた：私の好きな色は青です。
-⬅️ エージェント：了解しました！あなたの好きな色は青であることを覚えておきます。
-➡️ あなた：私の好きな色は何ですか？
-⬅️ エージェント：あなたの好きな色は青です。
-```
+### エージェントにストレージを追加する
 
-## メモリースレッド
+エージェントに専用ストレージを割り当てるには、必要な依存関係をインストールしてインポートし、`Memory` コンストラクタに `storage` インスタンスを渡します:
 
-Mastraはメモリーをスレッドに整理します。スレッドは特定の会話履歴を識別する記録であり、次の2つの識別子を使用します：
-
-1.  **`threadId`**: 特定の会話ID（例：`support_123`）。
-2.  **`resourceId`**: 各スレッドを所有するユーザーまたはエンティティID（例：`user_123`、`org_456`）。
-
-```typescript {2,3}
-const response = await myMemoryAgent.stream("Hello, my name is Alice.", {
-  resourceId: "user_alice",
-  threadId: "conversation_123",
-});
-```
-
-**重要:** これらのIDがなければ、メモリーが適切に設定されていても、エージェントはメモリーを使用しません。プレイグラウンドではこれが自動的に処理されますが、アプリケーションでメモリーを使用する場合は自分でIDを追加する必要があります。
-
-## 会話履歴
-
-デフォルトでは、`Memory`インスタンスは現在のMemoryスレッドからの[最新40メッセージ](../../reference/memory/Memory.mdx)を各新規リクエストに含めます。これにより、エージェントに即時の会話コンテキストが提供されます。
-
-```ts {3}
-const memory = new Memory({
-  options: {
-    lastMessages: 10,
-  },
-});
-```
-
-**重要:** 各エージェント呼び出しでは、最新のユーザーメッセージのみを送信してください。Mastraは必要な履歴の取得と注入を処理します。履歴全体を自分で送信すると重複が発生します。`useChat`フロントエンドフックを使用する場合の処理方法については、[AI SDK Memoryの例](../../examples/memory/use-chat.mdx)を参照してください。
-
-### ストレージ設定
-
-会話履歴はメッセージを保存するために[ストレージアダプター](/reference/memory/Memory#parameters)に依存しています。
-デフォルトでは、[メインのMastraインスタンス](https://mastra.ai/reference/core/mastra-class#initialization)に提供されたものと同じストレージを使用します。
-
-`Memory`インスタンスも`Mastra`オブジェクトもストレージプロバイダーを指定していない場合、Mastraは自動的に小さなローカル`LibSQLStore`（`file:memory.db`）を作成します。この*デフォルトストレージ*により、ローカルでMemoryを試すのが非常に簡単になります。データはページの更新後も残りますが、サーバープロセスが再起動したり、一時的な環境にデプロイしたりすると消えてしまいます。ローカルテスト以外のデプロイメントでは、`Mastra`または`new Memory()`内で直接独自のストレージ設定を提供する必要があります。
-
-`Mastra`インスタンスに`storage`が指定されている場合、それはエージェントに接続されているすべての`Memory`によって自動的に使用されます。その場合、エージェントごとのオーバーライドが必要でない限り、`new Memory()`に`storage`を渡す必要はありません。
-
-```ts {7-9}
+```typescript {3, 9-11} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 import { LibSQLStore } from "@mastra/libsql";
 
-const agent = new Agent({
+export const testAgent = new Agent({
+  // ...
   memory: new Memory({
+    // ...
     storage: new LibSQLStore({
-      url: "file:./local.db",
-    }),
-  }),
+      url: "file:agent-memory.db"
+    })
+  // ...
+  })
 });
 ```
 
-**ストレージコードの例**:
+## メモリスレッド
 
-- [LibSQL](/examples/memory/memory-with-libsql)
-- [Postgres](/examples/memory/memory-with-pg)
-- [Upstash](/examples/memory/memory-with-upstash)
+Mastra は関連するやり取りをまとめる記録単位としてメモリをスレッドに編成し、次の2つの識別子を使用します：
+
+1. **`thread`**: 会話を表すグローバルに一意な ID（例：`support_123`）。すべてのリソースにまたがって一意である必要があります。
+2. **`resource`**: そのスレッドの所有者であるユーザーまたはエンティティ（例：`user_123`、`org_456`）。
+
+`resource` は特に [resource-scoped memory](./working-memory.mdx#resource-scoped-memory) で重要で、同一のユーザーまたはエンティティに紐づくすべてのスレッド間でメモリを永続化できます。
+
+```typescript {4} showLineNumbers
+const stream = await agent.stream("message for agent", {
+  memory: {
+    thread: "user-123",
+    resource: "test-123"
+  }
+});
+```
+
+<Callout type="warning">
+メモリを構成していても、`thread` と `resource` の両方が指定されない限り、エージェントは情報を保存・参照しません。
+</Callout>
+
+> Mastra Playground は `thread` と `resource` の ID を自動的に設定します。独自のアプリケーションでは、各 `.generate()` または `.stream()` 呼び出しで手動指定する必要があります。
+
+### スレッドタイトルの生成
+
+Mastra はユーザーの最初のメッセージに基づいて、わかりやすいスレッドタイトルを自動生成できます。これを有効にするには、`generateTitle` を `true` に設定します。これにより整理しやすくなり、UI 上で会話を表示しやすくなります。
+
+```typescript {3-7} showLineNumbers
+export const testAgent = new Agent({
+  memory: new Memory({
+    options: {
+      threads: {
+        generateTitle: true,
+      }
+    },
+  })
+});
+```
+
+> タイトル生成はエージェントの応答後に非同期で実行され、応答時間には影響しません。詳細と例は [設定リファレンスの全文](../../reference/memory/Memory.mdx#thread-title-generation) を参照してください。
+
+#### タイトル生成の最適化
+
+デフォルトでは、タイトルはエージェントのモデルで生成されます。コストや挙動を最適化するには、より軽量な `model` とカスタムの `instructions` を指定してください。これにより、タイトル生成をメインの会話ロジックから分離できます。
+
+```typescript {5-9} showLineNumbers
+export const testAgent = new Agent({
+  // ...
+  memory: new Memory({
+    options: {
+      threads: {
+        generateTitle: {
+          model: openai("gpt-4.1-nano"),
+          instructions: "Generate a concise title based on the user's first message",
+        },
+      },
+    }
+  })
+});
+```
+
+#### 動的なモデル選択と指示文
+
+`model` と `instructions` に関数を渡すことで、スレッドタイトルの生成を動的に設定できます。これらの関数は `runtimeContext` オブジェクトを受け取り、ユーザー固有の値に応じてタイトル生成を調整できます。
+
+```typescript {7-16} showLineNumbers
+export const testAgent = new Agent({
+  // ...
+  memory: new Memory({
+    options: {
+      threads: {
+        generateTitle: {
+          model: ({ runtimeContext }) => {
+            const userTier = runtimeContext.get("userTier");
+            return userTier === "premium" ? openai("gpt-4.1") : openai("gpt-4.1-nano");
+          },
+          instructions: ({ runtimeContext }) => {
+            const language = runtimeContext.get("userLanguage") || "English";
+            return `ユーザーの最初のメッセージに基づき、${language} で簡潔かつ魅力的なタイトルを生成してください。`;
+          }
+        }
+      }
+    }
+  })
+});
+```
+
+## 会話履歴の拡張
+
+デフォルトでは、各リクエストには現在のメモリスレッドから直近10件のメッセージが含まれ、エージェントに短期的な会話コンテキストを提供します。この上限は `lastMessages` パラメータで増やせます。
+
+```typescript {3-7} showLineNumbers
+export const testAgent = new Agent({
+  // ...
+  memory: new Memory({
+    options: {
+      lastMessages: 100
+    },
+  })
+});
+```
+
+## 取得されたメッセージの表示
+
+Mastra のデプロイメントでトレースが有効になっており、メモリが `lastMessages` や/または `semanticRecall` で設定されている場合、エージェントのトレース出力にはコンテキスト用に取得されたすべてのメッセージが表示されます。これには、直近の会話履歴と、semantic recall によって想起されたメッセージの両方が含まれます。
+
+これは、デバッグ、エージェントの意思決定の把握、そして各リクエストに対してエージェントが適切な情報を取得できているかの検証に役立ちます。
+
+トレースの有効化と設定方法の詳細については、[Tracing](../observability/tracing) を参照してください。
+
+## LibSQL を使ったローカル開発
+
+`LibSQLStore` を用いたローカル開発では、VS Code の拡張機能 [SQLite Viewer](https://marketplace.visualstudio.com/items?itemName=qwtel.sqlite-viewer) を使って、保存されたメモリを確認できます。
+
+![SQLite Viewer](/image/memory/memory-sqlite-viewer.jpg)
 
 ## 次のステップ
 
-コアコンセプトを理解したところで、[セマンティック検索](./semantic-recall.mdx)に進んで、MastraエージェントにRAGメモリを追加する方法を学びましょう。
+コア概念を理解したら、[semantic recall](./semantic-recall.mdx) に進み、Mastra エージェントに RAG メモリを追加する方法を学びましょう。
 
-あるいは、利用可能なオプションについては[設定リファレンス](../../reference/memory/Memory.mdx)を参照するか、[使用例](../../examples/memory/use-chat.mdx)を閲覧することもできます。
+また、利用可能なオプションについては [configuration reference](../../reference/memory/Memory.mdx) を参照してください。

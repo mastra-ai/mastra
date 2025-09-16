@@ -1,0 +1,108 @@
+---
+title: "例: エージェントにワークフローを追加する | Agents | Mastra Docs"
+description: Mastraで、専用ワークフローを用いてサッカーの試合日程情報を提供するAIエージェントを作成する例。
+---
+
+
+
+# ワークフローの追加
+
+AIエージェントを構築する際には、複数のステップからなるタスクを実行したり、構造化データを取得したりするワークフローと組み合わせると便利です。Mastra では、`workflows` パラメータを使ってワークフローをエージェントに渡せます。ワークフローは、エージェントがあらかじめ定義された手順の一連の流れを起動できるようにし、単一のツールでは提供できない、より複雑な処理にアクセスできるようにします。
+
+
+
+## 前提条件
+
+この例では `openai` モデルを使用します。`OPENAI_API_KEY` を `.env` ファイルに追加してください。
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+```
+
+
+
+## ワークフローの作成
+
+このワークフローは、指定した日付のイングランド・プレミアリーグ（English Premier League）の試合日程を取得します。入力・出力スキーマを明確にすることで、データの予測可能性が高まり、エージェントが扱いやすくなります。
+
+```typescript filename="src/mastra/workflows/example-soccer-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const getFixtures = createStep({
+  id: "get-fixtures",
+  description: "Fetch match fixtures English Premier League matches",
+  inputSchema: z.object({
+    date: z.string()
+  }),
+  outputSchema: z.object({
+    fixtures: z.any()
+  }),
+  execute: async ({ inputData }) => {
+    const { date } = inputData;
+
+    const response = await fetch(`https://www.thesportsdb.com/api/v1/json/123/eventsday.php?d=${date}&l=English_Premier_League`);
+    const { events } = await response.json();
+
+    return {
+      fixtures: events
+    };
+  }
+});
+
+export const soccerWorkflow = createWorkflow({
+  id: "soccer-workflow",
+  inputSchema: z.object({
+    date: z.string()
+  }),
+  outputSchema: z.object({
+    fixtures: z.any()
+  })
+})
+  .then(getFixtures)
+  .commit();
+```
+
+
+
+
+## エージェントにワークフローを追加する
+
+このエージェントは、試合日程に関する質問に回答するために `soccerWorkflow` を使用します。指示では、日付を算出し、`YYYY-MM-DD` 形式でワークフローに渡し、チーム名・試合開始時刻・日付のみを返すように求めています。
+
+```typescript filename="src/mastra/agents/example-soccer-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+import { soccerWorkflow } from "../workflows/example-soccer-workflow";
+
+export const soccerAgent = new Agent({
+  name: "soccer-agent",
+  description: "A premier league soccer specialist",
+  instructions: `You are a premier league soccer specialist. Use the soccerWorkflow to fetch match data.
+
+  Calculate dates from ${new Date()} and pass to workflow in YYYY-MM-DD format.
+
+  Only show team names, match times, and dates.`,
+  model: openai("gpt-4o"),
+  workflows: { soccerWorkflow }
+});
+```
+
+
+
+## 使用例
+
+`getAgent()` でエージェントへの参照を取得し、プロンプトを渡して `generate()` を呼び出します。
+
+```typescript filename="src/test-soccer-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("soccerAgent");
+
+const response = await agent.generate("What matches are being played this weekend?");
+
+console.log(response.text);
+```

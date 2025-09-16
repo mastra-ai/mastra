@@ -1,0 +1,142 @@
+---
+title: "リファレンス: Context Precision Scorer | Scorers | Mastra ドキュメント"
+description: Mastra における Context Precision Scorer のドキュメント。平均適合率（Mean Average Precision）を用いて、期待される出力の生成に向けて取得されたコンテキストの関連性と精度を評価します。
+---
+
+import { PropertiesTable } from "@/components/properties-table";
+
+
+
+# コンテキスト適合度スコアラー
+
+`createContextPrecisionScorer()` 関数は、期待される出力の生成に対して、取得されたコンテキスト断片がどれだけ関連性が高く、どれだけ適切な位置にあるかを評価するスコアラーを作成します。これは、関連するコンテキストをシーケンスの早い位置に配置するシステムを高く評価するために、**平均適合率（MAP）** を使用します。
+
+
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraLanguageModel",
+      description: "コンテキストの関連性を評価するために使用する言語モデル",
+      required: true,
+    },
+    {
+      name: "options",
+      type: "ContextPrecisionMetricOptions",
+      description: "スコアリングの構成オプション",
+      required: true,
+      children: [
+        {
+          name: "context",
+          type: "string[]",
+          description: "関連性を評価する対象となるコンテキスト片の配列",
+          required: false,
+        },
+        {
+          name: "contextExtractor",
+          type: "(input, output) => string[]",
+          description: "実行時の入力と出力からコンテキストを動的に抽出する関数",
+          required: false,
+        },
+        {
+          name: "scale",
+          type: "number",
+          description: "最終スコアに乗算するスケール係数（既定値: 1）",
+          required: false,
+        },
+      ],
+    },
+  ]}
+/>
+
+:::note
+`context` または `contextExtractor` のいずれかを必ず指定してください。両方が指定された場合は `contextExtractor` が優先されます。
+:::
+
+
+
+## .run() の戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "0 からスケール上限（既定は 0〜1）までの平均適合率（Mean Average Precision）のスコア",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "コンテキストの精度評価に関する、人間が読める説明",
+    },
+  ]}
+/>
+
+
+
+## スコアの詳細
+
+### 平均適合率（MAP）
+
+Context Precision は、関連性と順位の両面を評価するために**平均適合率**を用います:
+
+1. **コンテキスト評価**: 各コンテキスト断片が、期待される出力の生成に関連するか否かを分類する
+2. **適合率の計算**: 位置 `i` にある関連コンテキストについて、precision = `relevant_items_so_far / (i + 1)`
+3. **平均適合率**: すべての適合率を合計し、関連項目の総数で割る
+4. **最終スコア**: スケール係数を掛けて小数第2位に丸める
+
+### スコアの式
+
+```
+MAP = (Σ Precision@k) / R
+
+Where:
+- Precision@k = (relevant items in positions 1...k) / k
+- R = total number of relevant items
+- Only calculated at positions where relevant items appear
+```
+
+### スコアの解釈
+
+- **1.0** = 完全な適合（関連コンテキストがすべて先に出現）
+- **0.5-0.9** = 一部の関連コンテキストが適切に上位に配置されている良好な適合
+- **0.1-0.4** = 関連コンテキストが埋もれている／散在している不十分な適合
+- **0.0** = 関連コンテキストが見つからない
+
+### 計算例
+
+与えられたコンテキスト: `[relevant, irrelevant, relevant, irrelevant]`
+
+- 位置 0: 関連 → Precision = 1/1 = 1.0
+- 位置 1: スキップ（irrelevant）
+- 位置 2: 関連 → Precision = 2/3 = 0.67
+- 位置 3: スキップ（irrelevant）
+
+MAP = (1.0 + 0.67) / 2 = 0.835 ≈ **0.83**
+
+
+
+## 使用パターン
+
+### RAG システムの評価
+次のような状況で、RAG パイプラインで取得したコンテキストの評価に最適です:
+- モデル性能にコンテキストの並び順が影響する場合
+- 単純な関連度評価を超えて、検索（取得）の品質を測る必要がある場合
+- 後段の関連コンテキストよりも、先に提示される関連コンテキストの方が価値が高い場合
+
+### コンテキストウィンドウの最適化
+次のような条件下でコンテキスト選択を最適化する際に使用します:
+- コンテキストウィンドウが限られている場合
+- トークン予算に制約がある場合  
+- マルチステップの推論タスク
+
+
+
+## 関連
+
+- [Answer Relevancy Scorer](/reference/scorers/answer-relevancy) - 回答が質問に適切に対応しているかを評価します
+- [Faithfulness Scorer](/reference/scorers/faithfulness) - 文脈に基づいた回答の忠実性を測定します
+- [Custom Scorers](/docs/scorers/custom-scorers) - 独自の評価指標を作成する

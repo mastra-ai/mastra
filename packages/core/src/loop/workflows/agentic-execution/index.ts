@@ -1,4 +1,5 @@
 import type { ToolSet } from 'ai-v5';
+import { InternalSpans } from '../../../ai-tracing';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createWorkflow } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
@@ -11,9 +12,9 @@ import { createToolCallStep } from './tool-call-step';
 export function createAgenticExecutionWorkflow<
   Tools extends ToolSet = ToolSet,
   OUTPUT extends OutputSchema | undefined = undefined,
->({ model, telemetry_settings, _internal, modelStreamSpan, ...rest }: OuterLLMRun<Tools, OUTPUT>) {
+>({ models, telemetry_settings, _internal, modelStreamSpan, ...rest }: OuterLLMRun<Tools, OUTPUT>) {
   const llmExecutionStep = createLLMExecutionStep({
-    model,
+    models,
     _internal,
     modelStreamSpan,
     telemetry_settings,
@@ -21,7 +22,7 @@ export function createAgenticExecutionWorkflow<
   });
 
   const toolCallStep = createToolCallStep({
-    model,
+    models,
     telemetry_settings,
     _internal,
     modelStreamSpan,
@@ -30,7 +31,7 @@ export function createAgenticExecutionWorkflow<
 
   const llmMappingStep = createLLMMappingStep(
     {
-      model,
+      models,
       telemetry_settings,
       _internal,
       modelStreamSpan,
@@ -43,6 +44,13 @@ export function createAgenticExecutionWorkflow<
     id: 'executionWorkflow',
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
+    options: {
+      tracingPolicy: {
+        // mark all workflow spans related to the
+        // VNext execution as internal
+        internal: InternalSpans.WORKFLOW,
+      },
+    },
   })
     .then(llmExecutionStep)
     .map(async ({ inputData }) => {

@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.13.0-alpha.1
+
+### Patch Changes
+
+- Update peerdep of @mastra/core ([#7619](https://github.com/mastra-ai/mastra/pull/7619))
+
 ## 0.12.4-alpha.0
 
 ### Patch Changes

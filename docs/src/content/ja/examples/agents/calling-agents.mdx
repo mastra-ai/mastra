@@ -1,0 +1,144 @@
+---
+title: "エージェントの呼び出し | Agents | Mastra Docs"
+description: エージェントを呼び出す方法の例
+---
+
+
+
+# エージェントの呼び出し
+
+Mastra で作成したエージェントとやり取りする方法はいくつかあります。以下では、ワークフローのステップ、ツール、[Mastra Client SDK](../../docs/server-db/mastra-client.mdx)、そしてローカルで手早くテストするためのコマンドラインを使ってエージェントを呼び出す例を紹介します。
+
+このページでは、[システムプロンプトの変更](./system-prompt.mdx)の例で説明している `harryPotterAgent` の呼び出し方を示します。
+
+
+
+## ワークフローのステップから
+
+`mastra` インスタンスは、ワークフローのステップにある `execute` 関数へ引数として渡されます。`getAgent()` を使って登録済みのエージェントにアクセスできます。このメソッドでエージェントを取得し、続けてプロンプトを渡して `generate()` を呼び出してください。
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  // ...
+  execute: async ({ mastra }) => {
+
+    const agent = mastra.getAgent("harryPotterAgent");
+    const response = await agent.generate("What is your favorite room in Hogwarts?");
+
+    console.log(response.text);
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .then(step1)
+  .commit();
+```
+
+
+
+## ツールから
+
+`mastra` インスタンスはツールの `execute` 関数内で利用できます。`getAgent()` で登録済みのエージェントを取得し、プロンプトを渡して `generate()` を呼び出します。
+
+```typescript filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const testTool = createTool({
+  // ...
+  execute: async ({ mastra }) => {
+
+    const agent = mastra.getAgent("harryPotterAgent");
+    const response = await agent.generate("What is your favorite room in Hogwarts?");
+
+    console.log(response!.text);
+  }
+});
+```
+
+
+
+## Mastra Client から
+
+`mastraClient` インスタンスは、登録済みのエージェントへアクセスできます。`getAgent()` でエージェントを取得し、role と content のペアを含む `messages` 配列を持つオブジェクトを渡して `generate()` を呼び出します。
+
+```typescript showLineNumbers copy
+import { mastraClient } from "../lib/mastra-client";
+
+const agent = mastraClient.getAgent("harryPotterAgent");
+const response = await agent.generate({
+  messages: [
+    {
+      role: "user",
+      content: "What is your favorite room in Hogwarts?"
+    }
+  ]
+});
+
+console.log(response.text);
+```
+
+> 詳細は [Mastra Client SDK](../../docs/server-db/mastra-client.mdx) をご覧ください。
+
+
+
+## コマンドラインから
+
+ローカルでエージェントをテストするための簡単なスクリプトを作成できます。`mastra` インスタンスでは、`getAgent()` を使って登録済みのエージェントにアクセスできます。
+
+モデルが環境変数（`OPENAI_API_KEY` など）にアクセスできるよう、`dotenv` をインストールし、スクリプトの先頭でインポートしてください。
+
+```typescript filename="src/test-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("harryPotterAgent");
+const response = await agent.generate("What is your favorite room in Hogwarts?");
+
+console.log(response.text);
+```
+
+### スクリプトを実行する
+
+次のコマンドを使って、コマンドラインからこのスクリプトを実行します:
+
+```bash
+npx tsx src/test-agent.ts
+```
+
+
+
+## curl から
+
+登録済みのエージェントとは、Mastra アプリケーションの `/generate` エンドポイントに `POST` リクエストを送信してやり取りできます。`messages` 配列に role/content のペアを含めてください。
+
+```bash
+curl -X POST http://localhost:4111/api/agents/harryPotterAgent/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is your favorite room in Hogwarts?"
+      }
+    ]
+  }'| jq -r '.text'
+```
+
+
+
+
+## 出力例
+
+```text
+そうですね、ひとつ選ぶならグリフィンドールの談話室でしょう。
+ロンとハーマイオニーと最高の時間を過ごしてきた場所です。
+暖かな炉火、座り心地のいい肘掛け椅子、そして仲間の一体感があって、まるで我が家のように感じます。
+それに、僕たちの冒険の計画はいつもここで立てるんです！
+```

@@ -11,7 +11,7 @@ export function workflowLoopStream<
   OUTPUT extends OutputSchema | undefined = undefined,
 >({
   telemetry_settings,
-  model,
+  models,
   toolChoice,
   modelSettings,
   _internal,
@@ -41,7 +41,7 @@ export function workflowLoopStream<
 
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
         messageId: messageId!,
-        model,
+        models,
         telemetry_settings,
         _internal,
         modelSettings,
@@ -99,7 +99,7 @@ export function workflowLoopStream<
 
       const executionResult = await run.start({
         inputData: initialData,
-        tracingContext: { currentSpan: llmAISpan, isInternal: true },
+        tracingContext: { currentSpan: llmAISpan },
       });
 
       if (executionResult.status !== 'success') {

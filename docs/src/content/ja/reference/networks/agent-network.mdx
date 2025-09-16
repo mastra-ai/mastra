@@ -3,17 +3,23 @@ title: "AgentNetwork（実験的）"
 description: "AgentNetworkクラスのリファレンスドキュメント"
 ---
 
+
+
 # AgentNetwork（実験的）
 
 > **注意:** AgentNetwork機能は実験的であり、今後のリリースで変更される可能性があります。
 
 `AgentNetwork` クラスは、複雑なタスクを解決するために協力できる専門的なエージェントのネットワークを作成する方法を提供します。Workflowsが実行経路を明示的に制御する必要があるのに対し、AgentNetworkはLLMベースのルーターを使用して、次にどのエージェントを呼び出すかを動的に決定します。
 
+
+
 ## 主要な概念
 
 - **LLMベースのルーティング**: AgentNetworkは、エージェントの最適な活用方法を判断するためにLLMのみを使用します
 - **エージェントの協働**: 複数の専門エージェントが協力して複雑なタスクを解決できます
 - **動的な意思決定**: ルーターがタスクの要件に基づいてどのエージェントを呼び出すかを決定します
+
+
 
 ## 使い方
 
@@ -55,6 +61,8 @@ const result = await researchNetwork.generate(
 console.log(result.text);
 ```
 
+
+
 ## コンストラクター
 
 ```typescript
@@ -68,6 +76,8 @@ constructor(config: AgentNetworkConfig)
   - `instructions`: ルーティングエージェントへの指示
   - `model`: ルーティングに使用する言語モデル
   - `agents`: ネットワーク内の専門エージェントの配列
+
+
 
 ## メソッド
 
@@ -144,11 +154,15 @@ getAgentInteractionHistory(): Record<
 getAgentInteractionSummary(): string
 ```
 
+
+
 ## AgentNetwork と Workflows の使い分け
 
 - **AgentNetwork を使う場合:** タスクの要件に基づいて、AI にエージェントの最適な使い方や動的なルーティングを任せたいとき。
 
 - **Workflows を使う場合:** 実行経路を明確に制御したいときや、エージェントの呼び出し順序や条件分岐をあらかじめ決めておきたいとき。
+
+
 
 ## 内部ツール
 
@@ -157,6 +171,8 @@ AgentNetwork は、ルーティングエージェントが専門のエージェ�
 - 単一エージェントの呼び出し
 - 複数エージェントの並列呼び出し
 - エージェント間のコンテキスト共有
+
+
 
 ## 制限事項
 

@@ -19,7 +19,7 @@ export function createAgenticLoopWorkflow<
   OUTPUT extends OutputSchema | undefined = undefined,
 >(params: AgenticLoopParams<Tools, OUTPUT>) {
   const {
-    model,
+    models,
     _internal,
     messageId,
     runId,
@@ -40,7 +40,7 @@ export function createAgenticLoopWorkflow<
 
   const agenticExecutionWorkflow = createAgenticExecutionWorkflow<Tools, OUTPUT>({
     messageId: messageId!,
-    model,
+    models,
     telemetry_settings,
     _internal,
     modelSettings,
@@ -127,7 +127,7 @@ export function createAgenticLoopWorkflow<
 
       modelStreamSpan.setAttributes({
         'stream.response.id': typedInputData.metadata?.id,
-        'stream.response.model': model.modelId,
+        'stream.response.model': typedInputData.metadata?.modelId,
         ...(typedInputData.metadata?.providerMetadata
           ? { 'stream.response.providerMetadata': JSON.stringify(typedInputData.metadata.providerMetadata) }
           : {}),
