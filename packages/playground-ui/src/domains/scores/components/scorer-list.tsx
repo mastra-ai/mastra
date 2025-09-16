@@ -8,6 +8,7 @@ import { GetScorerResponse } from '@mastra/client-js';
 import { GaugeIcon } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 import { Badge } from '@/ds/components/Badge';
+import { AgentMetadataListEmpty } from '@/domains/agents';
 
 export interface ScorerListProps {
   entityId: string;
@@ -33,7 +34,7 @@ export const ScorerList = ({ entityId, entityType }: ScorerListProps) => {
     .map(scorerKey => ({ ...scorers[scorerKey], id: scorerKey }));
 
   if (scorerList.length === 0) {
-    return <EmptyScorerList />;
+    return <AgentMetadataListEmpty>No scorers were attached to this agent.</AgentMetadataListEmpty>;
   }
 
   return (
@@ -44,15 +45,6 @@ export const ScorerList = ({ entityId, entityType }: ScorerListProps) => {
         </li>
       ))}
     </ul>
-  );
-};
-
-export const EmptyScorerList = () => {
-  // TODO: Add a link to the scorer documentation when available
-  return (
-    <Txt as="p" variant="ui-lg" className="text-icon6">
-      No scorers were attached to this agent.
-    </Txt>
   );
 };
 
