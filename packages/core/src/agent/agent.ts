@@ -168,6 +168,9 @@ export class Agent<
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
 
+  // Static flag to track if deprecation warning has been shown
+  private static _streamDeprecationWarningShown = false;
+
   constructor(config: AgentConfig<TAgentId, TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
 
@@ -4252,9 +4255,12 @@ export class Agent<
     | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
     | (StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties)
   > {
-    this.logger.warn(
-      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 23rd, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
-    );
+    if (!Agent._streamDeprecationWarningShown) {
+      this.logger.warn(
+        "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 23rd, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
+      );
+      Agent._streamDeprecationWarningShown = true;
+    }
     // @ts-expect-error - generic type issues
     return this.streamLegacy(messages, streamOptions);
   }
