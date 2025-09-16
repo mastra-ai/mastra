@@ -29,8 +29,11 @@ import { CompositeVoice, MastraVoice } from '../voice';
 import { MessageList } from './message-list/index';
 import { assertNoDuplicateParts, MockMemory } from './test-utils';
 import { Agent } from './index';
+import { MockStore } from '../storage';
 
 config();
+
+const mockStorage = new MockStore();
 
 const mockFindUser = vi.fn().mockImplementation(async data => {
   const list = [
@@ -633,6 +636,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       const mastra = new Mastra({
         agents: { userAgent },
         logger: false,
+        storage: mockStorage,
       });
 
       const agentOne = mastra.getAgent('userAgent');
@@ -657,8 +661,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         response = stream.response;
         console.log('response', JSON.stringify(response.toolResults, null, 2));
         console.log('status', stream.status);
-        // TODO: resume agent stream with approval
-        // TODO: consume the chunks
+        const resumeStream = await agentOne.resumeStreamVNext({ hello: 'world' }, { runId: stream.runId });
+        for await (const chunk of resumeStream.fullStream) {
+          console.log('resume stream chunk', chunk);
+        }
+
         // toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'findUserTool').payload;
       }
 
