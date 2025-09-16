@@ -160,7 +160,7 @@ const mastra = new Mastra({
   },
 });
 
-const run = mastra.vnext_getWorkflow('myWorkflow').createRun();
+const run = await mastra.vnext_getWorkflow('myWorkflow').createRunAsync();
 ```
 
 The `steps` property in the workflow options provides type safety for accessing step results. When you declare the steps used in your workflow, TypeScript will ensure type safety when accessing `result.steps`:

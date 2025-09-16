@@ -194,7 +194,7 @@ export class Workflow extends BaseResource {
    * @deprecated Use createRunAsync() instead.
    * @throws {Error} Always throws an error directing users to use createRunAsync()
    */
-  async createRun(params?: { runId?: string }): Promise<{
+  async createRun(_params?: { runId?: string }): Promise<{
     runId: string;
     start: (params: {
       inputData: Record<string, any>;
