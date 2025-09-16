@@ -6,8 +6,6 @@ import { ChevronDown, GaugeIcon } from 'lucide-react';
 import { useTriggerScorer } from '../hooks/use-trigger-scorer';
 import Spinner from '@/components/ui/spinner';
 import { AISpanRecord } from '@mastra/core';
-import { useAgent } from '@/domains/agents/hooks/use-agent';
-import { useWorkflow } from '@/hooks/use-workflows';
 
 export interface ScorersDropdownProps {
   trace: AISpanRecord;
@@ -16,8 +14,6 @@ export interface ScorersDropdownProps {
 }
 
 export const ScorersDropdown = ({ trace, spanId, onScorerTriggered }: ScorersDropdownProps) => {
-  const { data: agent, isLoading: isLoadingAgent } = useAgent(trace?.attributes?.agentId);
-  const { data: workflow, isLoading: isLoadingWorkflow } = useWorkflow(trace?.attributes?.workflowId);
   const { data: scorers = {}, isLoading } = useScorers();
   const { mutate: triggerScorer, isPending } = useTriggerScorer(onScorerTriggered);
 
@@ -28,7 +24,7 @@ export const ScorersDropdown = ({ trace, spanId, onScorerTriggered }: ScorersDro
     isRegistered: scorer.isRegistered,
   }));
 
-  const isWaiting = isPending || isLoading || isLoadingAgent || isLoadingWorkflow;
+  const isWaiting = isPending || isLoading;
 
   return (
     <Dropdown>
