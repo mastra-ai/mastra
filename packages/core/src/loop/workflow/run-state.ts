@@ -21,6 +21,8 @@ export class AgenticRunState {
         id: _internal?.generateId?.(),
         timestamp: _internal?.currentDate?.(),
         modelId: model.modelId,
+        modelVersion: model.specificationVersion,
+        modelProvider: model.provider,
         headers: undefined,
       },
       isReasoning: false,

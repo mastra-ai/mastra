@@ -14,7 +14,7 @@ export function workflowLoopStream<
   OUTPUT extends OutputSchema | undefined = undefined,
 >({
   telemetry_settings,
-  model,
+  models,
   toolChoice,
   modelSettings,
   _internal,
@@ -41,7 +41,7 @@ export function workflowLoopStream<
 
       const outerLLMWorkflow = createOuterLLMWorkflow<Tools, OUTPUT>({
         messageId: messageId!,
-        model,
+        models,
         telemetry_settings,
         _internal,
         modelSettings,
@@ -87,7 +87,7 @@ export function workflowLoopStream<
 
           modelStreamSpan.setAttributes({
             'stream.response.id': inputData.metadata.id,
-            'stream.response.model': model.modelId,
+            'stream.response.model': inputData.metadata.modelId,
             ...(inputData.metadata.providerMetadata
               ? { 'stream.response.providerMetadata': JSON.stringify(inputData.metadata.providerMetadata) }
               : {}),
