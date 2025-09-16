@@ -93,17 +93,13 @@ async function captureDependenciesToOptimize(
     }
 
     // The `getPackageName` helper also handles subpaths so we only get the proper package name
+    const pkgName = getPackageName(dependency);
     let rootPath: string | null = null;
     let isWorkspace = false;
 
-    if (workspaceMap.has(dependency)) {
-      rootPath = workspaceMap.get(dependency)!.location;
-      isWorkspace = true;
-    } else {
-      const pkgName = getPackageName(dependency);
-      if (pkgName) {
-        rootPath = await getPackageRootPath(pkgName);
-      }
+    if (pkgName) {
+      rootPath = await getPackageRootPath(pkgName);
+      isWorkspace = workspaceMap.has(pkgName);
     }
 
     depsToOptimize.set(dependency, { exports: bindings, rootPath, isWorkspace });
