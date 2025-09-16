@@ -284,7 +284,7 @@ ${
     ? `
 ## Direct Provider Installation
 
-This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string:
+This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/${provider.packageName}) for more details.
 
 <Tabs items={["npm", "yarn", "pnpm", "bun"]}>
   <Tab>
