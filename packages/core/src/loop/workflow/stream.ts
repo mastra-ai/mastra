@@ -1,6 +1,7 @@
 import { ReadableStream } from 'stream/web';
 import type { ToolSet } from 'ai-v5';
 import z from 'zod';
+import { InternalSpans } from '../../ai-tracing';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
@@ -56,6 +57,13 @@ export function workflowLoopStream<
         id: 'agentic-loop',
         inputSchema: llmIterationOutputSchema,
         outputSchema: z.any(),
+        options: {
+          tracingPolicy: {
+            // mark all workflow spans related to the
+            // VNext execution as internal
+            internal: InternalSpans.WORKFLOW,
+          },
+        },
       })
         .dowhile(outerLLMWorkflow, async ({ inputData }) => {
           let hasFinishedSteps = false;
@@ -154,7 +162,7 @@ export function workflowLoopStream<
             nonUser: [],
           },
         },
-        tracingContext: { currentSpan: llmAISpan, isInternal: true },
+        tracingContext: { currentSpan: llmAISpan },
       });
 
       if (executionResult.status !== 'success') {

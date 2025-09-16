@@ -1,7 +1,7 @@
 import type { GenerateTextOnStepFinishCallback, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema, ZodTypeAny } from 'zod';
-import type { TracingContext, TracingOptions } from '../ai-tracing';
+import type { TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
@@ -56,6 +56,10 @@ export type StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny> = {
   instructions?: string;
 } & FallbackFields<S>;
 
+export interface AgentCreateOptions {
+  tracingPolicy?: TracingPolicy;
+}
+
 export interface AgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
@@ -86,6 +90,7 @@ export interface AgentConfig<
   voice?: CompositeVoice;
   inputProcessors?: DynamicArgument<InputProcessor[]>;
   outputProcessors?: DynamicArgument<OutputProcessor[]>;
+  options?: AgentCreateOptions;
 }
 
 export type AgentMemoryOption = {
