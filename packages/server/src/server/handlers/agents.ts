@@ -2,6 +2,7 @@ import type { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
+import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
@@ -690,5 +691,37 @@ export async function updateAgentModelHandler({
     return { message: 'Agent model updated' };
   } catch (error) {
     return handleError(error, 'error updating agent model');
+  }
+}
+
+export async function getProvidersHandler(): Promise<{
+  providers: Array<{
+    id: string;
+    name: string;
+    envVar: string;
+    connected: boolean;
+    models: string[];
+  }>;
+}> {
+  try {
+    const providers = [];
+
+    // Check each provider in the registry
+    for (const [providerId, config] of Object.entries(PROVIDER_REGISTRY)) {
+      const envVar = config.apiKeyEnvVar;
+      const apiKey = process.env[envVar];
+
+      providers.push({
+        id: providerId,
+        name: config.name,
+        envVar: envVar,
+        connected: !!apiKey,
+        models: [...config.models], // Convert readonly array to mutable
+      });
+    }
+
+    return { providers };
+  } catch (error) {
+    return handleError(error, 'Error getting providers');
   }
 }

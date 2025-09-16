@@ -19,7 +19,7 @@ export const ProviderLogo = ({ providerId, className = '', size = 20 }: Provider
   const cleanProviderId = providerId.replace(/\//g, '-').toLowerCase();
 
   // Get fallback icon from our existing mapping
-  const getProviderIcon = (id: string): string => {
+  const getFallbackProviderIcon = (id: string): string => {
     const iconMap: Record<string, string> = {
       openai: 'openai.chat',
       anthropic: 'anthropic.messages',
@@ -36,7 +36,7 @@ export const ProviderLogo = ({ providerId, className = '', size = 20 }: Provider
     return iconMap[id] || 'DEFAULT';
   };
 
-  const fallbackIcon = getProviderIcon(providerId);
+  const fallbackIcon = getFallbackProviderIcon(providerId);
 
   // If we've already had an error or don't have a provider ID, show fallback
   if (imageError || !providerId) {

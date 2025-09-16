@@ -14,6 +14,7 @@ import {
   generateLegacyHandler as getOriginalGenerateLegacyHandler,
   streamGenerateLegacyHandler as getOriginalStreamGenerateLegacyHandler,
   streamNetworkHandler as getOriginalStreamNetworkHandler,
+  getProvidersHandler as getOriginalProvidersHandler,
 } from '@mastra/server/handlers/agents';
 import type { Context } from 'hono';
 
@@ -85,6 +86,11 @@ export async function getAgentsHandler(c: Context) {
   });
 
   return c.json(serializedAgents);
+}
+
+export async function getProvidersHandler(c: Context) {
+  const providers = await getOriginalProvidersHandler();
+  return c.json(providers);
 }
 
 export async function getAgentByIdHandler(c: Context) {
