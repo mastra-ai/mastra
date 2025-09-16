@@ -671,6 +671,13 @@ describe('Workflow', () => {
           type: 'tool-call-delta',
         },
         {
+          args: {
+            prompt: 'Capital of France, just the name',
+          },
+          name: 'test-agent-1',
+          type: 'tool-call-streaming-finish',
+        },
+        {
           payload: {
             id: 'test-agent-1',
             output: {
@@ -746,6 +753,13 @@ describe('Workflow', () => {
           argsTextDelta: 'London',
           name: 'test-agent-2',
           type: 'tool-call-delta',
+        },
+        {
+          args: {
+            prompt: 'Capital of UK, just the name',
+          },
+          name: 'test-agent-2',
+          type: 'tool-call-streaming-finish',
         },
         {
           payload: {
@@ -1410,11 +1424,6 @@ describe('Workflow', () => {
         },
         {
           payload: {
-            messages: {
-              all: [],
-              nonUser: [],
-              user: [],
-            },
             metadata: {},
             output: {
               usage: {
@@ -1706,10 +1715,10 @@ describe('Workflow', () => {
       for await (const value of streamResult) {
         values.push(value);
       }
-      const workflowEvents = values.filter(value => value.from === 'WORKFLOW');
-      const agentEvents = values.filter(value => value.from === 'AGENT');
+      const workflowEvents = values.filter(value => value.type !== 'workflow-step-output');
+      const agentEvents = values.filter(value => value.type === 'workflow-step-output');
 
-      expect(agentEvents.map(event => event.type)).toEqual([
+      expect(agentEvents.map(event => event?.payload?.output?.type)).toEqual([
         'start',
         'step-start',
         'text-start',
@@ -1812,28 +1821,6 @@ describe('Workflow', () => {
           },
         },
         {
-          type: 'workflow-agent-call-start',
-          runId: 'test-run-id',
-          from: 'WORKFLOW',
-          payload: {
-            name: 'test-agent-1',
-            args: {
-              prompt: 'Capital of France, just the name',
-            },
-          },
-        },
-        {
-          type: 'workflow-agent-call-finish',
-          runId: 'test-run-id',
-          from: 'WORKFLOW',
-          payload: {
-            name: 'test-agent-1',
-            args: {
-              prompt: 'Capital of France, just the name',
-            },
-          },
-        },
-        {
           type: 'workflow-step-result',
           runId: 'test-run-id',
           from: 'WORKFLOW',
@@ -1890,28 +1877,6 @@ describe('Workflow', () => {
           },
         },
         {
-          type: 'workflow-agent-call-start',
-          runId: 'test-run-id',
-          from: 'WORKFLOW',
-          payload: {
-            name: 'test-agent-2',
-            args: {
-              prompt: 'Capital of UK, just the name',
-            },
-          },
-        },
-        {
-          type: 'workflow-agent-call-finish',
-          runId: 'test-run-id',
-          from: 'WORKFLOW',
-          payload: {
-            name: 'test-agent-2',
-            args: {
-              prompt: 'Capital of UK, just the name',
-            },
-          },
-        },
-        {
           type: 'workflow-step-result',
           runId: 'test-run-id',
           from: 'WORKFLOW',
@@ -1937,11 +1902,6 @@ describe('Workflow', () => {
               },
             },
             metadata: {},
-            messages: {
-              all: [],
-              user: [],
-              nonUser: [],
-            },
           },
         },
       ]);
@@ -2078,11 +2038,6 @@ describe('Workflow', () => {
         },
         {
           payload: {
-            messages: {
-              all: [],
-              nonUser: [],
-              user: [],
-            },
             metadata: {},
             output: {
               usage: {
@@ -2253,11 +2208,6 @@ describe('Workflow', () => {
         },
         {
           payload: {
-            messages: {
-              all: [],
-              nonUser: [],
-              user: [],
-            },
             metadata: {},
             output: {
               usage: {
@@ -2467,11 +2417,6 @@ describe('Workflow', () => {
         },
         {
           payload: {
-            messages: {
-              all: [],
-              nonUser: [],
-              user: [],
-            },
             metadata: {},
             output: {
               usage: {
@@ -7888,6 +7833,67 @@ describe('Workflow', () => {
       expect(run3?.runId).toBe(run1.runId);
       expect(run3?.workflowName).toBe('test-workflow');
       expect(run3?.snapshot).toEqual(runs[0].snapshot);
+    });
+
+    it('should persist resourceId when creating workflow runs', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
+      workflow.then(step1).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: {
+          'test-workflow': workflow,
+        },
+      });
+
+      // Create run with resourceId
+      const resourceId = 'user-123';
+      const run = await workflow.createRunAsync({ resourceId });
+      await run.start({ inputData: {} });
+
+      // Verify resourceId is persisted in storage
+      const { runs } = await workflow.getWorkflowRuns();
+      expect(runs).toHaveLength(1);
+      expect(runs[0]?.resourceId).toBe(resourceId);
+
+      // Verify getWorkflowRunById also returns resourceId
+      const runById = await workflow.getWorkflowRunById(run.runId);
+      expect(runById?.resourceId).toBe(resourceId);
+
+      // Create another run with different resourceId
+      const resourceId2 = 'user-456';
+      const run2 = await workflow.createRunAsync({ resourceId: resourceId2 });
+      await run2.start({ inputData: {} });
+
+      // Verify both runs have correct resourceIds
+      const { runs: allRuns } = await workflow.getWorkflowRuns();
+      expect(allRuns).toHaveLength(2);
+      const runWithResource123 = allRuns.find(r => r.resourceId === resourceId);
+      const runWithResource456 = allRuns.find(r => r.resourceId === resourceId2);
+      expect(runWithResource123).toBeDefined();
+      expect(runWithResource456).toBeDefined();
+      expect(runWithResource123?.runId).toBe(run.runId);
+      expect(runWithResource456?.runId).toBe(run2.runId);
+
+      // Create run without resourceId to ensure it's optional
+      const run3 = await workflow.createRunAsync();
+      await run3.start({ inputData: {} });
+
+      const { runs: finalRuns } = await workflow.getWorkflowRuns();
+      expect(finalRuns).toHaveLength(3);
+      const runWithoutResource = finalRuns.find(r => r.runId === run3.runId);
+      expect(runWithoutResource).toBeDefined();
+      expect(runWithoutResource?.resourceId).toBeUndefined();
     });
   });
 

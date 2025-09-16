@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { AITracingEvent, AnyAISpan, CreateSpanOptions } from '..';
+import type { AITracingEvent, AnyExportedAISpan, CreateSpanOptions } from '..';
 import { AISpanType, AITracingEventType } from '..';
 
 import { fetchWithRetry } from '../../utils';
@@ -24,21 +24,14 @@ function createTestJWT(payload: { teamId: string; projectId: string }): string {
 
 function getMockSpan<TType extends AISpanType>(
   options: CreateSpanOptions<TType> & { id: string; traceId: string },
-): AnyAISpan {
+): AnyExportedAISpan {
   return {
     ...options,
     startTime: new Date(),
     endTime: new Date(),
     isEvent: options.isEvent ?? false,
-    isValid: true,
     isRootSpan: true,
-    parent: undefined,
-    aiTracing: {} as any,
-    end: vi.fn(),
-    error: vi.fn(),
-    update: vi.fn(),
-    createChildSpan: vi.fn(),
-    createEventSpan: vi.fn(),
+    parentSpanId: undefined,
   };
 }
 
@@ -72,7 +65,7 @@ describe('CloudExporter', () => {
     it('should process SPAN_ENDED events', async () => {
       const spanEndedEvent: AITracingEvent = {
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       };
 
       // Mock the internal buffer to verify span was added
@@ -86,7 +79,7 @@ describe('CloudExporter', () => {
     it('should ignore SPAN_STARTED events', async () => {
       const spanStartedEvent: AITracingEvent = {
         type: AITracingEventType.SPAN_STARTED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       };
 
       const addToBufferSpy = vi.spyOn(exporter as any, 'addToBuffer');
@@ -99,7 +92,7 @@ describe('CloudExporter', () => {
     it('should ignore SPAN_UPDATED events', async () => {
       const spanUpdatedEvent: AITracingEvent = {
         type: AITracingEventType.SPAN_UPDATED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       };
 
       const addToBufferSpy = vi.spyOn(exporter as any, 'addToBuffer');
@@ -111,9 +104,9 @@ describe('CloudExporter', () => {
 
     it('should only increment buffer size for SPAN_ENDED events', async () => {
       const events: AITracingEvent[] = [
-        { type: AITracingEventType.SPAN_STARTED, span: mockSpan },
-        { type: AITracingEventType.SPAN_UPDATED, span: mockSpan },
-        { type: AITracingEventType.SPAN_ENDED, span: mockSpan },
+        { type: AITracingEventType.SPAN_STARTED, exportedSpan: mockSpan },
+        { type: AITracingEventType.SPAN_UPDATED, exportedSpan: mockSpan },
+        { type: AITracingEventType.SPAN_ENDED, exportedSpan: mockSpan },
       ];
 
       for (const event of events) {
@@ -151,7 +144,7 @@ describe('CloudExporter', () => {
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       const buffer = (exporter as any).buffer;
@@ -166,7 +159,7 @@ describe('CloudExporter', () => {
       // Add first span
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       const buffer = (exporter as any).buffer;
@@ -179,7 +172,7 @@ describe('CloudExporter', () => {
       const secondSpan = { ...mockSpan, id: 'span-456' };
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: secondSpan,
+        exportedSpan: secondSpan,
       });
 
       // firstEventTime should not have changed
@@ -194,14 +187,14 @@ describe('CloudExporter', () => {
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
       expect(buffer.totalSize).toBe(1);
 
       const secondSpan = { ...mockSpan, id: 'span-456' };
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: secondSpan,
+        exportedSpan: secondSpan,
       });
       expect(buffer.totalSize).toBe(2);
     });
@@ -209,7 +202,7 @@ describe('CloudExporter', () => {
     it('should add spans with correct structure to buffer', async () => {
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       const buffer = (exporter as any).buffer;
@@ -250,20 +243,20 @@ describe('CloudExporter', () => {
     });
 
     it('should handle parent span references', async () => {
-      const parentSpan: AnyAISpan = {
+      const parentSpan: AnyExportedAISpan = {
         ...mockSpan,
         id: 'parent-span',
       };
 
-      const childSpan: AnyAISpan = {
+      const childSpan: AnyExportedAISpan = {
         ...mockSpan,
         id: 'child-span',
-        parent: parentSpan,
+        parentSpanId: parentSpan.id,
       };
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: childSpan,
+        exportedSpan: childSpan,
       });
 
       const buffer = (exporter as any).buffer;
@@ -297,7 +290,7 @@ describe('CloudExporter', () => {
       // Add first span - should not flush
       await smallBatchExporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       expect(shouldFlushSpy).toHaveReturnedWith(false);
@@ -307,7 +300,7 @@ describe('CloudExporter', () => {
       const secondSpan = { ...mockSpan, id: 'span-456' };
       await smallBatchExporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: secondSpan,
+        exportedSpan: secondSpan,
       });
 
       expect(shouldFlushSpy).toHaveReturnedWith(true);
@@ -319,7 +312,7 @@ describe('CloudExporter', () => {
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       expect(scheduleFlushSpy).toHaveBeenCalledOnce();
@@ -331,7 +324,7 @@ describe('CloudExporter', () => {
       // Add first span
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       expect(scheduleFlushSpy).toHaveBeenCalledTimes(1);
@@ -340,7 +333,7 @@ describe('CloudExporter', () => {
       const secondSpan = { ...mockSpan, id: 'span-456' };
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: secondSpan,
+        exportedSpan: secondSpan,
       });
 
       expect(scheduleFlushSpy).toHaveBeenCalledTimes(1); // Still only called once
@@ -403,7 +396,7 @@ describe('CloudExporter', () => {
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       expect(setTimeoutSpy).toHaveBeenCalledWith(
@@ -431,7 +424,7 @@ describe('CloudExporter', () => {
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       // Fast-forward timer
@@ -445,7 +438,7 @@ describe('CloudExporter', () => {
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       // Trigger flush
@@ -463,7 +456,7 @@ describe('CloudExporter', () => {
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       // Fast-forward timer to trigger flush
@@ -480,7 +473,7 @@ describe('CloudExporter', () => {
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       // Verify timer is set
@@ -500,7 +493,7 @@ describe('CloudExporter', () => {
       // Add event to buffer
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       // Manually clear the timer that was set
@@ -562,7 +555,7 @@ describe('CloudExporter', () => {
     it('should call cloud API with correct URL and headers', async () => {
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       // Trigger immediate flush
@@ -585,7 +578,7 @@ describe('CloudExporter', () => {
     it('should send spans in correct format', async () => {
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       await (exporter as any).flush();
@@ -621,7 +614,7 @@ describe('CloudExporter', () => {
 
       await authExporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       await (authExporter as any).flush();
@@ -634,16 +627,16 @@ describe('CloudExporter', () => {
     });
 
     it('should handle multiple spans in batch', async () => {
-      const spans = [
+      const exportedSpans = [
         { ...mockSpan, id: 'span-1' },
         { ...mockSpan, id: 'span-2' },
         { ...mockSpan, id: 'span-3' },
       ];
 
-      for (const span of spans) {
+      for (const exportedSpan of exportedSpans) {
         await exporter.exportEvent({
           type: AITracingEventType.SPAN_ENDED,
-          span,
+          exportedSpan,
         });
       }
 
@@ -664,7 +657,7 @@ describe('CloudExporter', () => {
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       await (exporter as any).flush();
@@ -714,7 +707,7 @@ describe('CloudExporter', () => {
 
       await retryExporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       await (retryExporter as any).flush();
@@ -738,7 +731,7 @@ describe('CloudExporter', () => {
 
       await customRetryExporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       await (customRetryExporter as any).flush();
@@ -764,7 +757,7 @@ describe('CloudExporter', () => {
 
       await retryExporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       // Flush should not throw - errors are caught and logged
@@ -784,7 +777,7 @@ describe('CloudExporter', () => {
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       // Fast-forward to trigger scheduled flush - errors should be caught
@@ -827,7 +820,7 @@ describe('CloudExporter', () => {
       // Set up a timer by adding an event
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       const timer = (exporter as any).flushTimer;
@@ -847,12 +840,12 @@ describe('CloudExporter', () => {
       // Add events to buffer
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: { ...mockSpan, id: 'span-456' },
+        exportedSpan: { ...mockSpan, id: 'span-456' },
       });
 
       const buffer = (exporter as any).buffer;
@@ -890,7 +883,7 @@ describe('CloudExporter', () => {
       // Add event to buffer
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: mockSpan,
+        exportedSpan: mockSpan,
       });
 
       await exporter.shutdown();

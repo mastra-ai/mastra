@@ -132,15 +132,18 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }) {
     const data = {
       workflow_name: workflowName,
       run_id: runId,
+      resourceId,
       snapshot,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -220,6 +223,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       updatedAt: new Date(run.updatedAt),
       runId: run.run_id,
       workflowName: run.workflow_name,
+      resourceId: run.resourceId,
     }));
 
     return { runs: parsedRuns as WorkflowRun[], total };
@@ -245,6 +249,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       updatedAt: new Date(run.updatedAt),
       runId: run.run_id,
       workflowName: run.workflow_name,
+      resourceId: run.resourceId,
     };
 
     return parsedRun as WorkflowRun;
