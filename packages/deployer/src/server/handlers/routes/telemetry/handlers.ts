@@ -1,11 +1,25 @@
 import type { Mastra } from '@mastra/core';
 import {
+  getTraceHandler as getOriginalGetTraceHandler,
   getTelemetryHandler as getOriginalTelemetryHandler,
   storeTelemetryHandler as getOriginalStoreTelemetryHandler,
 } from '@mastra/server/handlers/telemetry';
 import type { Context } from 'hono';
 
 import { handleError } from '../../error';
+
+export async function getTraceHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const traceId = c.req.param('traceId');
+
+    const trace = await getOriginalGetTraceHandler({ mastra, traceId });
+
+    return c.json({ trace });
+  } catch (error) {
+    return handleError(error, 'Error getting telemetry trace');
+  }
+}
 
 export async function getTelemetryHandler(c: Context) {
   try {

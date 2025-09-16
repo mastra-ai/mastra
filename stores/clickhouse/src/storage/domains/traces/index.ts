@@ -2,7 +2,7 @@ import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { safelyParseJSON, TABLE_SCHEMAS, TABLE_TRACES, TracesStorage } from '@mastra/core/storage';
 import type { PaginationInfo, StorageGetTracesPaginatedArg, StorageGetTracesArg } from '@mastra/core/storage';
-import type { Trace } from '@mastra/core/telemetry';
+import type { Trace, TraceRecord } from '@mastra/core/telemetry';
 import type { StoreOperationsClickhouse } from '../operations';
 
 export class TracesStorageClickhouse extends TracesStorage {
@@ -15,6 +15,36 @@ export class TracesStorageClickhouse extends TracesStorage {
     this.operations = operations;
   }
 
+  async getTrace(traceId: string): Promise<TraceRecord> {
+    const result = await this.client.query({
+      query: `SELECT * FROM ${TABLE_TRACES} WHERE traceId = {var_traceId:String}`,
+      query_params: { var_traceId: traceId },
+      clickhouse_settings: {
+        date_time_input_format: 'best_effort',
+        date_time_output_format: 'iso',
+        use_client_time_zone: 1,
+        output_format_json_quote_64bit_integers: 0,
+      },
+    });
+    const resp = await result.json();
+    const rows: any[] = resp.data;
+    if (rows.length === 0) {
+      throw new MastraError({
+        id: 'CLICKHOUSE_STORE_GET_TRACE_NOT_FOUND',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        text: `Trace not found`,
+        details: { traceId },
+      });
+    }
+    const spans = this.formatSpans(rows);
+
+    return {
+      id: traceId,
+      spans,
+    };
+  }
+
   async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {
     const { name, scope, page = 0, perPage = 100, attributes, filters, dateRange } = args;
     const fromDate = dateRange?.start;
@@ -22,7 +52,7 @@ export class TracesStorageClickhouse extends TracesStorage {
     const currentOffset = page * perPage;
 
     const queryArgs: Record<string, any> = {};
-    const conditions: string[] = [];
+    const conditions: string[] = ["parentSpanId = ''"];
 
     if (name) {
       conditions.push(`name LIKE CONCAT({var_name:String}, '%')`);
@@ -105,22 +135,7 @@ export class TracesStorageClickhouse extends TracesStorage {
 
       const resp = await result.json();
       const rows: any[] = resp.data;
-      const traces = rows.map(row => ({
-        id: row.id,
-        parentSpanId: row.parentSpanId,
-        traceId: row.traceId,
-        name: row.name,
-        scope: row.scope,
-        kind: row.kind,
-        status: safelyParseJSON(row.status),
-        events: safelyParseJSON(row.events),
-        links: safelyParseJSON(row.links),
-        attributes: safelyParseJSON(row.attributes),
-        startTime: row.startTime,
-        endTime: row.endTime,
-        other: safelyParseJSON(row.other),
-        createdAt: row.createdAt,
-      }));
+      const traces = this.formatSpans(rows);
 
       return {
         traces,
@@ -157,6 +172,25 @@ export class TracesStorageClickhouse extends TracesStorage {
         error,
       );
     }
+  }
+
+  private formatSpans(rows: Record<string, any>[]): Trace[] {
+    return rows.map(row => ({
+      id: row.id,
+      parentSpanId: row.parentSpanId ? row.parentSpanId : null,
+      traceId: row.traceId,
+      name: row.name,
+      scope: row.scope,
+      kind: row.kind,
+      status: safelyParseJSON(row.status),
+      events: safelyParseJSON(row.events),
+      links: safelyParseJSON(row.links),
+      attributes: safelyParseJSON(row.attributes),
+      startTime: row.startTime,
+      endTime: row.endTime,
+      other: safelyParseJSON(row.other),
+      createdAt: row.createdAt,
+    }));
   }
 
   async getTraces({

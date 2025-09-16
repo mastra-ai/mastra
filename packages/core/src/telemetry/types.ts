@@ -82,3 +82,8 @@ export type Trace = {
   endTime: number;
   createdAt: string;
 };
+
+export type TraceRecord = {
+  id: string;
+  spans: Trace[];
+};

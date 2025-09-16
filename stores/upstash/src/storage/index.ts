@@ -16,6 +16,7 @@ import type {
   StoragePagination,
   StorageDomains,
 } from '@mastra/core/storage';
+import type { TraceRecord } from '@mastra/core/telemetry';
 
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
@@ -95,6 +96,10 @@ export class UpstashStore extends MastraStorage {
    */
   public async getTraces(args: StorageGetTracesArg): Promise<any[]> {
     return this.stores.traces.getTraces(args);
+  }
+
+  public async getTrace(traceId: string): Promise<TraceRecord> {
+    return this.stores.traces.getTrace(traceId);
   }
 
   public async getTracesPaginated(
