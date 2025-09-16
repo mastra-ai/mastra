@@ -5,7 +5,7 @@ import virtual from '@rollup/plugin-virtual';
 import esmShim from '@rollup/plugin-esm-shim';
 import { basename } from 'node:path/posix';
 import * as path from 'node:path';
-import { rollup, type OutputChunk, type OutputAsset } from 'rollup';
+import { rollup, type OutputChunk, type OutputAsset, type Plugin } from 'rollup';
 import { esbuild } from '../plugins/esbuild';
 import { aliasHono } from '../plugins/hono-alias';
 import { getCompiledDepCachePath, getPackageRootPath } from '../utils';
@@ -113,11 +113,15 @@ export function createVirtualDependencies(
  * Sets up virtual modules, TypeScript compilation, CommonJS transformation, and workspace resolution.
  */
 async function getInputPlugins(
-  virtualDependencies: Map<string, { virtual: string }>,
+  virtualDependencies: Map<string, { virtual: string; name: string }>,
   transpilePackages: Set<string>,
-  workspaceMap: Map<string, WorkspacePackageInfo>,
-  bundlerOptions: {
+  rootDir: string,
+  {
+    enableEsmShim,
+    isDev = false,
+  }: {
     enableEsmShim: boolean;
+    isDev?: boolean;
   },
 ) {
   const transpilePackagesMap = new Map<string, string>();
@@ -130,6 +134,22 @@ async function getInputPlugins(
   }
 
   return [
+    {
+      name: 'alias-optimized-deps',
+      resolveId(id: string) {
+        if (!virtualDependencies.has(id)) {
+          return null;
+        }
+
+        const filename = virtualDependencies.get(id)!.name;
+        const resolvedPath = path.join(rootDir, filename);
+
+        return {
+          id: resolvedPath,
+          external: true,
+        };
+      },
+    } satisfies Plugin,
     virtual(
       Array.from(virtualDependencies.entries()).reduce(
         (acc, [dep, virtualDep]) => {
@@ -155,17 +175,17 @@ async function getInputPlugins(
       transformMixedEsModules: true,
       ignoreTryCatch: false,
     }),
-    bundlerOptions.enableEsmShim ? esmShim() : undefined,
-    nodeResolve({
-      preferBuiltins: true,
-      exportConditions: ['node'],
-      // Do not embed external dependencies into files that we write to `node_modules/.cache` (for the mastra dev + workspace use case)
-      ...(workspaceMap.size > 0 ? { resolveOnly: Array.from(workspaceMap.keys()) } : {}),
-    }),
+    enableEsmShim ? esmShim() : undefined,
+    !isDev
+      ? nodeResolve({
+          preferBuiltins: true,
+          exportConditions: ['node'],
+        })
+      : undefined,
     // hono is imported from deployer, so we need to resolve from here instead of the project root
     aliasHono(),
     json(),
-  ];
+  ].filter(Boolean);
 }
 
 /**
@@ -177,18 +197,17 @@ async function buildExternalDependencies(
   {
     externals,
     packagesToTranspile,
-    workspaceMap,
     rootDir,
     outputDir,
     bundlerOptions,
   }: {
     externals: string[];
     packagesToTranspile: Set<string>;
-    workspaceMap: Map<string, WorkspacePackageInfo>;
     rootDir: string;
     outputDir: string;
     bundlerOptions: {
       enableEsmShim: boolean;
+      isDev: boolean;
     };
   },
 ) {
@@ -210,7 +229,7 @@ async function buildExternalDependencies(
     ),
     external: externals,
     treeshake: 'smallest',
-    plugins: getInputPlugins(virtualDependencies, packagesToTranspile, workspaceMap, bundlerOptions),
+    plugins: getInputPlugins(virtualDependencies, packagesToTranspile, rootDir, bundlerOptions),
   });
 
   const outputDirRelative = prepareEntryFileName(outputDir, rootDir);
@@ -308,11 +327,11 @@ export async function bundleExternals(
   const output = await buildExternalDependencies(optimizedDependencyEntries, {
     externals: allExternals,
     packagesToTranspile,
-    workspaceMap: isDev ? workspaceMap : new Map(),
     rootDir: workspaceRoot || projectRoot,
     outputDir,
     bundlerOptions: {
       enableEsmShim,
+      isDev,
     },
   });
 
