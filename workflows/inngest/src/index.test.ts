@@ -8259,7 +8259,7 @@ describe('MastraInngestWorkflow', () => {
         expect(response.ok).toBe(true);
 
         const introspectionData = await response.json();
-        console.log('introspectionData', introspectionData);
+
         // Inngest returns function metadata in the introspection response
         expect(introspectionData).toBeDefined();
 
