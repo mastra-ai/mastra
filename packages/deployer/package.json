@@ -109,16 +109,17 @@
     "builtins": "^5.1.0",
     "detect-libc": "^2.0.4",
     "dotenv": "^16.6.1",
+    "empathic": "^2.0.0",
     "esbuild": "^0.25.9",
     "find-workspaces": "^0.3.1",
     "fs-extra": "^11.3.1",
-    "globby": "^14.1.0",
     "hono": "^4.9.6",
     "local-pkg": "^1.1.2",
     "resolve-from": "^5.0.0",
-    "rollup": "~4.50.1",
+    "rollup": "~4.50.2",
     "rollup-plugin-esbuild": "^6.2.1",
     "rollup-plugin-node-externals": "^8.0.1",
+    "tinyglobby": "^0.2.15",
     "typescript-paths": "^1.5.1"
   },
   "devDependencies": {
@@ -145,7 +146,7 @@
     "zod": "^3.25.76"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.16.4-0 <0.17.0-0",
+    "@mastra/core": ">=0.17.0-0 <0.18.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",
