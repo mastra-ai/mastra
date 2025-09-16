@@ -32,17 +32,20 @@ FIRESTORE_DATABASE_ID=(default)
 Before you can use the `MastraAuthFirebase` class you have to install the `@mastra/auth-firebase` package.
 
 ```bash copy
-pnpm install @mastra/auth-firebase@latest
+npm install @mastra/auth-firebase@latest
 ```
 
 ## Usage examples
 
 ### Basic usage with environment variables
 
+If you set the required environment variables (`FIREBASE_SERVICE_ACCOUNT` and `FIRESTORE_DATABASE_ID`), you can initialize `MastraAuthFirebase` without any constructor arguments. The class will automatically read these environment variables as configuration:
+
 ```typescript {2,7} filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { MastraAuthFirebase } from '@mastra/auth-firebase';
 
+// Automatically uses FIREBASE_SERVICE_ACCOUNT and FIRESTORE_DATABASE_ID env vars
 export const mastra = new Mastra({
   // ..
   server: {
@@ -77,7 +80,7 @@ The `MastraAuthFirebase` class can be configured through constructor options or 
 - `FIREBASE_SERVICE_ACCOUNT`: Path to Firebase service account JSON file
 - `FIRESTORE_DATABASE_ID` or `FIREBASE_DATABASE_ID`: Firestore database ID
 
-When no constructor options are provided, the class will automatically use these environment variables.
+> **Note:** When constructor options are not provided, the class automatically reads these environment variables. This means you can simply call `new MastraAuthFirebase()` without any arguments if your environment variables are properly configured.
 
 ### User Authorization
 
