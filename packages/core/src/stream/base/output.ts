@@ -91,6 +91,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   #tripwireReason = '';
 
   #delayedPromises = {
+    suspendPayload: new DelayedPromise<any>(),
     object: new DelayedPromise<InferSchemaOutput<OUTPUT>>(),
     finishReason: new DelayedPromise<FinishReason | string | undefined>(),
     usage: new DelayedPromise<Record<string, number>>(),
@@ -219,6 +220,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
             case 'tool-call-suspended':
             case 'tool-call-approval':
               self.#status = 'suspended';
+              self.#delayedPromises.suspendPayload.resolve(chunk.payload);
               break;
             case 'source':
               self.#bufferedSources.push(chunk);
@@ -663,6 +665,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
   get steps() {
     return this.#getDelayedPromise(this.#delayedPromises.steps);
+  }
+
+  get suspendPayload() {
+    return this.#getDelayedPromise(this.#delayedPromises.suspendPayload);
   }
 
   teeStream() {
