@@ -1,15 +1,15 @@
 ---
-title: "Reference: ChunkType | Agents | Mastra Docs"
+title: "Reference: ChunkType (Experimental) | Agents | Mastra Docs"
 description: "Documentation for the ChunkType type used in Mastra streaming responses, defining all possible chunk types and their payloads."
 ---
 
 import { Callout } from "nextra/components";
 import { PropertiesTable } from "@/components/properties-table";
 
-# ChunkType
+# ChunkType (Experimental)
 
-<Callout type="warning">
-  **Experimental API**: This type is part of the experimental [`streamVNext()`](../streamVNext) method. The API may change as we refine the feature based on feedback.
+<Callout type="important">
+  <strong className="block">Experimental API: </strong>This type is part of the experimental `.streamVNext()` method. The API may change as we refine the feature based on feedback.
 </Callout>
 
 The `ChunkType` type defines the mastra format of stream chunks that can be emitted during streaming responses from agents.
@@ -854,4 +854,4 @@ for await (const chunk of stream.fullStream) {
 ## Related Types
 
 - [MastraModelOutput](./MastraModelOutput.mdx) - The stream object that emits these chunks
-- [Agent.streamVNext()](./streamVNext.mdx) - Method that returns streams emitting these chunks
+- [.streamVNext()](./streamVNext.mdx) - Method that returns streams emitting these chunks
