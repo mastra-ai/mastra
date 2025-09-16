@@ -191,8 +191,12 @@ process.versions.node = '${process.versions.node}';
     return inputOptions;
   }
 
-  async bundle(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths);
+  async bundle(
+    entryFile: string,
+    outputDirectory: string,
+    { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string },
+  ): Promise<void> {
+    return this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot, enableEsmShim: false }, toolsPaths);
   }
 
   async deploy(): Promise<void> {
