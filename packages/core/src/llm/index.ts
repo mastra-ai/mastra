@@ -18,7 +18,7 @@ import type {
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
-import type { AISpan, AISpanType } from '../ai-tracing';
+import type { TracingContext } from '../ai-tracing';
 import type { Run } from '../run/types';
 import type { RuntimeContext } from '../runtime-context';
 import type { CoreTool } from '../tools/types';
@@ -109,7 +109,7 @@ type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = unde
   threadId?: string;
   resourceId?: string;
   runtimeContext: RuntimeContext;
-  agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
+  tracingContext: TracingContext;
 } & Run;
 
 export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {

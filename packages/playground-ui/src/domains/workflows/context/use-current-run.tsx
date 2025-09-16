@@ -13,7 +13,6 @@ export type Step = {
 
 type UseCurrentRunReturnType = {
   steps: Record<string, Step>;
-  isRunning: boolean;
   runId?: string;
 };
 
@@ -36,5 +35,5 @@ export const useCurrentRun = (): UseCurrentRunReturnType => {
     };
   }, {});
 
-  return { steps, isRunning: Boolean(context.payload), runId: context.result?.runId };
+  return { steps, runId: context.result?.runId };
 };

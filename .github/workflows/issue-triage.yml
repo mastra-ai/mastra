@@ -19,9 +19,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20.19.1
+          registry-url: 'https://registry.yarnpkg.com'
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --registry=https://registry.yarnpkg.com
         working-directory: scripts/gh-issue-triage
 
       - name: Label Issue

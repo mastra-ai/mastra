@@ -1,11 +1,11 @@
 {
   "$schema": "https://unpkg.com/@changesets/config@3.0.4/schema.json",
   "changelog": [
-    "@changesets/changelog-github",
+    "changesets-changelog-github-local",
     { "repo": "mastra-ai/mastra" }
   ],
   "commit": false,
-  "fixed": [["@mastra/core", "@mastra/server", "@mastra/deployer"], ["mastra", "create-mastra"]],
+  "fixed": [["@mastra/core", "@mastra/server", "@mastra/deployer", "@mastra/deployer-cloud"], ["mastra", "create-mastra"]],
   "linked": [],
   "access": "public",
   "baseBranch": "main",
@@ -16,8 +16,6 @@
     "!mastra",
     "!create-mastra",
     "!@mastra/*",
-    "!docs",
-    "@internal/*",
-    "@mastra/memory-integration-tests"
+    "@internal/*"
   ]
 }

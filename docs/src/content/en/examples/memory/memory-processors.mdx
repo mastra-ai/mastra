@@ -1,190 +1,164 @@
 ---
-title: Memory Processors
-description: Example of using memory processors to filter and transform recalled messages
+title: "Example: Memory Processors | Memory | Mastra Docs"
+description: Example showing how to use memory processors to limit tokens, filter tool calls, and create custom filters.
 ---
 
 # Memory Processors
 
-This example demonstrates how to use memory processors to limit token usage, filter out tool calls, and create a simple custom processor.
+Use memory processors to filter, transform, or limit recalled messages before they are passed to the agent. These examples demonstrates how to apply token limits, exclude tool calls, and implement a custom processor.
 
-## Setup
+## Prerequisites
 
-First, install the memory package:
+This example uses the `openai` model. Make sure to add `OPENAI_API_KEY` to your `.env` file.
 
-```bash copy
-npm install @mastra/memory@latest
-# or
-pnpm add @mastra/memory@latest
-# or
-yarn add @mastra/memory@latest
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
 ```
 
-## Basic Memory Setup with Processors
+And install the following package:
 
-```typescript
+```bash copy
+npm install @mastra/libsql
+```
+
+## Adding memory to an agent
+
+To add LibSQL memory to an agent, use the `Memory` class and pass a `storage` instance using `LibSQLStore`. The `url` can point to a remote location or local file.
+
+### Memory processor configuration
+
+Enable working memory by setting `workingMemory.enabled` to `true`. This allows the agent to remember structured information between interactions. This example also uses memory processors to limit the number of recalled tokens with `TokenLimiter` and filter out tool calls using `ToolCallFilter`.
+
+```typescript filename="src/mastra/agents/example-working-memory-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { TokenLimiter, ToolCallFilter } from "@mastra/memory/processors";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { LibSQLStore } from "@mastra/libsql";
 
-// Create memory with processors
-const memory = new Memory({
-  processors: [new TokenLimiter(127000), new ToolCallFilter()],
+export const memoryProcessorAgent = new Agent({
+  name: "memory-processor-agent",
+  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:memory-processor.db"
+    }),
+    processors: [new TokenLimiter(127000), new ToolCallFilter()],
+    options: {
+      workingMemory: {
+        enabled: true
+      },
+      threads: {
+        generateTitle: true
+      }
+    }
+  })
 });
 ```
 
-## Using Token Limiting
+### Using token limiters
 
-The `TokenLimiter` helps you stay within your model's context window:
+Token limiters control how many tokens are passed to the agent by trimming recalled messages. This helps manage context size and avoid exceeding model limits.
 
-```typescript
+```typescript showLineNumbers
 import { Memory } from "@mastra/memory";
 import { TokenLimiter } from "@mastra/memory/processors";
 
-// Set up memory with a token limit
-const memory = new Memory({
-  processors: [
-    // Limit to approximately 12700 tokens (for GPT-4o)
-    new TokenLimiter(127000),
-  ],
+export const memoryProcessorAgent = new Agent({
+  // ...
+  memory: new Memory({
+    // ...
+    processors: [new TokenLimiter(127000)],
+  }),
 });
 ```
 
-You can also specify a different encoding if needed:
+### Using token encoding
 
-```typescript
+You can customize how tokens are counted by providing a specific encoding, such as `cl100k_base` from the `js-tiktoken` package. This ensures accurate token limits for different models.
+
+```typescript showLineNumbers
 import { Memory } from "@mastra/memory";
 import { TokenLimiter } from "@mastra/memory/processors";
 import cl100k_base from "js-tiktoken/ranks/cl100k_base";
 
-const memory = new Memory({
-  processors: [
-    new TokenLimiter({
-      limit: 16000,
-      encoding: cl100k_base, // Specific encoding for certain models eg GPT-3.5
-    }),
-  ],
+export const memoryProcessorAgent = new Agent({
+  // ...
+  memory: new Memory({
+    // ...
+    processors: [
+      new TokenLimiter({
+        limit: 16000,
+        encoding: cl100k_base,
+      }),
+    ],
+  }),
 });
 ```
 
-## Filtering Tool Calls
+### Filtering tool calls
 
-The `ToolCallFilter` processor removes tool calls and their results from memory:
+The `ToolCallFilter` processor removes specific tool calls and their results from memory. Filtering out tools like logging or image generation helps reduce noise and keeps the agent focused.
 
-```typescript
+```typescript showLineNumbers
 import { Memory } from "@mastra/memory";
 import { ToolCallFilter } from "@mastra/memory/processors";
 
-// Filter out all tool calls
-const memoryNoTools = new Memory({
-  processors: [new ToolCallFilter()],
-});
-
-// Filter specific tool calls
-const memorySelectiveFilter = new Memory({
-  processors: [
-    new ToolCallFilter({
-      exclude: ["imageGenTool", "clipboardTool"],
-    }),
-  ],
+export const memoryProcessorAgent = new Agent({
+  // ...
+  memory: new Memory({
+    // ...
+    processors: [
+      new ToolCallFilter({
+        exclude: ["exampleLoggerTool", "exampleImageGenTool"],
+      }),
+    ],
+  }),
 });
 ```
 
-## Combining Multiple Processors
+## Creating custom processors
 
-Processors run in the order they are defined:
+Custom memory processors can be created by extending the `MemoryProcessor` class, allowing custom logic to be applied to the list of recalled messages before they are sent to the agent.
 
-```typescript
-import { Memory } from "@mastra/memory";
-import { TokenLimiter, ToolCallFilter } from "@mastra/memory/processors";
-
-const memory = new Memory({
-  processors: [
-    // First filter out tool calls
-    new ToolCallFilter({ exclude: ["imageGenTool"] }),
-    // Then limit tokens (always put token limiter last for accurate measuring after other filters/transforms)
-    new TokenLimiter(16000),
-  ],
-});
-```
-
-## Creating a Simple Custom Processor
-
-You can create your own processors by extending the `MemoryProcessor` class:
-
-```typescript
-import type { CoreMessage } from "@mastra/core";
+```typescript filename="src/mastra/processors/example-recent-messages-processor.ts" showLineNumbers copy
 import { MemoryProcessor } from "@mastra/core/memory";
-import { Memory } from "@mastra/memory";
+import type { CoreMessage } from "@mastra/core";
 
-// Simple processor that keeps only the most recent messages
-class RecentMessagesProcessor extends MemoryProcessor {
+export class RecentMessagesProcessor extends MemoryProcessor {
   private limit: number;
 
   constructor(limit: number = 10) {
-    super();
+    super({ name: "RecentMessagesProcessor" });
     this.limit = limit;
   }
 
   process(messages: CoreMessage[]): CoreMessage[] {
-    // Keep only the most recent messages
     return messages.slice(-this.limit);
   }
 }
+```
 
-// Use the custom processor
-const memory = new Memory({
-  processors: [
-    new RecentMessagesProcessor(5), // Keep only the last 5 messages
-    new TokenLimiter(16000),
-  ],
+### Custom processor usage
+
+This example uses the `RecentMessagesProcessor` with a limit of `5` to return only the last five messages from memory.
+
+```typescript showLineNumbers
+import { Memory } from "@mastra/memory";
+import { ToolCallFilter } from "@mastra/memory/processors";
+import { RecentMessagesProcessor } from "../processors/example-recent-messages-processor";
+
+export const memoryProcessorAgent = new Agent({
+  // ...
+  memory: new Memory({
+    // ...
+    processors: [new RecentMessagesProcessor(5)],
+  }),
 });
 ```
 
-Note: this example is for simplicity of understanding how custom processors work - you can limit messages more efficiently using `new Memory({ options: { lastMessages: 5 } })`. Memory processors are applied after memories are retrieved from storage, while `options.lastMessages` is applied before messages are fetched from storage.
+## Related
 
-## Integration with an Agent
-
-Here's how to use memory with processors in an agent:
-
-```typescript
-import { Agent } from "@mastra/core/agent";
-import { Memory, TokenLimiter, ToolCallFilter } from "@mastra/memory";
-import { openai } from "@ai-sdk/openai";
-
-// Set up memory with processors
-const memory = new Memory({
-  processors: [
-    new ToolCallFilter({ exclude: ["debugTool"] }),
-    new TokenLimiter(16000),
-  ],
-});
-
-// Create an agent with the memory
-const agent = new Agent({
-  name: "ProcessorAgent",
-  instructions: "You are a helpful assistant with processed memory.",
-  model: openai("gpt-4o-mini"),
-  memory,
-});
-
-// Use the agent
-const response = await agent.stream("Hi, can you remember our conversation?", {
-  threadId: "unique-thread-id",
-  resourceId: "user-123",
-});
-
-for await (const chunk of response.textStream) {
-  process.stdout.write(chunk);
-}
-```
-
-## Summary
-
-This example demonstrates:
-
-1. Setting up memory with token limiting to prevent context window overflow
-2. Filtering out tool calls to reduce noise and token usage
-3. Creating a simple custom processor to keep only recent messages
-4. Combining multiple processors in the correct order
-5. Integrating processed memory with an agent
-
-For more details on memory processors, check out the [Memory Processors documentation](/docs/memory/memory-processors).
+- [Calling Agents](../agents/calling-agents.mdx#from-the-command-line)
+- [Memory Processors](../../docs/memory/memory-processors.mdx)

@@ -9,6 +9,8 @@ on:
 
 jobs:
   changelog:
+    if: ${{ github.repository == 'mastra-ai/mastra' && (contains(github.head_ref || github.ref_name, 'changeset-release') || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -23,9 +25,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
-    if: ${{ github.repository == 'mastra-ai/mastra' && (contains(github.head_ref || github.ref_name, 'changeset-release') || github.event_name == 'workflow_dispatch') }}
-    runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -42,7 +41,7 @@ jobs:
         with:
           node-version: '20.19.1'
           cache: 'pnpm'
-          registry-url: 'https://registry.npmjs.org'
+          registry-url: 'https://registry.yarnpkg.com'
 
       - name: Install dependencies
         run: pnpm install
@@ -52,7 +51,7 @@ jobs:
 
       - name: Setup npm auth
         run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+          echo "//registry.yarnpkg.com/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
 
       - name: Build core
         run: pnpm build:core

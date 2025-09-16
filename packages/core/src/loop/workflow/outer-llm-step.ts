@@ -1,6 +1,7 @@
 import type { ToolSet } from 'ai-v5';
 import z from 'zod';
 import { convertMastraChunkToAISDKv5 } from '../../stream/aisdk/v5/transform';
+import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { createStep, createWorkflow } from '../../workflows';
@@ -9,13 +10,10 @@ import { createLLMExecutionStep } from './llm-execution';
 import { llmIterationOutputSchema, toolCallOutputSchema } from './schema';
 import { createToolCallStep } from './tool-call-step';
 
-export function createOuterLLMWorkflow<Tools extends ToolSet = ToolSet>({
-  model,
-  telemetry_settings,
-  _internal,
-  modelStreamSpan,
-  ...rest
-}: OuterLLMRun<Tools>) {
+export function createOuterLLMWorkflow<
+  Tools extends ToolSet = ToolSet,
+  OUTPUT extends OutputSchema | undefined = undefined,
+>({ model, telemetry_settings, _internal, modelStreamSpan, ...rest }: OuterLLMRun<Tools, OUTPUT>) {
   const llmExecutionStep = createLLMExecutionStep({
     model,
     _internal,
@@ -99,6 +97,7 @@ export function createOuterLLMWorkflow<Tools extends ToolSet = ToolSet>({
               toolName: toolCall.toolName,
               result: toolCall.result,
               providerMetadata: toolCall.providerMetadata,
+              providerExecuted: toolCall.providerExecuted,
             },
           };
 
@@ -167,7 +166,7 @@ export function createOuterLLMWorkflow<Tools extends ToolSet = ToolSet>({
       }
       return inputData.output.toolCalls || [];
     })
-    .foreach(toolCallStep)
+    .foreach(toolCallStep, { concurrency: 10 })
     .then(llmMappingStep)
     .commit();
 }

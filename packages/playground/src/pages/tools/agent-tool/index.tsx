@@ -10,15 +10,7 @@ import { useAgent } from '@/hooks/use-agents';
 import { useExecuteTool } from '@/hooks/use-execute-agent-tool';
 
 import ToolExecutor from '../tool-executor';
-import {
-  Header,
-  Crumb,
-  Breadcrumb,
-  usePlaygroundStore,
-  Txt,
-  MainContentLayout,
-  MainContentContent,
-} from '@mastra/playground-ui';
+import { Header, Crumb, Breadcrumb, usePlaygroundStore, Txt, MainContentLayout } from '@mastra/playground-ui';
 
 const AgentTool = () => {
   const { toolId, agentId } = useParams();
@@ -59,7 +51,7 @@ const AgentTool = () => {
           <Crumb as={Link} to={`/agents/${agentId}/chat`}>
             {agentId}
           </Crumb>
-          <Crumb as={Link} to={`/agents/${agentId}/tools/${toolId}`} isCurrent>
+          <Crumb as={Link} to={`/tools/${agentId}/${toolId}`} isCurrent>
             {toolId}
           </Crumb>
         </Breadcrumb>

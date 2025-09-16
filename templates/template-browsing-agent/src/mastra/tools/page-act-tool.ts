@@ -1,4 +1,4 @@
-import { createTool } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
 import z from 'zod';
 import { sessionManager } from '../../lib/stage-hand';
 

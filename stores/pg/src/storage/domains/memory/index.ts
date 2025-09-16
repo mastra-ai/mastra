@@ -323,6 +323,8 @@ export class MemoryPG extends MemoryStorage {
     selectBy: StorageGetMessagesArg['selectBy'];
     orderByStatement: string;
   }) {
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
     const include = selectBy?.include;
     if (!include) return null;
 
@@ -411,13 +413,14 @@ export class MemoryPG extends MemoryStorage {
       format?: 'v1' | 'v2';
     },
   ): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    const { threadId, format, selectBy } = args;
-
+    const { threadId, resourceId, format, selectBy } = args;
     const selectStatement = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId"`;
     const orderByStatement = `ORDER BY "createdAt" DESC`;
     const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
 
     try {
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
       let rows: any[] = [];
       const include = selectBy?.include || [];
 
@@ -471,6 +474,7 @@ export class MemoryPG extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             threadId,
+            resourceId: resourceId ?? '',
           },
         },
         error,
@@ -540,7 +544,7 @@ export class MemoryPG extends MemoryStorage {
       format?: 'v1' | 'v2';
     },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, format, selectBy } = args;
+    const { threadId, resourceId, format, selectBy } = args;
     const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
     const fromDate = dateRange?.start;
     const toDate = dateRange?.end;
@@ -550,14 +554,16 @@ export class MemoryPG extends MemoryStorage {
 
     const messages: MastraMessageV2[] = [];
 
-    if (selectBy?.include?.length) {
-      const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
-      if (includeMessages) {
-        messages.push(...includeMessages);
-      }
-    }
-
     try {
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
+      if (selectBy?.include?.length) {
+        const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
+        if (includeMessages) {
+          messages.push(...includeMessages);
+        }
+      }
+
       const perPage =
         perPageInput !== undefined ? perPageInput : resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
       const currentOffset = page * perPage;
@@ -630,6 +636,7 @@ export class MemoryPG extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             threadId,
+            resourceId: resourceId ?? '',
             page,
           },
         },

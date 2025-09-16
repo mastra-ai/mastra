@@ -1,3 +1,4 @@
+import { Searchbar } from '@/components/ui/searchbar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
@@ -56,8 +57,7 @@ const ToolListInner = ({
 
   if (filteredTools.length === 0 && !value) return <ToolListEmpty />;
 
-  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+  const handleSearch = (value: string) => {
     setValue(value);
 
     startTransition(() => {
@@ -79,19 +79,7 @@ const ToolListInner = ({
   return (
     <div>
       <div className="max-w-5xl w-full mx-auto px-4 pt-8">
-        <div className="px-4 flex items-center gap-2 rounded-lg bg-surface5 focus-within:ring-2 focus-within:ring-accent3">
-          <Icon>
-            <SearchIcon />
-          </Icon>
-
-          <input
-            type="text"
-            placeholder="Search for a tool"
-            className="w-full py-2 bg-transparent text-icon3 focus:text-icon6 placeholder:text-icon3 outline-none"
-            value={value}
-            onChange={handleSearch}
-          />
-        </div>
+        <Searchbar onSearch={handleSearch} label="Search for a tool" placeholder="Search for a tool" />
 
         {filteredTools.length === 0 && (
           <Txt as="p" className="text-icon3 py-2">

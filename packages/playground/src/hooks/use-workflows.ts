@@ -3,8 +3,10 @@ import { LegacyWorkflowRunResult, WorkflowWatchResult } from '@mastra/client-js'
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { usePlaygroundStore } from '@mastra/playground-ui';
 import { useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
+import { mapWorkflowStreamChunkToWatchResult } from '@mastra/playground-ui';
 
 export type ExtendedLegacyWorkflowRunResult = LegacyWorkflowRunResult & {
   sanitizedOutput?: string | null;
@@ -69,21 +71,12 @@ export const useWorkflows = () => {
 };
 
 export const useLegacyWorkflow = (workflowId: string, enabled = true) => {
+  const { runtimeContext } = usePlaygroundStore();
   return useQuery({
     gcTime: 0,
     staleTime: 0,
     queryKey: ['legacy-workflow', workflowId],
-    queryFn: () => client.getLegacyWorkflow(workflowId).details(),
-    enabled,
-  });
-};
-
-export const useWorkflow = (workflowId: string, enabled = true) => {
-  return useQuery({
-    gcTime: 0,
-    staleTime: 0,
-    queryKey: ['workflow', workflowId],
-    queryFn: () => client.getWorkflow(workflowId).details(),
+    queryFn: () => client.getLegacyWorkflow(workflowId).details(runtimeContext),
     enabled,
   });
 };
@@ -260,7 +253,7 @@ export const useStreamWorkflow = () => {
         runtimeContext.set(key as keyof RuntimeContext, value);
       });
       const workflow = client.getWorkflow(workflowId);
-      const stream = await workflow.stream({ runId, inputData, runtimeContext });
+      const stream = await workflow.streamVNext({ runId, inputData, runtimeContext });
 
       if (!stream) throw new Error('No stream returned');
 
@@ -272,166 +265,19 @@ export const useStreamWorkflow = () => {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          if (value.type === 'start') {
-            setStreamResult((prev: WorkflowWatchResult) => ({
-              ...prev,
-              runId: value.payload.runId,
-              eventTimestamp: new Date(),
-              payload: {
-                ...(prev?.payload || {}),
-                workflowState: {
-                  ...(prev?.payload?.workflowState || {}),
-                  status: 'running',
-                },
-              },
-            }));
-          }
 
-          if (value.type === 'step-start') {
+          setStreamResult(prev => mapWorkflowStreamChunkToWatchResult(prev, value));
+
+          if (value.type === 'workflow-step-start') {
             setIsStreaming(true);
-            setStreamResult((prev: WorkflowWatchResult) => {
-              const current = prev?.payload?.workflowState?.steps?.[value.payload.id] || {};
-              return {
-                ...prev,
-                payload: {
-                  ...prev.payload,
-                  currentStep: {
-                    id: value.payload.id,
-                    ...value.payload,
-                  },
-                  workflowState: {
-                    ...prev.payload.workflowState,
-                    steps: {
-                      ...prev.payload.workflowState.steps,
-                      [value.payload.id]: {
-                        ...(current || {}),
-                        ...value.payload,
-                      },
-                    },
-                  },
-                },
-                eventTimestamp: new Date(),
-              };
-            });
           }
 
-          if (value.type === 'step-suspended') {
-            setStreamResult((prev: WorkflowWatchResult) => {
-              const current = prev?.payload?.workflowState?.steps?.[value.payload.id] || {};
-              return {
-                ...prev,
-                payload: {
-                  ...prev.payload,
-                  currentStep: {
-                    id: value.payload.id,
-                    ...(prev?.payload?.currentStep || {}),
-                    ...value.payload,
-                  },
-                  workflowState: {
-                    ...prev.payload.workflowState,
-                    status: 'suspended',
-                    steps: {
-                      ...prev.payload.workflowState.steps,
-                      [value.payload.id]: {
-                        ...(current || {}),
-                        ...value.payload,
-                      },
-                    },
-                  },
-                },
-                eventTimestamp: new Date(),
-              };
-            });
+          if (value.type === 'workflow-step-suspended') {
             setIsStreaming(false);
           }
 
-          if (value.type === 'step-waiting') {
-            setStreamResult((prev: WorkflowWatchResult) => {
-              const current = prev?.payload?.workflowState?.steps?.[value.payload.id] || {};
-              return {
-                ...prev,
-                payload: {
-                  ...prev.payload,
-                  currentStep: {
-                    id: value.payload.id,
-                    ...(prev?.payload?.currentStep || {}),
-                    ...value.payload,
-                  },
-                  workflowState: {
-                    ...prev.payload.workflowState,
-                    status: 'waiting',
-                    steps: {
-                      ...prev.payload.workflowState.steps,
-                      [value.payload.id]: {
-                        ...current,
-                        ...value.payload,
-                      },
-                    },
-                  },
-                },
-                eventTimestamp: new Date(),
-              };
-            });
-          }
-
-          if (value.type === 'step-result') {
+          if (value.type === 'workflow-step-result') {
             status = value.payload.status;
-            setStreamResult((prev: WorkflowWatchResult) => {
-              const current = prev?.payload?.workflowState?.steps?.[value.payload.id] || {};
-              return {
-                ...prev,
-                payload: {
-                  ...prev.payload,
-                  currentStep: {
-                    id: value.payload.id,
-                    ...(prev?.payload?.currentStep || {}),
-                    ...value.payload,
-                  },
-                  workflowState: {
-                    ...prev.payload.workflowState,
-                    status: 'running',
-                    steps: {
-                      ...prev.payload.workflowState.steps,
-                      [value.payload.id]: {
-                        ...current,
-                        ...value.payload,
-                      },
-                    },
-                  },
-                },
-                eventTimestamp: new Date(),
-              };
-            });
-          }
-
-          if (value.type === 'step-finish') {
-            setStreamResult((prev: WorkflowWatchResult) => {
-              return {
-                ...prev,
-                payload: {
-                  ...prev.payload,
-                  currentStep: undefined,
-                },
-                eventTimestamp: new Date(),
-              };
-            });
-          }
-
-          if (value.type === 'finish') {
-            setStreamResult((prev: WorkflowWatchResult) => {
-              return {
-                ...prev,
-                payload: {
-                  ...prev.payload,
-                  currentStep: undefined,
-                  workflowState: {
-                    ...prev.payload.workflowState,
-                    status,
-                  },
-                },
-                eventTimestamp: new Date(),
-              };
-            });
           }
         }
       } catch (error) {

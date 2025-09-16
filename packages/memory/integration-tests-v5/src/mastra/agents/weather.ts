@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai';
-import { createTool } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import { createTool } from '@mastra/core/tools';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { ToolCallFilter } from '@mastra/memory/processors';

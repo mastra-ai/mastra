@@ -1,6 +1,6 @@
-import type { PaginationInfo, StoragePagination } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData } from '@mastra/core/scores';
+import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
 import type { ConnectionPool } from 'mssql';
 import type { StoreOperationsMSSQL } from '../operations';

@@ -1,13 +1,15 @@
 import { isAbortError } from '@ai-sdk/provider-utils';
+import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2, LanguageModelV2Prompt, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
 import type { CallSettings, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
-import type { ObjectOptions } from '../../../loop/types';
 import { getResponseFormat } from '../../base/schema';
+import type { OutputSchema } from '../../base/schema';
 import { prepareToolsAndToolChoice } from './compat';
 import { AISDKV5InputStream } from './input';
+import { getModelSupport } from './model-supports';
 
-type ExecutionProps = {
+type ExecutionProps<OUTPUT extends OutputSchema | undefined = undefined> = {
   runId: string;
   model: LanguageModelV2;
   providerOptions?: SharedV2ProviderOptions;
@@ -23,7 +25,7 @@ type ExecutionProps = {
   includeRawChunks?: boolean;
   modelSettings?: CallSettings;
   onResult: (result: { warnings: any; request: any; rawResponse: any }) => void;
-  objectOptions?: ObjectOptions;
+  output?: OUTPUT;
   /**
   Additional HTTP headers to be sent with the request.
   Only applicable for HTTP-based providers.
@@ -31,7 +33,7 @@ type ExecutionProps = {
   headers?: Record<string, string | undefined>;
 };
 
-export function execute({
+export function execute<OUTPUT extends OutputSchema | undefined = undefined>({
   runId,
   model,
   providerOptions,
@@ -44,9 +46,9 @@ export function execute({
   telemetry_settings,
   includeRawChunks,
   modelSettings,
-  objectOptions,
+  output,
   headers,
-}: ExecutionProps) {
+}: ExecutionProps<OUTPUT>) {
   const v5 = new AISDKV5InputStream({
     component: 'LLM',
     name: model.modelId,
@@ -64,6 +66,18 @@ export function execute({
     });
   }
 
+  const modelSupports = getModelSupport(model.modelId, model.provider);
+  const modelSupportsResponseFormat = modelSupports?.capabilities.responseFormat?.support === 'full';
+  const responseFormat = output ? getResponseFormat(output) : undefined;
+
+  let prompt = inputMessages;
+  if (output && responseFormat?.type === 'json' && !modelSupportsResponseFormat) {
+    prompt = injectJsonInstructionIntoMessages({
+      messages: inputMessages,
+      schema: responseFormat.schema,
+    });
+  }
+
   const stream = v5.initialize({
     runId,
     onResult,
@@ -71,11 +85,11 @@ export function execute({
       try {
         const stream = await model.doStream({
           ...toolsAndToolChoice,
-          prompt: inputMessages,
+          prompt,
           providerOptions,
           abortSignal: options?.abortSignal,
           includeRawChunks,
-          responseFormat: objectOptions?.schema ? getResponseFormat(objectOptions?.schema) : undefined,
+          responseFormat: modelSupportsResponseFormat ? responseFormat : undefined,
           ...(modelSettings ?? {}),
           headers,
         });

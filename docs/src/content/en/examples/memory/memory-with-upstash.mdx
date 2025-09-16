@@ -1,104 +1,147 @@
+---
+title: "Example: Memory with Upstash | Memory | Mastra Docs"
+description: Example for how to use Mastra's memory system with Upstash Redis storage and vector capabilities.
+---
+
 # Memory with Upstash
 
 This example demonstrates how to use Mastra's memory system with Upstash as the storage backend.
 
-## Setup
+## Prerequisites
 
-First, set up the memory system with Upstash storage and vector capabilities:
+This example uses the `openai` model and requires both Upstash Redis and Upstash Vector services. Make sure to add the following to your `.env` file:
 
-```typescript
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+UPSTASH_REDIS_REST_URL=<your-redis-url>
+UPSTASH_REDIS_REST_TOKEN=<your-redis-token>
+UPSTASH_VECTOR_REST_URL=<your-vector-index-url>
+UPSTASH_VECTOR_REST_TOKEN=<your-vector-index-token>
+```
+
+You can get your Upstash credentials by signing up at [upstash.com](https://upstash.com) and creating both Redis and Vector databases.
+
+And install the following package:
+
+```bash copy
+npm install @mastra/upstash
+```
+
+## Adding memory to an agent
+
+To add Upstash memory to an agent use the `Memory` class and create a new `storage` key using `UpstashStore` and a new `vector` key using `UpstashVector`. The configuration can point to either a remote service or a local setup.
+
+```typescript filename="src/mastra/agents/example-upstash-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
-import { UpstashStore, UpstashVector } from "@mastra/upstash";
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
+import { UpstashStore } from "@mastra/upstash";
 
-// Initialize memory with Upstash storage and vector search
-const memory = new Memory({
-  storage: new UpstashStore({
-    url: process.env.UPSTASH_REDIS_REST_URL,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN,
-  }),
-  vector: new UpstashVector({
-    url: process.env.UPSTASH_VECTOR_REST_URL,
-    token: process.env.UPSTASH_VECTOR_REST_TOKEN,
-  }),
-  options: {
-    lastMessages: 10,
+export const upstashAgent = new Agent({
+  name: "upstash-agent",
+  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new UpstashStore({
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!
+    }),
+    options: {
+      threads: {
+        generateTitle: true
+      }
+    }
+  })
+});
+```
+
+
+## Local embeddings with fastembed
+
+Embeddings are numeric vectors used by memory’s `semanticRecall` to retrieve related messages by meaning (not keywords). This setup uses `@mastra/fastembed` to generate vector embeddings.
+
+Install `fastembed` to get started:
+
+```bash copy
+npm install @mastra/fastembed
+```
+
+Add the following to your agent:
+
+```typescript filename="src/mastra/agents/example-upstash-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { UpstashStore, UpstashVector } from "@mastra/upstash";
+import { fastembed } from "@mastra/fastembed";
+
+export const upstashAgent = new Agent({
+  name: "upstash-agent",
+  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new UpstashStore({
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!
+    }),
+    vector: new UpstashVector({
+      url: process.env.UPSTASH_VECTOR_REST_URL!,
+      token: process.env.UPSTASH_VECTOR_REST_TOKEN!
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2
+      }
+    }
+  })
+});
+```
+
+## Usage example
+
+Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
+
+```typescript filename="src/test-upstash-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("upstashAgent");
+
+const message = await agent.stream("My name is Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  }
+});
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("What's my name?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  },
+  memoryOptions: {
+    lastMessages: 5,
     semanticRecall: {
       topK: 3,
-      messageRange: 2,
-    },
-  },
+      messageRange: 2
+    }
+  }
 });
 
-// Create an agent with memory capabilities
-const chefAgent = new Agent({
-  name: "chefAgent",
-  instructions:
-    "You are Michel, a practical and experienced home chef who helps people cook great meals with whatever ingredients they have available.",
-  model: openai("gpt-4o-mini"),
-  memory,
-});
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
 ```
 
-## Environment Setup
+## Related
 
-Make sure to set up your Upstash credentials in the environment variables:
-
-```bash
-UPSTASH_REDIS_REST_URL=your-redis-url
-UPSTASH_REDIS_REST_TOKEN=your-redis-token
-UPSTASH_VECTOR_REST_URL=your-vector-index-url
-UPSTASH_VECTOR_REST_TOKEN=your-vector-index-token
-```
-
-## Usage Example
-
-```typescript
-import { randomUUID } from "crypto";
-
-// Start a conversation
-const threadId = randomUUID();
-const resourceId = "SOME_USER_ID";
-
-// Ask about ingredients
-const response1 = await chefAgent.stream(
-  "In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?",
-  {
-    threadId,
-    resourceId,
-  },
-);
-
-// Ask about different ingredients
-const response2 = await chefAgent.stream(
-  "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and curry powder.",
-  {
-    threadId,
-    resourceId,
-  },
-);
-
-// Use memory to recall previous conversation
-const response3 = await chefAgent.stream(
-  "What did we cook before I went to my friends house?",
-  {
-    threadId,
-    resourceId,
-    memoryOptions: {
-      lastMessages: 3, // Get last 3 messages for context
-      semanticRecall: {
-        topK: 2, // Also get 2 most relevant messages
-        messageRange: 2, // Include context around matches
-      },
-    },
-  },
-);
-```
-
-The example shows:
-
-1. Setting up Upstash storage with vector search capabilities
-2. Configuring environment variables for Upstash connection
-3. Creating an agent with memory integration
-4. Using both recent history and semantic search in the same query
+- [Calling Agents](../agents/calling-agents.mdx)

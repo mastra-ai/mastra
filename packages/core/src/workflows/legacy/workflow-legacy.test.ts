@@ -3,10 +3,9 @@ import path from 'path';
 import { MockLanguageModelV1 } from 'ai/test';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-
-import { Mastra } from '../..';
 import { Agent } from '../../agent';
 import { createLogger } from '../../logger';
+import { Mastra } from '../../mastra';
 import { RuntimeContext } from '../../runtime-context';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../storage';
 import { MockStore } from '../../storage/mock';
@@ -3299,7 +3298,7 @@ describe('LegacyWorkflow', async () => {
         triggerData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
       });
 
-      console.log(result);
+      result;
 
       expect(result.results['test-agent-1']).toEqual({
         status: 'success',
@@ -4237,7 +4236,7 @@ describe('LegacyWorkflow', async () => {
 
         const run = counterWorkflow.createRun();
         const unwatch = counterWorkflow.watch(state => {
-          console.log('state', JSON.stringify(state.results, null, 2));
+          ('state', JSON.stringify(state.results, null, 2));
         });
         const { results } = await run.start({ triggerData: { startValue: 1 } });
 

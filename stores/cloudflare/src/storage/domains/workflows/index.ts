@@ -1,7 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { TABLE_WORKFLOW_SNAPSHOT, ensureDate, WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
-import type { WorkflowRunState } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { StoreOperationsCloudflare } from '../operations';
 
 export class WorkflowsStorageCloudflare extends WorkflowsStorage {
@@ -19,13 +19,51 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     }
   }
 
+  updateWorkflowResults(
+    {
+      // workflowName,
+      // runId,
+      // stepId,
+      // result,
+      // runtimeContext,
+    }: {
+      workflowName: string;
+      runId: string;
+      stepId: string;
+      result: StepResult<any, any, any, any>;
+      runtimeContext: Record<string, any>;
+    },
+  ): Promise<Record<string, StepResult<any, any, any, any>>> {
+    throw new Error('Method not implemented.');
+  }
+  updateWorkflowState(
+    {
+      // workflowName,
+      // runId,
+      // opts,
+    }: {
+      workflowName: string;
+      runId: string;
+      opts: {
+        status: string;
+        result?: StepResult<any, any, any, any>;
+        error?: string;
+        suspendedPaths?: Record<string, number[]>;
+        waitingPaths?: Record<string, number[]>;
+      };
+    },
+  ): Promise<WorkflowRunState | undefined> {
+    throw new Error('Method not implemented.');
+  }
+
   async persistWorkflowSnapshot(params: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
     try {
-      const { workflowName, runId, snapshot } = params;
+      const { workflowName, runId, resourceId, snapshot } = params;
 
       await this.operations.putKV({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -33,6 +71,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
         value: {
           workflow_name: workflowName,
           run_id: runId,
+          resourceId,
           snapshot: typeof snapshot === 'string' ? snapshot : JSON.stringify(snapshot),
           createdAt: new Date(),
           updatedAt: new Date(),

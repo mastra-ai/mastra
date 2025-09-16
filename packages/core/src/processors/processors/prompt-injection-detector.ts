@@ -2,6 +2,7 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import type { TracingContext } from '../../ai-tracing';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { Processor } from '../index';
 
@@ -110,9 +111,10 @@ export class PromptInjectionDetector implements Processor {
   async processInput(args: {
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
+    tracingContext?: TracingContext;
   }): Promise<MastraMessageV2[]> {
     try {
-      const { messages, abort } = args;
+      const { messages, abort, tracingContext } = args;
 
       if (messages.length === 0) {
         return messages;
@@ -130,7 +132,7 @@ export class PromptInjectionDetector implements Processor {
           continue;
         }
 
-        const detectionResult = await this.detectPromptInjection(textContent);
+        const detectionResult = await this.detectPromptInjection(textContent, tracingContext);
         results.push(detectionResult);
 
         if (this.isInjectionFlagged(detectionResult)) {
@@ -163,7 +165,10 @@ export class PromptInjectionDetector implements Processor {
   /**
    * Detect prompt injection using the internal agent
    */
-  private async detectPromptInjection(content: string): Promise<PromptInjectionResult> {
+  private async detectPromptInjection(
+    content: string,
+    tracingContext?: TracingContext,
+  ): Promise<PromptInjectionResult> {
     const prompt = this.createDetectionPrompt(content);
     try {
       const model = await this.detectionAgent.getModel();
@@ -191,11 +196,13 @@ export class PromptInjectionDetector implements Processor {
           modelSettings: {
             temperature: 0,
           },
+          tracingContext,
         });
       } else {
         response = await this.detectionAgent.generate(prompt, {
           output: schema,
           temperature: 0,
+          tracingContext,
         });
       }
 

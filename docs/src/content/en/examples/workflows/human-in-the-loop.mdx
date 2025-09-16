@@ -3,7 +3,7 @@ title: "Example: Human in the Loop | Workflows | Mastra Docs"
 description: Example of using Mastra to create workflows with human intervention points.
 ---
 
-# Human in-the-loop Workflow
+# Human In-the-Loop Workflow
 
 Use human-in-the-loop workflows to pause execution at specific steps for human input, decision-making, or tasks that require judgment beyond automation.
 
@@ -50,8 +50,7 @@ const step2 = createStep({
     const { confirm } = resumeData ?? {};
 
     if (!confirm) {
-      await suspend({});
-      return { value: value };
+      return await suspend({});
     }
 
     return { value: value, confirmed: confirm };
@@ -71,6 +70,10 @@ export const humanInLoopWorkflow = createWorkflow({
   .then(step2)
   .commit();
 ```
+
+## Related
+
+- [Running Workflows](./running-workflows.mdx)
 
 ## Workflows (Legacy)
 

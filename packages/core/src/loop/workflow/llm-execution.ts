@@ -2,11 +2,12 @@ import type { ReadableStream } from 'stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2, LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import type { ToolSet } from 'ai-v5';
-import type { MessageList } from '../../agent/message-list';
+import { MessageList } from '../../agent/message-list';
 import { execute } from '../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../stream/aisdk/v5/output-helpers';
 import { convertMastraChunkToAISDKv5 } from '../../stream/aisdk/v5/transform';
 import { MastraModelOutput } from '../../stream/base/output';
+import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType, ReasoningStartPayload, TextStartPayload } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { createStep } from '../../workflows';
@@ -14,13 +15,13 @@ import type { LoopConfig, OuterLLMRun } from '../types';
 import { AgenticRunState } from './run-state';
 import { llmIterationOutputSchema } from './schema';
 
-type ProcessOutputStreamOptions = {
+type ProcessOutputStreamOptions<OUTPUT extends OutputSchema | undefined = undefined> = {
   model: LanguageModelV2;
   tools?: ToolSet;
   messageId: string;
   includeRawChunks?: boolean;
   messageList: MessageList;
-  outputStream: MastraModelOutput;
+  outputStream: MastraModelOutput<OUTPUT>;
   runState: AgenticRunState;
   options?: LoopConfig;
   controller: ReadableStreamDefaultController<ChunkType>;
@@ -31,7 +32,7 @@ type ProcessOutputStreamOptions = {
   };
 };
 
-async function processOutputStream({
+async function processOutputStream<OUTPUT extends OutputSchema | undefined = undefined>({
   tools,
   messageId,
   messageList,
@@ -41,7 +42,7 @@ async function processOutputStream({
   controller,
   responseFromModel,
   includeRawChunks,
-}: ProcessOutputStreamOptions) {
+}: ProcessOutputStreamOptions<OUTPUT>) {
   for await (const chunk of outputStream.fullStream) {
     if (!chunk) {
       continue;
@@ -84,7 +85,20 @@ async function processOutputStream({
     }
 
     // Streaming
-    if (chunk.type !== 'text-delta' && chunk.type !== 'tool-call' && runState.state.isStreaming) {
+    if (
+      chunk.type !== 'text-delta' &&
+      chunk.type !== 'tool-call' &&
+      // not 100% sure about this being the right fix.
+      // basically for some llm providers they add response-metadata after each text-delta
+      // we then flush the chunks by calling messageList.add (a few lines down)
+      // this results in a bunch of weird separated text chunks on the message instead of combined chunks
+      // easiest solution here is to just not flush for response-metadata
+      // BUT does this cause other issues?
+      // Alternative solution: in message list allow combining text deltas together when the message source is "response" and the text parts are directly next to each other
+      // simple solution for now is to not flush text deltas on response-metadata
+      chunk.type !== 'response-metadata' &&
+      runState.state.isStreaming
+    ) {
       if (runState.state.textDeltas.length) {
         const textStartPayload = chunk.payload as TextStartPayload;
         const providerMetadata = textStartPayload.providerMetadata ?? runState.state.providerOptions;
@@ -341,7 +355,10 @@ async function processOutputStream({
   }
 }
 
-export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
+export function createLLMExecutionStep<
+  Tools extends ToolSet = ToolSet,
+  OUTPUT extends OutputSchema | undefined = undefined,
+>({
   model,
   _internal,
   messageId,
@@ -357,14 +374,17 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
   options,
   toolCallStreaming,
   controller,
-  objectOptions,
+  output,
+  outputProcessors,
   headers,
-}: OuterLLMRun<Tools>) {
+  downloadRetries,
+  downloadConcurrency,
+}: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'llm-execution',
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
-    execute: async ({ inputData, bail }) => {
+    execute: async ({ inputData, bail, tracingContext }) => {
       const runState = new AgenticRunState({
         _internal: _internal!,
         model,
@@ -377,18 +397,74 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
 
       switch (model.specificationVersion) {
         case 'v2': {
+          const messageListPromptArgs = {
+            downloadRetries,
+            downloadConcurrency,
+            supportedUrls: model?.supportedUrls as Record<string, RegExp[]>,
+          };
+          let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+
+          // Call prepareStep callback if provided
+          let stepModel = model;
+          let stepToolChoice = toolChoice;
+          let stepTools = tools;
+
+          if (options?.prepareStep) {
+            try {
+              const prepareStepResult = await options.prepareStep({
+                stepNumber: inputData.output?.steps?.length || 0,
+                steps: inputData.output?.steps || [],
+                model,
+                messages: messageList.get.all.aiV5.model(),
+              });
+
+              if (prepareStepResult) {
+                if (prepareStepResult.model) {
+                  stepModel = prepareStepResult.model;
+                }
+                if (prepareStepResult.toolChoice) {
+                  stepToolChoice = prepareStepResult.toolChoice;
+                }
+                if (prepareStepResult.activeTools && stepTools) {
+                  const activeToolsSet = new Set(prepareStepResult.activeTools);
+                  stepTools = Object.fromEntries(
+                    Object.entries(stepTools).filter(([toolName]) => activeToolsSet.has(toolName)),
+                  ) as typeof tools;
+                }
+                if (prepareStepResult.messages) {
+                  const newMessages = prepareStepResult.messages;
+                  const newMessageList = new MessageList();
+
+                  for (const message of newMessages) {
+                    if (message.role === 'system') {
+                      newMessageList.addSystem(message);
+                    } else if (message.role === 'user') {
+                      newMessageList.add(message, 'input');
+                    } else if (message.role === 'assistant' || message.role === 'tool') {
+                      newMessageList.add(message, 'response');
+                    }
+                  }
+
+                  inputMessages = await newMessageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+                }
+              }
+            } catch (error) {
+              console.error('Error in prepareStep callback:', error);
+            }
+          }
+
           modelResult = execute({
             runId,
-            model,
+            model: stepModel,
             providerOptions,
-            inputMessages: messageList.get.all.aiV5.llmPrompt(),
-            tools,
-            toolChoice,
+            inputMessages,
+            tools: stepTools,
+            toolChoice: stepToolChoice,
             options,
             modelSettings,
             telemetry_settings,
             includeRawChunks,
-            objectOptions,
+            output,
             headers,
             onResult: ({
               warnings: warningsFromStream,
@@ -427,13 +503,17 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
         },
         stream: modelResult as ReadableStream<ChunkType>,
         messageList,
+        messageId,
         options: {
           runId,
           rootSpan: modelStreamSpan,
           toolCallStreaming,
           telemetry_settings,
           includeRawChunks,
-          objectOptions,
+          output,
+          outputProcessors,
+          outputProcessorRunnerMode: 'stream',
+          tracingContext,
         },
       });
 
@@ -510,6 +590,26 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
         });
       }
 
+      // Check if the inner stream encountered a tripwire and propagate it
+      if (outputStream.tripwire) {
+        controller.enqueue({
+          type: 'tripwire',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            tripwireReason: outputStream.tripwireReason || 'Content blocked by output processor',
+          },
+        });
+
+        // Set the step result to indicate abort
+        runState.setState({
+          stepResult: {
+            isContinued: false,
+            reason: 'abort',
+          },
+        });
+      }
+
       /**
        * Add tool calls to the message list
        */
@@ -546,6 +646,9 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
       const responseMetadata = runState.state.responseMetadata;
       const text = outputStream._getImmediateText();
 
+      // Check if tripwire was triggered
+      const tripwireTriggered = outputStream.tripwire;
+
       const steps = inputData.output?.steps || [];
 
       steps.push(
@@ -570,9 +673,9 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
       return {
         messageId,
         stepResult: {
-          reason: hasErrored ? 'error' : finishReason,
+          reason: tripwireTriggered ? 'abort' : hasErrored ? 'error' : finishReason,
           warnings,
-          isContinued: !['stop', 'error'].includes(finishReason),
+          isContinued: tripwireTriggered ? false : !['stop', 'error'].includes(finishReason),
         },
         metadata: {
           providerMetadata: runState.state.providerOptions,

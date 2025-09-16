@@ -1,4 +1,4 @@
-import type { WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
+import type { StepResult, WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import sql from 'mssql';
@@ -44,13 +44,52 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     this.schema = schema;
   }
 
+  updateWorkflowResults(
+    {
+      // workflowName,
+      // runId,
+      // stepId,
+      // result,
+      // runtimeContext,
+    }: {
+      workflowName: string;
+      runId: string;
+      stepId: string;
+      result: StepResult<any, any, any, any>;
+      runtimeContext: Record<string, any>;
+    },
+  ): Promise<Record<string, StepResult<any, any, any, any>>> {
+    throw new Error('Method not implemented.');
+  }
+  updateWorkflowState(
+    {
+      // workflowName,
+      // runId,
+      // opts,
+    }: {
+      workflowName: string;
+      runId: string;
+      opts: {
+        status: string;
+        result?: StepResult<any, any, any, any>;
+        error?: string;
+        suspendedPaths?: Record<string, number[]>;
+        waitingPaths?: Record<string, number[]>;
+      };
+    },
+  ): Promise<WorkflowRunState | undefined> {
+    throw new Error('Method not implemented.');
+  }
+
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
     const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
@@ -59,6 +98,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       const request = this.pool.request();
       request.input('workflow_name', workflowName);
       request.input('run_id', runId);
+      request.input('resourceId', resourceId);
       request.input('snapshot', JSON.stringify(snapshot));
       request.input('createdAt', sql.DateTime2, new Date(now));
       request.input('updatedAt', sql.DateTime2, new Date(now));
@@ -66,10 +106,11 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         USING (SELECT @workflow_name AS workflow_name, @run_id AS run_id) AS src
         ON target.workflow_name = src.workflow_name AND target.run_id = src.run_id
         WHEN MATCHED THEN UPDATE SET
+          resourceId = @resourceId,
           snapshot = @snapshot,
           [updatedAt] = @updatedAt
-        WHEN NOT MATCHED THEN INSERT (workflow_name, run_id, snapshot, [createdAt], [updatedAt])
-          VALUES (@workflow_name, @run_id, @snapshot, @createdAt, @updatedAt);`;
+        WHEN NOT MATCHED THEN INSERT (workflow_name, run_id, resourceId, snapshot, [createdAt], [updatedAt])
+          VALUES (@workflow_name, @run_id, @resourceId, @snapshot, @createdAt, @updatedAt);`;
       await request.query(mergeSql);
     } catch (error) {
       throw new MastraError(

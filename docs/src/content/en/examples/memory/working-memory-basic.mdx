@@ -1,0 +1,163 @@
+---
+title: "Example: Basic Working Memory | Memory | Mastra Docs"
+description: Example showing how to enable basic working memory for agents to maintain conversational context.
+---
+
+# Basic Working Memory
+
+Use working memory to help agents remember key facts, track user details, and maintain context across conversations.
+
+Working memory works with both streamed responses using `.stream()` and generated responses using `.generate()`, and requires a storage provider such as PostgreSQL, LibSQL, or Redis to persist data between sessions.
+
+This example shows how to enable working memory in an agent and interact with it across multiple messages in the same thread.
+
+## Prerequisites
+
+This example uses the `openai` model. Make sure to add `OPENAI_API_KEY` to your `.env` file.
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+```
+
+And install the following package:
+
+```bash copy
+npm install @mastra/libsql
+```
+
+## Adding memory to an agent
+
+To add LibSQL memory to an agent, use the `Memory` class and pass a `storage` instance using `LibSQLStore`. The `url` can point to a remote location or local file.
+
+### Working memory configuration
+
+Enable working memory by setting `workingMemory.enabled` to `true`. This allows the agent to remember information from earlier conversations and persist structured data between sessions.
+
+Threads group related messages into distinct conversations. When `generateTitle` is enabled, each thread is automatically named based on its content.
+
+```typescript filename="src/mastra/agents/example-working-memory-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const workingMemoryAgent = new Agent({
+  name: "working-memory-agent",
+  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:working-memory.db"
+    }),
+    options: {
+      workingMemory: {
+        enabled: true
+      },
+      threads: {
+        generateTitle: true
+      }
+    }
+  })
+});
+```
+
+## Usage examples
+
+This example shows how to interact with an agent that has working memory enabled. The agent remembers information shared across multiple interactions within the same thread.
+
+### Streaming a response using `.stream()`
+
+This example sends two messages to the agent within the same thread. The response is streamed and includes information remembered from the first.
+
+```typescript filename="src/test-working-memory-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("workingMemoryAgent");
+
+await agent.stream("My name is Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  }
+});
+
+const stream = await agent.stream("What do you know about me?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  }
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+### Generating a response using `.generate()`
+
+This example sends two messages to the agent within the same thread. The response is returned as a single message and includes information remembered from the first.
+
+```typescript filename="src/test-working-memory-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("workingMemoryAgent");
+
+await agent.generate("My name is Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  }
+});
+
+const response = await agent.generate("What do you know about me?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  }
+});
+
+console.log(response.text);
+```
+
+## Example output
+
+The output demonstrates the agent has used its memory to recall information.
+
+```text
+I know that your first name is Mastra.
+If there's anything else you'd like to share or update, feel free to let me know!
+```
+
+## Example storage object
+
+Working memory stores data in `.json` format, which would look similar to the below:
+
+```json
+{
+  // ...
+  "toolInvocations": [
+    {
+      // ...
+      "args": {
+        "memory": "# User Information\n- **First Name**: Mastra\n-"
+      },
+    }
+  ],
+}
+```
+
+## Related
+
+- [Calling Agents](../agents/calling-agents.mdx#from-the-command-line)
+- [Agent Memory](../../docs/agents/agent-memory.mdx)
+- [Serverless Deployment](../../docs/deployment/server-deployment.mdx#libsqlstore)

@@ -94,6 +94,8 @@ const response = await agent.generate("What is your favorite room in Hogwarts?")
 console.log(response.text);
 ```
 
+### Run the script
+
 Run this script from your command line using:
 
 ```bash
@@ -115,4 +117,14 @@ curl -X POST http://localhost:4111/api/agents/harryPotterAgent/generate \
       }
     ]
   }'| jq -r '.text'
+```
+
+
+## Example output
+
+```text
+Well, if I had to choose, I'd say the Gryffindor common room.
+It's where I've spent some of my best moments with Ron and Hermione.
+The warm fire, the cozy armchairs, and the sense of camaraderie make it feel like home.
+Plus, it's where we plan all our adventures!
 ```

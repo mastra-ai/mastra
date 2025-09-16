@@ -12,7 +12,7 @@
     "clean": {
       "cache": false
     },
-    "dev:playground": {
+    "dev": {
       "dependsOn": ["^build"],
       "cache": false,
       "persistent": true

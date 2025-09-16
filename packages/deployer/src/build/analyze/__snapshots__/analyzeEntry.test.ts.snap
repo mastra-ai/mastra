@@ -1,0 +1,28 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`analyzeEntry > should analyze the entry file 1`] = `
+{
+  "code": "import { createLogger } from '@mastra/core/logger';
+import { Mastra } from '@mastra/core/mastra';
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+
+const testAgent = new Agent({
+  name: "test-agent",
+  instructions: "test-agent",
+  model: openai("gpt-4o")
+});
+
+const mastra = new Mastra({
+  agents: { testAgent },
+  logger: createLogger({
+    name: 'Mastra',
+    level: 'info',
+  }),
+});
+
+export { mastra };
+",
+  "map": null,
+}
+`;

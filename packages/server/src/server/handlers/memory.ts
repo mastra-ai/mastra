@@ -1,8 +1,7 @@
-import { generateEmptyFromSchema } from '@mastra/core';
-import type { StorageGetMessagesArg } from '@mastra/core';
 import type { RuntimeContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
-import type { ThreadSortOptions } from '@mastra/core/storage';
+import type { StorageGetMessagesArg, ThreadSortOptions } from '@mastra/core/storage';
+import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 

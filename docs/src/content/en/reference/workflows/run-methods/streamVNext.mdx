@@ -3,13 +3,11 @@ title: "Reference: Run.streamVNext() | Workflows | Mastra Docs"
 description: Documentation for the `Run.streamVNext()` method in workflows, which enables real-time streaming of responses.
 ---
 
-import { Callout } from "nextra/components";
+import { StreamVNextCallout } from "@/components/streamVNext-callout.tsx"
 
-# Run.streamVNext()
+# Run.streamVNext() (Experimental)
 
-<Callout type="warning">
-  **Experimental Feature**: This is a new streaming implementation that will replace the existing `stream()` method once battle-tested. The API may change as we refine the feature based on feedback.
-</Callout>
+<StreamVNextCallout />
 
 The `.streamVNext()` method enables real-time streaming of responses from a workflow. This enhanced streaming capability will eventually replace the current `stream()` method.
 
@@ -89,11 +87,11 @@ const result = await stream.result;
 
 The stream emits various event types during workflow execution. Each event has a `type` field and a `payload` containing relevant data:
 
-- **`start`**: Workflow execution begins
-- **`step-start`**: A step begins execution
-- **`step-output`**: Custom output from a step
-- **`step-result`**: A step completes with results
-- **`finish`**: Workflow execution completes with usage statistics
+- **`workflow-start`**: Workflow execution begins
+- **`workflow-step-start`**: A step begins execution
+- **`workflow-step-output`**: Custom output from a step
+- **`workflow-step-result`**: A step completes with results
+- **`workflow-finish`**: Workflow execution completes with usage statistics
 
 ## Related
 

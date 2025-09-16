@@ -17,14 +17,14 @@ import { LangfuseExporter } from '@mastra/langfuse';
 const mastra = new Mastra({
   ...,
   observability: {
-    instances: {
+    configs: {
       langfuse: {
         serviceName: 'service',
         exporters: [
           new LangfuseExporter({
             publicKey: process.env.LANGFUSE_PUBLIC_KEY,
             secretKey: process.env.LANGFUSE_SECRET_KEY,
-            baseUrl: process.env.LANGFUSE_BASE_URL,
+            baseUrl: process.env.LANGFUSE_BASE_URL, // Optional - defaults to Langfuse cloud
             realtime: true,
           }),
         ],

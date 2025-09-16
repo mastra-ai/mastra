@@ -274,6 +274,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     this.logger.debug('Getting messages', { threadId, selectBy });
 
     try {
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
       const messages: MastraMessageV2[] = [];
       const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: Number.MAX_SAFE_INTEGER });
 
@@ -343,7 +345,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           id: 'STORAGE_DYNAMODB_STORE_GET_MESSAGES_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
+          details: { threadId, resourceId: resourceId ?? '' },
         },
         error,
       );
@@ -567,6 +569,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     this.logger.debug('Getting messages with pagination', { threadId, page, perPage, fromDate, toDate, limit });
 
     try {
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
       let messages: MastraMessageV2[] = [];
 
       // Handle include messages first
@@ -650,20 +654,25 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
-      throw new MastraError(
+      const mastraError = new MastraError(
         {
           id: 'STORAGE_DYNAMODB_STORE_GET_MESSAGES_PAGINATED_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
+          details: { threadId, resourceId: resourceId ?? '' },
         },
         error,
       );
+      this.logger?.trackException?.(mastraError);
+      this.logger?.error?.(mastraError.toString());
+      return { messages: [], total: 0, page, perPage, hasMore: false };
     }
   }
 
   // Helper method to get included messages with context
   private async _getIncludedMessages(threadId: string, selectBy: any): Promise<MastraMessageV2[]> {
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
     if (!selectBy?.include?.length) {
       return [];
     }

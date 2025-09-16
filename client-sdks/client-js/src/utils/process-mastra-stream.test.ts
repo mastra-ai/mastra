@@ -1,7 +1,7 @@
+import { ReadableStream } from 'stream/web';
+import type { ChunkType } from '@mastra/core/stream';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { processMastraStream } from './process-mastra-stream';
-import type { ChunkType } from '@mastra/core/stream';
-import { ReadableStream } from 'stream/web';
 
 describe('processMastraStream', () => {
   let mockOnChunk: ReturnType<typeof vi.fn>;

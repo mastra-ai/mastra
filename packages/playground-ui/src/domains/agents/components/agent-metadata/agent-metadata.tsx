@@ -10,7 +10,7 @@ import { AgentMetadataWrapper } from './agent-metadata-wrapper';
 import { ReactNode, useState } from 'react';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { ScorerList } from '@/domains/scores';
-import { Icon } from '@/ds/icons';
+import { AgentIcon, Icon } from '@/ds/icons';
 import { EditIcon } from 'lucide-react';
 import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './agent-metadata-model-switcher';
 
@@ -18,16 +18,45 @@ export interface AgentMetadataProps {
   agent: GetAgentResponse;
   promptSlot: ReactNode;
   hasMemoryEnabled: boolean;
+  computeAgentLink: (agent: { id: string; name: string }) => string;
   computeToolLink: (tool: GetToolResponse) => string;
-  computeWorkflowLink: (workflow: GetWorkflowResponse) => string;
+  computeWorkflowLink: (workflowId: string, workflow: GetWorkflowResponse) => string;
   modelProviders: string[];
   updateModel: AgentMetadataModelSwitcherProps['updateModel'];
 }
+
+export interface AgentMetadataNetworkListProps {
+  agents: { id: string; name: string }[];
+  computeAgentLink: (agent: { id: string; name: string }) => string;
+}
+
+export const AgentMetadataNetworkList = ({ agents, computeAgentLink }: AgentMetadataNetworkListProps) => {
+  const { Link } = useLinkComponent();
+
+  if (agents.length === 0) {
+    return <AgentMetadataListEmpty>No tools</AgentMetadataListEmpty>;
+  }
+
+  return (
+    <AgentMetadataList>
+      {agents.map(agent => (
+        <AgentMetadataListItem key={agent.id}>
+          <Link href={computeAgentLink(agent)}>
+            <Badge variant="success" icon={<AgentIcon />}>
+              {agent.name}
+            </Badge>
+          </Link>
+        </AgentMetadataListItem>
+      ))}
+    </AgentMetadataList>
+  );
+};
 
 export const AgentMetadata = ({
   agent,
   promptSlot,
   hasMemoryEnabled,
+  computeAgentLink,
   computeToolLink,
   computeWorkflowLink,
   updateModel,
@@ -36,11 +65,14 @@ export const AgentMetadata = ({
   const [isEditingModel, setIsEditingModel] = useState(false);
   const providerIcon = providerMapToIcon[(agent.provider || 'openai.chat') as keyof typeof providerMapToIcon];
 
+  const networkAgentsMap = agent.agents ?? {};
+  const networkAgents = Object.values(networkAgentsMap);
+
   const agentTools = agent.tools ?? {};
   const tools = Object.keys(agentTools).map(key => agentTools[key]);
 
   const agentWorkflows = agent.workflows ?? {};
-  const workflows = Object.keys(agentWorkflows).map(key => agentWorkflows[key]);
+  const workflows = Object.keys(agentWorkflows).map(key => ({ id: key, ...agentWorkflows[key] }));
 
   return (
     <AgentMetadataWrapper>
@@ -58,7 +90,12 @@ export const AgentMetadata = ({
             <Badge icon={providerIcon} className="font-medium">
               {agent.modelId || 'N/A'}
             </Badge>
-            <button onClick={() => setIsEditingModel(true)} className="text-icon3 hover:text-icon6">
+            <button
+              title="Edit model"
+              type="button"
+              onClick={() => setIsEditingModel(true)}
+              className="text-icon3 hover:text-icon6"
+            >
               <Icon>
                 <EditIcon />
               </Icon>
@@ -78,6 +115,18 @@ export const AgentMetadata = ({
           {hasMemoryEnabled ? 'On' : 'Off'}
         </Badge>
       </AgentMetadataSection>
+
+      {networkAgents.length > 0 && (
+        <AgentMetadataSection
+          title="Agents"
+          hint={{
+            link: 'https://mastra.ai/en/docs/agents/overview',
+            title: 'Agents documentation',
+          }}
+        >
+          <AgentMetadataNetworkList agents={networkAgents} computeAgentLink={computeAgentLink} />
+        </AgentMetadataSection>
+      )}
 
       <AgentMetadataSection
         title="Tools"
@@ -100,7 +149,7 @@ export const AgentMetadata = ({
       </AgentMetadataSection>
 
       <AgentMetadataSection title="Scorers">
-        <AgentMetadataScorerList entityId={agent.name} />
+        <ScorerList entityId={agent.name} entityType="AGENT" />
       </AgentMetadataSection>
       <AgentMetadataSection title="System Prompt">{promptSlot}</AgentMetadataSection>
     </AgentMetadataWrapper>
@@ -132,17 +181,9 @@ export const AgentMetadataToolList = ({ tools, computeToolLink }: AgentMetadataT
   );
 };
 
-export const AgentMetadataScorerList = ({ entityId }: { entityId: string }) => {
-  return (
-    <div className="px-5 pb-5">
-      <ScorerList entityId={entityId} entityType="AGENT" />
-    </div>
-  );
-};
-
 export interface AgentMetadataWorkflowListProps {
-  workflows: GetWorkflowResponse[];
-  computeWorkflowLink: (workflow: GetWorkflowResponse) => string;
+  workflows: Array<{ id: string } & GetWorkflowResponse>;
+  computeWorkflowLink: (workflowId: string, workflow: GetWorkflowResponse) => string;
 }
 
 export const AgentMetadataWorkflowList = ({ workflows, computeWorkflowLink }: AgentMetadataWorkflowListProps) => {
@@ -155,8 +196,8 @@ export const AgentMetadataWorkflowList = ({ workflows, computeWorkflowLink }: Ag
   return (
     <AgentMetadataList>
       {workflows.map(workflow => (
-        <AgentMetadataListItem key={workflow.name}>
-          <Link href={computeWorkflowLink(workflow)}>
+        <AgentMetadataListItem key={workflow.id}>
+          <Link href={computeWorkflowLink(workflow.id, workflow)}>
             <Badge icon={<WorkflowIcon className="text-accent3" />}>{workflow.name}</Badge>
           </Link>
         </AgentMetadataListItem>
