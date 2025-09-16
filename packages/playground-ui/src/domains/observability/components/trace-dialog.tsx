@@ -32,6 +32,7 @@ type TraceDialogProps = {
   isLoadingSpans?: boolean;
   computeAgentsLink?: () => string;
   computeWorkflowsLink?: () => string;
+  onScorerTriggered: (scorerName: string, traceId: string, spanId?: string) => void;
 };
 
 export function TraceDialog({
@@ -45,6 +46,7 @@ export function TraceDialog({
   isLoadingSpans,
   computeAgentsLink,
   computeWorkflowsLink,
+  onScorerTriggered,
 }: TraceDialogProps) {
   const { Link } = useLinkComponent();
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
@@ -141,11 +143,13 @@ export function TraceDialog({
             </TextAndIcon>
           </SideDialogHeader>
 
-          <div>
-            <ScorersDropdown />
-          </div>
-
           <div className={cn('overflow-y-auto pb-[2.5rem]')}>
+            {traceId && (
+              <div>
+                <ScorersDropdown traceId={traceId} spanId={selectedSpanId} onScorerTriggered={onScorerTriggered} />
+              </div>
+            )}
+
             {traceDetails?.metadata?.usage && (
               <TraceSpanUsage
                 traceUsage={traceDetails?.metadata?.usage}

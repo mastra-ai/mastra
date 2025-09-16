@@ -1,11 +1,32 @@
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { useMutation } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
-export const useTriggerScorer = (scorerName: string, traceId: string, spanId?: string) => {
+interface TriggerScoreArgs {
+  scorerName: string;
+  traceId: string;
+  spanId?: string;
+}
+
+export const useTriggerScorer = (onScorerTriggered: (scorerName: string, traceId: string, spanId?: string) => void) => {
   const client = useMastraClient();
+
   return useMutation({
-    mutationFn: async () => {
-      const response = await client.score(scorerName, traceId, spanId);
+    mutationFn: async ({ scorerName, traceId, spanId }: TriggerScoreArgs) => {
+      const response = await client.score({
+        scorerName,
+        targets: [{ traceId, spanId }],
+      });
+
+      console.log(response);
+      return response;
+    },
+    onSuccess: (_, variables) => {
+      toast.success('Scorer triggered successfully');
+      onScorerTriggered(variables.scorerName, variables.traceId, variables.spanId);
+    },
+    onError: () => {
+      toast.error('Error triggering scorer');
     },
   });
 };

@@ -18,7 +18,7 @@ import { useAITraces } from '@/domains/observability/hooks/use-ai-traces';
 import { useAITrace } from '@/domains/observability/hooks/use-ai-trace';
 import { format, isToday } from 'date-fns';
 import { useWorkflows } from '@/hooks/use-workflows';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 
 const listColumns = [
   { name: 'shortId', label: 'ID', size: '6rem' },
@@ -38,6 +38,7 @@ type TraceItem = {
 };
 
 export default function Observability() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedTraceId, setSelectedTraceId] = useState<string | undefined>();
   const [selectedEntityOption, setSelectedEntityOption] = useState<EntityOptions | undefined>({
@@ -227,6 +228,10 @@ export default function Observability() {
         onNext={thereIsNextItem() ? toNextItem : undefined}
         onPrevious={thereIsPreviousItem() ? toPreviousItem : undefined}
         isLoadingSpans={isLoadingAiTrace}
+        onScorerTriggered={scorerName => {
+          setDialogIsOpen(false);
+          navigate(`/scorers/${scorerName}`);
+        }}
       />
     </>
   );
