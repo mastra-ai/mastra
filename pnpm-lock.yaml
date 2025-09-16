@@ -8,7 +8,7 @@ overrides:
   typescript: ^5.8.3
   '@types/node': ^20.17.57
   cookie: '>=0.7.2'
-  tmp: '>=0.2.4'
+  tmp: '>=0.2.5'
 
 importers:
 
