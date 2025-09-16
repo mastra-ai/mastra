@@ -15,13 +15,6 @@ type ScoreDialogProps = {
 };
 
 export function ScoreDialog({ scorer, score, isOpen, onClose, onNext, onPrevious }: ScoreDialogProps) {
-  const prompts: Record<string, string | undefined> = {
-    preprocessPrompt: score?.preprocessPrompt,
-    analyzePrompt: score?.analyzePrompt,
-    generateScorePrompt: score?.generateScorePrompt,
-    generateReasonPrompt: score?.generateReasonPrompt,
-  };
-
   return (
     <>
       <SideDialog
@@ -46,10 +39,7 @@ export function ScoreDialog({ scorer, score, isOpen, onClose, onNext, onPrevious
 
         <div className="p-[1.5rem] px-[2.5rem] overflow-y-auto grid gap-[1.5rem] content-start">
           <div className="grid gap-[1.5rem] mb-[2rem]">
-            <SideDialogCodeSection
-              title={`Score: ${score?.score}`}
-              codeStr={JSON.stringify(score?.reason || null, null, 2)}
-            />
+            <SideDialogCodeSection title={`Score: ${score?.score}`} codeStr={score?.reason} simplified={true} />
             <SideDialogCodeSection title="Input" codeStr={JSON.stringify(score?.input || null, null, 2)} />
             <SideDialogCodeSection title="Output" codeStr={JSON.stringify(score?.output || null, null, 2)} />
             <SideDialogCodeSection title="Preprocess Prompt" codeStr={score?.preprocessPrompt} simplified={true} />
