@@ -473,7 +473,7 @@ export class MessageList {
                 },
               ];
               const modelMessages = AIV5.convertToModelMessages(this.sanitizeV5UIMessages(stepUiMessages));
-              return modelMessages.flatMap(m => this.response.aiV5.stepContent(m));
+              return modelMessages.flatMap(this.response.aiV5.stepContent);
             }
 
             // Count total steps (1 + number of step-start markers)
@@ -490,7 +490,7 @@ export class MessageList {
                 },
               ];
               const modelMessages = AIV5.convertToModelMessages(this.sanitizeV5UIMessages(stepUiMessages));
-              return modelMessages.flatMap(m => this.response.aiV5.stepContent(m));
+              return modelMessages.flatMap(this.response.aiV5.stepContent);
             }
 
             // Multiple steps - get content after the last step-start marker
@@ -513,7 +513,7 @@ export class MessageList {
             ];
 
             const modelMessages = AIV5.convertToModelMessages(this.sanitizeV5UIMessages(stepUiMessages));
-            return modelMessages.flatMap(m => this.response.aiV5.stepContent(m));
+            return modelMessages.flatMap(this.response.aiV5.stepContent);
           }
 
           // Step 1 is everything before the first step-start
@@ -535,7 +535,7 @@ export class MessageList {
 
             // Convert to model messages without adding extra step-start markers
             const modelMessages = AIV5.convertToModelMessages(this.sanitizeV5UIMessages(stepUiMessages));
-            return modelMessages.flatMap(m => this.response.aiV5.stepContent(m));
+            return modelMessages.flatMap(this.response.aiV5.stepContent);
           }
 
           // For steps 2+, content is between (stepNumber-1)th and stepNumber-th step-start markers
@@ -562,7 +562,7 @@ export class MessageList {
 
           // Convert to model messages without adding extra step-start markers
           const modelMessages = AIV5.convertToModelMessages(this.sanitizeV5UIMessages(stepUiMessages));
-          return modelMessages.flatMap(m => this.response.aiV5.stepContent(m));
+          return modelMessages.flatMap(this.response.aiV5.stepContent);
         }
 
         return this.response.aiV5.model().map(this.response.aiV5.stepContent).flat();

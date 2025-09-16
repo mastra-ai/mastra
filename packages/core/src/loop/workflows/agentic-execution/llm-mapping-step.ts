@@ -11,7 +11,10 @@ import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 export function createLLMMappingStep<
   Tools extends ToolSet = ToolSet,
   OUTPUT extends OutputSchema | undefined = undefined,
->({ models, telemetry_settings, _internal, modelStreamSpan, ...rest }: OuterLLMRun<Tools, OUTPUT>, llmExecutionStep: any) {
+>(
+  { models, telemetry_settings, _internal, modelStreamSpan, ...rest }: OuterLLMRun<Tools, OUTPUT>,
+  llmExecutionStep: any,
+) {
   return createStep({
     id: 'llmExecutionMappingStep',
     inputSchema: z.array(toolCallOutputSchema),
