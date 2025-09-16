@@ -619,12 +619,28 @@ export class MCPServer extends MCPServerBase {
         inputSchema: z.object({
           message: z.string().describe('The question or input for the agent.'),
         }),
-        execute: async ({ context, runtimeContext, tracingContext }) => {
+        execute: async ({ context, runtimeContext, tracingContext }, execOptions) => {
           this.logger.debug(
             `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${context.message}"`,
           );
+
+          // Populate RuntimeContext from MCP extra.authInfo if available
+          let effectiveRuntimeContext = runtimeContext || new RuntimeContext();
+          if ((execOptions as any)?.extra?.authInfo) {
+            effectiveRuntimeContext = new RuntimeContext();
+            const authInfo = (execOptions as any).extra.authInfo;
+            if (typeof authInfo === 'object') {
+              Object.entries(authInfo).forEach(([key, value]) => {
+                effectiveRuntimeContext.set(key, value);
+              });
+            }
+          }
+
           try {
-            const response = await agent.generate(context.message, { runtimeContext, tracingContext });
+            const response = await agent.generate(context.message, {
+              runtimeContext: effectiveRuntimeContext,
+              tracingContext
+            });
             return response;
           } catch (error) {
             this.logger.error(`Error executing agent tool '${agentToolName}' for agent '${agent.name}':`, error);
@@ -692,15 +708,32 @@ export class MCPServer extends MCPServerBase {
         id: workflowToolName,
         description: `Run workflow '${workflowKey}'. Workflow description: ${workflowDescription}`,
         inputSchema: workflow.inputSchema,
-        execute: async ({ context, runtimeContext, tracingContext }) => {
+        execute: async ({ context, runtimeContext, tracingContext }, execOptions) => {
           this.logger.debug(
             `Executing workflow tool '${workflowToolName}' for workflow '${workflow.id}' with input:`,
             context,
           );
-          try {
-            const run = workflow.createRun({ runId: runtimeContext?.get('runId') });
 
-            const response = await run.start({ inputData: context, runtimeContext, tracingContext });
+          // Populate RuntimeContext from MCP extra.authInfo if available
+          let effectiveRuntimeContext = runtimeContext || new RuntimeContext();
+          if ((execOptions as any)?.extra?.authInfo) {
+            effectiveRuntimeContext = new RuntimeContext();
+            const authInfo = (execOptions as any).extra.authInfo;
+            if (typeof authInfo === 'object') {
+              Object.entries(authInfo).forEach(([key, value]) => {
+                effectiveRuntimeContext.set(key, value);
+              });
+            }
+          }
+
+          try {
+            const run = workflow.createRun({ runId: effectiveRuntimeContext?.get('runId') });
+
+            const response = await run.start({
+              inputData: context,
+              runtimeContext: effectiveRuntimeContext,
+              tracingContext
+            });
 
             return response;
           } catch (error) {
