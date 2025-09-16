@@ -17,13 +17,13 @@ export class AnswerRelevancyJudge extends MastraAgentJudge {
 
   async evaluate(input: string, actualOutput: string): Promise<{ verdict: string; reason: string }[]> {
     const statementPrompt = generateEvaluationStatementsPrompt({ output: actualOutput });
-    const statements = await this.agent.generate(statementPrompt, {
+    const statements = await this.agent.generateLegacy(statementPrompt, {
       output: z.object({
         statements: z.array(z.string()),
       }),
     });
     const prompt = generateEvaluatePrompt({ input, statements: statements.object.statements });
-    const result = await this.agent.generate(prompt, {
+    const result = await this.agent.generateLegacy(prompt, {
       output: z.object({
         verdicts: z.array(
           z.object({
@@ -45,7 +45,7 @@ export class AnswerRelevancyJudge extends MastraAgentJudge {
     verdicts: { verdict: string; reason: string }[];
   }): Promise<string> {
     const prompt = generateReasonPrompt(args);
-    const result = await this.agent.generate(prompt, {
+    const result = await this.agent.generateLegacy(prompt, {
       output: z.object({
         reason: z.string(),
       }),

@@ -12,7 +12,7 @@ export class ToxicityJudge extends MastraAgentJudge {
 
   async evaluate(input: string, actualOutput: string): Promise<{ verdict: string; reason: string }[]> {
     const prompt = generateEvaluatePrompt({ input, output: actualOutput });
-    const result = await this.agent.generate(prompt, {
+    const result = await this.agent.generateLegacy(prompt, {
       output: z.object({
         verdicts: z.array(
           z.object({
@@ -28,7 +28,7 @@ export class ToxicityJudge extends MastraAgentJudge {
 
   async getReason(args: { score: number; toxics: string[] }): Promise<string> {
     const prompt = getReasonPrompt(args);
-    const result = await this.agent.generate(prompt, {
+    const result = await this.agent.generateLegacy(prompt, {
       output: z.object({
         reason: z.string(),
       }),

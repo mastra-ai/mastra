@@ -523,7 +523,7 @@ export async function createNetworkLoop({
         throw new Error(`Invalid task input: ${inputData.task}`);
       }
 
-      const run = wf.createRun();
+      const run = await wf.createRunAsync();
       const toolData = {
         name: wf.name,
         args: inputData,

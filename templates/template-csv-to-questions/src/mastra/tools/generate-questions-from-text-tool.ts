@@ -41,7 +41,7 @@ export const generateQuestionsFromTextTool = createTool({
         throw new Error('Question generator agent not found');
       }
 
-      const streamResponse = await agent.stream([
+      const streamResponse = await agent.streamLegacy([
         {
           role: 'user',
           content: `Generate comprehensive questions based on the following content extracted from a CSV dataset.

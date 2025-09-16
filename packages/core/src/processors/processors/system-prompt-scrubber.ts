@@ -255,7 +255,7 @@ export class SystemPromptScrubber implements Processor {
           tracingContext,
         });
       } else {
-        result = await this.detectionAgent.generate(text, {
+        result = await this.detectionAgent.generateLegacy(text, {
           output: schema,
           tracingContext,
         });

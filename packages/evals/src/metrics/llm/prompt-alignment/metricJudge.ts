@@ -16,7 +16,7 @@ export class PromptAlignmentJudge extends MastraAgentJudge {
     instructions: string[],
   ): Promise<{ verdict: string; reason: string }[]> {
     const prompt = generateEvaluatePrompt({ input, output: actualOutput, instructions });
-    const result = await this.agent.generate(prompt, {
+    const result = await this.agent.generateLegacy(prompt, {
       output: z.object({
         verdicts: z.array(
           z.object({
@@ -37,7 +37,7 @@ export class PromptAlignmentJudge extends MastraAgentJudge {
     scale: number;
   }): Promise<string> {
     const prompt = generateReasonPrompt(args);
-    const result = await this.agent.generate(prompt, { output: z.object({ reason: z.string() }) });
+    const result = await this.agent.generateLegacy(prompt, { output: z.object({ reason: z.string() }) });
     return result.object.reason;
   }
 }

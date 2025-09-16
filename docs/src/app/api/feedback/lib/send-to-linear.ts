@@ -115,7 +115,7 @@ export async function sendToLinear(feedback: FeedbackData) {
 
   const res = await mastra
     .getAgent("summarizer")
-    .generate(`Give me a succint title from ${feedback.feedback}`);
+    .generateLegacy(`Give me a succint title from ${feedback.feedback}`);
 
   // Get the current cycle ID
   const cycleId = await getCurrentCycle();

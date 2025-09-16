@@ -72,7 +72,7 @@ async function main() {
   });
 
   // Fetch the title and body of the issue
-  const response = await agent.generate({
+  const response = await agent.generateLegacy({
     messages: `
             Issue Title: ${issue.data.title}
             Issue Body: ${issue.data.body}

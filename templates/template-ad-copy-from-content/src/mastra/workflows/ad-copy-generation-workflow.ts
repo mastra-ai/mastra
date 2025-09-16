@@ -74,7 +74,7 @@ const extractContentStep = createStep({
         const webContentAgent = mastra.getAgent('webContentAgent');
 
         // Use the agent to extract content
-        const response = await webContentAgent.generate([
+        const response = await webContentAgent.generateLegacy([
           {
             role: 'user',
             content: `Please extract the complete content from this URL for marketing ad copy generation: ${contentInput}

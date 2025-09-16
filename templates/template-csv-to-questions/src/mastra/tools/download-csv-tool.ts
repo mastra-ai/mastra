@@ -156,7 +156,7 @@ export const csvFetcherTool = createTool({
         throw new Error('CSV summarization agent not found');
       }
 
-      const summaryResult = await csvSummarizationAgent.generate([
+      const summaryResult = await csvSummarizationAgent.generateLegacy([
         {
           role: 'user',
           content: `Please provide a comprehensive summary of this CSV dataset:\n\n${structuredData}`,

@@ -114,7 +114,7 @@ const agentStep = createStep(myAgent);
 // Method 2: Call agent in execute function
 const step = createStep({
   execute: async ({ inputData }) => {
-    const result = await myAgent.generate(prompt);
+    const result = await myAgent.generateLegacy(prompt);
     return { output: result.text };
   }
 });

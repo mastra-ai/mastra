@@ -105,7 +105,7 @@ export const pdfContentExtractorTool = createTool({
       const subjectAreaText = subjectArea ? `Subject area: ${subjectArea}` : '';
       const focusAreasText = focusAreas.length > 0 ? `Focus particularly on: ${focusAreas.join(', ')}` : '';
 
-      const summaryResult = await pdfProcessorAgent.generate([
+      const summaryResult = await pdfProcessorAgent.generateLegacy([
         {
           role: 'user',
           content: `Please create an educational summary of this PDF content for flash card generation. ${subjectAreaText} ${focusAreasText}
@@ -126,7 +126,7 @@ ${extractionResult.extractedText}`,
         throw new Error('Content analyzer agent not found');
       }
 
-      const analysisResult = await contentAnalyzerAgent.generate([
+      const analysisResult = await contentAnalyzerAgent.generateLegacy([
         {
           role: 'user',
           content: `Please analyze this educational content and prepare it for flash card generation. ${subjectAreaText} ${focusAreasText}

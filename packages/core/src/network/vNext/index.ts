@@ -337,7 +337,7 @@ export class NewAgentNetwork extends MastraBase {
       .then(finalStep)
       .commit();
 
-    const run = mainWorkflow.createRun();
+    const run = await mainWorkflow.createRunAsync();
 
     const thread = await this.beforeRun({
       runtimeContext: runtimeContext || new RuntimeContext(),
@@ -431,7 +431,7 @@ export class NewAgentNetwork extends MastraBase {
       .then(finalStep)
       .commit();
 
-    const run = mainWorkflow.createRun();
+    const run = await mainWorkflow.createRunAsync();
 
     const thread = await this.beforeRun({
       runtimeContext: runtimeContext || new RuntimeContext(),
@@ -521,7 +521,7 @@ export class NewAgentNetwork extends MastraBase {
               runtimeContext: runtimeContextToUse,
             });
           } else {
-            completionResult = await routingAgent.generate([{ role: 'assistant', content: completionPrompt }], {
+            completionResult = await routingAgent.generateLegacy([{ role: 'assistant', content: completionPrompt }], {
               output: completionSchema,
               threadId: initData?.threadId ?? runId,
               resourceId: initData?.threadResourceId ?? this.name,
@@ -584,7 +584,7 @@ export class NewAgentNetwork extends MastraBase {
         if (model.specificationVersion === 'v2') {
           result = await routingAgent.generateVNext(prompt, options);
         } else {
-          result = await routingAgent.generate(prompt, options);
+          result = await routingAgent.generateLegacy(prompt, options);
         }
 
         return {
@@ -689,7 +689,7 @@ export class NewAgentNetwork extends MastraBase {
             }
           }
         } else {
-          result = await agent.stream(inputData.prompt, {
+          result = await agent.streamLegacy(inputData.prompt, {
             // resourceId: inputData.resourceId,
             // threadId: inputData.threadId,
             runtimeContext: runtimeContextToUse,
@@ -809,7 +809,7 @@ export class NewAgentNetwork extends MastraBase {
           type: 'tool-call-streaming-start',
           ...toolData,
         });
-        const run = wf.createRun();
+        const run = await wf.createRunAsync();
         const { stream, getWorkflowState } = run.stream({
           inputData: input,
           runtimeContext: runtimeContextToUse,
@@ -1096,7 +1096,7 @@ export class NewAgentNetwork extends MastraBase {
     }: { runtimeContext?: RuntimeContext; threadId?: string; resourceId?: string },
   ) {
     const networkWorkflow = this.createWorkflow({ runtimeContext });
-    const run = networkWorkflow.createRun();
+    const run = await networkWorkflow.createRunAsync();
 
     const thread = await this.beforeRun({
       runtimeContext: runtimeContext || new RuntimeContext(),
@@ -1145,7 +1145,7 @@ export class NewAgentNetwork extends MastraBase {
     }: { runtimeContext?: RuntimeContext; resourceId?: string; threadId?: string },
   ) {
     const networkWorkflow = this.createWorkflow({ runtimeContext });
-    const run = networkWorkflow.createRun();
+    const run = await networkWorkflow.createRunAsync();
 
     const thread = await this.beforeRun({
       runtimeContext: runtimeContext || new RuntimeContext(),

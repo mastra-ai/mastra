@@ -258,7 +258,7 @@ export class AgentNetwork extends MastraBase {
       }
 
       // Generate a response from the agent
-      const result = await agent.generate(messagesWithContext, { runtimeContext });
+      const result = await agent.generateLegacy(messagesWithContext, { runtimeContext });
 
       return result.text;
     } catch (err) {
@@ -400,7 +400,7 @@ export class AgentNetwork extends MastraBase {
     this.logger.debug(`AgentNetwork: Routing with max steps: ${ops.maxSteps}`);
 
     // Generate a response using the routing agent
-    const result = await this.#routingAgent.generate(
+    const result = await this.#routingAgent.generateLegacy(
       messages,
       ops as AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: never; experimental_output?: never },
     );

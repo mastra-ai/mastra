@@ -77,7 +77,7 @@ export class StructuredOutputProcessor<S extends z.ZodTypeAny> implements Proces
               output: schema,
             });
           } else {
-            structuredResult = await this.structuringAgent.generate(prompt, {
+            structuredResult = await this.structuringAgent.generateLegacy(prompt, {
               output: schema,
             });
           }

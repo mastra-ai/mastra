@@ -19,14 +19,14 @@ export class SummarizationJudge extends MastraAgentJudge {
 
   async evaluateAlignment(originalText: string, summary: string): Promise<{ verdict: string; reason: string }[]> {
     const claimsPrompt = generateClaimExtractionPrompt({ output: summary });
-    const summaryClaims = await this.agent.generate(claimsPrompt, {
+    const summaryClaims = await this.agent.generateLegacy(claimsPrompt, {
       output: z.object({
         claims: z.array(z.string()),
       }),
     });
 
     const prompt = generateAlignmentPrompt({ originalText, summaryClaims: summaryClaims.object.claims });
-    const result = await this.agent.generate(prompt, {
+    const result = await this.agent.generateLegacy(prompt, {
       output: z.object({
         verdicts: z.array(
           z.object({
@@ -49,7 +49,7 @@ export class SummarizationJudge extends MastraAgentJudge {
   }> {
     // Generate questions from original text
     const questionsPrompt = generateQuestionsPrompt({ originalText });
-    const questionsResult = await this.agent.generate(questionsPrompt, {
+    const questionsResult = await this.agent.generateLegacy(questionsPrompt, {
       output: z.object({
         questions: z.array(z.string()),
       }),
@@ -61,7 +61,7 @@ export class SummarizationJudge extends MastraAgentJudge {
       summary,
       questions: questionsResult.object.questions,
     });
-    const answersResult = await this.agent.generate(answersPrompt, {
+    const answersResult = await this.agent.generateLegacy(answersPrompt, {
       output: z.object({
         answers: z.array(z.string()),
       }),
@@ -95,7 +95,7 @@ export class SummarizationJudge extends MastraAgentJudge {
     scale: number;
   }): Promise<string> {
     const prompt = generateReasonPrompt(args);
-    const result = await this.agent.generate(prompt, { output: z.object({ reason: z.string() }) });
+    const result = await this.agent.generateLegacy(prompt, { output: z.object({ reason: z.string() }) });
     return result.object.reason;
   }
 }

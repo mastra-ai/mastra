@@ -127,7 +127,7 @@ Generate the following ad copy variations:
 
 Format your response as JSON with the exact structure requested in the output schema.`;
 
-      const copyResult = await copywritingAgent.generate([
+      const copyResult = await copywritingAgent.generateLegacy([
         {
           role: 'user',
           content: adCopyPrompt,

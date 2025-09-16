@@ -30,7 +30,7 @@ export const evaluateResultTool = createTool({
 
       const evaluationAgent = mastra!.getAgent('evaluationAgent');
 
-      const response = await evaluationAgent.generate(
+      const response = await evaluationAgent.generateLegacy(
         [
           {
             role: 'user',

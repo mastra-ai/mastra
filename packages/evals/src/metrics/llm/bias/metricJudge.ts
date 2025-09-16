@@ -18,7 +18,7 @@ export class BiasJudge extends MastraAgentJudge {
   async evaluate(input: string, actualOutput: string): Promise<{ verdict: string; reason: string }[]> {
     const opinionsPrompt = generateOpinionsPrompt({ input, output: actualOutput });
 
-    const opinions = await this.agent.generate(opinionsPrompt, {
+    const opinions = await this.agent.generateLegacy(opinionsPrompt, {
       output: z.object({
         opinions: z.array(z.string()),
       }),
@@ -26,7 +26,7 @@ export class BiasJudge extends MastraAgentJudge {
 
     const prompt = generateEvaluatePrompt({ output: actualOutput, opinions: opinions.object.opinions });
 
-    const result = await this.agent.generate(prompt, {
+    const result = await this.agent.generateLegacy(prompt, {
       output: z.object({
         verdicts: z.array(
           z.object({
@@ -42,7 +42,7 @@ export class BiasJudge extends MastraAgentJudge {
 
   async getReason(args: { score: number; biases: string[] }): Promise<string> {
     const prompt = generateReasonPrompt(args);
-    const result = await this.agent.generate(prompt, {
+    const result = await this.agent.generateLegacy(prompt, {
       output: z.object({
         reason: z.string(),
       }),

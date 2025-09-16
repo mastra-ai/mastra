@@ -50,7 +50,7 @@ export const pdfFetcherTool = createTool({
       if (!pdfSummarizationAgent) {
         throw new Error('PDF summarization agent not found');
       }
-      const summaryResult = await pdfSummarizationAgent.generate([
+      const summaryResult = await pdfSummarizationAgent.generateLegacy([
         {
           role: 'user',
           content: `Please provide a comprehensive summary of this PDF content:\n\n${extractionResult.extractedText}`,

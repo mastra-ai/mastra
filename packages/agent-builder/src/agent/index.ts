@@ -115,7 +115,7 @@ export class AgentBuilder extends Agent {
       projectPath: this.builderConfig.projectPath,
     });
 
-    return super.generate(messages, enhancedOptions);
+    return super.generateLegacy(messages, enhancedOptions);
   };
 
   /**

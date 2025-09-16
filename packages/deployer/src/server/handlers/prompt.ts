@@ -106,7 +106,7 @@ export async function generateSystemPromptHandler(c: Context) {
       model: agent.llm?.getModel(),
     });
 
-    const result = await systemPromptAgent.generate(
+    const result = await systemPromptAgent.generateLegacy(
       `
             We need to improve the system prompt. 
             Current: ${instructions}

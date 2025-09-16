@@ -59,7 +59,7 @@ export const pdfContentExtractorTool = createTool({
       }
 
       const focusAreasText = focusAreas.length > 0 ? `Focus particularly on: ${focusAreas.join(', ')}` : '';
-      const summaryResult = await contentSummarizerAgent.generate([
+      const summaryResult = await contentSummarizerAgent.generateLegacy([
         {
           role: 'user',
           content: `Please create a marketing-focused summary of this content for ad copy creation. ${focusAreasText}

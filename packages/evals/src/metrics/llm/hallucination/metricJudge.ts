@@ -12,7 +12,7 @@ export class HallucinationJudge extends MastraAgentJudge {
 
   async evaluate(output: string, context: string[]): Promise<{ statement: string; verdict: string; reason: string }[]> {
     const claimsPrompt = generateClaimExtractionPrompt({ output });
-    const claims = await this.agent.generate(claimsPrompt, {
+    const claims = await this.agent.generateLegacy(claimsPrompt, {
       output: z.object({
         claims: z.array(z.string()),
       }),
@@ -23,7 +23,7 @@ export class HallucinationJudge extends MastraAgentJudge {
     }
 
     const evaluatePrompt = generateEvaluatePrompt({ claims: claims.object.claims, context });
-    const result = await this.agent.generate(evaluatePrompt, {
+    const result = await this.agent.generateLegacy(evaluatePrompt, {
       output: z.object({
         verdicts: z.array(
           z.object({
@@ -47,7 +47,7 @@ export class HallucinationJudge extends MastraAgentJudge {
     verdicts: { verdict: string; reason: string }[];
   }): Promise<string> {
     const prompt = generateReasonPrompt(args);
-    const result = await this.agent.generate(prompt, {
+    const result = await this.agent.generateLegacy(prompt, {
       output: z.object({ reason: z.string() }),
     });
     return result.object.reason;

@@ -332,7 +332,7 @@ const planActivities = createStep({
 
     const prompt = \${weatherWorkflowPrompt}
 
-    const response = await agent.stream([
+    const response = await agent.streamLegacy([
       {
         role: 'user',
         content: prompt,

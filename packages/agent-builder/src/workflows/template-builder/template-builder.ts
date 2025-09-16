@@ -237,7 +237,7 @@ Return the actual exported names of the units, as well as the file names.`,
             output,
             maxSteps: 100,
           })
-        : await agent.generate(prompt, {
+        : await agent.generateLegacy(prompt, {
             experimental_output: output,
             maxSteps: 100,
           });
