@@ -877,7 +877,7 @@ export class Workflow<
    * @deprecated Use createRunAsync() instead.
    * @throws {Error} Always throws an error directing users to use createRunAsync()
    */
-  createRun(options?: {
+  createRun(_options?: {
     runId?: string;
     resourceId?: string;
     disableScorers?: boolean;
