@@ -23,9 +23,6 @@ importers:
       '@mastra/client-js':
         specifier: link:../../../client-sdks/client-js
         version: link:../../../client-sdks/client-js
-      '@mastra/core':
-        specifier: link:../../core
-        version: link:../../core
       '@mastra/mcp':
         specifier: link:..
         version: link:..
@@ -36,6 +33,9 @@ importers:
         specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
+      '@mastra/core':
+        specifier: link:../../core
+        version: link:../../core
       '@testing-library/react':
         specifier: ^16.3.0
         version: 16.3.0(@testing-library/dom@10.4.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)

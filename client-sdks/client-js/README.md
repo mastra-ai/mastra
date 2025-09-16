@@ -125,7 +125,3 @@ The client uses the native `fetch` API internally for making HTTP requests. All 
 - Retry logic with exponential backoff
 - Custom header management
 - Error handling
-
-## License
-
-MIT
