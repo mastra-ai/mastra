@@ -106,24 +106,24 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
   const tokensByProviderValid = JSON.stringify(traceUsage) === JSON.stringify(traceTokensBasedOnSpans);
 
   const legacyTokenPresentations: Record<string, { label: string; icon: React.ReactNode }> = {
-    totalTokens: {
-      label: 'Total LLM Tokens',
-      icon: <CoinsIcon />,
-    },
     promptTokens: {
       label: 'Prompt Tokens',
       icon: <ArrowRightIcon />,
     },
+    completionTokens: {
+      label: 'Completion Tokens',
+      icon: <ArrowRightToLineIcon />,
+    },
   };
 
   const v5TokenPresentations: Record<string, { label: string; icon: React.ReactNode }> = {
-    totalTokens: {
-      label: 'Total LLM Tokens',
-      icon: <CoinsIcon />,
-    },
     inputTokens: {
       label: 'Input Tokens',
       icon: <ArrowRightIcon />,
+    },
+    outputTokens: {
+      label: 'Output Tokens',
+      icon: <ArrowRightToLineIcon />,
     },
   };
   const commonTokenPresentations: Record<string, { label: string; icon: React.ReactNode }> = {
