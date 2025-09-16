@@ -6,6 +6,7 @@ const meta = {
   generateVNext: <Tag text="experimental">.generateVNext()</Tag>,
   stream: ".stream()",
   streamVNext: <Tag text="experimental">.streamVNext()</Tag>,
+  network: <Tag text="experimental">.network()</Tag>,
   MastraModelOutput: "MastraModelOutput",
   ChunkType: "ChunkType",
   listAgents: ".listAgents()",
