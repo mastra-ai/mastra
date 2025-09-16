@@ -19,7 +19,6 @@ import { AgentPromptEnhancer } from './agent-instructions-enhancer';
 
 export function AgentInformation({ agentId, chatInputValue }: { agentId: string; chatInputValue?: string }) {
   const { data: agent, isLoading } = useAgent(agentId);
-  console.log(agent);
   const { data: modelProviders } = useModelProviders();
   const { mutateAsync: updateModel } = useUpdateAgentModel(agentId);
   const { memory, isLoading: isMemoryLoading } = useMemory(agentId);

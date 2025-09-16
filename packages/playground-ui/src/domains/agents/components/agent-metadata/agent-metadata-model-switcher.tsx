@@ -207,10 +207,13 @@ export const AgentMetadataModelSwitcher = ({
                       if (provider.id !== currentModelProvider) {
                         setSelectedModel('');
                       }
-                      setTimeout(() => {
-                        modelInputRef.current?.focus();
-                        modelInputRef.current?.click();
-                      }, 100);
+                      // Only auto-focus model input if provider is connected
+                      if (provider.connected) {
+                        setTimeout(() => {
+                          modelInputRef.current?.focus();
+                          modelInputRef.current?.click();
+                        }, 100);
+                      }
                     }}
                   >
                     <div className="relative">
