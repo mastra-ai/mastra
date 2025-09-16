@@ -3,7 +3,7 @@ import { DataTable, Header, HeaderTitle, MainContentLayout } from '@mastra/playg
 import { scorersTableColumns } from '@/domains/agents/table.columns';
 
 export default function Scorers() {
-  const { scorers, isLoading } = useScorers();
+  const { data: scorers, isLoading } = useScorers();
 
   const scorerListData = Object.entries(scorers || {}).map(([key, scorer]) => ({
     id: key,

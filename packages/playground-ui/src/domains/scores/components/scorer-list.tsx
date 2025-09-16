@@ -15,7 +15,7 @@ export interface ScorerListProps {
 }
 
 export const ScorerList = ({ entityId, entityType }: ScorerListProps) => {
-  const { scorers, isLoading } = useScorers();
+  const { data: scorers = {}, isLoading } = useScorers();
 
   if (isLoading) {
     return <ScorerSkeleton />;

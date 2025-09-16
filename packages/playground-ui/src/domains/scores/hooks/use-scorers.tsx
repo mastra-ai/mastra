@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { GetScorerResponse, GetScoresResponse } from '@mastra/client-js';
 import { useMastraClient } from '@/contexts/mastra-client-context';
+import { useQuery } from '@tanstack/react-query';
 
 export const useScoresByEntityId = (entityId: string, entityType: string, page: number = 0) => {
   const client = useMastraClient();
@@ -97,26 +98,9 @@ export const useScorer = (scorerId: string) => {
 
 export const useScorers = () => {
   const client = useMastraClient();
-  const [scorers, setScorers] = useState<Record<string, GetScorerResponse>>({});
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchScorers = async () => {
-      setIsLoading(true);
-      try {
-        const res = await client.getScorers();
-        setScorers(res);
-      } catch (error) {
-        setScorers({});
-        console.error('Error fetching agents', error);
-        toast.error('Error fetching agents');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchScorers();
-  }, []);
-
-  return { scorers, isLoading };
+  return useQuery({
+    queryKey: ['scorers'],
+    queryFn: () => client.getScorers(),
+  });
 };

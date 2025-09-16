@@ -19,6 +19,7 @@ import { SpanDialog } from './span-dialog';
 import { SpanDetails } from './span-details';
 import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
 import { UISpan } from '../types';
+import { ScorersDropdown } from '@/domains/scores/components/scorers-dropdown';
 
 type TraceDialogProps = {
   traceSpans?: AISpanRecord[];
@@ -130,7 +131,7 @@ export function TraceDialog({
             'grid-rows-[auto_1fr_1fr]': selectedSpan && combinedView,
           })}
         >
-          <SideDialogHeader className="flex gap-[1rem] items-baseline pr-[2.5rem]">
+          <SideDialogHeader className="pr-[2.5rem]">
             <SideDialogHeading>
               <EyeIcon /> {traceDetails?.name}
             </SideDialogHeading>
@@ -139,6 +140,10 @@ export function TraceDialog({
               <HashIcon /> {traceId}
             </TextAndIcon>
           </SideDialogHeader>
+
+          <div>
+            <ScorersDropdown />
+          </div>
 
           <div className={cn('overflow-y-auto pb-[2.5rem]')}>
             {traceDetails?.metadata?.usage && (
