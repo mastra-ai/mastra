@@ -20,6 +20,7 @@ const meta: Meta = {
   storage: "Storage",
   deployer: "Deployer",
   "client-js": "Client SDK",
+  telemetry: "Telemetry",
   observability: "Observability",
   evals: "Evals",
   scorers: <Tag text="experimental">Scorers</Tag>,
