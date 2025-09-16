@@ -42,7 +42,7 @@
     "zod": "^3.24.3"
   },
   "devDependencies": {
-    "@faker-js/faker": "^9.6.0",
+    "@faker-js/faker": "^9.9.0",
     "@mastra/core": "*",
     "@testing-library/react": "^16.3.0",
     "@types/json-schema": "^7.0.15",
