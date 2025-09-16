@@ -8,7 +8,13 @@ import { DefaultStepResult } from '../../stream/aisdk/v5/output-helpers';
 import { convertMastraChunkToAISDKv5 } from '../../stream/aisdk/v5/transform';
 import { MastraModelOutput } from '../../stream/base/output';
 import type { OutputSchema } from '../../stream/base/schema';
-import type { ChunkType, ReasoningStartPayload, TextStartPayload } from '../../stream/types';
+import type {
+  ChunkType,
+  ExecuteStreamModelManager,
+  ModelManagerModelConfig,
+  ReasoningStartPayload,
+  TextStartPayload,
+} from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { createStep } from '../../workflows';
 import type { LoopConfig, OuterLLMRun } from '../types';
@@ -355,11 +361,50 @@ async function processOutputStream<OUTPUT extends OutputSchema | undefined = und
   }
 }
 
+function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): ExecuteStreamModelManager<T> {
+  return async callback => {
+    let index = 0;
+    let finalResult: any;
+    let done = false;
+    for (const modelConfig of models) {
+      index++;
+      const maxRetries = modelConfig.maxRetries || 0;
+      let attempt = 0;
+
+      if (done) {
+        break;
+      }
+
+      while (attempt <= maxRetries) {
+        try {
+          console.log(`====Executing model ${modelConfig.model.modelId}, attempt ${attempt}====`);
+          const isLastModel = attempt === maxRetries && index === models.length;
+          const result = await callback(modelConfig.model, isLastModel);
+          finalResult = result;
+          done = true;
+          break;
+        } catch (err) {
+          attempt++;
+
+          console.log(`====Error in model ${modelConfig.model.modelId}, attempt ${attempt}====`, err);
+
+          // If we've exhausted all retries for this model, break and try the next model
+          if (attempt > maxRetries) {
+            break;
+          }
+        }
+      }
+    }
+
+    return finalResult;
+  };
+}
+
 export function createLLMExecutionStep<
   Tools extends ToolSet = ToolSet,
   OUTPUT extends OutputSchema | undefined = undefined,
 >({
-  model,
+  models,
   _internal,
   messageId,
   runId,
@@ -385,207 +430,224 @@ export function createLLMExecutionStep<
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, bail, tracingContext }) => {
-      const runState = new AgenticRunState({
-        _internal: _internal!,
-        model,
-      });
-
       let modelResult;
       let warnings: any;
       let request: any;
       let rawResponse: any;
 
-      switch (model.specificationVersion) {
-        case 'v2': {
-          const messageListPromptArgs = {
-            downloadRetries,
-            downloadConcurrency,
-            supportedUrls: model?.supportedUrls as Record<string, RegExp[]>,
-          };
-          let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+      const { outputStream, callBail, runState } = await executeStreamWithFallbackModels<{
+        outputStream: MastraModelOutput<OUTPUT | undefined>;
+        runState: AgenticRunState;
+        callBail?: boolean;
+      }>(models)(async (model, isLastModel) => {
+        const runState = new AgenticRunState({
+          _internal: _internal!,
+          model,
+        });
 
-          // Call prepareStep callback if provided
-          let stepModel = model;
-          let stepToolChoice = toolChoice;
-          let stepTools = tools;
+        switch (model.specificationVersion) {
+          case 'v2': {
+            const messageListPromptArgs = {
+              downloadRetries,
+              downloadConcurrency,
+              supportedUrls: model?.supportedUrls as Record<string, RegExp[]>,
+            };
+            let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
-          if (options?.prepareStep) {
-            try {
-              const prepareStepResult = await options.prepareStep({
-                stepNumber: inputData.output?.steps?.length || 0,
-                steps: inputData.output?.steps || [],
-                model,
-                messages: messageList.get.all.aiV5.model(),
-              });
+            // Call prepareStep callback if provided
+            let stepModel = model;
+            let stepToolChoice = toolChoice;
+            let stepTools = tools;
 
-              if (prepareStepResult) {
-                if (prepareStepResult.model) {
-                  stepModel = prepareStepResult.model;
-                }
-                if (prepareStepResult.toolChoice) {
-                  stepToolChoice = prepareStepResult.toolChoice;
-                }
-                if (prepareStepResult.activeTools && stepTools) {
-                  const activeToolsSet = new Set(prepareStepResult.activeTools);
-                  stepTools = Object.fromEntries(
-                    Object.entries(stepTools).filter(([toolName]) => activeToolsSet.has(toolName)),
-                  ) as typeof tools;
-                }
-                if (prepareStepResult.messages) {
-                  const newMessages = prepareStepResult.messages;
-                  const newMessageList = new MessageList();
+            if (options?.prepareStep) {
+              try {
+                const prepareStepResult = await options.prepareStep({
+                  stepNumber: inputData.output?.steps?.length || 0,
+                  steps: inputData.output?.steps || [],
+                  model,
+                  messages: messageList.get.all.aiV5.model(),
+                });
 
-                  for (const message of newMessages) {
-                    if (message.role === 'system') {
-                      newMessageList.addSystem(message);
-                    } else if (message.role === 'user') {
-                      newMessageList.add(message, 'input');
-                    } else if (message.role === 'assistant' || message.role === 'tool') {
-                      newMessageList.add(message, 'response');
-                    }
+                if (prepareStepResult) {
+                  if (prepareStepResult.model) {
+                    stepModel = prepareStepResult.model;
                   }
+                  if (prepareStepResult.toolChoice) {
+                    stepToolChoice = prepareStepResult.toolChoice;
+                  }
+                  if (prepareStepResult.activeTools && stepTools) {
+                    const activeToolsSet = new Set(prepareStepResult.activeTools);
+                    stepTools = Object.fromEntries(
+                      Object.entries(stepTools).filter(([toolName]) => activeToolsSet.has(toolName)),
+                    ) as typeof tools;
+                  }
+                  if (prepareStepResult.messages) {
+                    const newMessages = prepareStepResult.messages;
+                    const newMessageList = new MessageList();
 
-                  inputMessages = await newMessageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+                    for (const message of newMessages) {
+                      if (message.role === 'system') {
+                        newMessageList.addSystem(message);
+                      } else if (message.role === 'user') {
+                        newMessageList.add(message, 'input');
+                      } else if (message.role === 'assistant' || message.role === 'tool') {
+                        newMessageList.add(message, 'response');
+                      }
+                    }
+
+                    inputMessages = await newMessageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+                  }
                 }
+              } catch (error) {
+                console.error('Error in prepareStep callback:', error);
               }
-            } catch (error) {
-              console.error('Error in prepareStep callback:', error);
             }
-          }
 
-          modelResult = execute({
+            modelResult = execute({
+              runId,
+              model: stepModel,
+              providerOptions,
+              inputMessages,
+              tools: stepTools,
+              toolChoice: stepToolChoice,
+              options,
+              modelSettings,
+              telemetry_settings,
+              includeRawChunks,
+              output,
+              headers,
+              onResult: ({
+                warnings: warningsFromStream,
+                request: requestFromStream,
+                rawResponse: rawResponseFromStream,
+              }) => {
+                warnings = warningsFromStream;
+                request = requestFromStream || {};
+                rawResponse = rawResponseFromStream;
+
+                controller.enqueue({
+                  runId,
+                  from: ChunkFrom.AGENT,
+                  type: 'step-start',
+                  payload: {
+                    request: request || {},
+                    warnings: [],
+                    messageId: messageId,
+                  },
+                });
+              },
+              modelStreamSpan,
+              shouldThrowError: !isLastModel,
+            });
+            break;
+          }
+          default: {
+            throw new Error(`Unsupported model version: ${model.specificationVersion}`);
+          }
+        }
+
+        const outputStream = new MastraModelOutput({
+          model: {
+            modelId: model.modelId,
+            provider: model.provider,
+            version: model.specificationVersion,
+          },
+          stream: modelResult as ReadableStream<ChunkType>,
+          messageList,
+          messageId,
+          options: {
             runId,
-            model: stepModel,
-            providerOptions,
-            inputMessages,
-            tools: stepTools,
-            toolChoice: stepToolChoice,
-            options,
-            modelSettings,
+            rootSpan: modelStreamSpan,
+            toolCallStreaming,
             telemetry_settings,
             includeRawChunks,
             output,
-            headers,
-            onResult: ({
-              warnings: warningsFromStream,
-              request: requestFromStream,
-              rawResponse: rawResponseFromStream,
-            }) => {
-              warnings = warningsFromStream;
-              request = requestFromStream || {};
-              rawResponse = rawResponseFromStream;
-
-              controller.enqueue({
-                runId,
-                from: ChunkFrom.AGENT,
-                type: 'step-start',
-                payload: {
-                  request: request || {},
-                  warnings: [],
-                  messageId: messageId,
-                },
-              });
-            },
-            modelStreamSpan,
-          });
-          break;
-        }
-        default: {
-          throw new Error(`Unsupported model version: ${model.specificationVersion}`);
-        }
-      }
-
-      const outputStream = new MastraModelOutput({
-        model: {
-          modelId: model.modelId,
-          provider: model.provider,
-          version: model.specificationVersion,
-        },
-        stream: modelResult as ReadableStream<ChunkType>,
-        messageList,
-        messageId,
-        options: {
-          runId,
-          rootSpan: modelStreamSpan,
-          toolCallStreaming,
-          telemetry_settings,
-          includeRawChunks,
-          output,
-          outputProcessors,
-          outputProcessorRunnerMode: 'stream',
-          tracingContext,
-        },
-      });
-
-      try {
-        await processOutputStream({
-          outputStream,
-          includeRawChunks,
-          model,
-          tools,
-          messageId,
-          messageList,
-          runState,
-          options,
-          controller,
-          responseFromModel: {
-            warnings,
-            request,
-            rawResponse,
+            outputProcessors,
+            outputProcessorRunnerMode: 'stream',
+            tracingContext,
           },
         });
-      } catch (error) {
-        console.log('Error in LLM Execution Step', error);
-        if (isAbortError(error) && options?.abortSignal?.aborted) {
-          await options?.onAbort?.({
-            steps: inputData?.output?.steps ?? [],
-          });
 
-          controller.enqueue({ type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
-
-          const usage = outputStream._getImmediateUsage();
-          const responseMetadata = runState.state.responseMetadata;
-          const text = outputStream._getImmediateText();
-
-          return bail({
+        try {
+          await processOutputStream({
+            outputStream,
+            includeRawChunks,
+            model,
+            tools,
             messageId,
-            stepResult: {
-              reason: 'abort',
+            messageList,
+            runState,
+            options,
+            controller,
+            responseFromModel: {
               warnings,
-              isContinued: false,
-            },
-            metadata: {
-              providerMetadata: providerOptions,
-              ...responseMetadata,
-              headers: rawResponse?.headers,
               request,
-            },
-            output: {
-              text,
-              toolCalls: [],
-              usage: usage ?? inputData.output?.usage,
-              steps: [],
-            },
-            messages: {
-              all: messageList.get.all.aiV5.model(),
-              user: messageList.get.input.aiV5.model(),
-              nonUser: messageList.get.response.aiV5.model(),
+              rawResponse,
             },
           });
+        } catch (error) {
+          console.log('Error in LLM Execution Step', error);
+          if (isAbortError(error) && options?.abortSignal?.aborted) {
+            await options?.onAbort?.({
+              steps: inputData?.output?.steps ?? [],
+            });
+
+            controller.enqueue({ type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+
+            return { callBail: true, outputStream, runState };
+          }
+
+          if (isLastModel) {
+            controller.enqueue({
+              type: 'error',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: { error },
+            });
+
+            runState.setState({
+              hasErrored: true,
+              stepResult: {
+                isContinued: false,
+                reason: 'error',
+              },
+            });
+          } else {
+            throw error;
+          }
         }
 
-        controller.enqueue({
-          type: 'error',
-          runId,
-          from: ChunkFrom.AGENT,
-          payload: { error },
-        });
+        return { outputStream, callBail: false, runState };
+      });
 
-        runState.setState({
-          hasErrored: true,
+      if (callBail) {
+        const usage = outputStream._getImmediateUsage();
+        const responseMetadata = runState.state.responseMetadata;
+        const text = outputStream._getImmediateText();
+
+        return bail({
+          messageId,
           stepResult: {
+            reason: 'abort',
+            warnings,
             isContinued: false,
-            reason: 'error',
+          },
+          metadata: {
+            providerMetadata: providerOptions,
+            ...responseMetadata,
+            headers: rawResponse?.headers,
+            request,
+          },
+          output: {
+            text,
+            toolCalls: [],
+            usage: usage ?? inputData.output?.usage,
+            steps: [],
+          },
+          messages: {
+            all: messageList.get.all.aiV5.model(),
+            user: messageList.get.input.aiV5.model(),
+            nonUser: messageList.get.response.aiV5.model(),
           },
         });
       }

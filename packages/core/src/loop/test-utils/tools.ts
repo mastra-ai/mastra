@@ -12,7 +12,7 @@ import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { loop } from '../loop';
-import { createTestModel, defaultSettings, testUsage } from './utils';
+import { createTestModels, defaultSettings, testUsage } from './utils';
 
 export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe.skip('provider-executed tools', () => {
@@ -23,7 +23,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
         result = await loopFn({
           runId,
           messageList: new MessageList(),
-          model: createTestModel({
+          models: createTestModels({
             stream: convertArrayToReadableStream([
               {
                 type: 'tool-input-start',
@@ -315,7 +315,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
         result = await loopFn({
           runId,
           messageList: new MessageList(),
-          model: createTestModel({
+          models: createTestModels({
             stream: convertArrayToReadableStream([
               {
                 type: 'tool-input-start',
@@ -543,7 +543,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
 
       const result = await loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -827,56 +827,62 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       );
       const result = await loopFn({
         runId,
-        model: new MockLanguageModelV2({
-          doStream: async ({ prompt, tools, toolChoice }) => {
-            expect(tools).toStrictEqual([
-              {
-                type: 'function',
-                name: 'tool1',
-                description: undefined,
-                inputSchema: {
-                  additionalProperties: false,
-                  properties: { value: { type: 'string' } },
-                  required: ['value'],
-                  type: 'object',
-                },
-                providerOptions: undefined,
+        models: [
+          {
+            maxRetries: 0,
+            id: 'test-model',
+            model: new MockLanguageModelV2({
+              doStream: async ({ prompt, tools, toolChoice }) => {
+                expect(tools).toStrictEqual([
+                  {
+                    type: 'function',
+                    name: 'tool1',
+                    description: undefined,
+                    inputSchema: {
+                      additionalProperties: false,
+                      properties: { value: { type: 'string' } },
+                      required: ['value'],
+                      type: 'object',
+                    },
+                    providerOptions: undefined,
+                  },
+                ]);
+
+                expect(toolChoice).toStrictEqual({ type: 'required' });
+
+                expect(prompt).toStrictEqual([
+                  {
+                    role: 'user',
+                    content: [{ type: 'text', text: 'test-input' }],
+                    // providerOptions: undefined,
+                  },
+                ]);
+
+                return {
+                  stream: convertArrayToReadableStream([
+                    {
+                      type: 'response-metadata',
+                      id: 'id-0',
+                      modelId: 'mock-model-id',
+                      timestamp: new Date(0),
+                    },
+                    {
+                      type: 'tool-call',
+                      toolCallId: 'call-1',
+                      toolName: 'tool1',
+                      input: `{ "value": "value" }`,
+                    },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: testUsage,
+                    },
+                  ]),
+                };
               },
-            ]);
-
-            expect(toolChoice).toStrictEqual({ type: 'required' });
-
-            expect(prompt).toStrictEqual([
-              {
-                role: 'user',
-                content: [{ type: 'text', text: 'test-input' }],
-                // providerOptions: undefined,
-              },
-            ]);
-
-            return {
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                {
-                  type: 'tool-call',
-                  toolCallId: 'call-1',
-                  toolName: 'tool1',
-                  input: `{ "value": "value" }`,
-                },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: testUsage,
-                },
-              ]),
-            };
+            }),
           },
-        }),
+        ],
         tools: {
           tool1: {
             inputSchema: jsonSchema<{ value: string }>({
@@ -906,7 +912,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       result = await loopFn({
         runId,
         messageList: new MessageList(),
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -1171,7 +1177,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       const result = loopFn({
         runId,
         messageList: new MessageList(),
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',

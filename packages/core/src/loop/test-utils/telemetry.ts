@@ -4,7 +4,7 @@ import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import { MockTracer } from './mockTracer';
-import { createTestModel, testUsage } from './utils';
+import { createTestModels, testUsage } from './utils';
 
 export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('telemetry', () => {
@@ -26,7 +26,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
 
       const result = await loopFn({
         runId,
-        model: createTestModel(),
+        models: createTestModels(),
         messageList,
         _internal: {
           now: mockValues(0, 100, 500),
@@ -50,7 +50,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
 
       const result = await loopFn({
         runId,
-        model: createTestModel(),
+        models: createTestModels(),
         messageList,
         modelSettings: {
           topK: 0.1,
@@ -94,7 +94,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
 
       const result = await loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -143,7 +143,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
 
       const result = await loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -216,7 +216,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
       );
       const result = await loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',

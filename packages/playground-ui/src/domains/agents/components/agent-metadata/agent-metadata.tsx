@@ -13,6 +13,7 @@ import { ScorerList } from '@/domains/scores';
 import { AgentIcon, Icon } from '@/ds/icons';
 import { EditIcon } from 'lucide-react';
 import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './agent-metadata-model-switcher';
+import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
 
 export interface AgentMetadataProps {
   agent: GetAgentResponse;
@@ -23,6 +24,8 @@ export interface AgentMetadataProps {
   computeWorkflowLink: (workflowId: string, workflow: GetWorkflowResponse) => string;
   modelProviders: string[];
   updateModel: AgentMetadataModelSwitcherProps['updateModel'];
+  updateModelInModelList: AgentMetadataModelListProps['updateModelInModelList'];
+  reorderModelList: AgentMetadataModelListProps['reorderModelList'];
 }
 
 export interface AgentMetadataNetworkListProps {
@@ -61,6 +64,8 @@ export const AgentMetadata = ({
   computeWorkflowLink,
   updateModel,
   modelProviders,
+  updateModelInModelList,
+  reorderModelList,
 }: AgentMetadataProps) => {
   const [isEditingModel, setIsEditingModel] = useState(false);
   const providerIcon = providerMapToIcon[(agent.provider || 'openai.chat') as keyof typeof providerMapToIcon];
@@ -76,33 +81,44 @@ export const AgentMetadata = ({
 
   return (
     <AgentMetadataWrapper>
-      <AgentMetadataSection title="Model">
-        {isEditingModel ? (
-          <AgentMetadataModelSwitcher
-            defaultProvider={agent.provider}
-            defaultModel={agent.modelId}
-            updateModel={updateModel}
-            closeEditor={() => setIsEditingModel(false)}
+      {agent.modelList ? (
+        <AgentMetadataSection title="Models">
+          <AgentMetadataModelList
+            modelList={agent.modelList}
             modelProviders={modelProviders}
+            updateModelInModelList={updateModelInModelList}
+            reorderModelList={reorderModelList}
           />
-        ) : (
-          <div className="flex items-center gap-2">
-            <Badge icon={providerIcon} className="font-medium">
-              {agent.modelId || 'N/A'}
-            </Badge>
-            <button
-              title="Edit model"
-              type="button"
-              onClick={() => setIsEditingModel(true)}
-              className="text-icon3 hover:text-icon6"
-            >
-              <Icon>
-                <EditIcon />
-              </Icon>
-            </button>
-          </div>
-        )}
-      </AgentMetadataSection>
+        </AgentMetadataSection>
+      ) : (
+        <AgentMetadataSection title="Model">
+          {isEditingModel ? (
+            <AgentMetadataModelSwitcher
+              defaultProvider={agent.provider}
+              defaultModel={agent.modelId}
+              updateModel={updateModel}
+              closeEditor={() => setIsEditingModel(false)}
+              modelProviders={modelProviders}
+            />
+          ) : (
+            <div className="flex items-center gap-2">
+              <Badge icon={providerIcon} className="font-medium">
+                {agent.modelId || 'N/A'}
+              </Badge>
+              <button
+                title="Edit model"
+                type="button"
+                onClick={() => setIsEditingModel(true)}
+                className="text-icon3 hover:text-icon6"
+              >
+                <Icon>
+                  <EditIcon />
+                </Icon>
+              </button>
+            </div>
+          )}
+        </AgentMetadataSection>
+      )}
 
       <AgentMetadataSection
         title="Memory"

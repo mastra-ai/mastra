@@ -8,6 +8,8 @@ import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { AgentTableData } from './types';
 import { useLinkComponent } from '@/lib/framework';
 import { providerMapToIcon } from '../provider-map-icon';
+import { ListIcon } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 export type AgentTableColumn = {
   repoUrl: string;
@@ -41,7 +43,7 @@ export const columns: ColumnDef<AgentTableColumn>[] = [
   {
     header: 'Model',
     accessorKey: 'model',
-    size: 160,
+    size: 300,
     cell: ({ row }) => {
       return (
         <Cell>
@@ -52,6 +54,27 @@ export const columns: ColumnDef<AgentTableColumn>[] = [
           >
             {row.original.modelId || 'N/A'}
           </Badge>
+          {row.original.modelList && row.original.modelList.length > 1 ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="info" className="ml-2">
+                  + {row.original.modelList.length - 1} more
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="bg-surface5 flex flex-col gap-2">
+                {row.original.modelList.slice(1).map(mdl => (
+                  <div key={mdl.id}>
+                    <Badge
+                      variant="default"
+                      icon={providerMapToIcon[mdl.model.provider as keyof typeof providerMapToIcon]}
+                    >
+                      {mdl.model.modelId}
+                    </Badge>
+                  </div>
+                ))}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
         </Cell>
       );
     },
