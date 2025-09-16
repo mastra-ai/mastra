@@ -109,7 +109,7 @@ export const startWeatherTool = createTool({
   }),
   execute: async ({ context }) => {
     const workflow = mastra.getWorkflow('weatherWorkflowWithSuspend');
-    const run = await workflow.createRun();
+    const run = await workflow.createRunAsync();
     await run.start({
       inputData: {},
     });
@@ -130,7 +130,7 @@ export const resumeWeatherTool = createTool({
   outputSchema: forecastSchema,
   execute: async ({ context }) => {
     const workflow = mastra.getWorkflow('weatherWorkflowWithSuspend');
-    const run = await workflow.createRun({
+    const run = await workflow.createRunAsync({
       runId: context.runId,
     });
     const result = await run.resume({
