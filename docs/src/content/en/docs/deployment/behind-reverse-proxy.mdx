@@ -1,0 +1,39 @@
+---
+title: "Behind a Reverse Proxy"
+description: "Deploy a Mastra server behind a Reverse Proxy"
+---
+
+# Deploy a Mastra Server behind a Reverse Proxy
+
+When streaming responses (e.g., SSE, chunked HTTP) from Mastra Server fail or hang behind a reverse proxy, it’s often due to proxy buffering or timeouts. 
+Reverse proxies like `Nginx` and `Caddy` buffer responses by default, which can break streaming protocols.
+
+It is recommended to disable buffering and increase read timeouts.
+
+## Nginx Configuration
+```nginx filename="nginx.conf" showLineNumbers
+location / {
+    proxy_pass http://localhost:4111;
+
+    # Disable buffering for streaming responses
+    proxy_buffering off;
+
+    # increase read timeout for longer streaming sessions
+    proxy_read_timeout 300s; # Wait up to 5 minutes for upstream response
+}
+```
+
+## Caddy Configuration
+```nginx filename="Caddyfile" showLineNumbers
+reverse_proxy localhost:4111 {
+    # Disable buffering for streaming responses
+    flush_interval -1  # Caddy v2.4+ syntax
+    # flush_interval 0  # Legacy syntax
+
+    # increase read timeout for longer streaming sessions
+    read_timeout 300s  # Wait up to 5 minutes for upstream response
+}
+```
+
+## Others
+For other proxies (Cloudflare, HAProxy, etc.), refer to their documentation for equivalent "response buffering" settings.
