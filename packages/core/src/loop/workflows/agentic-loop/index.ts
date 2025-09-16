@@ -1,4 +1,5 @@
 import type { StepResult, ToolSet } from 'ai-v5';
+import { InternalSpans } from '../../../ai-tracing';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type { ChunkType, StepFinishPayload } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
@@ -57,6 +58,13 @@ export function createAgenticLoopWorkflow<
     id: 'agentic-loop',
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
+    options: {
+      tracingPolicy: {
+        // mark all workflow spans related to the
+        // VNext execution as internal
+        internal: InternalSpans.WORKFLOW,
+      },
+    },
   })
     .dowhile(agenticExecutionWorkflow, async ({ inputData }) => {
       const typedInputData = inputData as LLMIterationData<Tools>;
