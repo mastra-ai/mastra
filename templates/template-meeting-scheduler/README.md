@@ -111,3 +111,18 @@ The agent handles Google service authentication through Arcade:
 2. Agent provides clickable authorization URLs
 3. User grants permissions through Google OAuth
 4. Subsequent requests work automatically
+
+---
+
+## Contribution Notice: Templates Are Managed in the Monorepo
+
+This template is maintained in the Mastra monorepo and mirrored to this standalone repository.
+- **Source of truth**: https://github.com/mastra-ai/mastra (see /templates/template-meeting-scheduler)
+- **Issues and pull requests**: Please open them in the monorepo only
+- **Why**: Changes here will be overwritten by the next sync and we don't actively monitor this mirrored repo for PRs
+
+If you're viewing this:
+- **In the monorepo**: you're in the right place—open your PR here.
+- **In the mirrored repo**: do not open a PR here. Instead, submit your PR against the matching path in the monorepo.
+
+Thank you for helping keep our templates consistent and maintainable.

@@ -165,3 +165,18 @@ The Agent app should be deployed first, then the deployment URL should be added 
 - [Mastra Documentation](https://docs.mastra.ai)
 - [MCP Protocol](https://docs.mastra.ai/mcp)
 - [Turborepo Documentation](https://turborepo.com/docs)
+
+---
+
+## Contribution Notice: Templates Are Managed in the Monorepo
+
+This template is maintained in the Mastra monorepo and mirrored to this standalone repository.
+- **Source of truth**: https://github.com/mastra-ai/mastra (see /templates/template-docs-chatbot)
+- **Issues and pull requests**: Please open them in the monorepo only
+- **Why**: Changes here will be overwritten by the next sync and we don't actively monitor this mirrored repo for PRs
+
+If you're viewing this:
+- **In the monorepo**: you're in the right place—open your PR here.
+- **In the mirrored repo**: do not open a PR here. Instead, submit your PR against the matching path in the monorepo.
+
+Thank you for helping keep our templates consistent and maintainable.
