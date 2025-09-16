@@ -79,10 +79,6 @@ A custom OpenTelemetry exporter that sends telemetry data to Mastra Cloud.
 - `endpoint` (optional): Custom endpoint URL for sending telemetry data
 - `logger` (optional): Logger instance compatible with the Mastra Logger interface
 
-## License
-
-This package is covered by the license specified in the project repository.
-
 ## Support
 
 For questions, issues, or feature requests, please reach out through the official Mastra support channels.
