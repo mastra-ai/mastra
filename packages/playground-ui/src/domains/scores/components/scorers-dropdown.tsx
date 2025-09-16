@@ -5,14 +5,19 @@ import { Icon } from '@/ds/icons';
 import { ChevronDown, GaugeIcon } from 'lucide-react';
 import { useTriggerScorer } from '../hooks/use-trigger-scorer';
 import Spinner from '@/components/ui/spinner';
+import { AISpanRecord } from '@mastra/core';
+import { useAgent } from '@/domains/agents/hooks/use-agent';
+import { useWorkflow } from '@/hooks/use-workflows';
 
 export interface ScorersDropdownProps {
-  traceId: string;
+  trace: AISpanRecord;
   spanId?: string;
   onScorerTriggered: (scorerName: string, traceId: string, spanId?: string) => void;
 }
 
-export const ScorersDropdown = ({ traceId, spanId, onScorerTriggered }: ScorersDropdownProps) => {
+export const ScorersDropdown = ({ trace, spanId, onScorerTriggered }: ScorersDropdownProps) => {
+  const { data: agent, isLoading: isLoadingAgent } = useAgent(trace?.attributes?.agentId);
+  const { data: workflow, isLoading: isLoadingWorkflow } = useWorkflow(trace?.attributes?.workflowId);
   const { data: scorers = {}, isLoading } = useScorers();
   const { mutate: triggerScorer, isPending } = useTriggerScorer(onScorerTriggered);
 
@@ -23,11 +28,13 @@ export const ScorersDropdown = ({ traceId, spanId, onScorerTriggered }: ScorersD
     isRegistered: scorer.isRegistered,
   }));
 
+  const isWaiting = isPending || isLoading || isLoadingAgent || isLoadingWorkflow;
+
   return (
     <Dropdown>
       <Dropdown.Trigger asChild>
-        <Button variant="light" disabled={isPending || isLoading}>
-          {isPending || isLoading ? (
+        <Button variant="light" disabled={isWaiting}>
+          {isWaiting ? (
             <Icon>
               <Spinner />
             </Icon>
@@ -46,7 +53,10 @@ export const ScorersDropdown = ({ traceId, spanId, onScorerTriggered }: ScorersD
         {scorerList
           .filter(scorer => scorer.isRegistered)
           .map(scorer => (
-            <Dropdown.Item key={scorer.id} onClick={() => triggerScorer({ scorerName: scorer.name, traceId, spanId })}>
+            <Dropdown.Item
+              key={scorer.id}
+              onClick={() => triggerScorer({ scorerName: scorer.name, traceId: trace.traceId, spanId })}
+            >
               <span>{scorer.name}</span>
             </Dropdown.Item>
           ))}

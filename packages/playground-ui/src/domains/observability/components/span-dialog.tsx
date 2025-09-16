@@ -17,6 +17,7 @@ import { useLinkComponent } from '@/lib/framework';
 import { ScorersDropdown } from '@/domains/scores/components/scorers-dropdown';
 
 type SpanDialogProps = {
+  trace: AISpanRecord;
   span?: AISpanRecord;
   spanInfo?: KeyValueListItemData[];
   isOpen: boolean;
@@ -28,6 +29,7 @@ type SpanDialogProps = {
 };
 
 export function SpanDialog({
+  trace,
   span,
   isOpen,
   onClose,
@@ -79,7 +81,7 @@ export function SpanDialog({
 
           {span?.traceId && span?.spanId && (
             <div>
-              <ScorersDropdown traceId={span.traceId} spanId={span?.spanId} onScorerTriggered={onScorerTriggered} />
+              <ScorersDropdown trace={trace} spanId={span?.spanId} onScorerTriggered={onScorerTriggered} />
             </div>
           )}
         </div>

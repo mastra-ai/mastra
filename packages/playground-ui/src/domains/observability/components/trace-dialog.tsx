@@ -144,9 +144,9 @@ export function TraceDialog({
           </SideDialogHeader>
 
           <div className={cn('overflow-y-auto pb-[2.5rem]')}>
-            {traceId && (
+            {traceDetails && (
               <div>
-                <ScorersDropdown traceId={traceId} spanId={selectedSpanId} onScorerTriggered={onScorerTriggered} />
+                <ScorersDropdown trace={traceDetails} spanId={selectedSpanId} onScorerTriggered={onScorerTriggered} />
               </div>
             )}
 
@@ -219,16 +219,19 @@ export function TraceDialog({
         </div>
       </SideDialog>
 
-      <SpanDialog
-        span={selectedSpan}
-        isOpen={Boolean(dialogIsOpen && selectedSpanId && !combinedView)}
-        onClose={() => setDialogIsOpen(false)}
-        onNext={thereIsNextSpan() ? toNextSpan : undefined}
-        onPrevious={thereIsPreviousSpan() ? toPreviousSpan : undefined}
-        onViewToggle={() => setCombinedView(!combinedView)}
-        spanInfo={selectedSpanInfo}
-        onScorerTriggered={onScorerTriggered}
-      />
+      {traceDetails && (
+        <SpanDialog
+          trace={traceDetails}
+          span={selectedSpan}
+          isOpen={Boolean(dialogIsOpen && selectedSpanId && !combinedView)}
+          onClose={() => setDialogIsOpen(false)}
+          onNext={thereIsNextSpan() ? toNextSpan : undefined}
+          onPrevious={thereIsPreviousSpan() ? toPreviousSpan : undefined}
+          onViewToggle={() => setCombinedView(!combinedView)}
+          spanInfo={selectedSpanInfo}
+          onScorerTriggered={onScorerTriggered}
+        />
+      )}
     </>
   );
 }
