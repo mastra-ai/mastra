@@ -121,7 +121,7 @@ export const mastra = new Mastra({
   // ...
   storage: new LibSQLStore({
     url: ":memory:"
-  }),
+  })
 });
 ```
 
@@ -138,7 +138,8 @@ export const mastra = new Mastra({
   storage: new UpstashStore({
     url: "<upstash-redis-rest-url>",
     token: "<upstash-redis-rest-token>"
-  }),
+  })
+})
 ```
 
 ### Postgres `@mastra/pg`
