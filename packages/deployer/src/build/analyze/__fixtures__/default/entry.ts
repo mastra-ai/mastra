@@ -1,5 +1,5 @@
 import { createLogger } from '@mastra/core/logger';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { testAgent } from './agent/testAgent';
 
 export const mastra = new Mastra({
