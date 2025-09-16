@@ -32,7 +32,15 @@ export class MastraLLMVNext extends MastraBase {
   #options?: MastraModelOptions;
   #firstModel: ModelManagerModelConfig;
 
-  constructor({ mastra, models, options }: { mastra?: Mastra; models: ModelManagerModelConfig[]; options?: MastraModelOptions }) {
+  constructor({
+    mastra,
+    models,
+    options,
+  }: {
+    mastra?: Mastra;
+    models: ModelManagerModelConfig[];
+    options?: MastraModelOptions;
+  }) {
     super({ name: 'aisdk' });
 
     this.#options = options;

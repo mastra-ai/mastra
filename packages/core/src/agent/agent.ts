@@ -719,10 +719,10 @@ export class Agent<
       if (resolvedModel.specificationVersion === 'v2') {
         llm = this.prepareModels(runtimeContext, model).then(models => {
           const enabledModels = models.filter(model => model.enabled);
-          return new MastraLLMVNext({ 
-            models: enabledModels, 
-            mastra: this.#mastra, 
-            options: { tracingPolicy: this.#options?.tracingPolicy }, 
+          return new MastraLLMVNext({
+            models: enabledModels,
+            mastra: this.#mastra,
+            options: { tracingPolicy: this.#options?.tracingPolicy },
           });
         });
       } else {
