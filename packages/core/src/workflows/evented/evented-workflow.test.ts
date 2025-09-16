@@ -1041,7 +1041,7 @@ describe('Workflow', () => {
         steps: [step1],
       });
 
-      await expect(() => workflow.createRunAsync()).rejects.toThrowError(
+      await expect(workflow.createRunAsync()).rejects.toThrowError(
         'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
       );
     });
@@ -1066,7 +1066,7 @@ describe('Workflow', () => {
 
       workflow.then(step1);
 
-      await expect(() => workflow.createRunAsync()).rejects.toThrowError(
+      await expect(workflow.createRunAsync()).rejects.toThrowError(
         'Uncommitted step flow changes detected. Call .commit() to register the steps.',
       );
     });
