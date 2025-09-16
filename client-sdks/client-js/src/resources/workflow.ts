@@ -191,12 +191,51 @@ export class Workflow extends BaseResource {
   }
 
   /**
+   * @deprecated Use createRunAsync() instead. This method will be removed on September 16th, 2025.
+   * @throws {Error} Always throws an error directing users to use createRunAsync()
+   */
+  async createRun(params?: { runId?: string }): Promise<{
+    runId: string;
+    start: (params: {
+      inputData: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+    }) => Promise<{ message: string }>;
+    watch: (onRecord: (record: WorkflowWatchResult) => void) => Promise<void>;
+    resume: (params: {
+      step: string | string[];
+      resumeData?: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+    }) => Promise<{ message: string }>;
+    stream: (params: {
+      inputData: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+    }) => Promise<ReadableStream>;
+    startAsync: (params: {
+      inputData: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+    }) => Promise<WorkflowRunResult>;
+    resumeAsync: (params: {
+      step: string | string[];
+      resumeData?: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+    }) => Promise<WorkflowRunResult>;
+  }> {
+    throw new Error(
+      'createRun() has been deprecated and will be removed on September 16th, 2025. ' +
+        'Please use createRunAsync() instead.\n\n' +
+        'Migration guide:\n' +
+        '  Before: const run = workflow.createRun();\n' +
+        '  After:  const run = await workflow.createRunAsync();\n\n' +
+        'Note: createRunAsync() is an async method, so make sure your calling function is async.',
+    );
+  }
+
+  /**
    * Creates a new workflow run
    * @param params - Optional object containing the optional runId
-   * @returns Promise containing the runId of the created run
+   * @returns Promise containing the runId of the created run with methods to control execution
    */
-  /** @deprecated Use createRunAsync instead */
-  async createRun(params?: { runId?: string }): Promise<{
+  async createRunAsync(params?: { runId?: string }): Promise<{
     runId: string;
     start: (params: {
       inputData: Record<string, any>;
@@ -269,40 +308,6 @@ export class Workflow extends BaseResource {
         return this.resumeAsync({ runId, step: p.step, resumeData: p.resumeData, runtimeContext: p.runtimeContext });
       },
     };
-  }
-
-  /**
-   * Creates a new workflow run (alias for createRun)
-   * @param params - Optional object containing the optional runId
-   * @returns Promise containing the runId of the created run
-   */
-  createRunAsync(params?: { runId?: string }): Promise<{
-    runId: string;
-    start: (params: {
-      inputData: Record<string, any>;
-      runtimeContext?: RuntimeContext | Record<string, any>;
-    }) => Promise<{ message: string }>;
-    watch: (onRecord: (record: WorkflowWatchResult) => void) => Promise<void>;
-    resume: (params: {
-      step: string | string[];
-      resumeData?: Record<string, any>;
-      runtimeContext?: RuntimeContext | Record<string, any>;
-    }) => Promise<{ message: string }>;
-    stream: (params: {
-      inputData: Record<string, any>;
-      runtimeContext?: RuntimeContext | Record<string, any>;
-    }) => Promise<ReadableStream>;
-    startAsync: (params: {
-      inputData: Record<string, any>;
-      runtimeContext?: RuntimeContext | Record<string, any>;
-    }) => Promise<WorkflowRunResult>;
-    resumeAsync: (params: {
-      step: string | string[];
-      resumeData?: Record<string, any>;
-      runtimeContext?: RuntimeContext | Record<string, any>;
-    }) => Promise<WorkflowRunResult>;
-  }> {
-    return this.createRun(params);
   }
 
   /**
