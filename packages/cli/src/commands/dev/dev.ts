@@ -19,8 +19,8 @@ let serverStartTime: number | undefined;
 const ON_ERROR_MAX_RESTARTS = 3;
 
 interface HTTPSOptions {
-  key: Buffer<ArrayBufferLike>;
-  cert: Buffer<ArrayBufferLike>;
+  key: Buffer;
+  cert: Buffer;
 }
 
 interface StartOptions {

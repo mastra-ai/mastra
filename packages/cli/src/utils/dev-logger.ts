@@ -7,8 +7,8 @@ interface DevLoggerOptions {
 }
 
 interface HTTPSOptions {
-  key: Buffer<ArrayBufferLike>;
-  cert: Buffer<ArrayBufferLike>;
+  key: Buffer;
+  cert: Buffer;
 }
 
 export class DevLogger {

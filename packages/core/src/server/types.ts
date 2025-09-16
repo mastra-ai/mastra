@@ -142,7 +142,7 @@ export type ServerConfig = {
    * If you want to run `mastra dev` with HTTPS, you can run it with the `--https` flag and provide the key and cert files here.
    */
   https?: {
-    key: Buffer<ArrayBufferLike>;
-    cert: Buffer<ArrayBufferLike>;
+    key: Buffer;
+    cert: Buffer;
   };
 };
