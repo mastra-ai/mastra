@@ -282,6 +282,16 @@ export class EventedWorkflow<
   }
 
   async createRunAsync(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TInput, TOutput>> {
+    // Add validation checks from base class
+    if (this.stepFlow.length === 0) {
+      throw new Error(
+        'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
+      );
+    }
+    if (!this.executionGraph.steps) {
+      throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
+    }
+
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
