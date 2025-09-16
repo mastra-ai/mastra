@@ -5,8 +5,8 @@ import { ChunkFrom } from './types';
 
 export class MastraWorkflowStream extends ReadableStream<ChunkType> {
   #usageCount = {
-    promptTokens: 0,
-    completionTokens: 0,
+    inputTokens: 0,
+    outputTokens: 0,
     totalTokens: 0,
   };
   #streamPromise: {
@@ -38,12 +38,12 @@ export class MastraWorkflowStream extends ReadableStream<ChunkType> {
     });
 
     const updateUsageCount = (usage: {
-      promptTokens?: `${number}` | number;
-      completionTokens?: `${number}` | number;
+      inputTokens?: `${number}` | number;
+      outputTokens?: `${number}` | number;
       totalTokens?: `${number}` | number;
     }) => {
-      this.#usageCount.promptTokens += parseInt(usage?.promptTokens?.toString() ?? '0', 10);
-      this.#usageCount.completionTokens += parseInt(usage?.completionTokens?.toString() ?? '0', 10);
+      this.#usageCount.inputTokens += parseInt(usage?.inputTokens?.toString() ?? '0', 10);
+      this.#usageCount.outputTokens += parseInt(usage?.outputTokens?.toString() ?? '0', 10);
       this.#usageCount.totalTokens += parseInt(usage?.totalTokens?.toString() ?? '0', 10);
     };
 

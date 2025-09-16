@@ -307,9 +307,11 @@ export class MastraLLMVNext extends MastraBase {
               attributes: {
                 finishReason: props?.finishReason,
                 usage: {
-                  promptTokens: props?.totalUsage?.inputTokens,
-                  completionTokens: props?.totalUsage?.outputTokens,
+                  inputTokens: props?.totalUsage?.inputTokens,
+                  outputTokens: props?.totalUsage?.outputTokens,
                   totalTokens: props?.totalUsage?.totalTokens,
+                  reasoningTokens: props?.totalUsage?.reasoningTokens,
+                  cachedInputTokens: props?.totalUsage?.cachedInputTokens,
                 },
               },
             });

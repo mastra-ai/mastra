@@ -23,6 +23,14 @@ import { createJsonTextStreamTransformer, createObjectStreamTransformer } from '
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
 
+export interface LanguageModelUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
+}
+
 export class JsonToSseTransformStream extends TransformStream<unknown, string> {
   constructor() {
     super({
@@ -84,14 +92,14 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   #warnings: LanguageModelV2CallWarning[] = [];
   #finishReason: FinishReason | string | undefined;
   #request: Record<string, any> | undefined;
-  #usageCount: Record<string, number> = {};
+  #usageCount: LanguageModelUsage = {};
   #tripwire = false;
   #tripwireReason = '';
 
   #delayedPromises = {
     object: new DelayedPromise<InferSchemaOutput<OUTPUT>>(),
     finishReason: new DelayedPromise<FinishReason | string | undefined>(),
-    usage: new DelayedPromise<Record<string, number>>(),
+    usage: new DelayedPromise<LanguageModelUsage>(),
     warnings: new DelayedPromise<LanguageModelV2CallWarning[]>(),
     providerMetadata: new DelayedPromise<Record<string, any> | undefined>(),
     response: new DelayedPromise<Record<string, any>>(), // TODO: add type
@@ -104,7 +112,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     toolCalls: new DelayedPromise<any[]>(), // TODO: add type
     toolResults: new DelayedPromise<any[]>(), // TODO: add type
     steps: new DelayedPromise<StepBufferItem[]>(),
-    totalUsage: new DelayedPromise<Record<string, number>>(),
+    totalUsage: new DelayedPromise<LanguageModelUsage>(),
     content: new DelayedPromise<AIV5Type.StepResult<any>['content']>(),
     reasoningDetails: new DelayedPromise<
       {
@@ -785,25 +793,49 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     return this.#error;
   }
 
-  updateUsageCount(usage: Record<string, number>) {
+  updateUsageCount(usage: Partial<LanguageModelUsage>) {
     if (!usage) {
       return;
     }
 
-    for (const [key, value] of Object.entries(usage)) {
-      this.#usageCount[key] = (this.#usageCount[key] ?? 0) + (value ?? 0);
+    // Use AI SDK v5 format only (MastraModelOutput is only used in VNext paths)
+    if (usage.inputTokens !== undefined) {
+      this.#usageCount.inputTokens = (this.#usageCount.inputTokens ?? 0) + usage.inputTokens;
+    }
+    if (usage.outputTokens !== undefined) {
+      this.#usageCount.outputTokens = (this.#usageCount.outputTokens ?? 0) + usage.outputTokens;
+    }
+    if (usage.totalTokens !== undefined) {
+      this.#usageCount.totalTokens = (this.#usageCount.totalTokens ?? 0) + usage.totalTokens;
+    }
+    if (usage.reasoningTokens !== undefined) {
+      this.#usageCount.reasoningTokens = (this.#usageCount.reasoningTokens ?? 0) + usage.reasoningTokens;
+    }
+    if (usage.cachedInputTokens !== undefined) {
+      this.#usageCount.cachedInputTokens = (this.#usageCount.cachedInputTokens ?? 0) + usage.cachedInputTokens;
     }
   }
 
-  populateUsageCount(usage: Record<string, number>) {
+  populateUsageCount(usage: Partial<LanguageModelUsage>) {
     if (!usage) {
       return;
     }
 
-    for (const [key, value] of Object.entries(usage)) {
-      if (!this.#usageCount[key]) {
-        this.#usageCount[key] = value;
-      }
+    // Use AI SDK v5 format only (MastraModelOutput is only used in VNext paths)
+    if (usage.inputTokens !== undefined && this.#usageCount.inputTokens === undefined) {
+      this.#usageCount.inputTokens = usage.inputTokens;
+    }
+    if (usage.outputTokens !== undefined && this.#usageCount.outputTokens === undefined) {
+      this.#usageCount.outputTokens = usage.outputTokens;
+    }
+    if (usage.totalTokens !== undefined && this.#usageCount.totalTokens === undefined) {
+      this.#usageCount.totalTokens = usage.totalTokens;
+    }
+    if (usage.reasoningTokens !== undefined && this.#usageCount.reasoningTokens === undefined) {
+      this.#usageCount.reasoningTokens = usage.reasoningTokens;
+    }
+    if (usage.cachedInputTokens !== undefined && this.#usageCount.cachedInputTokens === undefined) {
+      this.#usageCount.cachedInputTokens = usage.cachedInputTokens;
     }
   }
 
@@ -1035,16 +1067,22 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     return this.#finishReason;
   }
 
-  #getTotalUsage() {
-    let total = 0;
-    for (const [key, value] of Object.entries(this.#usageCount)) {
-      if (key !== 'totalTokens' && value && !key.startsWith('cached')) {
-        total += value;
-      }
+  #getTotalUsage(): LanguageModelUsage {
+    let total = this.#usageCount.totalTokens;
+
+    if (total === undefined) {
+      const input = this.#usageCount.inputTokens ?? 0;
+      const output = this.#usageCount.outputTokens ?? 0;
+      const reasoning = this.#usageCount.reasoningTokens ?? 0;
+      total = input + output + reasoning;
     }
+
     return {
-      ...this.#usageCount,
+      inputTokens: this.#usageCount.inputTokens,
+      outputTokens: this.#usageCount.outputTokens,
       totalTokens: total,
+      reasoningTokens: this.#usageCount.reasoningTokens,
+      cachedInputTokens: this.#usageCount.cachedInputTokens,
     };
   }
 }
