@@ -52,10 +52,12 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
     try {
@@ -66,6 +68,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
           $set: {
             workflow_name: workflowName,
             run_id: runId,
+            resourceId,
             snapshot,
             createdAt: new Date(),
             updatedAt: new Date(),

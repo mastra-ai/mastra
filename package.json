@@ -3,7 +3,7 @@
   "version": "0.1.11",
   "type": "module",
   "devDependencies": {
-    "@changesets/cli": "^2.29.6",
+    "@changesets/cli": "^2.29.7",
     "@types/node": "^20.19.0",
     "changesets-changelog-github-local": "^1.0.0",
     "husky": "^9.1.7",
@@ -87,7 +87,7 @@
     "typescript": "^5.8.3",
     "@types/node": "^20.17.57",
     "cookie": ">=0.7.2",
-    "tmp": ">=0.2.4"
+    "tmp": ">=0.2.5"
   },
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.12.4",

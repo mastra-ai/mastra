@@ -7,7 +7,7 @@ import type { Mastra, WorkflowRun } from '..';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
 import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
-import type { TracingContext, TracingOptions } from '../ai-tracing';
+import type { TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
@@ -37,6 +37,7 @@ import type {
   StreamEvent,
   WatchEvent,
   WorkflowConfig,
+  WorkflowOptions,
   WorkflowResult,
   WorkflowRunState,
 } from './types';
@@ -169,6 +170,7 @@ export function createStep<
         runtimeContext,
         abortSignal,
         abort,
+        writer,
       }) => {
         let streamPromise = {} as {
           promise: Promise<string>;
@@ -184,11 +186,7 @@ export function createStep<
           name: params.name,
           args: inputData,
         };
-        await emitter.emit('watch-v2', {
-          type: 'workflow-agent-call-start',
-          from: 'WORKFLOW',
-          payload: toolData,
-        });
+
         // TODO: add support for format, if format is undefined use stream, else streamVNext
         let stream: ReadableStream<any>;
 
@@ -204,6 +202,24 @@ export function createStep<
           });
 
           stream = fullStream as any;
+
+          await emitter.emit('watch-v2', {
+            type: 'tool-call-streaming-start',
+            ...(toolData ?? {}),
+          });
+          for await (const chunk of stream) {
+            if (chunk.type === 'text-delta') {
+              await emitter.emit('watch-v2', {
+                type: 'tool-call-delta',
+                ...(toolData ?? {}),
+                argsTextDelta: chunk.textDelta,
+              });
+            }
+          }
+          await emitter.emit('watch-v2', {
+            type: 'tool-call-streaming-finish',
+            ...(toolData ?? {}),
+          });
         } else {
           const modelOutput = await params.streamVNext(inputData.prompt, {
             runtimeContext,
@@ -214,21 +230,15 @@ export function createStep<
           });
 
           stream = modelOutput.fullStream;
+
+          for await (const chunk of stream) {
+            await writer.write(chunk as any);
+          }
         }
 
         if (abortSignal.aborted) {
           return abort();
         }
-
-        for await (const chunk of stream) {
-          await emitter.emit('watch-v2', chunk);
-        }
-
-        await emitter.emit('watch-v2', {
-          type: 'workflow-agent-call-finish',
-          from: 'WORKFLOW',
-          payload: toolData,
-        });
 
         return {
           text: await streamPromise.promise,
@@ -353,6 +363,7 @@ export class Workflow<
   protected serializedStepFlow: SerializedStepFlowEntry[];
   protected executionEngine: ExecutionEngine;
   protected executionGraph: ExecutionGraph;
+  readonly options?: WorkflowOptions;
   public retryConfig: {
     attempts?: number;
     delay?: number;
@@ -371,6 +382,7 @@ export class Workflow<
     executionEngine,
     retryConfig,
     steps,
+    options,
   }: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
@@ -384,10 +396,14 @@ export class Workflow<
     this.#mastra = mastra;
     this.steps = {};
     this.stepDefs = steps;
+    this.options = options;
 
     if (!executionEngine) {
       // TODO: this should be configured using the Mastra class instance that's passed in
-      this.executionEngine = new DefaultExecutionEngine({ mastra: this.#mastra });
+      this.executionEngine = new DefaultExecutionEngine({
+        mastra: this.#mastra,
+        options: { tracingPolicy: options?.tracingPolicy },
+      });
     } else {
       this.executionEngine = executionEngine;
     }
@@ -860,9 +876,16 @@ export class Workflow<
   /**
    * Creates a new workflow run instance
    * @param options Optional configuration for the run
+   * @param options.runId Optional custom run ID, defaults to a random UUID
+   * @param options.resourceId Optional resource ID to associate with this run
+   * @param options.disableScorers Optional flag to disable scorers for this run
    * @returns A Run instance that can be used to execute the workflow
    */
-  createRun(options?: { runId?: string; disableScorers?: boolean }): Run<TEngineType, TSteps, TInput, TOutput> {
+  createRun(options?: {
+    runId?: string;
+    resourceId?: string;
+    disableScorers?: boolean;
+  }): Run<TEngineType, TSteps, TInput, TOutput> {
     if (this.stepFlow.length === 0) {
       throw new Error(
         'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
@@ -879,12 +902,14 @@ export class Workflow<
       new Run({
         workflowId: this.id,
         runId: runIdToUse,
+        resourceId: options?.resourceId,
         executionEngine: this.executionEngine,
         executionGraph: this.executionGraph,
         mastra: this.#mastra,
         retryConfig: this.retryConfig,
         serializedStepGraph: this.serializedStepGraph,
         disableScorers: options?.disableScorers,
+        tracingPolicy: this.options?.tracingPolicy,
         cleanup: () => this.#runs.delete(runIdToUse),
       });
 
@@ -898,10 +923,14 @@ export class Workflow<
   /**
    * Creates a new workflow run instance and stores a snapshot of the workflow in the storage
    * @param options Optional configuration for the run
+   * @param options.runId Optional custom run ID, defaults to a random UUID
+   * @param options.resourceId Optional resource ID to associate with this run
+   * @param options.disableScorers Optional flag to disable scorers for this run
    * @returns A Run instance that can be used to execute the workflow
    */
   async createRunAsync(options?: {
     runId?: string;
+    resourceId?: string;
     disableScorers?: boolean;
   }): Promise<Run<TEngineType, TSteps, TInput, TOutput>> {
     if (this.stepFlow.length === 0) {
@@ -920,6 +949,7 @@ export class Workflow<
       new Run({
         workflowId: this.id,
         runId: runIdToUse,
+        resourceId: options?.resourceId,
         executionEngine: this.executionEngine,
         executionGraph: this.executionGraph,
         mastra: this.#mastra,
@@ -927,6 +957,7 @@ export class Workflow<
         serializedStepGraph: this.serializedStepGraph,
         disableScorers: options?.disableScorers,
         cleanup: () => this.#runs.delete(runIdToUse),
+        tracingPolicy: this.options?.tracingPolicy,
       });
 
     this.#runs.set(runIdToUse, run);
@@ -937,6 +968,7 @@ export class Workflow<
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
+        resourceId: options?.resourceId,
         snapshot: {
           runId: runIdToUse,
           status: 'pending',
@@ -1225,9 +1257,19 @@ export class Run<
   readonly runId: string;
 
   /**
+   * Unique identifier for the resource this run is associated with
+   */
+  readonly resourceId?: string;
+
+  /**
    * Whether to disable scorers for this run
    */
   readonly disableScorers?: boolean;
+
+  /**
+   * Options around how to trace this run
+   */
+  readonly tracingPolicy?: TracingPolicy;
 
   /**
    * Internal state of the workflow run
@@ -1271,6 +1313,7 @@ export class Run<
   constructor(params: {
     workflowId: string;
     runId: string;
+    resourceId?: string;
     executionEngine: ExecutionEngine;
     executionGraph: ExecutionGraph;
     mastra?: Mastra;
@@ -1281,9 +1324,11 @@ export class Run<
     cleanup?: () => void;
     serializedStepGraph: SerializedStepFlowEntry[];
     disableScorers?: boolean;
+    tracingPolicy?: TracingPolicy;
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
+    this.resourceId = params.resourceId;
     this.serializedStepGraph = params.serializedStepGraph;
     this.executionEngine = params.executionEngine;
     this.executionGraph = params.executionGraph;
@@ -1292,6 +1337,7 @@ export class Run<
     this.retryConfig = params.retryConfig;
     this.cleanup = params.cleanup;
     this.disableScorers = params.disableScorers;
+    this.tracingPolicy = params.tracingPolicy;
   }
 
   public get abortController(): AbortController {
@@ -1336,8 +1382,9 @@ export class Run<
       attributes: {
         workflowId: this.workflowId,
       },
-      tracingContext,
+      tracingPolicy: this.tracingPolicy,
       tracingOptions,
+      tracingContext,
       runtimeContext,
     });
 
@@ -1346,6 +1393,7 @@ export class Run<
     const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
+      resourceId: this.resourceId,
       disableScorers: this.disableScorers,
       graph: this.executionGraph,
       serializedStepGraph: this.serializedStepGraph,
@@ -1427,37 +1475,9 @@ export class Run<
   } {
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
-    let currentToolData: { name: string; args: any } | undefined = undefined;
-
     const writer = writable.getWriter();
     const unwatch = this.watch(async event => {
-      if ((event as any).type === 'workflow-agent-call-start') {
-        currentToolData = {
-          name: (event as any).payload.name,
-          args: (event as any).payload.args,
-        };
-        await writer.write({
-          ...event.payload,
-          type: 'tool-call-streaming-start',
-        } as any);
-
-        return;
-      }
-
       try {
-        if ((event as any).type === 'workflow-agent-call-finish') {
-          return;
-        } else if (!(event as any).type.startsWith('workflow-')) {
-          if ((event as any).type === 'text-delta') {
-            await writer.write({
-              type: 'tool-call-delta',
-              ...(currentToolData ?? {}),
-              argsTextDelta: (event as any).textDelta,
-            } as any);
-          }
-          return;
-        }
-
         const e: any = {
           ...event,
           type: event.type.replace('workflow-', ''),
@@ -1786,8 +1806,9 @@ export class Run<
       attributes: {
         workflowId: this.workflowId,
       },
-      tracingContext: params.tracingContext,
+      tracingPolicy: this.tracingPolicy,
       tracingOptions: params.tracingOptions,
+      tracingContext: params.tracingContext,
       runtimeContext: runtimeContextToUse,
     });
 

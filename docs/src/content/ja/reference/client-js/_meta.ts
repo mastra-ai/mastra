@@ -1,12 +1,13 @@
 const meta = {
+  "mastra-client": "MastraClient",
   agents: "エージェント API",
-  memory: "メモリー API",
+  memory: "メモリ API",
   tools: "ツール API",
   workflows: "ワークフロー API",
-  "workflows-vnext": "ワークフロー (vNext) API",
-  vectors: "ベクトル API",
+  vectors: "ベクター API",
   logs: "ログ API",
-  telemetry: "テレメトリー API",
-  "error-handling": "エラー処理",
+  telemetry: "テレメトリ API",
+  "error-handling": "エラーハンドリング",
+  "workflows-legacy": "ワークフロー（レガシー）API",
 };
 export default meta;

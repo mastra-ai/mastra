@@ -1,0 +1,101 @@
+---
+title: "リファレンス: Run.stream() | Workflows | Mastra ドキュメント"
+description: ワークフローで使用する `Run.stream()` メソッドのドキュメント。ワークフローの実行をストリーミング形式で監視できます。
+---
+
+
+
+# Run.stream()
+
+`.stream()` メソッドを使うと、ワークフロー実行を監視し、各ステップの状態についてリアルタイムで更新を受け取れます。
+
+
+
+## 使い方の例
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+const stream = await run.stream({
+  inputData: {
+    value: "initial data",
+  },
+});
+```
+
+
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "inputData",
+      type: "z.infer<TInput>",
+      description: "ワークフローの入力スキーマに適合する入力データ",
+      isOptional: true,
+    },
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      description: "ワークフローの実行時に使用するランタイムコンテキストデータ",
+      isOptional: true,
+    },
+  ]}
+/>
+
+
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "stream",
+      type: "ReadableStream<StreamEvent>",
+      description: "ワークフローの実行イベントをリアルタイムに発行する読み取り可能なストリーム。",
+    },
+    {
+      name: "getWorkflowState",
+      type: "() => Promise<WorkflowResult<TOutput, TSteps>>",
+      description: "最終的なワークフロー結果に解決される Promise を返す関数。",
+    },
+  ]}
+/>
+
+
+
+## 応用例
+
+```typescript showLineNumbers copy
+const { getWorkflowState } = await run.stream({
+  inputData: {
+    value: "initial data"
+  }
+});
+
+const result = await getWorkflowState();
+```
+
+
+
+## ストリームイベント
+
+ストリームはワークフローの実行中にさまざまな種類のイベントを発行します。各イベントには `type` フィールドと、関連データを含む `payload` が含まれます:
+
+- **`start`**: ワークフローの実行を開始
+- **`step-start`**: ステップの実行を開始
+- **`tool-call`**: ツール呼び出しを開始
+- **`tool-call-streaming-start`**: ツール呼び出しのストリーミングを開始
+- **`tool-call-delta`**: ツール出力のインクリメンタル更新
+- **`step-result`**: ステップが結果とともに完了
+- **`step-finish`**: ステップの実行を終了
+- **`finish`**: ワークフローの実行が完了
+
+
+
+
+## 関連項目
+
+- [Workflows 概要](../../../docs/workflows/overview.mdx#run-workflow)
+- [Workflow.createRunAsync()](../create-run.mdx)

@@ -1,5 +1,98 @@
 # @mastra/core
 
+## 0.17.0-alpha.3
+
+### Minor Changes
+
+- Improved workspace dependency resolution during development and builds. This makes the build process more reliable when working with monorepos and workspace packages, reducing potential bundling errors and improving development experience. ([#7619](https://github.com/mastra-ai/mastra/pull/7619))
+
+### Patch Changes
+
+- Updated SensitiveDataFilter to be less greedy in its redacting ([#7840](https://github.com/mastra-ai/mastra/pull/7840))
+
+- Add support for running the Mastra dev server over HTTPS for local development. ([#7871](https://github.com/mastra-ai/mastra/pull/7871))
+  - Add `--https` flag for `mastra dev`. This automatically creates a local key and certificate for you.
+  - Alternatively, you can provide your own key and cert through `server.https`:
+
+    ```ts
+    // src/mastra/index.ts
+    import { Mastra } from '@mastra/core/mastra';
+    import fs from 'node:fs';
+
+    export const mastra = new Mastra({
+      server: {
+        https: {
+          key: fs.readFileSync('path/to/key.pem'),
+          cert: fs.readFileSync('path/to/cert.pem'),
+        },
+      },
+    });
+    ```
+
+- avoid refetching on error when resolving a workflow in cloud ([#7842](https://github.com/mastra-ai/mastra/pull/7842))
+
+- fix(core): handle JSON code blocks in structured output streaming ([#7864](https://github.com/mastra-ai/mastra/pull/7864))
+
+- Add model fallbacks ([#7126](https://github.com/mastra-ai/mastra/pull/7126))
+
+- fix workflows runs fetching and displaying ([#7852](https://github.com/mastra-ai/mastra/pull/7852))
+
+- fix empty state for scorers on agent page ([#7846](https://github.com/mastra-ai/mastra/pull/7846))
+
+## 0.16.4-alpha.2
+
+### Patch Changes
+
+- Postgresql Storage Query Index Performance: Adds index operations and automatic indexing for Postgresql ([#7757](https://github.com/mastra-ai/mastra/pull/7757))
+
+- Fixes assistant message ids when using toUIMessageStream, preserves the original messageId rather than creating a new id for this message. ([#7783](https://github.com/mastra-ai/mastra/pull/7783))
+
+## 0.16.4-alpha.1
+
+### Patch Changes
+
+- Add resource id to workflow run snapshots ([#7740](https://github.com/mastra-ai/mastra/pull/7740))
+
+## 0.16.4-alpha.0
+
+### Patch Changes
+
+- Added the ability to hide internal ai tracing spans (enabled by default) ([#7764](https://github.com/mastra-ai/mastra/pull/7764))
+
+- "refactored ai tracing to commonize types" ([#7744](https://github.com/mastra-ai/mastra/pull/7744))
+
+- feat: add requiresAuth option for custom API routes ([#7703](https://github.com/mastra-ai/mastra/pull/7703))
+
+  Added a new `requiresAuth` option to the `ApiRoute` type that allows users to explicitly control authentication requirements for custom endpoints.
+  - By default, all custom routes require authentication (`requiresAuth: true`)
+  - Set `requiresAuth: false` to make a route publicly accessible without authentication
+  - The auth middleware now checks this configuration before applying authentication
+
+  Example usage:
+
+  ```typescript
+  const customRoutes: ApiRoute[] = [
+    {
+      path: '/api/public-endpoint',
+      method: 'GET',
+      requiresAuth: false, // No authentication required
+      handler: async c => c.json({ message: 'Public access' }),
+    },
+    {
+      path: '/api/protected-endpoint',
+      method: 'GET',
+      requiresAuth: true, // Authentication required (default)
+      handler: async c => c.json({ message: 'Protected access' }),
+    },
+  ];
+  ```
+
+  This addresses issue #7674 where custom endpoints were not being protected by the authentication system.
+
+- Network stream class when calling agent.network() ([#7763](https://github.com/mastra-ai/mastra/pull/7763))
+
+- Deprecate "output" in generate and stream VNext in favour of structuredOutput. When structuredOutput is used in tandem with maxSteps = 1, the structuredOutput processor won't run, it'll generate the output using the main agent, similar to how "output" used to work. ([#7750](https://github.com/mastra-ai/mastra/pull/7750))
+
 ## 0.16.3
 
 ### Patch Changes

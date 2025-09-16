@@ -1,0 +1,102 @@
+---
+title: "MastraJwtAuth クラス"
+description: "JSON Web Token を用いて Mastra アプリケーションを認証する MastraJwtAuth クラスのドキュメント。"
+---
+
+import { Tabs, Tab } from "@/components/tabs";
+
+
+# MastraJwtAuth クラス
+
+`MastraJwtAuth` クラスは、JSON Web Token（JWT）を使用して Mastra のための軽量な認証方式を提供します。共有シークレットに基づいて受信リクエストを検証し、`experimental_auth` オプションを介して Mastra サーバーと統合します。
+
+## インストール
+
+`MastraJwtAuth` クラスを使用する前に、`@mastra/auth` パッケージをインストールしてください。
+
+```bash copy
+npm install @mastra/auth@latest
+```
+
+## 使用例
+
+```typescript {2,7-9} filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { MastraJwtAuth } from '@mastra/auth';
+
+export const mastra = new Mastra({
+  // ..
+  server: {
+    experimental_auth: new MastraJwtAuth({
+        secret: process.env.MASTRA_JWT_SECRET
+    }),
+  },
+});
+```
+
+> 利用可能な設定オプションの一覧については、[MastraJwtAuth](/reference/auth/jwt.mdx) の API リファレンスをご覧ください。
+
+## `MastraClient` の設定
+
+`experimental_auth` が有効な場合、`MastraClient` を用いたすべてのリクエストには、`Authorization` ヘッダーに有効な JWT を含める必要があります：
+
+```typescript {6} filename="lib/mastra/mastra-client.ts" showLineNumbers copy
+import { MastraClient } from "@mastra/client-js";
+
+export const mastraClient = new MastraClient({
+  baseUrl: "https://<mastra-api-url>",
+  headers: {
+    Authorization: `Bearer ${process.env.MASTRA_JWT_TOKEN}`
+  }
+});
+```
+
+> さらに詳しい設定オプションは、[Mastra Client SDK](/docs/server-db/mastra-client.mdx) を参照してください。
+
+### 認証付きリクエストの送信
+
+`MastraClient` を設定したら、フロントエンドアプリから認証付きリクエストを送信するか、ローカルでの簡単なテストには `curl` を使えます:
+
+<Tabs items={["MastraClient", "curl"]}>
+  <Tab>
+    ```tsx filename="src/components/test-agent.tsx" showLineNumbers copy
+    import { mastraClient } from "../../lib/mastra-client";
+
+    export const TestAgent = () => {
+      async function handleClick() {
+        const agent = mastraClient.getAgent("weatherAgent");
+
+        const response = await agent.generate({
+          messages: "Weather in London"
+        });
+
+        console.log(response);
+      }
+
+      return <button onClick={handleClick}>テスト Agent</button>;
+    };
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <your-jwt>" \
+      -d '{
+        "messages": "Weather in London"
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+## JWT の作成
+
+Mastra サーバーへのリクエストを認証するには、`MASTRA_JWT_SECRET` で署名された有効な JSON Web Token (JWT) が必要です。
+
+最も手軽な生成方法は、[jwt.io](https://www.jwt.io/) を使うことです：
+
+1. **JWT Encoder** を選択します。
+2. 下へスクロールして **Sign JWT: Secret** セクションを開きます。
+3. シークレットを入力します（例：`supersecretdevkeythatishs256safe!`）。
+4. **Generate example** をクリックして有効な JWT を生成します。
+5. 生成されたトークンをコピーし、`.env` ファイルの `MASTRA_JWT_TOKEN` に設定します。

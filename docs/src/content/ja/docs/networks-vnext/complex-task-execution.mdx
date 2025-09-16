@@ -1,0 +1,148 @@
+---
+title: "AgentNetwork の loop メソッドで複雑なタスクを実行する"
+description: "このページでは、Mastra vNext で AgentNetwork の loop メソッドを用い、メモリに基づくオーケストレーションや複数ステップの実行を含む、複数のエージェントとワークフローを要する複雑なタスクを扱う方法を紹介します。"
+---
+
+
+
+## 複数のプリミティブを要する複雑なタスク
+
+例として、3つのプリミティブを利用できる AgentNetwork があります:
+
+- `agent1`: 指定されたトピックをリサーチできる汎用のリサーチエージェント。
+- `agent2`: リサーチした資料に基づいて包括的なレポートを作成できる汎用のライティングエージェント。
+- `workflow1`: 特定の都市をリサーチし、リサーチ結果に基づいて包括的なレポートを作成するワークフロー（agent1 と agent2 を使用）。
+
+複数のプリミティブを必要とするタスクを作成するために `loop` メソッドを使用します。AgentNetwork はメモリを活用して、どのプリミティブをどの順序で呼び出すか、またタスクがいつ完了したかを判断します。
+
+
+
+```typescript
+import { NewAgentNetwork } from '@mastra/core/network/vNext';
+import { Agent } from '@mastra/core/agent';
+import { createStep, createWorkflow } from '@mastra/core/workflows';
+import { Memory } from '@mastra/memory';
+import { openai } from '@ai-sdk/openai';
+import { LibSQLStore } from '@mastra/libsql';
+import { z } from 'zod';
+import { RuntimeContext } from '@mastra/core/runtime-context';
+
+const memory = new Memory({
+  storage: new LibSQLStore({
+    url: 'file:../mastra.db', // もしくはご自身のデータベース URL
+  }),
+});
+
+const agentStep1 = createStep({
+  id: 'agent-step',
+  description: 'このステップはリサーチとテキストの統合に使用します。',
+  inputSchema: z.object({
+    city: z.string().describe('調査対象の都市'),
+  }),
+  outputSchema: z.object({
+    text: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    const resp = await agent1.generate(inputData.city, {
+      output: z.object({
+        text: z.string(),
+      }),
+    });
+
+    return { text: resp.object.text };
+  },
+});
+
+const agentStep2 = createStep({
+  id: 'agent-step-two',
+  description: 'このステップはリサーチとテキストの統合に使用します。',
+  inputSchema: z.object({
+    text: z.string().describe('調査対象の都市'),
+  }),
+  outputSchema: z.object({
+    text: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    const resp = await agent2.generate(inputData.text, {
+      output: z.object({
+        text: z.string(),
+      }),
+    });
+
+    return { text: resp.object.text };
+  },
+});
+
+const workflow1 = createWorkflow({
+  id: 'workflow1',
+  description:
+    'このワークフローは特定の都市を調査するのに最適です。調査したい都市がすでに決まっている場合に使用してください。',
+  steps: [],
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  outputSchema: z.object({
+    text: z.string(),
+  }),
+})
+  .then(agentStep1)
+  .then(agentStep2)
+  .commit();
+
+const agent1 = new Agent({
+  name: 'agent1',
+  instructions:
+    'このエージェントはリサーチ用で、完全な回答は作成しません。箇条書きのみで簡潔に回答してください。',
+  description:
+    'このエージェントはリサーチ用で、完全な回答は作成しません。箇条書きのみで簡潔に回答してください。',
+  model: openai('gpt-4o'),
+});
+
+const agent2 = new Agent({
+  name: 'agent2',
+  description:
+    'このエージェントは調査済みの資料をもとにテキストの統合（シンセシス）を行います。調査資料に基づいて完全なレポートを作成します。レポートは段落形式で記述します。最終レポートとして複数の情報源から得た内容を統合するために使用します。',
+  instructions:
+    'このエージェントは調査済みの資料をもとにテキストの統合（シンセシス）を行います。調査資料に基づいて完全なレポートを書いてください。箇条書きは使用せず、段落で記述してください。最終レポートに箇条書きが1つでもあってはなりません。',
+  model: openai('gpt-4o'),
+});
+
+const network = new NewAgentNetwork({
+  id: 'test-network',
+  name: 'Test Network',
+  instructions:
+    'あなたはライター兼リサーチャーのネットワークです。ユーザーはトピックの調査を依頼します。常に完全なレポートで回答してください。箇条書きは完全なレポートではありません。ブログ記事のように段落でしっかり書いてください。断片的な情報に頼ってはいけません。',
+  model: openai('gpt-4o'),
+  agents: {
+    agent1,
+    agent2,
+  },
+  workflows: {
+    workflow1,
+  },
+  memory: memory,
+});
+
+const runtimeContext = new RuntimeContext();
+
+console.log(
+  // タスクの指定。ここで合成にエージェントを使うことに言及しているのは、ルーティングエージェント自体も結果をある程度統合できるためで、agent2 の使用を強制する意図があります
+  await network.loop(
+    'フランスで最も大きな都市はどこですか？3つ教えてください。それぞれはどのような都市ですか？都市を特定し、各都市を徹底的に調査し、そのすべての情報を統合した最終的な完全レポートを提示してください。統合には必ずエージェントを使用してください。',
+    { runtimeContext },
+  ),
+);
+```
+
+
+
+与えられたタスク（フランスの最大都市3つを調査し、完全なレポートを作成する）に対して、AgentNetwork は次のプリミティブを呼び出します：
+
+1. `agent1` がフランスの最大都市3つを特定します。
+2. `workflow1` が各都市を順番に調査します。ワークフローは `memory` を用いて、どの都市が既に調査済みかを把握し、先に進む前にすべての都市の調査が完了していることを確認します。
+3. `agent2` が最終レポートを作成（統合）します。
+
+### 仕組み
+
+- 基盤となるエンジンは、単一呼び出しの `generate` ワークフローをラップした Mastra のワークフローです。
+- ワークフローは、ルーティングモデルがタスク完了と判断するまで、`dountil` 構造を使ってネットワーク実行ワークフローを繰り返し呼び出します。この判定が `dountil` の条件として用いられます。

@@ -126,11 +126,10 @@ The local development server includes an OpenAPI specification available at: [ht
 
 To include OpenAPI documentation in your production server, enable it in the Mastra instance:
 
-```typescript {7} filename="src/mastra/index.ts" showLineNumbers copy
+```typescript {6} filename="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core/mastra";
 
 export const mastra = new Mastra({
-  // ...
   server: {
     build: {
       openAPIDocs: true
@@ -145,11 +144,10 @@ The local development server includes an interactive Swagger UI - API explorer a
 
 To include Swagger UI in your production server, enable it in the Mastra instance:
 
-```typescript {7} filename="src/mastra/index.ts" showLineNumbers copy
+```typescript {6} filename="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core/mastra";
 
 export const mastra = new Mastra({
-  // ...
   server: {
     build: {
       swaggerUI: true
@@ -170,13 +168,12 @@ This setup lets you start developing immediately with production-like behavior, 
 
 ## Configuration
 
-By default, the server runs on port `4111`. You can customize the host and port through the Mastra server configuration.
+By default, the server runs on port `4111`. You can customize the `host` and `port` through the Mastra server configuration.
 
-```typescript {6,7} filename="src/mastra/index.ts" showLineNumbers copy
+```typescript {5,6} filename="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core/mastra";
 
 export const mastra = new Mastra({
-  // ...
   server: {
     port: 8080,
     host: "0.0.0.0",
@@ -184,15 +181,40 @@ export const mastra = new Mastra({
 });
 ```
 
+### Local HTTPS
+
+Mastra provides a way to use a local HTTPS server for `mastra dev` (through [expo/devcert](https://github.com/expo/devcert)). When you use the `--https` flag, a private key and certificate will be created and used for your project. By default, certificates are issued for `localhost` unless you defined another `host` value.
+
+```bash
+mastra dev --https
+```
+
+You can provide your own key and cert file by specifying the `server.https` option in the Mastra server configuration.
+
+```typescript {2,6-9} filename="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core/mastra";
+import fs from 'node:fs'
+
+export const mastra = new Mastra({
+  server: {
+    https: {
+      key: fs.readFileSync('path/to/key.pem'),
+      cert: fs.readFileSync('path/to/cert.pem')
+    }
+  },
+});
+```
+
+When you provide both `--https` and `server.https` the latter will take precedence.
+
 ## Bundler options
 
 Use `transpilePackages` to compile TypeScript packages or libraries. Use `externals` to exclude dependencies resolved at runtime, and `sourcemap` to emit readable stack traces.
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
+```typescript filename="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core/mastra";
 
 export const mastra = new Mastra({
-  // ...
   bundler: {
     transpilePackages: ["utils"],
     externals: ["ui"],

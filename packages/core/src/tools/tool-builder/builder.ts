@@ -131,6 +131,7 @@ export class CoreToolBuilder extends MastraBase {
           toolDescription: options.description,
           toolType: logType || 'tool',
         },
+        tracingPolicy: options.tracingPolicy,
       });
 
       try {

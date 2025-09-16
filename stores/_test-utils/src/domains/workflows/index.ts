@@ -446,6 +446,34 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       expect(loadedSnapshot).toEqual(complexSnapshot);
     });
 
+    it('should persist resourceId when creating workflow runs', async () => {
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+      const resourceId = `resource-${randomUUID()}`;
+      const snapshot = {
+        status: 'running',
+        context: {},
+      } as any;
+
+      await storage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        resourceId,
+        snapshot,
+      });
+
+      const run = await storage.getWorkflowRunById({
+        runId,
+        workflowName,
+      });
+
+      expect(run?.resourceId).toBe(resourceId);
+
+      expect(run?.snapshot).toEqual(snapshot);
+      expect(run?.workflowName).toBe(workflowName);
+      expect(run?.runId).toBe(runId);
+    });
+
     // implement on other stores
     it.todo('should update workflow results in snapshot', async () => {
       const workflowName = 'test-workflow';

@@ -1,0 +1,339 @@
+---
+title: "例: AI SDK v5 との統合 | エージェント | Mastra ドキュメント"
+description: メモリとツール連携を備えたストリーミングチャットインターフェースに向けて、Mastra のエージェントを AI SDK v5 と統合する例。
+---
+
+import { Callout } from "nextra/components";
+import { GithubLink } from "@/components/github-link";
+
+
+
+# 例: AI SDK v5 との統合
+
+この例では、Mastra エージェントを [AI SDK v5](https://sdk.vercel.ai/) と統合し、最新のストリーミング対応チャットインターフェースを構築する方法を紹介します。リアルタイムの会話機能、永続メモリ、さらに実験的な `streamVNext` メソッドによる AI SDK v5 形式対応のツール連携を備えた、完成度の高い Next.js アプリケーションを実装しています。
+
+
+
+## 主な機能
+
+- **ストリーミングチャットインターフェース**: AI SDK v5 の `useChat` フックによるリアルタイム対話
+- **Mastra エージェントの統合**: カスタムツールと OpenAI GPT-4o を活用した天気エージェント
+- **永続メモリ**: 会話履歴を LibSQL に永続化
+- **互換レイヤー**: Mastra と AI SDK v5 のストリームをシームレスに連携
+- **ツール統合**: リアルタイムなデータ取得に対応するカスタム天気ツール
+
+
+
+## Mastra の設定
+
+まず、メモリとツールを使って Mastra エージェントをセットアップします。
+
+```typescript showLineNumbers copy filename="src/mastra/index.ts"
+import { ConsoleLogger } from "@mastra/core/logger";
+import { Mastra } from "@mastra/core/mastra";
+import { weatherAgent } from "./agents";
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+  logger: new ConsoleLogger(),
+  // aiSdkCompat: "v4", // オプション: 追加の互換性のため
+});
+```
+
+```typescript showLineNumbers copy filename="src/mastra/agents/index.ts"
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+import { weatherTool } from "../tools";
+
+export const memory = new Memory({
+  storage: new LibSQLStore({
+    url: `file:./mastra.db`,
+  }),
+  options: {
+    semanticRecall: false,
+    workingMemory: {
+      enabled: false,
+    },
+    lastMessages: 5
+  },
+});
+
+export const weatherAgent = new Agent({
+  name: "Weather Agent",
+  instructions: `
+    あなたは正確な気象情報を提供する、頼れる天気アシスタントです。
+
+    主な役割は、特定の場所の天気情報をユーザーが取得できるように支援することです。回答する際は次を守ってください:
+    - 場所が指定されていない場合は、必ず場所を尋ねる
+    - 湿度、風の状況、降水量などの関連情報を含める
+    - 簡潔でありながら要点を押さえた回答にする
+
+    現在の天気データを取得するには weatherTool を使用してください。
+  `,
+  model: openai("gpt-4o-mini"),
+  tools: {
+    weatherTool,
+  },
+  memory,
+});
+```
+
+
+
+## カスタム天気ツール
+
+リアルタイムの天気データを取得するツールを作成します：
+
+```typescript showLineNumbers copy filename="src/mastra/tools/index.ts"
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+
+export const weatherTool = createTool({
+  id: 'get-weather',
+  description: '指定した場所の現在の天気を取得します',
+  inputSchema: z.object({
+    location: z.string().describe('都市名'),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+    feelsLike: z.number(),
+    humidity: z.number(),
+    windSpeed: z.number(),
+    windGust: z.number(),
+    conditions: z.string(),
+    location: z.string(),
+  }),
+  execute: async ({ context }) => {
+    return await getWeather(context.location);
+  },
+});
+
+const getWeather = async (location: string) => {
+  // ジオコーディング API の呼び出し
+  const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`;
+  const geocodingResponse = await fetch(geocodingUrl);
+  const geocodingData = await geocodingResponse.json();
+
+  if (!geocodingData.results?.[0]) {
+    throw new Error(`Location '${location}' not found`);
+  }
+
+  const { latitude, longitude, name } = geocodingData.results[0];
+
+  // 天気 API の呼び出し
+  const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code`;
+  const response = await fetch(weatherUrl);
+  const data = await response.json();
+
+  return {
+    temperature: data.current.temperature_2m,
+    feelsLike: data.current.apparent_temperature,
+    humidity: data.current.relative_humidity_2m,
+    windSpeed: data.current.wind_speed_10m,
+    windGust: data.current.wind_gusts_10m,
+    conditions: getWeatherCondition(data.current.weather_code),
+    location: name,
+  };
+};
+```
+
+
+
+## Next.js API ルート
+
+### ストリーミング チャット エンドポイント
+
+実験的な `streamVNext` を使い、AI SDK v5 形式で Mastra エージェントのレスポンスをストリーミングする API ルートを作成します:
+
+```typescript showLineNumbers copy filename="app/api/chat/route.ts"
+import { mastra } from "@/src/mastra";
+
+const myAgent = mastra.getAgent("weatherAgent");
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+
+  // Use streamVNext with AI SDK v5 format (experimental)
+  const stream = await myAgent.streamVNext(messages, {
+    format: 'aisdk',  // Enable AI SDK v5 compatibility
+    memory: {
+      thread: "user-session", // 実際のユーザー/セッション ID を使用
+      resource: "weather-chat",
+    },
+  });
+
+  // すでに AI SDK v5 形式のストリームです
+  return stream.toUIMessageStreamResponse();
+}
+```
+
+### 初期チャット履歴
+
+Mastra Memory から会話履歴を読み込みます:
+
+```typescript showLineNumbers copy filename="app/api/initial-chat/route.ts"
+import { mastra } from "@/src/mastra";
+import { NextResponse } from "next/server";
+
+const myAgent = mastra.getAgent("weatherAgent");
+
+export async function GET() {
+  const result = await myAgent.getMemory()?.query({
+    threadId: "user-session",
+  });
+
+  return NextResponse.json(result?.uiMessages || []);
+}
+```
+
+
+
+## React チャットインターフェース
+
+AI SDK v5 の `useChat` フックを使ってフロントエンドを構築します：
+
+```typescript showLineNumbers copy filename="app/page.tsx"
+"use client";
+
+import { Message, useChat } from "@ai-sdk/react";
+import useSWR from "swr";
+
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
+export default function Chat() {
+  // 初期の会話履歴を読み込む
+  const { data: initialMessages = [] } = useSWR<Message[]>(
+    "/api/initial-chat",
+    fetcher,
+  );
+
+  // AI SDK v5 でストリーミングチャットをセットアップ
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    initialMessages,
+  });
+
+  return (
+    <div className="flex flex-col w-full max-w-md py-24 mx-auto stretch">
+      {messages.map((m) => (
+        <div
+          key={m.id}
+          className="whitespace-pre-wrap"
+          style={{ marginTop: "1em" }}
+        >
+          <h3
+            style={{
+              fontWeight: "bold",
+              color: m.role === "user" ? "green" : "yellow",
+            }}
+          >
+            {m.role === "user" ? "User: " : "AI: "}
+          </h3>
+          {m.parts.map((p) => p.type === "text" && p.text).join("\n")}
+        </div>
+      ))}
+
+      <form onSubmit={handleSubmit}>
+        <input
+          className="fixed dark:bg-zinc-900 bottom-0 w-full max-w-md p-2 mb-8 border border-zinc-300 dark:border-zinc-800 rounded shadow-xl"
+          value={input}
+          placeholder="天気について質問してみてください..."
+          onChange={handleInputChange}
+        />
+      </form>
+    </div>
+  );
+}
+```
+
+
+
+## パッケージ設定
+
+必要な依存関係をインストールします:
+
+注意: ai-sdk v5 はまだベータ版です。ベータ期間中は、ai-sdk のベータ版と mastra のベータ版をインストールする必要があります。詳しくは[こちら](https://github.com/mastra-ai/mastra/issues/5470)をご覧ください。
+
+```json showLineNumbers copy filename="package.json"
+{
+  "dependencies": {
+    "@ai-sdk/openai": "2.0.0-beta.1",
+    "@ai-sdk/react": "2.0.0-beta.1",
+    "@mastra/core": "0.0.0-ai-v5-20250625173645",
+    "@mastra/libsql": "0.0.0-ai-v5-20250625173645",
+    "@mastra/memory": "0.0.0-ai-v5-20250625173645",
+    "next": "15.1.7",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "swr": "^2.3.3",
+    "zod": "^3.25.67"
+  }
+}
+```
+
+
+
+## 主要な統合ポイント
+
+### 実験的な streamVNext 形式のサポート
+
+実験的な `streamVNext` メソッドに `format: 'aisdk'` を指定すると、AI SDK v5 とネイティブに互換性があります：
+
+```typescript
+// AI SDK v5 の形式で streamVNext を使用
+const stream = await agent.streamVNext(messages, {
+  format: 'aisdk'  // AISDKV5OutputStream を返す
+});
+
+// AI SDK v5 のインターフェースと直接互換
+return stream.toUIMessageStreamResponse();
+```
+
+<Callout type="info">
+  **Note**: フォーマット対応のある `streamVNext` メソッドは実験的であり、フィードバックに基づく機能改善の過程で変更される可能性があります。詳細は [Agent Streaming のドキュメント](/docs/agents/streaming) を参照してください。
+</Callout>
+
+### メモリの永続化
+
+会話は Mastra Memory により自動的に永続化されます：
+
+- 各会話は固有の `threadId` を使用
+- ページのリロード時に `/api/initial-chat` 経由で履歴を読み込み
+- 新しいメッセージはエージェントが自動的に保存
+
+### ツール統合
+
+天気ツールはシームレスに統合されています：
+
+- 天気情報が必要な際はエージェントが自動でツールを呼び出す
+- リアルタイムのデータを外部 API から取得
+- 構造化された出力により一貫した応答を実現
+
+
+
+## 例を実行する
+
+1. OpenAI APIキーを設定します:
+```bash
+echo "OPENAI_API_KEY=your_key_here" > .env.local
+```
+
+2. 開発サーバーを起動します:
+```bash
+pnpm dev
+```
+
+3. `http://localhost:3000` にアクセスして、さまざまな都市の天気を尋ねてみましょう！
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/tree/main/examples/ai-sdk-v5"
+  }
+/>

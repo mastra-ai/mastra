@@ -1,89 +1,82 @@
 ---
-title: "ベクトルデータベースへのエンベディングの保存 | Mastra Docs"
-description: Mastraにおけるベクトルストレージオプションのガイド。類似性検索のための組み込みおよび専用ベクトルデータベースを含みます。
+title: "ベクトルデータベースへの埋め込みの保存 | Mastra ドキュメント"
+description: Mastra におけるベクトル格納オプションのガイド。類似検索のための内蔵型および専用のベクトルデータベースについて解説します。
 ---
 
 import { Tabs } from "nextra/components";
 
-## ベクトルデータベースへの埋め込みの保存
 
-埋め込みを生成した後、ベクトル類似性検索をサポートするデータベースに保存する必要があります。Mastraは、さまざまなベクトルデータベース間で埋め込みを保存およびクエリするための一貫したインターフェースを提供します。
+## ベクターデータベースへの埋め込みの保存
 
-## サポートされているデータベース
+埋め込みを生成した後は、ベクトル類似検索をサポートするデータベースに保存する必要があります。Mastra は、複数のベクターデータベースにまたがって埋め込みの保存と検索を行える統一的なインターフェースを提供します。
 
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch']}>
+## 対応データベース
+
+{/*
+LLM CONTEXT: この Tabs コンポーネントは、Mastra がサポートする各種のベクターデータベース実装を紹介します。
+各タブでは、特定のベクターデータベースプロバイダーのセットアップと設定方法を示します。
+タブ間で API のパターンを統一しており、プロバイダーの切り替え方の理解に役立ちます。
+各タブには、そのデータベース向けの import 文、初期化コード、基本操作（createIndex、upsert）が含まれます。
+対応プロバイダーは、Pg Vector、Pinecone、Qdrant、Chroma、Astra、LibSQL、Upstash、Cloudflare、MongoDB、OpenSearch、Couchbase、S3 Vectors です。
+*/}
+
+<Tabs items={['MongoDB', 'Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'OpenSearch', 'Couchbase', 'LanceDB', 'S3 Vectors']}>
   <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
-      import { PgVector } from '@mastra/pg';
+    import { MongoDBVector } from '@mastra/mongodb'
 
-    const store = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING })
-    await store.createIndex({
-    indexName: "myCollection",
-    dimension: 1536,
-    });
-    await store.upsert({
-    indexName: "myCollection",
-    vectors: embeddings,
-    metadata: chunks.map(chunk => ({ text: chunk.text })),
-    });
-
-    ```
-
-    ### pgvectorを使用したPostgreSQLの利用
-
-    pgvector拡張機能を備えたPostgreSQLは、すでにPostgreSQLを使用しているチームがインフラの複雑さを最小限に抑えたい場合に適したソリューションです。
-    詳細なセットアップ手順とベストプラクティスについては、[pgvectorの公式リポジトリ](https://github.com/pgvector/pgvector)を参照してください。
-
-  </Tabs.Tab>
-
-  <Tabs.Tab>
-    ```ts filename="vector-store.ts" showLineNumbers copy
-
-      import { PineconeVector } from '@mastra/pinecone'
-
-      const store = new PineconeVector({
-        apiKey: process.env.PINECONE_API_KEY,
-      })
-      await store.createIndex({
-        indexName: "myCollection",
-        dimension: 1536,
-      });
-      await store.upsert({
-        indexName: "myCollection",
-        vectors: embeddings,
-        metadata: chunks.map(chunk => ({ text: chunk.text })),
-      });
-    ```
-
-  </Tabs.Tab>
-
-  <Tabs.Tab>
-    ```ts filename="vector-store.ts" showLineNumbers copy
-      import { QdrantVector } from '@mastra/qdrant'
-
-    const store = new QdrantVector({
-    url: process.env.QDRANT_URL,
-    apiKey: process.env.QDRANT_API_KEY
+    const store = new MongoDBVector({
+      uri: process.env.MONGODB_URI,
+      dbName: process.env.MONGODB_DATABASE
     })
     await store.createIndex({
-    indexName: "myCollection",
-    dimension: 1536,
+      indexName: "myCollection",
+      dimension: 1536,
     });
     await store.upsert({
-    indexName: "myCollection",
-    vectors: embeddings,
-    metadata: chunks.map(chunk => ({ text: chunk.text })),
+      indexName: "myCollection",
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
     });
 
     ```
 
+    ### MongoDB Atlas Vector Search を使う
+
+    セットアップ手順やベストプラクティスの詳細は、[MongoDB Atlas Vector Search の公式ドキュメント](https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-overview/?utm_campaign=devrel\&utm_source=third-party-content\&utm_medium=cta\&utm_content=mastra-docs)をご覧ください。
   </Tabs.Tab>
 
   <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
-    import { ChromaVector } from '@mastra/chroma'
+    import { PgVector } from '@mastra/pg';
 
-    const store = new ChromaVector()
+    const store = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING })
+
+    await store.createIndex({
+      indexName: "myCollection",
+      dimension: 1536,
+    });
+
+    await store.upsert({
+      indexName: "myCollection",
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    });
+    ```
+
+    ### pgvector を使った PostgreSQL の利用
+
+    pgvector 拡張機能を備えた PostgreSQL は、すでに PostgreSQL を利用していて、インフラの複雑さを抑えたいチームにとって適したソリューションです。
+    セットアップ手順やベストプラクティスの詳細は、[公式の pgvector リポジトリ](https://github.com/pgvector/pgvector)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```ts filename="vector-store.ts" showLineNumbers copy
+    import { PineconeVector } from '@mastra/pinecone'
+
+    const store = new PineconeVector({
+      apiKey: process.env.PINECONE_API_KEY,
+    })
     await store.createIndex({
       indexName: "myCollection",
       dimension: 1536,
@@ -94,30 +87,80 @@ import { Tabs } from "nextra/components";
       metadata: chunks.map(chunk => ({ text: chunk.text })),
     });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
-      import { AstraVector } from '@mastra/astra'
+    import { QdrantVector } from '@mastra/qdrant'
 
-    const store = new AstraVector({
-    token: process.env.ASTRA_DB_TOKEN,
-    endpoint: process.env.ASTRA_DB_ENDPOINT,
-    keyspace: process.env.ASTRA_DB_KEYSPACE
+    const store = new QdrantVector({
+      url: process.env.QDRANT_URL,
+      apiKey: process.env.QDRANT_API_KEY
     })
+
     await store.createIndex({
-    indexName: "myCollection",
-    dimension: 1536,
+      indexName: "myCollection",
+      dimension: 1536,
     });
+
     await store.upsert({
-    indexName: "myCollection",
-    vectors: embeddings,
-    metadata: chunks.map(chunk => ({ text: chunk.text })),
+      indexName: "myCollection",
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
     });
 
     ```
+  </Tabs.Tab>
 
+  <Tabs.Tab>
+    ```ts filename="vector-store.ts" showLineNumbers copy
+    import { ChromaVector } from '@mastra/chroma'
+
+    // Chroma をローカルで実行
+    // const store = new ChromaVector()
+
+    // Chroma Cloud で実行
+    const store = new ChromaVector({
+      apiKey: process.env.CHROMA_API_KEY,
+      tenant: process.env.CHROMA_TENANT,
+      database: process.env.CHROMA_DATABASE
+    })
+
+    await store.createIndex({
+      indexName: "myCollection",
+      dimension: 1536,
+    });
+
+    await store.upsert({
+      indexName: "myCollection",
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    });
+    ```
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```ts filename="vector-store.ts" showLineNumbers copy
+    import { AstraVector } from '@mastra/astra'
+
+    const store = new AstraVector({
+      token: process.env.ASTRA_DB_TOKEN,
+      endpoint: process.env.ASTRA_DB_ENDPOINT,
+      keyspace: process.env.ASTRA_DB_KEYSPACE
+    })
+
+    await store.createIndex({
+      indexName: "myCollection",
+      dimension: 1536,
+    });
+
+    await store.upsert({
+      indexName: "myCollection",
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    });
+
+    ```
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -126,41 +169,40 @@ import { Tabs } from "nextra/components";
 
     const store = new LibSQLVector({
       connectionUrl: process.env.DATABASE_URL,
-      authToken: process.env.DATABASE_AUTH_TOKEN // Optional: for Turso cloud databases
+      authToken: process.env.DATABASE_AUTH_TOKEN // オプション: Turso のクラウドデータベース向け
     })
+
     await store.createIndex({
       indexName: "myCollection",
       dimension: 1536,
     });
+
     await store.upsert({
       indexName: "myCollection",
       vectors: embeddings,
       metadata: chunks.map(chunk => ({ text: chunk.text })),
     });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
-      import { UpstashVector } from '@mastra/upstash'
+    import { UpstashVector } from '@mastra/upstash'
 
+    // Upstash ではストアを index と呼びます
     const store = new UpstashVector({
-    url: process.env.UPSTASH_URL,
-    token: process.env.UPSTASH_TOKEN
+      url: process.env.UPSTASH_URL,
+      token: process.env.UPSTASH_TOKEN
     })
-    await store.createIndex({
-    indexName: "myCollection",
-    dimension: 1536,
-    });
+
+    // ここでは store.createIndex の呼び出しは不要です。Upstash では upsert 時に、
+    // 該当の namespace がまだ存在しない場合、自動的に index（Upstash では namespace とも呼ばれます）を作成します。
     await store.upsert({
-    indexName: "myCollection",
-    vectors: embeddings,
-    metadata: chunks.map(chunk => ({ text: chunk.text })),
+      indexName: "myCollection", // Upstash における namespace 名
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
     });
-
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -181,178 +223,269 @@ import { Tabs } from "nextra/components";
       metadata: chunks.map(chunk => ({ text: chunk.text })),
     });
     ```
-
-  </Tabs.Tab>
-
-  <Tabs.Tab>
-    ```ts filename="vector-store.ts" showLineNumbers copy
-      import { MongoDBVector } from '@mastra/mongodb'
-
-    const store = new MongoDBVector({
-    url: process.env.MONGODB_URL,
-    database: process.env.MONGODB_DATABASE
-    })
-    await store.createIndex({
-    indexName: "myCollection",
-    dimension: 1536,
-    });
-    await store.upsert({
-    indexName: "myCollection",
-    vectors: embeddings,
-    metadata: chunks.map(chunk => ({ text: chunk.text })),
-    });
-
-    ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
     import { OpenSearchVector } from '@mastra/opensearch'
 
-    const store = new OpenSearchVector(process.env.OPENSEARCH_URL)
+    const store = new OpenSearchVector({ url: process.env.OPENSEARCH_URL })
+
     await store.createIndex({
       indexName: "my-collection",
       dimension: 1536,
     });
+
     await store.upsert({
       indexName: "my-collection",
       vectors: embeddings,
       metadata: chunks.map(chunk => ({ text: chunk.text })),
     });
     ```
+  </Tabs.Tab>
 
+  <Tabs.Tab>
+    ```ts filename="vector-store.ts" showLineNumbers copy
+    import { CouchbaseVector } from '@mastra/couchbase'
+
+    const store = new CouchbaseVector({
+      connectionString: process.env.COUCHBASE_CONNECTION_STRING,
+      username: process.env.COUCHBASE_USERNAME,
+      password: process.env.COUCHBASE_PASSWORD,
+      bucketName: process.env.COUCHBASE_BUCKET,
+      scopeName: process.env.COUCHBASE_SCOPE,
+      collectionName: process.env.COUCHBASE_COLLECTION,
+    })
+    await store.createIndex({
+      indexName: "myCollection",
+      dimension: 1536,
+    });
+    await store.upsert({
+      indexName: "myCollection",
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    });
+    ```
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```ts filename="vector-store.ts" showLineNumbers copy
+    import { LanceVectorStore } from '@mastra/lance'
+
+    const store = await LanceVectorStore.create('/path/to/db')
+
+    await store.createIndex({
+      tableName: "myVectors",
+      indexName: "myCollection",
+      dimension: 1536,
+    });
+
+    await store.upsert({
+      tableName: "myVectors",
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    });
+    ```
+
+    ### LanceDB の利用
+
+    LanceDB は Lance 列指向フォーマットの上に構築された組み込み型のベクターデータベースで、ローカル開発やクラウド環境へのデプロイに適しています。\
+    詳細なセットアップ手順やベストプラクティスは、[公式 LanceDB ドキュメント](https://lancedb.github.io/lancedb/)を参照してください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```ts filename="vector-store.ts" showLineNumbers copy
+    import { S3Vectors } from "@mastra/s3vectors";
+
+    const store = new S3Vectors({
+      vectorBucketName: "my-vector-bucket",
+      clientConfig: {
+        region: "us-east-1",
+      },
+      nonFilterableMetadataKeys: ["content"],
+    });
+
+    await store.createIndex({
+      indexName: "my-index",
+      dimension: 1536,
+    });
+    await store.upsert({
+      indexName: "my-index",
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    });
+    ```
   </Tabs.Tab>
 </Tabs>
 
-## ベクトルストレージの使用
+## ベクターストレージの使用
 
-初期化後、すべてのベクトルストアは、インデックスの作成、埋め込みのアップサート、およびクエリのための同じインターフェースを共有します。
+初期化が完了すると、すべてのベクターストアは、インデックス作成、埋め込みのアップサート、クエリの実行に同じインターフェースを共有します。
 
 ### インデックスの作成
 
-埋め込みを保存する前に、埋め込みモデルに適切な次元サイズでインデックスを作成する必要があります：
+埋め込みを保存する前に、使用する埋め込みモデルに適した次元数でインデックスを作成する必要があります:
 
 ```ts filename="store-embeddings.ts" showLineNumbers copy
-// Create an index with dimension 1536 (for text-embedding-3-small)
+// 次元数 1536 のインデックスを作成（text-embedding-3-small 用）
 await store.createIndex({
   indexName: "myCollection",
   dimension: 1536,
 });
 ```
 
-次元サイズは、選択した埋め込みモデルの出力次元と一致する必要があります。一般的な次元サイズは以下の通りです：
+次元数は、選択した埋め込みモデルの出力次元と一致している必要があります。一般的な次元数は次のとおりです:
 
-- OpenAI text-embedding-3-small: 1536次元（またはカスタム、例えば256）
-- Cohere embed-multilingual-v3: 1024次元
-- Google `text-embedding-004`: 768次元（またはカスタム）
+- OpenAI text-embedding-3-small: 1536 次元（またはカスタム。例: 256）
+- Cohere embed-multilingual-v3: 1024 次元
+- Google `text-embedding-004`: 768 次元（またはカスタム）
 
-> **重要**: インデックスの次元は作成後に変更できません。異なるモデルを使用するには、インデックスを削除して新しい次元サイズで再作成してください。
+> **重要**: インデックスの次元数は作成後に変更できません。別のモデルを使用する場合は、インデックスを削除し、新しい次元数で再作成してください。
 
 ### データベースの命名規則
 
-各ベクトルデータベースは、互換性を確保し競合を防ぐために、インデックスとコレクションに特定の命名規則を適用しています。
+各ベクターデータベースは、互換性の確保と競合の防止のため、インデックスやコレクションに特定の命名規則を設けています。
 
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch']}>
+{/*
+LLM CONTEXT: この Tabs コンポーネントは、各種ベクターデータベースの命名規則を表示します。
+各タブでは、そのデータベースプロバイダーに固有の命名要件や制限事項を説明します。
+これにより、ユーザーは制約を理解し、インデックスやコレクション作成時の命名競合を回避できます。
+各データベースの規則を明確にするため、有効な名前と無効な名前の例を示します。
+*/}
+
+<Tabs items={['MongoDB', 'Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'OpenSearch', 'S3 Vectors']}>
   <Tabs.Tab>
-    インデックス名は以下の条件を満たす必要があります：
-    - 文字またはアンダースコアで始まる
-    - 文字、数字、アンダースコアのみを含む
-    - 例：`my_index_123` は有効
-    - 例：`my-index` は無効（ハイフンを含む）
+    コレクション（インデックス）名は次の要件を満たす必要があります:
+
+    * 文字またはアンダースコアで始まること
+    * 最大120バイトであること
+    * 文字、数字、アンダースコア、またはドットのみを含むこと
+    * `$` またはヌル文字を含まないこと
+    * 例: `my_collection.123` は有効
+    * 例: `my-index` は無効（ハイフンを含むため）
+    * 例: `My$Collection` は無効（`$` を含むため）
   </Tabs.Tab>
+
   <Tabs.Tab>
-    インデックス名は以下の条件を満たす必要があります：
-    - 小文字、数字、ダッシュのみを使用
-    - ドット（DNS ルーティングに使用）を含まない
-    - 非ラテン文字や絵文字を使用しない
-    - プロジェクトIDと合わせた長さが52文字未満
-      - 例：`my-index-123` は有効
-      - 例：`my.index` は無効（ドットを含む）
+    インデックス名は次の条件を満たす必要があります:
+
+    * 文字またはアンダースコアで始まること
+    * 文字、数字、アンダースコアのみを含むこと
+    * 例: `my_index_123` は有効
+    * 例: `my-index` は無効（ハイフンを含むため）
   </Tabs.Tab>
+
   <Tabs.Tab>
-    コレクション名は以下の条件を満たす必要があります：
-    - 1〜255文字の長さ
-    - 以下の特殊文字を含まない：
-      - `< > : " / \ | ? *`
-      - ヌル文字（`\0`）
-      - ユニットセパレータ（`\u{1F}`）
-    - 例：`my_collection_123` は有効
-    - 例：`my/collection` は無効（スラッシュを含む）
+    インデックス名は次を満たす必要があります:
+
+    * 小文字、数字、ハイフンのみを使用すること
+    * ドットを含まないこと（DNS ルーティングで使用されるため）
+    * 非ラテン文字や絵文字を使用しないこと
+    * プロジェクト ID を含めた合計の長さが 52 文字未満であること
+      * 例: `my-index-123` は有効
+      * 例: `my.index` は無効（ドットを含むため）
   </Tabs.Tab>
+
   <Tabs.Tab>
-    コレクション名は以下の条件を満たす必要があります：
-    - 3〜63文字の長さ
-    - 文字または数字で始まり、終わる
-    - 文字、数字、アンダースコア、ハイフンのみを含む
-    - 連続したピリオド（..）を含まない
-    - 有効なIPv4アドレスでない
-    - 例：`my-collection-123` は有効
-    - 例：`my..collection` は無効（連続したピリオド）
+    コレクション名は次の条件を満たす必要があります:
+
+    * 1〜255文字であること
+    * 次の特殊文字を含まないこと:
+      * `< > : " / \ | ? *`
+      * Null 文字（`\0`）
+      * ユニットセパレータ（`\u{1F}`）
+    * 例: `my_collection_123` は有効
+    * 例: `my/collection` は無効（スラッシュを含む）
   </Tabs.Tab>
+
   <Tabs.Tab>
-    コレクション名は以下の条件を満たす必要があります：
-    - 空でない
-    - 48文字以下
-    - 文字、数字、アンダースコアのみを含む
-    - 例：`my_collection_123` は有効
-    - 例：`my-collection` は無効（ハイフンを含む）
+    コレクション名は次の条件を満たす必要があります:
+
+    * 3〜63文字であること
+    * 文字または数字で始まり、文字または数字で終わること
+    * 文字、数字、アンダースコア、ハイフンのみを含むこと
+    * 連続するピリオド（..）を含まないこと
+    * 有効なIPv4アドレスでないこと
+    * 例: `my-collection-123` は有効
+    * 例: `my..collection` は無効（連続するピリオド）
   </Tabs.Tab>
+
   <Tabs.Tab>
-    インデックス名は以下の条件を満たす必要があります：
-    - 文字またはアンダースコアで始まる
-    - 文字、数字、アンダースコアのみを含む
-    - 例：`my_index_123` は有効
-    - 例：`my-index` は無効（ハイフンを含む）
+    コレクション名は次の条件を満たす必要があります:
+
+    * 空でないこと
+    * 48文字以下であること
+    * 英数字とアンダースコアのみを含むこと
+    * 例: `my_collection_123` は有効です
+    * 例: `my-collection` は無効です（ハイフンを含むため）
   </Tabs.Tab>
+
   <Tabs.Tab>
-    名前空間名は以下の条件を満たす必要があります：
-    - 2〜100文字の長さ
-    - 以下のみを含む：
-      - 英数字（a-z、A-Z、0-9）
-      - アンダースコア、ハイフン、ドット
-    - 特殊文字（_、-、.）で始まらない、または終わらない
-    - 大文字と小文字は区別される
-    - 例：`MyNamespace123` は有効
-    - 例：`_namespace` は無効（アンダースコアで始まる）
+    インデックス名は次を満たす必要があります:
+
+    * 先頭は英字またはアンダースコアであること
+    * 使用できるのは英字、数字、アンダースコアのみであること
+    * 例: `my_index_123` は有効
+    * 例: `my-index` は無効（ハイフンを含むため）
   </Tabs.Tab>
+
   <Tabs.Tab>
-    インデックス名は以下の条件を満たす必要があります：
-    - 文字で始まる
-    - 32文字未満
-    - 小文字のASCII文字、数字、ダッシュのみを含む
-    - スペースの代わりにダッシュを使用
-    - 例：`my-index-123` は有効
-    - 例：`My_Index` は無効（大文字とアンダースコア）
+    Namespace 名は次を満たす必要があります:
+
+    * 2〜100文字であること
+    * 次のみを含むこと:
+      * 英数字 (a-z, A-Z, 0-9)
+      * アンダースコア、ハイフン、ドット
+    * 特殊文字（\_, -, .）で始めたり終わったりしないこと
+    * 大文字と小文字を区別することがある
+    * 例: `MyNamespace123` は有効
+    * 例: `_namespace` は無効（アンダースコアで始まるため）
   </Tabs.Tab>
+
   <Tabs.Tab>
-    コレクション（インデックス）名は以下の条件を満たす必要があります：
-    - 文字またはアンダースコアで始まる
-    - 最大120バイトの長さ
-    - 文字、数字、アンダースコア、ドットのみを含む
-    - `$`やヌル文字を含まない
-    - 例：`my_collection.123` は有効
-    - 例：`my-index` は無効（ハイフンを含む）
-    - 例：`My$Collection` は無効（`$`を含む）
+    インデックス名は次の条件を満たす必要があります:
+
+    * 英字で始まること
+    * 32文字未満であること
+    * 小文字のASCII英字、数字、ダッシュのみを含むこと
+    * スペースの代わりにダッシュを使用すること
+    * 例: `my-index-123` は有効
+    * 例: `My_Index` は無効（大文字とアンダースコアのため）
   </Tabs.Tab>
+
   <Tabs.Tab>
-    インデックス名は以下の条件を満たす必要があります：
-    - 小文字のみを使用
-    - アンダースコアやハイフンで始まらない
-    - スペース、カンマを含まない
-    - 特殊文字（例：`:`、`"`、`*`、`+`、`/`、`\`、`|`、`?`、`#`、`>`、`<`）を含まない
-    - 例：`my-index-123` は有効
-    - 例：`My_Index` は無効（大文字を含む）
-    - 例：`_myindex` は無効（アンダースコアで始まる）
+    インデックス名は次を満たす必要があります：
+
+    * 小文字のみを使用すること
+    * 先頭をアンダースコアまたはハイフンにしないこと
+    * 空白やカンマを含めないこと
+    * 次の特殊文字を含めないこと（例: `:`, `"`, `*`, `+`, `/`, `\`, `|`, `?`, `#`, `>`, `<`）
+    * 例: `my-index-123` は有効
+    * 例: `My_Index` は無効（大文字を含むため）
+    * 例: `_myindex` は無効（先頭がアンダースコアのため）
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    インデックス名は次を満たす必要があります：
+
+    * 同じベクターバケット内で一意であること
+    * 3〜63文字であること
+    * 小文字（`a–z`）、数字（`0–9`）、ハイフン（`-`）、ドット（`.`）のみを使用すること
+    * 英字または数字で始まり、英字または数字で終わること
+    * 例：`my-index.123` は有効
+    * 例：`my_index` は無効（アンダースコアを含む）
+    * 例：`-myindex` は無効（ハイフンで始まる）
+    * 例：`myindex-` は無効（ハイフンで終わる）
+    * 例：`MyIndex` は無効（大文字を含む）
   </Tabs.Tab>
 </Tabs>
 
 ### 埋め込みのアップサート
 
-インデックスを作成した後、埋め込みとその基本的なメタデータを保存できます：
+インデックスを作成したら、基本的なメタデータと一緒に埋め込みを保存できます:
 
 ```ts filename="store-embeddings.ts" showLineNumbers copy
-// Store embeddings with their corresponding metadata
+// 対応するメタデータとともに埋め込みを保存する
 await store.upsert({
   indexName: "myCollection", // index name
   vectors: embeddings, // array of embedding vectors
@@ -363,40 +496,40 @@ await store.upsert({
 });
 ```
 
-upsert操作は以下を行います：
+アップサート操作では次のことを行います:
 
-- 埋め込みベクトルとそれに対応するメタデータの配列を受け取ります
-- 同じIDを持つ既存のベクトルを更新します
-- 存在しないベクトルを新規作成します
-- 大規模なデータセットのバッチ処理を自動的に処理します
+- 埋め込みベクトルの配列と対応するメタデータを受け取る
+- 同じIDの既存ベクトルを更新する
+- 存在しない場合は新しいベクトルを作成する
+- 大規模データセットに対して自動的にバッチ処理する
 
-異なるベクトルストアでの埋め込みのupsertの完全な例については、[埋め込みのUpsert](../../examples/rag/upsert/upsert-embeddings.mdx)ガイドを参照してください。
+さまざまなベクトルストアでの埋め込みのアップサートの完全な例については、[Upsert Embeddings](../../examples/rag/upsert/upsert-embeddings.mdx) ガイドを参照してください。
 
 ## メタデータの追加
 
-ベクトルストアはフィルタリングと整理のためのリッチなメタデータ（JSONシリアライズ可能なフィールド）をサポートしています。メタデータは固定されたスキーマなしで保存されるため、予期しないクエリ結果を避けるために一貫したフィールド命名を使用してください。
+ベクターストアは、フィルタリングや整理のためにリッチなメタデータ（任意の JSON シリアライズ可能なフィールド）をサポートします。メタデータは固定スキーマなしで保存されるため、予期しないクエリ結果を避けるにはフィールド名を一貫させてください。
 
-**重要**：メタデータはベクトルストレージにとって非常に重要です - これがなければ、数値的な埋め込みだけが残り、元のテキストを返したり結果をフィルタリングしたりする方法がなくなります。少なくとも元のテキストをメタデータとして常に保存してください。
+**重要**: メタデータはベクターストレージにとって不可欠です。これがないと、元のテキストを返したり結果をフィルタリングしたりする手段のない数値埋め込みしか残りません。少なくともソーステキストはメタデータとして必ず保存してください。
 
 ```ts showLineNumbers copy
-// Store embeddings with rich metadata for better organization and filtering
+// より良い整理とフィルタリングのために、リッチなメタデータとともに埋め込みを保存する
 await store.upsert({
   indexName: "myCollection",
   vectors: embeddings,
   metadata: chunks.map((chunk) => ({
-    // Basic content
+    // 基本的な内容
     text: chunk.text,
     id: chunk.id,
 
-    // Document organization
+    // ドキュメントの整理
     source: chunk.source,
     category: chunk.category,
 
-    // Temporal metadata
+    // 時系列メタデータ
     createdAt: new Date().toISOString(),
     version: "1.0",
 
-    // Custom fields
+    // カスタムフィールド
     language: chunk.language,
     author: chunk.author,
     confidenceScore: chunk.score,
@@ -404,15 +537,15 @@ await store.upsert({
 });
 ```
 
-メタデータに関する重要な考慮事項：
+メタデータに関する主なポイント:
 
-- フィールド命名に厳格であること - 「category」と「Category」のような不一致はクエリに影響します
-- フィルタリングやソートに使用する予定のフィールドのみを含める - 余分なフィールドはオーバーヘッドを追加します
-- コンテンツの鮮度を追跡するためのタイムスタンプ（例：「createdAt」、「lastUpdated」）を追加する
+- フィールド名は厳密に統一すること — 'category' と 'Category' の不一致はクエリに影響します
+- フィルタやソートに使う予定のあるフィールドのみ含めること — 余分なフィールドはオーバーヘッドになります
+- コンテンツの鮮度を追跡できるようにタイムスタンプ（例: 'createdAt'、'lastUpdated'）を追加すること
 
 ## ベストプラクティス
 
-- 大量挿入の前にインデックスを作成する
-- 大量挿入にはバッチ操作を使用する（upsertメソッドは自動的にバッチ処理を行います）
-- クエリを実行する予定のメタデータのみを保存する
-- 埋め込みの次元数をモデルに合わせる（例：`text-embedding-3-small`の場合は1536）
+- 一括挿入の前にインデックスを作成する
+- 大量挿入にはバッチ処理を使用する（`upsert` メソッドは自動でバッチ化されます）
+- クエリに使用するメタデータのみを保存する
+- 埋め込みの次元数をモデルに合わせる（例：`text-embedding-3-small` は 1536）

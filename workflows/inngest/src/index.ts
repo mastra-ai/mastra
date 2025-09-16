@@ -26,6 +26,7 @@ import type {
   WatchEvent,
   StreamEvent,
   ChunkType,
+  ExecutionEngineOptions,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
@@ -94,6 +95,7 @@ export class InngestRun<
     params: {
       workflowId: string;
       runId: string;
+      resourceId?: string;
       executionEngine: ExecutionEngine;
       executionGraph: ExecutionGraph;
       serializedStepGraph: SerializedStepFlowEntry[];
@@ -129,7 +131,6 @@ export class InngestRun<
       await new Promise(resolve => setTimeout(resolve, 1000));
       runs = await this.getRuns(eventId);
       if (runs?.[0]?.status === 'Failed') {
-        console.log('run', runs?.[0]);
         throw new Error(`Function run ${runs?.[0]?.status}`);
       } else if (runs?.[0]?.status === 'Cancelled') {
         const snapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
@@ -165,6 +166,7 @@ export class InngestRun<
       await this.#mastra?.storage?.persistWorkflowSnapshot({
         workflowName: this.workflowId,
         runId: this.runId,
+        resourceId: this.resourceId,
         snapshot: {
           ...snapshot,
           status: 'canceled' as any,
@@ -182,6 +184,7 @@ export class InngestRun<
     await this.#mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
+      resourceId: this.resourceId,
       snapshot: {
         runId: this.runId,
         serializedStepGraph: this.serializedStepGraph,
@@ -200,6 +203,7 @@ export class InngestRun<
       data: {
         inputData,
         runId: this.runId,
+        resourceId: this.resourceId,
       },
     });
 
@@ -319,37 +323,9 @@ export class InngestRun<
   } {
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
-    let currentToolData: { name: string; args: any } | undefined = undefined;
-
     const writer = writable.getWriter();
     const unwatch = this.watch(async event => {
-      if ((event as any).type === 'workflow-agent-call-start') {
-        currentToolData = {
-          name: (event as any).payload.name,
-          args: (event as any).payload.args,
-        };
-        await writer.write({
-          ...event.payload,
-          type: 'tool-call-streaming-start',
-        } as any);
-
-        return;
-      }
-
       try {
-        if ((event as any).type === 'workflow-agent-call-finish') {
-          return;
-        } else if (!(event as any).type.startsWith('workflow-')) {
-          if ((event as any).type === 'text-delta') {
-            await writer.write({
-              type: 'tool-call-delta',
-              ...(currentToolData ?? {}),
-              argsTextDelta: (event as any).textDelta,
-            } as any);
-          }
-          return;
-        }
-
         const e: any = {
           ...event,
           type: event.type.replace('workflow-', ''),
@@ -495,7 +471,10 @@ export class InngestWorkflow<
     return run;
   }
 
-  async createRunAsync(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TInput, TOutput>> {
+  async createRunAsync(options?: {
+    runId?: string;
+    resourceId?: string;
+  }): Promise<Run<TEngineType, TSteps, TInput, TOutput>> {
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
@@ -505,6 +484,7 @@ export class InngestWorkflow<
         {
           workflowId: this.id,
           runId: runIdToUse,
+          resourceId: options?.resourceId,
           executionEngine: this.executionEngine,
           executionGraph: this.executionGraph,
           serializedStepGraph: this.serializedStepGraph,
@@ -523,6 +503,7 @@ export class InngestWorkflow<
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
+        resourceId: options?.resourceId,
         snapshot: {
           runId: runIdToUse,
           status: 'pending',
@@ -558,7 +539,7 @@ export class InngestWorkflow<
       },
       { event: `workflow.${this.id}` },
       async ({ event, step, attempt, publish }) => {
-        let { inputData, runId, resume } = event.data;
+        let { inputData, runId, resourceId, resume } = event.data;
 
         if (!runId) {
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
@@ -597,6 +578,7 @@ export class InngestWorkflow<
         const result = await engine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
           workflowId: this.id,
           runId,
+          resourceId,
           graph: this.executionGraph,
           serializedStepGraph: this.serializedStepGraph,
           input: inputData,
@@ -721,8 +703,6 @@ export function createStep<
       // @ts-ignore
       inputSchema: z.object({
         prompt: z.string(),
-        // resourceId: z.string().optional(),
-        // threadId: z.string().optional(),
       }),
       // @ts-ignore
       outputSchema: z.object({
@@ -743,13 +723,8 @@ export function createStep<
           name: params.name,
           args: inputData,
         };
-        await emitter.emit('watch-v2', {
-          type: 'workflow-agent-call-start',
-          payload: toolData,
-        });
+
         const { fullStream } = await params.stream(inputData.prompt, {
-          // resourceId: inputData.resourceId,
-          // threadId: inputData.threadId,
           runtimeContext,
           tracingContext,
           onFinish: result => {
@@ -762,13 +737,24 @@ export function createStep<
           return abort();
         }
 
+        await emitter.emit('watch-v2', {
+          type: 'tool-call-streaming-start',
+          ...(toolData ?? {}),
+        });
+
         for await (const chunk of fullStream) {
-          await emitter.emit('watch-v2', chunk);
+          if (chunk.type === 'text-delta') {
+            await emitter.emit('watch-v2', {
+              type: 'tool-call-delta',
+              ...(toolData ?? {}),
+              argsTextDelta: chunk.textDelta,
+            });
+          }
         }
 
         await emitter.emit('watch-v2', {
-          type: 'workflow-agent-call-finish',
-          payload: toolData,
+          type: 'tool-call-streaming-finish',
+          ...(toolData ?? {}),
         });
 
         return {
@@ -877,8 +863,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   private inngestStep: BaseContext<Inngest>['step'];
   private inngestAttempts: number;
 
-  constructor(mastra: Mastra, inngestStep: BaseContext<Inngest>['step'], inngestAttempts: number = 0) {
-    super({ mastra });
+  constructor(
+    mastra: Mastra,
+    inngestStep: BaseContext<Inngest>['step'],
+    inngestAttempts: number = 0,
+    options?: ExecutionEngineOptions,
+  ) {
+    super({ mastra, options });
     this.inngestStep = inngestStep;
     this.inngestAttempts = inngestAttempts;
   }
@@ -886,6 +877,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   async execute<TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
+    resourceId?: string;
     graph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
@@ -1045,6 +1037,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         durationMs: duration,
         sleepType: fn ? 'dynamic' : 'fixed',
       },
+      tracingPolicy: this.options?.tracingPolicy,
     });
 
     if (fn) {
@@ -1162,6 +1155,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         durationMs: date ? Math.max(0, date.getTime() - Date.now()) : undefined,
         sleepType: fn ? 'dynamic' : 'fixed',
       },
+      tracingPolicy: this.options?.tracingPolicy,
     });
 
     if (fn) {
@@ -1214,6 +1208,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       });
 
       // Update sleep until span with dynamic duration
+      // Ensure date is a Date object before calling getTime()
+      if (date && !(date instanceof Date)) {
+        date = new Date(date);
+      }
       const time = !date ? 0 : date.getTime() - Date.now();
       sleepUntilSpan?.update({
         attributes: {
@@ -1285,6 +1283,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       attributes: {
         stepId: step.id,
       },
+      tracingPolicy: this.options?.tracingPolicy,
     });
 
     const startedAt = await this.inngestStep.run(
@@ -1698,6 +1697,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     workflowId,
     runId,
     stepResults,
+    resourceId,
     executionContext,
     serializedStepGraph,
     workflowStatus,
@@ -1708,6 +1708,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     runId: string;
     stepResults: Record<string, StepResult<any, any, any, any>>;
     serializedStepGraph: SerializedStepFlowEntry[];
+    resourceId?: string;
     executionContext: ExecutionContext;
     workflowStatus: 'success' | 'failed' | 'suspended' | 'running';
     result?: Record<string, any>;
@@ -1720,6 +1721,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         await this.mastra?.getStorage()?.persistWorkflowSnapshot({
           workflowName: workflowId,
           runId,
+          resourceId,
           snapshot: {
             runId,
             value: {},
@@ -1788,6 +1790,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       attributes: {
         conditionCount: entry.conditions.length,
       },
+      tracingPolicy: this.options?.tracingPolicy,
     });
 
     let execResults: any;
@@ -1802,6 +1805,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               attributes: {
                 conditionIndex: index,
               },
+              tracingPolicy: this.options?.tracingPolicy,
             });
 
             try {

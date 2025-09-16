@@ -1,10 +1,10 @@
 import type {
-  LanguageModelV2,
   LanguageModelV2CallWarning,
   LanguageModelV2StreamPart,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream, mockId } from 'ai-v5/test';
+import type { ModelManagerModelConfig } from '../../stream/types';
 
 export const mockDate = new Date('2024-01-01T00:00:00Z');
 
@@ -35,7 +35,7 @@ export const testUsage2 = {
   cachedInputTokens: 3,
 };
 
-export function createTestModel({
+export function createTestModels({
   warnings = [],
   stream = convertArrayToReadableStream([
     {
@@ -69,10 +69,17 @@ export function createTestModel({
   request?: { body: string };
   response?: { headers: Record<string, string> };
   warnings?: LanguageModelV2CallWarning[];
-} = {}): LanguageModelV2 {
-  return new MockLanguageModelV2({
+} = {}): ModelManagerModelConfig[] {
+  const model = new MockLanguageModelV2({
     doStream: async () => ({ stream, request, response, warnings }),
   });
+  return [
+    {
+      model,
+      maxRetries: 0,
+      id: 'test-model',
+    },
+  ];
 }
 
 export const modelWithSources = new MockLanguageModelV2({

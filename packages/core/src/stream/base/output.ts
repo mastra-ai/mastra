@@ -118,6 +118,12 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   #streamConsumed = false;
   #returnScorerData = false;
 
+  #model: {
+    modelId: string | undefined;
+    provider: string | undefined;
+    version: 'v1' | 'v2';
+  };
+
   /**
    * Unique identifier for this execution run.
    */
@@ -136,12 +142,14 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * Trace ID used on the execution (if the execution was traced).
    */
   public traceId?: string;
+  public messageId: string;
 
   constructor({
     model: _model,
     stream,
     messageList,
     options,
+    messageId,
   }: {
     model: {
       modelId: string | undefined;
@@ -151,6 +159,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     stream: ReadableStream<ChunkType<OUTPUT>>;
     messageList: MessageList;
     options: MastraModelOutputOptions<OUTPUT>;
+    messageId: string;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
     this.#options = options;
@@ -158,6 +167,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.runId = options.runId;
     this.traceId = getValidTraceId(options.tracingContext?.currentSpan);
 
+    this.#model = _model;
+
+    this.messageId = messageId;
     // Create processor runner if outputProcessors are provided
     if (options.outputProcessors?.length) {
       this.processorRunner = new ProcessorRunner({
@@ -316,7 +328,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 content: messageList.get.response.aiV5.stepContent(),
               };
 
-              await options?.onStepFinish?.(stepResult);
+              await options?.onStepFinish?.({
+                ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
+                ...stepResult,
+              });
 
               self.#bufferedSteps.push(stepResult);
 
@@ -423,8 +438,21 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   self.#delayedPromises.text.resolve(textContent);
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
 
-                  // Resolve object promise to avoid hanging
-                  if (!self.#options.output && self.#delayedPromises.object.status.type !== 'resolved') {
+                  // Check for structuredOutput in metadata (from output processors in stream mode)
+                  const messages = self.messageList.get.response.v2();
+                  const messagesWithStructuredData = messages.filter(
+                    msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
+                  );
+
+                  if (
+                    messagesWithStructuredData[0] &&
+                    // this is to make typescript happy
+                    messagesWithStructuredData[0].content.metadata?.structuredOutput
+                  ) {
+                    const structuredOutput = messagesWithStructuredData[0].content.metadata.structuredOutput;
+                    self.#delayedPromises.object.resolve(structuredOutput as InferSchemaOutput<OUTPUT>);
+                  } else if (!self.#options.output && self.#delayedPromises.object.status.type !== 'resolved') {
+                    // Resolve object promise to avoid hanging
                     self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
                   }
                 }
@@ -467,6 +495,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 const { stepType: _stepType, isContinued: _isContinued } = baseFinishStep;
 
                 const onFinishPayload = {
+                  ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
                   text: baseFinishStep.text,
                   warnings: baseFinishStep.warnings ?? [],
                   finishReason: chunk.payload.stepResult.reason,
@@ -515,6 +544,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               if (options?.rootSpan) {
                 options.rootSpan.setAttributes({
+                  ...(self.#model.modelId ? { 'aisdk.model.id': self.#model.modelId } : {}),
+                  ...(self.#model.provider ? { 'aisdk.model.provider': self.#model.provider } : {}),
                   ...(baseFinishStep?.usage?.reasoningTokens
                     ? {
                         'stream.usage.reasoningTokens': baseFinishStep.usage.reasoningTokens,
