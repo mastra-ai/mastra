@@ -42,32 +42,12 @@ type UseScoresByScorerIdProps = {
 
 export const useScoresByScorerId = ({ scorerId, page = 0, entityId, entityType }: UseScoresByScorerIdProps) => {
   const client = useMastraClient();
-  const [scores, setScores] = useState<GetScoresResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchScores = async () => {
-      setIsLoading(true);
-      try {
-        const res = await client.getScoresByScorerId({
-          scorerId,
-          page: page || 0,
-          entityId: entityId || undefined,
-          entityType: entityType || undefined,
-          perPage: 10,
-        });
-        setScores(res);
-        setIsLoading(false);
-      } catch (error) {
-        setScores(null);
-        setIsLoading(false);
-      }
-    };
-
-    fetchScores();
-  }, [scorerId, page, entityId, entityType]);
-
-  return { scores, isLoading };
+  return useQuery({
+    queryKey: ['scores', scorerId, page, entityId, entityType],
+    queryFn: () => client.getScoresByScorerId({ scorerId, page, entityId, entityType, perPage: 10 }),
+    refetchInterval: 5000,
+  });
 };
 
 export const useScorer = (scorerId: string) => {

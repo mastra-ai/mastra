@@ -1,4 +1,12 @@
-import { AgentIcon, Breadcrumb, Crumb, Header, MainContentLayout, WorkflowIcon } from '@mastra/playground-ui';
+import {
+  AgentIcon,
+  Breadcrumb,
+  Crumb,
+  Header,
+  MainContentLayout,
+  useLinkComponent,
+  WorkflowIcon,
+} from '@mastra/playground-ui';
 import { useParams, Link } from 'react-router';
 import { useScorer, useScoresByScorerId } from '@mastra/playground-ui';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -18,7 +26,11 @@ import { useWorkflows } from '@/hooks/use-workflows';
 import { ClientScoreRowData } from '@mastra/client-js';
 import { CodeMirrorBlock } from '@/components/ui/code-mirror-block';
 
-export default function Scorer() {
+export interface ScorerProps {
+  computeTraceLink: (traceId: string) => string;
+}
+
+export default function Scorer({ computeTraceLink }: ScorerProps) {
   const { scorerId } = useParams()! as { scorerId: string };
   const { scorer, isLoading: scorerLoading } = useScorer(scorerId!);
   const { data: agents, isLoading: agentsLoading } = useAgents();
@@ -51,8 +63,8 @@ export default function Scorer() {
 
   const [scoresPage, setScoresPage] = useState<number>(0);
   const [filteredByEntity, setFilteredByEntity] = useState<string>('');
-
-  const { scores: scoresData, isLoading: scoresLoading } = useScoresByScorerId({
+  const { Link } = useLinkComponent();
+  const { data: scoresData, isLoading: scoresLoading } = useScoresByScorerId({
     scorerId,
     page: scoresPage,
     entityId: filteredByEntity !== '' ? scorerEntities?.[+filteredByEntity]?.name : undefined,
@@ -156,6 +168,7 @@ export default function Scorer() {
                 hasMore={scoresHasMore}
                 onNextPage={handleNextPage}
                 onPrevPage={handlePrevPage}
+                computeTraceLink={computeTraceLink}
               />
             </div>
           </div>
@@ -267,12 +280,13 @@ function ScoreListHeader({
 
       <div
         className={cn(
-          'grid gap-[1rem] grid-cols-[7rem_7rem_1fr_10rem_3rem] text-left text-[0.75rem] text-icon3 uppercase py-[1rem]  border-t border-border1',
+          'grid gap-[1rem] grid-cols-[7rem_7rem_1fr_12rem_10rem_3rem] text-left text-[0.75rem] text-icon3 uppercase py-[1rem]  border-t border-border1',
         )}
       >
         <span>Date</span>
         <span>Time</span>
         <span>Input</span>
+        <span>Trace ID</span>
         <span>Entity</span>
         <span>Score</span>
       </div>
@@ -291,6 +305,7 @@ function ScoreList({
   onNextPage,
   onPrevPage,
   perPage,
+  computeTraceLink,
 }: {
   scores: ClientScoreRowData[];
   selectedScore: any;
@@ -302,6 +317,7 @@ function ScoreList({
   onNextPage?: () => void;
   onPrevPage?: () => void;
   perPage?: number;
+  computeTraceLink: (traceId: string) => string;
 }) {
   if (isLoading) {
     return (
@@ -321,7 +337,15 @@ function ScoreList({
         )}
         {scores?.length > 0 &&
           scores.map(score => {
-            return <ScoreItem key={score.id} score={score} selectedScore={selectedScore} onClick={onItemClick} />;
+            return (
+              <ScoreItem
+                key={score.id}
+                score={score}
+                selectedScore={selectedScore}
+                onClick={onItemClick}
+                computeTraceLink={computeTraceLink}
+              />
+            );
           })}
       </ul>
 
@@ -358,10 +382,12 @@ function ScoreItem({
   score,
   selectedScore,
   onClick,
+  computeTraceLink,
 }: {
   score: ClientScoreRowData;
   selectedScore: any | null;
   onClick?: (score: any) => void;
+  computeTraceLink: (traceId: string) => string;
 }) {
   const isSelected = selectedScore?.id === score.id;
 
@@ -372,7 +398,8 @@ function ScoreItem({
   const isTodayDate = isToday(new Date(score.createdAt));
   const dateStr = format(new Date(score.createdAt), 'MMM d yyyy');
   const timeStr = format(new Date(score.createdAt), 'h:mm:ss bb');
-  const inputPrev = score?.input?.inputMessages?.[0]?.content || '';
+  const inputPrev = JSON.stringify(score?.input || {}, null, 2);
+  const traceIdPrev = score?.traceId;
   const scorePrev = score?.score ? Math.round(score?.score * 100) / 100 : '0';
   const entityIcon = score?.entityType === 'WORKFLOW' ? <WorkflowIcon /> : <AgentIcon />;
 
@@ -383,20 +410,33 @@ function ScoreItem({
         'bg-surface5': isSelected,
       })}
     >
-      <button
+      <div
         onClick={handleClick}
         className={cn(
-          'grid w-full px-[1.5rem] gap-[1rem] text-left items-center min-h-[3.5rem] grid-cols-[7rem_7rem_1fr_10rem_3rem] ',
+          'grid w-full px-[1.5rem] gap-[1rem] text-left items-center min-h-[3.5rem] grid-cols-[7rem_7rem_1fr_12rem_10rem_3rem]',
         )}
       >
         <span className="text-icon4">{isTodayDate ? 'Today' : dateStr}</span>
         <span className="text-icon4">{timeStr}</span>
         <span className="truncate pr-[1rem]">{inputPrev}</span>
+        <span className="pr-[1rem] truncate">
+          {traceIdPrev ? (
+            <Link
+              to={computeTraceLink(traceIdPrev)}
+              onClick={e => e.stopPropagation()}
+              className="text-accent1 underline"
+            >
+              #{traceIdPrev}
+            </Link>
+          ) : (
+            '-'
+          )}
+        </span>
         <span className="pr-[1rem] flex gap-[0.5rem] items-center [&>svg]:shrink-0 [&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:text-icon3 text-[0.875rem]">
           {entityIcon} <span className="truncate">{score.entityId}</span>
         </span>
         <span>{scorePrev}</span>
-      </button>
+      </div>
     </li>
   );
 }
@@ -417,8 +457,6 @@ function ScoreDetails({
   if (!score) {
     return null;
   }
-
-  console.log({ score });
 
   const handleOnNext = () => {
     if (onNext) {
