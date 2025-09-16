@@ -66,7 +66,7 @@ export function SideDialogCodeSection({ codeStr = '', title, simplified = false 
           {codeStr && (
             <>
               {simplified ? (
-                <div className="text-icon4 text-[0.875rem] py-[1rem] font-mono break-all mx-[1.5rem] border border-red-500">
+                <div className="text-icon4 text-[0.875rem] py-[1rem] font-mono break-all mx-[1.5rem]">
                   <pre className="text-wrap">{codeStr}</pre>
                 </div>
               ) : (
