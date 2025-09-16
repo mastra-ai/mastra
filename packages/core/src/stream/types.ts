@@ -166,7 +166,7 @@ interface StepStartPayload {
   [key: string]: any;
 }
 
-interface StepFinishPayload {
+export interface StepFinishPayload {
   id?: string;
   providerMetadata?: SharedV2ProviderMetadata;
   totalUsage?: LanguageModelV2Usage;

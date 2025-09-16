@@ -324,8 +324,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 response: { ...otherMetadata, messages: chunk.payload.messages.nonUser } as any,
                 request: request,
                 usage: chunk.payload.output.usage,
-                // TODO: need to be able to pass a step id into this fn to get the content for a specific step id
-                content: messageList.get.response.aiV5.stepContent(),
+                content: messageList.get.response.aiV5.modelContent(-1),
               };
 
               await options?.onStepFinish?.({

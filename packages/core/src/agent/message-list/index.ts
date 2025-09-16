@@ -431,7 +431,140 @@ export class MessageList {
         this.aiV5UIMessagesToAIV5ModelMessages(this.response.aiV5.ui()).filter(
           m => m.role === `tool` || m.role === `assistant`,
         ),
-      modelContent: (): AIV5Type.StepResult<any>['content'] => {
+      modelContent: (stepNumber?: number): AIV5Type.StepResult<any>['content'] => {
+        if (typeof stepNumber === 'number') {
+          const uiMessages = this.response.aiV5.ui();
+          const uiMessagesParts = uiMessages.flatMap(item => item.parts);
+
+          // Find step boundaries by looking for step-start markers
+          const stepBoundaries: number[] = [];
+          uiMessagesParts.forEach((part, index) => {
+            if (part.type === 'step-start') {
+              stepBoundaries.push(index);
+            }
+          });
+
+          // Handle -1 to get the last step (the current/most recent step)
+          if (stepNumber === -1) {
+            // For tool-only steps without step-start markers, we need different logic
+            // Each tool part represents a complete step (tool call + result)
+            const toolParts = uiMessagesParts.filter(p => p.type?.startsWith('tool-'));
+            const hasStepStart = stepBoundaries.length > 0;
+
+            if (!hasStepStart && toolParts.length > 0) {
+              // No step-start markers but we have tool parts
+              // Each tool part is a separate step, so return only the last tool
+              const lastToolPart = toolParts[toolParts.length - 1];
+              if (!lastToolPart) {
+                return [];
+              }
+              const lastToolIndex = uiMessagesParts.indexOf(lastToolPart);
+              const previousToolPart = toolParts[toolParts.length - 2];
+              const previousToolIndex = previousToolPart ? uiMessagesParts.indexOf(previousToolPart) : -1;
+
+              const startIndex = previousToolIndex + 1;
+              const stepParts = uiMessagesParts.slice(startIndex, lastToolIndex + 1);
+
+              const stepUiMessages: AIV5Type.UIMessage[] = [
+                {
+                  id: 'last-step',
+                  role: 'assistant',
+                  parts: stepParts,
+                },
+              ];
+              const modelMessages = AIV5.convertToModelMessages(this.sanitizeV5UIMessages(stepUiMessages));
+              return modelMessages.flatMap(this.response.aiV5.stepContent);
+            }
+
+            // Count total steps (1 + number of step-start markers)
+            const totalSteps = stepBoundaries.length + 1;
+
+            // Get the content for the last step using the regular step logic
+            if (totalSteps === 1 && !hasStepStart) {
+              // Only one step, return all content
+              const stepUiMessages: AIV5Type.UIMessage[] = [
+                {
+                  id: 'last-step',
+                  role: 'assistant',
+                  parts: uiMessagesParts,
+                },
+              ];
+              const modelMessages = AIV5.convertToModelMessages(this.sanitizeV5UIMessages(stepUiMessages));
+              return modelMessages.flatMap(this.response.aiV5.stepContent);
+            }
+
+            // Multiple steps - get content after the last step-start marker
+            const lastStepStart = stepBoundaries[stepBoundaries.length - 1];
+            if (lastStepStart === undefined) {
+              return [];
+            }
+            const stepParts = uiMessagesParts.slice(lastStepStart + 1);
+
+            if (stepParts.length === 0) {
+              return [];
+            }
+
+            const stepUiMessages: AIV5Type.UIMessage[] = [
+              {
+                id: 'last-step',
+                role: 'assistant',
+                parts: stepParts,
+              },
+            ];
+
+            const modelMessages = AIV5.convertToModelMessages(this.sanitizeV5UIMessages(stepUiMessages));
+            return modelMessages.flatMap(this.response.aiV5.stepContent);
+          }
+
+          // Step 1 is everything before the first step-start
+          if (stepNumber === 1) {
+            const firstStepStart = stepBoundaries[0] ?? uiMessagesParts.length;
+            if (firstStepStart === 0) {
+              // No content before first step-start
+              return [];
+            }
+
+            const stepParts = uiMessagesParts.slice(0, firstStepStart);
+            const stepUiMessages: AIV5Type.UIMessage[] = [
+              {
+                id: 'step-1',
+                role: 'assistant',
+                parts: stepParts,
+              },
+            ];
+
+            // Convert to model messages without adding extra step-start markers
+            const modelMessages = AIV5.convertToModelMessages(this.sanitizeV5UIMessages(stepUiMessages));
+            return modelMessages.flatMap(this.response.aiV5.stepContent);
+          }
+
+          // For steps 2+, content is between (stepNumber-1)th and stepNumber-th step-start markers
+          const stepIndex = stepNumber - 2; // -2 because step 2 is at index 0 in boundaries
+          if (stepIndex < 0 || stepIndex >= stepBoundaries.length) {
+            return [];
+          }
+
+          const startIndex = (stepBoundaries[stepIndex] ?? 0) + 1; // Start after the step-start marker
+          const endIndex = stepBoundaries[stepIndex + 1] ?? uiMessagesParts.length;
+
+          if (startIndex >= endIndex) {
+            return [];
+          }
+
+          const stepParts = uiMessagesParts.slice(startIndex, endIndex);
+          const stepUiMessages: AIV5Type.UIMessage[] = [
+            {
+              id: `step-${stepNumber}`,
+              role: 'assistant',
+              parts: stepParts,
+            },
+          ];
+
+          // Convert to model messages without adding extra step-start markers
+          const modelMessages = AIV5.convertToModelMessages(this.sanitizeV5UIMessages(stepUiMessages));
+          return modelMessages.flatMap(this.response.aiV5.stepContent);
+        }
+
         return this.response.aiV5.model().map(this.response.aiV5.stepContent).flat();
       },
       stepContent: (message?: AIV5Type.ModelMessage): AIV5Type.StepResult<any>['content'] => {

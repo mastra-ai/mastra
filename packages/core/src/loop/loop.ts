@@ -6,7 +6,7 @@ import { MastraModelOutput } from '../stream/base/output';
 import type { OutputSchema } from '../stream/base/schema';
 import { getRootSpan } from './telemetry';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
-import { workflowLoopStream } from './workflow/stream';
+import { workflowLoopStream } from './workflows/stream';
 
 export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
   models,

@@ -1,39 +1,21 @@
 import type { ToolSet } from 'ai-v5';
 import z from 'zod';
-import { InternalSpans } from '../../ai-tracing';
-import { convertMastraChunkToAISDKv5 } from '../../stream/aisdk/v5/transform';
-import type { OutputSchema } from '../../stream/base/schema';
-import type { ChunkType } from '../../stream/types';
-import { ChunkFrom } from '../../stream/types';
-import { createStep, createWorkflow } from '../../workflows';
-import type { OuterLLMRun } from '../types';
-import { createLLMExecutionStep } from './llm-execution';
-import { llmIterationOutputSchema, toolCallOutputSchema } from './schema';
-import { createToolCallStep } from './tool-call-step';
+import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
+import type { OutputSchema } from '../../../stream/base/schema';
+import type { ChunkType } from '../../../stream/types';
+import { ChunkFrom } from '../../../stream/types';
+import { createStep } from '../../../workflows';
+import type { OuterLLMRun } from '../../types';
+import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 
-export function createOuterLLMWorkflow<
+export function createLLMMappingStep<
   Tools extends ToolSet = ToolSet,
   OUTPUT extends OutputSchema | undefined = undefined,
->({ models, telemetry_settings, _internal, modelStreamSpan, ...rest }: OuterLLMRun<Tools, OUTPUT>) {
-  const llmExecutionStep = createLLMExecutionStep({
-    models,
-    _internal,
-    modelStreamSpan,
-    telemetry_settings,
-    ...rest,
-  });
-
-  const toolCallStep = createToolCallStep({
-    models,
-    telemetry_settings,
-    _internal,
-    modelStreamSpan,
-    ...rest,
-  });
-
-  const messageList = rest.messageList;
-
-  const llmMappingStep = createStep({
+>(
+  { models, telemetry_settings, _internal, modelStreamSpan, ...rest }: OuterLLMRun<Tools, OUTPUT>,
+  llmExecutionStep: any,
+) {
+  return createStep({
     id: 'llmExecutionMappingStep',
     inputSchema: z.array(toolCallOutputSchema),
     outputSchema: llmIterationOutputSchema,
@@ -114,7 +96,7 @@ export function createOuterLLMWorkflow<
 
           const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
 
-          messageList.add(
+          rest.messageList.add(
             {
               id: toolResultMessageId,
               role: 'tool',
@@ -135,46 +117,12 @@ export function createOuterLLMWorkflow<
         return {
           ...initialResult,
           messages: {
-            all: messageList.get.all.aiV5.model(),
-            user: messageList.get.input.aiV5.model(),
-            nonUser: messageList.get.response.aiV5.model(),
+            all: rest.messageList.get.all.aiV5.model(),
+            user: rest.messageList.get.input.aiV5.model(),
+            nonUser: rest.messageList.get.response.aiV5.model(),
           },
         };
       }
     },
   });
-
-  return createWorkflow({
-    id: 'executionWorkflow',
-    inputSchema: llmIterationOutputSchema,
-    outputSchema: z.any(),
-    options: {
-      tracingPolicy: {
-        // mark all workflow spans related to the
-        // VNext execution as internal
-        internal: InternalSpans.WORKFLOW,
-      },
-    },
-  })
-    .then(llmExecutionStep)
-    .map(({ inputData }) => {
-      if (modelStreamSpan && telemetry_settings?.recordOutputs !== false && inputData.output.toolCalls?.length) {
-        modelStreamSpan.setAttribute(
-          'stream.response.toolCalls',
-          JSON.stringify(
-            inputData.output.toolCalls?.map((toolCall: any) => {
-              return {
-                toolCallId: toolCall.toolCallId,
-                args: toolCall.args,
-                toolName: toolCall.toolName,
-              };
-            }),
-          ),
-        );
-      }
-      return inputData.output.toolCalls || [];
-    })
-    .foreach(toolCallStep, { concurrency: 10 })
-    .then(llmMappingStep)
-    .commit();
 }
