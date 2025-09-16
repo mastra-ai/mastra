@@ -81,17 +81,6 @@ export const useLegacyWorkflow = (workflowId: string, enabled = true) => {
   });
 };
 
-export const useWorkflow = (workflowId: string, enabled = true) => {
-  const { runtimeContext } = usePlaygroundStore();
-  return useQuery({
-    gcTime: 0,
-    staleTime: 0,
-    queryKey: ['workflow', workflowId],
-    queryFn: () => client.getWorkflow(workflowId).details(runtimeContext),
-    enabled,
-  });
-};
-
 export const useExecuteWorkflow = () => {
   const createLegacyWorkflowRun = useMutation({
     mutationFn: async ({ workflowId, prevRunId }: { workflowId: string; prevRunId?: string }) => {
