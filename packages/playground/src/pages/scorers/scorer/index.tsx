@@ -9,9 +9,10 @@ import {
   ScoreDialog,
   type ScoreEntityOption as EntityOptions,
   KeyValueList,
+  useScorer,
+  useScoresByScorerId,
 } from '@mastra/playground-ui';
 import { useParams, Link, useSearchParams } from 'react-router';
-import { useScorer, useScoresByScorerId } from '@mastra/playground-ui';
 import { Skeleton } from '@/components/ui/skeleton';
 import { GaugeIcon } from 'lucide-react';
 import { format, isToday } from 'date-fns';
