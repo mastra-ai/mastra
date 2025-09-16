@@ -31,14 +31,11 @@
     "ai": "^5.0.15",
     "jsdom": "^26.1.0",
     "mastra": "latest",
-    "next": "^15.2.4",
+    "next": "^15.5.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "typescript": "^5.8.2",
     "vitest": "^3.2.4"
-  },
-  "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.17.0-0"
   },
   "pnpm": {
     "overrides": {

@@ -23,9 +23,6 @@
     "typescript": "^5.8.2",
     "vitest": "^3.2.4"
   },
-  "peerDependencies": {
-    "@mastra/core": ">=0.15.2-0 <0.17.0-0"
-  },
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../core",
