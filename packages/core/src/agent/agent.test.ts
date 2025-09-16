@@ -661,6 +661,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         response = stream.response;
         console.log('response', JSON.stringify(response.toolResults, null, 2));
         console.log('status', stream.status);
+        await new Promise(resolve => setTimeout(resolve, 1000));
         const resumeStream = await agentOne.resumeStreamVNext({ hello: 'world' }, { runId: stream.runId });
         for await (const chunk of resumeStream.fullStream) {
           console.log('resume stream chunk', chunk);

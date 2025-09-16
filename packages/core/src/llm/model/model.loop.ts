@@ -119,10 +119,10 @@ export class MastraLLMVNext extends MastraBase {
 
   stream<Tools extends ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
     resumeContext,
+    runId,
     stopWhen = stepCountIs(5),
     maxSteps,
     tools = {} as Tools,
-    runId,
     modelSettings,
     toolChoice = 'auto',
     telemetry_settings,
@@ -180,7 +180,9 @@ export class MastraLLMVNext extends MastraBase {
 
     try {
       const loopOptions: LoopOptions<Tools, OUTPUT> = {
+        mastra: this.#mastra,
         resumeContext,
+        runId,
         messageList,
         model: this.#model,
         tools: tools as Tools,

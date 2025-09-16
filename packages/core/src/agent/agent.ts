@@ -3045,6 +3045,7 @@ export class Agent<
             generateId: inputData.experimental_generateMessageId || this.#mastra?.generateId?.bind(this.#mastra),
           },
           resumeContext,
+          runId,
         });
 
         if (format === 'aisdk') {

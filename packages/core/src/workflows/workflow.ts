@@ -1702,8 +1702,9 @@ export class Run<
     });
 
     if (!snapshot) {
-      throw new Error('No snapshot found for this workflow run');
+      throw new Error('No snapshot found for this workflow run: ' + this.workflowId + ' ' + this.runId);
     }
+    console.dir({ snapshot }, { depth: null });
 
     // Auto-detect suspended steps if no step is provided
     let steps: string[];

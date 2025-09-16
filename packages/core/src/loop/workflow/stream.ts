@@ -126,6 +126,10 @@ export function workflowLoopStream<
         })
         .commit();
 
+      if (rest.mastra) {
+        mainWorkflow.__registerMastra(rest.mastra);
+      }
+
       const msToFirstChunk = _internal?.now?.()! - rest.startTimestamp!;
 
       modelStreamSpan.addEvent('ai.stream.firstChunk', {
@@ -146,6 +150,7 @@ export function workflowLoopStream<
         });
       }
 
+      console.log('CREATING RUN', rest.runId);
       const run = await mainWorkflow.createRunAsync({
         runId: rest.runId,
       });
@@ -153,6 +158,7 @@ export function workflowLoopStream<
       const executionResult = resumeContext
         ? await run.resume({
             resumeData: resumeContext,
+            tracingContext: { currentSpan: llmAISpan, isInternal: true },
           })
         : await run.start({
             inputData: {

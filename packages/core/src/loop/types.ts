@@ -14,6 +14,7 @@ import z from 'zod';
 import type { MessageList } from '../agent/message-list';
 import type { AISpan, AISpanType } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
+import type { Mastra } from '../mastra';
 import type { OutputProcessor } from '../processors';
 import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
@@ -53,6 +54,7 @@ export type LoopConfig = {
 };
 
 export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
+  mastra?: Mastra;
   resumeContext?: any;
   model: LanguageModelV2;
   logger?: IMastraLogger;

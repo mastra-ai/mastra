@@ -2147,6 +2147,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         serializedStepGraph,
       });
     } else if (entry.type === 'foreach') {
+      console.log('got foreach', prevOutput, resume);
       execResults = await this.executeForeach({
         workflowId,
         runId,
