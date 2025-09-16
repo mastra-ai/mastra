@@ -16,7 +16,7 @@ import type { AISpan, AISpanType } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
 import type { OutputProcessor } from '../processors';
 import type { OutputSchema } from '../stream/base/schema';
-import type { ChunkType } from '../stream/types';
+import type { ChunkType, ModelManagerModelConfig } from '../stream/types';
 import type { MastraIdGenerator } from '../types';
 
 export type StreamInternal = {
@@ -53,7 +53,7 @@ export type LoopConfig = {
 };
 
 export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
-  model: LanguageModelV2;
+  models: ModelManagerModelConfig[];
   logger?: IMastraLogger;
   mode?: 'generate' | 'stream';
   runId?: string;
