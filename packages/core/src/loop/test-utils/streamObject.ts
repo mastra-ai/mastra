@@ -1408,6 +1408,233 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       });
     });
 
+    describe('JSON code block handling', () => {
+      describe('object format with complete code blocks', () => {
+        it('should handle complete ```json...``` code blocks', async () => {
+          const result = loopFn({
+            runId,
+            model: createTestModel({
+              stream: convertArrayToReadableStream([
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: '```json\n' },
+                { type: 'text-delta', id: '1', delta: '{ ' },
+                { type: 'text-delta', id: '1', delta: '"content": ' },
+                { type: 'text-delta', id: '1', delta: '"Hello, world!"' },
+                { type: 'text-delta', id: '1', delta: ' }' },
+                { type: 'text-delta', id: '1', delta: '\n```' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+            }),
+            output: z.object({ content: z.string() }),
+            messageList: new MessageList(),
+          });
+
+          expect(await convertAsyncIterableToArray(result.objectStream)).toMatchInlineSnapshot(`
+            [
+              {},
+              {
+                "content": "Hello, world!",
+              },
+            ]
+          `);
+
+          expect(await result.object).toStrictEqual({
+            content: 'Hello, world!',
+          });
+        });
+
+        it('should handle ```json code blocks without newlines', async () => {
+          const result = loopFn({
+            runId,
+            model: createTestModel({
+              stream: convertArrayToReadableStream([
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: '```json{"content": "Hello, world!"}```' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+            }),
+            output: z.object({ content: z.string() }),
+            messageList: new MessageList(),
+          });
+
+          expect(await result.object).toStrictEqual({
+            content: 'Hello, world!',
+          });
+        });
+      });
+
+      describe('object format with partial streaming', () => {
+        it('should handle ```json prefix during streaming', async () => {
+          const result = loopFn({
+            runId,
+            model: createTestModel({
+              stream: convertArrayToReadableStream([
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: '```json\n' },
+                { type: 'text-delta', id: '1', delta: '{ ' },
+                { type: 'text-delta', id: '1', delta: '"content": ' },
+                { type: 'text-delta', id: '1', delta: '"Hello, ' },
+                { type: 'text-delta', id: '1', delta: 'world' },
+                { type: 'text-delta', id: '1', delta: '!"' },
+                { type: 'text-delta', id: '1', delta: ' }' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+            }),
+            output: z.object({ content: z.string() }),
+            messageList: new MessageList(),
+          });
+
+          const streamResults = await convertAsyncIterableToArray(result.objectStream);
+
+          // Should have streaming chunks without ```json prefix
+          expect(streamResults).toEqual([
+            {},
+            { content: 'Hello, ' },
+            { content: 'Hello, world' },
+            { content: 'Hello, world!' },
+          ]);
+
+          expect(await result.object).toStrictEqual({
+            content: 'Hello, world!',
+          });
+        });
+      });
+
+      describe('array format with JSON code blocks', () => {
+        it('should handle array wrapped in ```json...``` blocks', async () => {
+          const result = loopFn({
+            runId,
+            model: createTestModel({
+              stream: convertArrayToReadableStream([
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: '```json\n' },
+                { type: 'text-delta', id: '1', delta: '{"elements":[' },
+                { type: 'text-delta', id: '1', delta: '{"content":"element 1"},' },
+                { type: 'text-delta', id: '1', delta: '{"content":"element 2"}' },
+                { type: 'text-delta', id: '1', delta: ']}' },
+                { type: 'text-delta', id: '1', delta: '\n```' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+            }),
+            output: z.array(z.object({ content: z.string() })),
+            messageList: new MessageList(),
+          });
+
+          expect(await result.object).toStrictEqual([{ content: 'element 1' }, { content: 'element 2' }]);
+        });
+
+        it('should handle partial array streaming with ```json prefix', async () => {
+          const result = loopFn({
+            runId,
+            model: createTestModel({
+              stream: convertArrayToReadableStream([
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: '```json\n' },
+                { type: 'text-delta', id: '1', delta: '{"elements":[' },
+                { type: 'text-delta', id: '1', delta: '{"content":"element 1"},' },
+                { type: 'text-delta', id: '1', delta: '{"content":"element 2"}' },
+                { type: 'text-delta', id: '1', delta: ']}' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+            }),
+            output: z.array(z.object({ content: z.string() })),
+            messageList: new MessageList(),
+          });
+
+          const streamResults = await convertAsyncIterableToArray(result.objectStream);
+
+          // Should progressively stream array elements without ```json prefix
+          expect(streamResults).toEqual([
+            [],
+            [{ content: 'element 1' }],
+            [{ content: 'element 1' }, { content: 'element 2' }],
+          ]);
+        });
+      });
+
+      describe('enum format with JSON code blocks', () => {
+        it('should handle enum wrapped in ```json...``` blocks', async () => {
+          const result = loopFn({
+            runId,
+            model: createTestModel({
+              stream: convertArrayToReadableStream([
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: '```json\n' },
+                { type: 'text-delta', id: '1', delta: '{ "result": "sunny" }' },
+                { type: 'text-delta', id: '1', delta: '\n```' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+            }),
+            output: z.enum(['sunny', 'rainy', 'snowy']),
+            messageList: new MessageList(),
+          });
+
+          expect(await result.object).toStrictEqual('sunny');
+        });
+
+        it('should handle partial enum streaming with ```json prefix', async () => {
+          const result = loopFn({
+            runId,
+            model: createTestModel({
+              stream: convertArrayToReadableStream([
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: '```json\n' },
+                { type: 'text-delta', id: '1', delta: '{ ' },
+                { type: 'text-delta', id: '1', delta: '"result": ' },
+                { type: 'text-delta', id: '1', delta: '"su' },
+                { type: 'text-delta', id: '1', delta: 'nny' },
+                { type: 'text-delta', id: '1', delta: '"' },
+                { type: 'text-delta', id: '1', delta: ' }' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+            }),
+            output: z.enum(['sunny', 'rainy', 'snowy']),
+            messageList: new MessageList(),
+          });
+
+          const streamResults = await convertAsyncIterableToArray(result.objectStream);
+
+          // Should progressively stream enum values without ```json prefix
+          expect(streamResults).toEqual(['sunny']);
+        });
+      });
+    });
+
     describe('output = "array"', () => {
       describe('array with 3 elements', () => {
         let result: any;
