@@ -10,7 +10,7 @@ import type { AIV5Type } from '../../agent/message-list/types';
 import { getValidTraceId } from '../../ai-tracing';
 import type { TracingContext } from '../../ai-tracing';
 import { MastraBase } from '../../base';
-import type { OutputProcessor } from '../../processors';
+import type { OutputProcessor, StructuredOutputOptions } from '../../processors';
 import type { ProcessorRunnerMode, ProcessorState } from '../../processors/runner';
 import { ProcessorRunner } from '../../processors/runner';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
@@ -44,7 +44,7 @@ type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   onFinish?: (event: Record<string, any>) => Promise<void> | void;
   onStepFinish?: (event: Record<string, any>) => Promise<void> | void;
   includeRawChunks?: boolean;
-  output?: OUTPUT;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
   outputProcessors?: OutputProcessor[];
   outputProcessorRunnerMode?: ProcessorRunnerMode;
   returnScorerData?: boolean;
@@ -87,6 +87,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   #usageCount: Record<string, number> = {};
   #tripwire = false;
   #tripwireReason = '';
+  #isSingleStepStructuredOutput: boolean = false;
 
   #delayedPromises = {
     object: new DelayedPromise<InferSchemaOutput<OUTPUT>>(),
@@ -157,6 +158,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
     this.#options = options;
+
+    if (options.structuredOutput && options.maxSteps === 1) {
+      this.#isSingleStepStructuredOutput = true;
+    }
+
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
     this.traceId = getValidTraceId(options.tracingContext?.currentSpan);
@@ -191,7 +197,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               part: processed,
               blocked,
               reason,
-            } = await processorRunner.processPart(chunk as any, processorStates);
+            } = await processorRunner.processPart(chunk as any, processorStates, controller);
+
             if (blocked) {
               // Emit a tripwire chunk so downstream knows about the abort
               controller.enqueue({
@@ -674,6 +681,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     return fullStream
       .pipeThrough(
         createObjectStreamTransformer({
+          structuredOutput: self.#options.structuredOutput,
           schema: self.#options.output,
           onFinish: data => self.#delayedPromises.object.resolve(data),
         }),

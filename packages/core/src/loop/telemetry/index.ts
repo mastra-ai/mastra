@@ -52,6 +52,7 @@ export function getTelemetryAttributes({
 
     // settings:
     ...Object.entries(settings).reduce((attributes, [key, value]) => {
+      // @ts-expect-error -- mismatched type
       attributes[`stream.settings.${key}`] = value;
       return attributes;
     }, {} as Attributes),

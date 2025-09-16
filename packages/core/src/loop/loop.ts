@@ -114,6 +114,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       onStepFinish: rest.options?.onStepFinish,
       includeRawChunks: !!includeRawChunks,
       output: rest.output,
+      structuredOutput: rest.structuredOutput,
       outputProcessors,
       outputProcessorRunnerMode: 'result',
       returnScorerData,

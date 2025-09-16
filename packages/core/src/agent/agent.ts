@@ -553,19 +553,16 @@ export class Agent<
     });
   }
 
-  public getDefaultVNextStreamOptions<
-    Output extends ZodSchema | undefined,
-    StructuredOutput extends ZodSchema | undefined,
-  >({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
-    | AgentExecutionOptions<Output, StructuredOutput>
-    | Promise<AgentExecutionOptions<Output, StructuredOutput>> {
+  public getDefaultVNextStreamOptions<Output extends OutputSchema = undefined>({
+    runtimeContext = new RuntimeContext(),
+  }: { runtimeContext?: RuntimeContext } = {}): AgentExecutionOptions<Output> | Promise<AgentExecutionOptions<Output>> {
     if (typeof this.#defaultVNextStreamOptions !== 'function') {
-      return this.#defaultVNextStreamOptions as AgentExecutionOptions<Output, StructuredOutput>;
+      return this.#defaultVNextStreamOptions as AgentExecutionOptions<Output>;
     }
 
     const result = this.#defaultVNextStreamOptions({ runtimeContext, mastra: this.#mastra }) as
-      | AgentExecutionOptions<Output, StructuredOutput>
-      | Promise<AgentExecutionOptions<Output, StructuredOutput>>;
+      | AgentExecutionOptions<Output>
+      | Promise<AgentExecutionOptions<Output>>;
 
     return resolveMaybePromise(result, options => {
       if (!options) {
@@ -3491,13 +3488,9 @@ export class Agent<
     });
   }
 
-  async generateVNext<
-    OUTPUT extends OutputSchema | undefined = undefined,
-    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-    FORMAT extends 'aisdk' | 'mastra' = 'mastra',
-  >(
+  async generateVNext<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' = 'mastra'>(
     messages: MessageListInput,
-    options?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
+    options?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<
     FORMAT extends 'aisdk'
       ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
@@ -3524,20 +3517,16 @@ export class Agent<
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
   }
 
-  async streamVNext<
-    OUTPUT extends OutputSchema | undefined = undefined,
-    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
-  >(
+  async streamVNext<OUTPUT extends OutputSchema = undefined, FORMAT extends 'mastra' | 'aisdk' | undefined = undefined>(
     messages: MessageListInput,
-    streamOptions?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
+    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
     const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
       runtimeContext: streamOptions?.runtimeContext,
     });
 
     let mergedStreamOptions = {
-      ...defaultStreamOptions,
+      ...(defaultStreamOptions as AgentExecutionOptions<OUTPUT, FORMAT>),
       ...streamOptions,
       onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
@@ -3551,10 +3540,12 @@ export class Agent<
         modelOverride = mergedStreamOptions.structuredOutput.model;
       }
 
+      // TODO: remove 'output' piping throughout, and only accept it as a legacy option that just sets structuredOutput.schema and maxSteps instead of the other way around.
+      // Destructure to omit structuredOutput instead of setting it to undefined
+      const { structuredOutput, ...optionsWithoutStructuredOutput } = mergedStreamOptions;
       mergedStreamOptions = {
-        ...mergedStreamOptions,
-        output: mergedStreamOptions.structuredOutput.schema as OUTPUT,
-        structuredOutput: undefined, // Remove structuredOutput to avoid confusion downstream
+        ...optionsWithoutStructuredOutput,
+        output: structuredOutput.schema as OUTPUT,
       };
     }
 
@@ -3577,7 +3568,7 @@ export class Agent<
       messages,
       methodType: 'streamVNext',
       model: modelOverride,
-    });
+    } as InnerAgentExecutionOptions<OUTPUT, FORMAT>);
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {

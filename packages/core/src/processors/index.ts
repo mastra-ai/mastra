@@ -18,11 +18,13 @@ export interface Processor {
    * Process output stream chunks with built-in state management
    * This allows processors to accumulate chunks and make decisions based on larger context
    * Return null, or undefined to skip emitting the part
+   * When controller is provided, processors can emit additional chunks directly to the stream
    */
   processOutputStream?(args: {
     part: ChunkType;
     streamParts: ChunkType[];
     state: Record<string, any>;
+    controller?: TransformStreamDefaultController;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
   }): Promise<ChunkType | null | undefined>;

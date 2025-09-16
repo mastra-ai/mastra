@@ -14,7 +14,7 @@ import z from 'zod';
 import type { MessageList } from '../agent/message-list';
 import type { AISpan, AISpanType } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
-import type { OutputProcessor } from '../processors';
+import type { OutputProcessor, StructuredOutputOptions } from '../processors';
 import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
 import type { MastraIdGenerator } from '../types';
@@ -74,6 +74,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   maxSteps?: number;
   _internal?: StreamInternal;
   output?: OUTPUT;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
   returnScorerData?: boolean;
   downloadRetries?: number;
   downloadConcurrency?: number;

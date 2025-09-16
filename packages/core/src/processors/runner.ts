@@ -119,6 +119,7 @@ export class ProcessorRunner {
   async processPart(
     part: ChunkType,
     processorStates: Map<string, ProcessorState>,
+    controller?: any, // TransformStreamDefaultController but avoiding import issues
     tracingContext?: TracingContext,
   ): Promise<{
     part: ChunkType | null | undefined;
@@ -149,13 +150,20 @@ export class ProcessorRunner {
               part: processedPart,
               streamParts: state.streamParts,
               state: state.customState,
+              controller, // Pass controller to all processors now
               abort: (reason?: string) => {
                 throw new TripWire(reason || `Stream part blocked by ${processor.name}`);
               },
               tracingContext,
             });
 
-            // If result is null, or undefined, don't emit
+            // If result is null/undefined, processor handled it with controller
+            if (result === null || result === undefined) {
+              processedPart = null;
+              break;
+            }
+
+            // Otherwise, use the result as the processed part
             processedPart = result;
           }
         } catch (error) {
@@ -197,7 +205,7 @@ export class ProcessorRunner {
               part: processedPart,
               blocked,
               reason,
-            } = await this.processPart(value, processorStates, tracingContext);
+            } = await this.processPart(value, processorStates, controller, tracingContext);
 
             if (blocked) {
               // Log that part was blocked
