@@ -1,25 +1,25 @@
 ---
-title: "Reference: MastraModelOutput | Agents | Mastra Docs"
+title: "Reference: MastraModelOutput (Experimental) | Agents | Mastra Docs"
 description: "Complete reference for MastraModelOutput - the stream object returned by agent.streamVNext() with streaming and promise-based access to model outputs."
 ---
 
 import { Callout } from "nextra/components";
 import { PropertiesTable } from "@/components/properties-table";
 
-# MastraModelOutput
+# MastraModelOutput (Experimental)
 
-<Callout type="warning">
-  **Experimental API**: This type is part of the experimental [`streamVNext()`](/reference/agents/streamVNext) method. The API may change as we refine the feature based on feedback.
+<Callout type="important">
+  <strong className="block">Experimental API:</strong>This type is part of the experimental `.streamVNext()` method. The API may change as we refine the feature based on feedback.
 </Callout>
 
-The `MastraModelOutput` class is returned by [`agent.streamVNext()`](/reference/agents/streamVNext) and provides both streaming and promise-based access to model outputs. It supports structured output generation, tool calls, reasoning, and comprehensive usage tracking.
+The `MastraModelOutput` class is returned by [.streamVNext()](./streamVNext.mdx) and provides both streaming and promise-based access to model outputs. It supports structured output generation, tool calls, reasoning, and comprehensive usage tracking.
 
 ```typescript
 // MastraModelOutput is returned by agent.streamVNext()
 const stream = await agent.streamVNext("Hello world");
 ```
 
-For setup and basic usage, see the [streamVNext() method documentation](/reference/agents/streamVNext).
+For setup and basic usage, see the [.streamVNext()](./streamVNext.mdx) method documentation.
 
 ## Streaming Properties
 
@@ -113,7 +113,7 @@ These properties resolve to final values after the stream completes:
       type: "Promise<ToolResultChunk[]>",
       description: "Array of all tool result chunks corresponding to the tool calls. Contains execution results and error information.",
       properties: [{
-        type: "ToolResultChunk", 
+        type: "ToolResultChunk",
         parameters: [
           { name: "type", type: "'tool-result'", description: "Chunk type identifier" },
           { name: "runId", type: "string", description: "Execution run identifier" },
@@ -302,7 +302,7 @@ try {
       console.error("Stream error:", error);
     }
   });
-  
+
   const result = await stream.text;
 } catch (error) {
   console.error("Failed to get result:", error);
@@ -318,4 +318,4 @@ if (stream.error) {
 ## Related Types
 
 - [ChunkType](/reference/agents/ChunkType) - All possible chunk types in the full stream
-- [Agent.streamVNext()](/reference/agents/streamVNext) - Method that returns MastraModelOutput
+- [.streamVNext()](/reference/agents/streamVNext) - Method that returns MastraModelOutput
