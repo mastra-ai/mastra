@@ -206,20 +206,9 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
       throw new Error('URL is required for OpenAI-compatible model');
     }
 
-    // Check if API key is required and missing
-    if (!parsedConfig.apiKey && this.provider !== 'openai-compatible') {
-      // Get the provider config to find the env var name
-      const providerConfig = getProviderConfig(this.provider);
-      if (providerConfig?.apiKeyEnvVar) {
-        throw new Error(
-          `API key not found for provider "${this.provider}". Please set the ${providerConfig.apiKeyEnvVar} environment variable.`,
-        );
-      } else {
-        throw new Error(
-          `API key not found for provider "${this.provider}". Please provide an API key in the configuration.`,
-        );
-      }
-    }
+    // Store the API key (might be undefined, we'll check later when making requests)
+    // This allows the model to be instantiated even without an API key,
+    // and we'll throw a proper error through the stream when the request is made
 
     // Get provider config for headers
     const providerConfig = this.provider !== 'openai-compatible' ? getProviderConfig(this.provider) : undefined;
@@ -361,6 +350,16 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
     response?: { headers: Record<string, string> };
     warnings: LanguageModelV2CallWarning[];
   }> {
+    // Check if API key is required and missing
+    if (!this.headers['Authorization'] && !this.headers['x-api-key'] && this.provider !== 'openai-compatible') {
+      const providerConfig = getProviderConfig(this.provider);
+      const errorMessage = providerConfig?.apiKeyEnvVar
+        ? `API key not found for provider "${this.provider}". Please set the ${providerConfig.apiKeyEnvVar} environment variable.`
+        : `API key not found for provider "${this.provider}". Please provide an API key in the configuration.`;
+
+      throw new Error(errorMessage);
+    }
+
     const { prompt, tools, toolChoice, providerOptions } = options;
 
     // TODO: lets get a real body type here, not any
@@ -469,6 +468,18 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
     response?: { headers: Record<string, string> };
     warnings: LanguageModelV2CallWarning[];
   }> {
+    // Check if API key is required and missing (do this check here so error goes through stream)
+    if (!this.headers['Authorization'] && !this.headers['x-api-key'] && this.provider !== 'openai-compatible') {
+      const providerConfig = getProviderConfig(this.provider);
+      const errorMessage = providerConfig?.apiKeyEnvVar
+        ? `API key not found for provider "${this.provider}". Please set the ${providerConfig.apiKeyEnvVar} environment variable.`
+        : `API key not found for provider "${this.provider}". Please provide an API key in the configuration.`;
+      // throw new Error(errorMessage)
+      // Return a stream that throws an error immediately
+      // This will be caught by the execute wrapper and properly handled
+      throw new Error(errorMessage);
+    }
+
     const { prompt, tools, toolChoice, providerOptions } = options;
 
     // TODO: real body type, not any

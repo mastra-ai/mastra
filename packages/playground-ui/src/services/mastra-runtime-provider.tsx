@@ -595,9 +595,46 @@ export function MastraRuntimeProvider({
                 }
 
                 case 'error': {
-                  if (typeof chunk.payload.error === 'string') {
-                    throw new Error(chunk.payload.error);
+                  let errorMessage = 'An error occurred';
+                  const error = chunk.payload.error as any;
+                  if (typeof error === 'string') {
+                    errorMessage = error;
+                  } else if (error?.message) {
+                    errorMessage = error.message;
+                  } else if (chunk.payload) {
+                    errorMessage = JSON.stringify(chunk.payload);
                   }
+
+                  // Add specific handling for common errors
+                  if (errorMessage.includes('401') || errorMessage.toLowerCase().includes('unauthorized')) {
+                    errorMessage = 'Authentication failed. Please check your API key configuration.';
+                  } else if (errorMessage.includes('403') || errorMessage.toLowerCase().includes('forbidden')) {
+                    errorMessage = 'Access denied. Please verify your API key has the necessary permissions.';
+                  } else if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('rate limit')) {
+                    errorMessage = 'Rate limit exceeded. Please wait a moment before trying again.';
+                  } else if (
+                    errorMessage.includes('500') ||
+                    errorMessage.includes('502') ||
+                    errorMessage.includes('503')
+                  ) {
+                    errorMessage = 'The service is temporarily unavailable. Please try again later.';
+                  }
+
+                  // Add error message to chat instead of throwing
+                  // We'll use a special text format that the UI can recognize as an error
+                  setMessages(currentConversation => [
+                    ...currentConversation,
+                    {
+                      role: 'assistant',
+                      content: [
+                        {
+                          type: 'text',
+                          text: `__ERROR__:${errorMessage}`,
+                        },
+                      ],
+                    } as ThreadMessageLike,
+                  ]);
+                  setIsRunning(false);
                   break;
                 }
 
@@ -1002,9 +1039,46 @@ export function MastraRuntimeProvider({
         return;
       }
 
+      // Extract a user-friendly error message
+      let errorMessage = 'An error occurred while processing your request.';
+
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error.response?.data?.error) {
+        // Handle API response errors
+        errorMessage = error.response.data.error.message || error.response.data.error;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.statusText) {
+        errorMessage = `Request failed: ${error.statusText}`;
+      }
+
+      // Add specific handling for common errors
+      if (errorMessage.includes('401') || errorMessage.toLowerCase().includes('unauthorized')) {
+        errorMessage = '❌ Authentication failed. Please check your API key configuration.';
+      } else if (errorMessage.includes('403') || errorMessage.toLowerCase().includes('forbidden')) {
+        errorMessage = '❌ Access denied. Please verify your API key has the necessary permissions.';
+      } else if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('rate limit')) {
+        errorMessage = '⚠️ Rate limit exceeded. Please wait a moment before trying again.';
+      } else if (errorMessage.includes('500') || errorMessage.includes('502') || errorMessage.includes('503')) {
+        errorMessage = '⚠️ The service is temporarily unavailable. Please try again later.';
+      } else if (errorMessage.toLowerCase().includes('api key') || errorMessage.toLowerCase().includes('api_key')) {
+        errorMessage = `❌ ${errorMessage}`;
+      }
+
       setMessages(currentConversation => [
         ...currentConversation,
-        { role: 'assistant', content: [{ type: 'text', text: `${error}` as string }] },
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'text',
+              text: errorMessage,
+            },
+          ],
+        },
       ]);
     } finally {
       // Clean up the abort controller reference

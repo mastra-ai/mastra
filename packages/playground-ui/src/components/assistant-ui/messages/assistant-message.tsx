@@ -2,6 +2,7 @@ import { ActionBarPrimitive, MessagePrimitive, ToolCallMessagePartComponent, use
 import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
 
 import { MarkdownText } from './markdown-text';
+import { ErrorAwareText } from './error-aware-text';
 import { TooltipIconButton } from '../tooltip-icon-button';
 import { ToolFallback } from '@/components/assistant-ui/tools/tool-fallback';
 import { Reasoning } from './reasoning';
@@ -21,7 +22,7 @@ export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom }: Assistant
       <div className="text-icon6 text-ui-lg leading-ui-lg">
         <MessagePrimitive.Parts
           components={{
-            Text: MarkdownText,
+            Text: ErrorAwareText,
             tools: { Fallback: ToolFallbackCustom || ToolFallback },
             Reasoning: Reasoning,
           }}

@@ -26,7 +26,6 @@ export const AgentMetadataModelSwitcher = ({
   defaultProvider,
   defaultModel,
   updateModel,
-  modelProviders,
   apiUrl = '/api/agents/providers',
 }: AgentMetadataModelSwitcherProps) => {
   const [selectedModel, setSelectedModel] = useState(defaultModel);
