@@ -101,7 +101,7 @@ export class ToolSummaryProcessor extends MemoryProcessor {
               content.result = `Tool call summary: ${cachedSummary}`;
             } else {
               // Create a promise for this summary (but don't await yet)
-              const summaryPromise = this.summaryAgent.generate(
+              const summaryPromise = this.summaryAgent.generateLegacy(
                 `Summarize the following tool call: ${JSON.stringify(toolCall)} and result: ${JSON.stringify(content)}`,
               );
 

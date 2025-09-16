@@ -20,7 +20,7 @@ export class ContextPositionJudge extends MastraAgentJudge {
       output: actualOutput,
       context: retrievalContext,
     });
-    const result = await this.agent.generate(prompt, {
+    const result = await this.agent.generateLegacy(prompt, {
       output: z.object({
         verdicts: z.array(
           z.object({
@@ -45,7 +45,7 @@ export class ContextPositionJudge extends MastraAgentJudge {
     }[];
   }): Promise<string> {
     const prompt = generateReasonPrompt(args);
-    const result = await this.agent.generate(prompt, {
+    const result = await this.agent.generateLegacy(prompt, {
       output: z.object({
         reason: z.string(),
       }),

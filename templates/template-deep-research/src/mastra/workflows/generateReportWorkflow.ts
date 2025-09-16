@@ -26,7 +26,7 @@ const processResearchResultStep = createStep({
     try {
       console.log('Generating report...');
       const agent = mastra.getAgent('reportAgent');
-      const response = await agent.generate([
+      const response = await agent.generateLegacy([
         {
           role: 'user',
           content: `Generate a report based on this research: ${JSON.stringify(inputData.researchData)}`,

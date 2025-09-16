@@ -58,7 +58,7 @@ const researchStep = createStep({
 
       Return findings in JSON format with queries, searchResults, learnings, completedQueries, and phase.`;
 
-      const result = await agent.generate(
+      const result = await agent.generateLegacy(
         [
           {
             role: 'user',

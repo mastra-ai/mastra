@@ -63,7 +63,7 @@ export const contentAnalyzerTool = createTool({
       const difficultyText = `Target difficulty level: ${difficultyLevel}`;
       const focusAreasText = focusAreas.length > 0 ? `Focus areas: ${focusAreas.join(', ')}` : '';
 
-      const analysisResult = await contentAnalyzerAgent.generate([
+      const analysisResult = await contentAnalyzerAgent.generateLegacy([
         {
           role: 'user',
           content: `Analyze this educational content and extract elements suitable for flash card generation.

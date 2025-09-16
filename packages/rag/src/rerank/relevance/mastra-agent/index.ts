@@ -33,7 +33,7 @@ Always return just the number, no explanation.`,
     if (model.specificationVersion === 'v2') {
       response = await this.agent.generateVNext(prompt);
     } else {
-      response = await this.agent.generate(prompt);
+      response = await this.agent.generateLegacy(prompt);
     }
 
     return parseFloat(response.text);

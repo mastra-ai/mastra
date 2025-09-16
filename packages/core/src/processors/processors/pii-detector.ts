@@ -274,7 +274,7 @@ export class PIIDetector implements Processor {
           tracingContext,
         });
       } else {
-        response = await this.detectionAgent.generate(prompt, {
+        response = await this.detectionAgent.generateLegacy(prompt, {
           output: schema,
           temperature: 0,
           tracingContext,

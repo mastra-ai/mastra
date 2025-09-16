@@ -209,7 +209,7 @@ async function executeTarget(target: Agent | Workflow, item: RunExperimentDataIt
 }
 
 async function executeWorkflow(target: Workflow, item: RunExperimentDataItem<any>) {
-  const run = target.createRun({ disableScorers: true });
+  const run = await target.createRunAsync({ disableScorers: true });
   const workflowResult = await run.start({
     inputData: item.input,
     runtimeContext: item.runtimeContext,
@@ -233,7 +233,7 @@ async function executeAgent(agent: Agent, item: RunExperimentDataItem<any>) {
       runtimeContext: item.runtimeContext,
     });
   } else {
-    return await agent.generate(item.input as any, {
+    return await agent.generateLegacy(item.input as any, {
       scorers: {},
       returnScorerData: true,
       runtimeContext: item.runtimeContext,

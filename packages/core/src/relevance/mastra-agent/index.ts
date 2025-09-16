@@ -34,7 +34,7 @@ Always return just the number, no explanation.`,
       const responseText = await this.agent.generateVNext(prompt);
       response = responseText.text;
     } else {
-      const responseText = await this.agent.generate(prompt);
+      const responseText = await this.agent.generateLegacy(prompt);
       response = responseText.text;
     }
     return parseFloat(response);

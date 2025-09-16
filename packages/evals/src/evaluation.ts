@@ -8,7 +8,7 @@ export async function evaluate<T extends Agent>(agent: T, input: Parameters<T['g
   const testInfo = await getCurrentTestInfo();
   let globalRunId = process.env[GLOBAL_RUN_ID_ENV_KEY];
   const runId = crypto.randomUUID();
-  const agentOutput = await agent.generate(input, {
+  const agentOutput = await agent.generateLegacy(input, {
     runId,
   });
 

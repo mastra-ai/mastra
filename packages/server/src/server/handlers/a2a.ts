@@ -147,7 +147,7 @@ export async function handleMessageSend({
   });
 
   try {
-    const { text } = await agent.generate([convertToCoreMessage(message)], {
+    const { text } = await agent.generateLegacy([convertToCoreMessage(message)], {
       runId: taskId,
       runtimeContext,
     });

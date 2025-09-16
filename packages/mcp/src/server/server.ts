@@ -624,7 +624,7 @@ export class MCPServer extends MCPServerBase {
             `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${context.message}"`,
           );
           try {
-            const response = await agent.generate(context.message, { runtimeContext, tracingContext });
+            const response = await agent.generateLegacy(context.message, { runtimeContext, tracingContext });
             return response;
           } catch (error) {
             this.logger.error(`Error executing agent tool '${agentToolName}' for agent '${agent.name}':`, error);
@@ -698,7 +698,7 @@ export class MCPServer extends MCPServerBase {
             context,
           );
           try {
-            const run = workflow.createRun({ runId: runtimeContext?.get('runId') });
+            const run = await workflow.createRunAsync({ runId: runtimeContext?.get('runId') });
 
             const response = await run.start({ inputData: context, runtimeContext, tracingContext });
 

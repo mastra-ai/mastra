@@ -21,7 +21,7 @@ export class ContextualRecallJudge extends MastraAgentJudge {
       context: retrievalContext,
     });
 
-    const result = await this.agent.generate(prompt, {
+    const result = await this.agent.generateLegacy(prompt, {
       output: z.object({
         verdicts: z.array(
           z.object({
@@ -42,7 +42,7 @@ export class ContextualRecallJudge extends MastraAgentJudge {
     supportiveReasons: string[];
   }): Promise<string> {
     const prompt = generateReasonPrompt(args);
-    const result = await this.agent.generate(prompt, {
+    const result = await this.agent.generateLegacy(prompt, {
       output: z.object({
         reason: z.string(),
       }),

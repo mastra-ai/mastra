@@ -48,7 +48,7 @@ export const summarizePdfTool = createTool({
       console.log('🧠 Generating AI summary...');
       const pdfSummarizationAgent = mastra!.getAgent('pdfSummarizationAgent');
 
-      const summaryResult = await pdfSummarizationAgent.generate(
+      const summaryResult = await pdfSummarizationAgent.generateLegacy(
         `Please provide a comprehensive summary of this PDF content:\n\n${extractionResult.extractedText}`,
       );
 

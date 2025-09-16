@@ -12,7 +12,7 @@ import { MastraClient } from './client';
 
   try {
     const agent = client.getAgent('weatherAgent');
-    const response = await agent.stream({
+    const response = await agent.streamLegacy({
       messages: 'what is the weather in new york?',
       output: z.object({
         weather: z.string(),
@@ -78,7 +78,7 @@ import { MastraClient } from './client';
 
 //     const run = await workflow.createRunAsync();
 
-//     const stream = await run.stream({
+//     const stream = await run.streamLegacy({
 //       inputData: {
 //         city: 'New York',
 //       },

@@ -259,7 +259,7 @@ export class ModerationProcessor implements Processor {
           tracingContext,
         });
       } else {
-        response = await this.moderationAgent.generate(prompt, {
+        response = await this.moderationAgent.generateLegacy(prompt, {
           output: schema,
           temperature: 0,
           tracingContext,
