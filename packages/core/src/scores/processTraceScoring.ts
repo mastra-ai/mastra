@@ -29,6 +29,11 @@ export async function processTraceScoring({
       }
 
       const parentSpan = getParentSpan(trace.spans);
+
+      if (!parentSpan) {
+        throw new Error(`No parent span found for span ${target.spanId}`);
+      }
+
       let entityType;
       let entityId;
       let runPayload;
@@ -69,7 +74,21 @@ export async function processTraceScoring({
         scorerId: scorer.name,
       });
 
-      await storage.saveScore(ValidatedSaveScorePayload);
+      const savedScore = await storage.saveScore(ValidatedSaveScorePayload);
+
+      if (span) {
+        const existingLinks = span.links || [];
+        span.links = [...existingLinks, { type: 'score', id: savedScore.score.id }];
+        await storage.updateAISpan({ spanId: span.spanId, traceId: span.traceId, updates: { links: span.links } });
+      } else {
+        const existingLinks = parentSpan.links || [];
+        parentSpan.links = [...existingLinks, { type: 'score', id: savedScore.score.id }];
+        await storage.updateAISpan({
+          spanId: parentSpan.spanId,
+          traceId: parentSpan.traceId,
+          updates: { links: parentSpan.links },
+        });
+      }
     } catch (error) {
       console.error(`Failed to score trace ${target.traceId}:`, error);
     }
