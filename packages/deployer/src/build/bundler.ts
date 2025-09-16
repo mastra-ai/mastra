@@ -19,10 +19,17 @@ export async function getInputOptions(
   env: Record<string, string> = { 'process.env.NODE_ENV': JSON.stringify('production') },
   {
     sourcemap = false,
-    enableEsmShim = true,
     isDev = false,
+    projectRoot,
     workspaceRoot = undefined,
-  }: { sourcemap?: boolean; enableEsmShim?: boolean; isDev?: boolean; workspaceRoot?: string } = {},
+    enableEsmShim = true,
+  }: {
+    sourcemap?: boolean;
+    isDev?: boolean;
+    workspaceRoot?: string;
+    projectRoot: string;
+    enableEsmShim?: boolean;
+  },
 ): Promise<InputOptions> {
   let nodeResolvePlugin =
     platform === 'node'
@@ -72,19 +79,12 @@ export async function getInputOptions(
             };
           }
 
-          if (isDev && analyzedBundleInfo.workspaceMap.has(id) && workspaceRoot) {
-            const filename = analyzedBundleInfo.dependencies.get(id)!;
-            const resolvedPath = join(workspaceRoot, filename);
-
-            return {
-              id: resolvedPath,
-              external: true,
-            };
-          }
-
+          const filename = analyzedBundleInfo.dependencies.get(id)!;
+          // also add projectRoot
+          const resolvedPath = join(workspaceRoot || projectRoot, filename);
           return {
-            id: '.mastra/.build/' + analyzedBundleInfo.dependencies.get(id)!,
-            external: false,
+            id: resolvedPath,
+            external: isDev,
           };
         },
       } satisfies Plugin,

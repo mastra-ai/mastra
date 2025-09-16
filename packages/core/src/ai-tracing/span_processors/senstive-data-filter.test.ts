@@ -4,15 +4,6 @@ import type { AITracingEvent, AITracingExporter } from '../types';
 import { AISpanType, SamplingStrategyType } from '../types';
 import { SensitiveDataFilter } from './sensitive-data-filter';
 
-// Mock console for exporter tests
-const mockConsole = {
-  log: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  info: vi.fn(),
-};
-vi.stubGlobal('console', mockConsole);
-
 // Test exporter for capturing events
 class TestExporter implements AITracingExporter {
   name = 'test-exporter';
@@ -60,7 +51,7 @@ describe('AI Tracing', () => {
             SECRET: 'top-secret', // Should be redacted (case insensitive)
             apiKey: 'api-key-456', // Should be redacted
             AUTHORIZATION: 'Basic xyz', // Should be redacted (case insensitive)
-            sessionId: 'session-789', // Should be redacted
+            sessionId: 'session-789', // Should NOT be redacted (sessionId doesn't match sensitive patterns)
             normalField: 'visible-data', // Should NOT be redacted
           },
           aiTracing: {} as any,
@@ -81,15 +72,76 @@ describe('AI Tracing', () => {
         expect(attributes?.['SECRET']).toBe('[REDACTED]');
         expect(attributes?.['apiKey']).toBe('[REDACTED]');
         expect(attributes?.['AUTHORIZATION']).toBe('[REDACTED]');
-        expect(attributes?.['sessionId']).toBe('[REDACTED]');
 
         // Check that normal fields are visible
         expect(attributes?.['normalField']).toBe('visible-data');
         expect(attributes?.['agentId']).toBe('agent-123'); // agentId is part of AgentRunMetadata
+        expect(attributes?.['sessionId']).toBe('session-789'); // sessionId should not be redacted
+      });
+
+      it('should NOT redact fields like promptTokens and totalTokens', () => {
+        const processor = new SensitiveDataFilter();
+
+        const mockSpan = {
+          id: 'test-span-1',
+          name: 'test-span',
+          type: AISpanType.LLM_GENERATION,
+          startTime: new Date(),
+          traceId: 'trace-123',
+          trace: { traceId: 'trace-123' } as any,
+          attributes: {
+            model: 'gpt-4',
+            promptTokens: 100, // Should NOT be redacted (normalizes to "prompttokens", not "token")
+            completionTokens: 50, // Should NOT be redacted (normalizes to "completiontokens")
+            totalTokens: 150, // Should NOT be redacted (normalizes to "totaltokens")
+            prompt_tokens: 100, // Should NOT be redacted (normalizes to "prompttokens")
+            total_tokens: 150, // Should NOT be redacted (normalizes to "totaltokens")
+            token: 'auth-token-123', // Should be redacted (normalizes to "token")
+            authToken: 'bearer-456', // Should NOT be redacted (normalizes to "authtoken", not "token")
+            api_key: 'sk-123456', // Should be redacted (normalizes to "apikey")
+            apikey: 'test-key', // Should be redacted (normalizes to "apikey")
+            keyword: 'search-term', // Should NOT be redacted (normalizes to "keyword", not "key")
+            keystone: 'architecture', // Should NOT be redacted (normalizes to "keystone", not "key")
+            monkey: 'business', // Should NOT be redacted (normalizes to "monkey", not "key")
+            key: 'secret', // Should be redacted (normalizes to "key")
+          },
+          aiTracing: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        } as any;
+
+        const filtered = processor.process(mockSpan);
+        expect(filtered).not.toBeNull();
+
+        const attributes = filtered!.attributes;
+
+        // Check that token-related metrics are NOT redacted
+        expect(attributes?.['promptTokens']).toBe(100);
+        expect(attributes?.['completionTokens']).toBe(50);
+        expect(attributes?.['totalTokens']).toBe(150);
+        expect(attributes?.['prompt_tokens']).toBe(100);
+        expect(attributes?.['total_tokens']).toBe(150);
+
+        // Check that fields that don't exactly match after normalization are NOT redacted
+        expect(attributes?.['authToken']).toBe('bearer-456');
+        expect(attributes?.['keyword']).toBe('search-term');
+        expect(attributes?.['keystone']).toBe('architecture');
+        expect(attributes?.['monkey']).toBe('business');
+
+        // Check that exact matches after normalization ARE redacted
+        expect(attributes?.['token']).toBe('[REDACTED]');
+        expect(attributes?.['apikey']).toBe('[REDACTED]');
+        expect(attributes?.['api_key']).toBe('[REDACTED]'); // api_key normalizes to apikey
+        expect(attributes?.['key']).toBe('[REDACTED]');
+
+        // Check other fields
+        expect(attributes?.['model']).toBe('gpt-4');
       });
 
       it('should allow custom sensitive fields', () => {
-        const processor = new SensitiveDataFilter(['customSecret', 'internalId']);
+        const processor = new SensitiveDataFilter({ sensitiveFields: ['customSecret', 'internalId'] });
 
         const mockSpan = {
           id: 'test-span-1',
@@ -252,11 +304,11 @@ describe('AI Tracing', () => {
         expect(filtered).not.toBeNull();
 
         const attributes = filtered!.attributes;
-        expect(attributes?.['[FILTERING_ERROR]']).toBe('Attributes were completely redacted due to filtering error');
+        expect(attributes?.['error']).toStrictEqual({ processor: 'sensitive-data-filter' });
 
         // Should NOT contain the original sensitive data
-        expect(attributes?.['sensitiveData']).toBeUndefined();
         expect(attributes?.['agentId']).toBeUndefined();
+        expect(attributes?.['sensitiveData']).toBeUndefined();
         expect(attributes?.['problematicObject']).toBeUndefined();
       });
     });
@@ -277,7 +329,7 @@ describe('AI Tracing', () => {
           attributes: {
             agentId: 'agent-123',
             instructions: 'Test agent',
-          } as any,
+          },
         });
 
         // Update span with non-standard field that should be filtered
@@ -289,12 +341,12 @@ describe('AI Tracing', () => {
         expect(testExporter.events).toHaveLength(3);
 
         // Check that the exported span has filtered attributes
-        const startSpan = testExporter.events[0].span;
+        const startSpan = testExporter.events[0].exportedSpan;
         expect(startSpan.attributes?.['agentId']).toBe('agent-123');
         expect(startSpan.attributes?.['instructions']).toBe('Test agent');
 
         // Check the updated span for the filtered field
-        const updatedSpan = testExporter.events[1].span; // span_updated event
+        const updatedSpan = testExporter.events[1].exportedSpan; // span_updated event
         expect(updatedSpan.attributes?.['apiKey']).toBe('[REDACTED]');
       });
     });

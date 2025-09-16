@@ -32,7 +32,7 @@
     "@google-cloud/pubsub": "^5.1.0",
     "@inngest/realtime": "^0.3.1",
     "@opentelemetry/api": "^1.9.0",
-    "inngest": "^3.40.2",
+    "inngest": "^3.40.3",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -49,7 +49,7 @@
     "tsup": "^8.4.0"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.15.3-0 <0.17.0-0"
+    "@mastra/core": ">=0.15.3-0 <0.18.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

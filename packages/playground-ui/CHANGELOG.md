@@ -1,5 +1,19 @@
 # @mastra/playground-ui
 
+## 6.1.4-alpha.0
+
+### Patch Changes
+
+- fix minor playground stuff for observability ([#7765](https://github.com/mastra-ai/mastra/pull/7765))
+
+- Handle zod intersections in dynamic form ([#7768](https://github.com/mastra-ai/mastra/pull/7768))
+
+- Playground ui -pass runtimeContext to client SDK get methods ([#7767](https://github.com/mastra-ai/mastra/pull/7767))
+
+- Updated dependencies [[`5802bf5`](https://github.com/mastra-ai/mastra/commit/5802bf57f6182e4b67c28d7d91abed349a8d14f3), [`5bda53a`](https://github.com/mastra-ai/mastra/commit/5bda53a9747bfa7d876d754fc92c83a06e503f62), [`f26a8fd`](https://github.com/mastra-ai/mastra/commit/f26a8fd99fcb0497a5d86c28324430d7f6a5fb83), [`f0ab020`](https://github.com/mastra-ai/mastra/commit/f0ab02034532a4afb71a1ef4fe243f9a8dffde84), [`cdc63c0`](https://github.com/mastra-ai/mastra/commit/cdc63c0d2725ee0191aa7f5287ccf83629019748), [`e6e37a0`](https://github.com/mastra-ai/mastra/commit/e6e37a05ec2b6de4f34ee77bb2dd08edfae4ae4a), [`1a1fbe6`](https://github.com/mastra-ai/mastra/commit/1a1fbe66efb7d94abc373ed0dd9676adb8122454), [`36f39c0`](https://github.com/mastra-ai/mastra/commit/36f39c00dc794952dc3c11aab91c2fa8bca74b11)]:
+  - @mastra/core@0.16.4-alpha.0
+  - @mastra/client-js@0.12.4-alpha.0
+
 ## 6.1.3
 
 ### Patch Changes
