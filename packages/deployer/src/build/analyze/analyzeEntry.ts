@@ -175,7 +175,7 @@ async function captureDependenciesToOptimize(
 
   await checkTransitiveDependencies(new Map());
 
-  // #tools is a generated dependency, we don't want our analyzer to handle it
+  // #tools and #telemetry-config are generated dependencies, we don't want our analyzer to handle it
   const dynamicImports = output.dynamicImports.filter(d => !DEPS_TO_IGNORE.includes(d));
   if (dynamicImports.length) {
     for (const dynamicImport of dynamicImports) {
