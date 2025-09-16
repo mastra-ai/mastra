@@ -174,7 +174,8 @@ const workflow = createWorkflow({
   steps: [step1, step2], // TypeScript knows these steps exist
 });
 
-const result = await await workflow.createRunAsync().start({ inputData: {} });
+const run = await workflow.createRunAsync();
+const result = await run.start({ inputData: {} });
 if (result.status === 'success') {
   console.log(result.result); // only exists if status is success
 } else if (result.status === 'failed') {
@@ -580,7 +581,8 @@ export type WorkflowResult<...> =
 ### Example Usage
 
 ```typescript
-const result = await await workflow.createRunAsync().start({
+const run = await workflow.createRunAsync();
+const result = await run.start({
   inputData: {
     /* ... */
   },
