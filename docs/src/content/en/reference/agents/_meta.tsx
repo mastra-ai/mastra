@@ -4,6 +4,7 @@ const meta = {
   agent: "Agent",
   generate: ".generate()",
   generateVNext: <Tag text="experimental">.generateVNext()</Tag>,
+  network: <Tag text="experimental">.network()</Tag>,
   listAgents: ".listAgents()",
   getWorkflows: ".getWorkflows()",
   getTools: ".getTools()",
