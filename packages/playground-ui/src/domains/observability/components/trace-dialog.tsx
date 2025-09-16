@@ -197,9 +197,11 @@ export function TraceDialog({
 
               <div className="grid grid-cols-[20rem_1fr] gap-[1rem] overflow-y-auto">
                 <div className="overflow-y-auto grid content-start p-[1.5rem] pl-0 gap-[2rem]">
-                  <SideDialogHeading as="h2">
-                    <ChevronsLeftRightEllipsisIcon /> {selectedSpan?.name}
-                  </SideDialogHeading>
+                  <div>
+                    <SideDialogHeading as="h2">
+                      <ChevronsLeftRightEllipsisIcon /> {selectedSpan?.name}
+                    </SideDialogHeading>
+                  </div>
                   {selectedSpan?.attributes?.usage && (
                     <TraceSpanUsage
                       spanUsage={selectedSpan.attributes.usage}
@@ -225,6 +227,7 @@ export function TraceDialog({
         onPrevious={thereIsPreviousSpan() ? toPreviousSpan : undefined}
         onViewToggle={() => setCombinedView(!combinedView)}
         spanInfo={selectedSpanInfo}
+        onScorerTriggered={onScorerTriggered}
       />
     </>
   );
