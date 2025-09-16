@@ -4,6 +4,7 @@ import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 
 import { handleError } from './error';
+import { createStep, createWorkflow } from '@mastra/core/workflows/evented';
 
 interface ObservabilityContext extends Context {
   traceId?: string;
@@ -125,12 +126,18 @@ export async function scoreTracesHandler({ mastra, body }: ScoreTracesContext) {
 
     const logger = mastra.getLogger();
 
+    // const processTrace = createStep({
+    // })
+
+    // createWorkflow({
+    //   id: 'process-trace-scoring',
+    // })
+
     // Fire-and-forget: start processing in background
     processTraceScoring({
       scorer,
       targets,
-      storage,
-      logger,
+      mastra,
     }).catch(error => {
       logger?.error(`Background trace scoring failed: ${error.message}`, error);
     });

@@ -1,63 +1,89 @@
-import type { IMastraLogger } from '../logger';
-import type { AISpanRecord, MastraStorage } from '../storage';
+import z from 'zod';
+import type { Mastra } from '../mastra';
+import type { AISpanRecord } from '../storage';
+import { createStep, createWorkflow } from '../workflows';
 import type { MastraScorer } from './base';
 import { saveScorePayloadSchema, type ScoringEntityType } from './types';
 
 export async function processTraceScoring({
   scorer,
   targets,
-  storage,
-  logger,
+  mastra,
 }: {
   scorer: MastraScorer;
   targets: { traceId: string; spanId?: string }[];
-  storage: MastraStorage;
-  logger?: IMastraLogger;
+  mastra: Mastra;
 }) {
-  for (const target of targets) {
-    try {
-      const trace = await storage.getAITrace(target.traceId);
+  const workflow = createScoringWorkflow({ scorer, mastra });
+  const run = await workflow.createRunAsync();
+  run.start({ inputData: targets }).then(result => console.log(JSON.stringify(result, null, 2)));
+}
+
+function getParentSpan(spans: AISpanRecord[]) {
+  return spans.find(span => span.parentSpanId === null);
+}
+
+const createScoringWorkflow = ({ scorer, mastra }: { scorer: MastraScorer; mastra: Mastra }) => {
+  const storage = mastra.getStorage();
+  const logger = mastra.getLogger();
+
+  if (!storage) {
+    throw new Error('Storage not found');
+  }
+
+  if (!logger) {
+    throw new Error('Logger not found');
+  }
+
+  const getTraceStep = createStep({
+    id: 'process-trace-scoring',
+    inputSchema: z.object({
+      traceId: z.string(),
+      spanId: z.string().optional(),
+    }),
+    outputSchema: z.any(),
+    execute: async ({ inputData }) => {
+      const trace = await storage.getAITrace(inputData.traceId);
 
       if (!trace) {
-        logger?.warn(`Trace ${target.traceId} not found for scoring`);
-        continue;
+        logger?.warn(`Trace ${inputData.traceId} not found for scoring`);
+        return;
       }
 
       let span;
-      if (target.spanId) {
-        span = trace.spans.find(span => span.spanId === target.spanId);
+      if (inputData.spanId) {
+        span = trace.spans.find(span => span.spanId === inputData.spanId);
       }
 
       const parentSpan = getParentSpan(trace.spans);
 
       if (!parentSpan) {
-        throw new Error(`No parent span found for span ${target.spanId}`);
+        throw new Error(`No parent span found for span ${inputData.spanId}`);
       }
 
       let entityType;
       let entityId;
       let runPayload;
       if (parentSpan?.spanType === 'agent_run') {
-        // const buildScoringInputForAgent
-        console.log(`Skipping agent run ${parentSpan?.spanId}`);
-        return;
+        runPayload = span
+          ? { input: span.input, output: span.output }
+          : { input: parentSpan.input, output: parentSpan.output };
+        entityType = 'AGENT';
+        entityId = parentSpan?.attributes?.agentId;
       } else if (parentSpan?.spanType === 'workflow_run') {
         runPayload = span
           ? { input: span.input, output: span.output }
           : { input: parentSpan.input, output: parentSpan.output };
         entityType = 'WORKFLOW';
         entityId = parentSpan?.attributes?.workflowId;
-        console.log('attributes', parentSpan?.attributes);
-        console.log(`entityId ${entityId}`);
       }
 
       if (!runPayload) {
         throw new Error(`No run payload found for span ${parentSpan?.spanId}`);
       }
 
-      // Run scorer
       const result = await scorer.run(runPayload);
-      const traceId = `${target.traceId}-${target.spanId ?? parentSpan?.spanId}`;
+      const traceId = `${inputData.traceId}-${inputData.spanId ?? parentSpan?.spanId}`;
 
       const ValidatedSaveScorePayload = saveScorePayloadSchema.parse({
         scorer: {
@@ -89,49 +115,22 @@ export async function processTraceScoring({
           updates: { links: parentSpan.links },
         });
       }
-    } catch (error) {
-      console.error(`Failed to score trace ${target.traceId}:`, error);
-    }
-  }
-}
+    },
+  });
 
-function getParentSpan(spans: AISpanRecord[]) {
-  return spans.find(span => span.parentSpanId === null);
-}
+  const workflow = createWorkflow({
+    id: 'process-trace-scoring',
+    inputSchema: z.array(
+      z.object({
+        traceId: z.string(),
+        spanId: z.string().optional(),
+      }),
+    ),
+    outputSchema: z.any(),
+    steps: [getTraceStep],
+  });
 
-// function buildScoringPayloadForAgent(spans: AISpanRecord[]): { input: ScorerRunInputForAgent, output: ScorerRunOutputForAgent } {
-//     const parentSpan = getParentSpan(spans);
-//     const llmGenerationSpan = spans.find((span) => span.spanType === 'llm_generation');
-//     const inputMessages = parentSpan?.input?.messages || [];
-//     const outputMessages = [parentSpan?.output || {}];
+  workflow.foreach(getTraceStep, { concurrency: 1 }).commit();
 
-//     const systemMessages = []
-//     const rememberedMessages = []
-//     let workingMemory
-
-//     for (let i = 0; i < (llmGenerationSpan?.input?.messages || []).length; i++) {
-//         const message = (llmGenerationSpan?.input?.messages || [])[i];
-//         if (message.role === 'system' && i === 0) {
-//             systemMessages.push(message);
-//         } else if (message.role === 'system') {
-//             workingMemory = message;
-//         } else if (message.role === 'user') {
-//             rememberedMessages.push(message);
-//         }
-//     }
-
-//     const output = outputMessages.map((message) => ({
-//         role: message.role,
-//         content: message.content,
-//     }));
-
-//     return {
-//         input: {
-//             inputMessages,
-//             rememberedMessages,
-//             systemMessages,
-//             taggedSystemMessages: { systemMessages: [workingMemory] },
-//         },
-//         output,
-//     };
-// }
+  return workflow;
+};
