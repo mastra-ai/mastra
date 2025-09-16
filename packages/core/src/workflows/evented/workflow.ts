@@ -455,10 +455,20 @@ export class EventedRun<
       { resume: { runtimeContextObj: snapshot?.runtimeContext, runtimeContext: params.runtimeContext } },
       { depth: null },
     );
+    // Start with the snapshot's runtime context (old values)
     const runtimeContextObj = snapshot?.runtimeContext ?? {};
-    const runtimeContext = params.runtimeContext ?? new RuntimeContext();
+    const runtimeContext = new RuntimeContext();
+
+    // First, set values from the snapshot
     for (const [key, value] of Object.entries(runtimeContextObj)) {
       runtimeContext.set(key, value);
+    }
+
+    // Then, override with any values from the passed runtime context (new values take precedence)
+    if (params.runtimeContext) {
+      for (const [key, value] of params.runtimeContext.entries()) {
+        runtimeContext.set(key, value);
+      }
     }
 
     const executionResultPromise = this.executionEngine
