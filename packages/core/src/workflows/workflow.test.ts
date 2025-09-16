@@ -2430,9 +2430,7 @@ describe('Workflow', () => {
 
       workflow.then(step1).commit();
 
-      expect(() => workflow.createRun()).toThrowError(
-        'createRun() has been deprecated and will be removed on September 16th, 2025',
-      );
+      expect(() => workflow.createRun()).toThrowError('createRun() has been deprecated');
     });
 
     it('should execute a single step workflow successfully', async () => {

@@ -191,7 +191,7 @@ export class Workflow extends BaseResource {
   }
 
   /**
-   * @deprecated Use createRunAsync() instead. This method will be removed on September 16th, 2025.
+   * @deprecated Use createRunAsync() instead.
    * @throws {Error} Always throws an error directing users to use createRunAsync()
    */
   async createRun(params?: { runId?: string }): Promise<{
@@ -221,7 +221,7 @@ export class Workflow extends BaseResource {
     }) => Promise<WorkflowRunResult>;
   }> {
     throw new Error(
-      'createRun() has been deprecated and will be removed on September 16th, 2025. ' +
+      'createRun() has been deprecated. ' +
         'Please use createRunAsync() instead.\n\n' +
         'Migration guide:\n' +
         '  Before: const run = workflow.createRun();\n' +
