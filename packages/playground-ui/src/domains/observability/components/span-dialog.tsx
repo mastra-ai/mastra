@@ -14,8 +14,10 @@ import { TraceSpanUsage } from './trace-span-usage';
 import { SpanDetails } from './span-details';
 import { AISpanRecord } from '@mastra/core';
 import { useLinkComponent } from '@/lib/framework';
+import { ScorersDropdown } from '@/domains/scores/components/scorers-dropdown';
 
 type SpanDialogProps = {
+  trace: AISpanRecord;
   span?: AISpanRecord;
   spanInfo?: KeyValueListItemData[];
   isOpen: boolean;
@@ -23,9 +25,11 @@ type SpanDialogProps = {
   onNext?: () => void;
   onPrevious?: () => void;
   onViewToggle?: () => void;
+  onScorerTriggered: (scorerName: string, traceId: string, spanId?: string) => void;
 };
 
 export function SpanDialog({
+  trace,
   span,
   isOpen,
   onClose,
@@ -33,6 +37,7 @@ export function SpanDialog({
   onPrevious,
   onViewToggle,
   spanInfo = [],
+  onScorerTriggered,
 }: SpanDialogProps) {
   const { Link } = useLinkComponent();
 
@@ -64,14 +69,22 @@ export function SpanDialog({
       </div>
 
       <div className="p-[1.5rem] px-[2.5rem] overflow-y-auto grid gap-[1.5rem] content-start">
-        <SideDialogHeader className="flex gap-[1rem] items-baseline pr-[2.5rem]">
-          <SideDialogHeading>
-            <ChevronsLeftRightEllipsisIcon /> {span?.name}
-          </SideDialogHeading>
-          <TextAndIcon>
-            <HashIcon /> {span?.spanId}
-          </TextAndIcon>
-        </SideDialogHeader>
+        <div>
+          <SideDialogHeader className="flex gap-[1rem] items-baseline pr-[2.5rem]">
+            <SideDialogHeading>
+              <ChevronsLeftRightEllipsisIcon /> {span?.name}
+            </SideDialogHeading>
+            <TextAndIcon>
+              <HashIcon /> {span?.spanId}
+            </TextAndIcon>
+          </SideDialogHeader>
+
+          {span?.traceId && span?.spanId && (
+            <div>
+              <ScorersDropdown trace={trace} spanId={span?.spanId} onScorerTriggered={onScorerTriggered} />
+            </div>
+          )}
+        </div>
 
         {span?.attributes?.usage && <TraceSpanUsage spanUsage={span.attributes.usage} className="mt-[1.5rem]" />}
         <KeyValueList data={spanInfo} LinkComponent={Link} className="mt-[1.5rem]" />

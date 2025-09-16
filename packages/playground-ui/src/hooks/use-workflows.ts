@@ -23,12 +23,13 @@ export type ExtendedWorkflowWatchResult = WorkflowWatchResult & {
   } | null;
 };
 
-export const useWorkflow = (workflowId: string) => {
+export const useWorkflow = (workflowId?: string) => {
   const client = useMastraClient();
   const { runtimeContext } = usePlaygroundStore();
   return useQuery({
     queryKey: ['workflow', workflowId],
-    queryFn: () => client.getWorkflow(workflowId).details(runtimeContext),
+    queryFn: () => (workflowId ? client.getWorkflow(workflowId).details(runtimeContext) : null),
+    enabled: Boolean(workflowId),
     retry: false,
     refetchOnWindowFocus: false,
   });

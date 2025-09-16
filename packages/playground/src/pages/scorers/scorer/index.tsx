@@ -1,4 +1,13 @@
-import { AgentIcon, Breadcrumb, Crumb, Header, MainContentLayout, WorkflowIcon } from '@mastra/playground-ui';
+import {
+  AgentIcon,
+  Breadcrumb,
+  Crumb,
+  Header,
+  KeyValueList,
+  MainContentLayout,
+  useLinkComponent,
+  WorkflowIcon,
+} from '@mastra/playground-ui';
 import { useParams, Link } from 'react-router';
 import { useScorer, useScoresByScorerId } from '@mastra/playground-ui';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -18,7 +27,11 @@ import { useWorkflows } from '@/hooks/use-workflows';
 import { ClientScoreRowData } from '@mastra/client-js';
 import { CodeMirrorBlock } from '@/components/ui/code-mirror-block';
 
-export default function Scorer() {
+export interface ScorerProps {
+  computeTraceLink: (traceId: string) => string;
+}
+
+export default function Scorer({ computeTraceLink }: ScorerProps) {
   const { scorerId } = useParams()! as { scorerId: string };
   const { scorer, isLoading: scorerLoading } = useScorer(scorerId!);
   const { data: agents, isLoading: agentsLoading } = useAgents();
@@ -51,8 +64,8 @@ export default function Scorer() {
 
   const [scoresPage, setScoresPage] = useState<number>(0);
   const [filteredByEntity, setFilteredByEntity] = useState<string>('');
-
-  const { scores: scoresData, isLoading: scoresLoading } = useScoresByScorerId({
+  const { Link } = useLinkComponent();
+  const { data: scoresData, isLoading: scoresLoading } = useScoresByScorerId({
     scorerId,
     page: scoresPage,
     entityId: filteredByEntity !== '' ? scorerEntities?.[+filteredByEntity]?.name : undefined,
@@ -165,6 +178,7 @@ export default function Scorer() {
             onClose={() => setDetailsIsOpened(false)}
             onNext={toNextScore(selectedScore)}
             onPrevious={toPreviousScore(selectedScore)}
+            computeTraceLink={computeTraceLink}
           />
         </>
       ) : null}
@@ -372,7 +386,7 @@ function ScoreItem({
   const isTodayDate = isToday(new Date(score.createdAt));
   const dateStr = format(new Date(score.createdAt), 'MMM d yyyy');
   const timeStr = format(new Date(score.createdAt), 'h:mm:ss bb');
-  const inputPrev = score?.input?.inputMessages?.[0]?.content || '';
+  const inputPrev = JSON.stringify(score?.input || {}, null, 2);
   const scorePrev = score?.score ? Math.round(score?.score * 100) / 100 : '0';
   const entityIcon = score?.entityType === 'WORKFLOW' ? <WorkflowIcon /> : <AgentIcon />;
 
@@ -407,18 +421,19 @@ function ScoreDetails({
   onClose,
   onPrevious,
   onNext,
+  computeTraceLink,
 }: {
   isOpen: boolean;
   score: ScoreRowData;
   onClose?: () => void;
   onNext?: (() => void) | null;
   onPrevious?: (() => void) | null;
+  computeTraceLink: (traceId: string) => string;
 }) {
+  const { Link } = useLinkComponent();
   if (!score) {
     return null;
   }
-
-  console.log({ score });
 
   const handleOnNext = () => {
     if (onNext) {
@@ -471,6 +486,21 @@ function ScoreDetails({
               </Dialog.Close>
             </div>
           </div>
+
+          {score?.traceId && (
+            <div className="px-[1rem] py-[1rem]">
+              <KeyValueList
+                data={[
+                  {
+                    key: 'Trace ID',
+                    label: 'Trace ID:',
+                    value: <Link to={computeTraceLink(score.traceId)}>#{score.traceId}</Link>,
+                  },
+                ]}
+                LinkComponent={Link}
+              />
+            </div>
+          )}
 
           <div className="grid gap-[2rem] px-[1rem] py-[2rem] pb-[4rem] ">
             <section className="border border-border1 rounded-lg">

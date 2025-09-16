@@ -77,7 +77,10 @@ function App() {
                   }
                 >
                   <Route path="/scorers" element={<Scorers />} />
-                  <Route path="/scorers/:scorerId" element={<Scorer />} />
+                  <Route
+                    path="/scorers/:scorerId"
+                    element={<Scorer computeTraceLink={traceId => `/observability?traceId=${traceId}`} />}
+                  />
                 </Route>
                 <Route
                   element={
