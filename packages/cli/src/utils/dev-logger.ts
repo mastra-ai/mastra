@@ -6,6 +6,11 @@ interface DevLoggerOptions {
   colors?: boolean;
 }
 
+interface HTTPSOptions {
+  key: Buffer<ArrayBufferLike>;
+  cert: Buffer<ArrayBufferLike>;
+}
+
 export class DevLogger {
   private options: DevLoggerOptions;
 
@@ -53,13 +58,18 @@ export class DevLogger {
     console.log(`${prefix} ${pc.blue('Starting Mastra dev server...')}`);
   }
 
-  ready(host: string, port: number, startTime?: number): void {
+  ready(host: string, port: number, startTime?: number, https?: HTTPSOptions): void {
+    let protocol = 'http';
+    if (https && https.key && https.cert) {
+      protocol = 'https';
+    }
+
     console.log('');
     const timing = startTime ? `${Date.now() - startTime} ms` : 'XXX ms';
     console.log(pc.inverse(pc.green(' mastra ')) + ` ${pc.green(version)} ${pc.gray('ready in')} ${timing}`);
     console.log('');
-    console.log(`${pc.dim('│')} ${pc.bold('Playground:')}   ${pc.cyan(`http://${host}:${port}/`)}`);
-    console.log(`${pc.dim('│')} ${pc.bold('API:')}     ${`http://${host}:${port}/api`}`);
+    console.log(`${pc.dim('│')} ${pc.bold('Playground:')} ${pc.cyan(`${protocol}://${host}:${port}/`)}`);
+    console.log(`${pc.dim('│')} ${pc.bold('API:')}        ${`${protocol}://${host}:${port}/api`}`);
     console.log('');
   }
 
