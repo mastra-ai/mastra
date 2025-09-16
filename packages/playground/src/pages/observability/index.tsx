@@ -23,7 +23,7 @@ import { useSearchParams } from 'react-router';
 const listColumns = [
   { name: 'shortId', label: 'ID', size: '6rem' },
   { name: 'date', label: 'Date', size: '4.5rem' },
-  { name: 'time', label: 'Time', size: '5rem' },
+  { name: 'time', label: 'Time', size: '6.5rem' },
   { name: 'name', label: 'Name', size: '1fr' },
   { name: 'entityId', label: 'Entity', size: '10rem' },
   { name: 'status', label: 'Status', size: '3rem' },
@@ -136,7 +136,7 @@ export default function Observability() {
       id: trace.traceId,
       shortId: getShortId(trace?.traceId) || 'n/a',
       date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
-      time: format(createdAtDate, 'HH:mm:ss'),
+      time: format(createdAtDate, 'h:mm:ss aaa'),
       name: trace?.name,
       entityId: trace?.attributes?.agentId || trace?.attributes?.workflowId,
       status: <EntryListStatusCell status={trace?.attributes?.status} key={`${trace?.traceId}-status`} />,
