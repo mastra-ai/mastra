@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Only log stream deprecation warning once
+Only log stream/generate deprecation warning once
