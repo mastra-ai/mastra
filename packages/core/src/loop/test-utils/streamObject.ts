@@ -516,21 +516,17 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             messageList: new MessageList(),
           });
 
-          const expectedOutput = `
-          {
-            "cachedInputTokens": undefined,
-            "inputTokens": 3,
-            "outputTokens": 10,
-            "reasoningTokens": undefined,
-            "totalTokens": 13,
-          }
-        `;
-
           // consume stream (runs in parallel)
           // void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
           // expect(await result.usage).toMatchInlineSnapshot(expectedOutput);
           await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-          expect(await result.usage).toMatchInlineSnapshot(expectedOutput);
+          expect(await result.usage).toMatchInlineSnapshot(`
+            {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            }
+          `);
         });
       });
 
@@ -999,10 +995,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "timestamp": 1970-01-01T00:00:00.000Z,
                   },
                   "usage": {
-                    "cachedInputTokens": undefined,
                     "inputTokens": 3,
                     "outputTokens": 10,
-                    "reasoningTokens": undefined,
                     "totalTokens": 13,
                   },
                   "warnings": [],
@@ -1019,10 +1013,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "totalTokens": 13,
               },
               "usage": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "warnings": [],
@@ -1168,10 +1160,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "timestamp": 1970-01-01T00:00:00.000Z,
                   },
                   "usage": {
-                    "cachedInputTokens": undefined,
                     "inputTokens": 3,
                     "outputTokens": 10,
-                    "reasoningTokens": undefined,
                     "totalTokens": 13,
                   },
                   "warnings": [],
@@ -1188,10 +1178,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "totalTokens": 13,
               },
               "usage": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "warnings": [],
