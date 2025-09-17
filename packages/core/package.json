@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.17.0-alpha.3",
+  "version": "0.17.0-alpha.5",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -166,7 +166,7 @@
   "sideEffects": false,
   "scripts": {
     "check": "tsc --noEmit",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.build.json",
     "lint": "eslint .",
     "pre-build": "tsup --silent --config tsup.config.ts --no-dts",
     "build": "node ./tools/commonjs-tsc-fixer.js",
@@ -200,7 +200,7 @@
     "ai-v5": "npm:ai@5.0.44",
     "date-fns": "^3.6.0",
     "dotenv": "^16.6.1",
-    "hono": "^4.9.6",
+    "hono": "^4.9.7",
     "hono-openapi": "^0.4.8",
     "js-tiktoken": "^1.0.20",
     "json-schema": "^0.4.0",

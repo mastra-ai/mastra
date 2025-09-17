@@ -20,7 +20,6 @@ import LegacyWorkflowTracesPage from './pages/workflows/workflow/legacy/traces';
 import Networks from './pages/networks';
 import { NetworkLayout } from './domains/networks/network-layout';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
-import Network from './pages/networks/network';
 import { PostHogProvider } from './lib/analytics';
 import RuntimeContext from './pages/runtime-context';
 import MCPs from './pages/mcps';
@@ -103,7 +102,7 @@ function App() {
                   <Route
                     path="/networks/v-next/:networkId"
                     element={
-                      <NetworkLayout isVNext>
+                      <NetworkLayout>
                         <Outlet />
                       </NetworkLayout>
                     }
@@ -112,16 +111,6 @@ function App() {
                     <Route path="chat/:threadId" element={<VNextNetwork />} />
                   </Route>
                   <Route path="/networks/:networkId" element={<NavigateTo to="/networks/:networkId/chat" />} />
-                  <Route
-                    path="/networks/:networkId"
-                    element={
-                      <NetworkLayout>
-                        <Outlet />
-                      </NetworkLayout>
-                    }
-                  >
-                    <Route path="chat" element={<Network />} />
-                  </Route>
                 </Route>
 
                 <Route
