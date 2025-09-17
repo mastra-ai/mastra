@@ -215,6 +215,10 @@ export async function observeStreamWorkflowHandler(c: Context) {
     const workflowId = c.req.param('workflowId');
     const runId = c.req.query('runId');
 
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to observe workflow stream' });
+    }
+
     c.header('Transfer-Encoding', 'chunked');
 
     return stream(
