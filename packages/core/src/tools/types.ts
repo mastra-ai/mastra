@@ -12,13 +12,18 @@ import type { ToolStream } from './stream';
 export type VercelTool = Tool;
 export type VercelToolV5 = ToolV5;
 
+export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions; /* & {
+  suspend?: (suspendPayload: any) => Promise<any>;
+  resumeData?: any;
+}; */
+
 // Define CoreTool as a discriminated union to match the AI SDK's Tool type
 export type CoreTool = {
   id?: string;
   description?: string;
   parameters: ZodSchema | JSONSchema7Type | Schema;
   outputSchema?: ZodSchema | JSONSchema7Type | Schema;
-  execute?: (params: any, options: ToolExecutionOptions) => Promise<any>;
+  execute?: (params: any, options: ToolInvocationOptions) => Promise<any>;
 } & (
   | {
       type?: 'function' | undefined;
@@ -37,7 +42,7 @@ export type InternalCoreTool = {
   description?: string;
   parameters: Schema;
   outputSchema?: Schema;
-  execute?: (params: any, options: ToolExecutionOptions) => Promise<any>;
+  execute?: (params: any, options: ToolInvocationOptions) => Promise<any>;
 } & (
   | {
       type?: 'function' | undefined;
@@ -62,11 +67,11 @@ export interface ToolAction<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
   TContext extends ToolExecutionContext<TSchemaIn> = ToolExecutionContext<TSchemaIn>,
-> extends IAction<string, TSchemaIn, TSchemaOut, TContext, ToolExecutionOptions> {
+> extends IAction<string, TSchemaIn, TSchemaOut, TContext, ToolInvocationOptions> {
   description: string;
   execute?: (
     context: TContext,
-    options?: ToolExecutionOptions & { suspend?: (suspendPayload: any) => Promise<any>; resumeData?: any },
+    options?: ToolInvocationOptions,
   ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
   mastra?: Mastra;
   requireApproval?: boolean;
