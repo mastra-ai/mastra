@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "6.1.4-alpha.2",
+  "version": "6.2.0-alpha.3",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -105,7 +105,7 @@
     "swr": "^2.3.6",
     "tailwindcss-animate": "^1.0.7",
     "unified": "^11.0.5",
-    "use-debounce": "^10.0.5",
+    "use-debounce": "^10.0.6",
     "zod": "^4.1.5",
     "zustand": "^5.0.8"
   },

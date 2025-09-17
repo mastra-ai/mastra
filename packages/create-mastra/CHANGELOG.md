@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.13.0-alpha.4
+
+### Patch Changes
+
+- clean up console logs in monorepo ([#7926](https://github.com/mastra-ai/mastra/pull/7926))
+
 ## 0.13.0-alpha.3
 
 ## 0.13.0-alpha.2

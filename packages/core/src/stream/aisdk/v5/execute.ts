@@ -99,7 +99,7 @@ export function execute<OUTPUT extends OutputSchema | undefined = undefined>({
       } catch (error) {
         console.error('Error creating stream', error);
         if (isAbortError(error) && options?.abortSignal?.aborted) {
-          console.log('Abort error', error);
+          console.error('Abort error', error);
         }
 
         if (shouldThrowError) {

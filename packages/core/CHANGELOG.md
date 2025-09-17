@@ -1,5 +1,34 @@
 # @mastra/core
 
+## 0.17.0-alpha.6
+
+### Minor Changes
+
+- Remove original AgentNetwork ([#7919](https://github.com/mastra-ai/mastra/pull/7919))
+
+### Patch Changes
+
+- dependencies updates: ([#7861](https://github.com/mastra-ai/mastra/pull/7861))
+  - Updated dependency [`hono@^4.9.7` ↗︎](https://www.npmjs.com/package/hono/v/4.9.7) (from `^4.9.6`, in `dependencies`)
+
+- clean up console logs in monorepo ([#7926](https://github.com/mastra-ai/mastra/pull/7926))
+
+- Register server cache in Mastra ([#7946](https://github.com/mastra-ai/mastra/pull/7946))
+
+- Resumable streams ([#7949](https://github.com/mastra-ai/mastra/pull/7949))
+
+- move ToolExecutionOptions and ToolCallOptions to a union type (ToolInvocationOptions) for use in createTool, Tool, and ToolAction ([#7914](https://github.com/mastra-ai/mastra/pull/7914))
+
+- fix scorers table link full row ([#7915](https://github.com/mastra-ai/mastra/pull/7915))
+
+- adjust the way we display scorers in agent metadata ([#7910](https://github.com/mastra-ai/mastra/pull/7910))
+
+- fix: support destructuring of streamVNext return values ([#7920](https://github.com/mastra-ai/mastra/pull/7920))
+
+- Remove extraneous console.log ([#7916](https://github.com/mastra-ai/mastra/pull/7916))
+
+- Fix switch in prompt-injection ([#7951](https://github.com/mastra-ai/mastra/pull/7951))
+
 ## 0.17.0-alpha.5
 
 ### Patch Changes
