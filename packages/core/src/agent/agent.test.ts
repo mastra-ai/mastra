@@ -667,11 +667,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           console.log('resume stream chunk', chunk);
         }
 
-        response = await resumeStream.response;
         console.log('resume status', resumeStream.status);
-        console.log('resume response', JSON.stringify(response, null, 2));
+        console.log('resume tool results', await resumeStream.toolResults);
 
-        toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'findUserTool').payload;
+        toolCall = (await resumeStream.toolResults).find(
+          (result: any) => result.payload.toolName === 'findUserTool',
+        ).payload;
       }
 
       const name = toolCall?.result?.name;
