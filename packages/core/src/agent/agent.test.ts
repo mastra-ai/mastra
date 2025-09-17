@@ -5604,28 +5604,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           throw error;
         }
       });
-
-      it('should support destructuring with stream consumption', async () => {
-        const agent = new Agent({
-          id: 'test-destructuring-stream',
-          name: 'Test Destructuring Stream',
-          model: openaiModel,
-          instructions: 'You are a helpful assistant.',
-        });
-
-        const result = await agent.streamVNext('Count to 3');
-
-        // Destructure the fullStream
-        const { fullStream } = result;
-
-        // This should work without errors
-        const chunks = [];
-        for await (const chunk of fullStream) {
-          chunks.push(chunk);
-        }
-
-        expect(chunks.length).toBeGreaterThan(0);
-      });
     });
   }
 

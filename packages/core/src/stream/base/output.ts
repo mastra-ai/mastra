@@ -628,6 +628,32 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
         output: options?.output,
       },
     });
+
+    // Bind methods to ensure they work when destructured
+    this.consumeStream = this.consumeStream.bind(this);
+    this.getFullOutput = this.getFullOutput.bind(this);
+    this.teeStream = this.teeStream.bind(this);
+
+    // Convert getters to bound properties to support destructuring
+    // We need to do this because getters lose their 'this' context when destructured
+    const bindGetter = (name: string, getter: () => any) => {
+      Object.defineProperty(this, name, {
+        get: getter.bind(this),
+        enumerable: true,
+        configurable: true,
+      });
+    };
+
+    // Get the prototype to access the getters
+    const proto = Object.getPrototypeOf(this);
+    const descriptors = Object.getOwnPropertyDescriptors(proto);
+
+    // Bind all getters from the prototype
+    for (const [key, descriptor] of Object.entries(descriptors)) {
+      if (descriptor.get && key !== 'constructor') {
+        bindGetter(key, descriptor.get);
+      }
+    }
   }
 
   #getDelayedPromise<T>(promise: DelayedPromise<T>): Promise<T> {
