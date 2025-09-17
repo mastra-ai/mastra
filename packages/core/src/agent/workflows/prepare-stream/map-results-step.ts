@@ -6,12 +6,12 @@ import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { RuntimeContext } from '../../../runtime-context';
+import { ChunkFrom } from '../../../stream';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { MessageList } from '../../message-list';
 import type { SaveQueueManager } from '../../save-queue';
 import type { AgentCapabilities } from './types';
-import { ChunkFrom } from '../../../stream';
 
 interface MapResultsStepOptions<
   OUTPUT extends OutputSchema | undefined = undefined,
@@ -26,7 +26,7 @@ interface MapResultsStepOptions<
   memoryConfig?: MemoryConfig;
   saveQueueManager: SaveQueueManager;
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
-  instructions?: string;
+  instructions: string;
 }
 
 export function createMapResultsStep<
@@ -200,7 +200,7 @@ export function createMapResultsStep<
             await capabilities.executeOnFinish({
               result: payload,
               outputText,
-              instructions: instructions || capabilities.agentInstructions,
+              instructions,
               thread: result.thread,
               threadId: result.threadId,
               readOnlyMemory: options.memory?.readOnly,

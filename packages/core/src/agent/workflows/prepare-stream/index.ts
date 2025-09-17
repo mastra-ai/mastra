@@ -27,7 +27,7 @@ interface CreatePrepareStreamWorkflowOptions<
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
   methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
   format?: FORMAT;
-  instructions?: string;
+  instructions: string;
   memoryConfig?: MemoryConfig;
   memory?: MastraMemory;
   saveQueueManager: SaveQueueManager;
@@ -107,7 +107,7 @@ export function createPrepareStreamWorkflow<
     id: 'execution-workflow',
     inputSchema: z.any(),
     outputSchema: z.any(),
-    steps: [prepareToolsStep, prepareMemoryStep],
+    steps: [prepareToolsStep, prepareMemoryStep, streamStep],
     options: {
       tracingPolicy: {
         internal: InternalSpans.WORKFLOW,

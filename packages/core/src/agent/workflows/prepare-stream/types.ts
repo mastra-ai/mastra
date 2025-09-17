@@ -4,6 +4,7 @@ import type { Mastra } from '../../../mastra';
 import type { OutputProcessor } from '../../../processors';
 import type { DynamicArgument } from '../../../types';
 import type { Agent } from '../../agent';
+import type { AgentExecuteOnFinishOptions } from '../../types';
 
 export type AgentCapabilities = {
   agentName: string;
@@ -17,7 +18,7 @@ export type AgentCapabilities = {
   convertTools: Agent['convertTools'];
   getMemoryMessages: Agent['getMemoryMessages'];
   runInputProcessors: Agent['__runInputProcessors'];
-  executeOnFinish: (params: any) => Promise<void>;
+  executeOnFinish: (args: AgentExecuteOnFinishOptions) => Promise<void>;
   outputProcessors?: DynamicArgument<OutputProcessor[]>;
   llm: MastraLLMVNext;
 };

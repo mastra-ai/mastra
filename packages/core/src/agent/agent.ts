@@ -74,7 +74,9 @@ import type {
   AgentMemoryOption,
   AgentModelManagerConfig,
   AgentCreateOptions,
+  AgentExecuteOnFinishOptions,
 } from './types';
+import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 
@@ -3010,9 +3012,6 @@ export class Agent<
       this.logger.debug(`[Agents:${this.name}] - Starting generation`, { runId });
     }
 
-    // Import the workflow creator function
-    const { createPrepareStreamWorkflow } = await import('./workflows/prepare-stream');
-
     // Create a capabilities object with bound methods
     const capabilities = {
       agentName: this.name,
@@ -3075,26 +3074,7 @@ export class Agent<
     structuredOutput = false,
     saveQueueManager,
     overrideScorers,
-  }: {
-    instructions: string;
-    runId: string;
-    result: Record<string, any>;
-    thread: StorageThreadType | null | undefined;
-    readOnlyMemory?: boolean;
-    threadId?: string;
-    resourceId?: string;
-    runtimeContext: RuntimeContext;
-    agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
-    memoryConfig: MemoryConfig | undefined;
-    outputText: string;
-    messageList: MessageList;
-    threadExists: boolean;
-    structuredOutput?: boolean;
-    saveQueueManager: SaveQueueManager;
-    overrideScorers?:
-      | MastraScorers
-      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
-  }) {
+  }: AgentExecuteOnFinishOptions) {
     const resToLog = {
       text: result?.text,
       object: result?.object,
