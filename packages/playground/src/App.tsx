@@ -20,7 +20,6 @@ import LegacyWorkflowTracesPage from './pages/workflows/workflow/legacy/traces';
 import Networks from './pages/networks';
 import { NetworkLayout } from './domains/networks/network-layout';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
-import Network from './pages/networks/network';
 import { PostHogProvider } from './lib/analytics';
 import RuntimeContext from './pages/runtime-context';
 import MCPs from './pages/mcps';

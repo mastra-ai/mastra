@@ -2,7 +2,6 @@ import { Header, HeaderTitle, MainContentLayout, NetworkTable, MainContentConten
 import { useNetworks, useVNextNetworks } from '@/hooks/use-networks';
 
 function Networks() {
-  const { networks, isLoading } = useNetworks();
   const { vNextNetworks, isLoading: isVNextLoading } = useVNextNetworks();
 
   const isEmpty = [...networks, ...vNextNetworks].length === 0;
@@ -15,7 +14,6 @@ function Networks() {
 
       <MainContentContent isCentered={isEmpty && !isLoading}>
         <NetworkTable
-          legacyNetworks={networks}
           networks={vNextNetworks}
           isLoading={isLoading || isVNextLoading}
           computeLink={(networkId: string, isVNext: boolean) => {
