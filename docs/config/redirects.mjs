@@ -823,4 +823,9 @@ export const redirectList = [
     destination: "/:locale/reference/streaming/workflows/streamVNext",
     permanent: true,
   },
+  {
+    source: "/:locale/reference/networks/agent-network",
+    destination: "/:locale/reference/agents/network",
+    permanent: true,
+  },
 ];
