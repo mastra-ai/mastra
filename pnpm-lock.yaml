@@ -1095,6 +1095,9 @@ importers:
       '@ai-sdk/ui-utils':
         specifier: ^1.2.11
         version: 1.2.11(zod@3.25.76)
+      '@isaacs/ttlcache':
+        specifier: ^1.4.1
+        version: 1.4.1
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../schema-compat
@@ -1153,7 +1156,7 @@ importers:
         specifier: ^16.6.1
         version: 16.6.1
       hono:
-        specifier: ^4.9.6
+        specifier: ^4.9.7
         version: 4.9.7
       hono-openapi:
         specifier: ^0.4.8
@@ -1389,7 +1392,7 @@ importers:
         specifier: ^11.3.1
         version: 11.3.1
       hono:
-        specifier: ^4.9.6
+        specifier: ^4.9.7
         version: 4.9.7
       local-pkg:
         specifier: ^1.1.2
@@ -1414,8 +1417,8 @@ importers:
         version: 1.5.1(typescript@5.8.3)
     devDependencies:
       '@hono/node-server':
-        specifier: ^1.19.2
-        version: 1.19.2(hono@4.9.7)
+        specifier: ^1.19.3
+        version: 1.19.3(hono@4.9.7)
       '@hono/swagger-ui':
         specifier: ^0.5.2
         version: 0.5.2(hono@4.9.7)
@@ -1646,8 +1649,8 @@ importers:
         specifier: ^1.3.24
         version: 1.3.24(zod@3.25.76)
       '@hono/node-server':
-        specifier: ^1.19.2
-        version: 1.19.2(hono@4.9.7)
+        specifier: ^1.19.3
+        version: 1.19.3(hono@4.9.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1673,7 +1676,7 @@ importers:
         specifier: ^9.30.1
         version: 9.34.0(jiti@2.4.2)
       hono:
-        specifier: ^4.9.6
+        specifier: ^4.9.7
         version: 4.9.7
       hono-mcp-server-sse-transport:
         specifier: 0.0.7
@@ -1731,8 +1734,8 @@ importers:
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@hono/node-server':
-        specifier: ^1.19.2
-        version: 1.19.2(hono@4.9.7)
+        specifier: ^1.19.3
+        version: 1.19.3(hono@4.9.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1755,7 +1758,7 @@ importers:
         specifier: ^9.30.1
         version: 9.34.0(jiti@2.4.2)
       hono:
-        specifier: ^4.9.6
+        specifier: ^4.9.7
         version: 4.9.7
       tsup:
         specifier: ^8.5.0
@@ -1786,8 +1789,8 @@ importers:
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@hono/node-server':
-        specifier: ^1.19.2
-        version: 1.19.2(hono@4.9.7)
+        specifier: ^1.19.3
+        version: 1.19.3(hono@4.9.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1813,7 +1816,7 @@ importers:
         specifier: ^9.30.1
         version: 9.34.0(jiti@2.4.2)
       hono:
-        specifier: ^4.9.6
+        specifier: ^4.9.7
         version: 4.9.7
       tsup:
         specifier: ^8.5.0
@@ -3903,8 +3906,8 @@ importers:
         specifier: ^1.3.24
         version: 1.3.24(zod@3.25.76)
       '@hono/node-server':
-        specifier: ^1.19.2
-        version: 1.19.2(hono@4.9.7)
+        specifier: ^1.19.3
+        version: 1.19.3(hono@4.9.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -3939,7 +3942,7 @@ importers:
         specifier: 7.1.0
         version: 7.1.0
       hono:
-        specifier: ^4.9.6
+        specifier: ^4.9.7
         version: 4.9.7
       inngest-cli:
         specifier: 1.8.2
@@ -6302,8 +6305,8 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
-  '@hono/node-server@1.19.2':
-    resolution: {integrity: sha512-lndWsd9De/btN998Aiv6gkeMVV2h9Cc0AR0qwFTmxx/YFh/PbrjgoxTpHaNaRn6F4GAkPiVJwI0W0gQF4Wn8EA==}
+  '@hono/node-server@1.19.3':
+    resolution: {integrity: sha512-Fjyxfux0rMPXMSob79OmddfpK5ArJa2xLkLCV+zamHkbeXQtSNKOi0keiBKyHZ/hCRKjigjmKGp4AJnDFq8PUw==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
       hono: ^4
@@ -6717,6 +6720,10 @@ packages:
   '@isaacs/fs-minipass@4.0.1':
     resolution: {integrity: sha512-wgm9Ehl2jpeqP3zw/7mo3kRHFp5MEDhqAdwy1fTGkHAwnkGOVsgpvQhL8B5n1qlb01jV3n/bI0ZfZp5lWA1k4w==}
     engines: {node: '>=18.0.0'}
+
+  '@isaacs/ttlcache@1.4.1':
+    resolution: {integrity: sha512-RQgQ4uQ+pLbqXfOmieB91ejmLwvSgv9nLx6sT6sD83s7umBypgg+OIBOBbEUiJXrfpnp9j0mRhYYdzp9uqq3lA==}
+    engines: {node: '>=12'}
 
   '@istanbuljs/schema@0.1.3':
     resolution: {integrity: sha512-ZXRY4jNvVgSVQ8DL3LTcakaAtXwTVUxE81hslsyD2AtoXW/wVob10HkOJ1X/pAlcI7D+2YoZKg5do8G/w6RYgA==}
@@ -20010,7 +20017,7 @@ snapshots:
       protobufjs: 7.5.3
       yargs: 17.7.2
 
-  '@hono/node-server@1.19.2(hono@4.9.7)':
+  '@hono/node-server@1.19.3(hono@4.9.7)':
     dependencies:
       hono: 4.9.7
 
@@ -20363,6 +20370,8 @@ snapshots:
   '@isaacs/fs-minipass@4.0.1':
     dependencies:
       minipass: 7.1.2
+
+  '@isaacs/ttlcache@1.4.1': {}
 
   '@istanbuljs/schema@0.1.3': {}
 

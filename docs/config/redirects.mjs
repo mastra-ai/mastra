@@ -146,11 +146,6 @@ export const redirectList = [
     permanent: true,
   },
   {
-    source: "/:locale/docs/workflows/00-overview",
-    destination: "/:locale/docs/workflows/overview",
-    permanent: true,
-  },
-  {
     source: "/:locale/docs/workflows/index",
     destination: "/:locale/docs/workflows/overview",
     permanent: true,
@@ -214,16 +209,6 @@ export const redirectList = [
   {
     source: "/:locale/examples/rag/filter-rag",
     destination: "/:locale/examples/rag/usage/filter-rag",
-    permanent: true,
-  },
-  {
-    source: "/:locale/workflows",
-    destination: "/:locale/docs/workflows/overview",
-    permanent: true,
-  },
-  {
-    source: "/:locale/workflows/:path*",
-    destination: "/:locale/docs/workflows/:path*",
     permanent: true,
   },
   {
@@ -689,11 +674,6 @@ export const redirectList = [
     permanent: true,
   },
   {
-    source: "/:locale/reference/workflows/streamVNext",
-    destination: "/:locale/reference/workflows/run-methods/streamVNext",
-    permanent: true,
-  },
-  {
     source: "/:locale/reference/workflows/resume",
     destination: "/:locale/reference/workflows/run-methods/resume",
     permanent: true,
@@ -701,11 +681,6 @@ export const redirectList = [
   {
     source: "/:locale/reference/workflows/watch",
     destination: "/:locale/reference/workflows/run-methods/watch",
-    permanent: true,
-  },
-  {
-    source: "/:locale/reference/workflows/stream",
-    destination: "/:locale/reference/workflows/run-methods/stream",
     permanent: true,
   },
   {
@@ -803,15 +778,14 @@ export const redirectList = [
     destination: "/:locale/reference/templates/overview",
     permanent: true,
   },
-  // Redirect moved streaming files from agents to streaming
   {
     source: "/:locale/reference/agents/stream",
-    destination: "/:locale/reference/streaming/stream",
+    destination: "/:locale/reference/streaming/agents/stream",
     permanent: true,
   },
   {
     source: "/:locale/reference/agents/streamVNext",
-    destination: "/:locale/reference/streaming/streamVNext",
+    destination: "/:locale/reference/streaming/agents/streamVNext",
     permanent: true,
   },
   {
@@ -821,7 +795,17 @@ export const redirectList = [
   },
   {
     source: "/:locale/reference/agents/MastraModelOutput",
-    destination: "/:locale/reference/streaming/MastraModelOutput",
+    destination: "/:locale/reference/streaming/agents/MastraModelOutput",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/run-methods/stream",
+    destination: "/:locale/reference/streaming/workflows/stream",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/run-methods/streamVNext",
+    destination: "/:locale/reference/streaming/workflows/streamVNext",
     permanent: true,
   },
   {

@@ -139,7 +139,7 @@ export function watchLegacyWorkflowHandler(c: Context) {
             await stream.write(chunk.toString() + '\x1E');
           }
         } catch (err) {
-          console.log(err);
+          console.error(err);
         }
       },
       async err => {
