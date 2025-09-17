@@ -7,6 +7,10 @@ export class InMemoryServerCache extends MastraServerCache {
     ttl: 1000 * 60 * 5,
   });
 
+  constructor() {
+    super();
+  }
+
   async get(key: string): Promise<unknown> {
     return this.cache.get(key);
   }
