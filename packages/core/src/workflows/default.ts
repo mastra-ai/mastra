@@ -1729,10 +1729,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       },
     });
 
-    for (let i = 0; i < prevOutput.length; i += concurrency) {
+    const prevPayload = stepResults[step.id];
+    const resumeIndex =
+      prevPayload?.status === 'suspended' ? prevPayload?.suspendPayload?.__workflow_meta?.foreachIndex || 0 : 0;
+
+    for (let i = resumeIndex; i < prevOutput.length; i += concurrency) {
       const items = prevOutput.slice(i, i + concurrency);
       const itemsResults = await Promise.all(
-        items.map((item: any) => {
+        items.map((item: any, j: number) => {
           return this.executeStep({
             workflowId,
             runId,
@@ -1740,7 +1744,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             step,
             stepResults,
             executionContext,
-            resume,
+            resume: resumeIndex === i + j ? resume : undefined,
             prevOutput: item,
             tracingContext: { currentSpan: loopSpan, isInternal: loopSpan?.isInternal },
             emitter,
@@ -1792,6 +1796,20 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 ...execResults,
               },
             });
+
+            return {
+              ...stepInfo,
+              status: 'suspended',
+              suspendPayload: {
+                ...execResults.suspendPayload,
+                __workflow_meta: {
+                  ...execResults.suspendPayload?.__workflow_meta,
+                  foreachIndex: i,
+                },
+              },
+              //@ts-ignore
+              endedAt: Date.now(),
+            };
           } else {
             await emitter.emit('watch-v2', {
               type: 'workflow-step-result',
@@ -1808,8 +1826,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 metadata: {},
               },
             });
+
+            return result;
           }
-          return result;
         }
 
         results.push(result?.output);
@@ -2147,7 +2166,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         serializedStepGraph,
       });
     } else if (entry.type === 'foreach') {
-      console.log('got foreach', prevOutput, resume);
       execResults = await this.executeForeach({
         workflowId,
         runId,

@@ -150,23 +150,26 @@ export function createOuterLLMWorkflow<
     outputSchema: z.any(),
   })
     .then(llmExecutionStep)
-    .map(({ inputData }) => {
-      if (modelStreamSpan && telemetry_settings?.recordOutputs !== false && inputData.output.toolCalls?.length) {
-        modelStreamSpan.setAttribute(
-          'stream.response.toolCalls',
-          JSON.stringify(
-            inputData.output.toolCalls?.map((toolCall: any) => {
-              return {
-                toolCallId: toolCall.toolCallId,
-                args: toolCall.args,
-                toolName: toolCall.toolName,
-              };
-            }),
-          ),
-        );
-      }
-      return inputData.output.toolCalls || [];
-    })
+    .map(
+      ({ inputData }) => {
+        if (modelStreamSpan && telemetry_settings?.recordOutputs !== false && inputData.output.toolCalls?.length) {
+          modelStreamSpan.setAttribute(
+            'stream.response.toolCalls',
+            JSON.stringify(
+              inputData.output.toolCalls?.map((toolCall: any) => {
+                return {
+                  toolCallId: toolCall.toolCallId,
+                  args: toolCall.args,
+                  toolName: toolCall.toolName,
+                };
+              }),
+            ),
+          );
+        }
+        return inputData.output.toolCalls || [];
+      },
+      { id: 'map-tool-calls' },
+    )
     .foreach(toolCallStep, { concurrency: 10 })
     .then(llmMappingStep)
     .commit();

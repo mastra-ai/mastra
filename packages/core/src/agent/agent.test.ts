@@ -658,8 +658,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             console.log('tool-call-approval chunk', chunk);
           }
         }
-        response = stream.response;
-        console.log('response', JSON.stringify(response.toolResults, null, 2));
+        // response = await stream.response;
+        // console.log('response', JSON.stringify(response.toolResults, null, 2));
         console.log('status', stream.status);
         await new Promise(resolve => setTimeout(resolve, 1000));
         const resumeStream = await agentOne.resumeStreamVNext({ hello: 'world' }, { runId: stream.runId });
@@ -667,7 +667,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           console.log('resume stream chunk', chunk);
         }
 
-        // toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'findUserTool').payload;
+        response = await resumeStream.response;
+        console.log('resume status', resumeStream.status);
+        console.log('resume response', JSON.stringify(response, null, 2));
+
+        toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'findUserTool').payload;
       }
 
       const name = toolCall?.result?.name;
