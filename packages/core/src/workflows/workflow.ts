@@ -1276,8 +1276,8 @@ export class Run<
   }
 
   protected closeStreamAction?: () => Promise<void>;
-  protected activeStream?: MastraWorkflowStream<TOutput, TSteps>;
-  protected executionResults?: Promise<WorkflowResult<TOutput, TSteps>>;
+  protected activeStream?: MastraWorkflowStream<TInput, TOutput, TSteps>;
+  protected executionResults?: Promise<WorkflowResult<TInput, TOutput, TSteps>>;
 
   protected cleanup?: () => void;
 
@@ -1349,7 +1349,7 @@ export class Run<
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     format?: 'aisdk' | 'mastra' | undefined;
-  }): Promise<WorkflowResult<TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     // note: this span is ended inside this.executionEngine.execute()
     const workflowAISpan = getOrCreateSpan({
       type: AISpanType.WORKFLOW_RUN,
@@ -1366,7 +1366,7 @@ export class Run<
 
     const traceId = getValidTraceId(workflowAISpan);
 
-    const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
+    const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
@@ -1421,7 +1421,7 @@ export class Run<
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
-  }): Promise<WorkflowResult<TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     return this._start({
       inputData,
       runtimeContext,
@@ -1449,7 +1449,7 @@ export class Run<
     onChunk?: (chunk: StreamEvent) => Promise<unknown>;
   } = {}): {
     stream: ReadableStream<StreamEvent>;
-    getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
+    getWorkflowState: () => Promise<WorkflowResult<TInput, TOutput, TSteps>>;
   } {
     if (this.closeStreamAction) {
       return {
@@ -1591,7 +1591,7 @@ export class Run<
     runtimeContext,
   }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): Promise<{
     stream: ReadableStream<StreamEvent>;
-    getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
+    getWorkflowState: () => Promise<WorkflowResult<TInput, TOutput, TSteps>>;
   }> {
     return this.stream({ inputData, runtimeContext });
   }
@@ -1611,14 +1611,14 @@ export class Run<
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     format?: 'aisdk' | 'mastra' | undefined;
-  } = {}): MastraWorkflowStream<TOutput, TSteps> {
+  } = {}): MastraWorkflowStream<TInput, TOutput, TSteps> {
     if (this.closeStreamAction && this.activeStream) {
       return this.activeStream;
     }
 
     this.closeStreamAction = async () => {};
 
-    this.activeStream = new MastraWorkflowStream<TOutput, TSteps>({
+    this.activeStream = new MastraWorkflowStream<TInput, TOutput, TSteps>({
       run: this,
       createStream: () => {
         const { readable, writable } = new TransformStream<ChunkType, ChunkType>({
@@ -1718,10 +1718,6 @@ export class Run<
     tracingContext?: TracingContext;
     format?: 'aisdk' | 'mastra' | undefined;
   } = {}) {
-    if (this.closeStreamAction && this.activeStream) {
-      return this.activeStream;
-    }
-
     this.closeStreamAction = async () => {};
 
     this.activeStream = new MastraWorkflowStream({
@@ -1887,7 +1883,7 @@ export class Run<
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     writableStream?: WritableStream<ChunkType>;
-  }): Promise<WorkflowResult<TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     return this._resume(params);
   }
 
@@ -1905,7 +1901,7 @@ export class Run<
     writableStream?: WritableStream<ChunkType>;
     format?: 'aisdk' | 'mastra' | undefined;
     isVNext?: boolean;
-  }): Promise<WorkflowResult<TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
@@ -2008,7 +2004,7 @@ export class Run<
     const traceId = getValidTraceId(workflowAISpan);
 
     const executionResultPromise = this.executionEngine
-      .execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
+      .execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
         runId: this.runId,
         graph: this.executionGraph,
@@ -2078,7 +2074,7 @@ export class Run<
    * @access private
    * @returns The execution results of the workflow run
    */
-  _getExecutionResults(): Promise<WorkflowResult<TOutput, TSteps>> | undefined {
+  _getExecutionResults(): Promise<WorkflowResult<TInput, TOutput, TSteps>> | undefined {
     return this.executionResults;
   }
 }

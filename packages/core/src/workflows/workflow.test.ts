@@ -1167,7 +1167,7 @@ describe('Workflow', () => {
       expect.assertions(3);
       // Verify that the input property is preserved from the original snapshot context
       // This is the key test: input should come from snapshot.context.input, not from resumeData
-      expect(result.steps.input).toEqual(originalInput);
+      expect(result.input).toEqual(originalInput);
 
       // Also verify that the step received the original input as payload, not the resume data
       expect(result.steps.step1.payload).toEqual(originalInput);
@@ -3890,7 +3890,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result: z.string(),
         }),
-        steps: [step1],
+        steps: [step1, step2],
       });
 
       workflow.then(step1).sleep(1000).then(step2).commit();
@@ -3943,7 +3943,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result: z.string(),
         }),
-        steps: [step1],
+        steps: [step1, step2],
       });
 
       workflow

@@ -45,3 +45,4 @@ export * from './components/ui/searchbar';
 export * from './components/ui/kbd';
 export * from './components/ui/collapsible';
 export * from './domains/conversation/index';
+export * from './lib/errors';
