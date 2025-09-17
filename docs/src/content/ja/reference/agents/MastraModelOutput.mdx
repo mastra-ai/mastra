@@ -1,0 +1,322 @@
+---
+title: "リファレンス: MastraModelOutput | Agents | Mastra Docs"
+description: "MastraModelOutput の完全なリファレンス。agent.streamVNext() が返すストリームオブジェクトで、モデル出力へのストリーミングおよび Promise ベースのアクセスを提供します。"
+---
+
+import { Callout } from "nextra/components";
+import { PropertiesTable } from "@/components/properties-table";
+
+
+# MastraModelOutput
+
+<Callout type="warning">
+  **実験的 API**: この型は実験的な [`streamVNext()`](/reference/agents/streamVNext) メソッドの一部です。フィードバックに基づき機能を改善していく過程で、API が変更される可能性があります。
+</Callout>
+
+`MastraModelOutput` クラスは [`agent.streamVNext()`](/reference/agents/streamVNext) によって返され、モデル出力へのストリーミングアクセスと Promise ベースのアクセスの両方を提供します。構造化出力の生成、ツール呼び出し、推論、包括的な使用状況の追跡をサポートします。
+
+```typescript
+// MastraModelOutput は agent.streamVNext() によって返されます
+const stream = await agent.streamVNext("Hello world");
+```
+
+セットアップと基本的な使い方については、[streamVNext() メソッドのドキュメント](/reference/agents/streamVNext)を参照してください。
+
+## ストリーミングプロパティ
+
+これらのプロパティにより、モデルの出力を生成と同時にリアルタイムで参照できます：
+
+<PropertiesTable
+  content={[
+    {
+      name: "fullStream",
+      type: "ReadableStream<ChunkType<OUTPUT>>",
+      description: "テキスト、ツール呼び出し、推論、メタデータ、コントロールチャンクなど、あらゆるチャンクタイプを含む完全なストリーム。モデルの応答のすべての側面にきめ細かくアクセスできます。",
+      properties: [{
+        type: "ReadableStream",
+        parameters: [
+          { name: "ChunkType", type: "ChunkType<OUTPUT>", description: "ストリーミング中に出力されうるすべてのチャンクタイプ" }
+        ]
+      }]
+    },
+    {
+      name: "textStream",
+      type: "ReadableStream<string>",
+      description: "テキストコンテンツのみを増分で流すストリーム。メタデータ、ツール呼び出し、コントロールチャンクをすべて除外し、生成中のテキストだけを提供します。"
+    },
+    {
+      name: "objectStream",
+      type: "ReadableStream<PartialSchemaOutput<OUTPUT>>",
+      description: "出力スキーマ使用時の、構造化オブジェクトの進行中更新を流すストリーム。構築途中の部分的なオブジェクトを逐次出力し、構造化データ生成をリアルタイムに可視化できます。",
+      properties: [{
+        type: "ReadableStream",
+        parameters: [
+          { name: "PartialSchemaOutput", type: "PartialSchemaOutput<OUTPUT>", description: "定義済みスキーマに適合する未完成の部分オブジェクト" }
+        ]
+      }]
+    },
+    {
+      name: "elementStream",
+      type: "ReadableStream<InferSchemaOutput<OUTPUT> extends (infer T)[] ? T : never>",
+      description: "出力スキーマが配列型を定義している場合に、配列の各要素を個別に流すストリーム。配列全体の完了を待たず、各要素が完了し次第出力されます。"
+    }
+  ]}
+/>
+
+## Promiseベースのプロパティ
+
+これらのプロパティは、ストリームの完了後に最終値へと解決されます:
+
+<PropertiesTable
+  content={[
+    {
+      name: "text",
+      type: "Promise<string>",
+      description: "モデルからの連結済みの完全なテキスト応答。テキスト生成が完了すると解決されます。"
+    },
+    {
+      name: "object",
+      type: "Promise<InferSchemaOutput<OUTPUT>>",
+      description: "出力スキーマ使用時の、完全な構造化オブジェクト応答。解決前にスキーマで検証され、検証に失敗した場合は拒否されます。",
+      properties: [{
+        type: "Promise",
+        parameters: [
+          { name: "InferSchemaOutput", type: "InferSchemaOutput<OUTPUT>", description: "スキーマ定義に厳密一致する完全型付けオブジェクト" }
+        ]
+      }]
+    },
+    {
+      name: "reasoning",
+      type: "Promise<string>",
+      description: "reasoning をサポートするモデル（OpenAI の o1 シリーズなど）における、完全な reasoning テキスト。reasoning 非対応のモデルでは空文字列を返します。"
+    },
+    {
+      name: "reasoningText",
+      type: "Promise<string | undefined>",
+      description: "reasoning コンテンツへの別経路。reasoning 非対応のモデルでは undefined の可能性があり、一方で 'reasoning' は空文字列を返します。"
+    },
+    {
+      name: "toolCalls",
+      type: "Promise<ToolCallChunk[]>",
+      description: "実行中に行われたすべてのツール呼び出しチャンクの配列。各チャンクにはツールのメタデータと実行詳細が含まれます。",
+      properties: [{
+        type: "ToolCallChunk",
+        parameters: [
+          { name: "type", type: "'tool-call'", description: "チャンク種別の識別子" },
+          { name: "runId", type: "string", description: "実行ラン識別子" },
+          { name: "from", type: "ChunkFrom", description: "チャンクの発生元（AGENT、WORKFLOW など）" },
+          { name: "payload", type: "ToolCallPayload", description: "toolCallId、toolName、args、実行詳細を含むツール呼び出しデータ" }
+        ]
+      }]
+    },
+    {
+      name: "toolResults",
+      type: "Promise<ToolResultChunk[]>",
+      description: "ツール呼び出しに対応するすべてのツール結果チャンクの配列。実行結果およびエラー情報を含みます。",
+      properties: [{
+        type: "ToolResultChunk", 
+        parameters: [
+          { name: "type", type: "'tool-result'", description: "チャンク種別の識別子" },
+          { name: "runId", type: "string", description: "実行ラン識別子" },
+          { name: "from", type: "ChunkFrom", description: "チャンクの発生元（AGENT、WORKFLOW など）" },
+          { name: "payload", type: "ToolResultPayload", description: "toolCallId、toolName、result、エラー状態を含むツール結果データ" }
+        ]
+      }]
+    },
+    {
+      name: "usage",
+      type: "Promise<Record<string, number>>",
+      description: "入力トークン、出力トークン、合計トークン、reasoning トークン（reasoning モデルの場合）を含むトークン使用状況の統計。",
+      properties: [{
+        type: "Record",
+        parameters: [
+          { name: "inputTokens", type: "number", description: "入力プロンプトで消費したトークン数" },
+          { name: "outputTokens", type: "number", description: "応答で生成されたトークン数" },
+          { name: "totalTokens", type: "number", description: "入力トークンと出力トークンの合計" },
+          { name: "reasoningTokens", type: "number", isOptional: true, description: "非公開の reasoning トークン（reasoning モデル向け）" }
+        ]
+      }]
+    },
+    {
+      name: "finishReason",
+      type: "Promise<string | undefined>",
+      description: "生成が停止した理由（例: 'stop'、'length'、'tool_calls'、'content_filter'）。ストリームが完了していない場合は undefined。",
+      properties: [{
+        type: "enum",
+        parameters: [
+          { name: "stop", type: "'stop'", description: "モデルが自然に完了" },
+          { name: "length", type: "'length'", description: "最大トークン数に到達" },
+          { name: "tool_calls", type: "'tool_calls'", description: "モデルがツールを呼び出した" },
+          { name: "content_filter", type: "'content_filter'", description: "コンテンツがフィルタリングされた" }
+        ]
+      }]
+    }
+  ]}
+/>
+
+## エラーのプロパティ
+
+<PropertiesTable
+  content={[
+    {
+      name: "error",
+      type: "string | Error | { message: string; stack: string; } | undefined",
+      description: "ストリームでエラーが発生した場合のエラー情報。エラーが発生していない場合は undefined。文字列メッセージ、Error オブジェクト、またはスタックトレースを含むシリアライズ済みエラーのいずれか。"
+    }
+  ]}
+/>
+
+## メソッド
+
+<PropertiesTable
+  content={[
+    {
+      name: "getFullOutput",
+      type: "() => Promise<FullOutput>",
+      description: "テキスト、構造化オブジェクト、ツール呼び出し、使用状況統計、推論、メタデータなど、すべての結果を含む包括的な出力オブジェクトを返します。ストリームの全結果へアクセスするための便利な単一メソッドです。",
+      properties: [{
+        type: "FullOutput",
+        parameters: [
+          { name: "text", type: "string", description: "完全なテキスト応答" },
+          { name: "object", type: "InferSchemaOutput<OUTPUT>", isOptional: true, description: "スキーマが提供された場合の構造化出力" },
+          { name: "toolCalls", type: "ToolCallChunk[]", description: "実行されたすべてのツール呼び出しチャンク" },
+          { name: "toolResults", type: "ToolResultChunk[]", description: "すべてのツール結果チャンク" },
+          { name: "usage", type: "Record<string, number>", description: "トークン使用量の統計" },
+          { name: "reasoning", type: "string", isOptional: true, description: "利用可能な場合の推論テキスト" },
+          { name: "finishReason", type: "string", isOptional: true, description: "生成が終了した理由" }
+        ]
+      }]
+    },
+    {
+      name: "consumeStream",
+      type: "(options?: ConsumeStreamOptions) => Promise<void>",
+      description: "チャンクを処理せずにストリーム全体を手動で消費します。最終的な Promise ベースの結果だけが必要で、ストリームの消費を明示的に開始したい場合に便利です。",
+      properties: [{
+        type: "ConsumeStreamOptions",
+        parameters: [
+          { name: "onError", type: "(error: Error) => void", isOptional: true, description: "ストリームエラーを処理するためのコールバック" }
+        ]
+      }]
+    }
+  ]}
+/>
+
+## 使い方の例
+
+### テキストの基本的なストリーミング
+
+```typescript
+const stream = await agent.streamVNext("Write a haiku");
+
+// 生成されるそばからテキストをストリーミングする
+for await (const text of stream.textStream) {
+  process.stdout.write(text);
+}
+
+// あるいは、全文をまとめて取得する
+const fullText = await stream.text;
+console.log(fullText);
+```
+
+### 構造化出力のストリーミング
+
+```typescript
+const stream = await agent.streamVNext("Generate user data", {
+  output: z.object({
+    name: z.string(),
+    age: z.number(),
+    email: z.string()
+  })
+});
+
+// 部分オブジェクトをストリーミング
+for await (const partial of stream.objectStream) {
+  console.log("進行状況:", partial); // { name: "John" }, { name: "John", age: 30 }, ...
+}
+
+// 検証済みの最終オブジェクトを取得
+const user = await stream.object;
+console.log("最終結果:", user); // { name: "John", age: 30, email: "john@example.com" }
+```
+
+### ツールの呼び出しと結果
+
+```typescript
+const stream = await agent.streamVNext("What's the weather in NYC?", {
+  tools: { weather: weatherTool }
+});
+
+// ツール呼び出しをモニタリング
+const toolCalls = await stream.toolCalls;
+const toolResults = await stream.toolResults;
+
+console.log("呼び出されたツール:", toolCalls);
+console.log("結果:", toolResults);
+```
+
+### 出力の一括取得
+
+```typescript
+const stream = await agent.streamVNext("Analyze this data");
+
+const output = await stream.getFullOutput();
+console.log({
+  text: output.text,
+  usage: output.usage,
+  reasoning: output.reasoning,
+  finishReason: output.finishReason
+});
+```
+
+### フルストリーム処理
+
+```typescript
+const stream = await agent.streamVNext("Complex task");
+
+for await (const chunk of stream.fullStream) {
+  switch (chunk.type) {
+    case 'text-delta':
+      process.stdout.write(chunk.payload.text);
+      break;
+    case 'tool-call':
+      console.log(`ツール ${chunk.payload.toolName} を呼び出し中...`);
+      break;
+    case 'reasoning-delta':
+      console.log(`推論: ${chunk.payload.text}`);
+      break;
+    case 'finish':
+      console.log(`完了！理由: ${chunk.payload.stepResult.reason}`);
+      break;
+  }
+}
+```
+
+### エラー処理
+
+```typescript
+const stream = await agent.streamVNext("Analyze this data");
+
+try {
+  // オプション1: consumeStream 内でエラーを処理する
+  await stream.consumeStream({
+    onError: (error) => {
+      console.error("ストリームエラー:", error);
+    }
+  });
+  
+  const result = await stream.text;
+} catch (error) {
+  console.error("結果の取得に失敗しました:", error);
+}
+
+// オプション2: error プロパティを確認する
+const result = await stream.getFullOutput();
+if (stream.error) {
+  console.error("ストリームでエラーが発生しました:", stream.error);
+}
+```
+
+## 関連する型
+
+- [ChunkType](/reference/agents/ChunkType) - フルストリームに含まれる可能性のあるすべてのチャンクタイプ
+- [Agent.streamVNext()](/reference/agents/streamVNext) - MastraModelOutput を返すメソッド

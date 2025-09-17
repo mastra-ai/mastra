@@ -3,11 +3,15 @@ title: "リファレンス: CompositeVoice | Voice Providers | Mastra ドキュ�
 description: "CompositeVoice クラスのドキュメント。複数の音声プロバイダーを組み合わせて、柔軟なテキスト読み上げおよび音声認識操作を可能にします。"
 ---
 
+
+
 # CompositeVoice
 
 CompositeVoice クラスは、テキスト読み上げ（text-to-speech）や音声認識（speech-to-text）操作のために、異なる音声プロバイダーを組み合わせて利用することができます。これは、各操作ごとに最適なプロバイダーを使いたい場合に特に便利です。例えば、音声認識には OpenAI を、テキスト読み上げには PlayAI を使うといった使い方が可能です。
 
 CompositeVoice は、Agent クラスによって内部的に使用され、柔軟な音声機能を提供します。
+
+
 
 ## 使用例
 
@@ -32,6 +36,8 @@ const text = await voice.listen(audioStream);
 // Convert text to speech using PlayAI
 const audio = await voice.speak("Hello, world!");
 ```
+
+
 
 ## コンストラクタのパラメータ
 
@@ -58,6 +64,8 @@ const audio = await voice.speak("Hello, world!");
   ]}
 />
 
+
+
 ## メソッド
 
 ### speak()
@@ -75,8 +83,7 @@ const audio = await voice.speak("Hello, world!");
     {
       name: "options",
       type: "object",
-      description:
-        "スピーキングプロバイダーに渡されるプロバイダー固有のオプション",
+      description: "スピーキングプロバイダーに渡されるプロバイダー固有のオプション",
       isOptional: true,
     },
   ]}
@@ -103,8 +110,7 @@ const audio = await voice.speak("Hello, world!");
     {
       name: "options",
       type: "object",
-      description:
-        "リスニングプロバイダーに渡されるプロバイダー固有のオプション",
+      description: "リスニングプロバイダーに渡されるプロバイダー固有のオプション",
       isOptional: true,
     },
   ]}

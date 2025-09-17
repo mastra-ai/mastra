@@ -1,5 +1,11 @@
 # @mastra/auth-auth0
 
+## 0.10.5-alpha.0
+
+### Patch Changes
+
+- Update package.json and README ([#7886](https://github.com/mastra-ai/mastra/pull/7886))
+
 ## 0.10.4
 
 ### Patch Changes

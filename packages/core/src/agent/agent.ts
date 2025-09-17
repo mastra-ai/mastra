@@ -6,7 +6,7 @@ import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
-import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
+import { AISpanType, getOrCreateSpan, getValidTraceId, InternalSpans } from '../ai-tracing';
 import type { AISpan, TracingContext, TracingOptions, TracingProperties } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -77,6 +77,7 @@ import type {
   ToolsInput,
   AgentMemoryOption,
   AgentModelManagerConfig,
+  AgentCreateOptions,
 } from './types';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
@@ -88,6 +89,10 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) 
 
   return cb(value);
 }
+
+// Flags to track if deprecation warnings have been shown
+let streamDeprecationWarningShown = false;
+let generateDeprecationWarningShown = false;
 
 // Helper to resolve threadId from args (supports both new and old API)
 function resolveThreadIdFromArgs(args: {
@@ -162,6 +167,7 @@ export class Agent<
   #voice: CompositeVoice;
   #inputProcessors?: DynamicArgument<InputProcessor[]>;
   #outputProcessors?: DynamicArgument<OutputProcessor[]>;
+  readonly #options?: AgentCreateOptions;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -174,6 +180,7 @@ export class Agent<
 
     this.#instructions = config.instructions;
     this.#description = config.description;
+    this.#options = config.options;
 
     if (!config.model) {
       const mastraError = new MastraError({
@@ -716,10 +723,18 @@ export class Agent<
       if (resolvedModel.specificationVersion === 'v2') {
         llm = this.prepareModels(runtimeContext, model).then(models => {
           const enabledModels = models.filter(model => model.enabled);
-          return new MastraLLMVNext({ models: enabledModels, mastra: this.#mastra });
+          return new MastraLLMVNext({
+            models: enabledModels,
+            mastra: this.#mastra,
+            options: { tracingPolicy: this.#options?.tracingPolicy },
+          });
         });
       } else {
-        llm = new MastraLLMV1({ model: resolvedModel, mastra: this.#mastra });
+        llm = new MastraLLMV1({
+          model: resolvedModel,
+          mastra: this.#mastra,
+          options: { tracingPolicy: this.#options?.tracingPolicy },
+        });
       }
 
       return resolveMaybePromise(llm, resolvedLLM => {
@@ -1225,6 +1240,7 @@ export class Agent<
           runtimeContext,
           tracingContext,
           model: await this.getModel({ runtimeContext }),
+          tracingPolicy: this.#options?.tracingPolicy,
         };
         const convertedToCoreTool = makeCoreTool(toolObj, options);
         convertedMemoryTools[toolName] = convertedToCoreTool;
@@ -1447,6 +1463,7 @@ export class Agent<
           tracingContext,
           model: await this.getModel({ runtimeContext }),
           writableStream,
+          tracingPolicy: this.#options?.tracingPolicy,
         };
         return [k, makeCoreTool(tool, options)];
       }),
@@ -1504,6 +1521,7 @@ export class Agent<
             runtimeContext,
             tracingContext,
             model: await this.getModel({ runtimeContext }),
+            tracingPolicy: this.#options?.tracingPolicy,
           };
           const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
           toolsForRequest[toolName] = convertedToCoreTool;
@@ -1553,6 +1571,7 @@ export class Agent<
           runtimeContext,
           tracingContext,
           model: await this.getModel({ runtimeContext }),
+          tracingPolicy: this.#options?.tracingPolicy,
         };
         const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
         toolsForRequest[toolName] = convertedToCoreTool;
@@ -1679,6 +1698,7 @@ export class Agent<
           runtimeContext,
           model: await this.getModel({ runtimeContext }),
           tracingContext,
+          tracingPolicy: this.#options?.tracingPolicy,
         };
 
         convertedWorkflowTools[workflowName] = makeCoreTool(toolObj, options);
@@ -1909,8 +1929,9 @@ export class Agent<
             resourceId,
             threadId: thread ? thread.id : undefined,
           },
-          tracingContext,
+          tracingPolicy: this.#options?.tracingPolicy,
           tracingOptions,
+          tracingContext,
           runtimeContext,
         });
 
@@ -2352,7 +2373,7 @@ export class Agent<
           overrideScorers,
           threadId,
           resourceId,
-          tracingContext: { currentSpan: agentAISpan, isInternal: true },
+          tracingContext: { currentSpan: agentAISpan },
         });
 
         const scoringData: {
@@ -2953,8 +2974,9 @@ export class Agent<
         resourceId,
         threadId: threadFromArgs?.id,
       },
-      tracingContext: options.tracingContext,
+      tracingPolicy: this.#options?.tracingPolicy,
       tracingOptions: options.tracingOptions,
+      tracingContext: options.tracingContext,
       runtimeContext,
     });
 
@@ -3295,6 +3317,13 @@ export class Agent<
       inputSchema: z.any(),
       outputSchema: z.any(),
       steps: [prepareToolsStep, prepareMemory],
+      options: {
+        tracingPolicy: {
+          // mark all workflow spans related to the
+          // VNext execution as internal
+          internal: InternalSpans.WORKFLOW,
+        },
+      },
     })
       .parallel([prepareToolsStep, prepareMemory])
       .map(async ({ inputData, bail }) => {
@@ -3496,7 +3525,7 @@ export class Agent<
       .commit();
 
     const run = await executionWorkflow.createRunAsync();
-    const result = await run.start({ tracingContext: { currentSpan: agentAISpan, isInternal: true } });
+    const result = await run.start({ tracingContext: { currentSpan: agentAISpan } });
 
     return result;
   }
@@ -3694,7 +3723,7 @@ export class Agent<
       runtimeContext,
       structuredOutput,
       overrideScorers,
-      tracingContext: { currentSpan: agentAISpan, isInternal: true },
+      tracingContext: { currentSpan: agentAISpan },
     });
 
     agentAISpan?.end({
@@ -3860,9 +3889,12 @@ export class Agent<
     messages: MessageListInput,
     generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
-    this.logger.warn(
-      "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 23rd, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
-    );
+    if (!generateDeprecationWarningShown) {
+      this.logger.warn(
+        "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 23rd, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
+      );
+      generateDeprecationWarningShown = true;
+    }
     // @ts-expect-error - generic type issues
     return this.generateLegacy(messages, generateOptions);
   }
@@ -4227,9 +4259,12 @@ export class Agent<
     | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
     | (StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties)
   > {
-    this.logger.warn(
-      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 23rd, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
-    );
+    if (!streamDeprecationWarningShown) {
+      this.logger.warn(
+        "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 23rd, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
+      );
+      streamDeprecationWarningShown = true;
+    }
     // @ts-expect-error - generic type issues
     return this.streamLegacy(messages, streamOptions);
   }

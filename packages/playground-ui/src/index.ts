@@ -11,7 +11,6 @@ export * from './domains/traces/index';
 export * from './domains/observability/index';
 export * from './domains/resizable-panel';
 export * from './components/dynamic-form/index';
-export * from './components/ui/data-table';
 export * from './components/ui/containers';
 export * from './components/ui/elements';
 export * from './components/threads';
