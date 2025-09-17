@@ -107,6 +107,78 @@ export class DevBundler extends Bundler {
           }
         },
         plugins: [
+          {
+            name: 'prevent-tool-double-bundling',
+            enforce: 'pre', // Run this plugin first, before other plugins
+            async resolveId(id: string, importer: string | undefined) {
+              // Intercept #tools import and replace with a virtual module
+              // This prevents tools from being bundled inline in the main bundle
+              if (id === '#tools') {
+                return '\0virtual:tools';
+              }
+
+              // Don't process entry points
+              if (!importer) {
+                return null;
+              }
+
+              // Skip processing imports from the virtual tools module or tools.mjs
+              // These reference the separately bundled tool files
+              if (
+                importer &&
+                (importer === '\0virtual:tools' || importer.endsWith('tools.mjs')) &&
+                id.startsWith('./tools/')
+              ) {
+                return null;
+              }
+
+              // Handle relative imports to tools from source files
+              // These should be externalized to prevent double bundling
+              if ((id.startsWith('../tools/') || id.startsWith('./tools/')) && importer) {
+                // Extract tool name from relative import
+                const toolName = id.replace(/^\.\.?\/tools\//, '').replace(/\.(ts|js|mjs)$/, '');
+
+                // Check if this matches one of our separately bundled tool entries
+                for (const [toolKey, toolPath] of Object.entries(toolsInputOptions || {})) {
+                  if (typeof toolPath === 'string') {
+                    const toolFileName = toolPath
+                      .split('/')
+                      .pop()
+                      ?.replace(/\.(ts|js|mjs)$/, '');
+
+                    if (toolFileName === toolName) {
+                      // Externalize to the separately bundled tool file
+                      return { id: `./${toolKey}.mjs`, external: true };
+                    }
+                  }
+                }
+              }
+
+              return null;
+            },
+            load(id: string) {
+              // Provide content for the virtual tools module
+              if (id === '\0virtual:tools') {
+                // Use string concatenation to prevent Rollup from analyzing the import
+                // This makes it truly dynamic and resolved at runtime
+                return `
+                  // Dynamically load tools at runtime
+                  const toolsPath = './tools' + '.mjs';
+                  let tools = [];
+                  
+                  // This import will be resolved at runtime, not build time
+                  import(toolsPath).then(module => {
+                    tools = module.tools || [];
+                  }).catch(() => {
+                    // Tools not loaded yet or not available
+                  });
+                  
+                  export { tools };
+                `;
+              }
+              return null;
+            },
+          },
           // @ts-ignore - types are good
           // eslint-disable-next-line @typescript-eslint/no-misused-promises
           ...inputOptions.plugins,
@@ -130,6 +202,8 @@ export class DevBundler extends Bundler {
           {
             name: 'tools-watcher',
             async buildEnd() {
+              // Tools.mjs is now pre-created, but we can update it here if needed
+              // This ensures it's always in sync with the actual tool bundles
               const toolImports: string[] = [];
               const toolsExports: string[] = [];
               Array.from(Object.keys(toolsInputOptions || {}))
@@ -142,9 +216,7 @@ export class DevBundler extends Bundler {
 
               await writeFile(
                 join(outputDir, 'tools.mjs'),
-                `${toolImports.join('\n')}
-        
-                export const tools = [${toolsExports.join(', ')}]`,
+                `${toolImports.join('\n')}\n\nexport const tools = [${toolsExports.join(', ')}]`,
               );
             },
           },
