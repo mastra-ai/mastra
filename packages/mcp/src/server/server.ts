@@ -625,8 +625,9 @@ export class MCPServer extends MCPServerBase {
           );
 
           // Populate RuntimeContext from MCP extra.authInfo if available
-          let effectiveRuntimeContext = runtimeContext || new RuntimeContext();
+          let effectiveRuntimeContext: RuntimeContext;
           if ((execOptions as any)?.extra?.authInfo) {
+            // Create fresh isolated context for MCP auth
             effectiveRuntimeContext = new RuntimeContext();
             const authInfo = (execOptions as any).extra.authInfo;
             if (typeof authInfo === 'object') {
@@ -634,6 +635,9 @@ export class MCPServer extends MCPServerBase {
                 effectiveRuntimeContext.set(key, value);
               });
             }
+          } else {
+            // No MCP auth - use existing context or create empty one
+            effectiveRuntimeContext = runtimeContext || new RuntimeContext();
           }
 
           try {
@@ -715,8 +719,9 @@ export class MCPServer extends MCPServerBase {
           );
 
           // Populate RuntimeContext from MCP extra.authInfo if available
-          let effectiveRuntimeContext = runtimeContext || new RuntimeContext();
+          let effectiveRuntimeContext: RuntimeContext;
           if ((execOptions as any)?.extra?.authInfo) {
+            // Create fresh isolated context for MCP auth
             effectiveRuntimeContext = new RuntimeContext();
             const authInfo = (execOptions as any).extra.authInfo;
             if (typeof authInfo === 'object') {
@@ -724,6 +729,9 @@ export class MCPServer extends MCPServerBase {
                 effectiveRuntimeContext.set(key, value);
               });
             }
+          } else {
+            // No MCP auth - use existing context or create empty one
+            effectiveRuntimeContext = runtimeContext || new RuntimeContext();
           }
 
           try {
