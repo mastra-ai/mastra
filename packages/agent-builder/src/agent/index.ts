@@ -10,8 +10,6 @@ import type { CoreMessage } from '@mastra/core/llm';
 import type { AISDKV5OutputStream, MastraModelOutput, OutputSchema } from '@mastra/core/stream';
 import { Memory } from '@mastra/memory';
 import { TokenLimiter } from '@mastra/memory/processors';
-import type { JSONSchema7 } from 'ai';
-import type { ZodSchema } from 'zod';
 import { AgentBuilderDefaults } from '../defaults';
 import { ToolSummaryProcessor } from '../processors/tool-summary';
 import type { AgentBuilderConfig, GenerateAgentOptions } from '../types';
