@@ -61,7 +61,81 @@ An agent stream provides access to various response properties:
 - **`stream.usage`**: Token usage information.
 
 
-### AI SDK v5 Compatibility
+### AI SDK v4 vs v5 Compatibility
+
+The `.streamVNext()` method requires AI SDK v5 models (`LanguageModelV2`). If you're using AI SDK v4 models (`LanguageModelV1`), use the `.stream()` method instead.
+
+#### How to identify your SDK version
+
+Your model's SDK version depends on the import path:
+
+**AI SDK v5 (Compatible with `streamVNext`):**
+```typescript
+import { openai } from '@ai-sdk/openai';      // v5
+import { anthropic } from '@ai-sdk/anthropic'; // v5
+import { google } from '@ai-sdk/google';      // v5
+```
+
+**AI SDK v4 (Use `stream` instead):**
+```typescript
+import { openai } from 'ai/openai';      // v4
+import { anthropic } from 'ai/anthropic'; // v4
+import { google } from 'ai/google';      // v4
+```
+
+#### Popular provider examples
+
+Here's how to configure popular AI providers for use with `streamVNext`:
+
+**OpenAI (AI SDK v5):**
+```typescript
+import { openai } from '@ai-sdk/openai';
+
+const agent = mastra.createAgent({
+  name: 'my-agent',
+  model: openai('gpt-4'),  // or 'gpt-3.5-turbo'
+});
+
+const stream = await agent.streamVNext(messages);
+```
+
+**Anthropic (AI SDK v5):**
+```typescript
+import { anthropic } from '@ai-sdk/anthropic';
+
+const agent = mastra.createAgent({
+  name: 'my-agent',
+  model: anthropic('claude-3-5-sonnet-latest'),
+});
+
+const stream = await agent.streamVNext(messages);
+```
+
+**Google (AI SDK v5):**
+```typescript
+import { google } from '@ai-sdk/google';
+
+const agent = mastra.createAgent({
+  name: 'my-agent',
+  model: google('gemini-1.5-pro'),
+});
+
+const stream = await agent.streamVNext(messages);
+```
+
+**OpenRouter (AI SDK v5):**
+```typescript
+import { openrouter } from '@ai-sdk/openrouter';
+
+const agent = mastra.createAgent({
+  name: 'my-agent',
+  model: openrouter('meta-llama/llama-3.1-8b-instruct'),
+});
+
+const stream = await agent.streamVNext(messages);
+```
+
+#### Using AI SDK v5 output format
 
 For integration with AI SDK v5, use `format` 'aisdk' to get an `AISDKV5OutputStream`:
 
