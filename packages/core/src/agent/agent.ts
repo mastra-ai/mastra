@@ -3298,16 +3298,28 @@ export class Agent<
       runtimeContext: streamOptions?.runtimeContext,
     });
 
-    // prioritizes structuredOutput over output if provided
     if (
       (defaultStreamOptions.structuredOutput && defaultStreamOptions.output) ||
-      (defaultStreamOptions.output && streamOptions?.structuredOutput)
+      (streamOptions?.structuredOutput && streamOptions.output)
     ) {
-      delete defaultStreamOptions.output;
+      throw new MastraError({
+        id: 'AGENT_STREAM_VNEXT_STRUCTURED_OUTPUT_AND_OUTPUT_PROVIDED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'structuredOutput and output cannot be provided at the same time',
+      });
+    }
+
+    // If streamOptions has either output or structuredOutput, remove both from defaultStreamOptions
+    // to ensure streamOptions takes precedence and avoid union type conflicts
+    let adjustedDefaultStreamOptions = { ...defaultStreamOptions };
+    if (streamOptions?.structuredOutput || streamOptions?.output) {
+      const { output, structuredOutput, ...restDefaultOptions } = adjustedDefaultStreamOptions;
+      adjustedDefaultStreamOptions = restDefaultOptions as typeof defaultStreamOptions;
     }
 
     let mergedStreamOptions = {
-      ...defaultStreamOptions,
+      ...adjustedDefaultStreamOptions,
       ...(streamOptions ?? {}),
       onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
@@ -3321,7 +3333,7 @@ export class Agent<
         modelOverride = mergedStreamOptions.structuredOutput.model;
       }
 
-      // Destructure to omit structuredOutput entirely (not set to undefined)
+      // assign structuredOutput.schema to output when maxSteps is explicitly set to 1
       const { structuredOutput, ...optionsWithoutStructuredOutput } = mergedStreamOptions;
       mergedStreamOptions = {
         ...optionsWithoutStructuredOutput,
