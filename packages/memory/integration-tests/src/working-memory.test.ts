@@ -536,7 +536,7 @@ describe('Working Memory Tests', () => {
               enabled: true,
               schema: z.object({
                 city: z.string(),
-                temperature: z.number().optional(),
+                temperature: z.number(),
               }),
             },
             lastMessages: 10,
@@ -561,7 +561,11 @@ describe('Working Memory Tests', () => {
 
         agent = new Agent({
           name: 'Memory Test Agent',
-          instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
+          instructions: `You are a helpful AI agent. Always add working memory tags to remember user information.
+          
+          Temperature, "temperature" should be reported as a number.
+          The location should be labeled "city" and reported as a string.
+          `,
           model: openai('gpt-4o'),
           memory,
         });
