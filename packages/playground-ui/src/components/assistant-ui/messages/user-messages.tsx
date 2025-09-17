@@ -136,8 +136,6 @@ export const UserMessage = () => {
                 );
               }
 
-              console.log('p.text', p);
-
               return p.text;
             },
           }}
