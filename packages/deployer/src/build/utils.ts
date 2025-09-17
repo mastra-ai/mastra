@@ -58,7 +58,7 @@ export function getCompiledDepCachePath(rootPath: string, packageName: string) {
  * ```
  */
 export function slash(path: string) {
-  const isExtendedLengthPath = /^\\\\\?\\/.test(path);
+  const isExtendedLengthPath = path.startsWith('\\\\?\\');
 
   if (isExtendedLengthPath) {
     return path;
