@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Brain, ChevronDown, RefreshCw } from 'lucide-react';
 import { Agent } from '@/components/ui/agent-logo';
-import { GetNetworkResponse, GetVNextNetworkResponse } from '@mastra/client-js';
+import { GetVNextNetworkResponse } from '@mastra/client-js';
 import { useContext } from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -24,11 +24,10 @@ import {
 } from '@mastra/playground-ui';
 
 type NetworkDetailsProps = {
-  network: GetNetworkResponse | GetVNextNetworkResponse;
-  isVNext?: boolean;
+  network: GetVNextNetworkResponse;
 };
 
-export function NetworkDetails({ network, isVNext }: NetworkDetailsProps) {
+export function NetworkDetails({ network }: NetworkDetailsProps) {
   const { modelSettings, setModelSettings, chatWithLoop, setChatWithLoop, maxIterations, setMaxIterations } =
     useContext(NetworkContext);
 

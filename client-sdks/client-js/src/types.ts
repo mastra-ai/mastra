@@ -389,22 +389,6 @@ export interface GetTelemetryParams {
   toDate?: Date;
 }
 
-export interface GetNetworkResponse {
-  id: string;
-  name: string;
-  instructions: string;
-  agents: Array<{
-    name: string;
-    provider: string;
-    modelId: string;
-  }>;
-  routingModel: {
-    provider: string;
-    modelId: string;
-  };
-  state?: Record<string, any>;
-}
-
 export interface GetVNextNetworkResponse {
   id: string;
   name: string;
