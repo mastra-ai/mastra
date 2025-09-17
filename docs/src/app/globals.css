@@ -556,7 +556,7 @@ aside a[href$="/reference"]::before {
   background-image: url("icons/reference.svg");
 }
 
-button[data-href="/en/docs/reference"] svg {
+button[data-href$="/docs/reference"] svg {
   display: none;
 }
 
