@@ -155,6 +155,7 @@ export const mastra = new Mastra({
 ```
 
 ## Testing workflows locally
+
 There are two ways to run and test workflows.
 
 <Steps>
@@ -288,17 +289,18 @@ for await (const chunk of result.stream) {
 
 > See [stream](../../reference/workflows/run-methods/stream.mdx) for more information.
 
-## Watch Workflow
+## Watch workflow
 
-A workflow can also be watched, allowing you to inspect each event that is emitted.
+A workflow can be watched to observe each event as it's emitted in real time. Events are emitted when a step starts or completes, the workflow status changes, or the workflow is paused awaiting input.
 
-```typescript {5} filename="src/test-workflow.ts" showLineNumbers copy
+```typescript {6-7} filename="src/test-workflow.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
 const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
 
 run.watch((event) => {
-  console.log(event);
+  console.log('Step completed:', event?.payload?.currentStep?.id);
+  console.log('Workflow status:', event?.payload?.workflowState?.status);
 });
 
 const result = await run.start({
