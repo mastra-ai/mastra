@@ -1685,7 +1685,7 @@ export class Run<
           writableStream: writable,
           format,
         }).then(result => {
-          // always close stream, even if the worklfow is suspended
+          // always close stream, even if the workflow is suspended
           // this will trigger a finish event with workflow status set to suspended
           this.closeStreamAction?.().catch(() => {});
 
@@ -1793,7 +1793,7 @@ export class Run<
           format,
           isVNext: true,
         }).then(result => {
-          // always close stream, even if the worklfow is suspended
+          // always close stream, even if the workflow is suspended
           // this will trigger a finish event with workflow status set to suspended
           this.closeStreamAction?.().catch(() => {});
 
