@@ -16,7 +16,6 @@ const meta: Meta = {
   streaming: <Tag text="experimental">Streaming</Tag>,
   tools: "Tools & MCP",
   memory: "Memory",
-  networks: <Tag text="experimental">Networks</Tag>,
   rag: "RAG",
   storage: "Storage",
   deployer: "Deployer",
