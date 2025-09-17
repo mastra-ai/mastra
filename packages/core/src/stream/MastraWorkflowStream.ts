@@ -37,13 +37,27 @@ export class MastraWorkflowStream extends ReadableStream<ChunkType> {
       deferredPromise.reject = reject;
     });
 
-    const updateUsageCount = (usage: {
-      inputTokens?: `${number}` | number;
-      outputTokens?: `${number}` | number;
-      totalTokens?: `${number}` | number;
-    }) => {
-      this.#usageCount.inputTokens += parseInt(usage?.inputTokens?.toString() ?? '0', 10);
-      this.#usageCount.outputTokens += parseInt(usage?.outputTokens?.toString() ?? '0', 10);
+    const updateUsageCount = (
+      usage:
+        | {
+            inputTokens?: `${number}` | number;
+            outputTokens?: `${number}` | number;
+            totalTokens?: `${number}` | number;
+          }
+        | {
+            promptTokens?: `${number}` | number;
+            completionTokens?: `${number}` | number;
+            totalTokens?: `${number}` | number;
+          },
+    ) => {
+      if ('inputTokens' in usage) {
+        this.#usageCount.inputTokens += parseInt(usage?.inputTokens?.toString() ?? '0', 10);
+        this.#usageCount.outputTokens += parseInt(usage?.outputTokens?.toString() ?? '0', 10);
+        // we need to handle both formats because you can use a V1 model inside a streamVNext workflow
+      } else if ('promptTokens' in usage) {
+        this.#usageCount.inputTokens += parseInt(usage?.promptTokens?.toString() ?? '0', 10);
+        this.#usageCount.outputTokens += parseInt(usage?.completionTokens?.toString() ?? '0', 10);
+      }
       this.#usageCount.totalTokens += parseInt(usage?.totalTokens?.toString() ?? '0', 10);
     };
 

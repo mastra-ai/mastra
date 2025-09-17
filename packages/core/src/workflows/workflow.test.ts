@@ -1267,8 +1267,8 @@ describe('Workflow', () => {
             metadata: {},
             output: {
               usage: {
-                completionTokens: 0,
-                promptTokens: 0,
+                inputTokens: 0,
+                outputTokens: 0,
                 totalTokens: 0,
               },
             },
@@ -1736,8 +1736,8 @@ describe('Workflow', () => {
           payload: {
             output: {
               usage: {
-                promptTokens: 0,
-                completionTokens: 0,
+                inputTokens: 0,
+                outputTokens: 0,
                 totalTokens: 0,
               },
             },
@@ -1881,8 +1881,8 @@ describe('Workflow', () => {
             metadata: {},
             output: {
               usage: {
-                completionTokens: 0,
-                promptTokens: 0,
+                inputTokens: 0,
+                outputTokens: 0,
                 totalTokens: 0,
               },
             },
@@ -2051,8 +2051,8 @@ describe('Workflow', () => {
             metadata: {},
             output: {
               usage: {
-                completionTokens: 0,
-                promptTokens: 0,
+                inputTokens: 0,
+                outputTokens: 0,
                 totalTokens: 0,
               },
             },
@@ -2260,8 +2260,8 @@ describe('Workflow', () => {
             metadata: {},
             output: {
               usage: {
-                completionTokens: 0,
-                promptTokens: 0,
+                inputTokens: 0,
+                outputTokens: 0,
                 totalTokens: 0,
               },
             },
