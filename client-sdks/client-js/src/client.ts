@@ -127,14 +127,13 @@ export class MastraClient extends BaseResource {
     threadId: string,
     opts: { agentId?: string; networkId?: string } = {},
   ): Promise<GetMemoryThreadMessagesResponse> {
-    const searchParams = new URLSearchParams();
+    let url = '';
     if (opts.agentId) {
-      searchParams.set('agentId', opts.agentId);
+      url = `/api/memory/threads/${threadId}/messages?agentId=${opts.agentId}`;
+    } else if (opts.networkId) {
+      url = `/api/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}`;
     }
-    if (opts.networkId) {
-      searchParams.set('networkId', opts.networkId);
-    }
-    return this.request(`/api/memory/threads/${threadId}/messages?${searchParams.toString()}`);
+    return this.request(url);
   }
 
   public deleteThread(
