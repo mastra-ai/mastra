@@ -159,7 +159,7 @@ export class Agent<
   #workflows?: DynamicArgument<Record<string, Workflow>>;
   #defaultGenerateOptions: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptions: DynamicArgument<AgentStreamOptions>;
-  #defaultVNextStreamOptions: DynamicArgument<AgentExecutionOptions<any, any>>;
+  #defaultVNextStreamOptions: DynamicArgument<AgentExecutionOptions<any>>;
   #tools: DynamicArgument<TTools>;
   evals: TMetrics;
   #scorers: DynamicArgument<MastraScorers>;
@@ -594,19 +594,16 @@ export class Agent<
     });
   }
 
-  public getDefaultVNextStreamOptions<
-    Output extends ZodSchema | undefined,
-    StructuredOutput extends ZodSchema | undefined,
-  >({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
-    | AgentExecutionOptions<Output, StructuredOutput>
-    | Promise<AgentExecutionOptions<Output, StructuredOutput>> {
+  public getDefaultVNextStreamOptions<OUTPUT extends OutputSchema = undefined>({
+    runtimeContext = new RuntimeContext(),
+  }: { runtimeContext?: RuntimeContext } = {}): AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>> {
     if (typeof this.#defaultVNextStreamOptions !== 'function') {
-      return this.#defaultVNextStreamOptions as AgentExecutionOptions<Output, StructuredOutput>;
+      return this.#defaultVNextStreamOptions as AgentExecutionOptions<OUTPUT>;
     }
 
     const result = this.#defaultVNextStreamOptions({ runtimeContext, mastra: this.#mastra }) as
-      | AgentExecutionOptions<Output, StructuredOutput>
-      | Promise<AgentExecutionOptions<Output, StructuredOutput>>;
+      | AgentExecutionOptions<OUTPUT>
+      | Promise<AgentExecutionOptions<OUTPUT>>;
 
     return resolveMaybePromise(result, options => {
       if (!options) {
@@ -3758,11 +3755,10 @@ export class Agent<
 
   async generateVNext<
     OUTPUT extends OutputSchema | undefined = undefined,
-    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     FORMAT extends 'aisdk' | 'mastra' = 'mastra',
   >(
     messages: MessageListInput,
-    options?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
+    options?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<
     FORMAT extends 'aisdk'
       ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
@@ -3791,19 +3787,26 @@ export class Agent<
 
   async streamVNext<
     OUTPUT extends OutputSchema | undefined = undefined,
-    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
   >(
     messages: MessageListInput,
-    streamOptions?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
+    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
     const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
       runtimeContext: streamOptions?.runtimeContext,
     });
 
+    // prioritizes structuredOutput over output if provided
+    if (
+      (defaultStreamOptions.structuredOutput && defaultStreamOptions.output) ||
+      (defaultStreamOptions.output && streamOptions?.structuredOutput)
+    ) {
+      delete defaultStreamOptions.output;
+    }
+
     let mergedStreamOptions = {
       ...defaultStreamOptions,
-      ...streamOptions,
+      ...(streamOptions ?? {}),
       onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
 
@@ -3816,10 +3819,11 @@ export class Agent<
         modelOverride = mergedStreamOptions.structuredOutput.model;
       }
 
+      // Destructure to omit structuredOutput entirely (not set to undefined)
+      const { structuredOutput, ...optionsWithoutStructuredOutput } = mergedStreamOptions;
       mergedStreamOptions = {
-        ...mergedStreamOptions,
-        output: mergedStreamOptions.structuredOutput.schema as OUTPUT,
-        structuredOutput: undefined, // Remove structuredOutput to avoid confusion downstream
+        ...optionsWithoutStructuredOutput,
+        output: structuredOutput.schema as OUTPUT,
       };
     }
 
@@ -3837,12 +3841,14 @@ export class Agent<
       });
     }
 
-    const result = await this.#execute({
+    const executeOptions = {
       ...mergedStreamOptions,
       messages,
       methodType: 'streamVNext',
       model: modelOverride,
-    });
+    } as InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+
+    const result = await this.#execute(executeOptions);
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {

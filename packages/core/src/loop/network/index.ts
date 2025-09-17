@@ -1,6 +1,4 @@
-import type { JSONSchema7 } from 'json-schema';
 import z from 'zod';
-import type { ZodSchema } from 'zod';
 import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
 import { Agent } from '../../agent/index';
@@ -846,7 +844,6 @@ export async function createNetworkLoop({
 
 export async function networkLoop<
   OUTPUT extends OutputSchema | undefined = undefined,
-  STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
 >({
   networkName,
@@ -864,7 +861,7 @@ export async function networkLoop<
   runtimeContext: RuntimeContext;
   runId: string;
   routingAgent: Agent;
-  routingAgentOptions?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>;
+  routingAgentOptions?: AgentExecutionOptions<OUTPUT, FORMAT>;
   generateId: () => string;
   maxIterations: number;
   threadId?: string;

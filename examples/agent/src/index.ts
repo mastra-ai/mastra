@@ -2,16 +2,23 @@ import { z } from 'zod';
 import { mastra } from './mastra';
 
 const agent = mastra.getAgent('chefAgent');
-const responsesAgent = mastra.getAgent('chefAgentResponses');
-const agentThatHarassesYou = mastra.getAgent('agentThatHarassesYou');
+// const responsesAgent = mastra.getAgent('chefAgentResponses');
+// const agentThatHarassesYou = mastra.getAgent('agentThatHarassesYou');
 
-const stream = await agentThatHarassesYou.streamVNext('I want to fight you');
+const output = await agent.streamVNext('I want to fight you', {
+  structuredOutput: {
+    schema: z.object({
+      sentiment: z.enum(['positive', 'negative', 'neutral']),
+      confidence: z.number(),
+    }),
+  },
+});
 
-for await (const chunk of stream.textStream) {
-  console.log(`frontend received chunk: ${chunk}`);
-}
+// for await (const chunk of stream.textStream) {
+//   console.log(`frontend received chunk: ${chunk}`);
+// }
 
-console.log('done');
+// console.log('done');
 
 // async function text() {
 //   // Query 1: Basic pantry ingredients

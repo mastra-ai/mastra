@@ -1,15 +1,9 @@
 import type { AgentExecutionOptions } from '@mastra/core/agent';
 import { registerApiRoute } from '@mastra/core/server';
 import type { OutputSchema } from '@mastra/core/stream';
-import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod/v3';
-import type { ZodAny } from 'zod/v4';
 
-export type chatRouteOptions<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  STRUCTURED_OUTPUT extends ZodSchema | ZodAny | JSONSchema7 | undefined = undefined,
-> = {
-  defaultOptions?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, 'aisdk'>;
+export type chatRouteOptions<OUTPUT extends OutputSchema | undefined = undefined> = {
+  defaultOptions?: AgentExecutionOptions<OUTPUT, 'aisdk'>;
 } & (
   | {
       path: `${string}:agentId${string}`;
@@ -21,14 +15,11 @@ export type chatRouteOptions<
     }
 );
 
-export function chatRoute<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  STRUCTURED_OUTPUT extends ZodSchema | ZodAny | JSONSchema7 | undefined = undefined,
->({
+export function chatRoute<OUTPUT extends OutputSchema | undefined = undefined>({
   path = '/chat/:agentId',
   agent,
   defaultOptions,
-}: chatRouteOptions<OUTPUT, STRUCTURED_OUTPUT>): ReturnType<typeof registerApiRoute> {
+}: chatRouteOptions<OUTPUT>): ReturnType<typeof registerApiRoute> {
   if (!agent && !path.includes('/:agentId')) {
     throw new Error('Path must include :agentId to route to the correct agent or pass the agent explicitly');
   }
@@ -153,7 +144,7 @@ export function chatRoute<
         throw new Error(`Agent ${agentToUse} not found`);
       }
 
-      const result = await agentObj.streamVNext<any, any, 'aisdk'>(messages, {
+      const result = await agentObj.streamVNext<any, 'aisdk'>(messages, {
         ...defaultOptions,
         ...rest,
         format: 'aisdk',

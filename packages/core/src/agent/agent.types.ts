@@ -39,7 +39,6 @@ export type MultiPrimitiveExecutionOptions = {
 
 export type AgentExecutionOptions<
   OUTPUT extends OutputSchema | undefined = undefined,
-  STRUCTURED_OUTPUT extends ZodSchemaV3 | ZodAny | JSONSchema7 | undefined = undefined,
   FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
 > = {
   /**
@@ -65,12 +64,6 @@ export type AgentExecutionOptions<
 
   /** Runtime context containing dynamic configuration and state */
   runtimeContext?: RuntimeContext;
-
-  /**
-   * Schema for structured output generation (Zod schema or JSON Schema)
-   * @deprecated Use `structuredOutput` instead. The `output` property will be removed in a future version.
-   */
-  output?: OUTPUT;
 
   /** @deprecated Use memory.resource instead. Identifier for the resource/user */
   resourceId?: string;
@@ -109,8 +102,6 @@ export type AgentExecutionOptions<
   inputProcessors?: InputProcessor[];
   /** Output processors to use for this execution (overrides agent's default) */
   outputProcessors?: OutputProcessor[];
-  /** Structured output generation with enhanced developer experience  @experimental */
-  structuredOutput?: StructuredOutputOptions<STRUCTURED_OUTPUT extends z.ZodTypeAny ? STRUCTURED_OUTPUT : never>;
 
   /** Additional tool sets that can be used for this execution */
   toolsets?: ToolsetsInput;
@@ -133,12 +124,27 @@ export type AgentExecutionOptions<
 
   /** Callback function called before each step of multi-step execution */
   prepareStep?: PrepareStepFunction<any>;
-};
+} & OutputOptions<OUTPUT>;
+
+type OutputOptions<OUTPUT extends OutputSchema | undefined = undefined> =
+  | {
+      /**
+       * Schema for structured output generation (Zod schema or JSON Schema)
+       * @deprecated Use `structuredOutput` instead. The `output` property will be removed in a future version.
+       */
+      output?: OUTPUT;
+      structuredOutput?: never;
+    }
+  | {
+      /** Structured output generation with enhanced developer experience  */
+      structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
+      output?: never;
+    };
 
 export type InnerAgentExecutionOptions<
-  OUTPUT extends OutputSchema | undefined = undefined,
+  OUTPUT extends OutputSchema = undefined,
   FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> = AgentExecutionOptions<OUTPUT, any, FORMAT> & {
+> = AgentExecutionOptions<OUTPUT, FORMAT> & {
   writableStream?: WritableStream<ChunkType>;
   messages: MessageListInput;
   methodType: 'generate' | 'stream' | 'streamVNext';
