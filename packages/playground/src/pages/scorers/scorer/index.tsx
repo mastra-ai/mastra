@@ -144,6 +144,7 @@ export default function Scorer() {
       id: score.id,
       date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
       time: format(createdAtDate, 'h:mm:ss aaa'),
+      // @ts-expect-error
       input: score?.input?.inputMessages?.[0]?.content || '',
       entityId: score.entityId,
       score: score.score,
