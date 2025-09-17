@@ -6,6 +6,8 @@ import { AISpanRecord } from '@mastra/core';
 type V5TokenUsage = {
   inputTokens: number;
   outputTokens: number;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
   totalTokens: number;
 };
 
@@ -52,7 +54,13 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
 
       if (!acc?.[spanModelProvider]) {
         if (hasV5Format) {
-          acc[spanModelProvider] = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+          acc[spanModelProvider] = {
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+            reasoningTokens: 0,
+            cachedInputTokens: 0,
+          };
         } else {
           acc[spanModelProvider] = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
         }
@@ -62,9 +70,13 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
       if ('inputTokens' in acc[spanModelProvider] && hasV5Format) {
         const inputTokens = spanUsage.inputTokens ?? 0;
         const outputTokens = spanUsage.outputTokens ?? 0;
+        const reasoningTokens = spanUsage.reasoningTokens ?? 0;
+        const cachedInputTokens = spanUsage.cachedInputTokens ?? 0;
         const v5Acc = acc[spanModelProvider];
         v5Acc.inputTokens += inputTokens;
         v5Acc.outputTokens += outputTokens;
+        v5Acc.reasoningTokens += reasoningTokens;
+        v5Acc.cachedInputTokens += cachedInputTokens;
         v5Acc.totalTokens += spanUsage.totalTokens || inputTokens + outputTokens;
       } else if ('promptTokens' in acc[spanModelProvider] && !hasV5Format) {
         const promptTokens = spanUsage.promptTokens ?? 0;
@@ -88,6 +100,8 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
         const v5Acc = acc as V5TokenUsage;
         v5Acc.inputTokens = (v5Acc.inputTokens || 0) + v5Usage.inputTokens;
         v5Acc.outputTokens = (v5Acc.outputTokens || 0) + v5Usage.outputTokens;
+        v5Acc.reasoningTokens = (v5Acc.reasoningTokens || 0) + (v5Usage?.reasoningTokens ?? 0);
+        v5Acc.cachedInputTokens = (v5Acc.cachedInputTokens || 0) + (v5Usage?.cachedInputTokens ?? 0);
         v5Acc.totalTokens = (v5Acc.totalTokens || 0) + v5Usage.totalTokens;
       } else {
         const legacyUsage = providerUsage as LegacyTokenUsage;
@@ -99,7 +113,7 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
       return acc;
     },
     hasV5Format
-      ? ({ inputTokens: 0, outputTokens: 0, totalTokens: 0 } as V5TokenUsage)
+      ? ({ inputTokens: 0, outputTokens: 0, totalTokens: 0, reasoningTokens: 0, cachedInputTokens: 0 } as V5TokenUsage)
       : ({ promptTokens: 0, completionTokens: 0, totalTokens: 0 } as LegacyTokenUsage),
   );
 
@@ -125,6 +139,14 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
       label: 'Output Tokens',
       icon: <ArrowRightToLineIcon />,
     },
+    reasoningTokens: {
+      label: 'Reasoning Tokens',
+      icon: <ArrowRightToLineIcon />,
+    },
+    cachedInputTokens: {
+      label: 'Cached Input Tokens',
+      icon: <ArrowRightToLineIcon />,
+    },
   };
   const commonTokenPresentations: Record<string, { label: string; icon: React.ReactNode }> = {
     totalTokens: {
@@ -143,7 +165,7 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
 
   let usageKeyOrder = [];
   if (hasV5Format) {
-    usageKeyOrder = ['totalTokens', 'inputTokens', 'outputTokens'];
+    usageKeyOrder = ['totalTokens', 'inputTokens', 'outputTokens', 'reasoningTokens', 'cachedInputTokens'];
   } else {
     usageKeyOrder = ['totalTokens', 'promptTokens', 'completionTokens'];
   }
