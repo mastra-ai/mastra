@@ -4,6 +4,7 @@ import type { AISpanRecord } from '../storage';
 import { createStep, createWorkflow } from '../workflows';
 import type { MastraScorer } from './base';
 import { saveScorePayloadSchema, type ScoringEntityType } from './types';
+import { AISpanType, NoOpAISpan, getDefaultAITracing } from '../ai-tracing';
 
 export async function processTraceScoring({
   scorer,
@@ -16,7 +17,19 @@ export async function processTraceScoring({
 }) {
   const workflow = createScoringWorkflow({ scorer, mastra });
   const run = await workflow.createRunAsync();
-  run.start({ inputData: targets }).then(result => console.log(JSON.stringify(result, null, 2)));
+
+  const aiTracing = getDefaultAITracing();
+  const noOpSpan = new NoOpAISpan(
+    {
+      name: 'scorer-run',
+      type: AISpanType.GENERIC,
+      isInternal: true,
+    },
+    aiTracing!,
+  );
+  run
+    .start({ inputData: targets, tracingContext: { isInternal: true, currentSpan: noOpSpan } })
+    .then(result => console.log(JSON.stringify(result, null, 2)));
 }
 
 function getParentSpan(spans: AISpanRecord[]) {
@@ -42,7 +55,7 @@ const createScoringWorkflow = ({ scorer, mastra }: { scorer: MastraScorer; mastr
       spanId: z.string().optional(),
     }),
     outputSchema: z.any(),
-    execute: async ({ inputData }) => {
+    execute: async ({ inputData, tracingContext }) => {
       const trace = await storage.getAITrace(inputData.traceId);
 
       if (!trace) {
@@ -81,6 +94,9 @@ const createScoringWorkflow = ({ scorer, mastra }: { scorer: MastraScorer; mastr
       if (!runPayload) {
         throw new Error(`No run payload found for span ${parentSpan?.spanId}`);
       }
+
+      // @ts-ignore
+      runPayload.tracingContext = tracingContext;
 
       const result = await scorer.run(runPayload);
       const traceId = `${inputData.traceId}-${inputData.spanId ?? parentSpan?.spanId}`;
