@@ -170,7 +170,7 @@ export class DevBundler extends Bundler {
         }
 
         if (event.code === 'ERROR') {
-          console.log(event);
+          console.info(event);
           devLogger.error('Bundling failed - check console for details');
           watcher.off('event', cb);
           reject(event);
