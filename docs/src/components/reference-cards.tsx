@@ -750,14 +750,6 @@ export const ReferenceCards = () => {
             title: "Toxicity",
             href: "/reference/scorers/toxicity",
           },
-          {
-            title: "AnswerSimilarity",
-            href: "/reference/scorers/answer-similarity",
-          },
-          {
-            title: "ToolCallAccuracy",
-            href: "/reference/scorers/tool-call-accuracy",
-          },
         ],
         Voice: [
           {
