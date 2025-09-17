@@ -56,7 +56,6 @@ export interface Config<
   mcpServers?: TMCPServers;
   bundler?: BundlerConfig;
   pubsub?: PubSub;
-  serverCache?: MastraServerCache;
   scorers?: TScorers;
 
   /**
@@ -222,8 +221,6 @@ export class Mastra<
         this.#events[topic] = config?.events?.[topic] ?? [];
       }
     }
-
-    this.#serverCache = new InMemoryServerCache();
 
     const workflowEventProcessor = new WorkflowEventProcessor({ mastra: this });
     const workflowEventCb = async (event: Event, cb?: () => Promise<void>): Promise<void> => {
