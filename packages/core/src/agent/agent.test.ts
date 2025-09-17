@@ -5560,6 +5560,73 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(abortEvent).toBeDefined();
       });
     });
+    describe(`${version} - streamVNext destructuring support`, () => {
+      it('should support destructuring of stream properties and methods', async () => {
+        const agent = new Agent({
+          id: 'test-destructuring',
+          name: 'Test Destructuring',
+          model: openaiModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        const result = await agent.streamVNext('Say hello');
+
+        // Test destructuring of various properties
+        const { fullStream, textStream, text, usage, consumeStream, toolCalls, finishReason, request } = result;
+
+        // These should all work without throwing errors
+        try {
+          // Test async method
+          await consumeStream();
+
+          // Test promise getters
+          const textResult = await text;
+          expect(typeof textResult).toBe('string');
+
+          const usageResult = await usage;
+          expect(usageResult).toBeDefined();
+
+          const toolCallsResult = await toolCalls;
+          expect(Array.isArray(toolCallsResult)).toBe(true);
+
+          const finishReasonResult = await finishReason;
+          expect(finishReasonResult).toBeDefined();
+
+          const requestResult = await request;
+          expect(requestResult).toBeDefined();
+
+          // Test stream getters (just check they exist without consuming)
+          expect(fullStream).toBeDefined();
+          expect(textStream).toBeDefined();
+        } catch (error) {
+          // If this fails before the fix, we expect it to throw
+          console.error('Destructuring test failed:', error);
+          throw error;
+        }
+      });
+
+      it('should support destructuring with stream consumption', async () => {
+        const agent = new Agent({
+          id: 'test-destructuring-stream',
+          name: 'Test Destructuring Stream',
+          model: openaiModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        const result = await agent.streamVNext('Count to 3');
+
+        // Destructure the fullStream
+        const { fullStream } = result;
+
+        // This should work without errors
+        const chunks = [];
+        for await (const chunk of fullStream) {
+          chunks.push(chunk);
+        }
+
+        expect(chunks.length).toBeGreaterThan(0);
+      });
+    });
   }
 
   describe(`${version} - dynamic memory configuration`, () => {
