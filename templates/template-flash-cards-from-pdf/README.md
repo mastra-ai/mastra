@@ -214,7 +214,3 @@ pnpm start
 - Image generation is limited to 3 cards by default to manage costs
 - Flash cards are kept simple - just question, answer, and basic metadata
 - The template is designed as a learning example, not a production-ready product
-
-## License
-
-This template is part of the Mastra framework and follows the same licensing terms.

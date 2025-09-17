@@ -1,0 +1,103 @@
+---
+title: "ランタイムコンテキスト | Agents | Mastra Docs"
+description: Mastra の RuntimeContext を使用して、エージェントに対して動的かつリクエスト固有の設定を提供する方法を学びます。
+---
+
+# エージェントのランタイムコンテキスト
+
+Mastra は `RuntimeContext` を提供します。これは、実行時の変数でエージェントを設定できる依存性注入システムです。似たタスクを行うエージェントを複数作成している場合、ランタイムコンテキストを使うことで、それらをより柔軟な単一のエージェントにまとめられます。
+
+## 概要
+
+依存性注入システムを使うと、次のことが可能になります：
+
+1. 型安全な `runtimeContext` を通じて、実行時の設定変数をエージェントに渡す
+2. ツールの実行コンテキスト内でこれらの変数にアクセスする
+3. 基盤のコードを変更せずにエージェントの振る舞いを調整する
+4. 同一のエージェント内で複数のツール間で設定を共有する
+
+## エージェントでの `runtimeContext` の使用
+
+エージェントは `instructions` パラメータ経由で `runtimeContext` にアクセスし、`runtimeContext.get()` で変数を取得できます。これにより、基盤の実装を変更せずに、ユーザー入力や外部設定に応じてエージェントの挙動を動的に調整できます。
+
+```typescript {6-7,14} filename="src/mastra/agents/test-weather-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+export const testWeatherAgent = new Agent({
+  name: "test-weather-agent",
+  instructions: async ({ runtimeContext }) => {
+    const temperatureUnit = runtimeContext.get("temperature-unit");
+
+    return `You are a weather assistant that provides current weather information for any city.
+
+    When a user asks for weather:
+    - Extract the city name from their request
+    - Respond with: temperature, feels-like temperature, humidity, wind speed, and conditions
+    - Use ${temperatureUnit} for all temperature values
+    - If no city is mentioned, ask for a city name
+    `;
+  },
+  model: openai("gpt-4o-mini")
+});
+```
+
+### 使用例
+
+この例では、`runtimeContext.set()` を使って `temperature-unit` を **celsius** または **fahrenheit** に設定し、エージェントが適切な単位で気温を返せるようにします。
+
+```typescript {12} filename="src/test-weather-agent.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+
+const agent = mastra.getAgent("testWeatherAgent");
+
+export type WeatherRuntimeContext = {
+  "temperature-unit": "celsius" | "fahrenheit";
+};
+
+const runtimeContext = new RuntimeContext<WeatherRuntimeContext>();
+
+runtimeContext.set("temperature-unit", "fahrenheit");
+
+const response = await agent.generate("What's the weather in London?", {
+  runtimeContext
+});
+
+console.log(response.text);
+```
+
+## サーバーミドルウェアで `runtimeContext` にアクセスする
+
+サーバーミドルウェア内でリクエストから情報を抽出し、`runtimeContext` を動的に設定できます。次の例では、ユーザーのロケールに応じた応答になるよう、Cloudflare の `CF-IPCountry` ヘッダーに基づいて `temperature-unit` を設定しています。
+
+```typescript {2,12-21} filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import { testWeatherAgent } from "./agents/test-weather-agent";
+
+type WeatherRuntimeContext = {
+  "temperature-unit": "celsius" | "fahrenheit";
+};
+
+export const mastra = new Mastra({
+  agents: { testWeatherAgent },
+  server: {
+    middleware: [
+      async (context, next) => {
+        const country = context.req.header("CF-IPCountry");
+        const runtimeContext = context.get("runtimeContext") as RuntimeContext<WeatherRuntimeContext>;
+
+        runtimeContext.set("temperature-unit", country === "US" ? "fahrenheit" : "celsius");
+
+        await next();
+      }
+    ]
+  }
+});
+```
+
+## 関連項目
+
+- [動的エージェント](./dynamic-agents.mdx)
+- [ツールのランタイムコンテキスト](../tools-mcp/runtime-context.mdx)

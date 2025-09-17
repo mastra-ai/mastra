@@ -1,0 +1,258 @@
+---
+title: "Reference: Agent.network() (Experimental) | Agents | Mastra Docs"
+description: "Documentation for the `Agent.network()` method in Mastra agents, which enables multi-agent collaboration and routing."
+---
+
+import { NetworkCallout } from "@/components/network-callout.tsx"
+
+# Agent.network()
+
+<NetworkCallout />
+
+The `.network()` method enables multi-agent collaboration and routing. This method accepts messages and optional execution options.
+
+## Usage example
+
+```typescript copy
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { agent1, agent2 } from './agents';
+import { workflow1 } from './workflows';
+import { tool1, tool2 } from './tools';
+
+const agent = new Agent({
+  name: 'network-agent',
+  instructions: 'You are a network agent that can help users with a variety of tasks.',
+  model: openai('gpt-4o'),
+  agents: {
+    agent1,
+    agent2,
+  },
+  workflows: {
+    workflow1,
+  },
+  tools: {
+    tool1,
+    tool2,
+  },
+})
+
+await agent.network(`
+  Find me the weather in Tokyo. 
+  Based on the weather, plan an activity for me.
+`);
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]",
+      description: "The messages to send to the agent. Can be a single string, array of strings, or structured message objects.",
+    },
+    {
+      name: "options",
+      type: "MultiPrimitiveExecutionOptions",
+      isOptional: true,
+      description: "Optional configuration for the network process.",
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "maxSteps",
+      type: "number",
+      isOptional: true,
+      description: "Maximum number of steps to run during execution.",
+    },
+    {
+      name: "memory",
+      type: "object",
+      isOptional: true,
+      description: "Configuration for memory. This is the preferred way to manage memory.",
+      properties: [
+        {
+          parameters: [{
+              name: "thread",
+              type: "string | { id: string; metadata?: Record<string, any>, title?: string }",
+              isOptional: false,
+              description: "The conversation thread, as a string ID or an object with an `id` and optional `metadata`."
+          }]
+        },
+        {
+          parameters: [{
+              name: "resource",
+              type: "string",
+              isOptional: false,
+              description: "Identifier for the user or resource associated with the thread."
+          }]
+        },
+        {
+          parameters: [{
+              name: "options",
+              type: "MemoryConfig",
+              isOptional: true,
+              description: "Configuration for memory behavior, like message history and semantic recall."
+          }]
+        }
+      ]
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      isOptional: true,
+      description: "AI tracing context for span hierarchy and metadata.",
+    },
+    {
+      name: "telemetry",
+      type: "TelemetrySettings",
+      isOptional: true,
+      description:
+        "Settings for telemetry collection during streaming.",
+      properties: [
+        {
+          parameters: [{
+            name: "isEnabled",
+            type: "boolean",
+            isOptional: true,
+            description: "Enable or disable telemetry. Disabled by default while experimental."
+          }]
+        },
+        {
+          parameters: [{
+            name: "recordInputs",
+            type: "boolean",
+            isOptional: true,
+            description: "Enable or disable input recording. Enabled by default. You might want to disable input recording to avoid recording sensitive information."
+          }]
+        },
+        {
+          parameters: [{
+            name: "recordOutputs",
+            type: "boolean",
+            isOptional: true,
+            description: "Enable or disable output recording. Enabled by default. You might want to disable output recording to avoid recording sensitive information."
+          }]
+        },
+        {
+          parameters: [{
+            name: "functionId",
+            type: "string",
+            isOptional: true,
+            description: "Identifier for this function. Used to group telemetry data by function."
+          }]
+        }
+      ]
+    },
+    {
+      name: "modelSettings",
+      type: "CallSettings",
+      isOptional: true,
+      description:
+        "Model-specific settings like temperature, maxTokens, topP, etc. These are passed to the underlying language model.",
+      properties: [
+        {
+          parameters: [{
+            name: "temperature",
+            type: "number",
+            isOptional: true,
+            description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic."
+          }]
+        },
+        {
+          parameters: [{
+            name: "maxRetries",
+            type: "number",
+            isOptional: true,
+            description: "Maximum number of retries for failed requests."
+          }]
+        },
+        {
+          parameters: [{
+            name: "topP",
+            type: "number",
+            isOptional: true,
+            description: "Nucleus sampling. This is a number between 0 and 1. It is recommended to set either temperature or topP, but not both."
+          }]
+        },
+        {
+          parameters: [{
+            name: "topK",
+            type: "number",
+            isOptional: true,
+            description: "Only sample from the top K options for each subsequent token. Used to remove 'long tail' low probability responses."
+          }]
+        },
+        {
+          parameters: [{
+            name: "presencePenalty",
+            type: "number",
+            isOptional: true,
+            description: "Presence penalty setting. It affects the likelihood of the model to repeat information that is already in the prompt. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition)."
+          }]
+        },
+        {
+          parameters: [{
+            name: "frequencyPenalty",
+            type: "number",
+            isOptional: true,
+            description: "Frequency penalty setting. It affects the likelihood of the model to repeatedly use the same words or phrases. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition)."
+          }]
+        },
+        {
+          parameters: [{
+            name: "stopSequences",
+            type: "string[]",
+            isOptional: true,
+            description: "Stop sequences. If set, the model will stop generating text when one of the stop sequences is generated."
+          }]
+        },
+      ]
+    },
+    {
+      name: "runId",
+      type: "string",
+      isOptional: true,
+      description: "Unique ID for this generation run. Useful for tracking and debugging purposes.",
+    },
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      description: "Runtime context for dependency injection and contextual information.",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "stream",
+      type: "MastraAgentNetworkStream<NetworkChunkType>",
+      description: "A custom stream that extends ReadableStream<NetworkChunkType> with additional network-specific properties",
+    },
+    {
+      name: "status",
+      type: "Promise<RunStatus>",
+      description: "A promise that resolves to the current workflow run status",
+    },
+    {
+      name: "result",
+      type: "Promise<WorkflowResult<TOutput, TSteps>>",
+      description: "A promise that resolves to the final workflow result",
+    },
+    {
+      name: "usage",
+      type: "Promise<{ promptTokens: number; completionTokens: number; totalTokens: number }>",
+      description: "A promise that resolves to token usage statistics",
+    },
+  ]}
+/>

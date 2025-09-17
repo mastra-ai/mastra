@@ -1,0 +1,143 @@
+---
+title: "MastraAuthClerk クラス"
+description: "Clerk 認証を用いて Mastra アプリケーションの認証を行う MastraAuthClerk クラスのドキュメント。"
+---
+
+import { Tabs, Tab } from "@/components/tabs";
+
+
+# MastraAuthClerk クラス
+
+`MastraAuthClerk` クラスは、Clerk を用いて Mastra の認証を提供します。Clerk の認証システムで受信リクエストを検証し、`experimental_auth` オプションを通じて Mastra サーバーと統合します。
+
+## 前提条件
+
+この例では Clerk の認証を使用します。`.env` ファイルに Clerk の認証情報を追加し、Clerk プロジェクトが正しく設定されていることを確認してください。
+
+```env filename=".env" copy
+CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...
+CLERK_JWKS_URI=https://your-clerk-domain.clerk.accounts.dev/.well-known/jwks.json
+```
+
+> 注: これらのキーは Clerk ダッシュボードの「API Keys」で確認できます。
+
+## インストール
+
+`MastraAuthClerk` クラスを使用する前に、`@mastra/clerk-auth` パッケージをインストールしてください。
+
+```bash copy
+npm install @mastra/clerk-auth@latest
+```
+
+## 使用例
+
+```typescript {2,7-11} filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthClerk } from '@mastra/clerk-auth';
+
+export const mastra = new Mastra({
+  // ..
+  server: {
+    experimental_auth: new MastraAuthClerk({
+      publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+      secretKey: process.env.CLERK_SECRET_KEY,
+      jwksUri: process.env.CLERK_JWKS_URI
+    }),
+  },
+});
+```
+
+> 注: デフォルトの `authorizeUser` メソッドは、認証済みユーザーをすべて許可します。ユーザーの認可をカスタマイズするには、プロバイダーを初期化する際にカスタムの `authorizeUser` 関数を指定してください。
+
+> 利用可能なすべての設定オプションについては、[MastraAuthClerk](/reference/auth/clerk.mdx) の API リファレンスを参照してください。
+
+## クライアント側のセットアップ
+
+Clerk 認証を使用する場合は、クライアント側で Clerk からアクセストークンを取得し、それを Mastra へのリクエストに渡す必要があります。
+
+### アクセストークンの取得
+
+Clerk の React フックを使ってユーザーを認証し、アクセストークンを取得します：
+
+```typescript filename="lib/auth.ts" showLineNumbers copy
+import { useAuth } from "@clerk/nextjs";
+
+export const useClerkAuth = () => {
+  const { getToken } = useAuth();
+  
+  const getAccessToken = async () => {
+    const token = await getToken();
+    return token;
+  };
+  
+  return { getAccessToken };
+};
+```
+
+> くわしくは [Clerk ドキュメント](https://clerk.com/docs) をご覧ください。
+
+## `MastraClient` の設定
+
+`experimental_auth` が有効な場合、`MastraClient` を使ったすべてのリクエストには、`Authorization` ヘッダーに有効な Clerk のアクセストークンを含める必要があります：
+
+```typescript {6} filename="lib/mastra/mastra-client.ts" showLineNumbers copy
+import { MastraClient } from "@mastra/client-js";
+
+export const mastraClient = new MastraClient({
+  baseUrl: "https://<mastra-api-url>",
+  headers: {
+    Authorization: `Bearer ${accessToken}`
+  }
+});
+```
+
+> 注: アクセストークンは `Authorization` ヘッダーで `Bearer` を前置する必要があります。
+> そのほかの設定オプションについては [Mastra Client SDK](/docs/server-db/mastra-client.mdx) を参照してください。
+
+### 認証リクエストの送信
+
+`MastraClient` を Clerk のアクセストークンで設定したら、認証付きリクエストを送信できます:
+
+<Tabs items={["MastraClient", "curl"]}>
+  <Tab>
+    ```tsx filename="src/components/test-agent.tsx" showLineNumbers copy
+    "use client";
+
+    import { useAuth } from "@clerk/nextjs";
+    import { MastraClient } from "@mastra/client-js";
+
+    export const TestAgent = () => {
+      const { getToken } = useAuth();
+
+      async function handleClick() {
+        const token = await getToken();
+
+        const client = new MastraClient({
+          baseUrl: "http://localhost:4111",
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+
+        const weatherAgent = client.getAgent("weatherAgent");
+        const response = await weatherAgent.generate({
+          messages: "What's the weather like in New York",
+        });
+
+        console.log({ response });
+      }
+
+      return <button onClick={handleClick}>Test Agent</button>;
+    };
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <your-clerk-access-token>" \
+      -d '{
+        "messages": "Weather in London"
+      }'
+    ```
+  </Tab>
+</Tabs>

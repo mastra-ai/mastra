@@ -1,0 +1,43 @@
+---
+title: "リファレンス: Workflow.map() | Workflows | Mastra ドキュメント"
+description: ワークフローにおける `Workflow.map()` メソッドのドキュメント。前のステップの出力データを後続のステップの入力に対応付けます。
+---
+
+# Workflow.map()
+
+`.map()` メソッドは、前のステップの出力データを後続のステップの入力に対応付け、ステップ間でデータを変換できるようにします。
+
+## 使用例
+
+```typescript copy
+workflow.map(async ({ inputData }) => `${inputData.value} - map`
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "mappingFunction",
+      type: "(params: { inputData: any }) => any",
+      description: "入力データを変換して、マッピング結果を返す関数",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "メソッドチェーン用のワークフローのインスタンス",
+    },
+  ]}
+/>
+
+## 関連項目
+
+- [入力データのマッピング](../../docs/workflows/input-data-mapping.mdx)

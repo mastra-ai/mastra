@@ -416,8 +416,8 @@ interface CreateBaseOptions<TType extends AISpanType> {
   name: string;
   /** Span type */
   type: TType;
-  /** Is an internal span? */
-  isInternal?: boolean;
+  /** Policy-level tracing configuration */
+  tracingPolicy?: TracingPolicy;
 }
 
 /**
@@ -492,6 +492,42 @@ export interface ErrorSpanOptions<TType extends AISpanType> extends UpdateBaseOp
 // ============================================================================
 
 /**
+ * Bitwise options to set different types of spans as internal in
+ * a workflow or agent execution.
+ */
+export enum InternalSpans {
+  /** No spans are marked internal */
+  NONE = 0,
+  /** Workflow spans are marked internal */
+  WORKFLOW = 1 << 0, // 0001
+  /** Agent spans are marked internal */
+  AGENT = 1 << 1, // 0010
+  /** Tool spans are marked internal */
+  TOOL = 1 << 2, // 0100
+  /** LLM spans are marked internal */
+  LLM = 1 << 3, // 1000
+
+  /** All spans are marked internal */
+  ALL = (1 << 4) - 1, // 1111 (all bits set up to 3)
+}
+
+/**
+ * Policy-level tracing configuration applied when creating
+ * a workflow or agent. Unlike TracingOptions, which are
+ * provided at execution time, policies define persistent rules
+ * for how spans are treated across all executions of the
+ * workflow/agent.
+ */
+export interface TracingPolicy {
+  /**
+   * Bitwise options to set different types of spans as Internal in
+   * a workflow or agent execution. Internal spans are hidden by
+   * default in exported traces.
+   */
+  internal?: InternalSpans;
+}
+
+/**
  * Options passed when starting a new agent or workflow execution
  */
 export interface TracingOptions {
@@ -505,8 +541,6 @@ export interface TracingOptions {
 export interface TracingContext {
   /** Current AI span for creating child spans and adding metadata */
   currentSpan?: AnyAISpan;
-  /** Is the processing internal? Should new spans be created as such? */
-  isInternal?: boolean;
 }
 
 /**

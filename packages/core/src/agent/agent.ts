@@ -6,7 +6,7 @@ import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
-import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
+import { AISpanType, getOrCreateSpan, getValidTraceId, InternalSpans } from '../ai-tracing';
 import type { AISpan, TracingContext, TracingOptions, TracingProperties } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -29,7 +29,7 @@ import type {
 } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
 import type { ModelLoopStreamArgs } from '../llm/model/model.loop.types';
-import type { TripwireProperties, MastraLanguageModel } from '../llm/model/shared.types';
+import type { TripwireProperties, MastraLanguageModel, MastraLanguageModelV2 } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
@@ -76,6 +76,8 @@ import type {
   ToolsetsInput,
   ToolsInput,
   AgentMemoryOption,
+  AgentModelManagerConfig,
+  AgentCreateOptions,
 } from './types';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
@@ -87,6 +89,10 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) 
 
   return cb(value);
 }
+
+// Flags to track if deprecation warnings have been shown
+let streamDeprecationWarningShown = false;
+let generateDeprecationWarningShown = false;
 
 // Helper to resolve threadId from args (supports both new and old API)
 function resolveThreadIdFromArgs(args: {
@@ -139,7 +145,15 @@ export class Agent<
   public name: TAgentId;
   #instructions: DynamicArgument<string>;
   readonly #description?: string;
-  model?: DynamicArgument<MastraLanguageModel>;
+  model:
+    | DynamicArgument<MastraLanguageModel>
+    | {
+        id: string;
+        model: DynamicArgument<MastraLanguageModel>;
+        maxRetries: number;
+        enabled: boolean;
+      }[];
+  maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
   #workflows?: DynamicArgument<Record<string, Workflow>>;
@@ -153,6 +167,7 @@ export class Agent<
   #voice: CompositeVoice;
   #inputProcessors?: DynamicArgument<InputProcessor[]>;
   #outputProcessors?: DynamicArgument<OutputProcessor[]>;
+  readonly #options?: AgentCreateOptions;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -165,6 +180,7 @@ export class Agent<
 
     this.#instructions = config.instructions;
     this.#description = config.description;
+    this.#options = config.options;
 
     if (!config.model) {
       const mastraError = new MastraError({
@@ -181,7 +197,32 @@ export class Agent<
       throw mastraError;
     }
 
-    this.model = config.model;
+    if (Array.isArray(config.model)) {
+      if (config.model.length === 0) {
+        const mastraError = new MastraError({
+          id: 'AGENT_CONSTRUCTOR_MODEL_ARRAY_EMPTY',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: config.name,
+          },
+          text: `Model array is empty. Please provide at least one model.`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
+      this.model = config.model.map(mdl => ({
+        id: randomUUID(),
+        model: mdl.model,
+        maxRetries: mdl.maxRetries ?? config?.maxRetries ?? 0,
+        enabled: mdl.enabled ?? true,
+      }));
+    } else {
+      this.model = config.model;
+    }
+
+    this.maxRetries = config.maxRetries ?? 0;
 
     if (config.workflows) {
       this.#workflows = config.workflows;
@@ -678,23 +719,34 @@ export class Agent<
       : this.getModel({ runtimeContext });
 
     return resolveMaybePromise(modelToUse, resolvedModel => {
-      let llm: MastraLLM;
+      let llm: MastraLLM | Promise<MastraLLM>;
       if (resolvedModel.specificationVersion === 'v2') {
-        llm = new MastraLLMVNext({ model: resolvedModel, mastra: this.#mastra });
+        llm = this.prepareModels(runtimeContext, model).then(models => {
+          const enabledModels = models.filter(model => model.enabled);
+          return new MastraLLMVNext({
+            models: enabledModels,
+            mastra: this.#mastra,
+            options: { tracingPolicy: this.#options?.tracingPolicy },
+          });
+        });
       } else {
-        llm = new MastraLLMV1({ model: resolvedModel, mastra: this.#mastra });
+        llm = new MastraLLMV1({
+          model: resolvedModel,
+          mastra: this.#mastra,
+          options: { tracingPolicy: this.#options?.tracingPolicy },
+        });
       }
 
-      // Apply stored primitives if available
-      if (this.#primitives) {
-        llm.__registerPrimitives(this.#primitives);
-      }
-
-      if (this.#mastra) {
-        llm.__registerMastra(this.#mastra);
-      }
-
-      return llm;
+      return resolveMaybePromise(llm, resolvedLLM => {
+        // Apply stored primitives if available
+        if (this.#primitives) {
+          resolvedLLM.__registerPrimitives(this.#primitives);
+        }
+        if (this.#mastra) {
+          resolvedLLM.__registerMastra(this.#mastra);
+        }
+        return resolvedLLM;
+      }) as MastraLLM;
     });
   }
 
@@ -722,7 +774,81 @@ export class Agent<
         throw mastraError;
       }
 
-      return this.model;
+      let modelToUse: MastraLanguageModel | DynamicArgument<MastraLanguageModel>;
+
+      if (Array.isArray(this.model)) {
+        if (this.model.length === 0 || !this.model[0]) {
+          const mastraError = new MastraError({
+            id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: {
+              agentName: this.name,
+            },
+            text: `[Agent:${this.name}] - Empty model list provided`,
+          });
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
+        }
+        modelToUse = this.model[0].model;
+
+        if (typeof modelToUse !== 'function' && modelToUse.specificationVersion !== 'v2') {
+          const mastraError = new MastraError({
+            id: 'AGENT_GET_MODEL_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: {
+              agentName: this.name,
+            },
+            text: `[Agent:${this.name}] - Only v2 models are allowed when an array of models is provided`,
+          });
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
+        }
+      } else {
+        modelToUse = this.model;
+      }
+
+      if (typeof modelToUse === 'function') {
+        const result = modelToUse({ runtimeContext, mastra: this.#mastra });
+        return resolveMaybePromise(result, model => {
+          if (!model) {
+            const mastraError = new MastraError({
+              id: 'AGENT_GET_MODEL_FUNCTION_EMPTY_RETURN',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+              details: {
+                agentName: this.name,
+              },
+              text: `[Agent:${this.name}] - Function-based model returned empty value`,
+            });
+            this.logger.trackException(mastraError);
+            this.logger.error(mastraError.toString());
+            throw mastraError;
+          }
+
+          if (Array.isArray(this.model) && model.specificationVersion !== 'v2') {
+            const mastraError = new MastraError({
+              id: 'AGENT_GET_MODEL_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+              details: {
+                agentName: this.name,
+              },
+              text: `[Agent:${this.name}] - Only v2 models are allowed when an array of models is provided`,
+            });
+            this.logger.trackException(mastraError);
+            this.logger.error(mastraError.toString());
+            throw mastraError;
+          }
+
+          return model;
+        });
+      }
+
+      return modelToUse;
     }
 
     const result = this.model({ runtimeContext, mastra: this.#mastra });
@@ -746,6 +872,15 @@ export class Agent<
     });
   }
 
+  public async getModelList(
+    runtimeContext: RuntimeContext = new RuntimeContext(),
+  ): Promise<Array<AgentModelManagerConfig> | null> {
+    if (!Array.isArray(this.model)) {
+      return null;
+    }
+    return this.prepareModels(runtimeContext);
+  }
+
   __updateInstructions(newInstructions: string) {
     this.#instructions = newInstructions;
     this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
@@ -754,6 +889,56 @@ export class Agent<
   __updateModel({ model }: { model: DynamicArgument<MastraLanguageModel> }) {
     this.model = model;
     this.logger.debug(`[Agents:${this.name}] Model updated.`, { model: this.model, name: this.name });
+  }
+
+  reorderModels(modelIds: string[]) {
+    if (!Array.isArray(this.model)) {
+      this.logger.warn(`[Agents:${this.name}] model is not an array`);
+      return;
+    }
+
+    this.model = this.model.sort((a, b) => {
+      const aIndex = modelIds.indexOf(a.id);
+      const bIndex = modelIds.indexOf(b.id);
+      return aIndex - bIndex;
+    });
+    this.logger.debug(`[Agents:${this.name}] Models reordered`);
+  }
+
+  updateModelInModelList({
+    id,
+    model,
+    enabled,
+    maxRetries,
+  }: {
+    id: string;
+    model?: DynamicArgument<MastraLanguageModel>;
+    enabled?: boolean;
+    maxRetries?: number;
+  }) {
+    if (!Array.isArray(this.model)) {
+      this.logger.warn(`[Agents:${this.name}] model is not an array`);
+      return;
+    }
+
+    const modelToUpdate = this.model.find(m => m.id === id);
+    if (!modelToUpdate) {
+      this.logger.warn(`[Agents:${this.name}] model ${id} not found`);
+      return;
+    }
+
+    this.model = this.model.map(mdl => {
+      if (mdl.id === id) {
+        return {
+          ...mdl,
+          model: model ?? mdl.model,
+          enabled: enabled ?? mdl.enabled,
+          maxRetries: maxRetries ?? mdl.maxRetries,
+        };
+      }
+      return mdl;
+    });
+    this.logger.debug(`[Agents:${this.name}] model ${id} updated`);
   }
 
   #primitives?: MastraPrimitives;
@@ -1054,7 +1239,8 @@ export class Agent<
           agentName: this.name,
           runtimeContext,
           tracingContext,
-          model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
+          model: await this.getModel({ runtimeContext }),
+          tracingPolicy: this.#options?.tracingPolicy,
         };
         const convertedToCoreTool = makeCoreTool(toolObj, options);
         convertedMemoryTools[toolName] = convertedToCoreTool;
@@ -1275,8 +1461,9 @@ export class Agent<
           agentName: this.name,
           runtimeContext,
           tracingContext,
-          model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
+          model: await this.getModel({ runtimeContext }),
           writableStream,
+          tracingPolicy: this.#options?.tracingPolicy,
         };
         return [k, makeCoreTool(tool, options)];
       }),
@@ -1333,7 +1520,8 @@ export class Agent<
             agentName: this.name,
             runtimeContext,
             tracingContext,
-            model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
+            model: await this.getModel({ runtimeContext }),
+            tracingPolicy: this.#options?.tracingPolicy,
           };
           const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
           toolsForRequest[toolName] = convertedToCoreTool;
@@ -1382,7 +1570,8 @@ export class Agent<
           agentName: this.name,
           runtimeContext,
           tracingContext,
-          model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
+          model: await this.getModel({ runtimeContext }),
+          tracingPolicy: this.#options?.tracingPolicy,
         };
         const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
         toolsForRequest[toolName] = convertedToCoreTool;
@@ -1507,8 +1696,9 @@ export class Agent<
           memory: await this.getMemory({ runtimeContext }),
           agentName: this.name,
           runtimeContext,
-          model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
+          model: await this.getModel({ runtimeContext }),
           tracingContext,
+          tracingPolicy: this.#options?.tracingPolicy,
         };
 
         convertedWorkflowTools[workflowName] = makeCoreTool(toolObj, options);
@@ -1739,8 +1929,9 @@ export class Agent<
             resourceId,
             threadId: thread ? thread.id : undefined,
           },
-          tracingContext,
+          tracingPolicy: this.#options?.tracingPolicy,
           tracingOptions,
+          tracingContext,
           runtimeContext,
         });
 
@@ -2182,7 +2373,7 @@ export class Agent<
           overrideScorers,
           threadId,
           resourceId,
-          tracingContext: { currentSpan: agentAISpan, isInternal: true },
+          tracingContext: { currentSpan: agentAISpan },
         });
 
         const scoringData: {
@@ -2655,6 +2846,72 @@ export class Agent<
     };
   }
 
+  private async prepareModels(
+    runtimeContext: RuntimeContext,
+    model?: DynamicArgument<MastraLanguageModel>,
+  ): Promise<Array<AgentModelManagerConfig>> {
+    if (model || !Array.isArray(this.model)) {
+      const modelToUse = model ?? this.model;
+      const resolvedModel =
+        typeof modelToUse === 'function' ? await modelToUse({ runtimeContext, mastra: this.#mastra }) : modelToUse;
+
+      if ((resolvedModel as MastraLanguageModel).specificationVersion !== 'v2') {
+        const mastraError = new MastraError({
+          id: 'AGENT_PREPARE_MODELS_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Only v2 models are allowed when an array of models is provided`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
+      return [
+        {
+          id: 'main',
+          model: resolvedModel as MastraLanguageModelV2,
+          maxRetries: this.maxRetries ?? 0,
+          enabled: true,
+        },
+      ];
+    }
+
+    const models = await Promise.all(
+      this.model.map(async modelConfig => {
+        const model =
+          typeof modelConfig.model === 'function'
+            ? await modelConfig.model({ runtimeContext, mastra: this.#mastra })
+            : modelConfig.model;
+
+        if (model.specificationVersion !== 'v2') {
+          const mastraError = new MastraError({
+            id: 'AGENT_PREPARE_MODELS_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: {
+              agentName: this.name,
+            },
+            text: `[Agent:${this.name}] - Only v2 models are allowed when an array of models is provided`,
+          });
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
+        }
+
+        return {
+          id: modelConfig.id,
+          model: model as MastraLanguageModelV2,
+          maxRetries: modelConfig.maxRetries,
+          enabled: modelConfig.enabled,
+        };
+      }),
+    );
+
+    return models;
+  }
   /**
    * Merges telemetry wrapper with default onFinish callback when needed
    */
@@ -2717,8 +2974,9 @@ export class Agent<
         resourceId,
         threadId: threadFromArgs?.id,
       },
-      tracingContext: options.tracingContext,
+      tracingPolicy: this.#options?.tracingPolicy,
       tracingOptions: options.tracingOptions,
+      tracingContext: options.tracingContext,
       runtimeContext,
     });
 
@@ -3059,6 +3317,13 @@ export class Agent<
       inputSchema: z.any(),
       outputSchema: z.any(),
       steps: [prepareToolsStep, prepareMemory],
+      options: {
+        tracingPolicy: {
+          // mark all workflow spans related to the
+          // VNext execution as internal
+          internal: InternalSpans.WORKFLOW,
+        },
+      },
     })
       .parallel([prepareToolsStep, prepareMemory])
       .map(async ({ inputData, bail }) => {
@@ -3260,7 +3525,7 @@ export class Agent<
       .commit();
 
     const run = await executionWorkflow.createRunAsync();
-    const result = await run.start({ tracingContext: { currentSpan: agentAISpan, isInternal: true } });
+    const result = await run.start({ tracingContext: { currentSpan: agentAISpan } });
 
     return result;
   }
@@ -3458,7 +3723,7 @@ export class Agent<
       runtimeContext,
       structuredOutput,
       overrideScorers,
-      tracingContext: { currentSpan: agentAISpan, isInternal: true },
+      tracingContext: { currentSpan: agentAISpan },
     });
 
     agentAISpan?.end({
@@ -3624,9 +3889,12 @@ export class Agent<
     messages: MessageListInput,
     generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
-    this.logger.warn(
-      "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 23rd, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
-    );
+    if (!generateDeprecationWarningShown) {
+      this.logger.warn(
+        "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 23rd, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
+      );
+      generateDeprecationWarningShown = true;
+    }
     // @ts-expect-error - generic type issues
     return this.generateLegacy(messages, generateOptions);
   }
@@ -3991,9 +4259,12 @@ export class Agent<
     | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
     | (StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties)
   > {
-    this.logger.warn(
-      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 23rd, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
-    );
+    if (!streamDeprecationWarningShown) {
+      this.logger.warn(
+        "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 23rd, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
+      );
+      streamDeprecationWarningShown = true;
+    }
     // @ts-expect-error - generic type issues
     return this.streamLegacy(messages, streamOptions);
   }

@@ -803,4 +803,30 @@ export const redirectList = [
     destination: "/:locale/reference/templates/overview",
     permanent: true,
   },
+  // Redirect moved streaming files from agents to streaming
+  {
+    source: "/:locale/reference/agents/stream",
+    destination: "/:locale/reference/streaming/stream",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/agents/streamVNext",
+    destination: "/:locale/reference/streaming/streamVNext",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/agents/ChunkType",
+    destination: "/:locale/reference/streaming/ChunkType",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/agents/MastraModelOutput",
+    destination: "/:locale/reference/streaming/MastraModelOutput",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/networks/agent-network",
+    destination: "/:locale/reference/agents/network",
+    permanent: true,
+  },
 ];

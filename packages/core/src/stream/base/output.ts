@@ -118,6 +118,12 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   #streamConsumed = false;
   #returnScorerData = false;
 
+  #model: {
+    modelId: string | undefined;
+    provider: string | undefined;
+    version: 'v1' | 'v2';
+  };
+
   /**
    * Unique identifier for this execution run.
    */
@@ -160,6 +166,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
     this.traceId = getValidTraceId(options.tracingContext?.currentSpan);
+
+    this.#model = _model;
+
     this.messageId = messageId;
     // Create processor runner if outputProcessors are provided
     if (options.outputProcessors?.length) {
@@ -315,11 +324,13 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 response: { ...otherMetadata, messages: chunk.payload.messages.nonUser } as any,
                 request: request,
                 usage: chunk.payload.output.usage,
-                // TODO: need to be able to pass a step id into this fn to get the content for a specific step id
-                content: messageList.get.response.aiV5.stepContent(),
+                content: messageList.get.response.aiV5.modelContent(-1),
               };
 
-              await options?.onStepFinish?.(stepResult);
+              await options?.onStepFinish?.({
+                ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
+                ...stepResult,
+              });
 
               self.#bufferedSteps.push(stepResult);
 
@@ -483,6 +494,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 const { stepType: _stepType, isContinued: _isContinued } = baseFinishStep;
 
                 const onFinishPayload = {
+                  ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
                   text: baseFinishStep.text,
                   warnings: baseFinishStep.warnings ?? [],
                   finishReason: chunk.payload.stepResult.reason,
@@ -531,6 +543,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               if (options?.rootSpan) {
                 options.rootSpan.setAttributes({
+                  ...(self.#model.modelId ? { 'aisdk.model.id': self.#model.modelId } : {}),
+                  ...(self.#model.provider ? { 'aisdk.model.provider': self.#model.provider } : {}),
                   ...(baseFinishStep?.usage?.reasoningTokens
                     ? {
                         'stream.usage.reasoningTokens': baseFinishStep.usage.reasoningTokens,

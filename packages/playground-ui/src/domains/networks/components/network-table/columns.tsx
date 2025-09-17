@@ -20,10 +20,7 @@ export const columns: ColumnDef<NetworkTableColumn>[] = [
         <EntryCell
           icon={<AgentIcon />}
           name={
-            <Link
-              className="w-full space-y-0"
-              href={`/networks${row.original.isVNext ? '/v-next' : ''}/${row.original.id}/chat`}
-            >
+            <Link className="w-full space-y-0" href={`/networks/v-next/${row.original.id}/chat`}>
               {row.original.name}
             </Link>
           }
@@ -70,7 +67,6 @@ export const columns: ColumnDef<NetworkTableColumn>[] = [
         <Badge variant="default" icon={<Brain />}>
           {row.original.routingModel}
         </Badge>
-        {row.original.isVNext ? <Badge className="!text-accent1 ml-2">vNext</Badge> : null}
       </Cell>
     ),
   },

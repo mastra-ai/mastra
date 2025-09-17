@@ -1,0 +1,151 @@
+---
+title: Mastra クライアントワークフロー（レガシー）API
+description: client-js SDKを使用してMastraで自動化されたレガシーワークフローを操作および実行する方法を学びます。
+---
+
+
+
+# ワークフロー（レガシー）API
+
+ワークフロー（レガシー）APIは、Mastraの自動化されたレガシーワークフローと対話し、実行するためのメソッドを提供します。
+
+
+
+## すべてのレガシーワークフローの取得
+
+利用可能なすべてのレガシーワークフローのリストを取得します：
+
+```typescript
+const workflows = await mastraClient.getLegacyWorkflows();
+```
+
+
+
+## 特定のレガシーワークフローの操作
+
+特定のレガシーワークフローのインスタンスを取得する：
+
+```typescript
+const workflow = mastraClient.getLegacyWorkflow("workflow-id");
+```
+
+
+
+## Legacy Workflow Methods
+
+### Legacy Workflowの詳細を取得
+
+Legacy workflowの詳細情報を取得します：
+
+```typescript
+const details = await workflow.details();
+```
+
+### Legacy Workflow実行を非同期で開始
+
+triggerDataを使用してlegacy workflow実行を開始し、完全な実行結果を待機します：
+
+```typescript
+const { runId } = workflow.createRun();
+
+const result = await workflow.startAsync({
+  runId,
+  triggerData: {
+    param1: "value1",
+    param2: "value2",
+  },
+});
+```
+
+### Legacy Workflow実行を非同期で再開
+
+中断されたlegacy workflowステップを再開し、完全な実行結果を待機します：
+
+```typescript
+const { runId } = createRun({ runId: prevRunId });
+
+const result = await workflow.resumeAsync({
+  runId,
+  stepId: "step-id",
+  contextData: { key: "value" },
+});
+```
+
+### Legacy Workflowの監視
+
+Legacy workflowの遷移を監視します
+
+```typescript
+try {
+  // workflowインスタンスを取得
+  const workflow = mastraClient.getLegacyWorkflow("workflow-id");
+
+  // workflow実行を作成
+  const { runId } = workflow.createRun();
+
+  // workflow実行を監視
+  workflow.watch({ runId }, (record) => {
+    // 新しいレコードはすべてworkflow実行の最新の遷移状態です
+
+    console.log({
+      activePaths: record.activePaths,
+      results: record.results,
+      timestamp: record.timestamp,
+      runId: record.runId,
+    });
+  });
+
+  // workflow実行を開始
+  workflow.start({
+    runId,
+    triggerData: {
+      city: "New York",
+    },
+  });
+} catch (e) {
+  console.error(e);
+}
+```
+
+### Legacy Workflowの再開
+
+Legacy workflow実行を再開し、legacy workflowステップの遷移を監視します
+
+```typescript
+try {
+  //ステップが中断されている場合にworkflow実行を再開するには
+  const { run } = createRun({ runId: prevRunId });
+
+  //実行を監視
+  workflow.watch({ runId }, (record) => {
+    // 新しいレコードはすべてworkflow実行の最新の遷移状態です
+
+    console.log({
+      activePaths: record.activePaths,
+      results: record.results,
+      timestamp: record.timestamp,
+      runId: record.runId,
+    });
+  });
+
+  //実行を再開
+  workflow.resume({
+    runId,
+    stepId: "step-id",
+    contextData: { key: "value" },
+  });
+} catch (e) {
+  console.error(e);
+}
+```
+
+### Legacy Workflow実行結果
+
+Legacy workflow実行結果は以下を返します：
+
+| フィールド    | 型                                                                             | 説明                                                               |
+| ------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| `activePaths` | `Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>` | 実行ステータスと共にworkflow内で現在アクティブなパス               |
+| `results`     | `LegacyWorkflowRunResult<any, any, any>['results']`                            | workflow実行からの結果                                             |
+| `timestamp`   | `number`                                                                       | この遷移が発生したUnixタイムスタンプ                               |
+| `runId`       | `string`                                                                       | このworkflow実行インスタンスの一意識別子                          |
