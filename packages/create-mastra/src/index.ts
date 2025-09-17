@@ -25,7 +25,7 @@ program
       analytics.trackCommand({
         command: 'version',
       });
-      console.log(`create-mastra ${version}`);
+      console.info(`create-mastra ${version}`);
     } catch {
       // ignore
     }

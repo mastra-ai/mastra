@@ -91,7 +91,6 @@ export const pathMatchesRule = (path: string, rulePath: string | RegExp | string
   }
 
   if (rulePath instanceof RegExp) {
-    console.log('rulePath', rulePath, path, rulePath.test(path));
     return rulePath.test(path);
   }
 

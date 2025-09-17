@@ -1,170 +1,198 @@
 ---
-title: "例: コンテキスト位置 | Evals | Mastra ドキュメント"
-description: Context Position メトリクスを使用して、応答の順序性を評価する例。
+title: "例: Context Position | Evals | Mastra Docs"
+description: 応答の順序を評価するために Context Position 指標を用いる例。
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
 
-# コンテキスト位置
 
-この例では、Mastra の Context Position メトリクスを使用して、応答が情報の順序をどれだけ適切に維持しているかを評価する方法を示します。
 
-## 概要
+# コンテキスト位置の評価
 
-この例では、以下の方法を示します：
+<ScorerCallout />
 
-1. Context Positionメトリクスを設定する
-2. ポジションの順守を評価する
-3. 連続した順序を分析する
-4. 異なるシーケンスタイプを扱う
+`ContextPositionMetric` を使用して、最も関連性の高いコンテキストセグメントに基づいてレスポンスが適切に裏付けられているかを評価します。このメトリックは `query` と `response` を受け取り、スコアと理由を含む `info` オブジェクトを返します。
 
-## セットアップ
 
-### 環境設定
 
-環境変数を必ず設定してください：
+## インストール
 
-```bash filename=".env"
-OPENAI_API_KEY=your_api_key_here
+```bash copy
+npm install @mastra/evals
 ```
 
-### 依存関係
 
-必要な依存関係をインポートします：
 
-```typescript copy showLineNumbers filename="src/index.ts"
+## 高位置の例
+
+この例では、提供されたコンテキストの最初の文を使って、応答がクエリに直接答えています。周辺のコンテキストも一貫して応答を補強し、歴史的・政治的・機能的な観点から裏付けるため、強い位置的整合性が得られます。
+
+```typescript filename="src/example-high-position.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { ContextPositionMetric } from "@mastra/evals/llm";
+
+const metric = new ContextPositionMetric(openai("gpt-4o-mini"), {
+  context: [
+    "The capital of France is Paris.",
+    "Paris has been the capital since 508 CE.",
+    "Paris serves as France's political center.",
+    "The capital city hosts the French government."
+  ]
+});
+
+const query = "What is the capital of France?";
+const response = "The capital of France is Paris.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
 ```
 
-## 使用例
+### 高位置の出力
 
-### 高い順序遵守の例
+関連情報がコンテキストの冒頭にあり、ノイズや不要な情報に邪魔されることなく応答を直接裏付けているため、この出力は満点となります。
 
-順序に従ったステップで応答を評価します：
-
-```typescript copy showLineNumbers{5} filename="src/index.ts"
-const context1 = [
-  "The capital of France is Paris.",
-  "Paris has been the capital since 508 CE.",
-  "Paris serves as France's political center.",
-  "The capital city hosts the French government.",
-];
-
-const metric1 = new ContextPositionMetric(openai("gpt-4o-mini"), {
-  context: context1,
-});
-
-const query1 = "What is the capital of France?";
-const response1 = "The capital of France is Paris.";
-
-console.log("Example 1 - High Position Adherence:");
-console.log("Context:", context1);
-console.log("Query:", query1);
-console.log("Response:", response1);
-
-const result1 = await metric1.measure(query1, response1);
-console.log("Metric Result:", {
-  score: result1.score,
-  reason: result1.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 1, reason: 'The context is in the correct sequential order.' }
+```typescript
+{
+  score: 1,
+  info: {
+    reason: 'The score is 1 because all provided context directly supports the output by confirming that Paris is the capital of France, with each statement reinforcing the answer through historical, political, and functional relevance.'
+  }
+}
 ```
 
-### 混在した順序遵守の例
 
-関連情報が散在している応答を評価します：
 
-```typescript copy showLineNumbers{31} filename="src/index.ts"
-const context2 = [
-  "Elephants are herbivores.",
-  "Adult elephants can weigh up to 13,000 pounds.",
-  "Elephants are the largest land animals.",
-  "Elephants eat plants and grass.",
-];
+## 混在位置の例
 
-const metric2 = new ContextPositionMetric(openai("gpt-4o-mini"), {
-  context: context2,
+この例では、応答が非常に関連性の高い情報に、文脈の後半にある追加の詳細を組み合わせています。体重に関する事実は質問に答えていますが、関連性の低い事実を含めることで、応答の位置的な精度が下がっています。
+
+```typescript filename="src/example-mixed-position.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextPositionMetric } from "@mastra/evals/llm";
+
+const metric = new ContextPositionMetric(openai("gpt-4o-mini"), {
+  context: [
+    "Elephants are herbivores.",
+    "Adult elephants can weigh up to 13,000 pounds.",
+    "Elephants are the largest land animals.",
+    "Elephants eat plants and grass."
+  ]
 });
 
-const query2 = "How much do elephants weigh?";
-const response2 =
-  "Adult elephants can weigh up to 13,000 pounds, making them the largest land animals.";
+const query = "How much do elephants weigh?";
+const response = "Adult elephants can weigh up to 13,000 pounds, making them the largest land animals.";
 
-console.log("Example 2 - Mixed Position Adherence:");
-console.log("Context:", context2);
-console.log("Query:", query2);
-console.log("Response:", response2);
+const result = await metric.measure(query, response);
 
-const result2 = await metric2.measure(query2, response2);
-console.log("Metric Result:", {
-  score: result2.score,
-  reason: result2.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 0.4, reason: 'The context includes relevant information and irrelevant information and is not in the correct sequential order.' }
+console.log(result);
+
 ```
 
-### 低い順序遵守の例
+### 混在位置の出力
 
-関連情報が最後に現れる応答を評価します：
+関連情報は含まれているものの、優先度の低い文脈と混在しているため、出力は中程度のスコアになります。これにより、文脈の順序と応答の焦点の整合性が弱まります。
 
-```typescript copy showLineNumbers{57} filename="src/index.ts"
-const context3 = [
-  "Rainbows appear in the sky.",
-  "Rainbows have different colors.",
-  "Rainbows are curved in shape.",
-  "Rainbows form when sunlight hits water droplets.",
-];
-
-const metric3 = new ContextPositionMetric(openai("gpt-4o-mini"), {
-  context: context3,
-});
-
-const query3 = "How do rainbows form?";
-const response3 =
-  "Rainbows are created when sunlight interacts with water droplets in the air.";
-
-console.log("Example 3 - Low Position Adherence:");
-console.log("Context:", context3);
-console.log("Query:", query3);
-console.log("Response:", response3);
-
-const result3 = await metric3.measure(query3, response3);
-console.log("Metric Result:", {
-  score: result3.score,
-  reason: result3.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 0.12, reason: 'The context includes some relevant information, but most of the relevant information is at the end.' }
+```typescript
+{
+  score: 0.4,
+  info: {
+    reason: 'スコアが0.4であるのは、応答に成体のゾウの体重に関する直接的な答えが含まれており、これは高い関連性がある一方で、ゾウが草食動物であることや食性に関する、体重の理解に寄与しない不要な情報も含まれているためです。関連性の高い文脈と低い文脈が併存していることが、全体として低めのスコアにつながっています。'
+  }
+}
 ```
+
+
+
+## 低位置の例
+
+この例では、応答が文脈の末尾にある関連情報を参照しています。文脈の前半には無関係な説明的詳細が含まれており、裏付け情報が期待される提示順序を乱しています。
+
+```typescript filename="src/example-low-position.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextPositionMetric } from "@mastra/evals/llm";
+
+const metric = new ContextPositionMetric(openai("gpt-4o-mini"), {
+  context: [
+    "Rainbows appear in the sky.",
+    "Rainbows have different colors.",
+    "Rainbows are curved in shape.",
+    "Rainbows form when sunlight hits water droplets."
+  ]
+});
+
+const query = "How do rainbows form?";
+const response = "Rainbows are created when sunlight interacts with water droplets in the air.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 低位置の出力
+
+主要な裏付け情報が文脈の後半に現れ、前半の内容がクエリに対してほとんど、あるいは全く価値を持たないため、出力のスコアは低くなります。
+
+```typescript
+{
+  score: 0.12,
+  info: {
+    reason: 'The score is 0.12 because the relevant context directly explains how rainbows form, while the other statements provide information that is either unrelated or only tangentially related to the formation process.'
+  }
+}
+```
+
+
+
+## メトリクスの設定
+
+期待される情報の並びを表す `context` 配列を指定して、`ContextPositionMetric` インスタンスを作成できます。`scale` などのオプションパラメーターを設定して、取り得る最大スコアを指定することも可能です。
+
+```typescript showLineNumbers copy
+const metric = new ContextPositionMetric(openai("gpt-4o-mini"), {
+  context: [""],
+  scale: 1
+});
+```
+> 設定オプションの一覧については、[ContextPositionMetric](/reference/evals/context-position.mdx) を参照してください。
+
+
 
 ## 結果の理解
 
-この指標は以下を提供します：
+`ContextPositionMetric` は次の形式の結果を返します:
 
-1. 0から1の間のポジションスコア：
-
-   - 1.0: 完全なポジション順守 - 最も関連性の高い情報が最初に表示される
-   - 0.7-0.9: 強いポジション順守 - 関連情報が主に冒頭にある
-   - 0.4-0.6: 混在したポジション順守 - 関連情報が全体に散在している
-   - 0.1-0.3: 弱いポジション順守 - 関連情報が主に最後にある
-   - 0.0: ポジション順守なし - 完全に無関係または逆の配置
-
-2. スコアの詳細な理由付け（以下の分析を含む）：
-   - クエリおよびレスポンスへの情報の関連性
-   - 文脈内での関連情報の位置
-   - 早い段階と遅い段階の文脈の重要性
-   - 全体的な文脈の構成
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-position"
+```typescript
+{
+  score: number,
+  info: {
+    reason: string
   }
+}
+```
+
+### 位置スコア
+
+0〜1 の範囲の位置スコア:
+
+- **1.0**: 完璧な配置 – 最も関連性の高い情報が最初に出現する。
+- **0.7–0.9**: 良好な配置 – 関連情報の多くが冒頭にある。
+- **0.4–0.6**: ばらつきのある配置 – 関連情報が全体に散在している。
+- **0.1–0.3**: 弱い配置 – 関連情報の多くが末尾にある。
+- **0.0**: 不適切な配置 – まったく無関係、または順序が逆。
+
+### 位置に関する情報
+
+スコアの根拠。以下の点を含む:
+
+- クエリおよび応答に対するコンテキストの関連性
+- コンテキストシーケンス内での関連コンテンツの位置
+- 後半より前半のコンテキストを重視する度合い
+- コンテキストの全体的な構成と構造
+
+<GithubLink
+  outdated={true}
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-position"
 />

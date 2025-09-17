@@ -1,0 +1,229 @@
+---
+title: "mastra dev でエージェントとワークフローを確認する | Mastra ローカル開発ドキュメント"
+description: Mastra アプリケーション向けのローカル開発環境に関するドキュメント。
+---
+
+import YouTube from "@/components/youtube";
+import { VideoPlayer } from "@/components/video-player"
+import { Tabs, Tab } from "@/components/tabs";
+
+
+
+# Playground
+
+Mastra は、開発中にエージェント、ワークフロー、ツールをテストできるローカル開発環境を提供します。
+
+以下を実行してローカル開発サーバーを起動します：
+
+<Tabs items={["npm", "yarn", "pnpm", "bun", "Mastra CLI"]}>
+  <Tab>
+    ```bash copy
+    npm run dev
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    yarn run dev
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    pnpm run dev
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    bun run dev
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    mastra dev
+    ```
+  </Tab>
+</Tabs>
+
+ローカル開発サーバーでは、次のインターフェースにアクセスできます。
+
+- Playground: [http://localhost:4111/](http://localhost:4111/)
+- Mastra API: [http://localhost:4111/api](http://localhost:4111/api)
+- OpenAPI 仕様: [http://localhost:4111/openapi.json](http://localhost:4111/openapi.json)
+- Swagger UI（API エクスプローラー）: [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui)
+
+
+
+## ローカル開発用 Playground
+
+Playground では、エージェント、ワークフロー、ツールと対話できます。開発中の Mastra アプリの各コンポーネントをテストするための専用インターフェースを提供し、次の URL で利用できます: [http://localhost:4111/](http://localhost:4111/)。
+
+<YouTube id="spGlcTEjuXY" startTime={126}/>
+
+### Agents
+
+Agent Playground のインタラクティブなチャットインターフェースを使って、開発中のエージェントを素早くテスト・デバッグできます。
+
+<VideoPlayer
+  src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406022/local-dev-agents-playground_100_m3begx.mp4"
+/>
+
+主な機能:
+
+- **チャットインターフェース**: エージェントに話しかけ、応答をリアルタイムで確認できます。
+- **モデル設定**: temperature や top-p などの設定を調整して、出力への影響を確認できます。
+- **エージェントのエンドポイント**: エージェントが公開する利用可能な REST API ルートとその使い方を確認できます。
+- **エージェントのトレース**: 裏側での処理、ツール呼び出し、意思決定などをステップごとに追跡できます。
+- **エージェントの評価**: エージェントに対してテストを実行し、性能を確認できます。
+
+### Workflows
+
+定義済みの入力を与え、Workflow Playground で各ステップを可視化してワークフローを検証します。
+
+<VideoPlayer
+  src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406027/local-dev-workflows-playground_100_rbc466.mp4"
+/>
+
+主な機能:
+
+- **ワークフローの可視化**: ワークフローをビジュアルグラフで表示し、ステップや分岐を一目で追えます。
+- **ステップの入力と出力**: 各ステップに入るデータと出てくるデータを確認し、全体の流れを把握できます。
+- **ワークフローの実行**: 実データでテストし、ロジックの妥当性確認とデバッグができます。
+- **実行 JSON**: 実行の全体像を生の JSON で取得（入力、出力、エラー、結果を含む）。
+- **ワークフローのトレース**: 各ステップの詳細な内訳を掘り下げ、データフロー、ツール呼び出し、途中のエラーなどを確認できます。
+
+### Tools
+
+Tools Playground を使って、フルのエージェントやワークフローを起動せずに、カスタムツールを単体で素早くテスト・デバッグできます。
+
+<VideoPlayer
+  src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406316/local-dev-agents-tools_100_fe1jdt.mp4"
+/>
+
+主な機能:
+
+- **ツールの単体テスト**: フルのエージェントやワークフローを起動せずに、個々のツールを単体で試せます。
+- **入力とレスポンス**: サンプル入力を送信して、ツールの応答を確認できます。
+- **ツールの利用状況**: どのエージェントがこのツールに依存し、どのように使っているかを把握できます。
+
+
+### MCP Servers
+
+ローカルの MCP サーバー開発における接続情報、ツールの使用状況、IDE 設定を確認します。
+
+![MCP Servers Playground](/image/local-dev/local-dev-mcp-server-playground.jpg)
+
+主な機能:
+
+- **接続情報**: MCP 環境を構成するために必要なエンドポイントや設定にアクセスできます。
+- **利用可能なツール**: 現在公開されているすべてのツールを、名称、バージョン、使用しているエージェントとともに確認できます。
+- **IDE 設定**: ローカル環境にそのまま適用できる設定を取得し、ツールのテストや公開に利用できます。
+
+
+
+
+## REST API エンドポイント
+
+ローカル開発サーバーは [Mastra Server](/docs/deployment/server-deployment) を介して一連の REST API ルートを公開しており、デプロイ前にエージェントやワークフローをテスト・操作できます。
+
+エージェント、ツール、ワークフローを含む利用可能な API ルートの全体像については、[Routes リファレンス](/reference/cli/dev#routes) を参照してください。
+
+
+
+## OpenAPI Specification
+
+ローカル開発サーバーには、次の URL で取得できる OpenAPI 仕様が含まれています: [http://localhost:4111/openapi.json](http://localhost:4111/openapi.json)。
+
+本番サーバーに OpenAPI ドキュメントを含めるには、Mastra インスタンスで有効化してください:
+
+```typescript {7} filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+
+export const mastra = new Mastra({
+  // ...
+  server: {
+    build: {
+      openAPIDocs: true
+    }
+  },
+});
+```
+
+
+
+## Swagger UI
+
+ローカル開発サーバーには、対話型の Swagger UI（API エクスプローラー）が含まれており、次の URL で利用できます：[http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui)。
+
+本番サーバーで Swagger UI を使用するには、Mastra インスタンスで有効にしてください:
+
+```typescript {7} filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+
+export const mastra = new Mastra({
+  // ...
+  server: {
+    build: {
+      swaggerUI: true
+    },
+  },
+});
+```
+
+
+
+## アーキテクチャ
+
+ローカル開発サーバーは、外部の依存関係やコンテナに頼らず、単体で完結して動作します。次のコンポーネントを活用します:
+
+- コアとなる [Mastra Server](/docs/deployment/server) 用に、[Hono](https://hono.dev) をベースにした **Dev Server**。
+- エージェントのメモリ、トレース、評価、ワークフローのスナップショット向けに、[LibSQL](https://libsql.org/) アダプタを用いた **インメモリ ストレージ**。
+- 埋め込み、ベクター検索、セマンティック検索のために、[FastEmbed](https://github.com/qdrant/fastembed) を用いた **ベクター ストレージ**。
+
+この構成により、データベースやベクターストアの事前設定は不要で、本番に近い挙動のまま、すぐに開発を始められます。
+
+
+
+## 設定
+
+既定ではサーバーはポート `4111` で動作します。Mastra サーバーの設定でホストとポートをカスタマイズできます。
+
+```typescript {6,7} filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+
+export const mastra = new Mastra({
+  // ...
+  server: {
+    port: 8080,
+    host: "0.0.0.0",
+  },
+});
+```
+
+
+
+## バンドラーのオプション
+
+TypeScript のパッケージやライブラリをコンパイルするには `transpilePackages` を使用します。実行時に解決される依存関係を除外するには `externals` を、可読性の高いスタックトレースを出力するには `sourcemap` を使用します。
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+
+export const mastra = new Mastra({
+  // ...
+  bundler: {
+    transpilePackages: ["utils"],
+    externals: ["ui"],
+    sourcemap: true
+  }
+});
+```
+
+> 設定オプションの詳細は [Mastra Class](../../reference/core/mastra-class.mdx) を参照してください。
+
+
+
+
+## 次のステップ
+
+- [Mastra Cloud](/docs/mastra-cloud/overview)
+- [デプロイの概要](/docs/deployment/overview)
+- [Mastra クライアント SDK](/docs/client-js/overview)

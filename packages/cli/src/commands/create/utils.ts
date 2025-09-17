@@ -204,7 +204,7 @@ export const createMastraProject = async ({
     s.stop('.gitignore added');
 
     p.outro('Project created successfully');
-    console.log('');
+    console.info('');
 
     return { projectName };
   } catch (error) {

@@ -1,12 +1,19 @@
 ---
-title: "リファレンス: 要約 | メトリクス | Evals | Mastra ドキュメント"
-description: Mastra における要約メトリクスのドキュメント。コンテンツと事実の正確性に関して、LLM が生成した要約の品質を評価します。
+title: "リファレンス: 要約 | メトリクス | 評価 | Mastra ドキュメント"
+description: Mastraの要約メトリクスのドキュメント。LLMが生成した要約の内容と事実の正確性の品質を評価します。
 ---
+
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
 
 # SummarizationMetric
 
-,
-`SummarizationMetric`は、LLMによる要約が元のテキストの内容をどれだけ正確に捉え、事実に基づいているかを評価します。この指標は、アライメント（事実の正確性）とカバレッジ（重要な情報の網羅）の2つの側面を組み合わせており、どちらの品質も優れた要約に不可欠であることを保証するために最小スコアを使用します。
+<ScorerCallout />
+
+`SummarizationMetric`は、LLMの要約が元のテキストの内容をどの程度うまく捉えているかを、事実の正確性を保ちながら評価します。これは2つの側面を組み合わせています：アライメント（事実の正確性）とカバレッジ（重要な情報の包含）で、最小スコアを使用して両方の品質が良い要約に必要であることを保証します。
+
+
 
 ## 基本的な使い方
 
@@ -27,6 +34,8 @@ const result = await metric.measure(
 console.log(result.score); // Score from 0-1
 console.log(result.info); // Object containing detailed metrics about the summary
 ```
+
+
 
 ## コンストラクタのパラメータ
 
@@ -62,6 +71,8 @@ console.log(result.info); // Object containing detailed metrics about the summar
   ]}
 />
 
+
+
 ## measure() のパラメーター
 
 <PropertiesTable
@@ -80,6 +91,8 @@ console.log(result.info); // Object containing detailed metrics about the summar
     },
   ]}
 />
+
+
 
 ## 戻り値
 
@@ -131,6 +144,8 @@ console.log(result.info); // Object containing detailed metrics about the summar
   ]}
 />
 
+
+
 ## スコアリングの詳細
 
 このメトリックは、要約を2つの重要な要素で評価します。
@@ -172,6 +187,8 @@ console.log(result.info); // Object containing detailed metrics about the summar
 - 0.1-0.3：大きな抜けや事実誤認がある低品質な要約
 - 0.0：無効な要約 - 完全に不正確、または重要な情報が欠落
 
+
+
 ## 分析付きの例
 
 ```typescript
@@ -202,6 +219,8 @@ const result = await metric.measure(
 //   }
 // }
 ```
+
+
 
 ## 関連
 

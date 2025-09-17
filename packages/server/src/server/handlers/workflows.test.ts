@@ -253,7 +253,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should get workflow run successfully', async () => {
-      const run = mockWorkflow.createRun({
+      const run = await mockWorkflow.createRunAsync({
         runId: 'test-run',
       });
 
@@ -299,7 +299,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should get workflow run execution result successfully', async () => {
-      const run = mockWorkflow.createRun({
+      const run = await mockWorkflow.createRunAsync({
         runId: 'test-run',
       });
       await run.start({ inputData: {} });
@@ -388,7 +388,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should start workflow run successfully', async () => {
-      const run = mockWorkflow.createRun({
+      const run = await mockWorkflow.createRunAsync({
         runId: 'test-run',
       });
 
@@ -482,7 +482,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should resume workflow run successfully', async () => {
-      const run = reusableWorkflow.createRun({
+      const run = await reusableWorkflow.createRunAsync({
         runId: 'test-run',
       });
 
@@ -521,7 +521,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should get workflow runs successfully (not empty)', async () => {
-      const run = mockWorkflow.createRun({
+      const run = await mockWorkflow.createRunAsync({
         runId: 'test-run',
       });
       await run.start({ inputData: {} });

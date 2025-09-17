@@ -1346,7 +1346,7 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
     ).toThrow('must have a non-empty description');
   });
 
-  it('should call workflow.createRun().start() when the derived tool is executed', async () => {
+  it('should execute workflow when the derived tool is called', async () => {
     const testWorkflow = createMockWorkflow('MyExecWorkflow', 'Executable workflow', z.object({ data: z.string() }));
     const step = createStep({
       id: 'my-step',

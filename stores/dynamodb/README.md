@@ -138,7 +138,3 @@ This implementation uses a single-table design pattern with ElectroDB, which off
 3. **Simplified administration**: Only one table to monitor and back up
 4. **Reduced complexity**: Consistent access patterns across entities
 5. **Transaction support**: Atomic operations across different entity types
-
-## License
-
-MIT

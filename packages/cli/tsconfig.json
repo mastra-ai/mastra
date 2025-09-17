@@ -1,11 +1,4 @@
 {
   "extends": "../../tsconfig.node.json",
-  "exclude": [
-    "node_modules",
-    "**/*.test.ts",
-    "src/starter-files/**/*.ts",
-    "src/playground/**",
-    "dist/**",
-    "eslint.config.js"
-  ]
+  "exclude": ["node_modules", "**/*.test.ts", "src/public/**/*.ts", "dist/**", "eslint.config.js"]
 }

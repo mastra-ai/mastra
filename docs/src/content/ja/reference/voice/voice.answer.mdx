@@ -3,9 +3,13 @@ title: "リファレンス: voice.answer() | Voice Providers | Mastra ドキュ�
 description: "リアルタイム音声プロバイダーで利用可能な answer() メソッドのドキュメント。このメソッドは音声プロバイダーに応答の生成を指示します。"
 ---
 
+
+
 # voice.answer()
 
 `answer()` メソッドは、リアルタイム音声プロバイダーでAIに応答を生成させるために使用されます。このメソッドは、ユーザー入力を受け取った後にAIに明示的に応答を促す必要がある音声対音声の会話で特に便利です。
+
+
 
 ## 使用例
 
@@ -42,6 +46,8 @@ await voice.send(microphoneStream);
 await voice.answer();
 ```
 
+
+
 ## パラメーター
 
 <br />
@@ -56,9 +62,13 @@ await voice.answer();
   ]}
 />
 
+
+
 ## 戻り値
 
 レスポンスがトリガーされたときに解決される `Promise<void>` を返します。
+
+
 
 ## 注意事項
 

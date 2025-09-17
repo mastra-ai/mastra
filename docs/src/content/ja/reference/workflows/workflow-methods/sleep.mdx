@@ -1,0 +1,43 @@
+---
+title: "リファレンス: Workflow.sleep() | Workflows | Mastra Docs"
+description: ワークフローで使用する `Workflow.sleep()` メソッドのドキュメント。指定したミリ秒間、実行を一時停止します。
+---
+
+# Workflow.sleep()
+
+`.sleep()` メソッドは、指定されたミリ秒間、実行を一時停止します。
+
+## 使い方の例
+
+```typescript copy
+workflow.sleep(5000);
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "milliseconds",
+      type: "number",
+      description: "実行を一時停止する時間（ミリ秒）",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "メソッドチェーン用のワークフローインスタンス",
+    },
+  ]}
+/>
+
+## 関連
+
+- [スリープとイベント](../../docs/workflows/pausing-execution.mdx)

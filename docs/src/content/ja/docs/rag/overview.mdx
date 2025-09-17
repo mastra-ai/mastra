@@ -3,6 +3,8 @@ title: MastraにおけるRAG（検索拡張生成） | Mastraドキュメント
 description: Mastraにおける検索拡張生成（RAG）の概要。関連するコンテキストでLLMの出力を強化する機能の詳細。
 ---
 
+
+
 # MastraにおけるRAG（検索拡張生成）
 
 MastraのRAGは、独自のデータソースから関連するコンテキストを取り込むことでLLMの出力を強化し、精度を向上させ、実際の情報に基づいた応答を提供します。
@@ -14,9 +16,11 @@ MastraのRAGシステムは以下を提供します：
 - 最適な検索のためのチャンキングと埋め込み戦略
 - 埋め込みと検索のパフォーマンスを追跡するための可観測性
 
+
+
 ## 例
 
-RAGを実装するには、ドキュメントをチャンクに処理し、埋め込みを作成し、ベクトルデータベースに保存し、クエリ時に関連するコンテキストを取得します。
+RAGを実装するには、ドキュメントをチャンクに処理し、埋め込みを作成し、ベクターデータベースに保存してから、クエリ時に関連するコンテキストを取得します。
 
 ```ts showLineNumbers copy
 import { embedMany } from "ai";
@@ -42,7 +46,9 @@ const { embeddings } = await embedMany({
 });
 
 // 4. Store in vector database
-const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
+const pgVector = new PgVector({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING,
+});
 await pgVector.upsert({
   indexName: "embeddings",
   vectors: embeddings,
@@ -58,15 +64,21 @@ const results = await pgVector.query({
 console.log("Similar chunks:", results);
 ```
 
-この例では基本的な部分を示しています：ドキュメントの初期化、チャンクの作成、埋め込みの生成、保存、そして類似コンテンツのクエリです。
+この例では基本的な要素を示しています：ドキュメントを初期化し、チャンクを作成し、埋め込みを生成し、それらを保存し、類似するコンテンツをクエリします。
+
+
 
 ## ドキュメント処理
 
 RAGの基本的な構成要素はドキュメント処理です。ドキュメントは様々な戦略（再帰的、スライディングウィンドウなど）を使用して分割し、メタデータで強化することができます。[チャンキングと埋め込みのドキュメント](./chunking-and-embedding.mdx)を参照してください。
 
-## ベクトルストレージ
 
-Mastraは、埋め込みの永続化と類似性検索のために、pgvector、Pinecone、Qdrantなど複数のベクトルストアをサポートしています。[ベクトルデータベースのドキュメント](./vector-databases.mdx)を参照してください。
+
+## ベクターストレージ
+
+Mastraは、pgvector、Pinecone、Qdrant、MongoDBを含む、埋め込みの永続化と類似性検索のための複数のベクターストアをサポートしています。[ベクターデータベースのドキュメント](./vector-databases.mdx)を参照してください。
+
+
 
 ## 可観測性とデバッグ
 
@@ -78,6 +90,8 @@ Mastraの RAGシステムには、検索パイプラインを最適化するた�
 - メトリクスを可観測性プラットフォームにエクスポート
 
 詳細については、[OTel設定](../../reference/observability/otel-config.mdx)ページをご覧ください。
+
+
 
 ## その他のリソース
 

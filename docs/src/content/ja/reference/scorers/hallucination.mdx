@@ -1,0 +1,143 @@
+---
+title: "リファレンス: Hallucination | Scorers | Mastra Docs"
+description: Mastraにおけるハルシネーションスコアラーのドキュメント。提供されたコンテキストとの矛盾を特定することで、LLM出力の事実的正確性を評価します。
+---
+
+
+
+# Hallucination Scorer
+
+`createHallucinationScorer()`関数は、LLMの出力を提供されたコンテキストと比較することで、LLMが事実的に正しい情報を生成するかどうかを評価します。このスコアラーは、コンテキストと出力の間の直接的な矛盾を特定することで幻覚を測定します。
+
+使用例については、[Hallucination Examples](/examples/scorers/hallucination)を参照してください。
+
+
+
+## Parameters
+
+`createHallucinationScorer()`関数は、以下のプロパティを持つ単一のオプションオブジェクトを受け取ります：
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      required: true,
+      description: "幻覚を評価するために使用されるモデルの設定。",
+    },
+    {
+      name: "scale",
+      type: "number",
+      required: false,
+      defaultValue: "1",
+      description: "最大スコア値。",
+    },
+  ]}
+/>
+
+この関数はMastraScorerクラスのインスタンスを返します。`.run()`メソッドは他のスコアラーと同じ入力を受け取りますが（[MastraScorerリファレンス](./mastra-scorer)を参照）、戻り値には以下に記載されているLLM固有のフィールドが含まれます。
+
+
+
+## .run() の戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "実行のID（任意）。",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "object",
+      description: "抽出された主張を含むオブジェクト: { claims: string[] }",
+    },
+    {
+      name: "preprocessPrompt",
+      type: "string",
+      description: "前処理ステップでLLMに送信されたプロンプト（任意）。",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description: "判定結果を含むオブジェクト: { verdicts: Array<{ statement: string, verdict: 'yes' | 'no', reason: string }> }",
+    },
+    {
+      name: "analyzePrompt",
+      type: "string",
+      description: "分析ステップでLLMに送信されたプロンプト（任意）。",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "ハルシネーションスコア（0からスケール、デフォルトは0-1）。",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "スコアと特定された矛盾の詳細な説明。",
+    },
+    {
+      name: "generateReasonPrompt",
+      type: "string",
+      description: "理由生成ステップでLLMに送信されたプロンプト（任意）。",
+    },
+  ]}
+/>
+
+
+
+## スコアリング詳細
+
+スコアラーは矛盾検出とサポートされていない主張の分析を通じて幻覚を評価します。
+
+### スコアリングプロセス
+
+1. 事実的コンテンツを分析：
+   - コンテキストから文を抽出
+   - 数値と日付を特定
+   - 文の関係をマッピング
+2. 幻覚についてアウトプットを分析：
+   - コンテキストの文と比較
+   - 直接的な矛盾を幻覚としてマーク
+   - サポートされていない主張を幻覚として特定
+   - 数値の正確性を評価
+   - 近似のコンテキストを考慮
+3. 幻覚スコアを計算：
+   - 幻覚文（矛盾とサポートされていない主張）をカウント
+   - 総文数で除算
+   - 設定された範囲にスケール
+
+最終スコア：`(hallucinated_statements / total_statements) * scale`
+
+### 重要な考慮事項
+
+- コンテキストに存在しない主張は幻覚として扱われます
+- 主観的な主張は明示的にサポートされない限り幻覚です
+- コンテキスト内の事実に関する推測的言語（「might」、「possibly」）は許可されます
+- コンテキストにない事実に関する推測的言語は幻覚として扱われます
+- 空のアウトプットは幻覚ゼロとなります
+- 数値評価では以下を考慮します：
+  - スケールに適した精度
+  - コンテキストでの近似
+  - 明示的な精度指標
+
+### スコア解釈
+
+（0からスケール、デフォルト0-1）
+
+- 1.0：完全な幻覚 - すべてのコンテキスト文と矛盾
+- 0.75：高い幻覚 - コンテキスト文の75%と矛盾
+- 0.5：中程度の幻覚 - コンテキスト文の半分と矛盾
+- 0.25：低い幻覚 - コンテキスト文の25%と矛盾
+- 0.0：幻覚なし - アウトプットはすべてのコンテキスト文と一致
+
+**注意：** スコアは幻覚の程度を表します - 低いスコアは提供されたコンテキストとのより良い事実的一致を示します
+
+
+
+## 関連項目
+
+- [忠実性スコアラー](./faithfulness)
+- [回答関連性スコアラー](./answer-relevancy)

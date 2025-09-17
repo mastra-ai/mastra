@@ -1,170 +1,195 @@
 ---
 title: "例: コンテキスト精度 | Evals | Mastra Docs"
-description: コンテキスト精度メトリクスを使用して、コンテキスト情報がどれだけ正確に利用されているかを評価する例。
+description: コンテキスト精度（Context Precision）指標を用いて、コンテキスト情報の活用の正確さを評価する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
 
-# コンテキスト精度
 
-この例では、Mastra のコンテキスト精度メトリクスを使用して、回答が提供されたコンテキスト情報をどれだけ正確に利用しているかを評価する方法を示します。
 
-## 概要
+# コンテキスト精度の評価
 
-この例では、以下の方法を示します：
+<ScorerCallout />
 
-1. Context Precisionメトリクスの設定
-2. コンテキスト精度の評価
-3. 精度スコアの分析
-4. 異なる精度レベルの対応
+`ContextPrecisionMetric` を使用して、レスポンスが提供されたコンテキストの中で最も関連性の高い部分に基づいているかどうかを評価します。メトリックは `query` と `response` を受け取り、スコアと、その理由を含む `info` オブジェクトを返します。
 
-## セットアップ
 
-### 環境セットアップ
 
-環境変数を必ず設定してください：
+## インストール
 
-```bash filename=".env"
-OPENAI_API_KEY=your_api_key_here
+```bash copy
+npm install @mastra/evals
 ```
 
-### 依存関係
 
-必要な依存関係をインポートします：
 
-```typescript copy showLineNumbers filename="src/index.ts"
+## 高精度の例
+
+この例では、応答はクエリに直接関係するコンテキストのみに基づいています。すべてのコンテキストが回答を支えており、その結果、精度スコアは高くなります。
+
+```typescript filename="src/example-high-precision.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { ContextPrecisionMetric } from "@mastra/evals/llm";
+
+const metric = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
+  context: [
+    "Photosynthesis converts sunlight into energy.",
+    "Plants use chlorophyll for photosynthesis.",
+    "Photosynthesis produces oxygen as a byproduct.",
+    "The process requires sunlight and chlorophyll."
+  ]
+});
+
+const query = "What is photosynthesis and how does it work?";
+const response = "Photosynthesis is a process where plants convert sunlight into energy using chlorophyll, producing oxygen as a byproduct.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
 ```
 
-## 使用例
+### 高精度の出力
 
-### 高精度の例
+すべてのコンテキスト文が無関係な情報を含まず、クエリへの回答に直接寄与しているため、出力は満点となります。
 
-すべてのコンテキストが関連している応答を評価します：
+```typescript
+{
+  score: 1,
+  info: {
+    reason: 'The score is 1 because all context nodes are relevant and provide direct definitions, explanations, and essential components of photosynthesis, with the first node defining the process, followed by supporting details about chlorophyll and oxygen production, all in optimal ranking order.'
+  }
+}
+```
+## 混合精度の例
 
-```typescript copy showLineNumbers{5} filename="src/index.ts"
-const context1 = [
-  "Photosynthesis converts sunlight into energy.",
-  "Plants use chlorophyll for photosynthesis.",
-  "Photosynthesis produces oxygen as a byproduct.",
-  "The process requires sunlight and chlorophyll.",
-];
+この例では、応答に1つ以上の関連するコンテキスト項目が使われていますが、無関係または注意をそらす情報も含まれています。これにより、全体的な精度スコアが下がります。
 
-const metric1 = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
-  context: context1,
+```typescript filename="src/example-mixed-precision.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextPrecisionMetric } from "@mastra/evals/llm";
+
+const metric = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
+  context: [
+    "Volcanoes are openings in the Earth's crust.",
+    "Volcanoes can be active, dormant, or extinct.",
+    "Hawaii has many active volcanoes.",
+    "The Pacific Ring of Fire has many volcanoes."
+  ]
 });
 
-const query1 = "What is photosynthesis and how does it work?";
-const response1 =
-  "Photosynthesis is a process where plants convert sunlight into energy using chlorophyll, producing oxygen as a byproduct.";
+const query = "What are the different types of volcanoes?";
+const response = "Volcanoes can be classified as active, dormant, or extinct based on their activity status.";
 
-console.log("Example 1 - High Precision:");
-console.log("Context:", context1);
-console.log("Query:", query1);
-console.log("Response:", response1);
+const result = await metric.measure(query, response);
 
-const result1 = await metric1.measure(query1, response1);
-console.log("Metric Result:", {
-  score: result1.score,
-  reason: result1.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 1, reason: 'The context uses all relevant information and does not include any irrelevant information.' }
+console.log(result);
 ```
 
-### 混合精度の例
+### 混合精度の出力
 
-一部のコンテキストが無関係な応答を評価します：
+関連するコンテキストを用いてはいるものの、無関係または不要な情報に紛れているため、全体の精度が低下し、中程度のスコアになります。
 
-```typescript copy showLineNumbers{32} filename="src/index.ts"
-const context2 = [
-  "Volcanoes are openings in the Earth's crust.",
-  "Volcanoes can be active, dormant, or extinct.",
-  "Hawaii has many active volcanoes.",
-  "The Pacific Ring of Fire has many volcanoes.",
-];
-
-const metric2 = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
-  context: context2,
-});
-
-const query2 = "What are the different types of volcanoes?";
-const response2 =
-  "Volcanoes can be classified as active, dormant, or extinct based on their activity status.";
-
-console.log("Example 2 - Mixed Precision:");
-console.log("Context:", context2);
-console.log("Query:", query2);
-console.log("Response:", response2);
-
-const result2 = await metric2.measure(query2, response2);
-console.log("Metric Result:", {
-  score: result2.score,
-  reason: result2.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 0.5, reason: 'The context uses some relevant information and includes some irrelevant information.' }
+```typescript
+{
+  score: 0.58,
+  info: {
+    reason: 'The score is 0.58 because while the second and third nodes provided direct definitions and examples of volcano types, the first and fourth nodes were irrelevant, leading to a lower precision score. The relevant nodes were not optimally ordered, as the most useful context was not the first, which affected the overall effectiveness.'
+  }
+}
 ```
 
-### 低精度の例
 
-ほとんどのコンテキストが無関係な応答を評価します：
 
-```typescript copy showLineNumbers{58} filename="src/index.ts"
-const context3 = [
-  "The Nile River is in Africa.",
-  "The Nile is the longest river.",
-  "Ancient Egyptians used the Nile.",
-  "The Nile flows north.",
-];
+## 低精度の例
 
-const metric3 = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
-  context: context3,
+この例では、応答は提供されたコンテキストのごく一部しか利用していません。コンテキストの大半はクエリと無関係で、その結果、精度スコアが低くなります。
+
+```typescript filename="src/example-low-precision.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextPrecisionMetric } from "@mastra/evals/llm";
+
+const metric = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
+  context: [
+    "The Nile River is in Africa.",
+    "The Nile is the longest river.",
+    "Ancient Egyptians used the Nile.",
+    "The Nile flows north."
+  ]
 });
 
-const query3 = "Which direction does the Nile River flow?";
-const response3 = "The Nile River flows northward.";
+const query = "Which direction does the Nile River flow?";
+const response = "The Nile River flows northward.";
 
-console.log("Example 3 - Low Precision:");
-console.log("Context:", context3);
-console.log("Query:", query3);
-console.log("Response:", response3);
+const result = await metric.measure(query, response);
 
-const result3 = await metric3.measure(query3, response3);
-console.log("Metric Result:", {
-  score: result3.score,
-  reason: result3.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 0.2, reason: 'The context only has one relevant piece, which is at the end.' }
+console.log(result);
 ```
+
+### 低精度の出力
+
+この出力は低いスコアになります。クエリに関連するコンテキストが1つしかなく、残りは無関係で応答に寄与していないためです。
+
+```typescript
+{
+  score: 0.25,
+  info: {
+    reason: "スコアが0.25なのは、ナイル川の流れる方向に関する質問に直接答えているのが4つ目のコンテキストノードだけであり、最初の3つのノードは無関係で有用な情報を提供していないためです。これは、取得されたコンテキスト全体の関連性に大きな制約があることを示しており、その大半が期待される出力に寄与しなかったことを浮き彫りにしています。"
+  }
+}
+```
+
+
+
+## メトリクスの設定
+
+関連する背景情報を表す `context` 配列を指定して、`ContextPrecisionMetric` インスタンスを作成できます。最大スコアを設定する `scale` など、任意のパラメータも設定できます。
+
+```typescript showLineNumbers copy
+const metric = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
+  context: [""],
+  scale: 1
+});
+```
+
+> 設定可能なオプションの一覧については、[ContextPrecisionMetric](/reference/evals/context-precision.mdx) を参照してください。
+
+
 
 ## 結果の理解
 
-この指標は以下を提供します：
+`ContextPrecisionMetric` は次の形式の結果を返します:
 
-1. 0から1の間の精度スコア：
-
-   - 1.0: 完全な精度 - すべてのコンテキスト要素が関連しており使用されている
-   - 0.7-0.9: 高い精度 - ほとんどのコンテキスト要素が関連している
-   - 0.4-0.6: 混合精度 - 一部のコンテキスト要素が関連している
-   - 0.1-0.3: 低い精度 - わずかなコンテキスト要素が関連している
-   - 0.0: 精度なし - どのコンテキスト要素も関連していない
-
-2. スコアの詳細な理由付け（以下の分析を含む）：
-   - 各コンテキスト要素の関連性
-   - 応答での使用状況
-   - クエリへの回答への貢献度
-   - 全体的なコンテキストの有用性
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-precision"
+```typescript
+{
+  score: number,
+  info: {
+    reason: string
   }
+}
+```
+
+### 精度スコア
+
+0〜1 の間の精度スコア:
+
+- **1.0**: 完全な精度 — すべてのコンテキスト項目が関連しており、活用されている。
+- **0.7〜0.9**: 高い精度 — ほとんどのコンテキスト項目が関連している。
+- **0.4〜0.6**: ばらつきのある精度 — 一部のコンテキスト項目が関連している。
+- **0.1〜0.3**: 低い精度 — ごく一部のコンテキスト項目のみが関連している。
+- **0.0**: 精度なし — どのコンテキスト項目も関連していない。
+
+### 精度に関する情報
+
+スコアの説明。以下の詳細を含みます:
+
+- 各コンテキスト項目がクエリおよび応答にどの程度関連しているか。
+- 関連する項目が応答に含まれていたかどうか。
+- 無関係なコンテキストが誤って含まれていなかったか。
+- 提供されたコンテキストに照らして、応答の全体的な有用性と焦点の定まり具合。
+
+<GithubLink
+  outdated={true}
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-precision"
 />

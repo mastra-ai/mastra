@@ -1,46 +1,103 @@
-import { AgentIcon, Breadcrumb, Crumb, Header, MainContentLayout, WorkflowIcon } from '@mastra/playground-ui';
-import { useParams, Link } from 'react-router';
-import { useScorer, useScoresByScorerId } from '@mastra/playground-ui';
+import {
+  Breadcrumb,
+  Crumb,
+  EntryList,
+  Header,
+  MainContentLayout,
+  PageHeader,
+  ScoresTools,
+  ScoreDialog,
+  type ScoreEntityOption as EntityOptions,
+  KeyValueList,
+  useScorer,
+  useScoresByScorerId,
+} from '@mastra/playground-ui';
+import { useParams, Link, useSearchParams } from 'react-router';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, XIcon } from 'lucide-react';
+import { GaugeIcon } from 'lucide-react';
 import { format, isToday } from 'date-fns';
-import { Fragment, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
 import { cn } from '@/lib/utils';
-import type { ScoreRowData } from '@mastra/core/scores';
-
-import * as Dialog from '@radix-ui/react-dialog';
-
-import { Select, SelectContent, SelectItem, SelectValue, SelectTrigger } from '@/components/ui/select';
-import { Button } from '@/components/ui/button';
-
 import { useWorkflows } from '@/hooks/use-workflows';
-import { ClientScoreRowData } from '@mastra/client-js';
-import { CodeMirrorBlock } from '@/components/ui/code-mirror-block';
+
+const listColumns = [
+  { name: 'date', label: 'Date', size: '4.5rem' },
+  { name: 'time', label: 'Time', size: '6.5rem' },
+  { name: 'input', label: 'Input', size: '1fr' },
+  { name: 'entityId', label: 'Entity', size: '10rem' },
+  { name: 'score', label: 'Score', size: '3rem' },
+];
+
+type ScoreItem = {
+  id: string;
+  date: string;
+  time: string;
+  input: string;
+  entityId: string;
+  score: number;
+};
 
 export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
-  const { scorer, isLoading: scorerLoading } = useScorer(scorerId!);
-  const { data: agents, isLoading: agentsLoading } = useAgents();
-  const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
-  const isLoading = scorerLoading || agentsLoading || workflowsLoading;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [selectedScoreId, setSelectedScoreId] = useState<string | undefined>();
 
-  const [selectedScore, setSelectedScore] = useState<any>(null);
-  const [detailsIsOpened, setDetailsIsOpened] = useState<boolean>(false);
+  const { scorer, isLoading: isScorerLoading } = useScorer(scorerId!);
+  const { data: agents, isLoading: isLoadingAgents } = useAgents();
+  const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
+
+  const [selectedEntityOption, setSelectedEntityOption] = useState<EntityOptions | undefined>({
+    value: 'all',
+    label: 'All',
+    type: 'ALL' as const,
+  });
+  const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
+
+  const agentOptions: EntityOptions[] =
+    scorer?.agentIds?.map(agentId => {
+      return { value: agentId, label: agentId, type: 'AGENT' as const };
+    }) || [];
+
+  const workflowOptions: EntityOptions[] =
+    scorer?.workflowIds?.map(workflowId => {
+      return { value: workflowId, label: workflowId, type: 'WORKFLOW' as const };
+    }) || [];
+
+  const entityOptions: EntityOptions[] = [
+    { value: 'all', label: 'All', type: 'ALL' as const },
+    ...agentOptions,
+    ...workflowOptions,
+  ];
+
+  useEffect(() => {
+    if (entityOptions) {
+      const entityName = searchParams.get('entity');
+      const entityOption = entityOptions.find(option => option.value === entityName);
+      if (entityOption && entityOption.value !== selectedEntityOption?.value) {
+        setSelectedEntityOption(entityOption);
+      }
+    }
+  }, [searchParams, selectedEntityOption, entityOptions]);
 
   const scorerAgents =
     scorer?.agentIds.map(agentId => {
-      return { id: agentId, name: agents?.[agentId]?.name };
+      return {
+        name: agentId,
+        id: Object.entries(agents).find(([_, value]) => value.name === agentId)?.[0],
+      };
     }) || [];
+
+  const legacyWorkflows = workflows?.[0] || {};
+  const currentWorkflows = workflows?.[1] || {};
 
   const scorerWorkflows =
     scorer?.workflowIds.map(workflowId => {
-      const legacy = workflows?.[0] || {};
-      const current = workflows?.[1] || {};
-
       return {
-        id: workflowId,
-        name: legacy[workflowId]?.name || current[workflowId]?.name,
+        name: workflowId,
+        id: Object.entries({ ...legacyWorkflows, ...currentWorkflows }).find(
+          ([_, value]) => value.name === workflowId,
+        )?.[0],
       };
     }) || [];
 
@@ -49,14 +106,29 @@ export default function Scorer() {
     ...scorerWorkflows.map(workflow => ({ id: workflow.id, name: workflow.name, type: 'WORKFLOW' })),
   ];
 
-  const [scoresPage, setScoresPage] = useState<number>(0);
-  const [filteredByEntity, setFilteredByEntity] = useState<string>('');
+  const scoreInfo = [
+    {
+      key: 'entities',
+      label: 'Entities',
+      value: (scorerEntities || []).map(entity => ({
+        id: entity.id,
+        name: entity.name || entity.id,
+        path: `${entity.type === 'AGENT' ? '/agents' : '/workflows'}/${entity.id}`,
+      })),
+    },
+  ];
 
-  const { scores: scoresData, isLoading: scoresLoading } = useScoresByScorerId({
+  const handleSelectedEntityChange = (option: EntityOptions | undefined) => {
+    option?.value && setSearchParams({ entity: option?.value });
+  };
+
+  const [scoresPage, setScoresPage] = useState<number>(0);
+
+  const { scores: scoresData, isLoading: isScoresLoading } = useScoresByScorerId({
     scorerId,
     page: scoresPage,
-    entityId: filteredByEntity !== '' ? scorerEntities?.[+filteredByEntity]?.name : undefined,
-    entityType: filteredByEntity !== '' ? scorerEntities?.[+filteredByEntity]?.type : undefined,
+    entityId: selectedEntityOption?.value === 'all' ? undefined : selectedEntityOption?.value,
+    entityType: selectedEntityOption?.type === 'ALL' ? undefined : selectedEntityOption?.type,
   });
 
   const scores = scoresData?.scores || [];
@@ -64,45 +136,55 @@ export default function Scorer() {
   const scoresHasMore = scoresData?.pagination.hasMore;
   const scoresPerPage = scoresData?.pagination.perPage;
 
-  const handleFilterChange = (value: string) => {
-    if (value === 'all') {
-      setFilteredByEntity('');
-      setScoresPage(0); // Reset to first page when filtering by all
-    } else {
-      const entity = scorerEntities?.[parseInt(value)];
-      if (entity) {
-        setFilteredByEntity(value);
-        setScoresPage(0);
-      } else {
-        console.warn('Entity not found for value:', value);
-      }
+  const items: ScoreItem[] = scores.map(score => {
+    const createdAtDate = new Date(score.createdAt);
+    const isTodayDate = isToday(createdAtDate);
+
+    return {
+      id: score.id,
+      date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
+      time: format(createdAtDate, 'h:mm:ss aaa'),
+      input: score?.input?.inputMessages?.[0]?.content || '',
+      entityId: score.entityId,
+      score: score.score,
+    };
+  });
+
+  const handleOnListItem = (id: string) => {
+    if (id === selectedScoreId) {
+      return setSelectedScoreId(undefined);
+    }
+
+    setSelectedScoreId(id);
+    setDialogIsOpen(true);
+  };
+
+  const toNextItem = () => {
+    const currentIndex = scores.findIndex(item => item.id === selectedScoreId);
+    const nextItem = scores[currentIndex + 1];
+
+    if (nextItem) {
+      setSelectedScoreId(nextItem.id);
     }
   };
 
-  const handleOnListItemClick = (score: any) => {
-    if (score.id === selectedScore?.id) {
-      setSelectedScore(null);
-    } else {
-      setSelectedScore(score);
-      setDetailsIsOpened(true);
+  const toPreviousItem = () => {
+    const currentIndex = scores.findIndex(item => item.id === selectedScoreId);
+    const previousItem = scores[currentIndex - 1];
+
+    if (previousItem) {
+      setSelectedScoreId(previousItem.id);
     }
   };
 
-  const toPreviousScore = (currentScore: ScoreRowData) => {
-    const currentIndex = scores?.findIndex(score => score?.id === currentScore?.id);
-    if (currentIndex === -1 || currentIndex === (scores?.length || 0) - 1) {
-      return null; // No next score
-    }
-
-    return () => setSelectedScore(scores[(currentIndex || 0) + 1]);
+  const thereIsNextItem = () => {
+    const currentIndex = scores.findIndex(item => item.id === selectedScoreId);
+    return currentIndex < scores.length - 1;
   };
 
-  const toNextScore = (currentScore: ScoreRowData) => {
-    const currentIndex = scores?.findIndex(score => score?.id === currentScore?.id);
-    if ((currentIndex || 0) <= 0) {
-      return null; // No previous score
-    }
-    return () => setSelectedScore(scores[(currentIndex || 0) - 1]);
+  const thereIsPreviousItem = () => {
+    const currentIndex = scores.findIndex(item => item.id === selectedScoreId);
+    return currentIndex > 0;
   };
 
   const handleNextPage = () => {
@@ -117,418 +199,60 @@ export default function Scorer() {
     }
   };
 
-  if (isLoading) {
-    return null;
-  }
-
   return (
-    <MainContentLayout>
-      <Header>
-        <Breadcrumb>
-          <Crumb as={Link} to={`/scorers`}>
-            Scorers
-          </Crumb>
+    <>
+      <MainContentLayout>
+        <Header>
+          <Breadcrumb>
+            <Crumb as={Link} to={`/scorers`}>
+              Scorers
+            </Crumb>
 
-          <Crumb as={Link} to={`/scorers/${scorerId}`} isCurrent>
-            {isLoading ? <Skeleton className="w-20 h-4" /> : scorer?.scorer.config.name || 'Not found'}
-          </Crumb>
-        </Breadcrumb>
-      </Header>
+            <Crumb as={Link} to={`/scorers/${scorerId}`} isCurrent>
+              {isScorerLoading ? <Skeleton className="w-20 h-4" /> : scorer?.scorer.config.name || 'Not found'}
+            </Crumb>
+          </Breadcrumb>
+        </Header>
 
-      {scorer?.scorer ? (
-        <>
-          <div className={cn(`h-full overflow-y-scroll `)}>
-            <div className={cn('max-w-[100rem] px-[3rem] mx-auto')}>
-              <ScorerHeader scorer={scorer} agents={scorerAgents} workflows={scorerWorkflows} />
-              <ScoreListHeader
-                filteredByEntity={filteredByEntity}
-                onFilterChange={handleFilterChange}
-                scorerEntities={scorerEntities}
-              />
-              <ScoreList
-                scores={scores || []}
-                selectedScore={selectedScore}
-                onItemClick={handleOnListItemClick}
-                isLoading={scoresLoading}
-                total={scoresTotal}
-                page={scoresPage}
-                perPage={scoresPerPage}
-                hasMore={scoresHasMore}
-                onNextPage={handleNextPage}
-                onPrevPage={handlePrevPage}
-              />
-            </div>
-          </div>
-          <ScoreDetails
-            score={selectedScore}
-            isOpen={detailsIsOpened}
-            onClose={() => setDetailsIsOpened(false)}
-            onNext={toNextScore(selectedScore)}
-            onPrevious={toPreviousScore(selectedScore)}
-          />
-        </>
-      ) : null}
-    </MainContentLayout>
-  );
-}
-
-function ScorerHeader({
-  scorer,
-  agents,
-  workflows,
-}: {
-  scorer: any;
-  agents?: { id: string; name: string }[];
-  workflows?: { id: string; name: string }[];
-}) {
-  return (
-    <div
-      className={cn(
-        'grid z-[1] top-0 gap-y-[0.5rem] text-icon4 bg-surface2 py-[3rem]',
-        '3xl:h-full 3xl:content-start 3xl:grid-rows-[auto_1fr] h-full 3xl:overflow-y-auto',
-      )}
-    >
-      <div className="grid gap-[1rem] w">
-        <h1 className="text-icon6 text-[1.25rem]">{scorer?.scorer?.config?.name}</h1>
-        <p className="m-0 text-[0.875rem]">{scorer?.scorer?.config?.description}</p>
-        <div
-          className={cn(
-            'flex gap-[1rem] mt-[1rem] text-[0.875rem] items-center mb-[0.25rem]',
-            '[&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:text-icon3',
-          )}
-        >
-          <span>Entities</span>
-          <ArrowRightIcon />
-          <div className="flex  gap-[1rem] [&>a]:text-icon4 [&>a:hover]:text-icon5 [&>a]:transition-colors [&>a]:flex [&>a]:items-center [&>a]:gap-[0.5rem] [&>a]:border [&>a]:border-border1 [&>a]:p-[0.25rem] [&>a]:px-[0.5rem] [&>a]:rounded-md [&>a]:text-[0.875rem]">
-            {agents?.map(agent => {
-              return (
-                <Link to={`/agents/${agent.id}/chat`} key={agent.id}>
-                  <AgentIcon /> {agent.name || agent.id}
-                </Link>
-              );
-            })}
-            {workflows?.map(workflow => {
-              return (
-                <Link to={`/workflows/${workflow.id}/graph`} key={workflow.id}>
-                  <WorkflowIcon /> {workflow.name || workflow.id}
-                </Link>
-              );
-            })}
+        <div className={cn(`grid overflow-y-auto h-full`)}>
+          <div className={cn('max-w-[100rem] w-full px-[3rem] mx-auto grid content-start gap-[2rem] h-full')}>
+            <PageHeader
+              title={scorer?.scorer?.config?.name}
+              description={scorer?.scorer?.config?.description}
+              icon={<GaugeIcon />}
+            />
+            <KeyValueList data={scoreInfo} LinkComponent={Link} isLoading={isLoadingAgents || isLoadingWorkflows} />
+            <ScoresTools
+              selectedEntity={selectedEntityOption}
+              entityOptions={entityOptions}
+              onEntityChange={handleSelectedEntityChange}
+              onReset={() => setSearchParams({ entity: 'all' })}
+              isLoading={isScoresLoading || isLoadingAgents || isLoadingWorkflows}
+            />
+            <EntryList
+              items={items}
+              selectedItemId={selectedScoreId}
+              onItemClick={handleOnListItem}
+              columns={listColumns}
+              isLoading={isScoresLoading}
+              page={scoresPage}
+              perPage={scoresPerPage}
+              hasMore={scoresHasMore}
+              total={scoresTotal || 0}
+              onNextPage={handleNextPage}
+              onPrevPage={handlePrevPage}
+            />
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function ScoreListHeader({
-  filteredByEntity,
-  onFilterChange,
-  scorerEntities,
-}: {
-  filteredByEntity?: string;
-  onFilterChange: (value: string) => void;
-  scorerEntities: { id: string; name: string; type: string }[];
-}) {
-  return (
-    <div className={cn('sticky top-0 bg-surface4 z-[1] mt-[1rem] mb-[1rem] rounded-lg px-[1.5rem]')}>
-      <div className="flex items-center justify-between">
-        <div className="inline-flex items-baseline gap-[1rem] py-[.75rem] ">
-          <label htmlFor="filter-by-entity" className="text-icon3 text-[0.875rem] font-semibold whitespace-nowrap">
-            Filter by entity:
-          </label>
-          <Select
-            name="filter-by-entity"
-            onValueChange={value => {
-              onFilterChange(value);
-            }}
-            defaultValue={'all'}
-            value={filteredByEntity || 'all'}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem key="all" value="all">
-                All
-              </SelectItem>
-              {(scorerEntities || []).map((entity, idx) => (
-                <SelectItem key={entity.id} value={`${idx}`}>
-                  <div className="flex items-center gap-[0.5rem] [&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:text-icon3">
-                    {entity.type === 'WORKFLOW' ? <WorkflowIcon /> : <AgentIcon />}
-                    {entity.name || entity.id}
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div
-        className={cn(
-          'grid gap-[1rem] grid-cols-[7rem_7rem_1fr_10rem_3rem] text-left text-[0.75rem] text-icon3 uppercase py-[1rem]  border-t border-border1',
-        )}
-      >
-        <span>Date</span>
-        <span>Time</span>
-        <span>Input</span>
-        <span>Entity</span>
-        <span>Score</span>
-      </div>
-    </div>
-  );
-}
-
-function ScoreList({
-  scores,
-  selectedScore,
-  onItemClick,
-  isLoading,
-  total,
-  page,
-  hasMore,
-  onNextPage,
-  onPrevPage,
-  perPage,
-}: {
-  scores: ClientScoreRowData[];
-  selectedScore: any;
-  onItemClick?: (score: ClientScoreRowData) => void;
-  isLoading?: boolean;
-  total?: number;
-  page?: number;
-  hasMore?: boolean;
-  onNextPage?: () => void;
-  onPrevPage?: () => void;
-  perPage?: number;
-}) {
-  if (isLoading) {
-    return (
-      <div className="flex border border-border1 w-full h-[3.5rem] items-center justify-center text-[0.875rem] text-icon3 rounded-lg">
-        Loading...
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid gap-[2rem] mb-[3rem]">
-      <ul className="grid border border-border1f bg-surface3 rounded-xl ">
-        {scores?.length === 0 && (
-          <li className="text-icon3 text-[0.875rem] text-center h-[3.5rem] items-center flex justify-center">
-            No scores found for this scorer.
-          </li>
-        )}
-        {scores?.length > 0 &&
-          scores.map(score => {
-            return <ScoreItem key={score.id} score={score} selectedScore={selectedScore} onClick={onItemClick} />;
-          })}
-      </ul>
-
-      {typeof page === 'number' && typeof perPage === 'number' && typeof total === 'number' && (
-        <div className={cn('flex items-center justify-center text-icon3 text-[0.875rem] gap-[2rem]')}>
-          <span>Page {page ? page + 1 : '1'}</span>
-          <div
-            className={cn(
-              'flex gap-[1rem]',
-              '[&>button]:flex [&>button]:items-center [&>button]:gap-[0.5rem] [&>button]:text-icon4 [&>button:hover]:text-icon5 [&>button]:transition-colors [&>button]:border [&>button]:border-border1 [&>button]:p-[0.25rem] [&>button]:px-[0.5rem] [&>button]:rounded-md',
-              ' [&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-icon3',
-            )}
-          >
-            {typeof page === 'number' && page > 0 && (
-              <button onClick={onPrevPage} disabled={page === 0}>
-                <ArrowLeftIcon />
-                Previous
-              </button>
-            )}
-            {hasMore && (
-              <button onClick={onNextPage} disabled={!hasMore}>
-                Next
-                <ArrowRightIcon />
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ScoreItem({
-  score,
-  selectedScore,
-  onClick,
-}: {
-  score: ClientScoreRowData;
-  selectedScore: any | null;
-  onClick?: (score: any) => void;
-}) {
-  const isSelected = selectedScore?.id === score.id;
-
-  const handleClick = () => {
-    return onClick && onClick(score);
-  };
-
-  const isTodayDate = isToday(new Date(score.createdAt));
-  const dateStr = format(new Date(score.createdAt), 'MMM d yyyy');
-  const timeStr = format(new Date(score.createdAt), 'h:mm:ss bb');
-  const inputPrev = score?.input?.inputMessages?.[0]?.content || '';
-  const scorePrev = score?.score ? Math.round(score?.score * 100) / 100 : '0';
-  const entityIcon = score?.entityType === 'WORKFLOW' ? <WorkflowIcon /> : <AgentIcon />;
-
-  return (
-    <li
-      key={score.id}
-      className={cn('scorerListItem border-b text-[#ccc] border-border1 last:border-b-0 text-[0.875rem]', {
-        'bg-surface5': isSelected,
-      })}
-    >
-      <button
-        onClick={handleClick}
-        className={cn(
-          'grid w-full px-[1.5rem] gap-[1rem] text-left items-center min-h-[3.5rem] grid-cols-[7rem_7rem_1fr_10rem_3rem] ',
-        )}
-      >
-        <span className="text-icon4">{isTodayDate ? 'Today' : dateStr}</span>
-        <span className="text-icon4">{timeStr}</span>
-        <span className="truncate pr-[1rem]">{inputPrev}</span>
-        <span className="pr-[1rem] flex gap-[0.5rem] items-center [&>svg]:shrink-0 [&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:text-icon3 text-[0.875rem]">
-          {entityIcon} <span className="truncate">{score.entityId}</span>
-        </span>
-        <span>{scorePrev}</span>
-      </button>
-    </li>
-  );
-}
-
-function ScoreDetails({
-  isOpen,
-  score,
-  onClose,
-  onPrevious,
-  onNext,
-}: {
-  isOpen: boolean;
-  score: ScoreRowData;
-  onClose?: () => void;
-  onNext?: (() => void) | null;
-  onPrevious?: (() => void) | null;
-}) {
-  if (!score) {
-    return null;
-  }
-
-  console.log({ score });
-
-  const handleOnNext = () => {
-    if (onNext) {
-      onNext();
-    }
-  };
-
-  const handleOnPrevious = () => {
-    if (onPrevious) {
-      onPrevious();
-    }
-  };
-
-  const prompts: Record<string, string | undefined> = {
-    preprocessPrompt: score?.preprocessPrompt,
-    analyzePrompt: score?.analyzePrompt,
-    generateScorePrompt: score?.generateScorePrompt,
-    generateReasonPrompt: score?.generateReasonPrompt,
-  };
-
-  return (
-    <Dialog.Root open={isOpen} onOpenChange={onClose}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="bg-black top-0 bottom-0 right-0 left-0 fixed z-[10] opacity-[0.1]" />
-        <Dialog.Content
-          className={cn(
-            'fixed top-0 bottom-0 right-0 border-l border-border1 w-[70rem] max-w-[calc(100vw-15rem)] z-[100] bg-surface4 px-[1rem] overflow-y-scroll',
-          )}
-        >
-          <div className="bg-surface4 border-b border-border1 flex items-center py-[1.5rem] px-[1rem] top-0 sticky z-[100]">
-            <h2 className=" w-full text-[0.875rem] !text-icon5 !font-normal flex items-center gap-[1rem]">
-              <span>{score.id}</span>|<span>{format(new Date(score.createdAt), 'LLL do yyyy, hh:mm:ss bb')}</span>
-            </h2>
-            <div className="flex gap-[1rem]">
-              <Button variant={'outline'} onClick={handleOnNext} disabled={!onNext}>
-                Next
-                <ArrowUpIcon />
-              </Button>
-              <Button variant={'outline'} onClick={handleOnPrevious} disabled={!onPrevious}>
-                Previous
-                <ArrowDownIcon />
-              </Button>
-              <Dialog.Close asChild>
-                <button
-                  className="inline-flex bg-surface5 appearance-none items-center justify-center rounded-md p-[.2rem]"
-                  aria-label="Close"
-                >
-                  <XIcon />
-                </button>
-              </Dialog.Close>
-            </div>
-          </div>
-
-          <div className="grid gap-[2rem] px-[1rem] py-[2rem] pb-[4rem] ">
-            <section className="border border-border1 rounded-lg">
-              <div className="border-b border-border1 last:border-b-0 grid">
-                <h3 className="p-[1rem] px-[1.5rem] border-b border-border1">
-                  Score: <b>{typeof score.score === 'number' ? score.score : 'n/a'}</b>
-                </h3>
-                <div className="text-icon4 text-[0.875rem] py-[1rem] font-mono break-all mx-[1.5rem]">
-                  {<pre className="text-wrap">{score?.reason}</pre>}
-                </div>
-              </div>
-            </section>
-
-            <section className="border border-border1 rounded-lg">
-              <div className="border-b border-border1 last:border-b-0 grid">
-                <h3 className="p-[1rem] px-[1.5rem] border-b border-border1">Input</h3>
-                {score.input && (
-                  <div className={cn('overflow-auto text-icon4 text-[0.875rem] [&>div]:border-none break-all')}>
-                    <CodeMirrorBlock value={JSON.stringify(score.input || {}, null, 2)} />
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <section className="border border-border1 rounded-lg">
-              <div className="border-b border-border1 last:border-b-0 grid">
-                <h3 className="p-[1rem] px-[1.5rem] border-b border-border1">Output</h3>
-                {score.output && (
-                  <div className={cn('overflow-auto text-icon4 text-[0.875rem] [&>div]:border-none break-all')}>
-                    <CodeMirrorBlock value={JSON.stringify(score.output || {}, null, 2)} />
-                  </div>
-                )}
-              </div>
-            </section>
-
-            {prompts && Object.values(prompts).filter(Boolean).length > 0 && (
-              <section className="border border-border1 rounded-lg">
-                <div className="flex items-center justify-between  p-[1rem] ">
-                  <h3 className="px-[.5rem]">Prompts</h3>
-                </div>
-
-                {Object.entries(prompts || {}).map(([key, value]) =>
-                  value ? (
-                    <Fragment key={key}>
-                      <div className="flex gap-[1rem] text-[] py-[1rem] px-[1.5rem] border-y border-border1">
-                        <span className="text-icon5 font-bold text-[0.875rem]">{key}</span>
-                      </div>
-                      <div className="text-icon4 text-[0.875rem] py-[1rem] font-mono break-all mx-[1.5rem]">
-                        {value && <pre className="text-wrap">{value}</pre>}
-                      </div>
-                    </Fragment>
-                  ) : null,
-                )}
-              </section>
-            )}
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+      </MainContentLayout>
+      <ScoreDialog
+        scorer={scorer?.scorer}
+        score={scores.find(s => s.id === selectedScoreId)!}
+        isOpen={dialogIsOpen}
+        onClose={() => setDialogIsOpen(false)}
+        onNext={thereIsNextItem() ? toNextItem : undefined}
+        onPrevious={thereIsPreviousItem() ? toPreviousItem : undefined}
+      />
+    </>
   );
 }

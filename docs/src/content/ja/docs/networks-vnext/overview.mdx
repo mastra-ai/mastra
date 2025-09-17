@@ -1,0 +1,97 @@
+---
+title: "複雑なLLM操作の処理 | Networks | Mastra"
+description: "MastraのNetworksは、単一のAPIを使用して、個別または複数のMastraプリミティブを非決定論的な方法で実行するのに役立ちます。"
+---
+
+
+
+# Mastra vNext Agent Network
+
+vNext Agent Networkモジュールは、複数の専門エージェントとワークフローを柔軟で構成可能かつ非決定論的な方法でオーケストレーションし、複雑な推論とタスク完了を可能にします。
+
+このシステムが解決するように設計された主な問題領域は2つあります：
+
+- 単一のエージェントでは不十分で、タスクが複数のエージェントとワークフロー間でのコラボレーション、ルーティング、または順次/並列実行を必要とするシナリオ。
+- タスクが完全に定義されておらず、非構造化入力で開始されるシナリオ。AgentNetworkは、どのプリミティブを呼び出すかを判断し、非構造化入力を構造化されたタスクに変換できます。
+
+
+
+## Workflowsとの違い
+
+- Workflowsは線形または分岐したステップのシーケンスです。これにより決定論的な実行フローが作成されます。
+- Agent Networksは非決定論的なLLMベースのオーケストレーション層を追加し、動的なマルチエージェントコラボレーションとルーティングを可能にします。これにより非決定論的な実行フローが作成されます。
+
+
+
+## 現在の実験的実装との違い
+
+- AgentNetworkの現在の実装は、ネットワーク内の他のエージェントを呼び出すためにツール呼び出しに依存しています。vNext実装では、実行を個別のタスクに分解するためにMastraワークフローを内部で使用しています。
+- 新しいメソッド`.generate()`は、ネットワーク内の単一のプリミティブの一回限りの「プレイブック」のような実行を行い、ソリューションを反復するチャットベースのインターフェースにより適しています。`.loop()`メソッドは、より複雑なタスクに対して引き続き利用可能で、現在の実装とほぼ同様に動作します。
+
+
+
+## 重要な詳細
+
+- `loop`メソッドを使用する際、AgentNetworkにメモリを提供することは_オプションではありません_。タスク履歴を保存するために必要だからです。メモリは、どのプリミティブを実行するかの決定や、タスクの完了を判断するために使用される中核的なプリミティブです。
+- 利用可能なプリミティブ（エージェント、ワークフロー）は、その説明に基づいて使用されます。説明が優れているほど、ルーティングエージェントは適切なプリミティブを選択できるようになります。ワークフローの場合、入力スキーマもワークフローを呼び出す際にどの入力を使用するかを決定するために使用されます。より説明的な命名により、より良い結果が得られます。
+- 重複する機能を持つプリミティブが利用可能な場合、ルーティングエージェントは最も具体的なプリミティブを使用します。例えば、エージェントとワークフローの両方がリサーチを実行できる場合、ワークフローの入力スキーマを使用して判断します
+
+
+
+## MastraでのネットワークRegistering
+
+```typescript
+const mastra = new Mastra({
+  vnext_networks: {
+    'test-network': network,
+  },
+});
+
+// using the network
+const network = mastra.vnext_getNetwork('test-network');
+
+if (!network) {
+  throw new Error('Network not found');
+}
+
+console.log(await network.generate('What are the biggest cities in France?', { runtimeContext }));
+```
+
+
+
+## @mastra/client-jsの使用
+
+`@mastra/client-js`パッケージを使用して、クライアント側からネットワークを実行できます。
+
+```typescript
+import { MastraClient } from '@mastra/client-js';
+
+const client = new MastraClient();
+
+const network = client.getVNextNetwork('test-network');
+
+console.log(await network.generate('What are the biggest cities in France?', { runtimeContext }));
+```
+
+レスポンスをストリーミングすることもできます
+
+```typescript
+const stream = await network.stream('What are the biggest cities in France?', { runtimeContext });
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+そしてループの場合
+
+```typescript
+console.log(
+  // タスクを指定します。ここで合成にエージェントを使用することについて言及していることに注意してください。これは、ルーティングエージェントが実際に結果に対して独自に合成を行うことができるため、代わりにagent2を使用するよう強制するためです
+  await network.loop(
+    'What are the biggest cities in France? Give me 3. How are they like? Find cities, then do thorough research on each city, and give me a final full report synthesizing all that information. Make sure to use an agent for synthesis.',
+    { runtimeContext },
+  ),
+);
+```
+

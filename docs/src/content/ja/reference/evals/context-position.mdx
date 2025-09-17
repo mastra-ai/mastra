@@ -1,11 +1,19 @@
 ---
-title: "リファレンス: コンテキスト位置 | メトリクス | Evals | Mastra ドキュメント"
-description: Mastra におけるコンテキスト位置メトリクスのドキュメント。クエリおよび出力に対する関連性に基づいて、コンテキストノードの順序を評価します。
+title: "リファレンス: Context Position | Metrics | Evals | Mastra Docs"
+description: クエリと出力に対するコンテキストノードの関連性に基づいて、その順序を評価するMastraのContext Position Metricのドキュメント。
 ---
+
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
 
 # ContextPositionMetric
 
-`ContextPositionMetric` クラスは、クエリおよび出力に対する関連性に基づいて、コンテキストノードがどれだけ適切に並べられているかを評価します。位置に重み付けしたスコアリングを用いることで、最も関連性の高いコンテキストがシーケンスの早い段階に現れることの重要性を強調します。
+<ScorerCallout />
+
+`ContextPositionMetric`クラスは、クエリと出力に対するコンテキストノードの関連性に基づいて、それらがどの程度適切に順序付けされているかを評価します。位置重み付けスコアリングを使用して、最も関連性の高いコンテキスト部分がシーケンスの早い段階に現れることの重要性を強調します。
+
+
 
 ## 基本的な使い方
 
@@ -33,6 +41,8 @@ console.log(result.score); // Position score from 0-1
 console.log(result.info.reason); // Explanation of the score
 ```
 
+
+
 ## コンストラクターのパラメーター
 
 <PropertiesTable
@@ -40,7 +50,8 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "model",
       type: "ModelConfig",
-      description: "コンテキストの位置評価に使用されるモデルの設定",
+      description:
+        "コンテキストの位置評価に使用されるモデルの設定",
       isOptional: false,
     },
     {
@@ -72,6 +83,8 @@ console.log(result.info.reason); // Explanation of the score
   ]}
 />
 
+
+
 ## measure() のパラメーター
 
 <PropertiesTable
@@ -90,6 +103,8 @@ console.log(result.info.reason); // Explanation of the score
     },
   ]}
 />
+
+
 
 ## 戻り値
 
@@ -120,6 +135,8 @@ console.log(result.info.reason); // Explanation of the score
   ]}
 />
 
+
+
 ## スコアリングの詳細
 
 このメトリクスは、バイナリの関連性評価と位置に基づく重み付けを通じて、コンテキストの配置を評価します。
@@ -148,6 +165,8 @@ console.log(result.info.reason); // Explanation of the score
 - 0.4-0.6: 混在 - 関連性の高いコンテキストが散在
 - 0.1-0.3: 最適でない - 関連性の高いコンテキストが主に後半
 - 0.0: 不適切な順序 - 関連性の高いコンテキストが最後または欠落
+
+
 
 ## 分析付きの例
 
@@ -183,6 +202,8 @@ const result = await metric.measure(
 //   }
 // }
 ```
+
+
 
 ## 関連
 

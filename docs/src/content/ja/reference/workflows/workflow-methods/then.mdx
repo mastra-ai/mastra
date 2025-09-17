@@ -1,0 +1,44 @@
+---
+title: "リファレンス: Workflow.then() | Workflows | Mastra Docs"
+description: ワークフローで `Workflow.then()` メソッドを使用して、ステップ間に順次的な依存関係を作成する方法のドキュメントです。
+---
+
+# Workflow.then()
+
+`.then()` メソッドは、ワークフローのステップ間に順次的な依存関係を設定し、ステップが特定の順序で実行されるようにします。
+
+## 使い方の例
+
+```typescript copy
+workflow.then(step1).then(step2);
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "step",
+      type: "Step",
+      description:
+        "前のステップが完了した後に実行されるステップのインスタンス",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "NewWorkflow",
+      description: "メソッドチェーン用のワークフローインスタンス",
+    },
+  ]}
+/>
+
+## 関連項目
+
+- [制御フロー](../../docs/workflows/control-flow.mdx)

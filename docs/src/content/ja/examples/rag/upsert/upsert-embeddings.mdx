@@ -6,13 +6,25 @@ description: 類似性検索のために、Mastra を使ってさまざまなベ
 import { Tabs } from "nextra/components";
 import { GithubLink } from "@/components/github-link";
 
-# 埋め込みのアップサート
 
-埋め込みを生成した後、それらをベクトル類似検索をサポートするデータベースに保存する必要があります。この例では、後で検索できるように、さまざまなベクトルデータベースに埋め込みを保存する方法を示します。
 
-<Tabs items={['PgVector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
+# Upsert Embeddings
+
+埋め込みを生成した後、ベクトル類似性検索をサポートするデータベースに保存する必要があります。この例では、後で取得するために様々なベクトルデータベースに埋め込みを保存する方法を示します。
+
+{/*
+LLM CONTEXT: This Tabs component demonstrates how to upsert (insert/update) embeddings into different vector databases.
+Each tab shows a complete example of storing embeddings in a specific vector database provider.
+The tabs help users understand the consistent API pattern across different vector stores while showing provider-specific configuration.
+Each tab includes document chunking, embedding generation, index creation, and data insertion for that specific database.
+The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upstash, Cloudflare, MongoDB, OpenSearch, and Couchbase.
+*/}
+
+
+
+<Tabs items={['PgVector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch', 'Couchbase', 'LanceDB']}>
   <Tabs.Tab>
-    `PgVector` クラスは、pgvector拡張機能を持つPostgreSQLにインデックスを作成し、埋め込みを挿入するためのメソッドを提供します。
+    `PgVector` クラスは、pgvector 拡張機能を利用する PostgreSQL で、インデックスの作成や埋め込みの挿入を行うためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from "@ai-sdk/openai";
@@ -54,11 +66,10 @@ import { GithubLink } from "@/components/github-link";
       "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pgvector"
     }
     />
-
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `PineconeVector` クラスは、Pinecone（マネージド型ベクトルデータベースサービス）にインデックスを作成し、埋め込みを挿入するためのメソッドを提供します。
+    `PineconeVector` クラスは、マネージド型ベクターデータベースサービスである Pinecone で、インデックスの作成や埋め込みの挿入を行うためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -98,11 +109,10 @@ import { GithubLink } from "@/components/github-link";
     <br />
 
     <GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pinecone'} />
-
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `QdrantVector` クラスは、高性能ベクトルデータベースであるQdrantにコレクションを作成し、埋め込みを挿入するためのメソッドを提供します。
+    `QdrantVector` クラスは、高性能なベクターデータベースである Qdrant で、コレクションの作成や埋め込みの挿入を行うためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -136,11 +146,10 @@ import { GithubLink } from "@/components/github-link";
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `ChromaVector` クラスは、コレクションの作成や Chroma（オープンソースの埋め込みデータベース）への埋め込みの挿入を行うためのメソッドを提供します。
+    `ChromaVector` クラスは、オープンソースの埋め込みデータベースである Chroma に対して、コレクションの作成や埋め込みの挿入を行うためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -157,11 +166,17 @@ import { GithubLink } from "@/components/github-link";
       model: openai.embedding('text-embedding-3-small'),
     });
 
-    const chroma = new ChromaVector({
-      path: "path/to/chroma/db",
+    // Running Chroma locally
+    const store = new ChromaVector();
+
+    // Running on Chroma Cloud
+    const store = new ChromaVector({
+      apiKey: process.env.CHROMA_API_KEY,
+      tenant: process.env.CHROMA_TENANT,
+      database: process.env.CHROMA_DATABASE
     });
 
-    await chroma.createIndex({
+    await store.createIndex({
       indexName: 'test_collection',
       dimension: 1536,
     });
@@ -181,11 +196,10 @@ import { GithubLink } from "@/components/github-link";
     <br />
 
     <GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-chroma'} />
-
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `AstraVector` クラスは、コレクションの作成や DataStax Astra DB（クラウドネイティブなベクターデータベース）への埋め込みの挿入を行うためのメソッドを提供します。
+    `AstraVector` クラスは、クラウドネイティブなベクターデータベースである DataStax Astra DB に対して、コレクションの作成や埋め込みの挿入を行うためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -219,11 +233,10 @@ import { GithubLink } from "@/components/github-link";
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `LibSQLVector` クラスは、コレクションの作成や LibSQL（ベクター拡張機能を持つ SQLite のフォーク）への埋め込みの挿入を行うためのメソッドを提供します。
+    `LibSQLVector` クラスは、ベクター拡張を備えた SQLite のフォークである LibSQL に対して、コレクションの作成や埋め込みの挿入を行うためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from "@ai-sdk/openai";
@@ -264,11 +277,10 @@ import { GithubLink } from "@/components/github-link";
     <br />
 
     <GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-libsql'} />
-
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `UpstashVector` クラスは、コレクションの作成や埋め込みを Upstash Vector（サーバーレスベクターデータベース）に挿入するためのメソッドを提供します。
+    `UpstashVector` クラスは、コレクションの作成や、サーバーレスのベクターデータベースである Upstash Vector への埋め込みの挿入を行うためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -290,22 +302,18 @@ import { GithubLink } from "@/components/github-link";
       token: process.env.UPSTASH_TOKEN,
     });
 
-    await upstash.createIndex({
-      indexName: 'test_collection',
-      dimension: 1536,
-    });
-
+    // ここでは store.createIndex の呼び出しは不要です。Upstash では、アップサート時に
+    // その名前空間（Upstash では namespace と呼びます）が存在しない場合、自動的にインデックスを作成します。
     await upstash.upsert({
-      indexName: 'test_collection',
+      indexName: 'test_collection', // Upstash における namespace 名
       vectors: embeddings,
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `CloudflareVector` クラスは、コレクションの作成や埋め込みを Cloudflare Vectorize（サーバーレスベクターデータベースサービス）に挿入するためのメソッドを提供します。
+    `CloudflareVector` クラスは、コレクションの作成や、サーバーレスのベクターデータベースサービスである Cloudflare Vectorize への埋め込みの挿入を行うためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -338,11 +346,10 @@ import { GithubLink } from "@/components/github-link";
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `MongoDBVector` クラスは、インデックスの作成や埋め込みを MongoDB（Atlas Search を利用）に挿入するためのメソッドを提供します。
+    `MongoDBVector` クラスは、Atlas Search を用いた MongoDB へのインデックス作成と埋め込みの挿入を行うためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from "@ai-sdk/openai";
@@ -375,6 +382,118 @@ import { GithubLink } from "@/components/github-link";
       metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
     });
     ```
+  </Tabs.Tab>
 
+  <Tabs.Tab>
+    `OpenSearchVector` クラスは、ベクター検索機能を備えた分散型検索エンジンである OpenSearch へのインデックス作成と埋め込みの挿入を行うためのメソッドを提供します。
+
+    ```tsx copy
+    import { openai } from '@ai-sdk/openai';
+    import { OpenSearchVector } from '@mastra/opensearch';
+    import { MDocument } from '@mastra/rag';
+    import { embedMany } from 'ai';
+
+    const doc = MDocument.fromText('Your text content...');
+
+    const chunks = await doc.chunk();
+
+    const { embeddings } = await embedMany({
+      values: chunks.map(chunk => chunk.text),
+      model: openai.embedding('text-embedding-3-small'),
+    });
+
+    const vectorDB = new OpenSearchVector({
+      uri: process.env.OPENSEARCH_URI!,
+    });
+
+    await vectorDB.createIndex({
+      indexName: 'test_index',
+      dimension: 1536,
+    });
+
+    await vectorDB.upsert({
+      indexName: 'test_index',
+      vectors: embeddings,
+      metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+    });
+    ```
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    `CouchbaseVector` クラスは、ベクトル検索に対応した分散型 NoSQL データベースである Couchbase で、インデックスの作成やベクトル埋め込みの挿入を行うためのメソッドを提供します。
+
+    ```tsx copy
+    import { openai } from '@ai-sdk/openai';
+    import { CouchbaseVector } from '@mastra/couchbase';
+    import { MDocument } from '@mastra/rag';
+    import { embedMany } from 'ai';
+
+    const doc = MDocument.fromText('Your text content...');
+
+    const chunks = await doc.chunk();
+
+    const { embeddings } = await embedMany({
+      values: chunks.map(chunk => chunk.text),
+      model: openai.embedding('text-embedding-3-small'),
+    });
+
+    const couchbase = new CouchbaseVector({
+      connectionString: process.env.COUCHBASE_CONNECTION_STRING,
+      username: process.env.COUCHBASE_USERNAME,
+      password: process.env.COUCHBASE_PASSWORD,
+      bucketName: process.env.COUCHBASE_BUCKET,
+      scopeName: process.env.COUCHBASE_SCOPE,
+      collectionName: process.env.COUCHBASE_COLLECTION,
+    });
+
+    await couchbase.createIndex({
+      indexName: 'test_collection',
+      dimension: 1536,
+    });
+
+    await couchbase.upsert({
+      indexName: 'test_collection',
+      vectors: embeddings,
+      metadata: chunks?.map(chunk => ({ text: chunk.text })),
+    });
+    ```
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    `LanceVectorStore` クラスは、Lance カラムナ形式の上に構築された組み込み型ベクトルデータベースである LanceDB で、テーブルやインデックスの作成、ベクトル埋め込みの挿入を行うためのメソッドを提供します。
+
+    ```tsx copy
+    import { openai } from '@ai-sdk/openai';
+    import { LanceVectorStore } from '@mastra/lance';
+    import { MDocument } from '@mastra/rag';
+    import { embedMany } from 'ai';
+
+    const doc = MDocument.fromText('Your text content...');
+
+    const chunks = await doc.chunk();
+
+    const { embeddings } = await embedMany({
+      values: chunks.map(chunk => chunk.text),
+      model: openai.embedding('text-embedding-3-small'),
+    });
+
+    const lance = await LanceVectorStore.create('/path/to/db');
+
+    // LanceDB では、まずテーブルを作成する必要があります
+    await lance.createIndex({
+      tableName: 'myVectors',
+      indexName: 'vector',
+      dimension: 1536,
+    });
+
+    await lance.upsert({
+      tableName: 'myVectors',
+      vectors: embeddings,
+      metadata: chunks?.map(chunk => ({ text: chunk.text })),
+    });
+    ```
   </Tabs.Tab>
 </Tabs>
+
+
+

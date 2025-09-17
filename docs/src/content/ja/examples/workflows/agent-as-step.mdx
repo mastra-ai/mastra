@@ -1,0 +1,94 @@
+---
+title: "例: ステップとしてエージェントを使用する | Workflows | Mastra Docs"
+description: ワークフローのステップとしてエージェントを組み込むために Mastra を使用する例。
+---
+
+
+
+# ステップとしてのエージェント
+
+ワークフローにはステップとしてエージェントを組み込むことができます。次の例では、`createStep()` を用いてエージェントをステップとして定義する方法を示します。
+
+
+
+## エージェントの作成
+
+都市に関する事実を返すシンプルなエージェントを作成します。
+
+```typescript filename="src/mastra/agents/example-city-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+export const cityAgent = new Agent({
+  name: "city-agent",
+  description: "Create facts for a city",
+  instructions: "Return an interesting fact based on the city provided",
+  model: openai("gpt-4o")
+});
+```
+
+### エージェントの入出力スキーマ
+
+Mastra のエージェントは、入力として `prompt` の文字列を受け取り、出力として `text` の文字列を返すデフォルトのスキーマを使用します。
+
+```typescript
+{
+  inputSchema: {
+    prompt: string
+  },
+  outputSchema: {
+    text: string
+  }
+}
+```
+
+
+
+## ステップとしてのエージェント
+
+エージェントをステップとして使うには、`createStep()` に直接渡します。`.map()` メソッドで、ワークフローの入力をエージェントが期待する形に変換します。
+
+この例では、ワークフローが `city` の入力を受け取り、それを `prompt` にマッピングしてからエージェントを呼び出します。エージェントは `text` という文字列を返し、それがそのままワークフローの出力に渡されます。出力スキーマは `facts` フィールドを期待していますが、追加のマッピングは不要です。
+
+```typescript filename="src/mastra/workflows/example-agent-step.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+import { cityAgent } from "../agents/example-city-agent";
+
+const step1 = createStep(cityAgent);
+
+export const agentAsStep = createWorkflow({
+  id: "agent-step-workflow",
+  inputSchema: z.object({
+    city: z.string()
+  }),
+  outputSchema: z.object({
+    facts: z.string()
+  })
+})
+  .map(async ({ inputData }) => {
+    const { city } = inputData;
+    return {
+      prompt: `Create an interesting fact about ${city}`
+    };
+  })
+
+  .then(step1)
+  .commit();
+```
+
+
+
+## 関連項目
+
+- [ワークフローの実行](./running-workflows.mdx)
+
+
+
+## ワークフロー（レガシー）
+
+以下のリンクは、レガシー版ワークフローのドキュメント例です。
+
+- [ワークフローからエージェントを呼び出す（レガシー）](/examples/workflows_legacy/calling-agent)
+- [ツールをワークフローのステップとして使用する（レガシー）](/examples/workflows_legacy/using-a-tool-as-a-step)

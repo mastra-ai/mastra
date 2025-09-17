@@ -1,0 +1,121 @@
+---
+title: "リファレンス: Arize Phoenix との統合 | Mastra Observability ドキュメント"
+description: オープンソースのAI可観測性プラットフォームである Mastra と Arize Phoenix を統合し、LLM アプリケーションを監視・評価するためのドキュメント。
+---
+
+# Arize Phoenix
+
+Arize Phoenix は、LLM アプリケーションの監視・評価・改善のために設計された、オープンソースの AI オブザーバビリティプラットフォームです。セルフホスティングでの利用、または Phoenix Cloud を通じた利用が可能です。
+
+## 構成
+
+### Phoenix Cloud
+
+Phoenix Cloud を使用している場合は、次の環境変数を設定してください：
+
+```env
+PHOENIX_API_KEY="your-phoenix-api-key"
+PHOENIX_COLLECTOR_ENDPOINT="your-phoenix-hostname"
+```
+
+#### 資格情報の取得
+
+1. [app.phoenix.arize.com](https://app.phoenix.arize.com/login) で Arize Phoenix アカウントを作成します
+2. 左側のバーの「Keys」から API キーを取得します
+3. コレクターのエンドポイント用に Phoenix のホスト名をメモしておきます
+
+### 自己ホスティング版 Phoenix
+
+自己ホスティングの Phoenix インスタンスを実行している場合は、次のように設定します:
+
+```env
+PHOENIX_COLLECTOR_ENDPOINT="http://localhost:6006"
+# 任意: 認証を有効にしている場合
+PHOENIX_API_KEY="your-api-key"
+```
+
+## インストール
+
+必要なパッケージをインストールします：
+
+```bash
+npm install @arizeai/openinference-mastra@^2.2.0
+```
+
+## 実装
+
+Mastra を Phoenix と OpenTelemetry で使うように設定する方法は次のとおりです。
+
+### Phoenix Cloud の構成
+
+```typescript
+import { Mastra } from "@mastra/core";
+import {
+  OpenInferenceOTLPTraceExporter,
+  isOpenInferenceSpan,
+} from "@arizeai/openinference-mastra";
+
+export const mastra = new Mastra({
+  // ... other config
+  telemetry: {
+    serviceName: "my-mastra-app",
+    enabled: true,
+    export: {
+      type: "custom",
+      exporter: new OpenInferenceOTLPTraceExporter({
+        url: process.env.PHOENIX_COLLECTOR_ENDPOINT!,
+        headers: {
+          Authorization: `Bearer ${process.env.PHOENIX_API_KEY}`,
+        },
+        spanFilter: isOpenInferenceSpan,
+      }),
+    },
+  },
+});
+```
+
+### 自前ホスティングの Phoenix 設定
+
+```typescript
+import { Mastra } from "@mastra/core";
+import {
+  OpenInferenceOTLPTraceExporter,
+  isOpenInferenceSpan,
+} from "@arizeai/openinference-mastra";
+
+export const mastra = new Mastra({
+  // ... その他の設定
+  telemetry: {
+    serviceName: "my-mastra-app",
+    enabled: true,
+    export: {
+      type: "custom",
+      exporter: new OpenInferenceOTLPTraceExporter({
+        url: process.env.PHOENIX_COLLECTOR_ENDPOINT!,
+        spanFilter: isOpenInferenceSpan,
+      }),
+    },
+  },
+});
+```
+
+## 自動トレースされる内容
+
+Mastra の包括的なトレースでは、以下が記録されます:
+
+- **エージェントの処理**: すべてのエージェントの生成、ストリーミング、対話呼び出し
+- **LLM とのやり取り**: 入出力メッセージとメタデータを含むモデル呼び出しの全体
+- **ツールの実行**: エージェントによる関数呼び出し（パラメータと結果を含む）
+- **ワークフローの実行**: タイミングと依存関係を含む、ステップごとのワークフロー実行
+- **メモリ操作**: エージェントのメモリへのクエリ、更新、取得
+
+すべてのトレースは OpenTelemetry の標準に準拠し、モデルのパラメータ、トークン使用量、実行時間、エラー詳細などの関連メタデータを含みます。
+
+## ダッシュボード
+
+設定が完了すると、Phoenix でトレースと分析結果を確認できます:
+
+- **Phoenix Cloud**: [app.phoenix.arize.com](https://app.phoenix.arize.com)
+- **セルフホスト**: ご利用の Phoenix インスタンスの URL（例: `http://localhost:6006`）
+
+セルフホストの方法については、[Phoenix のセルフホスティングに関するドキュメント](https://arize.com/docs/phoenix/self-hosting)をご覧ください。

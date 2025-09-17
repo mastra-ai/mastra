@@ -3,9 +3,13 @@ title: "リファレンス: ExtractParams | ドキュメント処理 | RAG | Mas
 description: Mastraにおけるメタデータ抽出設定のドキュメント。
 ---
 
+
+
 # ExtractParams
 
 ExtractParamsは、LLM解析を用いてドキュメントチャンクからメタデータを抽出する設定を行います。
+
+
 
 ## 例
 
@@ -28,6 +32,8 @@ const chunks = await doc.chunk({
 //   excerptKeywords: "KEYWORDS: AI, machine learning, algorithms"
 // }
 ```
+
+
 
 ## パラメーター
 
@@ -65,6 +71,8 @@ const chunks = await doc.chunk({
     },
   ]}
 />
+
+
 
 ## 抽出器の引数
 
@@ -186,6 +194,8 @@ const chunks = await doc.chunk({
   ]}
 />
 
+
+
 ## 高度な例
 
 ```typescript showLineNumbers copy
@@ -230,6 +240,8 @@ const chunks = await doc.chunk({
 //   excerptKeywords: "1. Machine learning\n2. Neural networks\n3. Training data"
 // }
 ```
+
+
 
 ## タイトル抽出のためのドキュメントグループ化
 

@@ -1,0 +1,20 @@
+const meta = {
+  "custom-scorer": "カスタムスコアラー",
+  "answer-relevancy": "回答の関連性",
+  "answer-similarity": "回答の類似度",
+  bias: "バイアス",
+  completeness: "網羅性",
+  "content-similarity": "コンテンツの類似度",
+  "context-relevance": "文脈適合性",
+  "context-precision": "文脈精度",
+  faithfulness: "忠実度",
+  hallucination: "ハルシネーション",
+  "keyword-coverage": "キーワード網羅度",
+  "textual-difference": "テキスト差異",
+  "tone-consistency": "トーンの一貫性",
+  "tool-call-accuracy": "ツール呼び出し精度",
+  "prompt-alignment": "プロンプト整合性",
+  "noise-sensitivity": "ノイズ感受性",
+  toxicity: "有害度",
+};
+export default meta;

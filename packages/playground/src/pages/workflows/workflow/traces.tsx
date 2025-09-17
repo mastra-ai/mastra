@@ -1,7 +1,6 @@
 import { useParams, useSearchParams } from 'react-router';
-import { TracesView } from '@mastra/playground-ui';
+import { TracesView, useWorkflow } from '@mastra/playground-ui';
 
-import { useWorkflow } from '@/hooks/use-workflows';
 import { useTraces } from '@/domains/traces/hooks/use-traces';
 
 function WorkflowTracesPage() {

@@ -1,0 +1,202 @@
+---
+title: "例: スキーマを用いた作業メモリ | メモリ | Mastra ドキュメント"
+description: Zod スキーマを使って作業メモリのデータを構造化・検証する方法を示す例。
+---
+
+
+
+# スキーマを用いたワーキングメモリ
+
+Zod スキーマを使って、ワーキングメモリに保存する情報の構造を定義します。スキーマは、エージェントが会話をまたいで抽出・保持するデータに対し、型安全性とバリデーションを提供します。
+
+これは、`.stream()` を使ったストリーミング応答と、`.generate()` を使った生成応答の両方で機能し、セッション間でデータを保持するために PostgreSQL、LibSQL、Redis などのストレージプロバイダが必要です。
+
+この例では、ワーキングメモリ用スキーマを使って ToDo リストを管理する方法を示します。
+
+
+
+## 前提条件
+
+この例では `openai` モデルを使用します。`OPENAI_API_KEY` を `.env` ファイルに追加してください。
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+```
+
+次のパッケージをインストールしてください:
+
+```bash copy
+npm install @mastra/libsql
+```
+
+
+
+## エージェントにメモリを追加する
+
+エージェントに LibSQL のメモリを追加するには、`Memory` クラスを使用し、`LibSQLStore` を用いて `storage` インスタンスを渡します。`url` はリモートの場所またはローカルファイルを指せます。
+
+### `schema` を用いたワーキングメモリ
+
+`workingMemory.enabled` を `true` に設定してワーキングメモリを有効にします。これにより、エージェントは対話間で構造化された情報を記憶できます。
+
+`schema` を指定すると、エージェントが情報を記憶する際の形式を定義できます。この例では、タスクをアクティブと完了のリストに分けています。
+
+スレッドは関連するメッセージを会話ごとにまとめます。`generateTitle` を有効にすると、各スレッドには内容に基づいたわかりやすい名前が自動的に付与されます。
+
+```typescript filename="src/mastra/agents/example-working-memory-schema-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { LibSQLStore } from "@mastra/libsql";
+import { z } from "zod";
+
+export const workingMemorySchemaAgent = new Agent({
+  name: "working-memory-schema-agent",
+  instructions: `
+    You are a todo list AI agent.
+    Always show the current list when starting a conversation.
+    For each task, include: title with index number, due date, description, status, and estimated time.
+    Use emojis for each field.
+    Support subtasks with bullet points.
+    Ask for time estimates to help with timeboxing.
+  `,
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:working-memory-schema.db"
+    }),
+    options: {
+      workingMemory: {
+        enabled: true,
+        schema: z.object({
+          items: z.array(
+            z.object({
+              title: z.string(),
+              due: z.string().optional(),
+              description: z.string(),
+              status: z.enum(["active", "completed"]).default("active"),
+              estimatedTime: z.string().optional(),
+            })
+          )
+        })
+      },
+      threads: {
+        generateTitle: true
+      }
+    }
+  })
+});
+```
+
+
+
+## 使用例
+
+この例では、構造化情報を管理するためにワーキングメモリスキーマを用いるエージェントとのやり取り方法を示します。エージェントは同一スレッド内の複数回の対話にわたり、ToDoリストを更新して保存します。
+
+### `.stream()` を使ったストリーミング応答
+
+この例では、新しいタスクを含むメッセージをエージェントに送信します。応答はストリーミングされ、更新後の ToDo リストが含まれます。
+
+```typescript filename="src/test-working-memory-schema-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("workingMemorySchemaAgent");
+
+const stream = await agent.stream("Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  }
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+### `.generate()` を使った応答生成
+
+この例では、新しいタスクを含むメッセージをエージェントに送信します。応答は単一のメッセージとして返され、更新後の ToDo リストが含まれます。
+
+```typescript filename="src/test-working-memory-schema-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("workingMemorySchemaAgent");
+
+const response = await agent.generate("Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  }
+});
+
+console.log(response.text);
+```
+
+
+
+## 出力例
+
+この出力は、zod スキーマで定義された構造に従って、エージェントが更新された ToDo リストをどのように整形して返すかを示しています。
+
+```text
+# Todo List
+## Active Items
+1. 🛠️ **Task:** Build a new feature for our app
+   - 📅 **Due:** Next Friday
+   - 📝 **Description:** Develop and integrate a new feature into the existing application.
+   - ⏳ **Status:** Not Started
+   - ⏲️ **Estimated Time:** 2 hours
+
+## Completed Items
+- None yet
+```
+
+
+
+## ストレージオブジェクトの例
+
+Working memory はデータを `.json` 形式で保存し、以下のようになります:
+
+```json
+{
+  // ...
+  "toolInvocations": [
+    {
+      // ...
+      "args": {
+        "memory": {
+          "items": [
+            {
+              "title": "アプリの新機能を開発する",
+              "due": "来週の金曜日",
+              "description": "",
+              "status": "active",
+              "estimatedTime": "2 hours"
+            }
+          ]
+        }
+      },
+    }
+  ],
+}
+```
+
+
+
+## 関連
+
+- [エージェントの呼び出し](../agents/calling-agents.mdx#from-the-command-line)
+- [エージェントのメモリ](../../docs/agents/agent-memory.mdx)
+- [サーバーレス展開](../../docs/deployment/server-deployment.mdx#libsqlstore)

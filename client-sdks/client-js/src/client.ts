@@ -8,7 +8,6 @@ import {
   Workflow,
   Vector,
   BaseResource,
-  Network,
   A2A,
   MCPTool,
   LegacyWorkflow,
@@ -27,7 +26,6 @@ import type {
   GetLogsResponse,
   GetMemoryThreadParams,
   GetMemoryThreadResponse,
-  GetNetworkResponse,
   GetTelemetryParams,
   GetTelemetryResponse,
   GetToolResponse,
@@ -426,28 +424,11 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Retrieves all available networks
-   * @returns Promise containing map of network IDs to network details
-   */
-  public getNetworks(): Promise<Array<GetNetworkResponse>> {
-    return this.request('/api/networks');
-  }
-
-  /**
    * Retrieves all available vNext networks
    * @returns Promise containing map of vNext network IDs to vNext network details
    */
   public getVNextNetworks(): Promise<Array<GetVNextNetworkResponse>> {
     return this.request('/api/networks/v-next');
-  }
-
-  /**
-   * Gets a network instance by ID
-   * @param networkId - ID of the network to retrieve
-   * @returns Network instance
-   */
-  public getNetwork(networkId: string) {
-    return new Network(this.options, networkId);
   }
 
   /**

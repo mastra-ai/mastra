@@ -3,16 +3,17 @@ import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
 import { providerMapToIcon } from '../provider-map-icon';
 import { useLinkComponent } from '@/lib/framework';
-import { GetAgentResponse, GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
+import { GetAgentResponse, GetScorerResponse, GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
 import { AgentMetadataSection } from './agent-metadata-section';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
 import { AgentMetadataWrapper } from './agent-metadata-wrapper';
 import { ReactNode, useState } from 'react';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
-import { ScorerList } from '@/domains/scores';
+import { useScorers } from '@/domains/scores';
 import { AgentIcon, Icon } from '@/ds/icons';
-import { EditIcon } from 'lucide-react';
+import { EditIcon, GaugeIcon } from 'lucide-react';
 import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './agent-metadata-model-switcher';
+import { LoadingBadge } from '@/components/assistant-ui/tools/badges/loading-badge';
 
 export interface AgentMetadataProps {
   agent: GetAgentResponse;
@@ -21,6 +22,7 @@ export interface AgentMetadataProps {
   computeAgentLink: (agent: { id: string; name: string }) => string;
   computeToolLink: (tool: GetToolResponse) => string;
   computeWorkflowLink: (workflowId: string, workflow: GetWorkflowResponse) => string;
+  computeScorerLink: (scorerId: string) => string;
   modelProviders: string[];
   updateModel: AgentMetadataModelSwitcherProps['updateModel'];
 }
@@ -59,6 +61,7 @@ export const AgentMetadata = ({
   computeAgentLink,
   computeToolLink,
   computeWorkflowLink,
+  computeScorerLink,
   updateModel,
   modelProviders,
 }: AgentMetadataProps) => {
@@ -149,7 +152,7 @@ export const AgentMetadata = ({
       </AgentMetadataSection>
 
       <AgentMetadataSection title="Scorers">
-        <AgentMetadataScorerList entityId={agent.name} />
+        <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" computeScorerLink={computeScorerLink} />
       </AgentMetadataSection>
       <AgentMetadataSection title="System Prompt">{promptSlot}</AgentMetadataSection>
     </AgentMetadataWrapper>
@@ -181,14 +184,6 @@ export const AgentMetadataToolList = ({ tools, computeToolLink }: AgentMetadataT
   );
 };
 
-export const AgentMetadataScorerList = ({ entityId }: { entityId: string }) => {
-  return (
-    <div className="px-5 pb-5">
-      <ScorerList entityId={entityId} entityType="AGENT" />
-    </div>
-  );
-};
-
 export interface AgentMetadataWorkflowListProps {
   workflows: Array<{ id: string } & GetWorkflowResponse>;
   computeWorkflowLink: (workflowId: string, workflow: GetWorkflowResponse) => string;
@@ -207,6 +202,48 @@ export const AgentMetadataWorkflowList = ({ workflows, computeWorkflowLink }: Ag
         <AgentMetadataListItem key={workflow.id}>
           <Link href={computeWorkflowLink(workflow.id, workflow)}>
             <Badge icon={<WorkflowIcon className="text-accent3" />}>{workflow.name}</Badge>
+          </Link>
+        </AgentMetadataListItem>
+      ))}
+    </AgentMetadataList>
+  );
+};
+
+interface AgentMetadataScorerListProps {
+  computeScorerLink: (scorerId: string) => string;
+  entityId: string;
+  entityType: string;
+}
+
+export const AgentMetadataScorerList = ({ entityId, entityType, computeScorerLink }: AgentMetadataScorerListProps) => {
+  const { Link } = useLinkComponent();
+  const { scorers, isLoading } = useScorers();
+
+  const scorerList = Object.keys(scorers)
+    .filter(scorerKey => {
+      const scorer = scorers[scorerKey];
+      if (entityType === 'AGENT') {
+        return scorer.agentIds.includes(entityId);
+      }
+
+      return scorer.workflowIds.includes(entityId);
+    })
+    .map(scorerKey => ({ ...scorers[scorerKey], id: scorerKey }));
+
+  if (isLoading) {
+    return <LoadingBadge />;
+  }
+
+  if (scorerList.length === 0) {
+    return <AgentMetadataListEmpty>No Scorers</AgentMetadataListEmpty>;
+  }
+
+  return (
+    <AgentMetadataList>
+      {scorerList.map(scorer => (
+        <AgentMetadataListItem key={scorer.id}>
+          <Link href={computeScorerLink(scorer.id)}>
+            <Badge icon={<GaugeIcon className="text-icon3" />}>{scorer.scorer.config.name}</Badge>
           </Link>
         </AgentMetadataListItem>
       ))}

@@ -206,7 +206,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
           use_client_time_zone: 1,
         },
       });
-      console.log('INSERT RESULT', result);
+      console.info('INSERT RESULT', result);
     } catch (error: any) {
       throw new MastraError(
         {

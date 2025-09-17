@@ -3,9 +3,13 @@ title: "リファレンス: voice.updateConfig() | Voice Providers | Mastra Docs
 description: "voiceプロバイダーで利用可能なupdateConfig()メソッドのドキュメント。実行時にvoiceプロバイダーの設定を更新します。"
 ---
 
+
+
 # voice.updateConfig()
 
 `updateConfig()` メソッドは、実行時にボイスプロバイダーの設定を更新することができます。これは、ボイス設定やAPIキー、その他のプロバイダー固有のオプションを新しいインスタンスを作成せずに変更したい場合に便利です。
+
+
 
 ## 使用例
 
@@ -38,6 +42,8 @@ voice.updateConfig({
 await voice.speak("Hello with my new voice!");
 ```
 
+
+
 ## パラメーター
 
 <br />
@@ -53,9 +59,13 @@ await voice.speak("Hello with my new voice!");
   ]}
 />
 
+
+
 ## 戻り値
 
 このメソッドは値を返しません。
+
+
 
 ## 設定オプション
 
@@ -69,17 +79,21 @@ await voice.speak("Hello with my new voice!");
     {
       name: "voice",
       type: "string",
-      description: "音声合成に使用するボイスID（例: 'alloy', 'echo', 'nova'）",
+      description:
+        "音声合成に使用するボイスID（例: 'alloy', 'echo', 'nova'）",
       isOptional: true,
     },
     {
       name: "turn_detection",
       type: "{ type: string, threshold?: number, silence_duration_ms?: number }",
-      description: "ユーザーが話し終えたことを検出するための設定",
+      description:
+        "ユーザーが話し終えたことを検出するための設定",
       isOptional: true,
     },
   ]}
 />
+
+
 
 ## 注意事項
 

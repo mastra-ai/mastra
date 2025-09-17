@@ -1,137 +1,199 @@
 ---
-title: "例：音声機能の追加 | エージェント | Mastra"
-description: "Mastraエージェントに音声機能を追加する例で、異なる音声プロバイダーを使用して話したり聞いたりする機能を有効にします。"
+title: "例: 音声機能の追加 | Agents | Mastra"
+description: "Mastra のエージェントに音声機能を追加し、複数の音声プロバイダーを使って発話・聴取できるようにする例。"
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# エージェントに声を与える
 
-この例では、Mastraエージェントに音声機能を追加し、異なる音声プロバイダーを使用して話したり聞いたりする方法を示します。異なる音声設定を持つ2つのエージェントを作成し、それらが音声を使ってどのように対話できるかを示します。
 
-この例では以下を紹介します：
+# エージェントに音声機能を与える
 
-1. CompositeVoiceを使用して、話すことと聞くことに異なるプロバイダーを組み合わせる方法
-2. 両方の機能に単一のプロバイダーを使用する方法
-3. エージェント間の基本的な音声対話
+Mastra のエージェントは音声機能を追加することで、話すことも聞くこともできるようになります。以下の例では、音声機能を構成する2つの方法を示します。
 
-まず、必要な依存関係をインポートし、エージェントをセットアップしましょう：
+1. 入力ストリームと出力ストリームを分ける複合的な音声構成を使う方法
+2. 両方を扱う統合型の音声プロバイダーを使う方法
 
-```ts showLineNumbers copy
-// Import required dependencies
-import { openai } from "@ai-sdk/openai";
+どちらの例でも、デモ用に `OpenAIVoice` プロバイダーを使用しています。
+
+
+
+## 前提条件
+
+この例では `openai` モデルを使用します。`OPENAI_API_KEY` を `.env` ファイルに追加してください。
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+```
+
+
+
+## インストール
+
+```bash
+npm install @mastra/voice-openai
+```
+
+
+
+## ハイブリッド音声エージェント
+
+このエージェントは、音声認識（STT）と音声合成（TTS）を分離した複合的な音声構成を使用します。`CompositeVoice` を使うと、聞き取り（入力）と発話（出力）で別々のプロバイダーを設定できます。なお、この例ではどちらも同じプロバイダーである `OpenAIVoice` が処理します。
+
+```typescript filename="src/mastra/agents/example-hybrid-voice-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { CompositeVoice } from "@mastra/core/voice";
 import { OpenAIVoice } from "@mastra/voice-openai";
-import { createReadStream, createWriteStream } from "fs";
-import { PlayAIVoice } from "@mastra/voice-playai";
+import { openai } from "@ai-sdk/openai";
+
+export const hybridVoiceAgent = new Agent({
+  name: "hybrid-voice-agent",
+  model: openai("gpt-4o"),
+  instructions: "You can speak and listen using different providers.",
+  voice: new CompositeVoice({
+    input: new OpenAIVoice(),
+    output: new OpenAIVoice()
+  })
+});
+```
+
+> 設定オプションの一覧については [Agent](../../reference/agents/agent.mdx) を参照してください。
+
+
+
+## 統合型ボイスエージェント
+
+このエージェントは、音声認識（STT）と音声合成（TTS）の両方に同一のボイスプロバイダーを使用します。聞き取りと発話の両方で同じプロバイダーを使う場合、よりシンプルに構成できます。この例では、`OpenAIVoice` プロバイダーが両方の機能を担います。
+
+```typescript filename="src/mastra/agents/example-unified-voice-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { OpenAIVoice } from "@mastra/voice-openai";
+
+export const unifiedVoiceAgent = new Agent({
+  name: "unified-voice-agent",
+  instructions: "You are an agent with both STT and TTS capabilities.",
+  model: openai("gpt-4o"),
+  voice: new OpenAIVoice()
+});
+```
+
+> 設定オプションの一覧については [Agent](../../reference/agents/agent.mdx) を参照してください。
+
+
+
+## エージェントの登録
+
+これらのエージェントを使用するには、メインの Mastra インスタンスに登録します。
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+
+import { hybridVoiceAgent } from "./agents/example-hybrid-voice-agent";
+import { unifiedVoiceAgent } from "./agents/example-unified-voice-agent";
+
+export const mastra = new Mastra({
+  // ...
+  agents: { hybridVoiceAgent, unifiedVoiceAgent }
+});
+```
+## 関数
+
+以下のヘルパー関数は、音声対話の例における音声ファイルの操作とテキスト変換を行います。
+
+### `saveAudioToFile`
+
+この関数は、オーディオディレクトリに音声ストリームをファイルとして保存し、ディレクトリが存在しない場合は作成します。
+
+```typescript filename="src/mastra/utils/save-audio-to-file.ts" showLineNumbers copy
+import fs, { createWriteStream } from "fs";
 import path from "path";
 
-// Initialize Agent 1 with both listening and speaking capabilities
-const agent1 = new Agent({
-  name: "Agent1",
-  instructions: `You are an agent with both STT and TTS capabilities.`,
-  model: openai("gpt-4o"),
-  voice: new CompositeVoice({
-    input: new OpenAIVoice(), // For converting speech to text
-    output: new PlayAIVoice(), // For converting text to speech
-  }),
-});
+export const saveAudioToFile = async (audio: NodeJS.ReadableStream, filename: string): Promise<void> => {
+  const audioDir = path.join(process.cwd(), "audio");
+  const filePath = path.join(audioDir, filename);
 
-// Initialize Agent 2 with just OpenAI for both listening and speaking capabilities
-const agent2 = new Agent({
-  name: "Agent2",
-  instructions: `You are an agent with both STT and TTS capabilities.`,
-  model: openai("gpt-4o"),
-  voice: new OpenAIVoice(),
-});
-```
+  await fs.promises.mkdir(audioDir, { recursive: true });
 
-このセットアップでは：
-
-- Agent1は、音声からテキストへの変換にOpenAI、テキストから音声への変換にPlayAIを組み合わせたCompositeVoiceを使用しています
-- Agent2は、両方の機能にOpenAIの音声機能を使用しています
-
-では、エージェント間の基本的な対話を示しましょう：
-
-```ts showLineNumbers copy
-// Step 1: Agent 1 speaks a question and saves it to a file
-const audio1 = await agent1.voice.speak(
-  "What is the meaning of life in one sentence?",
-);
-await saveAudioToFile(audio1, "agent1-question.mp3");
-
-// Step 2: Agent 2 listens to Agent 1's question
-const audioFilePath = path.join(process.cwd(), "agent1-question.mp3");
-const audioStream = createReadStream(audioFilePath);
-const audio2 = await agent2.voice.listen(audioStream);
-const text = await convertToText(audio2);
-
-// Step 3: Agent 2 generates and speaks a response
-const agent2Response = await agent2.generate(text);
-const agent2ResponseAudio = await agent2.voice.speak(agent2Response.text);
-await saveAudioToFile(agent2ResponseAudio, "agent2-response.mp3");
-```
-
-この対話で起きていることは：
-
-1. Agent1はPlayAIを使用してテキストを音声に変換し、ファイルに保存します（対話を聞けるように音声を保存しています）
-2. Agent2はOpenAIの音声認識を使用して音声ファイルを聞きます
-3. Agent2は応答を生成し、それを音声に変換します
-
-この例には、音声ファイルを扱うためのヘルパー関数が含まれています：
-
-```ts showLineNumbers copy
-/**
- * Saves an audio stream to a file
- */
-async function saveAudioToFile(
-  audio: NodeJS.ReadableStream,
-  filename: string,
-): Promise<void> {
-  const filePath = path.join(process.cwd(), filename);
   const writer = createWriteStream(filePath);
   audio.pipe(writer);
-  return new Promise<void>((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     writer.on("finish", resolve);
     writer.on("error", reject);
   });
-}
+};
+```
 
-/**
- * Converts either a string or a readable stream to text
- */
-async function convertToText(
-  input: string | NodeJS.ReadableStream,
-): Promise<string> {
+### `convertToText`
+
+この関数は、`string` または `ReadableStream` をテキストに変換し、音声処理における両方の入力形式に対応します。
+
+```typescript filename="src/mastra/utils/convert-to-text.ts" showLineNumbers copy
+export const convertToText = async (input: string | NodeJS.ReadableStream): Promise<string> => {
   if (typeof input === "string") {
     return input;
   }
 
   const chunks: Buffer[] = [];
-  return new Promise<string>((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     input.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
-    input.on("error", (err) => reject(err));
+    input.on("error", reject);
     input.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
   });
-}
+};
+
 ```
 
-## 重要なポイント
 
-1. エージェント設定の`voice`プロパティはMastraVoiceの任意の実装を受け入れます
-2. CompositeVoiceは話すことと聞くことに異なるプロバイダーを使用することを可能にします
-3. 音声はストリームとして処理できるため、リアルタイム処理に効率的です
-4. 音声機能はエージェントの自然言語処理と組み合わせることができます
 
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
+## 使用例
+
+この例では、2つのエージェント間での音声対話を示します。ハイブリッド音声エージェントが質問を音声で発し、その音声がファイルとして保存されます。ユニファイド音声エージェントはそのファイルを再生して内容を取得し、質問を処理して応答を生成し、音声で返答します。両方の音声出力は `audio` ディレクトリに保存されます。
+
+作成されるファイルは次のとおりです。
+
+- **hybrid-question.mp3** – ハイブリッドエージェントが話した質問。
+- **unified-response.mp3** – ユニファイドエージェントが話した応答。
+
+```typescript filename="src/test-voice-agents.ts" showLineNumbers copy
+import "dotenv/config";
+
+import path from "path";
+import { createReadStream } from "fs";
+import { mastra } from "./mastra";
+
+import { saveAudioToFile } from "./mastra/utils/save-audio-to-file";
+import { convertToText } from "./mastra/utils/convert-to-text";
+
+const hybridVoiceAgent = mastra.getAgent("hybridVoiceAgent");
+const unifiedVoiceAgent = mastra.getAgent("unifiedVoiceAgent");
+
+const question = "What is the meaning of life in one sentence?";
+
+const hybridSpoken = await hybridVoiceAgent.voice.speak(question);
+
+await saveAudioToFile(hybridSpoken!, "hybrid-question.mp3");
+
+const audioStream = createReadStream(path.join(process.cwd(), "audio", "hybrid-question.mp3"));
+const unifiedHeard = await unifiedVoiceAgent.voice.listen(audioStream);
+
+const inputText = await convertToText(unifiedHeard!);
+
+const unifiedResponse = await unifiedVoiceAgent.generate(inputText);
+const unifiedSpoken = await unifiedVoiceAgent.voice.speak(unifiedResponse.text);
+
+await saveAudioToFile(unifiedSpoken!, "unified-response.mp3");
+```
 
 <GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/voice-capabilities"
-  }
+  outdated={true}
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/voice-capabilities"
 />
+
+
+
+## 関連項目
+
+- [Calling Agents](./calling-agents.mdx#from-the-command-line)
+

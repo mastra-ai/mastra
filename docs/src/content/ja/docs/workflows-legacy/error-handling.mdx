@@ -1,0 +1,205 @@
+---
+title: "ワークフローにおけるエラー処理（レガシー） | Mastra ドキュメント"
+description: "ステップの再試行、条件分岐、モニタリングを使用して、Mastraレガシーワークフローでエラーを処理する方法を学びましょう。"
+---
+
+
+
+# ワークフローにおけるエラー処理（レガシー）
+
+本番環境のワークフローには堅牢なエラー処理が不可欠です。Mastra は、エラーを適切に処理するためのさまざまな仕組みを提供しており、ワークフローが障害から回復したり、必要に応じて優雅に機能を縮小したりできるようにします。
+
+
+
+## 概要
+
+Mastra ワークフローでのエラー処理は、以下の方法で実装できます。
+
+1. **ステップの再試行** - 失敗したステップを自動的に再試行する
+2. **条件分岐** - ステップの成功または失敗に基づいて代替パスを作成する
+3. **エラーモニタリング** - ワークフローのエラーを監視し、プログラム的に対応する
+4. **結果ステータスの確認** - 後続のステップで前のステップのステータスを確認する
+
+
+
+## ステップのリトライ
+
+Mastra には、一時的なエラーによって失敗したステップのための組み込みリトライ機構が用意されています。これは、外部サービスや一時的に利用できなくなるリソースと連携するステップに特に有用です。
+
+### 基本的なリトライ設定
+
+リトライはワークフロー全体、または個々のステップごとに設定できます。
+
+```typescript
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+
+// ワークフロー全体のリトライ設定
+const workflow = new LegacyWorkflow({
+  name: "my-workflow",
+  retryConfig: {
+    attempts: 3, // リトライ試行回数
+    delay: 1000, // リトライ間の遅延（ミリ秒）
+  },
+});
+
+// ステップごとのリトライ設定（ワークフロー全体の設定を上書き）
+const apiStep = new LegacyStep({
+  id: "callApi",
+  execute: async () => {
+    // 失敗する可能性のあるAPI呼び出し
+  },
+  retryConfig: {
+    attempts: 5, // このステップは最大5回までリトライ
+    delay: 2000, // リトライ間の遅延は2秒
+  },
+});
+```
+
+ステップのリトライについての詳細は、[ステップのリトライ](../../reference/legacyWorkflows/step-retries.mdx) リファレンスをご覧ください。
+
+
+
+## 条件分岐
+
+条件ロジックを使用して、前のステップの成功または失敗に基づいてワークフローの代替パスを作成できます。
+
+```typescript
+// Create a workflow with conditional branching
+const workflow = new LegacyWorkflow({
+  name: "error-handling-workflow",
+});
+
+workflow
+  .step(fetchDataStep)
+  .then(processDataStep, {
+    // Only execute processDataStep if fetchDataStep was successful
+    when: ({ context }) => {
+      return context.steps.fetchDataStep?.status === "success";
+    },
+  })
+  .then(fallbackStep, {
+    // Execute fallbackStep if fetchDataStep failed
+    when: ({ context }) => {
+      return context.steps.fetchDataStep?.status === "failed";
+    },
+  })
+  .commit();
+```
+
+
+
+## エラーモニタリング
+
+`watch` メソッドを使用してワークフローのエラーを監視できます。
+
+```typescript
+const { start, watch } = workflow.createRun();
+
+watch(async ({ results }) => {
+  // Check for any failed steps
+  const failedSteps = Object.entries(results)
+    .filter(([_, step]) => step.status === "failed")
+    .map(([stepId]) => stepId);
+
+  if (failedSteps.length > 0) {
+    console.error(`Workflow has failed steps: ${failedSteps.join(", ")}`);
+    // Take remedial action, such as alerting or logging
+  }
+});
+
+await start();
+```
+
+
+
+## ステップでのエラー処理
+
+ステップの実行関数内で、プログラム的にエラーを処理することができます。
+
+```typescript
+const robustStep = new LegacyStep({
+  id: "robustStep",
+  execute: async ({ context }) => {
+    try {
+      // Attempt the primary operation
+      const result = await someRiskyOperation();
+      return { success: true, data: result };
+    } catch (error) {
+      // Log the error
+      console.error("Operation failed:", error);
+
+      // Return a graceful fallback result instead of throwing
+      return {
+        success: false,
+        error: error.message,
+        fallbackData: "Default value",
+      };
+    }
+  },
+});
+```
+
+
+
+## 前のステップの結果を確認する
+
+前のステップの結果に基づいて判断を行うことができます。
+
+```typescript
+const finalStep = new LegacyStep({
+  id: "finalStep",
+  execute: async ({ context }) => {
+    // Check results of previous steps
+    const step1Success = context.steps.step1?.status === "success";
+    const step2Success = context.steps.step2?.status === "success";
+
+    if (step1Success && step2Success) {
+      // All steps succeeded
+      return { status: "complete", result: "All operations succeeded" };
+    } else if (step1Success) {
+      // Only step1 succeeded
+      return { status: "partial", result: "Partial completion" };
+    } else {
+      // Critical failure
+      return { status: "failed", result: "Critical steps failed" };
+    }
+  },
+});
+```
+
+
+
+## エラー処理のベストプラクティス
+
+1. **一時的な障害にはリトライを使用する**: 一時的な問題が発生する可能性のあるステップには、リトライポリシーを設定しましょう。
+
+2. **フォールバックパスを用意する**: 重要なステップが失敗した場合に備えて、代替経路をワークフローに設計しましょう。
+
+3. **エラーシナリオを具体的にする**: エラーの種類ごとに異なる処理戦略を使い分けましょう。
+
+4. **エラーを包括的に記録する**: デバッグを容易にするため、エラー記録時にはコンテキスト情報も含めましょう。
+
+5. **失敗時には意味のあるデータを返す**: ステップが失敗した場合、後続のステップが判断できるように、失敗に関する構造化データを返しましょう。
+
+6. **冪等性を考慮する**: ステップが安全に再実行でき、重複した副作用が発生しないようにしましょう。
+
+7. **ワークフローの実行を監視する**: `watch` メソッドを使ってワークフローの実行を積極的に監視し、早期にエラーを検知しましょう。
+
+
+
+## 高度なエラー処理
+
+より複雑なエラー処理が必要な場合は、次の点を検討してください。
+
+- **サーキットブレーカーの実装**: ステップが繰り返し失敗した場合、再試行を停止し、フォールバック戦略を使用する
+- **タイムアウト処理の追加**: ステップごとに時間制限を設け、ワークフローが無限に停止しないようにする
+- **専用のエラー回復ワークフローの作成**: 重要なワークフローの場合、メインのワークフローが失敗した際にトリガーされる専用の回復ワークフローを作成する
+
+
+
+## 関連
+
+- [ステップ再試行リファレンス](../../reference/legacyWorkflows/step-retries.mdx)
+- [Watch メソッドリファレンス](../../reference/legacyWorkflows/watch.mdx)
+- [ステップ条件](../../reference/legacyWorkflows/step-condition.mdx)
+- [制御フロー](./control-flow.mdx)

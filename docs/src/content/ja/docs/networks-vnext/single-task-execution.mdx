@@ -1,0 +1,139 @@
+---
+title: "AgentNetwork の generate メソッドで実現する単一タスク実行"
+description: "Mastra vNext で AgentNetwork の generate メソッドを使い、非構造化入力を構造化タスクへ変換して、最適なエージェントまたはワークフローにルーティングする方法を学びます。"
+---
+
+
+## 非構造化入力から構造化タスクへ
+
+例として、3つのプリミティブを利用できる AgentNetwork があります：
+
+- `agent1`: 指定されたトピックを調査できる汎用リサーチエージェント。
+- `agent2`: 調査資料に基づいて完全なレポートを書ける汎用ライティングエージェント。
+- `workflow1`: 特定の都市を調査し、その結果に基づいて完全なレポートを書くワークフロー（agent1 と agent2 を使用）。
+
+AgentNetwork は、タスクとコンテキストに応じて最適なプリミティブにタスクを振り分けます。
+非構造化（テキスト）入力に対して AgentNetwork に処理を依頼するには、`generate` メソッドを使用します。
+
+```typescript
+import { NewAgentNetwork } from '@mastra/core/network/vNext';
+import { Agent } from '@mastra/core/agent';
+import { createStep, createWorkflow } from '@mastra/core/workflows';
+import { Memory } from '@mastra/memory';
+import { openai } from '@ai-sdk/openai';
+import { LibSQLStore } from '@mastra/libsql';
+import { z } from 'zod';
+import { RuntimeContext } from '@mastra/core/runtime-context';
+
+const memory = new Memory({
+  storage: new LibSQLStore({
+    url: 'file:../mastra.db', // またはデータベースの URL
+  }),
+});
+
+const agent1 = new Agent({
+  name: 'agent1',
+  instructions:
+    'このエージェントは調査に使用され、完全な回答は作成しません。箇条書きで簡潔に回答してください。',
+  description:
+    'このエージェントは調査に使用され、完全な回答は作成しません。箇条書きで簡潔に回答してください。',
+  model: openai('gpt-4o'),
+});
+
+const agent2 = new Agent({
+  name: 'agent2',
+  description: 'このエージェントは調査資料のテキスト合成を行います。段落で構成された記事を執筆します。',
+  instructions:
+    'このエージェントは調査資料のテキスト合成を行います。調査結果に基づいて完全なレポートを書いてください。箇条書きは使わず、段落で書いてください。最終レポートには箇条書きを一切含めないでください。あなたは記事を書きます。',
+  model: openai('gpt-4o'),
+});
+
+const agentStep1 = createStep({
+  id: 'agent-step',
+  description: 'このステップは調査とテキスト合成に使用されます。',
+  inputSchema: z.object({
+    city: z.string().describe('調査する都市'),
+  }),
+  outputSchema: z.object({
+    text: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    const resp = await agent1.generate(inputData.city, {
+      output: z.object({
+        text: z.string(),
+      }),
+    });
+
+    return { text: resp.object.text };
+  },
+});
+
+const agentStep2 = createStep({
+  id: 'agent-step-two',
+  description: 'このステップは調査とテキスト合成に使用されます。',
+  inputSchema: z.object({
+    text: z.string().describe('調査する都市'),
+  }),
+  outputSchema: z.object({
+    text: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    const resp = await agent2.generate(inputData.text, {
+      output: z.object({
+        text: z.string(),
+      }),
+    });
+
+    return { text: resp.object.text };
+  },
+});
+
+const workflow1 = createWorkflow({
+  id: 'workflow1',
+  description: 'このワークフローは特定の都市の調査に最適です。',
+  steps: [],
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  outputSchema: z.object({
+    text: z.string(),
+  }),
+})
+  .then(agentStep1)
+  .then(agentStep2)
+  .commit();
+
+const network = new NewAgentNetwork({
+  id: 'test-network',
+  name: 'Test Network',
+  instructions:
+    '都市の調査ができます。調査資料の合成もできます。調査結果に基づいて完全なレポートを執筆することもできます。',
+  model: openai('gpt-4o'),
+  agents: {
+    agent1,
+    agent2,
+  },
+  workflows: {
+    workflow1,
+  },
+  memory: memory,
+});
+
+const runtimeContext = new RuntimeContext();
+
+// これは agent1 を呼び出します。ワークフローは個別の都市向けに設計されているため、ルーティングエージェントによる最適なプリミティブは汎用リサーチの agent1 になります。
+console.log(await network.generate('What are the biggest cities in France? How are they like?', { runtimeContext }));
+// これは workflow1 を呼び出します。個別の都市を調査する場合、ルーティングエージェントによれば最も適したプリミティブだからです。
+console.log(await network.generate('Tell me more about Paris', { runtimeContext }));
+```
+
+
+
+AgentNetwork は、タスクとコンテキストに応じて最も適切なプリミティブを呼び出します。特定の都市を調査する場合、ワークフローの入力スキーマと説明に基づき、非構造化の入力を構造化されたワークフロー入力へ変換する方法を見極められます。また、その他の調査トピックについては、`agent1` が最も適切なプリミティブである可能性が高いことも把握しています。
+
+### 仕組み
+
+- 基盤となるエンジンは Mastra のワークフローです。
+- まず、ネットワークは **ルーティングエージェント** を使って、各ステップをどのエージェントまたはワークフローが処理すべきかを判断します。
+- ルーティングエージェントは、選択されたプリミティブ向けのプロンプトや構造化入力を生成します。
+- ワークフローの次のステップは `.branch()` で、ルーティングエージェントが生成した入力を用いてエージェントステップまたはワークフローステップを呼び出し、適切なプリミティブを選択します。

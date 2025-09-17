@@ -4,7 +4,7 @@
 
 This document outlines the plan to enhance the `DefaultExporter` with intelligent batch processing capabilities for AI tracing spans. The goal is to provide production-ready performance while maintaining simplicity and database-specific optimizations.
 
-Note: This plan was created on 27-Aug-25, but may now be out of date.
+Note: This plan was created on 27-Aug-25, last updated on 16-Sep-25 to include memory management improvements.
 
 ## Architecture
 
@@ -134,6 +134,9 @@ interface BatchBuffer {
   seenSpans: Set<string>; // "traceId:spanId" combinations we've seen creates for
   spanSequences: Map<string, number>; // "traceId:spanId" -> next sequence number
 
+  // Track completed spans for cleanup
+  completedSpans: Set<string>; // Spans that have received SPAN_ENDED
+
   // Metrics
   outOfOrderCount: number;
 
@@ -162,6 +165,35 @@ interface UpdateRecord {
 - Start timer on first event in empty buffer
 - Cancel timer on flush
 - Use `setTimeout` for simplicity and efficiency
+
+### Memory Management
+
+**Persistent Span Tracking:**
+
+The exporter maintains a persistent `allCreatedSpans: Set<string>` that tracks all spans that have been created, surviving across buffer flushes. This is essential for handling spans that complete after their initial create event has been flushed.
+
+**Problem Solved:**
+
+- Without persistent tracking, spans that end after buffer flush would be treated as out-of-order
+- This allows SPAN_UPDATED and SPAN_ENDED events to be processed correctly even after the initial SPAN_STARTED was flushed
+
+**Memory Leak Prevention:**
+
+To prevent unbounded memory growth in long-running applications:
+
+1. **Track Completed Spans**: The `completedSpans` Set in the buffer tracks which spans received SPAN_ENDED
+2. **Cleanup After Flush**: After successful flush, remove completed spans from `allCreatedSpans`
+3. **Cleanup on Failure**: Even when flush fails after retries, clean up completed spans to prevent memory leaks
+4. **Immediate Cleanup for Realtime**: In realtime strategy, clean up immediately after processing SPAN_ENDED
+
+**Implementation:**
+
+```typescript
+// After successful flush
+for (const spanKey of buffer.completedSpans) {
+  this.allCreatedSpans.delete(spanKey);
+}
+```
 
 ## Span Ordering for Batch-With-Updates Strategy
 
@@ -491,6 +523,14 @@ this.logger.warn('Batch retry', {
 - **Circular reference**: Test graceful handling of circular objects
 - **Null attributes**: Test null returned for undefined attributes
 
+#### Memory Management
+
+- **Persistent tracking**: Test allCreatedSpans persists across buffer flushes
+- **Completed span cleanup**: Verify completed spans removed from allCreatedSpans after flush
+- **Failure cleanup**: Test cleanup happens even when flush fails after retries
+- **Realtime cleanup**: Test immediate cleanup for realtime strategy
+- **No memory leak**: Verify allCreatedSpans doesn't grow unbounded over time
+
 #### Mock Requirements
 
 - **Storage interface**: Mock batchCreateAISpans, batchUpdateAISpans, storage hints
@@ -571,6 +611,7 @@ private addToBuffer(event: AITracingEvent): void
 private shouldFlush(): boolean
 private async flush(): Promise<void>
 private scheduleFlush(): void
+private resetBuffer(completedSpansToCleanup?: Set<string>): void
 
 // Ordering logic - encapsulate complexity
 private buildSpanKey(traceId: string, spanId: string): string

@@ -251,7 +251,7 @@ export class PromptInjectionDetector implements Processor {
     switch (strategy) {
       case 'block':
         abort(alertMessage);
-
+        return null;
       case 'warn':
         console.warn(`[PromptInjectionDetector] ${alertMessage}`);
         return null; // Return null to indicate no message modification
@@ -268,7 +268,6 @@ export class PromptInjectionDetector implements Processor {
           console.warn(`[PromptInjectionDetector] No rewrite available, filtering: ${alertMessage}`);
           return null; // Fallback to filtering if no rewrite available
         }
-
       default:
         return null;
     }

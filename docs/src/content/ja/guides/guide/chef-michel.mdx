@@ -1,30 +1,40 @@
 ---
-title: "AIシェフアシスタントの構築 | Mastraエージェントガイド"
-description: 利用可能な食材で料理を作るユーザーを支援するMastraでのシェフアシスタントエージェントの作成ガイド。
+title: "AIシェフアシスタントの作成 | Mastra Agent ガイド"
+description: Mastraで、手持ちの食材から料理を作るのを支援するシェフアシスタントエージェントを作成するためのガイド。
 ---
 
 import { Steps } from "nextra/components";
 import YouTube from "@/components/youtube";
 
-# エージェントガイド：シェフアシスタントの構築
 
-このガイドでは、ユーザーが手持ちの食材で料理を作るのを手伝う「シェフアシスタント」エージェントの作成方法を説明します。
+
+# AIシェフアシスタントの構築
+
+このガイドでは、手元の食材で料理を作るのを手助けする「Chef Assistant」エージェントを作成します。
+
+まず、エージェントを作成して Mastra に登録する方法を学びます。次に、ターミナルからエージェントとやり取りし、さまざまな応答形式を確認します。最後に、Mastra のローカル API エンドポイントを通じてエージェントにアクセスします。
 
 <YouTube id="_tZhOqHCrF0" />
 
+
+
 ## 前提条件
 
-- Node.jsがインストールされていること
-- Mastraがインストールされていること: `npm install @mastra/core@latest`
+- Node.js `v20.0` 以降がインストールされていること
+- サポート対象の[モデルプロバイダー](/docs/getting-started/model-providers)から取得した API キー
+- 既存の Mastra プロジェクト（新規プロジェクトのセットアップは[インストールガイド](/docs/getting-started/installation)に従ってください）
 
----
 
-## エージェントを作成する
+
+## エージェントの作成
+
+Mastraでエージェントを作成するには、`Agent` クラスで定義し、その後Mastraに登録します。
 
 <Steps>
+
 ### エージェントを定義する
 
-新しいファイル `src/mastra/agents/chefAgent.ts` を作成し、エージェントを定義します：
+新規ファイル `src/mastra/agents/chefAgent.ts` を作成し、次のようにエージェントを定義します:
 
 ```ts copy filename="src/mastra/agents/chefAgent.ts"
 import { openai } from "@ai-sdk/openai";
@@ -39,25 +49,12 @@ export const chefAgent = new Agent({
 });
 ```
 
----
+### エージェントをMastraに登録する
 
-## 環境変数を設定する
+`src/mastra/index.ts` ファイルでエージェントを登録します:
 
-プロジェクトのルートに `.env` ファイルを作成し、OpenAI APIキーを追加します：
-
-```bash filename=".env" copy
-OPENAI_API_KEY=your_openai_api_key
-```
-
----
-
-## エージェントをMastraに登録する
-
-メインファイルで、エージェントを登録します：
-
-```ts copy filename="src/mastra/index.ts"
+```ts copy filename="src/mastra/index.ts" {2, 5}
 import { Mastra } from "@mastra/core";
-
 import { chefAgent } from "./agents/chefAgent";
 
 export const mastra = new Mastra({
@@ -65,16 +62,23 @@ export const mastra = new Mastra({
 });
 ```
 
----
-
 </Steps >
 
-## エージェントとの対話
+
+
+## エージェントとのやり取り
+
+要件に応じて、エージェントと対話し、さまざまな形式で応答を受け取れます。以下の手順では、生成、ストリーミング、構造化出力の取得方法を学びます。
 
 <Steps>
+
 ### テキスト応答の生成
 
+新しいファイル `src/index.ts` を作成し、`main()` 関数を追加します。関数内でエージェントへの質問（クエリ）を作成し、その応答をログに出力します。
+
 ```ts copy filename="src/index.ts"
+import { chefAgent } from "./mastra/agents/chefAgent";
+
 async function main() {
   const query =
     "In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?";
@@ -87,13 +91,13 @@ async function main() {
 main();
 ```
 
-スクリプトを実行します：
+続いて、スクリプトを実行します:
 
 ```bash copy
 npx bun src/index.ts
 ```
 
-出力：
+次のような出力が得られます:
 
 ```
 Query: In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?
@@ -101,11 +105,13 @@ Query: In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some
 👨‍🍳 Chef Michel: You can make a delicious pasta al pomodoro! Here's how...
 ```
 
----
+### ストリーミング応答
 
-### レスポンスのストリーミング
+前の例では、進捗が見えないまま応答を少し待ったかもしれません。エージェントが出力を生成するのに合わせて表示するには、応答をターミナルにストリーミングします。
 
 ```ts copy filename="src/index.ts"
+import { chefAgent } from "./mastra/agents/chefAgent";
+
 async function main() {
   const query =
     "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
@@ -125,7 +131,13 @@ async function main() {
 main();
 ```
 
-出力：
+その後、もう一度スクリプトを実行します:
+
+```bash copy
+npx bun src/index.ts
+```
+
+下記のような出力が得られるはずです。今回は一つの大きな塊ではなく、行ごとに読めます。
 
 ```
 Query: Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.
@@ -136,11 +148,14 @@ Great! You can make a comforting chicken curry...
 ✅ Recipe complete!
 ```
 
----
+### 構造化データでレシピを生成する
 
-### 構造化データを含むレシピの生成
+エージェントの応答を人に見せる代わりに、コードの別の部分に渡したい場合があります。こうしたケースでは、エージェントは[構造化出力](../../docs/agents/overview.mdx#4-structured-output)を返すべきです。
+
+`src/index.ts` を次のように変更します:
 
 ```ts copy filename="src/index.ts"
+import { chefAgent } from "./mastra/agents/chefAgent";
 import { z } from "zod";
 
 async function main() {
@@ -148,7 +163,7 @@ async function main() {
     "I want to make lasagna, can you generate a lasagna recipe for me?";
   console.log(`Query: ${query}`);
 
-  // Define the Zod schema
+  // Zod スキーマを定義
   const schema = z.object({
     ingredients: z.array(
       z.object({
@@ -169,7 +184,7 @@ async function main() {
 main();
 ```
 
-出力：
+再度スクリプトを実行すると、次のような出力が得られます:
 
 ```
 Query: I want to make lasagna, can you generate a lasagna recipe for me?
@@ -188,35 +203,37 @@ Query: I want to make lasagna, can you generate a lasagna recipe for me?
 }
 ```
 
----
-
 </Steps >
+
+
 
 ## エージェントサーバーの実行
 
+Mastra の API を通じてエージェントとやり取りする方法を説明します。
+
 <Steps>
 
-### `mastra dev`の使用
+### `mastra dev` の利用
 
-`mastra dev`コマンドを使用してエージェントをサービスとして実行できます：
+`mastra dev` コマンドで、エージェントをサービスとして起動できます：
 
 ```bash copy
 mastra dev
 ```
 
-これにより、登録されたエージェントと対話するためのエンドポイントを公開するサーバーが起動します。
+これにより、登録済みのエージェントとやり取りするためのエンドポイントを公開するサーバーが起動します。[playground](../../docs/server-db/local-dev-playground.mdx) では、UI からエージェントをテストできます。
 
-### シェフアシスタントAPIへのアクセス
+### Chef Assistant API へのアクセス
 
-デフォルトでは、`mastra dev`は`http://localhost:4111`で実行されます。シェフアシスタントエージェントは以下のURLで利用可能です：
+デフォルトでは、`mastra dev` は `http://localhost:4111` で実行されます。Chef Assistant エージェントには次のエンドポイントからアクセスできます：
 
 ```
 POST http://localhost:4111/api/agents/chefAgent/generate
 ```
 
-### `curl`を使用したエージェントとの対話
+### `curl` でのエージェントとのやり取り
 
-コマンドラインから`curl`を使用してエージェントと対話できます：
+コマンドラインから `curl` を使ってエージェントとやり取りできます：
 
 ```bash copy
 curl -X POST http://localhost:4111/api/agents/chefAgent/generate \
@@ -231,7 +248,7 @@ curl -X POST http://localhost:4111/api/agents/chefAgent/generate \
   }'
 ```
 
-**サンプルレスポンス：**
+**レスポンス例:**
 
 ```json
 {

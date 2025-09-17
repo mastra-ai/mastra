@@ -1,0 +1,223 @@
+---
+title: "リファレンス: Rerank | ドキュメント検索 | RAG | Mastra Docs"
+description: Mastraのrerank関数のドキュメント。ベクトル検索結果の高度な再ランキング機能を提供します。
+---
+
+
+
+# rerankWithScorer()
+
+`rerankWithScorer()`関数は、セマンティック関連性、ベクトル類似性、位置ベースのスコアリングを組み合わせることで、ベクトル検索結果に対する高度な再ランキング機能を提供します。
+
+```typescript
+function rerankWithScorer({
+  results: QueryResult[],
+  query: string,
+  scorer: RelevanceScoreProvider,
+  options?: RerankerFunctionOptions,
+}): Promise<RerankResult[]>;
+```
+
+
+
+## 使用例
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { rerankWithScorer as rerank, CohereRelevanceScorer } from "@mastra/rag";
+
+const scorer = new CohereRelevanceScorer('rerank-v3.5');
+
+const rerankedResults = await rerank({
+  results: vectorSearchResults,
+  query: "How do I deploy to production?",
+  scorer,
+  options: {
+    weights: {
+      semantic: 0.5,
+      vector: 0.3,
+      position: 0.2,
+    },
+    topK: 3,
+  },
+});
+```
+
+
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "results",
+      type: "QueryResult[]",
+      description: "再ランク付けするベクトル検索結果",
+      isOptional: false,
+    },
+    {
+      name: "query",
+      type: "string",
+      description: "関連性を評価するために使用される検索クエリテキスト",
+      isOptional: false,
+    },
+    {
+      name: "scorer",
+      type: "RelevanceScoreProvider",
+      description: "再ランク付けに使用する関連性スコアラー",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "RerankerFunctionOptions",
+      description: "再ランク付けモデルのオプション",
+      isOptional: true,
+    },
+  ]}
+/>
+
+`rerankWithScorer`関数は@mastra/ragの任意の`RelevanceScoreProvider`を受け入れます。
+
+> **注意:** 再ランク付け中にセマンティックスコアリングが適切に機能するためには、各結果の`metadata.text`フィールドにテキストコンテンツが含まれている必要があります。
+
+### RerankerFunctionOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "weights",
+      type: "WeightConfig",
+      description:
+        "異なるスコアリングコンポーネントの重み（合計が1になる必要があります）",
+      isOptional: true,
+      properties: [
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "semantic",
+              description: "セマンティック関連性の重み",
+              isOptional: true,
+              type: "number (default: 0.4)",
+            },
+          ],
+        },
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "vector",
+              description: "ベクトル類似度の重み",
+              isOptional: true,
+              type: "number (default: 0.4)",
+            },
+          ],
+        },
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "position",
+              description: "位置ベーススコアリングの重み",
+              isOptional: true,
+              type: "number (default: 0.2)",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "queryEmbedding",
+      type: "number[]",
+      description: "クエリの埋め込み",
+      isOptional: true,
+    },
+    {
+      name: "topK",
+      type: "number",
+      description: "返すトップ結果の数",
+      isOptional: true,
+      defaultValue: "3",
+    },
+  ]}
+/>
+
+
+
+## 戻り値
+
+この関数は `RerankResult` オブジェクトの配列を返します：
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "QueryResult",
+      description: "元のクエリ結果",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "統合された再ランキングスコア (0-1)",
+    },
+    {
+      name: "details",
+      type: "ScoringDetails",
+      description: "詳細なスコアリング情報",
+    },
+  ]}
+/>
+
+### ScoringDetails
+
+<PropertiesTable
+  content={[
+    {
+      name: "semantic",
+      type: "number",
+      description: "セマンティック関連性スコア (0-1)",
+    },
+    {
+      name: "vector",
+      type: "number",
+      description: "ベクトル類似度スコア (0-1)",
+    },
+    {
+      name: "position",
+      type: "number",
+      description: "位置ベースのスコア (0-1)",
+    },
+    {
+      name: "queryAnalysis",
+      type: "object",
+      description: "クエリ分析の詳細",
+      isOptional: true,
+      properties: [
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "magnitude",
+              description: "クエリの大きさ",
+            },
+          ],
+        },
+        {
+          type: "number[]",
+          parameters: [
+            {
+              name: "dominantFeatures",
+              description: "クエリの主要な特徴",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+
+
+## 関連
+
+- [createVectorQueryTool](../tools/vector-query-tool)

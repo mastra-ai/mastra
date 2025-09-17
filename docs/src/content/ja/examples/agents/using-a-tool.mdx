@@ -1,148 +1,122 @@
 ---
-title: "例：エージェントにツールを与える | エージェント | Mastra ドキュメント"
-description: Mastraで天気情報を提供するための専用ツールを使用するAIエージェントを作成する例。
+title: "例：エージェントにツールを追加する | Agents | Mastra Docs"
+description: Mastra で、天気情報を提供する専用ツールを用いる AI エージェントを作成する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# 例: エージェントにツールを与える
 
-AIエージェントを構築する際には、しばしば外部データソースや機能を統合して、その能力を強化する必要があります。この例では、特定の場所の正確な天気情報を提供するために専用の天気ツールを使用するAIエージェントを作成する方法を示します。
 
-```ts showLineNumbers copy
-import { Mastra } from "@mastra/core";
-import { Agent } from "@mastra/core/agent";
-import { createTool } from "@mastra/core/tools";
-import { openai } from "@ai-sdk/openai";
-import { z } from "zod";
+# ツールの追加
 
-interface WeatherResponse {
-  current: {
-    time: string;
-    temperature_2m: number;
-    apparent_temperature: number;
-    relative_humidity_2m: number;
-    wind_speed_10m: number;
-    wind_gusts_10m: number;
-    weather_code: number;
-  };
-}
+AIエージェントを構築する際には、外部のデータや機能で能力を拡張する必要が生じることがよくあります。Mastra では、`tools` パラメータを使ってエージェントにツールを渡せます。ツールは、データの取得や計算の実行など特定の関数を呼び出す手段をエージェントに提供し、ユーザーの問い合わせへの回答を支援します。
 
-const weatherTool = createTool({
-  id: "get-weather",
-  description: "特定の場所の現在の天気を取得する",
-  inputSchema: z.object({
-    location: z.string().describe("都市名"),
-  }),
-  outputSchema: z.object({
-    temperature: z.number(),
-    feelsLike: z.number(),
-    humidity: z.number(),
-    windSpeed: z.number(),
-    windGust: z.number(),
-    conditions: z.string(),
-    location: z.string(),
-  }),
-  execute: async ({ context }) => {
-    return await getWeather(context.location);
-  },
-});
 
-const getWeather = async (location: string) => {
-  const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`;
-  const geocodingResponse = await fetch(geocodingUrl);
-  const geocodingData = await geocodingResponse.json();
 
-  if (!geocodingData.results?.[0]) {
-    throw new Error(`場所 '${location}' が見つかりません`);
-  }
+## 前提条件
 
-  const { latitude, longitude, name } = geocodingData.results[0];
+この例では `openai` モデルを使用します。`.env` ファイルに `OPENAI_API_KEY` を追加してください。
 
-  const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code`;
-
-  const response = await fetch(weatherUrl);
-  const data: WeatherResponse = await response.json();
-
-  return {
-    temperature: data.current.temperature_2m,
-    feelsLike: data.current.apparent_temperature,
-    humidity: data.current.relative_humidity_2m,
-    windSpeed: data.current.wind_speed_10m,
-    windGust: data.current.wind_gusts_10m,
-    conditions: getWeatherCondition(data.current.weather_code),
-    location: name,
-  };
-};
-
-function getWeatherCondition(code: number): string {
-  const conditions: Record<number, string> = {
-    0: "晴天",
-    1: "主に晴れ",
-    2: "部分的に曇り",
-    3: "曇り",
-    45: "霧",
-    48: "霧氷の霧",
-    51: "小雨",
-    53: "中程度の霧雨",
-    55: "濃い霧雨",
-    56: "軽い凍結霧雨",
-    57: "濃い凍結霧雨",
-    61: "小雨",
-    63: "中程度の雨",
-    65: "大雨",
-    66: "軽い凍結雨",
-    67: "激しい凍結雨",
-    71: "小雪",
-    73: "中程度の雪",
-    75: "大雪",
-    77: "雪粒",
-    80: "小雨のにわか雨",
-    81: "中程度のにわか雨",
-    82: "激しいにわか雨",
-    85: "小雪のにわか雪",
-    86: "大雪のにわか雪",
-    95: "雷雨",
-    96: "小さな雹を伴う雷雨",
-    99: "大きな雹を伴う雷雨",
-  };
-  return conditions[code] || "不明";
-}
-
-const weatherAgent = new Agent({
-  name: "Weather Agent",
-  instructions: `あなたは正確な天気情報を提供する役立つ天気アシスタントです。
-あなたの主な機能は、特定の場所の天気の詳細をユーザーに提供することです。応答する際には：
-- 場所が提供されていない場合は必ず尋ねてください
-- 場所の名前が英語でない場合は翻訳してください
-- 湿度、風の状況、降水量などの関連する詳細を含めてください
-- 応答は簡潔でありながら情報豊かにしてください
-weatherToolを使用して現在の天気データを取得してください。`,
-  model: openai("gpt-4o-mini"),
-  tools: { weatherTool },
-});
-
-const mastra = new Mastra({
-  agents: { weatherAgent },
-});
-
-async function main() {
-  const agent = await mastra.getAgent("weatherAgent");
-  const result = await agent.generate("ロンドンの天気はどうですか？");
-  console.log(result.text);
-}
-
-main();
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
 ```
 
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
+
+
+## ツールの作成
+
+このツールはロンドンの過去の天気データを提供し、当年1月1日から今日までの、日ごとの最高/最低気温、降水量、風速、降雪量、天気状況の配列を返します。この構成により、エージェントは直近の天候トレンドに容易にアクセスし、把握できます。
+
+```typescript filename="src/mastra/tools/example-london-weather-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const londonWeatherTool = createTool({
+  id: "london-weather-tool",
+  description: "Returns year-to-date historical weather data for London",
+  outputSchema: z.object({
+    date: z.array(z.string()),
+    temp_max: z.array(z.number()),
+    temp_min: z.array(z.number()),
+    rainfall: z.array(z.number()),
+    windspeed: z.array(z.number()),
+    snowfall: z.array(z.number())
+  }),
+  execute: async () => {
+    const startDate = `${new Date().getFullYear()}-01-01`;
+    const endDate = new Date().toISOString().split("T")[0];
+
+    const response = await fetch(
+      `https://archive-api.open-meteo.com/v1/archive?latitude=51.5072&longitude=-0.1276&start_date=${startDate}&end_date=${endDate}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max,snowfall_sum&timezone=auto`
+    );
+
+    const { daily } = await response.json();
+
+    return {
+      date: daily.time,
+      temp_max: daily.temperature_2m_max,
+      temp_min: daily.temperature_2m_min,
+      rainfall: daily.precipitation_sum,
+      windspeed: daily.windspeed_10m_max,
+      snowfall: daily.snowfall_sum
+    };
+  }
+});
+```
+
+
+
+## エージェントにツールを追加する
+
+このエージェントは、ロンドンの過去の天候に関する質問に回答するために `londonWeatherTool` を使用します。すべての問い合わせでこのツールを使うこと、そして応答を当年（カレンダー年）の現在日付までに利用可能なデータに限定することが、明確に指示されています。
+
+```typescript filename="src/mastra/agents/example-london-weather-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+import { londonWeatherTool } from "../tools/example-london-weather-tool";
+
+export const londonWeatherAgent = new Agent({
+  name: "london-weather-agent",
+  description: "Provides historical information about London weather",
+  instructions: `You are a helpful assistant with access to historical weather data for London.
+    - The data is limited to the current calendar year, from January 1st up to today's date.
+    - Use the provided tool (londonWeatherTool) to retrieve relevant data.
+    - Answer the user's question using that data.
+    - Keep responses concise, factual, and informative.
+    - If the question cannot be answered with available data, say so clearly.`,
+  model: openai("gpt-4o"),
+  tools: { londonWeatherTool }
+});
+```
+
+
+
+## 使用例
+
+`getAgent()` でエージェントの参照を取得し、プロンプトを渡して `generate()` を呼び出します。
+
+```typescript filename="src/test-london-weather-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("londonWeatherAgent");
+
+const response = await agent.generate("How many times has it rained this year?");
+
+console.log(response.text);
+```
+
 
 <GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/using-a-tool"
-  }
+  outdated={true}
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/using-a-tool"
 />
+
+
+
+## 関連項目
+
+- [エージェントを呼び出す](./calling-agents.mdx#from-the-command-line)

@@ -2,19 +2,18 @@ import { useParams } from 'react-router';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
-import { useNetwork, useVNextNetwork } from '@/hooks/use-networks';
+import { useVNextNetwork } from '@/hooks/use-networks';
 
 import { NetworkHeader } from './network-header';
 import { Header, HeaderTitle, MainContentLayout } from '@mastra/playground-ui';
 
-export const NetworkLayout = ({ children, isVNext }: { children: React.ReactNode; isVNext?: boolean }) => {
+export const NetworkLayout = ({ children }: { children: React.ReactNode }) => {
   const { networkId } = useParams();
-  const { network, isLoading: isNetworkLoading } = useNetwork(networkId!, !isVNext);
-  const { vNextNetwork, isLoading: isVNextNetworkLoading } = useVNextNetwork(networkId!, isVNext);
+  const { vNextNetwork, isLoading: isVNextNetworkLoading } = useVNextNetwork(networkId!);
 
-  const isLoadingToUse = isVNext ? isVNextNetworkLoading : isNetworkLoading;
+  const isLoadingToUse = isVNextNetworkLoading;
 
-  const networkToUse = isVNext ? vNextNetwork : network;
+  const networkToUse = vNextNetwork;
 
   return (
     <MainContentLayout>

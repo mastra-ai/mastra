@@ -8,7 +8,8 @@ export async function linkChecker({ url }: { url: string }) {
 
   const workflow = mastra.getWorkflow('linkChecker');
 
-  const { start } = workflow.createRun();
+  const run = await workflow.createRunAsync();
+  const { start } = run;
   const res = await start({
     triggerData: {
       channelId: process.env.LINK_CHECKER_CHANNEL_ID!,

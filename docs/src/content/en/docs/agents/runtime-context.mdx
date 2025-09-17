@@ -20,9 +20,10 @@ The dependency injection system allows you to:
 
 Agents can access `runtimeContext` via the `instructions` parameter, and retrieve variables using `runtimeContext.get()`. This allows agent behavior to adapt dynamically based on user input or external configuration, without changing the underlying implementation.
 
-```typescript {6-7,14} filename="src/mastra/agents/test-weather-agent.ts" showLineNumbers copy
+```typescript {7-8,15} filename="src/mastra/agents/test-weather-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
+import { testWeatherTool } from "../tools/test-weather-tool";
 
 export const testWeatherAgent = new Agent({
   name: "test-weather-agent",
@@ -38,7 +39,47 @@ export const testWeatherAgent = new Agent({
     - If no city is mentioned, ask for a city name
     `;
   },
-  model: openai("gpt-4o-mini")
+  model: openai("gpt-4o-mini"),
+  tools: { testWeatherTool }
+});
+```
+
+### Example tool
+
+This tool exports a `WeatherRuntimeContext` type, which can be used anywhere `RuntimeContext` is used to enable type-safe access to runtime configuration.
+
+```typescript {4-6} filename="src/mastra/tools/test-weather-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export type WeatherRuntimeContext = {
+  "temperature-unit": "celsius" | "fahrenheit";
+};
+
+export const testWeatherTool = createTool({
+  id: "test-weather-tool",
+  description: "Get weather for a location",
+  inputSchema: z.object({
+    location: z.string()
+  }),
+  outputSchema: z.object({
+    metric: z.string(),
+    temperature: z.number(),
+    weather: z.string()
+  }),
+  execute: async ({ context, runtimeContext }) => {
+    const { location } = context;
+    const unit = runtimeContext.get("temperature-unit") as WeatherRuntimeContext["temperature-unit"];
+
+    const temperature = 30;
+    const weather = "Sunny";
+
+    return {
+      metric: unit === "celsius" ? "°C" : "°F",
+      temperature,
+      weather
+    };
+  }
 });
 ```
 
@@ -46,15 +87,12 @@ export const testWeatherAgent = new Agent({
 
 In this example, `temperature-unit` is set using `runtimeContext.set()` to either **celsius** or **fahrenheit**, allowing the agent to respond with temperatures in the appropriate unit.
 
-```typescript {12} filename="src/test-weather-agent.ts" showLineNumbers copy
+```typescript {9, 12} filename="src/test-weather-agent.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 import { RuntimeContext } from "@mastra/core/runtime-context";
+import { WeatherRuntimeContext } from "./mastra/tools/test-weather-tool";
 
 const agent = mastra.getAgent("testWeatherAgent");
-
-export type WeatherRuntimeContext = {
-  "temperature-unit": "celsius" | "fahrenheit";
-};
 
 const runtimeContext = new RuntimeContext<WeatherRuntimeContext>();
 
@@ -71,14 +109,11 @@ console.log(response.text);
 
 You can populate `runtimeContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
 
-```typescript {2,12-21} filename="src/mastra/index.ts" showLineNumbers copy
+```typescript {2,4,9-18} filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { RuntimeContext } from "@mastra/core/runtime-context";
 import { testWeatherAgent } from "./agents/test-weather-agent";
-
-type WeatherRuntimeContext = {
-  "temperature-unit": "celsius" | "fahrenheit";
-};
+import { WeatherRuntimeContext } from "./mastra/tools/test-weather-tool";
 
 export const mastra = new Mastra({
   agents: { testWeatherAgent },

@@ -1,0 +1,263 @@
+---
+title: "例: Context Precision スコアラー | Scorers | Mastra Docs"
+description: Mean Average Precision を用いて、RAG システムで取得したコンテキストの関連性と順位付けを評価するための Context Precision スコアラーの使用例。
+---
+
+
+
+# コンテキスト精度スコアラー
+
+`createContextPrecisionScorer` を使用して、取得したコンテキストが期待される出力の生成をどの程度裏付けているかを評価します。このスコアラーは、関連するコンテキストをシーケンスの先頭付近に配置するシステムを高く評価するために、Mean Average Precision (MAP) を使用します。
+
+
+
+## インストール
+
+```bash
+npm install @mastra/evals
+```
+
+
+
+## 高精度の例
+
+この例は、すべての関連コンテキストが早い段階に提示される、完璧なコンテキスト精度を示しています：
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { createContextPrecisionScorer } from '@mastra/evals';
+
+const scorer = createContextPrecisionScorer({
+  model: openai('gpt-4o-mini'),
+  options: {
+    context: [
+      'Photosynthesis is the process by which plants convert sunlight, carbon dioxide, and water into glucose and oxygen.',
+      'The process occurs in the chloroplasts of plant cells, specifically in the thylakoids.',
+      'Light-dependent reactions happen in the thylakoid membranes, while the Calvin cycle occurs in the stroma.',
+    ],
+    scale: 1,
+  },
+});
+
+const result = await scorer.run({
+  input: {
+    inputMessages: [
+      {
+        id: '1',
+        role: 'user',
+        content: 'How does photosynthesis work in plants?',
+      },
+    ],
+  },
+  output: [
+    {
+      id: '2', 
+      role: 'assistant',
+      content: 'Photosynthesis is the process where plants convert sunlight, CO2, and water into glucose and oxygen using chloroplasts.',
+    },
+  ],
+});
+
+console.log(result);
+// 出力:
+// {
+//   score: 1.0,
+//   reason: "スコアが 1.0 なのは、すべてのコンテキストが光合成の説明に高度に関連しており、期待される出力を支える最適な順序で並んでいるためです。"
+// }
+```
+
+
+
+## 混合精度の例
+
+この例では、関連するコンテキストと無関係なコンテキストが混在しているため、精度が中程度であることを示します:
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { createContextPrecisionScorer } from '@mastra/evals';
+
+const scorer = createContextPrecisionScorer({
+  model: openai('gpt-4o-mini'),
+  options: {
+    context: [
+      'Regular exercise improves cardiovascular health by strengthening the heart muscle.',
+      'A balanced diet should include fruits, vegetables, and whole grains.',
+      'Physical activity releases endorphins which improve mood and reduce stress.',
+      'The average person should drink 8 glasses of water per day.',
+      'Exercise also helps maintain healthy body weight and muscle mass.',
+    ],
+    scale: 1,
+  },
+});
+
+const result = await scorer.run({
+  input: {
+    inputMessages: [
+      {
+        id: '1',
+        role: 'user', 
+        content: 'What are the mental and physical benefits of exercise?',
+      },
+    ],
+  },
+  output: [
+    {
+      id: '2',
+      role: 'assistant', 
+      content: 'Exercise provides cardiovascular benefits, improves mood through endorphin release, and helps maintain healthy body composition.',
+    },
+  ],
+});
+
+console.log(result);
+// 出力:
+// {
+//   score: 0.72,
+//   reason: "スコアが0.72なのは、コンテキスト1、3、5は運動の利点に関連している一方で、食事や水分補給に関する無関係なコンテキストが精度スコアを下げているためです。"
+// }
+```
+
+
+
+## 低精度の例  
+
+この例は、ほとんど無関係な文脈が使われているため、コンテキスト精度が低いケースを示しています:
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { createContextPrecisionScorer } from '@mastra/evals';
+
+const scorer = createContextPrecisionScorer({
+  model: openai('gpt-4o-mini'),
+  options: {
+    context: [
+      'The weather forecast shows sunny skies this weekend.',
+      'Coffee is one of the world\'s most popular beverages.',
+      'Machine learning requires large amounts of training data.',
+      'Cats typically sleep 12-16 hours per day.',
+      'The capital of France is Paris.',
+    ],
+    scale: 1,
+  },
+});
+
+const result = await scorer.run({
+  input: {
+    inputMessages: [
+      {
+        id: '1',
+        role: 'user',
+        content: 'How does photosynthesis work?',
+      },
+    ],
+  },
+  output: [
+    {
+      id: '2',
+      role: 'assistant',
+      content: 'Photosynthesis is the process by which plants convert sunlight into energy using chlorophyll.',
+    },
+  ],
+});
+
+console.log(result);
+// 出力:
+// {
+//   score: 0.0,
+//   reason: "取得されたコンテキストのいずれも光合成の説明に関連していないため、スコアは 0.0 です。"
+// }
+```
+
+
+
+## スコアラーの設定
+
+### カスタムスケール
+
+```typescript
+const scorer = createContextPrecisionScorer({
+  model: openai('gpt-4o-mini'),
+  options: {
+    context: [
+      'Machine learning models require training data.',
+      'Deep learning uses neural networks with multiple layers.',
+    ],
+    scale: 10, // スコアを0–1ではなく0–10の範囲にスケーリング
+  },
+});
+
+// 結果はスケーリングされます: score は 0.85 ではなく 8.5
+```
+
+### 動的コンテキスト抽出
+
+```typescript
+const scorer = createContextPrecisionScorer({
+  model: openai('gpt-4o-mini'),
+  options: {
+    contextExtractor: (input, output) => {
+      // クエリに基づいて動的にコンテキストを抽出
+      const query = input?.inputMessages?.[0]?.content || '';
+      
+      // 例: ベクターデータベースから取得
+      const searchResults = vectorDB.search(query, { limit: 10 });
+      return searchResults.map(result => result.content);
+    },
+    scale: 1,
+  },
+});
+```
+
+### 大規模コンテキストでの評価
+
+```typescript
+const scorer = createContextPrecisionScorer({
+  model: openai('gpt-4o-mini'), 
+  options: {
+    context: [
+      // ベクターデータベースから取得したドキュメントを想定
+      'Document 1: Highly relevant content...',
+      'Document 2: Somewhat related content...',
+      'Document 3: Tangentially related...',
+      'Document 4: Not relevant...',
+      'Document 5: Highly relevant content...',
+      // ... コンテキストは数十件まで拡張可能
+    ],
+  },
+});
+```
+
+
+
+## 結果の理解
+
+### スコアの解釈
+
+- **0.9–1.0**: 精度が非常に高い - 関連するコンテキストがシーケンスの早い段階に揃っている
+- **0.7–0.8**: 良好な精度 - ほとんどの関連コンテキストが適切に配置されている  
+- **0.4–0.6**: 中程度の精度 - 関連コンテキストが無関係なものと混在している
+- **0.1–0.3**: 低い精度 - 関連コンテキストが少ない、または配置が不適切
+- **0.0**: 関連するコンテキストが見つからない
+
+### 理由の分析
+
+reason フィールドでは以下を説明します:
+- どのコンテキストが関連/非関連と判断されたか
+- 配置が MAP の計算にどう影響したか
+- 評価で用いた具体的な関連性の基準
+
+### 最適化の示唆
+
+結果の活用方法:
+- **検索の改善**: ランキング前に無関係なコンテキストを除外する
+- **ランキングの最適化**: 関連コンテキストが早い位置に現れるようにする
+- **チャンクサイズの調整**: コンテキストの詳細度と関連性の精度のバランスを取る
+- **埋め込みの評価**: 取得精度向上のために異なる埋め込みモデルをテストする
+
+
+
+## 関連例
+
+- [Answer Relevancy Example](/examples/scorers/answer-relevancy) - 回答の関連性を評価する
+- [Faithfulness Example](/examples/scorers/faithfulness) - 文脈に対する根拠の一貫性を測定する
+- [Hallucination Example](/examples/scorers/hallucination) - 事実でない生成情報を検出する

@@ -1,0 +1,191 @@
+---
+title: "例: テンプレートを使ったワーキングメモリ | メモリー | Mastra Docs"
+description: Markdownテンプレートでワーキングメモリのデータを構造化する方法を示す例。
+---
+
+
+
+# テンプレートを用いたワーキングメモリ
+
+テンプレートを使用して、ワーキングメモリに保存する情報の構造を定義します。テンプレートは、エージェントが会話全体を通じて一貫した構造化データを抽出・保持するのに役立ちます。
+
+これは、`.stream()` を使ったストリーミング応答と `.generate()` を使った生成応答の両方で機能し、セッション間でデータを保持するために PostgreSQL、LibSQL、Redis などのストレージプロバイダーが必要です。
+
+この例では、ワーキングメモリのテンプレートを使って、ToDo リストを管理する方法を示します。
+
+
+
+## 前提条件
+
+この例では `openai` モデルを使用します。`OPENAI_API_KEY` を `.env` ファイルに追加してください。
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+```
+
+さらに、次のパッケージをインストールしてください:
+
+```bash copy
+npm install @mastra/libsql
+```
+
+
+
+## エージェントにメモリを追加する
+
+エージェントに LibSQL のメモリを追加するには、`Memory` クラスを使用し、`LibSQLStore` を用いて `storage` インスタンスを渡します。`url` はリモートの場所またはローカルファイルを指せます。
+
+### `template` を使ったワーキングメモリ
+
+`workingMemory.enabled` を `true` に設定してワーキングメモリを有効化します。これにより、エージェントは対話間で構造化情報を記憶できます。
+
+`template` を指定すると、記憶すべき内容の構造を定義できます。この例では、テンプレートがタスクを Markdown 形式でアクティブ項目と完了項目に整理します。
+
+スレッドは関連メッセージを会話ごとにまとめます。`generateTitle` を有効にすると、各スレッドには内容に基づいた説明的な名前が自動的に付与されます。
+
+```typescript filename="src/mastra/agents/example-working-memory-template-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const workingMemoryTemplateAgent = new Agent({
+  name: "working-memory-template-agent",
+  instructions: `
+    You are a todo list AI agent.
+    Always show the current list when starting a conversation.
+    For each task, include: title with index number, due date, description, status, and estimated time.
+    Use emojis for each field.
+    Support subtasks with bullet points.
+    Ask for time estimates to help with timeboxing.
+  `,
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:working-memory-template.db"
+    }),
+    options: {
+      workingMemory: {
+        enabled: true,
+        template: `
+          # Todo List
+          ## Active Items
+          - Task 1: Example task
+            - Due: Feb 7 2028
+            - Description: This is an example task
+            - Status: Not Started
+            - Estimated Time: 2 hours
+
+          ## Completed Items
+          - None yet`
+      },
+      threads: {
+        generateTitle: true
+      }
+    }
+  })
+});
+```
+
+
+
+## 使用例
+
+この例では、構造化情報を管理するためのワーキングメモリテンプレートを用いるエージェントとのやり取り方法を示します。エージェントは同一スレッド内の複数回のインタラクションにわたり、todoリストを更新して保持します。
+
+### `.stream()` を使ってレスポンスをストリーミングする
+
+この例では、新しいタスクを含むメッセージをエージェントに送信します。レスポンスはストリーミングされ、更新後のtodoリストが含まれます。
+
+```typescript filename="src/test-working-memory-template-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("workingMemoryTemplateAgent");
+
+const stream = await agent.stream("Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  }
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+### `.generate()` を使ってレスポンスを生成する
+
+この例では、新しいタスクを含むメッセージをエージェントに送信します。レスポンスは単一のメッセージとして返され、更新後のtodoリストが含まれます。
+
+```typescript filename="src/test-working-memory-template-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("workingMemoryTemplateAgent");
+
+const response = await agent.generate("Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  }
+});
+
+console.log(response.text);
+```
+
+
+
+## 出力例
+
+この出力は、作業メモリのテンプレートで定義された構造に従って、エージェントが更新されたToDoリストを整形して返す方法を示しています。
+
+```text
+# ToDoリスト
+## 進行中の項目
+1. 🛠️ **タスク:** アプリに新機能を実装する
+   - 📅 **期限:** 来週の金曜日
+   - 📝 **説明:** 既存のアプリケーションに新機能を開発・統合する。
+   - ⏳ **ステータス:** 未着手
+   - ⏲️ **見積もり時間:** 2時間
+
+## 完了した項目
+- まだありません
+```
+
+
+
+## ストレージオブジェクトの例
+
+Working memory はデータを `.json` 形式で保存します。以下のようになります:
+
+```json
+{
+  // ...
+  "toolInvocations": [
+    {
+      // ...
+      "args": {
+        "memory": "# Todo List\n## Active Items\n- Task 1: Build a new feature for our app\n  - Due: Next Friday\n  - Description: Build a new feature for our app\n  - Status: Not Started\n  - Estimated Time: 2 hours\n\n## Completed Items\n- None yet"
+      },
+    }
+  ],
+}
+```
+
+
+
+## 関連項目
+
+- [エージェントの呼び出し](../agents/calling-agents.mdx#from-the-command-line)
+- [エージェントのメモリ](../../docs/agents/agent-memory.mdx)
+- [サーバーレスのデプロイ](../../docs/deployment/server-deployment.mdx#libsqlstore)

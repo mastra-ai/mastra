@@ -1,60 +1,103 @@
 ---
-title: "`mastra init` リファレンス | プロジェクト作成 | Mastra CLI"
-description: インタラクティブなセットアップオプションで新しいMastraプロジェクトを作成する「mastra init」コマンドのドキュメント。
+title: "mastra init | プロジェクトの初期化 | Mastra CLI"
+description: 新しいMastraプロジェクトをインタラクティブなセットアップオプションで作成するmastra initコマンドのドキュメント。
 ---
 
-# `mastra init` リファレンス
 
-## `mastra init`
 
-これは新しいMastraプロジェクトを作成します。以下の3つの方法で実行できます：
+# mastra init
 
-1. **インタラクティブモード（推奨）**
-   フラグなしで実行すると、インタラクティブプロンプトが表示され、以下の手順が案内されます：
+`mastra init`コマンドは、既存のプロジェクトでMastraを**初期化**します。このコマンドを使用して、新しいプロジェクトを生成することなく、必要なフォルダと設定をスキャフォールドします。
 
-   - Mastraファイルを保存するディレクトリの選択
-   - インストールするコンポーネント（エージェント、ツール、ワークフロー）の選択
-   - デフォルトのLLMプロバイダー（OpenAI、Anthropic、またはGroq）の選択
-   - サンプルコードを含めるかどうかの決定
 
-2. **デフォルト設定でのクイックスタート**
 
-   ```bash
-   mastra init --default
-   ```
-
-   これにより、以下の設定でプロジェクトがセットアップされます：
-
-   - ソースディレクトリ：`src/`
-   - すべてのコンポーネント：エージェント、ツール、ワークフロー
-   - OpenAIをデフォルトプロバイダーとして設定
-   - サンプルコードなし
-
-3. **カスタムセットアップ**
-   ```bash
-   mastra init --dir src/mastra --components agents,tools --llm openai --example
-   ```
-   オプション：
-   - `-d, --dir`：Mastraファイルのディレクトリ（デフォルトはsrc/mastra）
-   - `-c, --components`：コンポーネントのカンマ区切りリスト（agents, tools, workflows）
-   - `-l, --llm`：デフォルトのモデルプロバイダー（openai, anthropic, groq, google または cerebras）
-   - `-k, --llm-api-key`：選択したLLMプロバイダーのAPIキー（.envファイルに追加されます）
-   - `-e, --example`：サンプルコードを含める
-   - `-ne, --no-example`：サンプルコードをスキップする
-
-## 高度な使用法
-
-### 分析機能を無効にする
-
-匿名の使用状況データを送信したくない場合は、コマンドを実行する際に
-`MASTRA_TELEMETRY_DISABLED=1` 環境変数を設定してください：
+## 使用方法
 
 ```bash
+mastra init [options]
+```
+
+
+
+## オプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "--default",
+      type: "boolean",
+      description: "デフォルト設定ですぐに開始（src、OpenAI、例なし）",
+      isOptional: true,
+    },
+    {
+      name: "--dir",
+      type: "string",
+      description: "Mastraファイル用のディレクトリ（デフォルトはsrc/）",
+      isOptional: false,
+    },
+    {
+      name: "--components",
+      type: "string",
+      description:
+        "カンマ区切りのコンポーネント一覧（agents、tools、workflows）",
+      isOptional: false,
+    },
+    {
+      name: "--llm",
+      type: "string",
+      description:
+        "デフォルトのモデルプロバイダー（openai、anthropic、groq、google、cerebras のいずれか）",
+      isOptional: false,
+    },
+    {
+      name: "--llm-api-key",
+      type: "string",
+      description: "モデルプロバイダーのAPIキー",
+      isOptional: false,
+    },
+    {
+      name: "--example",
+      type: "boolean",
+      description: "サンプルコードを含める",
+      isOptional: true,
+    },
+    {
+      name: "--no-example",
+      type: "boolean",
+      description: "サンプルコードを含めない",
+      isOptional: true,
+    },
+    {
+      name: "--mcp",
+      type: "string",
+      description:
+        "コードエディタ用のMCPサーバー（cursor、cursor-global、windsurf、vscode）",
+      isOptional: false,
+    },
+    {
+      name: "--help",
+      type: "boolean",
+      description: "コマンドのヘルプを表示",
+      isOptional: true,
+    },
+  ]}
+/>
+
+
+
+## 高度な使用方法
+
+### アナリティクスを無効にする
+
+匿名の使用データを送信したくない場合は、コマンドを実行する際に
+`MASTRA_TELEMETRY_DISABLED=1` 環境変数を設定してください：
+
+```bash copy
 MASTRA_TELEMETRY_DISABLED=1 mastra init
 ```
 
 ### カスタムプロバイダーエンドポイント
 
-初期化されたプロジェクトは、`OPENAI_BASE_URL`および
-`ANTHROPIC_BASE_URL`変数が存在する場合、それらを尊重します。これにより、後で開発サーバーを起動する際に、
-プロバイダーのトラフィックをプロキシやプライベートゲートウェイを通じてルーティングすることができます。
+初期化されたプロジェクトは、存在する場合 `OPENAI_BASE_URL` と
+`ANTHROPIC_BASE_URL` 変数を尊重します。これにより、後で開発サーバーを起動する際に、
+プロバイダーのトラフィックをプロキシやプライベートゲートウェイ経由でルーティングできます。

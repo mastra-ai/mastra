@@ -90,7 +90,3 @@ The AgentBuilder includes specialized memory processors:
 2. **Use Project Context**: Let the agent explore your existing codebase structure
 3. **Validate Output**: Always run the validation tools after code generation
 4. **Iterative Development**: Start with simple agents and add complexity incrementally
-
-## License
-
-Apache-2.0

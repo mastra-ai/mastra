@@ -1,31 +1,37 @@
 ---
-title: "ツール概要 | ツール & MCP | Mastra ドキュメント"
-description: Mastraにおけるツールの概念、エージェントへの追加方法、効果的なツール設計のベストプラクティスを理解しましょう。
+title: "ツール概要 | Tools & MCP | Mastra ドキュメント"
+description: Mastra におけるツールの概要、エージェントへの追加方法、効果的なツール設計のベストプラクティスを理解する。
 ---
 
-# ツール概要
+import { Steps } from "nextra/components";
 
-ツールは、エージェントが特定のタスクを実行したり外部情報にアクセスしたりするために実行できる関数です。これらは単純なテキスト生成を超えてエージェントの能力を拡張し、API、データベース、または他のシステムとの対話を可能にします。
 
-各ツールは通常、以下を定義します：
 
-- **入力：** ツールの実行に必要な情報（多くの場合、Zodを使用した`inputSchema`で定義）。
-- **出力：** ツールが返すデータの構造（`outputSchema`で定義）。
-- **実行ロジック：** ツールのアクションを実行するコード。
-- **説明：** エージェントがツールの機能と使用タイミングを理解するのに役立つテキスト。
+# ツールの概要
+
+ツールは、エージェントが特定のタスクを実行したり外部情報にアクセスしたりするために呼び出せる関数です。これにより、単なるテキスト生成を超えて、API、データベース、その他のシステムとやり取りできるように、エージェントの能力が拡張されます。
+
+各ツールは通常、次の要素を定義します:
+
+- **入力:** ツールの実行に必要な情報（`inputSchema` で定義され、Zod がよく用いられます）。
+- **出力:** ツールが返すデータの構造（`outputSchema` で定義）。
+- **実行ロジック:** ツールの機能を実行するコード。
+- **説明:** ツールの役割と使用すべき場面をエージェントが理解するのに役立つテキスト。
+
+
 
 ## ツールの作成
 
-Mastraでは、`@mastra/core/tools`パッケージの[`createTool`](/reference/tools/create-tool)関数を使用してツールを作成します。
+Mastra では、`@mastra/core/tools` パッケージの [`createTool`](/reference/tools/create-tool) 関数を使ってツールを作成します。
 
 ```typescript filename="src/mastra/tools/weatherInfo.ts" copy
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 const getWeatherInfo = async (city: string) => {
-  // Replace with an actual API call to a weather service
+  // 実際の天気サービスへの API 呼び出しに置き換えてください
   console.log(`Fetching weather for ${city}...`);
-  // Example data structure
+  // データ構造の例
   return { temperature: 20, conditions: "Sunny" };
 };
 
@@ -46,22 +52,70 @@ export const weatherTool = createTool({
 });
 ```
 
-この例では、都市の入力スキーマ、天気データの出力スキーマ、およびツールのロジックを含む`execute`関数を持つ`weatherTool`を定義しています。
+この例では、都市名の入力スキーマ、天気データの出力スキーマ、そしてツールのロジックを含む `execute` 関数を備えた `weatherTool` を定義しています。
 
-ツールを作成する際は、ツールの説明をシンプルに保ち、ツールが**何を**するのか、**いつ**使用するのかに焦点を当て、その主な使用例を強調してください。技術的な詳細はパラメータスキーマに含め、エージェントがツールを正しく使用する*方法*について、わかりやすい名前、明確な説明、デフォルト値の説明などで案内します。
+ツールを作成する際は、説明文は簡潔にまとめ、ツールが「何をするのか」と「いつ使うべきか」に焦点を当て、主要なユースケースを強調してください。技術的な詳細はパラメータスキーマに記述し、わかりやすい名前、明確な説明、デフォルト値の説明を通じて、エージェントがツールを正しく使えるように導きます。
 
-## エージェントへのツールの追加
 
-ツールをエージェントが利用できるようにするには、エージェントの定義でそれらを設定します。エージェントのシステムプロンプトで利用可能なツールとその一般的な目的に言及することも、ツールの使用を改善することができます。詳細な手順と例については、[エージェントでのツールとMCPの使用](/docs/agents/using-tools-and-mcp#add-tools-to-an-agent)のガイドを参照してください。
 
-## ツールスキーマの互換レイヤー
+## エージェントにツールを追加する
 
-異なるモデルはスキーマを異なる方法で解釈します。特定のスキーマプロパティが渡されるとエラーになるモデルもあれば、特定のスキーマプロパティを無視してエラーを出さないモデルもあります。Mastra はツールスキーマのための互換レイヤーを追加し、ツールが異なるモデルプロバイダー間で一貫して動作し、スキーマの制約が守られるようにします。
+ツールをエージェントで利用できるようにするには、エージェントの定義でツールを設定します。エージェントのシステムプロンプトに、利用可能なツールとその概要を記載すると、ツールの活用が向上することもあります。詳しい手順や例は、[Using Tools and MCP with Agents](/docs/agents/using-tools-and-mcp#add-tools-to-an-agent) のガイドをご覧ください。
 
-このレイヤーを適用している主なプロバイダーは以下の通りです：
 
-- **Google Gemini & Anthropic:** サポートされていないスキーマプロパティを削除し、関連する制約をツールの説明に追加します。
-- **OpenAI（推論モデルを含む）:** 無視される、またはサポートされていないスキーマフィールドを削除または調整し、エージェントのガイダンスのために説明に指示を追加します。
-- **DeepSeek & Meta:** スキーマの整合性とツールの使いやすさを確保するため、同様の互換ロジックを適用します。
 
-このアプローチにより、カスタムツールと MCP ツールの両方で、ツールの利用がより信頼性が高く、モデル非依存になります。
+## ツールスキーマの互換性レイヤー
+
+モデルによってスキーマの解釈は異なります。特定のスキーマプロパティが渡されるとエラーになるものもあれば、無視してもエラーを出さないものもあります。Mastra はツールスキーマに互換性レイヤーを追加し、異なるモデルプロバイダー間でツールが一貫して動作し、スキーマの制約が順守されるようにします。
+
+このレイヤーを適用しているプロバイダーの例:
+
+- **Google Gemini & Anthropic:** 非対応のスキーマプロパティを削除し、関連する制約をツールの説明に追記します。
+- **OpenAI（推論モデルを含む）:** 無視される／非対応のスキーマフィールドを削除または調整し、エージェントのガイダンスとなる説明を追加します。
+- **DeepSeek & Meta:** 同様の互換性ロジックを適用し、スキーマ整合性とツールの利用性を確保します。
+
+このアプローチにより、カスタムツールと MCP ツールのいずれにおいても、より信頼性が高くモデル非依存なツール利用が可能になります。
+
+
+
+
+## ローカルでツールをテストする
+ツールを実行してテストする方法は2つあります。
+
+<Steps>
+
+### Mastra Playground
+
+Mastra Dev Server を起動している状態で、ブラウザから [http://localhost:4111/tools](http://localhost:4111/tools) にアクセスすると、Mastra Playground でツールをテストできます。
+
+> 詳細は [Local Dev Playground](/docs/server-db/local-dev-playground) のドキュメントをご覧ください。
+
+### コマンドライン
+
+`.execute()` を使ってツールを呼び出します。
+
+```typescript filename="src/test-tool.ts" showLineNumbers copy
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import { testTool } from "./mastra/tools/test-tool";
+
+const runtimeContext = new RuntimeContext();
+
+const result = await testTool.execute({
+  context: {
+    value: "foo"
+  },
+  runtimeContext
+});
+
+console.log(result);
+```
+
+> 詳細は [createTool()](../../reference/tools/create-tool.mdx) を参照してください。
+
+このツールをテストするには、次のコマンドを実行します:
+
+```bash copy
+npx tsx src/test-tool.ts
+```
+
+</Steps>

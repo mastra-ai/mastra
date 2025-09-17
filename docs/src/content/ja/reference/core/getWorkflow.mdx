@@ -1,0 +1,49 @@
+---
+title: "リファレンス: Mastra.getWorkflow() | Core | Mastra ドキュメント"
+description: "Mastra の `Mastra.getWorkflow()` メソッドのリファレンス。ID でワークフローを取得します。"
+---
+
+# Mastra.getWorkflow()
+
+`.getWorkflow()` メソッドは、ID を指定してワークフローを取得します。メソッドはワークフロー ID と、任意のオプションオブジェクトを受け取ります。
+
+## 使用例
+
+```typescript copy
+mastra.getWorkflow("testWorkflow");
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "TWorkflowId extends keyof TWorkflows",
+      description: "取得するワークフローのID。Mastra の設定で定義されている有効なワークフローIDである必要があります。",
+    },
+    {
+      name: "options",
+      type: "{ serialized?: boolean }",
+      description: "任意の設定オブジェクト。`serialized` が true の場合、ワークフローの完全なインスタンスではなく名前のみを返します。",
+      optional: true,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "TWorkflows[TWorkflowId]",
+      description: "指定された ID のワークフロー インスタンス。ワークフローが見つからない場合はエラーを送出します。",
+    },
+  ]}
+/>
+
+## 関連項目
+
+- [Workflows 概要](../../docs/workflows/overview.mdx)
+- [動的な Workflows](../../docs/workflows/dynamic-workflows.mdx)

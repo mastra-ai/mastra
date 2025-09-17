@@ -1,6 +1,5 @@
 import type {
   AISpan,
-  AISpanType,
   AISpanTypeMap,
   AnyAISpan,
   ChildSpanOptions,
@@ -12,6 +11,49 @@ import type {
   AITracing,
   ExportedAISpan,
 } from '../types';
+
+import { AISpanType, InternalSpans } from '../types';
+
+/**
+ * Determines if a span type should be considered internal based on flags.
+ * Returns false if flags are undefined.
+ */
+function isSpanInternal(spanType: AISpanType, flags?: InternalSpans): boolean {
+  if (flags === undefined || flags === InternalSpans.NONE) {
+    return false;
+  }
+
+  switch (spanType) {
+    // Workflow-related spans
+    case AISpanType.WORKFLOW_RUN:
+    case AISpanType.WORKFLOW_STEP:
+    case AISpanType.WORKFLOW_CONDITIONAL:
+    case AISpanType.WORKFLOW_CONDITIONAL_EVAL:
+    case AISpanType.WORKFLOW_PARALLEL:
+    case AISpanType.WORKFLOW_LOOP:
+    case AISpanType.WORKFLOW_SLEEP:
+    case AISpanType.WORKFLOW_WAIT_EVENT:
+      return (flags & InternalSpans.WORKFLOW) !== 0;
+
+    // Agent-related spans
+    case AISpanType.AGENT_RUN:
+      return (flags & InternalSpans.AGENT) !== 0;
+
+    // Tool-related spans
+    case AISpanType.TOOL_CALL:
+    case AISpanType.MCP_TOOL_CALL:
+      return (flags & InternalSpans.TOOL) !== 0;
+
+    // LLM-related spans
+    case AISpanType.LLM_GENERATION:
+    case AISpanType.LLM_CHUNK:
+      return (flags & InternalSpans.LLM) !== 0;
+
+    // Default: never internal
+    default:
+      return false;
+  }
+}
 
 export abstract class BaseAISpan<TType extends AISpanType = any> implements AISpan<TType> {
   public abstract id: string;
@@ -46,7 +88,7 @@ export abstract class BaseAISpan<TType extends AISpanType = any> implements AISp
     this.startTime = new Date();
     this.aiTracing = aiTracing;
     this.isEvent = options.isEvent ?? false;
-    this.isInternal = options.isInternal ?? false;
+    this.isInternal = isSpanInternal(this.type, options.tracingPolicy?.internal);
 
     if (this.isEvent) {
       // Event spans don't have endTime or input.

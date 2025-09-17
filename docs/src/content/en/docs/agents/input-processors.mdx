@@ -37,7 +37,7 @@ const agent = new Agent({
 
 Available options:
 - `stripControlChars`: Remove control characters (default: false)
-- `preserveEmojis`: Keep emojis intact (default: true) 
+- `preserveEmojis`: Keep emojis intact (default: true)
 - `collapseWhitespace`: Collapse multiple spaces/newlines (default: true)
 - `trim`: Remove leading/trailing whitespace (default: true)
 
@@ -184,11 +184,11 @@ You can chain multiple processors. They execute sequentially in the order they a
 
 ```typescript copy showLineNumbers {9-18}
 import { Agent } from "@mastra/core/agent";
-import { 
-  UnicodeNormalizer, 
-  ModerationProcessor, 
+import {
+  UnicodeNormalizer,
+  ModerationProcessor,
   PromptInjectionDetector,
-  PIIDetector 
+  PIIDetector
 } from "@mastra/core/processors";
 
 const secureAgent = new Agent({
@@ -209,17 +209,19 @@ const secureAgent = new Agent({
 
 You can create custom processors by implementing the `Processor` interface. A Processor can be used for input processing when it implements the `processInput` method.
 
-```typescript copy showLineNumbers {4-19,23-26}
-import type { Processor, MastraMessageV2, TripWire } from "@mastra/core/processors";
+```typescript copy showLineNumbers {5,10-33,39}
+import type { Processor } from "@mastra/core/processors";
+import type { MastraMessageV2 } from "@mastra/core/agent/message-list";
+import { TripWire } from "@mastra/core/agent";
 
 class MessageLengthLimiter implements Processor {
   readonly name = 'message-length-limiter';
-  
+
   constructor(private maxLength: number = 1000) {}
 
-  processInput({ messages, abort }: { 
-    messages: MastraMessageV2[]; 
-    abort: (reason?: string) => never 
+  processInput({ messages, abort }: {
+    messages: MastraMessageV2[];
+    abort: (reason?: string) => never
   }): MastraMessageV2[] {
     // Check total message length
     try {
@@ -228,7 +230,7 @@ class MessageLengthLimiter implements Processor {
           .filter(part => part.type === 'text')
           .reduce((partSum, part) => partSum + (part as any).text.length, 0);
       }, 0);
-      
+
       if (totalLength > this.maxLength) {
         abort(`Message too long: ${totalLength} characters (max: ${this.maxLength})`); // throws a TripWire error
       }
@@ -238,7 +240,7 @@ class MessageLengthLimiter implements Processor {
       }
       throw new Error(`Length validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`); // application level throw a standard error
     }
-    
+
     return messages;
   }
 }
@@ -279,4 +281,4 @@ If any processor calls `abort()`, the request terminates immediately and subsequ
 
 While input processors handle user messages before they reach the language model, **output processors** handle the LLM's responses after generation but before they're returned to the user. This is useful for response validation, content filtering, and safety controls on LLM-generated content.
 
-See the [Output Processors documentation](/docs/agents/output-processors) for details on processing LLM responses. 
+See the [Output Processors documentation](/docs/agents/output-processors) for details on processing LLM responses.

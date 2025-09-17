@@ -1,26 +1,19 @@
-# createThread
+---
+title: "リファレンス: Memory.createThread() | Memory | Mastra ドキュメント"
+description: "Mastra の `Memory.createThread()` メソッドに関するドキュメント。メモリシステム内で新しい会話スレッドを作成します。"
+---
 
-メモリーシステム内で新しい会話スレッドを作成します。各スレッドは個別の会話やコンテキストを表し、複数のメッセージを含めることができます。
+# Memory.createThread()
 
-## 使用例
+`.createThread()` メソッドは、メモリシステム内に新しい会話スレッドを作成します。各スレッドは、個別の会話またはコンテキストを表し、複数のメッセージを含むことができます。
 
-```typescript
-import { Memory } from "@mastra/memory";
+## 使い方の例
 
-const memory = new Memory({
-  /* config */
-});
-const thread = await memory.createThread({
-  resourceId: "user-123",
-  title: "Support Conversation",
-  metadata: {
-    category: "support",
-    priority: "high",
-  },
-});
+```typescript copy
+await memory?.createThread({ resourceId: "user-123" });
 ```
 
-## パラメーター
+## パラメータ
 
 <PropertiesTable
   content={[
@@ -35,19 +28,19 @@ const thread = await memory.createThread({
       name: "threadId",
       type: "string",
       description:
-        "スレッドのカスタムID（省略可能）。指定しない場合は自動生成されます。",
+        "スレッドのカスタムID（任意）。指定しない場合は自動生成されます。",
       isOptional: true,
     },
     {
       name: "title",
       type: "string",
-      description: "スレッドのタイトル（省略可能）",
+      description: "スレッドのタイトル（任意）",
       isOptional: true,
     },
     {
       name: "metadata",
       type: "Record<string, unknown>",
-      description: "スレッドに関連付けるメタデータ（省略可能）",
+      description: "スレッドに関連付けるメタデータ（任意）",
       isOptional: true,
     },
   ]}
@@ -60,7 +53,7 @@ const thread = await memory.createThread({
     {
       name: "id",
       type: "string",
-      description: "作成されたスレッドの一意の識別子",
+      description: "作成されたスレッドの固有識別子",
     },
     {
       name: "resourceId",
@@ -75,25 +68,52 @@ const thread = await memory.createThread({
     {
       name: "createdAt",
       type: "Date",
-      description: "スレッドが作成されたタイムスタンプ",
+      description: "スレッドの作成時刻のタイムスタンプ",
     },
     {
       name: "updatedAt",
       type: "Date",
-      description: "スレッドが最後に更新されたタイムスタンプ",
+      description: "スレッドの最終更新時刻のタイムスタンプ",
     },
     {
       name: "metadata",
       type: "Record<string, unknown>",
-      description: "スレッドに関連付けられた追加のメタデータ",
+      description: "スレッドに関連する追加のメタデータ",
     },
   ]}
 />
 
+## 応用使用例
+
+```typescript filename="src/test-memory.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("agent");
+const memory = await agent.getMemory();
+
+const thread = await memory?.createThread({
+  resourceId: "user-123",
+  title: "Memory Test Thread",
+  metadata: {
+    source: "test-script",
+    purpose: "memory-testing"
+  }
+});
+
+const response = await agent.generate("message for agent", {
+  memory: {
+    thread: thread!.id,
+    resource: thread!.resourceId
+  }
+});
+
+console.log(response.text);
+```
+
 ### 関連情報
 
 - [Memory クラスリファレンス](/reference/memory/Memory.mdx)
-- [Memory のはじめ方](/docs/memory/overview.mdx)（スレッドの概念を解説）
+- [Memory 入門](/docs/memory/overview.mdx)（スレッドの概念を解説）
 - [getThreadById](/reference/memory/getThreadById.mdx)
 - [getThreadsByResourceId](/reference/memory/getThreadsByResourceId.mdx)
 - [query](/reference/memory/query.mdx)

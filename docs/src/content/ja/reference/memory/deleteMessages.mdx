@@ -1,0 +1,60 @@
+---
+title: "リファレンス: Memory.deleteMessages() | Memory | Mastra ドキュメント"
+description: "Mastra における `Memory.deleteMessages()` メソッドのドキュメント。ID を指定して複数のメッセージを削除します。"
+---
+
+# Memory.deleteMessages()
+
+`.deleteMessages()` メソッドは、ID を指定して複数のメッセージを削除します。
+
+## 使用例
+
+```typescript copy
+await memory?.deleteMessages(["671ae63f-3a91-4082-a907-fe7de78e10ec"]);
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "messageIds",
+      type: "string[]",
+      description: "削除するメッセージIDの配列",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 返り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "void",
+      type: "Promise<void>",
+      description: "すべてのメッセージの削除完了時に解決される Promise",
+    },
+  ]}
+/>
+
+## 応用例
+
+```typescript filename="src/test-memory.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+import { UIMessageWithMetadata } from "@mastra/core/agent";
+
+const agent = mastra.getAgent("agent");
+const memory = await agent.getMemory();
+
+const { uiMessages } = await memory!.query({ threadId: "thread-123" });
+
+const messageIds = uiMessages.map((message: UIMessageWithMetadata) => message.id);
+await memory?.deleteMessages([...messageIds]);
+```
+
+## 関連項目
+
+- [Memory クラスリファレンス](/reference/memory/Memory.mdx)
+- [query](/reference/memory/query.mdx)
+- [Memory の概要](/docs/memory/overview.mdx)

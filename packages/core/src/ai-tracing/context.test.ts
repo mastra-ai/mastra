@@ -161,16 +161,6 @@ describe('AI Tracing Context Integration', () => {
       expect(run).not.toBe(mockRun); // Should be wrapped
     });
 
-    it('should wrap createRun to return run proxy', () => {
-      const wrapped = wrapMastra(mockMastra as any, tracingContext);
-      const workflow = wrapped.getWorkflow('test-workflow');
-
-      const run = workflow.createRun();
-
-      expect(mockWorkflow.createRun).toHaveBeenCalled();
-      expect(run).not.toBe(mockRun); // Should be wrapped
-    });
-
     it('should inject tracing context into run start method', async () => {
       const wrapped = wrapMastra(mockMastra as any, tracingContext);
       const workflow = wrapped.getWorkflow('test-workflow');

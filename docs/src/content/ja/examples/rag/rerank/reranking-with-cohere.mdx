@@ -3,19 +3,24 @@ title: "例: Cohereによるリランキング | RAG | Mastra ドキュメント
 description: Mastraを使用してCohereのリランキングサービスでドキュメント検索の関連性を向上させる例。
 ---
 
-# Cohereによるリランキング
 
-RAGのためにドキュメントを検索する際、初期のベクトル類似度検索では重要なセマンティックな一致を見逃すことがあります。
 
-Cohereのリランキングサービスは、複数のスコアリング要素を用いてドキュメントの順序を並べ替えることで、結果の関連性を向上させます。
+# Cohereを使用したリランキング
+
+RAGのためにドキュメントを取得する際、初期のベクトル類似度検索では重要なセマンティックマッチを見逃す可能性があります。
+
+Cohereのリランキングサービスは、複数のスコアリング要素を使用してドキュメントを並び替えることで、結果の関連性を向上させるのに役立ちます。
 
 ```typescript
-import { rerank } from "@mastra/rag";
+import { 
+  rerankWithScorer as rerank, 
+  CohereRelevanceScorer 
+} from "@mastra/rag";
 
-const results = rerank(
-  searchResults,
-  "deployment configuration",
-  cohere("rerank-v3.5"),
+const results = rerank({
+  results: searchResults,
+  query: "deployment configuration",
+  scorer: new CohereRelevanceScorer('rerank-v3.5'),
   {
     topK: 5,
     weights: {
@@ -27,7 +32,9 @@ const results = rerank(
 );
 ```
 
+
+
 ## リンク
 
-- [rerank() リファレンス](/reference/rag/rerank.mdx)
-- [リトリーバル ドキュメント](/reference/rag/retrieval.mdx)
+- [rerank() リファレンス](/reference/rag/rerankWithScorer.mdx)
+- [検索ドキュメント](/reference/rag/retrieval.mdx)

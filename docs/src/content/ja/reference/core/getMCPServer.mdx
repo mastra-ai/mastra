@@ -1,0 +1,49 @@
+---
+title: "リファレンス: Mastra.getMCPServer() | Core | Mastra Docs"
+description: "Mastra の `Mastra.getMCPServer()` メソッドに関するドキュメント。ID と任意のバージョンを指定して、特定の MCP サーバーインスタンスを取得します。"
+---
+
+# Mastra.getMCPServer()
+
+`.getMCPServer()` メソッドは、論理 ID と任意のバージョンを指定して、特定の MCP サーバーインスタンスを取得します。バージョンが指定されている場合は、その論理 ID とバージョンに完全一致するサーバーを検索します。バージョンが指定されていない場合は、指定された論理 ID を持つサーバーのうち、最も新しい releaseDate のものを返します。
+
+## 使用例
+
+```typescript copy
+mastra.getMCPServer("1.2.0");
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "serverId",
+      type: "string",
+      description: "取得する MCP サーバーの論理 ID。MCPServer インスタンスの `id` プロパティと一致している必要があります。",
+    },
+    {
+      name: "version",
+      type: "string",
+      description: "取得する MCP サーバーの特定バージョン（任意）。未指定の場合は、最も新しい releaseDate を持つサーバーを返します。",
+      optional: true,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "server",
+      type: "MCPServerBase | undefined",
+      description: "指定されたIDとバージョンのMCPサーバーインスタンス。見つからない場合、または指定したバージョンが見つからない場合は undefined。",
+    },
+  ]}
+/>
+
+## 関連情報
+
+- [MCP概要](../../docs/tools-mcp/mcp-overview.mdx)
+- [MCPサーバーリファレンス](../../reference/tools/mcp-server.mdx)

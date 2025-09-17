@@ -1,169 +1,198 @@
 ---
-title: "例: コンテクスチュアルリコール | Evals | Mastra Docs"
-description: コンテクスチュアルリコール指標を使用して、応答がどれだけ文脈情報を取り入れているかを評価する例。
+title: "例：Contextual Recall | Evals | Mastra Docs"
+description: 応答がどの程度コンテキスト情報を取り入れているかを評価するために、Contextual Recall 指標を用いる例。
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
 
-# コンテクスチュアルリコール
 
-この例では、Mastra のコンテクスチュアルリコール指標を使用して、回答が提供されたコンテキストの情報をどれだけ効果的に取り入れているかを評価する方法を示します。
 
-## 概要
+# コンテキスト想起の評価
 
-この例では、以下の方法を示します。
+<ScorerCallout />
 
-1. Contextual Recallメトリクスの設定
-2. コンテキストの取り込みを評価する
-3. リコールスコアを分析する
-4. 異なるリコールレベルへの対応
+`ContextualRecallMetric` を使用して、提供されたコンテキストの関連情報がどの程度適切に回答へ反映されているかを評価します。このメトリクスは `query` と `response` を受け取り、スコアと、その理由を含む `info` オブジェクトを返します。
 
-## セットアップ
 
-### 環境セットアップ
 
-環境変数を必ず設定してください：
+## インストール
 
-```bash filename=".env"
-OPENAI_API_KEY=your_api_key_here
+```bash copy
+npm install @mastra/evals
 ```
 
-### 依存関係
 
-必要な依存関係をインポートします：
 
-```typescript copy showLineNumbers filename="src/index.ts"
+## 高リコールの例
+
+この例では、応答にコンテキストの情報がすべて含まれています。各要素が正確に思い出され、出力で表現されているため、リコールスコアは満点です。
+
+```typescript filename="src/example-high-recall.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { ContextualRecallMetric } from "@mastra/evals/llm";
+
+const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
+  context: [
+    "Product features include cloud sync.",
+    "Offline mode is available.",
+    "Supports multiple devices."
+  ]
+});
+
+const query = "What are the key features of the product?";
+const response = "The product features cloud synchronization, offline mode support, and the ability to work across multiple devices.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
 ```
 
-## 使用例
+### 高リコールの出力
 
-### 高リコールの例
+応答にコンテキストの全要素が含まれているため、出力は満点となります。コンテキストで言及された各機能が正確に想起され、過不足なく統合されています。
 
-すべてのコンテキスト情報を含む応答を評価します：
-
-```typescript copy showLineNumbers{5} filename="src/index.ts"
-const context1 = [
-  "Product features include cloud sync.",
-  "Offline mode is available.",
-  "Supports multiple devices.",
-];
-
-const metric1 = new ContextualRecallMetric(openai("gpt-4o-mini"), {
-  context: context1,
-});
-
-const query1 = "What are the key features of the product?";
-const response1 =
-  "The product features cloud synchronization, offline mode support, and the ability to work across multiple devices.";
-
-console.log("Example 1 - High Recall:");
-console.log("Context:", context1);
-console.log("Query:", query1);
-console.log("Response:", response1);
-
-const result1 = await metric1.measure(query1, response1);
-console.log("Metric Result:", {
-  score: result1.score,
-  reason: result1.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 1, reason: 'All elements of the output are supported by the context.' }
+```typescript
+{
+  score: 1,
+  info: {
+    reason: 'The score is 1 because all elements of the expected output are fully supported by the corresponding nodes in retrieval context, specifically node(s) that detail cloud synchronization, offline mode support, and multi-device functionality.'
+  }
+}
 ```
 
-### 混合リコールの例
 
-一部のコンテキスト情報を含む応答を評価します：
 
-```typescript copy showLineNumbers{27} filename="src/index.ts"
-const context2 = [
-  "Python is a high-level programming language.",
-  "Python emphasizes code readability.",
-  "Python supports multiple programming paradigms.",
-  "Python is widely used in data science.",
-];
+## 混合リコールの例
 
-const metric2 = new ContextualRecallMetric(openai("gpt-4o-mini"), {
-  context: context2,
+この例では、応答に一部のコンテキスト要素が含まれる一方で、無関係な内容も混在しています。無関係な情報が含まれることで、全体的なリコールスコアが下がります。
+
+```typescript filename="src/example-mixed-recall.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextualRecallMetric } from "@mastra/evals/llm";
+
+const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
+  context: [
+    "Python is a high-level programming language.",
+    "Python emphasizes code readability.",
+    "Python supports multiple programming paradigms.",
+    "Python is widely used in data science."
+  ]
 });
 
-const query2 = "What are Python's key characteristics?";
-const response2 =
-  "Python is a high-level programming language. It is also a type of snake.";
+const query = "What are Python's key characteristics?";
+const response = "Python is a high-level programming language. It is also a type of snake.";
 
-console.log("Example 2 - Mixed Recall:");
-console.log("Context:", context2);
-console.log("Query:", query2);
-console.log("Response:", response2);
+const result = await metric.measure(query, response);
 
-const result2 = await metric2.measure(query2, response2);
-console.log("Metric Result:", {
-  score: result2.score,
-  reason: result2.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 0.5, reason: 'Only half of the output is supported by the context.' }
+console.log(result);
 ```
 
-### 低リコールの例
+### 混合リコールの出力
 
-ほとんどのコンテキスト情報を見落とした応答を評価します：
+出力は、関連するコンテキスト文を1つ含む一方で、元のコンテキストに裏付けられていない無関係な内容も含むため、中程度のスコアとなります。
 
-```typescript copy showLineNumbers{53} filename="src/index.ts"
-const context3 = [
-  "The solar system has eight planets.",
-  "Mercury is closest to the Sun.",
-  "Venus is the hottest planet.",
-  "Mars is called the Red Planet.",
-];
-
-const metric3 = new ContextualRecallMetric(openai("gpt-4o-mini"), {
-  context: context3,
-});
-
-const query3 = "Tell me about the solar system.";
-const response3 = "Jupiter is the largest planet in the solar system.";
-
-console.log("Example 3 - Low Recall:");
-console.log("Context:", context3);
-console.log("Query:", query3);
-console.log("Response:", response3);
-
-const result3 = await metric3.measure(query3, response3);
-console.log("Metric Result:", {
-  score: result3.score,
-  reason: result3.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 0, reason: 'None of the output is supported by the context.' }
+```typescript
+{
+  score: 0.25,
+  info: {
+    reason: "The score is 0.25 because while the sentence 'Python is a high-level programming language' aligns with node 1 in the retrieval context, the lack of mention of other relevant information from nodes 2, 3, and 4 indicates significant gaps in the overall context."
+  }
+}
 ```
+
+
+
+## リコールが低い例
+
+この例では、応答に関連するコンテキストがほとんど、またはまったく含まれていません。応答内の情報の大半が根拠に欠けるため、リコールのスコアが低くなります。
+
+```typescript filename="src/example-low-recall.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextualRecallMetric } from "@mastra/evals/llm";
+
+const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
+  context: [
+    "The solar system has eight planets.",
+    "Mercury is closest to the Sun.",
+    "Venus is the hottest planet.",
+    "Mars is called the Red Planet."
+  ]
+});
+
+const query = "Tell me about the solar system.";
+const response = "Jupiter is the largest planet in the solar system.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### リコールが低い出力
+
+この出力は、応答にコンテキストに存在しない情報が含まれ、提供された詳細を無視しているため、低いスコアとなります。コンテキスト項目は回答にまったく取り入れられていません。
+
+```typescript
+{
+  score: 0,
+  info: {
+    reason: "The score is 0 because the output lacks any relevant information from the node(s) in retrieval context, failing to address key aspects such as the number of planets, Mercury's position, Venus's temperature, and Mars's nickname."
+  }
+}
+```
+
+
+
+
+## メトリクスの設定
+
+応答に関連する背景情報を表す `context` 配列を指定して、`ContextualRecallMetric` のインスタンスを作成できます。スコア範囲を定義するための `scale` など、任意のパラメーターも設定できます。
+
+```typescript showLineNumbers copy
+const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
+  context: [""],
+  scale: 1
+});
+```
+
+> 設定オプションの一覧については、[ContextualRecallMetric](/reference/evals/contextual-recall.mdx) を参照してください。
+
+
 
 ## 結果の理解
 
-この指標は以下を提供します：
+`ContextualRecallMetric` は次の形式の結果を返します:
 
-1. 0から1の間のリコールスコア：
-
-   - 1.0: 完全なリコール - すべてのコンテキスト情報が使用された
-   - 0.7-0.9: 高いリコール - ほとんどのコンテキスト情報が使用された
-   - 0.4-0.6: 混合リコール - 一部のコンテキスト情報が使用された
-   - 0.1-0.3: 低いリコール - わずかなコンテキスト情報が使用された
-   - 0.0: リコールなし - コンテキスト情報が使用されていない
-
-2. スコアの詳細な理由付け（以下の分析を含む）：
-   - 情報の取り込み
-   - 欠落しているコンテキスト
-   - 応答の完全性
-   - 全体的なリコール品質
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/contextual-recall"
+```typescript
+{
+  score: number,
+  info: {
+    reason: string
   }
+}
+```
+
+### リコールスコア
+
+0〜1の範囲のリコールスコア:
+
+- **1.0**: 完全にリコール — すべてのコンテキスト情報を活用。
+- **0.7〜0.9**: 高リコール — ほとんどのコンテキスト情報を活用。
+- **0.4〜0.6**: 中程度のリコール — 一部のコンテキスト情報を活用。
+- **0.1〜0.3**: 低リコール — わずかなコンテキスト情報のみを活用。
+- **0.0**: リコールなし — コンテキスト情報を未活用。
+
+### リコール情報
+
+スコアの根拠。次のような詳細を含みます:
+
+- 情報の取り込み状況
+- 欠落しているコンテキスト
+- 応答の完全性
+- 全体的なリコール品質
+
+<GithubLink
+  outdated={true}
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/contextual-recall"
 />

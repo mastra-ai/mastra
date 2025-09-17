@@ -1,0 +1,35 @@
+---
+title: "リファレンス: Mastra.getServer() | Core | Mastra ドキュメント"
+description: "Mastra の `Mastra.getServer()` メソッドに関するドキュメント。設定済みのサーバー設定を取得します。"
+---
+
+# Mastra.getServer()
+
+`.getServer()` メソッドは、Mastra インスタンスで設定されたサーバー設定を取得するために使用します。
+
+## 使い方の例
+
+```typescript copy
+mastra.getServer();
+```
+
+## パラメータ
+
+このメソッドはパラメータを受け付けません。
+
+## 返り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "server",
+      type: "ServerConfig | undefined",
+      description: "ポート、タイムアウト、API ルート、ミドルウェア、CORS 設定、ビルドオプションを含むサーバーの設定。サーバーが構成されていない場合は undefined。",
+    },
+  ]}
+/>
+
+## 関連情報
+
+- [サーバーのデプロイ](../../docs/deployment/server-deployment.mdx)
+- [サーバーの構成](../../docs/server-db/custom-api-routes.mdx)

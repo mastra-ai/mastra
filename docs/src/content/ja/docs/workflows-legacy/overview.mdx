@@ -1,0 +1,198 @@
+---
+title: "複雑なLLM操作の処理 | ワークフロー（レガシー） | Mastra"
+description: "Mastraのワークフローは、分岐、並列実行、リソースの一時停止などの機能を活用し、複雑な一連の操作をオーケストレーションするのに役立ちます。"
+---
+
+
+
+# ワークフローによる複雑な LLM 操作の扱い（レガシー）
+
+レガシー版ワークフローのドキュメントは、以下のリンクから参照できます。
+
+- [ステップ](/docs/workflows-legacy/steps.mdx)
+- [制御フロー](/docs/workflows-legacy/control-flow.mdx)
+- [変数](/docs/workflows-legacy/variables.mdx)
+- [一時停止と再開](/docs/workflows-legacy/suspend-and-resume.mdx)
+- [動的ワークフロー](/docs/workflows-legacy/dynamic-workflows.mdx)
+- [エラーハンドリング](/docs/workflows-legacy/error-handling.mdx)
+- [ネストされたワークフロー](/docs/workflows-legacy/nested-workflows.mdx)
+- [実行時／動的変数](/docs/workflows-legacy/runtime-variables.mdx)
+
+Mastra のワークフローは、分岐、並列実行、リソースの一時停止などの機能を備え、複雑な一連の処理をオーケストレーションするのに役立ちます。
+
+
+
+## ワークフローを使用するタイミング
+
+ほとんどのAIアプリケーションは、言語モデルへの単一の呼び出し以上のものを必要とします。複数のステップを実行したり、条件によって特定のパスをスキップしたり、ユーザー入力を受け取るまで実行を完全に一時停止したりすることが必要な場合があります。エージェントのツール呼び出しが十分に正確でない場合もあります。
+
+Mastraのワークフローシステムは以下を提供します：
+
+- ステップを定義し、それらを連携させる標準化された方法。
+- シンプル（線形）と高度（分岐、並列）の両方のパスをサポート。
+- 各ワークフロー実行を追跡するためのデバッグと可観測性機能。
+
+
+
+## 例
+
+ワークフローを作成するには、1つ以上のステップを定義し、それらをリンクし、ワークフローをコミットしてから開始します。
+
+### ワークフローの分解（レガシー）
+
+ワークフロー作成プロセスの各部分を見ていきましょう。
+
+#### 1. ワークフローの作成
+
+Mastraでワークフローを定義する方法は次のとおりです。`name` フィールドはワークフローのAPIエンドポイント（`/workflows/$NAME/`）を決定し、`triggerSchema` はワークフローのトリガーデータの構造を定義します。
+
+```ts filename="src/mastra/workflow/index.ts"
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+
+const myWorkflow = new LegacyWorkflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+```
+
+#### 2. ステップの定義
+
+次に、ワークフローの各ステップを定義します。各ステップは独自の入力・出力スキーマを持つことができます。ここでは、`stepOne` が入力値を2倍にし、`stepTwo` は `stepOne` が成功した場合にその結果をインクリメントします。（シンプルにするため、この例ではLLM呼び出しは行っていません）
+
+```ts filename="src/mastra/workflow/index.ts"
+const stepOne = new LegacyStep({
+  id: "stepOne",
+  outputSchema: z.object({
+    doubledValue: z.number(),
+  }),
+  execute: async ({ context }) => {
+    const doubledValue = context.triggerData.inputValue * 2;
+    return { doubledValue };
+  },
+});
+
+const stepTwo = new LegacyStep({
+  id: "stepTwo",
+  execute: async ({ context }) => {
+    const doubledValue = context.getStepResult(stepOne)?.doubledValue;
+    if (!doubledValue) {
+      return { incrementedValue: 0 };
+    }
+    return {
+      incrementedValue: doubledValue + 1,
+    };
+  },
+});
+```
+
+#### 3. ステップのリンク
+
+次に、制御フローを作成し、「コミット」（ワークフローの確定）を行います。この場合、`stepOne` が最初に実行され、その後に `stepTwo` が続きます。
+
+```ts filename="src/mastra/workflow/index.ts"
+myWorkflow.step(stepOne).then(stepTwo).commit();
+```
+
+### ワークフローの登録
+
+Mastraにワークフローを登録して、ログ記録やテレメトリーを有効にします。
+
+```ts showLineNumbers filename="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  legacy_workflows: { myWorkflow },
+});
+```
+
+動的なワークフローを作成する必要がある場合は、mastraインスタンスをコンテキストに注入することもできます。
+
+```ts filename="src/mastra/workflow/index.ts"
+import { Mastra } from "@mastra/core";
+import { LegacyWorkflow } from "@mastra/core/workflows/legacy";
+
+const mastra = new Mastra();
+
+const myWorkflow = new LegacyWorkflow({
+  name: "my-workflow",
+  mastra,
+});
+```
+
+### ワークフローの実行
+
+ワークフローはプログラムから、またはAPI経由で実行できます。
+
+```ts showLineNumbers filename="src/mastra/run-workflow.ts" copy
+import { mastra } from "./index";
+
+// Get the workflow
+const myWorkflow = mastra.legacy_getWorkflow("myWorkflow");
+const { runId, start } = myWorkflow.createRun();
+
+// Start the workflow execution
+await start({ triggerData: { inputValue: 45 } });
+```
+
+またはAPIを使用します（`mastra dev` の実行が必要です）。
+
+// ワークフローランの作成
+
+```bash
+curl --location 'http://localhost:4111/api/workflows/myWorkflow/start-async' \
+     --header 'Content-Type: application/json' \
+     --data '{
+       "inputValue": 45
+     }'
+```
+
+この例では、基本的な流れを示しています：ワークフローを定義し、ステップを追加し、ワークフローをコミットし、そして実行します。
+
+
+
+## ステップの定義
+
+ワークフローの基本的な構成要素は[ステップです](./steps.mdx)。ステップは入力と出力のスキーマを使って定義され、前のステップの結果を取得することができます。
+
+
+
+## 制御フロー
+
+ワークフローでは、[制御フロー](./control-flow.mdx)を定義して、並列ステップ、分岐パスなどを使用してステップを連鎖させることができます。
+
+
+
+## ワークフローの変数
+
+ステップ間でデータをマッピングしたり、動的なデータフローを作成したりする必要がある場合、[ワークフロー変数](./variables.mdx)は、あるステップから別のステップへ情報を渡したり、ステップ出力内のネストされたプロパティにアクセスしたりするための強力なメカニズムを提供します。
+
+
+
+## 一時停止と再開
+
+実行を外部データ、ユーザー入力、または非同期イベントのために一時停止する必要がある場合、Mastraは[任意のステップでの一時停止をサポート](./suspend-and-resume.mdx)しており、ワークフローの状態を保持して後で再開できるようにします。
+
+
+
+## 可観測性とデバッグ
+
+Mastraワークフローは自動的に[ワークフロー実行内の各ステップの入力と出力をログに記録](../../reference/observability/otel-config.mdx)し、このデータを好みのロギング、テレメトリ、または可観測性ツールに送信できるようにします。
+
+以下のことが可能です：
+
+- 各ステップのステータス（例：`success`、`error`、または`suspended`）を追跡する。
+- 分析のための実行固有のメタデータを保存する。
+- ログを転送することで、DatadogやNew Relicなどのサードパーティの可観測性プラットフォームと統合する。
+
+
+
+## その他のリソース
+
+- [連続ステップワークフローの例](../../examples/workflows_legacy/sequential-steps.mdx)
+- [並列ステップワークフローの例](../../examples/workflows_legacy/parallel-steps.mdx)
+- [分岐パスワークフローの例](../../examples/workflows_legacy/branching-paths.mdx)
+- [ワークフロー変数の例](../../examples/workflows_legacy/workflow-variables.mdx)
+- [循環依存ワークフローの例](../../examples/workflows_legacy/cyclical-dependencies.mdx)
+- [一時停止と再開ワークフローの例](../../examples/workflows_legacy/suspend-and-resume.mdx)

@@ -117,7 +117,7 @@ const analyzePackageStep = createStep({
   inputSchema: CloneTemplateResultSchema,
   outputSchema: PackageAnalysisSchema,
   execute: async ({ inputData }) => {
-    console.log('Analyzing template package.json...');
+    console.info('Analyzing template package.json...');
     const { templateDir } = inputData;
     const packageJsonPath = join(templateDir, 'package.json');
 
@@ -125,7 +125,7 @@ const analyzePackageStep = createStep({
       const packageJsonContent = await readFile(packageJsonPath, 'utf-8');
       const packageJson = JSON.parse(packageJsonContent);
 
-      console.log('Template package.json:', JSON.stringify(packageJson, null, 2));
+      console.info('Template package.json:', JSON.stringify(packageJson, null, 2));
 
       return {
         dependencies: packageJson.dependencies || {},
@@ -165,7 +165,7 @@ const discoverUnitsStep = createStep({
 
     const tools = await AgentBuilderDefaults.DEFAULT_TOOLS(templateDir);
 
-    console.log('targetPath', targetPath);
+    console.info('targetPath', targetPath);
 
     const model = await resolveModel({ runtimeContext, projectPath: targetPath, defaultModel: openai('gpt-4.1') });
 
@@ -276,7 +276,7 @@ Return the actual exported names of the units, as well as the file names.`,
         units.push({ kind: 'other', id: otherId.name, file: otherId.file });
       });
 
-      console.log('Discovered units:', JSON.stringify(units, null, 2));
+      console.info('Discovered units:', JSON.stringify(units, null, 2));
 
       if (units.length === 0) {
         throw new Error(`No Mastra units (agents, workflows, tools) found in template.
@@ -364,7 +364,7 @@ const packageMergeStep = createStep({
   inputSchema: PackageMergeInputSchema,
   outputSchema: PackageMergeResultSchema,
   execute: async ({ inputData, runtimeContext }) => {
-    console.log('Package merge step starting...');
+    console.info('Package merge step starting...');
     const { slug, packageInfo } = inputData;
     const targetPath = resolveTargetPath(inputData, runtimeContext);
 
@@ -462,7 +462,7 @@ const installStep = createStep({
   inputSchema: InstallInputSchema,
   outputSchema: InstallResultSchema,
   execute: async ({ inputData, runtimeContext }) => {
-    console.log('Running install step...');
+    console.info('Running install step...');
     const targetPath = resolveTargetPath(inputData, runtimeContext);
 
     try {
@@ -499,7 +499,7 @@ const programmaticFileCopyStep = createStep({
   inputSchema: FileCopyInputSchema,
   outputSchema: FileCopyResultSchema,
   execute: async ({ inputData, runtimeContext }) => {
-    console.log('Programmatic file copy step starting...');
+    console.info('Programmatic file copy step starting...');
     const { orderedUnits, templateDir, commitSha, slug } = inputData;
     const targetPath = resolveTargetPath(inputData, runtimeContext);
 
@@ -580,7 +580,7 @@ const programmaticFileCopyStep = createStep({
 
       // Process each unit
       for (const unit of orderedUnits) {
-        console.log(`Processing ${unit.kind} unit "${unit.id}" from file "${unit.file}"`);
+        console.info(`Processing ${unit.kind} unit "${unit.id}" from file "${unit.file}"`);
 
         // Resolve source file path with fallback logic
         let sourceFile: string;
@@ -626,7 +626,7 @@ const programmaticFileCopyStep = createStep({
 
         // Analyze target naming convention
         const namingConvention = await analyzeNamingConvention(targetDir);
-        console.log(`Detected naming convention in ${targetDir}: ${namingConvention}`);
+        console.info(`Detected naming convention in ${targetDir}: ${namingConvention}`);
 
         // Convert unit.id to target filename with proper extension
         // Note: Check if unit.id already includes extension to avoid double extensions
@@ -643,7 +643,7 @@ const programmaticFileCopyStep = createStep({
         // Handle file conflicts with strategy-based resolution
         if (existsSync(targetFile)) {
           const strategy = determineConflictStrategy(unit, targetFile);
-          console.log(`File exists: ${convertedFileName}, using strategy: ${strategy}`);
+          console.info(`File exists: ${convertedFileName}, using strategy: ${strategy}`);
 
           switch (strategy) {
             case 'skip':
@@ -653,7 +653,7 @@ const programmaticFileCopyStep = createStep({
                 sourceFile: unit.file,
                 targetFile: `${targetDir}/${convertedFileName}`,
               });
-              console.log(`⏭️ Skipped ${unit.kind} "${unit.id}": file already exists`);
+              console.info(`⏭️ Skipped ${unit.kind} "${unit.id}": file already exists`);
               continue;
 
             case 'backup-and-replace':
@@ -664,7 +664,7 @@ const programmaticFileCopyStep = createStep({
                   destination: targetFile,
                   unit: { kind: unit.kind, id: unit.id },
                 });
-                console.log(
+                console.info(
                   `🔄 Replaced ${unit.kind} "${unit.id}": ${unit.file} → ${convertedFileName} (backup created)`,
                 );
                 continue;
@@ -686,7 +686,7 @@ const programmaticFileCopyStep = createStep({
                   destination: uniqueTargetFile,
                   unit: { kind: unit.kind, id: unit.id },
                 });
-                console.log(`📝 Renamed ${unit.kind} "${unit.id}": ${unit.file} → ${basename(uniqueTargetFile)}`);
+                console.info(`📝 Renamed ${unit.kind} "${unit.id}": ${unit.file} → ${basename(uniqueTargetFile)}`);
                 continue;
               } catch (renameError) {
                 conflicts.push({
@@ -720,7 +720,7 @@ const programmaticFileCopyStep = createStep({
             destination: targetFile,
             unit: { kind: unit.kind, id: unit.id },
           });
-          console.log(`✓ Copied ${unit.kind} "${unit.id}": ${unit.file} → ${convertedFileName}`);
+          console.info(`✓ Copied ${unit.kind} "${unit.id}": ${unit.file} → ${convertedFileName}`);
         } catch (copyError) {
           conflicts.push({
             unit: { kind: unit.kind, id: unit.id },
@@ -743,7 +743,7 @@ const programmaticFileCopyStep = createStep({
               destination: targetTsconfig,
               unit: { kind: 'other', id: 'tsconfig.json' },
             });
-            console.log('✓ Copied tsconfig.json from template to target');
+            console.info('✓ Copied tsconfig.json from template to target');
           } else {
             // Generate a minimal tsconfig.json as a fallback
             const minimalTsconfig = {
@@ -767,7 +767,7 @@ const programmaticFileCopyStep = createStep({
               destination: targetTsconfig,
               unit: { kind: 'other', id: 'tsconfig.json' },
             });
-            console.log('✓ Generated minimal tsconfig.json in target');
+            console.info('✓ Generated minimal tsconfig.json in target');
           }
         }
       } catch (e) {
@@ -794,7 +794,7 @@ const programmaticFileCopyStep = createStep({
               destination: targetMastraIndex,
               unit: { kind: 'other', id: 'mastra-index' },
             });
-            console.log('✓ Copied Mastra index file from template');
+            console.info('✓ Copied Mastra index file from template');
           }
         }
       } catch (e) {
@@ -823,7 +823,7 @@ const programmaticFileCopyStep = createStep({
               destination: targetGitignore,
               unit: { kind: 'other', id: 'gitignore' },
             });
-            console.log('✓ Copied .gitignore from template to target');
+            console.info('✓ Copied .gitignore from template to target');
           } else {
             // Both exist - merge them intelligently
             const targetContent = await readFile(targetGitignore, 'utf-8');
@@ -839,9 +839,9 @@ const programmaticFileCopyStep = createStep({
                 destination: targetGitignore,
                 unit: { kind: 'other', id: 'gitignore-merge' },
               });
-              console.log(`✓ Merged template .gitignore entries into existing .gitignore (${addedLines} new entries)`);
+              console.info(`✓ Merged template .gitignore entries into existing .gitignore (${addedLines} new entries)`);
             } else {
-              console.log('ℹ No new .gitignore entries to add from template');
+              console.info('ℹ No new .gitignore entries to add from template');
             }
           }
         }
@@ -874,7 +874,7 @@ const programmaticFileCopyStep = createStep({
               destination: targetEnv,
               unit: { kind: 'other', id: 'env' },
             });
-            console.log(`✓ Created .env file with ${Object.keys(variables).length} template variables`);
+            console.info(`✓ Created .env file with ${Object.keys(variables).length} template variables`);
           } else {
             // Both exist - merge them intelligently
             const targetContent = await readFile(targetEnv, 'utf-8');
@@ -888,9 +888,9 @@ const programmaticFileCopyStep = createStep({
                 destination: targetEnv,
                 unit: { kind: 'other', id: 'env-merge' },
               });
-              console.log(`✓ Merged new environment variables into existing .env file (${addedLines} new entries)`);
+              console.info(`✓ Merged new environment variables into existing .env file (${addedLines} new entries)`);
             } else {
-              console.log('ℹ No new environment variables to add (all already exist in .env)');
+              console.info('ℹ No new environment variables to add (all already exist in .env)');
             }
           }
         }
@@ -913,14 +913,14 @@ const programmaticFileCopyStep = createStep({
             fileList,
             { skipIfNoStaged: true },
           );
-          console.log(`✓ Committed ${copiedFiles.length} copied files`);
+          console.info(`✓ Committed ${copiedFiles.length} copied files`);
         } catch (commitError) {
           console.warn('Failed to commit copied files:', commitError);
         }
       }
 
       const message = `Programmatic file copy completed. Copied ${copiedFiles.length} files, ${conflicts.length} conflicts detected.`;
-      console.log(message);
+      console.info(message);
 
       return {
         success: true,
@@ -949,7 +949,7 @@ const intelligentMergeStep = createStep({
   inputSchema: IntelligentMergeInputSchema,
   outputSchema: IntelligentMergeResultSchema,
   execute: async ({ inputData, runtimeContext }) => {
-    console.log('Intelligent merge step starting...');
+    console.info('Intelligent merge step starting...');
     const { conflicts, copiedFiles, commitSha, slug, templateDir, branchName } = inputData;
     const targetPath = resolveTargetPath(inputData, runtimeContext);
     try {
@@ -1091,8 +1091,8 @@ Template information:
       const registrableFiles = copiedFiles.filter(f => registrableKinds.has(f.unit.kind as any));
       const targetMastraIndex = resolve(targetPath, 'src/mastra/index.ts');
       const mastraIndexExists = existsSync(targetMastraIndex);
-      console.log(`Mastra index exists: ${mastraIndexExists} at ${targetMastraIndex}`);
-      console.log(
+      console.info(`Mastra index exists: ${mastraIndexExists} at ${targetMastraIndex}`);
+      console.info(
         'Registrable components:',
         registrableFiles.map(f => `${f.unit.kind}:${f.unit.id}`),
       );
@@ -1109,7 +1109,7 @@ Template information:
 
       // Note: Validation is handled by the dedicated validation step, not here
 
-      console.log(`Creating task list with ${tasks.length} tasks...`);
+      console.info(`Creating task list with ${tasks.length} tasks...`);
       await AgentBuilderDefaults.manageTaskList({ action: 'create', tasks });
 
       // Log git state before merge operations
@@ -1175,12 +1175,12 @@ Start by listing your tasks and work through them systematically!
       for await (const chunk of result.fullStream) {
         if (chunk.type === 'step-finish' || chunk.type === 'step-start') {
           const chunkData = 'payload' in chunk ? chunk.payload : chunk;
-          console.log({
+          console.info({
             type: chunk.type,
             msgId: chunkData.messageId,
           });
         } else {
-          console.log(JSON.stringify(chunk, null, 2));
+          console.info(JSON.stringify(chunk, null, 2));
 
           // Extract task management tool results
           if (chunk.type === 'tool-result') {
@@ -1196,7 +1196,7 @@ Start by listing your tasks and work through them systematically!
                     content: toolResult.content || '',
                     notes: toolResult.notes,
                   });
-                  console.log(`📋 Task completed: ${toolResult.taskId} - ${toolResult.content}`);
+                  console.info(`📋 Task completed: ${toolResult.taskId} - ${toolResult.content}`);
                 }
               } catch (parseError) {
                 console.warn('Failed to parse task management result:', parseError);
@@ -1263,14 +1263,14 @@ const validationAndFixStep = createStep({
   inputSchema: ValidationFixInputSchema,
   outputSchema: ValidationFixResultSchema,
   execute: async ({ inputData, runtimeContext }) => {
-    console.log('Validation and fix step starting...');
+    console.info('Validation and fix step starting...');
     const { commitSha, slug, orderedUnits, templateDir, copiedFiles, conflictsResolved, maxIterations = 5 } = inputData;
     const targetPath = resolveTargetPath(inputData, runtimeContext);
 
     // Skip validation if no changes were made
     const hasChanges = copiedFiles.length > 0 || (conflictsResolved && conflictsResolved.length > 0);
     if (!hasChanges) {
-      console.log('⏭️ Skipping validation - no files copied or conflicts resolved');
+      console.info('⏭️ Skipping validation - no files copied or conflicts resolved');
       return {
         success: true,
         applied: false,
@@ -1283,7 +1283,7 @@ const validationAndFixStep = createStep({
       };
     }
 
-    console.log(
+    console.info(
       `📋 Changes detected: ${copiedFiles.length} files copied, ${conflictsResolved?.length || 0} conflicts resolved`,
     );
 
@@ -1412,7 +1412,7 @@ Be thorough and methodical. Always use listDirectory to verify actual file exist
         },
       });
 
-      console.log('Starting validation and fix agent with internal loop...');
+      console.info('Starting validation and fix agent with internal loop...');
 
       let validationResults = {
         valid: false,
@@ -1424,7 +1424,7 @@ Be thorough and methodical. Always use listDirectory to verify actual file exist
 
       // Loop up to maxIterations times or until all errors are fixed
       while (validationResults.remainingErrors > 0 && currentIteration <= maxIterations) {
-        console.log(`\n=== Validation Iteration ${currentIteration} ===`);
+        console.info(`\n=== Validation Iteration ${currentIteration} ===`);
 
         const iterationPrompt =
           currentIteration === 1
@@ -1452,13 +1452,13 @@ Previous iterations may have fixed some issues, so start by re-running validateC
         for await (const chunk of result.fullStream) {
           if (chunk.type === 'step-finish' || chunk.type === 'step-start') {
             const chunkData = 'payload' in chunk ? chunk.payload : chunk;
-            console.log({
+            console.info({
               type: chunk.type,
               msgId: chunkData.messageId,
               iteration: currentIteration,
             });
           } else {
-            console.log(JSON.stringify(chunk, null, 2));
+            console.info(JSON.stringify(chunk, null, 2));
           }
           if (chunk.type === 'tool-result') {
             // Track validation results
@@ -1468,7 +1468,7 @@ Previous iterations may have fixed some issues, so start by re-running validateC
               lastValidationResult = toolResult; // Store the full result
               if (toolResult?.summary) {
                 iterationErrors = toolResult.summary.totalErrors || 0;
-                console.log(`Iteration ${currentIteration}: Found ${iterationErrors} errors`);
+                console.info(`Iteration ${currentIteration}: Found ${iterationErrors} errors`);
               }
             }
           }
@@ -1485,14 +1485,14 @@ Previous iterations may have fixed some issues, so start by re-running validateC
           validationResults.lastValidationErrors = lastValidationResult.errors;
         }
 
-        console.log(`Iteration ${currentIteration} complete: ${iterationErrors} errors remaining`);
+        console.info(`Iteration ${currentIteration} complete: ${iterationErrors} errors remaining`);
 
         // Break if no errors or max iterations reached
         if (iterationErrors === 0) {
-          console.log(`✅ All validation issues resolved in ${currentIteration} iterations!`);
+          console.info(`✅ All validation issues resolved in ${currentIteration} iterations!`);
           break;
         } else if (currentIteration >= maxIterations) {
-          console.log(`⚠️  Max iterations (${maxIterations}) reached. ${iterationErrors} errors still remaining.`);
+          console.info(`⚠️  Max iterations (${maxIterations}) reached. ${iterationErrors} errors still remaining.`);
           break;
         }
 
@@ -1543,7 +1543,7 @@ Previous iterations may have fixed some issues, so start by re-running validateC
       // Cleanup template directory
       try {
         await rm(templateDir, { recursive: true, force: true });
-        console.log(`✓ Cleaned up template directory: ${templateDir}`);
+        console.info(`✓ Cleaned up template directory: ${templateDir}`);
       } catch (cleanupError) {
         console.warn('Failed to cleanup template directory:', cleanupError);
       }

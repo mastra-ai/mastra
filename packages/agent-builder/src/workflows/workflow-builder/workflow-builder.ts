@@ -32,14 +32,14 @@ const workflowDiscoveryStep = createStep({
   inputSchema: WorkflowBuilderInputSchema,
   outputSchema: WorkflowDiscoveryResultSchema,
   execute: async ({ inputData, runtimeContext: _runtimeContext }) => {
-    console.log('Starting workflow discovery...');
+    console.info('Starting workflow discovery...');
     const { projectPath = process.cwd() } = inputData;
 
     try {
       // Check if workflows directory exists
       const workflowsPath = join(projectPath, 'src/mastra/workflows');
       if (!existsSync(workflowsPath)) {
-        console.log('No workflows directory found');
+        console.info('No workflows directory found');
         return {
           success: true,
           workflows: [],
@@ -75,7 +75,7 @@ const workflowDiscoveryStep = createStep({
         }
       }
 
-      console.log(`Discovered ${workflows.length} existing workflows`);
+      console.info(`Discovered ${workflows.length} existing workflows`);
       return {
         success: true,
         workflows,
@@ -105,7 +105,7 @@ const projectDiscoveryStep = createStep({
   inputSchema: WorkflowDiscoveryResultSchema,
   outputSchema: ProjectDiscoveryResultSchema,
   execute: async ({ inputData: _inputData, runtimeContext: _runtimeContext }) => {
-    console.log('Starting project discovery...');
+    console.info('Starting project discovery...');
 
     try {
       // Get project structure - no need for AgentBuilder since we're just checking files
@@ -132,7 +132,7 @@ const projectDiscoveryStep = createStep({
         }
       }
 
-      console.log('Project discovery completed');
+      console.info('Project discovery completed');
       return {
         success: true,
         structure: {
@@ -175,7 +175,7 @@ const workflowResearchStep = createStep({
   inputSchema: ProjectDiscoveryResultSchema,
   outputSchema: WorkflowResearchResultSchema,
   execute: async ({ inputData, runtimeContext }) => {
-    console.log('Starting workflow research...');
+    console.info('Starting workflow research...');
 
     try {
       // const filteredMcpTools = await initializeMcpTools();
@@ -215,7 +215,7 @@ const workflowResearchStep = createStep({
         };
       }
 
-      console.log('Research completed successfully');
+      console.info('Research completed successfully');
       return {
         success: true,
         documentation: {
@@ -264,15 +264,15 @@ const taskExecutionStep = createStep({
       projectPath,
     } = inputData;
 
-    console.log(`Starting task execution for ${action}ing workflow: ${workflowName}`);
-    console.log(`Executing ${tasks.length} tasks using AgentBuilder stream...`);
+    console.info(`Starting task execution for ${action}ing workflow: ${workflowName}`);
+    console.info(`Executing ${tasks.length} tasks using AgentBuilder stream...`);
 
     try {
       const model = await resolveModel({ runtimeContext });
       const currentProjectPath = projectPath || process.cwd();
 
       // Pre-populate taskManager with the planned tasks
-      console.log('Pre-populating taskManager with planned tasks...');
+      console.info('Pre-populating taskManager with planned tasks...');
       const taskManagerContext = {
         action: 'create' as const,
         tasks: tasks.map(task => ({
@@ -286,7 +286,7 @@ const taskExecutionStep = createStep({
       };
 
       const taskManagerResult = await AgentBuilderDefaults.manageTaskList(taskManagerContext);
-      console.log(`Task manager initialized with ${taskManagerResult.tasks.length} tasks`);
+      console.info(`Task manager initialized with ${taskManagerResult.tasks.length} tasks`);
 
       if (!taskManagerResult.success) {
         throw new Error(`Failed to initialize task manager: ${taskManagerResult.message}`);
@@ -349,15 +349,15 @@ ${workflowBuilderPrompts.validation.instructions}`,
         const completedTasks = currentTaskStatus.tasks.filter(task => task.status === 'completed');
         const pendingTasks = currentTaskStatus.tasks.filter(task => task.status !== 'completed');
 
-        console.log(`\n=== EXECUTION ITERATION ${iterationCount} ===`);
-        console.log(`Completed tasks: ${completedTasks.length}/${expectedTaskIds.length}`);
-        console.log(`Remaining tasks: ${pendingTasks.map(t => t.id).join(', ')}`);
+        console.info(`\n=== EXECUTION ITERATION ${iterationCount} ===`);
+        console.info(`Completed tasks: ${completedTasks.length}/${expectedTaskIds.length}`);
+        console.info(`Remaining tasks: ${pendingTasks.map(t => t.id).join(', ')}`);
 
         // Check if all tasks are completed
         allTasksCompleted = pendingTasks.length === 0;
 
         if (allTasksCompleted) {
-          console.log('All tasks completed! Breaking execution loop.');
+          console.info('All tasks completed! Breaking execution loop.');
           break;
         }
 
@@ -389,23 +389,23 @@ ${workflowBuilderPrompts.validation.instructions}`;
           }
 
           if (chunk.type === 'step-finish') {
-            console.log(finalMessage);
+            console.info(finalMessage);
             finalMessage = '';
           }
 
           if (chunk.type === 'tool-result') {
-            console.log(JSON.stringify(chunk, null, 2));
+            console.info(JSON.stringify(chunk, null, 2));
           }
 
           if (chunk.type === 'finish') {
-            console.log(chunk);
+            console.info(chunk);
           }
         }
 
         await stream.consumeStream();
         finalResult = await stream.object;
 
-        console.log(`Iteration ${iterationCount} result:`, { finalResult });
+        console.info(`Iteration ${iterationCount} result:`, { finalResult });
 
         if (!finalResult) {
           throw new Error(`No result received from agent execution on iteration ${iterationCount}`);
@@ -417,13 +417,13 @@ ${workflowBuilderPrompts.validation.instructions}`;
 
         allTasksCompleted = postPendingTasks.length === 0;
 
-        console.log(
+        console.info(
           `After iteration ${iterationCount}: ${postCompletedTasks.length}/${expectedTaskIds.length} tasks completed in taskManager`,
         );
 
         // If agent needs clarification, break out and suspend
         if (finalResult.status === 'needs_clarification' && finalResult.questions && finalResult.questions.length > 0) {
-          console.log(
+          console.info(
             `Agent needs clarification on iteration ${iterationCount}: ${finalResult.questions.length} questions`,
           );
           break;
@@ -431,7 +431,7 @@ ${workflowBuilderPrompts.validation.instructions}`;
 
         // If agent claims completed but taskManager shows pending tasks, continue loop
         if (finalResult.status === 'completed' && !allTasksCompleted) {
-          console.log(
+          console.info(
             `Agent claimed completion but taskManager shows pending tasks: ${postPendingTasks.map(t => t.id).join(', ')}`,
           );
           // Continue to next iteration
@@ -449,9 +449,9 @@ ${workflowBuilderPrompts.validation.instructions}`;
 
       // If the agent needs clarification, suspend the workflow
       if (finalResult.status === 'needs_clarification' && finalResult.questions && finalResult.questions.length > 0) {
-        console.log(`Agent needs clarification: ${finalResult.questions.length} questions`);
+        console.info(`Agent needs clarification: ${finalResult.questions.length} questions`);
 
-        console.log('finalResult', JSON.stringify(finalResult, null, 2));
+        console.info('finalResult', JSON.stringify(finalResult, null, 2));
         return suspend({
           questions: finalResult.questions,
           currentProgress: finalResult.progress,
@@ -473,7 +473,7 @@ ${workflowBuilderPrompts.validation.instructions}`;
         ? `Successfully completed workflow ${action} - all ${tasksExpected} tasks completed after ${iterationCount} iteration(s): ${finalResult.message}`
         : `Workflow execution finished with issues after ${iterationCount} iteration(s): ${finalResult.message}. Completed: ${tasksCompleted}/${tasksExpected} tasks`;
 
-      console.log(message);
+      console.info(message);
 
       const missingTasks = finalPendingTasks.map(task => task.id);
       const validationErrors = [];
@@ -561,7 +561,7 @@ export const workflowBuilderWorkflow = createWorkflow({
   // Step 4: Planning and Approval Sub-workflow (loops until approved)
   .dountil(planningAndApprovalWorkflow, async ({ inputData }) => {
     // Continue looping until user approves the task list
-    console.log(`Sub-workflow check: approved=${inputData.approved}`);
+    console.info(`Sub-workflow check: approved=${inputData.approved}`);
     return inputData.approved === true;
   })
   // Map sub-workflow result to task execution input

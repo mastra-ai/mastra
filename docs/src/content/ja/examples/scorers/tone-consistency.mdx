@@ -1,0 +1,191 @@
+---
+title: "例: トーン一貫性 | Scorers | Mastra Docs"
+description: Tone Consistency scorerを使用してテキストの感情的なトーンパターンと感情の一貫性を評価する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+
+
+# Tone Consistency Scorer
+
+`createToneConsistencyScorer`を使用して、テキストの感情的なトーンパターンと感情の一貫性を評価します。
+
+
+
+## インストール
+
+```bash copy
+npm install @mastra/evals
+```
+
+> 完全なAPIドキュメントと設定オプションについては、[`createToneScorer`](/reference/scorers/tone-consistency)を参照してください。
+
+
+
+## ポジティブなトーンの例
+
+この例では、テキストが同様のポジティブな感情を示しています。スコアラーはトーン間の一貫性を測定し、高いスコアを出力します。
+
+```typescript filename="src/example-positive-tone.ts" showLineNumbers copy
+import { createToneScorer } from "@mastra/evals/scorers/code";
+
+const scorer = createToneScorer();
+
+const input = 'This product is fantastic and amazing!';
+const output = 'The product is excellent and wonderful!';
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: input }],
+  output: { role: 'assistant', text: output },
+});
+
+console.log('Score:', result.score);
+console.log('AnalyzeStepResult:', result.analyzeStepResult);
+```
+
+### ポジティブなトーンの出力
+
+スコアラーは強い感情の一致を反映した高いスコアを返します。`analyzeStepResult`フィールドは感情値とそれらの差を提供します。
+
+```typescript
+{
+  score: 0.8333333333333335,
+  analyzeStepResult: {
+    responseSentiment: 1.3333333333333333,
+    referenceSentiment: 1.1666666666666667,
+    difference: 0.16666666666666652,
+  },
+}
+```
+
+
+
+## 安定したトーンの例
+
+この例では、空のレスポンスを渡すことで、テキストの内部トーン一貫性が分析されます。これにより、スコアラーは単一の入力テキスト内の感情の安定性を評価し、テキスト全体でトーンがどの程度均一であるかを反映したスコアが得られます。
+
+```typescript filename="src/example-stable-tone.ts" showLineNumbers copy
+import { createToneScorer } from "@mastra/evals/scorers/code";
+
+const scorer = createToneScorer();
+
+const input = 'Great service! Friendly staff. Perfect atmosphere.';
+const output = '';
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: input }],
+  output: { role: 'assistant', text: output },
+});
+
+console.log('Score:', result.score);
+console.log('AnalyzeStepResult:', result.analyzeStepResult);
+```
+
+### 安定したトーンの出力
+
+スコアラーは、入力テキスト全体で一貫した感情を示す高いスコアを返します。`analyzeStepResult`フィールドには、平均感情と感情分散が含まれ、トーンの安定性を反映しています。
+
+```typescript
+{
+  score: 0.9444444444444444,
+  analyzeStepResult: {
+    avgSentiment: 1.3333333333333333,
+    sentimentVariance: 0.05555555555555556,
+  },
+}
+```
+
+
+
+## 混合トーンの例
+
+この例では、入力と応答が異なる感情的なトーンを持っています。スコアラーはこれらの変動を検出し、より低い一貫性スコアを与えます。
+
+```typescript filename="src/example-mixed-tone.ts" showLineNumbers copy
+import { createToneScorer } from "@mastra/evals/scorers/code";
+
+const scorer = createToneScorer();
+
+const input = 'The interface is frustrating and confusing, though it has potential.';
+const output = 'The design shows promise but needs significant improvements to be usable.';
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: input }],
+  output: { role: 'assistant', text: output },
+});
+
+console.log('Score:', result.score);
+console.log('AnalyzeStepResult:', result.analyzeStepResult);
+```
+
+### 混合トーンの出力
+
+スコアラーは感情的なトーンの顕著な違いにより低いスコアを返します。`analyzeStepResult`フィールドは感情値とそれらの間の変動の程度を強調表示します。
+
+```typescript
+{
+  score: 0.4181818181818182,
+  analyzeStepResult: {
+    responseSentiment: -0.4,
+    referenceSentiment: 0.18181818181818182,
+    difference: 0.5818181818181818,
+  },
+}
+```
+
+
+
+## Scorer configuration
+
+デフォルト設定で`ToneConsistencyScorer`インスタンスを作成できます。追加の設定は必要ありません。
+
+```typescript
+const scorer = createToneScorer();
+```
+
+> 設定オプションの完全なリストについては、[ToneConsistencyScorer](/reference/scorers/tone-consistency.mdx)を参照してください。
+
+
+
+## 結果の理解
+
+`.run()` は以下の形式で結果を返します：
+
+```typescript
+{
+  runId: string,
+  analyzeStepResult: {
+    responseSentiment?: number,
+    referenceSentiment?: number,
+    difference?: number,
+    avgSentiment?: number,
+    sentimentVariance?: number,
+  },
+  score: number
+}
+```
+
+### score
+0から1の間のトーン一貫性スコア：
+
+- **0.8–1.0**: 非常に一貫したトーン。
+- **0.6–0.7**: 一般的に一貫したトーン。
+- **0.4–0.5**: 混在したトーン。
+- **0.0–0.3**: 矛盾したトーン。
+
+### runId
+このスコアラー実行の一意識別子。
+
+### analyzeStepResult
+トーンメトリクスを含むオブジェクト：
+- **responseSentiment**: レスポンスのセンチメントスコア（比較モード）。
+- **referenceSentiment**: 入力/参照のセンチメントスコア（比較モード）。
+- **difference**: センチメントスコア間の絶対差（比較モード）。
+- **avgSentiment**: 文章全体の平均センチメント（安定性モード）。
+- **sentimentVariance**: 文章全体のセンチメント分散（安定性モード）。
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/scorers/tone-consistency"
+/>

@@ -1,0 +1,190 @@
+---
+title: "例: Answer Relevancy | Scorers | Mastra Docs"
+description: Answer Relevancyスコアラーを使用してクエリに対するレスポンスの関連性を評価する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+
+
+# Answer Relevancy Scorer
+
+`createAnswerRelevancyScorer`を使用して、レスポンスが元のクエリにどの程度関連しているかをスコア化します。
+
+
+
+## インストール
+
+```bash copy
+npm install @mastra/evals
+```
+
+> 完全なAPIドキュメントと設定オプションについては、[`createAnswerRelevancyScorer`](/reference/scorers/answer-relevancy)を参照してください。
+
+
+
+## 高関連性の例
+
+この例では、レスポンスが入力クエリに対して具体的で関連性の高い情報で正確に対応しています。
+
+```typescript filename="src/example-high-answer-relevancy.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") });
+
+const inputMessages = [{ role: 'user', content: "What are the health benefits of regular exercise?" }];
+const outputMessage = { text: "Regular exercise improves cardiovascular health, strengthens muscles, boosts metabolism, and enhances mental well-being through the release of endorphins." };
+
+const result = await scorer.run({
+  input: inputMessages,
+  output: outputMessage,
+});
+
+console.log(result);
+```
+
+### 高関連性の出力
+
+出力は、無関係な情報を含むことなくクエリに正確に答えているため、高いスコアを受け取ります。
+
+```typescript
+{
+  score: 1,
+  reason: 'The score is 1 because the output directly addresses the question by providing multiple explicit health benefits of regular exercise, including improvements in cardiovascular health, muscle strength, metabolism, and mental well-being. Each point is relevant and contributes to a comprehensive understanding of the health benefits.'
+}
+```
+
+
+
+## 部分的関連性の例
+
+この例では、レスポンスがクエリに部分的に対応していますが、直接関連しない追加情報が含まれています。
+
+```typescript filename="src/example-partial-answer-relevancy.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") });
+
+const inputMessages = [{ role: 'user', content: "What should a healthy breakfast include?" }];
+const outputMessage = { text: "A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day." };
+
+const result = await scorer.run({
+  input: inputMessages,
+  output: outputMessage,
+});
+
+console.log(result);
+```
+
+### 部分的関連性の出力
+
+出力は、クエリに部分的に答えているため、より低いスコアを受け取ります。関連する情報が一部含まれていますが、無関係な詳細が全体的な関連性を低下させています。
+
+```typescript
+{
+  score: 0.25,
+  reason: 'The score is 0.25 because the output provides a direct answer by mentioning whole grains and protein as components of a healthy breakfast, which is relevant. However, the additional information about the timing of breakfast and its effects on metabolism and energy levels is not directly related to the question, leading to a lower overall relevance score.'
+}
+```
+
+
+
+## 低関連性の例
+
+この例では、レスポンスがクエリに対処しておらず、完全に無関係な情報が含まれています。
+
+```typescript filename="src/example-low-answer-relevancy.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") });
+
+const inputMessages = [{ role: 'user', content: "What are the benefits of meditation?" }];
+const outputMessage = { text: "The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions." };
+
+const result = await scorer.run({
+  input: inputMessages,
+  output: outputMessage,
+});
+
+console.log(result);
+```
+
+### 低関連性の出力
+
+出力は、クエリに答えることができず、関連する情報を提供していないため、スコア0を受け取ります。
+
+```typescript
+{
+  score: 0,
+  reason: 'The score is 0 because the output about the Great Wall of China is completely unrelated to the benefits of meditation, providing no relevant information or context that addresses the input question.'
+}
+```
+
+
+
+## Scorer設定
+
+Answer Relevancy Scorerがスコアを計算する方法は、オプションパラメータを調整することでカスタマイズできます。例えば、`uncertaintyWeight`は不確実な回答にどの程度の重みを与えるかを制御し、`scale`は可能な最大スコアを設定します。
+
+```typescript showLineNumbers copy
+const scorer = createAnswerRelevancyScorer({ model: openai("gpt-4o-mini"), options: { uncertaintyWeight: 0.3, scale: 1 } });
+```
+> 設定オプションの完全なリストについては、[createAnswerRelevancyScorer](/reference/scorers/answer-relevancy.mdx)を参照してください。
+
+
+
+## 結果の理解
+
+`.run()`は以下の形式で結果を返します：
+
+```typescript
+{
+  runId: string,
+  score: number,
+  extractPrompt: string,
+  extractStepResult: { statements: string[] },
+  analyzePrompt: string,
+  analyzeStepResult: { results: Array<{ result: 'yes' | 'unsure' | 'no', reason: string }> },
+  reasonPrompt: string,
+  reason: string
+}
+```
+
+### score
+
+0から1の間の関連性スコア：
+
+- **1.0**: レスポンスがクエリに対して関連性があり焦点を絞った情報で完全に回答している。
+- **0.7–0.9**: レスポンスは主にクエリに回答しているが、軽微な無関係なコンテンツが含まれている可能性がある。
+- **0.4–0.6**: レスポンスは部分的にクエリに回答しており、関連する情報と無関係な情報が混在している。
+- **0.1–0.3**: レスポンスには最小限の関連コンテンツが含まれており、クエリの意図を大きく外している。
+- **0.0**: レスポンスは完全に無関係で、クエリに回答していない。
+
+### runId
+このスコアラー実行の一意識別子。
+
+### extractPrompt
+抽出ステップでLLMに送信されたプロンプト。
+
+### extractStepResult
+出力から抽出されたステートメント、例：`{ statements: string[] }`。
+
+### analyzePrompt
+分析ステップでLLMに送信されたプロンプト。
+
+### analyzeStepResult
+分析結果、例：`{ results: Array<{ result: 'yes' | 'unsure' | 'no', reason: string }> }`。
+
+### reasonPrompt
+理由ステップでLLMに送信されたプロンプト。
+
+### reason
+アライメント、焦点、改善提案を含むスコアの説明。
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/scorers/answer-relevancy"
+/>

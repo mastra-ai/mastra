@@ -5,9 +5,13 @@ description: OpenAIの埋め込みとPGVectorによるベクトルストレー�
 
 import { GithubLink } from "@/components/github-link";
 
+
+
 # Graph RAG
 
 この例では、Mastra、OpenAIの埋め込み、そしてベクトルストレージとしてPGVectorを使用して、検索拡張生成（RAG）システムを実装する方法を示します。
+
+
 
 ## 概要
 
@@ -22,6 +26,8 @@ import { GithubLink } from "@/components/github-link";
    - ツールはベクトルストアから結果を返し、ナレッジグラフを作成
    - クエリを使ってナレッジグラフをトラバース
 7. Mastra エージェントを用いてコンテキストに応じた応答を生成
+
+
 
 ## セットアップ
 
@@ -47,6 +53,8 @@ import { MDocument, createGraphRAGTool } from "@mastra/rag";
 import { embedMany } from "ai";
 ```
 
+
+
 ## GraphRAGツールの作成
 
 @mastra/ragからインポートしたcreateGraphRAGToolを使用すると、ベクターデータベースにクエリを実行し、その結果をナレッジグラフに変換するツールを作成できます。
@@ -62,6 +70,8 @@ const graphRagTool = createGraphRAGTool({
   },
 });
 ```
+
+
 
 ## エージェント設定
 
@@ -87,12 +97,16 @@ If the context doesn't contain enough information to fully answer the question, 
 });
 ```
 
+
+
 ## PgVector と Mastra のインスタンス化
 
 以下のコンポーネントを使って PgVector と Mastra をインスタンス化します。
 
 ```typescript copy showLineNumbers{36} filename="index.ts"
-const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
+const pgVector = new PgVector({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+});
 
 export const mastra = new Mastra({
   agents: { ragAgent },
@@ -100,6 +114,8 @@ export const mastra = new Mastra({
 });
 const agent = mastra.getAgent("ragAgent");
 ```
+
+
 
 ## ドキュメント処理
 
@@ -118,6 +134,8 @@ const chunks = await doc.chunk({
   separator: "\n",
 });
 ```
+
+
 
 ## 埋め込みの作成と保存
 
@@ -140,6 +158,8 @@ await vectorStore.upsert({
   metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
 });
 ```
+
+
 
 ## グラフベースのクエリ
 

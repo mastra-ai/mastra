@@ -1,0 +1,43 @@
+---
+title: "リファレンス: Agent.getAgent() | Agents | Mastra ドキュメント"
+description: "Mastra の `Agent.getAgent()` メソッドのドキュメント。エージェントを名前で取得します。"
+---
+
+# Mastra.getAgent()
+
+`.getAgent()` メソッドは、エージェントを取得するために使用します。エージェント名を表す単一の `string` パラメータを受け取ります。
+
+## 使用例
+
+```typescript copy
+mastra.getAgent("testAgent");
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "TAgentName extends keyof TAgents",
+      description: "取得するエージェントの名前。Mastra の構成に存在する有効なエージェント名である必要があります。",
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "agent",
+      type: "TAgents[TAgentName]",
+      description: "指定した名前のエージェントのインスタンス。見つからない場合はエラーをスローします。",
+    },
+  ]}
+/>
+
+## 関連
+
+- [エージェントの概要](../../docs/agents/overview.mdx)
+- [ダイナミックエージェント](../../docs/agents/dynamic-agents.mdx)

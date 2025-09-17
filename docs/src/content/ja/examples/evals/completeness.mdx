@@ -1,146 +1,212 @@
 ---
-title: "例: 完全性 | Evals | Mastra Docs"
-description: Completenessメトリクスを使用して、回答が入力要素をどれだけ網羅しているかを評価する例。
+title: "例: Completeness | Evals | Mastra Docs"
+description: 入力要素をどの程度網羅的にカバーできているかを評価するための Completeness メトリクスの使用例。
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
 
 # 完全性評価
 
-この例では、Mastra の Completeness メトリクスを使用して、回答が入力の主要な要素をどれだけ網羅しているかを評価する方法を示します。
+<ScorerCallout />
 
-## 概要
+`CompletenessMetric` を使用して、応答が入力の主要要素をすべて網羅しているかを評価します。このメトリクスは `query` と `response` を受け取り、スコアと、要素ごとの詳細な比較を含む `info` オブジェクトを返します。
 
-この例では、以下の方法を示します。
 
-1. Completenessメトリクスを設定する
-2. 要素の網羅性について回答を評価する
-3. カバレッジスコアを分析する
-4. 異なるカバレッジシナリオに対応する
 
-## セットアップ
+## インストール
 
-### 依存関係
-
-必要な依存関係をインポートします：
-
-```typescript copy showLineNumbers filename="src/index.ts"
-import { CompletenessMetric } from "@mastra/evals/nlp";
+```bash copy
+npm install @mastra/evals
 ```
 
-## メトリックの設定
 
-Completenessメトリックを設定します：
 
-```typescript copy showLineNumbers{4} filename="src/index.ts"
+## 完全網羅の例
+
+この例では、応答に入力のすべての要素が含まれています。内容は完全に一致しており、結果としてカバレッジは100%になります。
+
+```typescript filename="src/example-complete-coverage.ts" showLineNumbers copy
+import { CompletenessMetric } from "@mastra/evals/nlp";
+
+const metric = new CompletenessMetric();
+
+const query = "The primary colors are red, blue, and yellow.";
+const response = "The primary colors are red, blue, and yellow.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 完全網羅の出力
+
+出力は、応答に欠落がなく、すべての入力要素が含まれているため、スコアは1になります。
+
+```typescript
+{
+  score: 1,
+  info: {
+    inputElements: [
+      'the',    'primary',
+      'colors', 'be',
+      'red',    'blue',
+      'and',    'yellow'
+    ],
+    outputElements: [
+      'the',    'primary',
+      'colors', 'be',
+      'red',    'blue',
+      'and',    'yellow'
+    ],
+    missingElements: [],
+    elementCounts: { input: 8, output: 8 }
+  }
+}
+```
+
+
+
+## 部分的なカバレッジの例
+
+この例では、応答はすべての入力要素を含んでいますが、元のクエリにはなかった追加の内容も含まれています。
+
+```typescript filename="src/example-partial-coverage.ts" showLineNumbers copy
+import { CompletenessMetric } from "@mastra/evals/nlp";
+
+const metric = new CompletenessMetric();
+
+const query = "The primary colors are red and blue.";
+const response = "The primary colors are red, blue, and yellow.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 部分的なカバレッジの出力
+
+欠落している入力要素がないため、出力は高いスコアになります。ただし、応答には入力を超える追加の内容が含まれています。
+
+```typescript
+{
+  score: 1,
+  info: {
+    inputElements: [
+      'the',    'primary',
+      'colors', 'be',
+      'red',    'and',
+      'blue'
+    ],
+    outputElements: [
+      'the',    'primary',
+      'colors', 'be',
+      'red',    'blue',
+      'and',    'yellow'
+    ],
+    missingElements: [],
+    elementCounts: { input: 7, output: 8 }
+  }
+}
+```
+
+
+
+## 最小カバレッジの例
+
+この例では、応答は入力の要素の一部しか含んでいません。重要な用語が抜け落ちている、あるいは変更されており、その結果、カバレッジが低下しています。
+
+```typescript filename="src/example-minimal-coverage.ts" showLineNumbers copy
+import { CompletenessMetric } from "@mastra/evals/nlp";
+
+const metric = new CompletenessMetric();
+
+const query = "The seasons include summer.";
+const response = "The four seasons are spring, summer, fall, and winter.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 最小カバレッジの出力
+
+入力の要素が1つ以上欠落しているため、出力のスコアは低くなります。応答は一部重複していますが、元の内容を完全には反映していません。
+
+```typescript
+{
+  score: 0.75,
+  info: {
+    inputElements: [ 'the', 'seasons', 'summer', 'include' ],
+    outputElements: [
+      'the',     'four',
+      'seasons', 'spring',
+      'summer',  'winter',
+      'be',      'fall',
+      'and'
+    ],
+    missingElements: [ 'include' ],
+    elementCounts: { input: 4, output: 9 }
+  }
+}
+```
+
+
+
+## メトリクスの設定
+
+`CompletenessMetric` インスタンスはデフォルト設定で作成できます。追加の設定は不要です。
+
+```typescript showLineNumbers copy
 const metric = new CompletenessMetric();
 ```
+> 設定オプションの全一覧は [CompletenessMetric](/reference/evals/completeness.mdx) を参照してください。
 
-## 使用例
 
-### 完全カバレッジの例
 
-すべての要素をカバーしている応答を評価します：
+## 結果の解釈
 
-```typescript copy showLineNumbers{7} filename="src/index.ts"
-const text1 = "The primary colors are red, blue, and yellow.";
-const reference1 = "The primary colors are red, blue, and yellow.";
+`CompletenessMetric` は次の形式の結果を返します:
 
-console.log("Example 1 - Complete Coverage:");
-console.log("Text:", text1);
-console.log("Reference:", reference1);
-
-const result1 = await metric.measure(reference1, text1);
-console.log("Metric Result:", {
-  score: result1.score,
+```typescript
+{
+  score: number,
   info: {
-    missingElements: result1.info.missingElements,
-    elementCounts: result1.info.elementCounts,
-  },
-});
-// Example Output:
-// Metric Result: { score: 1, info: { missingElements: [], elementCounts: { input: 8, output: 8 } } }
-```
-
-### 部分的カバレッジの例
-
-一部の要素のみカバーしている応答を評価します：
-
-```typescript copy showLineNumbers{24} filename="src/index.ts"
-const text2 = "The primary colors are red and blue.";
-const reference2 = "The primary colors are red, blue, and yellow.";
-
-console.log("Example 2 - Partial Coverage:");
-console.log("Text:", text2);
-console.log("Reference:", reference2);
-
-const result2 = await metric.measure(reference2, text2);
-console.log("Metric Result:", {
-  score: result2.score,
-  info: {
-    missingElements: result2.info.missingElements,
-    elementCounts: result2.info.elementCounts,
-  },
-});
-// Example Output:
-// Metric Result: { score: 0.875, info: { missingElements: ['yellow'], elementCounts: { input: 8, output: 7 } } }
-```
-
-### 最小限カバレッジの例
-
-ごく少数の要素しかカバーしていない応答を評価します：
-
-```typescript copy showLineNumbers{41} filename="src/index.ts"
-const text3 = "The seasons include summer.";
-const reference3 = "The four seasons are spring, summer, fall, and winter.";
-
-console.log("Example 3 - Minimal Coverage:");
-console.log("Text:", text3);
-console.log("Reference:", reference3);
-
-const result3 = await metric.measure(reference3, text3);
-console.log("Metric Result:", {
-  score: result3.score,
-  info: {
-    missingElements: result3.info.missingElements,
-    elementCounts: result3.info.elementCounts,
-  },
-});
-// Example Output:
-// Metric Result: {
-//   score: 0.3333333333333333,
-//   info: {
-//     missingElements: [ 'four', 'spring', 'winter', 'be', 'fall', 'and' ],
-//     elementCounts: { input: 9, output: 4 }
-//   }
-// }
-```
-
-## 結果の理解
-
-この指標は以下を提供します：
-
-1. 0から1の間のスコア：
-
-   - 1.0: 完全なカバレッジ - すべての入力要素を含む
-   - 0.7-0.9: 高いカバレッジ - 主要な要素のほとんどを含む
-   - 0.4-0.6: 部分的なカバレッジ - 一部の主要な要素を含む
-   - 0.1-0.3: 低いカバレッジ - 主要な要素のほとんどが欠落
-   - 0.0: カバレッジなし - 出力に入力要素が全く含まれていない
-
-2. 詳細な分析内容：
-   - 見つかった入力要素のリスト
-   - 一致した出力要素のリスト
-   - 入力から欠落している要素
-   - 要素数の比較
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/completeness"
+    inputElements: string[],
+    outputElements: string[],
+    missingElements: string[],
+    elementCounts: {
+      input: number,
+      output: number
+    }
   }
+}
+
+```
+
+### 完全性スコア
+
+完全性スコアは 0 から 1 の範囲です:
+
+- **1.0**: すべての入力要素がレスポンスに含まれている。
+- **0.7–0.9**: 主要な要素の大半が含まれており、欠落は最小限。
+- **0.4–0.6**: 一部の入力要素は網羅されているが、重要なものが欠けている。
+- **0.1–0.3**: 一致した入力要素はわずかで、ほとんどが欠けている。
+- **0.0**: レスポンスに入力要素がまったく含まれていない。
+
+### 完全性情報
+
+スコアの根拠となる説明。詳細には次が含まれます:
+
+- クエリから抽出された入力要素
+- レスポンスで一致した出力要素
+- レスポンスから欠けている入力要素
+- 入力と出力の要素数の比較
+
+<GithubLink
+  outdated={true}
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/completeness"
 />

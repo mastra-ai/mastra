@@ -29,9 +29,10 @@ const useCodemirrorTheme = () => {
 export type SideDialogCodeSectionProps = {
   title: string;
   codeStr?: string;
+  simplified?: boolean;
 };
 
-export function SideDialogCodeSection({ codeStr = '', title }: SideDialogCodeSectionProps) {
+export function SideDialogCodeSection({ codeStr = '', title, simplified = false }: SideDialogCodeSectionProps) {
   const theme = useCodemirrorTheme();
   const [showAsMultilineText, setShowAsMultilineText] = useState(false);
   const hasMultilineText = useMemo(() => {
@@ -63,7 +64,15 @@ export function SideDialogCodeSection({ codeStr = '', title }: SideDialogCodeSec
           className={cn('bg-surface3 p-[1rem] overflow-auto text-icon4 text-[0.875rem] [&>div]:border-none break-all')}
         >
           {codeStr && (
-            <ReactCodeMirror extensions={[json(), EditorView.lineWrapping]} theme={theme} value={finalCodeStr} />
+            <>
+              {simplified ? (
+                <div className="text-icon4 text-[0.875rem] py-[1rem] font-mono break-all mx-[1.5rem]">
+                  <pre className="text-wrap">{codeStr}</pre>
+                </div>
+              ) : (
+                <ReactCodeMirror extensions={[json(), EditorView.lineWrapping]} theme={theme} value={finalCodeStr} />
+              )}
+            </>
           )}
         </div>
       </div>

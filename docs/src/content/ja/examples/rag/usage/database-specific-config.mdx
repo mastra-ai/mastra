@@ -1,0 +1,468 @@
+---
+title: "データベース固有の設定 | RAG | Mastra Examples"
+description: データベース固有の設定を使用してベクトル検索のパフォーマンスを最適化し、異なるベクトルストアの独自機能を活用する方法を学びます。
+---
+
+import { Tabs } from "nextra/components";
+
+
+
+# データベース固有の設定
+
+この例では、ベクトルクエリツールでデータベース固有の設定を使用して、パフォーマンスを最適化し、異なるベクトルストアの独自機能を活用する方法を示します。
+
+
+
+## マルチ環境セットアップ
+
+異なる環境に対して異なる設定を使用します：
+
+<Tabs items={['TypeScript', 'JavaScript']}>
+  <Tabs.Tab>
+    ```typescript
+    import { openai } from "@ai-sdk/openai";
+    import { createVectorQueryTool } from "@mastra/rag";
+    import { RuntimeContext } from "@mastra/core/runtime-context";
+
+    // Base configuration
+    const createSearchTool = (environment: 'dev' | 'staging' | 'prod') => {
+      return createVectorQueryTool({
+        vectorStoreName: "pinecone",
+        indexName: "documents",
+        model: openai.embedding("text-embedding-3-small"),
+        databaseConfig: {
+          pinecone: {
+            namespace: environment
+          }
+        }
+      });
+    };
+
+    // Create environment-specific tools
+    const devSearchTool = createSearchTool('dev');
+    const prodSearchTool = createSearchTool('prod');
+
+    // Or use runtime override
+    const dynamicSearchTool = createVectorQueryTool({
+      vectorStoreName: "pinecone", 
+      indexName: "documents",
+      model: openai.embedding("text-embedding-3-small")
+    });
+
+    // Switch environment at runtime
+    const switchEnvironment = async (environment: string, query: string) => {
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('databaseConfig', {
+        pinecone: {
+          namespace: environment
+        }
+      });
+
+      return await dynamicSearchTool.execute({
+        context: { queryText: query },
+        mastra,
+        runtimeContext
+      });
+    };
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```javascript
+    import { openai } from "@ai-sdk/openai";
+    import { createVectorQueryTool } from "@mastra/rag";
+    import { RuntimeContext } from "@mastra/core/runtime-context";
+
+    // Base configuration
+    const createSearchTool = (environment) => {
+      return createVectorQueryTool({
+        vectorStoreName: "pinecone",
+        indexName: "documents", 
+        model: openai.embedding("text-embedding-3-small"),
+        databaseConfig: {
+          pinecone: {
+            namespace: environment
+          }
+        }
+      });
+    };
+
+    // Create environment-specific tools
+    const devSearchTool = createSearchTool('dev');
+    const prodSearchTool = createSearchTool('prod');
+
+    // Or use runtime override
+    const dynamicSearchTool = createVectorQueryTool({
+      vectorStoreName: "pinecone",
+      indexName: "documents",
+      model: openai.embedding("text-embedding-3-small")
+    });
+
+    // Switch environment at runtime
+    const switchEnvironment = async (environment, query) => {
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('databaseConfig', {
+        pinecone: {
+          namespace: environment
+        }
+      });
+
+      return await dynamicSearchTool.execute({
+        context: { queryText: query },
+        mastra,
+        runtimeContext
+      });
+    };
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+
+
+## pgVectorによるパフォーマンス最適化
+
+異なる用途に応じて検索パフォーマンスを最適化します：
+
+<Tabs items={['高精度', '高速', 'バランス']}>
+  <Tabs.Tab>
+    ```typescript
+    // 高精度設定 - 遅いがより正確
+    const highAccuracyTool = createVectorQueryTool({
+      vectorStoreName: "postgres",
+      indexName: "embeddings",
+      model: openai.embedding("text-embedding-3-small"),
+      databaseConfig: {
+        pgvector: {
+          ef: 400,          // HNSWの高精度
+          probes: 20,       // IVFFlatの高再現率
+          minScore: 0.85    // 高品質閾値
+        }
+      }
+    });
+
+    // 精度が最重要な重要な検索に使用
+    const criticalSearch = async (query: string) => {
+      return await highAccuracyTool.execute({
+        context: { 
+          queryText: query,
+          topK: 5  // より少ない、高品質な結果
+        },
+        mastra
+      });
+    };
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```typescript
+    // 高速設定 - 速いが精度は低い
+    const highSpeedTool = createVectorQueryTool({
+      vectorStoreName: "postgres", 
+      indexName: "embeddings",
+      model: openai.embedding("text-embedding-3-small"),
+      databaseConfig: {
+        pgvector: {
+          ef: 50,           // 速度のため精度を下げる
+          probes: 3,        // 速度のため再現率を下げる
+          minScore: 0.6     // 品質閾値を下げる
+        }
+      }
+    });
+
+    // リアルタイムアプリケーションに使用
+    const realtimeSearch = async (query: string) => {
+      return await highSpeedTool.execute({
+        context: { 
+          queryText: query,
+          topK: 10  // 低精度を補うためより多くの結果
+        },
+        mastra
+      });
+    };
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```typescript
+    // バランス設定 - 良い妥協点
+    const balancedTool = createVectorQueryTool({
+      vectorStoreName: "postgres",
+      indexName: "embeddings", 
+      model: openai.embedding("text-embedding-3-small"),
+      databaseConfig: {
+        pgvector: {
+          ef: 150,          // 中程度の精度
+          probes: 8,        // 中程度の再現率
+          minScore: 0.7     // 中程度の品質閾値
+        }
+      }
+    });
+
+    // 負荷に基づいてパラメータを調整
+    const adaptiveSearch = async (query: string, isHighLoad: boolean) => {
+      const runtimeContext = new RuntimeContext();
+      
+      if (isHighLoad) {
+        // 高負荷時は速度のため品質を下げる
+        runtimeContext.set('databaseConfig', {
+          pgvector: {
+            ef: 75,
+            probes: 5,
+            minScore: 0.65
+          }
+        });
+      }
+
+      return await balancedTool.execute({
+        context: { queryText: query },
+        mastra,
+        runtimeContext
+      });
+    };
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+
+
+## Pineconeを使用したマルチテナントアプリケーション
+
+Pineconeの名前空間を使用してテナント分離を実装します：
+
+```typescript
+interface Tenant {
+  id: string;
+  name: string;
+  namespace: string;
+}
+
+class MultiTenantSearchService {
+  private searchTool: RagTool
+
+  constructor() {
+    this.searchTool = createVectorQueryTool({
+      vectorStoreName: "pinecone",
+      indexName: "shared-documents",
+      model: openai.embedding("text-embedding-3-small")
+    });
+  }
+
+  async searchForTenant(tenant: Tenant, query: string) {
+    const runtimeContext = new RuntimeContext();
+    
+    // Isolate search to tenant's namespace
+    runtimeContext.set('databaseConfig', {
+      pinecone: {
+        namespace: tenant.namespace
+      }
+    });
+
+    const results = await this.searchTool.execute({
+      context: { 
+        queryText: query,
+        topK: 10
+      },
+      mastra,
+      runtimeContext
+    });
+
+    // Add tenant context to results
+    return {
+      tenant: tenant.name,
+      query,
+      results: results.relevantContext,
+      sources: results.sources
+    };
+  }
+
+  async bulkSearchForTenants(tenants: Tenant[], query: string) {
+    const promises = tenants.map(tenant => 
+      this.searchForTenant(tenant, query)
+    );
+    
+    return await Promise.all(promises);
+  }
+}
+
+// Usage
+const searchService = new MultiTenantSearchService();
+
+const tenants = [
+  { id: '1', name: 'Company A', namespace: 'company-a' },
+  { id: '2', name: 'Company B', namespace: 'company-b' }
+];
+
+const results = await searchService.searchForTenant(
+  tenants[0], 
+  "product documentation"
+);
+```
+
+
+
+## Pineconeでのハイブリッド検索
+
+セマンティック検索とキーワード検索を組み合わせる：
+
+```typescript
+const hybridSearchTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "documents",
+  model: openai.embedding("text-embedding-3-small"),
+  databaseConfig: {
+    pinecone: {
+      namespace: "production",
+      sparseVector: {
+        // Example sparse vector for keyword "API"
+        indices: [1, 5, 10, 15],
+        values: [0.8, 0.6, 0.4, 0.2]
+      }
+    }
+  }
+});
+
+// Helper function to generate sparse vectors for keywords
+const generateSparseVector = (keywords: string[]) => {
+  // This is a simplified example - in practice, you'd use
+  // a proper sparse encoding method like BM25
+  const indices: number[] = [];
+  const values: number[] = [];
+  
+  keywords.forEach((keyword, i) => {
+    const hash = keyword.split('').reduce((a, b) => {
+      a = ((a << 5) - a) + b.charCodeAt(0);
+      return a & a;
+    }, 0);
+    
+    indices.push(Math.abs(hash) % 1000);
+    values.push(1.0 / (i + 1)); // Decrease weight for later keywords
+  });
+  
+  return { indices, values };
+};
+
+const hybridSearch = async (query: string, keywords: string[]) => {
+  const runtimeContext = new RuntimeContext();
+  
+  if (keywords.length > 0) {
+    const sparseVector = generateSparseVector(keywords);
+    runtimeContext.set('databaseConfig', {
+      pinecone: {
+        namespace: "production",
+        sparseVector
+      }
+    });
+  }
+
+  return await hybridSearchTool.execute({
+    context: { queryText: query },
+    mastra,
+    runtimeContext
+  });
+};
+
+// Usage
+const results = await hybridSearch(
+  "How to use the REST API",
+  ["API", "REST", "documentation"]
+);
+```
+
+
+
+## Quality-Gated Search
+
+段階的な検索品質を実装する：
+
+```typescript
+const createQualityGatedSearch = () => {
+  const baseConfig = {
+    vectorStoreName: "postgres",
+    indexName: "embeddings",
+    model: openai.embedding("text-embedding-3-small")
+  };
+
+  return {
+    // High quality search first
+    highQuality: createVectorQueryTool({
+      ...baseConfig,
+      databaseConfig: {
+        pgvector: {
+          minScore: 0.85,
+          ef: 200,
+          probes: 15
+        }
+      }
+    }),
+    
+    // Medium quality fallback
+    mediumQuality: createVectorQueryTool({
+      ...baseConfig,
+      databaseConfig: {
+        pgvector: {
+          minScore: 0.7,
+          ef: 150,
+          probes: 10
+        }
+      }
+    }),
+    
+    // Low quality last resort
+    lowQuality: createVectorQueryTool({
+      ...baseConfig,
+      databaseConfig: {
+        pgvector: {
+          minScore: 0.5,
+          ef: 100,
+          probes: 5
+        }
+      }
+    })
+  };
+};
+
+const progressiveSearch = async (query: string, minResults: number = 3) => {
+  const tools = createQualityGatedSearch();
+  
+  // Try high quality first
+  let results = await tools.highQuality.execute({
+    context: { queryText: query },
+    mastra
+  });
+  
+  if (results.sources.length >= minResults) {
+    return { quality: 'high', ...results };
+  }
+  
+  // Fallback to medium quality
+  results = await tools.mediumQuality.execute({
+    context: { queryText: query },
+    mastra
+  });
+  
+  if (results.sources.length >= minResults) {
+    return { quality: 'medium', ...results };
+  }
+  
+  // Last resort: low quality
+  results = await tools.lowQuality.execute({
+    context: { queryText: query },
+    mastra
+  });
+  
+  return { quality: 'low', ...results };
+};
+
+// Usage
+const results = await progressiveSearch("complex technical query", 5);
+console.log(`Found ${results.sources.length} results with ${results.quality} quality`);
+```
+
+
+
+## 重要なポイント
+
+1. **環境の分離**: 名前空間を使用して環境やテナントごとにデータを分離する
+2. **パフォーマンスチューニング**: 精度と速度の要件に基づいてef/probesパラメータを調整する
+3. **品質管理**: minScoreを使用して低品質のマッチを除外する
+4. **実行時の柔軟性**: コンテキストに基づいて設定を動的にオーバーライドする
+5. **段階的品質**: 異なる品質レベルに対するフォールバック戦略を実装する
+
+このアプローチにより、柔軟性とパフォーマンスを維持しながら、特定のユースケースに対してベクトル検索を最適化することができます。 

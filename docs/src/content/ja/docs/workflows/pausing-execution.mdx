@@ -1,0 +1,150 @@
+---
+title: "実行の一時停止 | Mastra Docs"
+description: "Mastraワークフローでの実行の一時停止により、.sleep()、.sleepUntil()、.waitForEvent()を使用して外部入力やリソースを待機している間、実行を一時停止できます。"
+---
+
+
+
+# Sleep & Events
+
+Mastraでは、外部入力やタイミング条件を待つ際にワークフローの実行を一時停止できます。これは、ポーリング、遅延リトライ、ユーザーアクションの待機などに役立ちます。
+
+以下の方法で実行を一時停止できます：
+
+- `sleep()`: 指定したミリ秒数だけ一時停止
+- `sleepUntil()`: 特定のタイムスタンプまで一時停止
+- `waitForEvent()`: 外部イベントを受信するまで一時停止
+- `sendEvent()`: 待機中のワークフローを再開するためのイベントを送信
+
+これらのメソッドのいずれかを使用すると、実行が再開されるまでワークフローのステータスは`waiting`に設定されます。
+
+
+
+## `.sleep()`による一時停止
+
+`sleep()`メソッドは、指定されたミリ秒数の間、ステップ間の実行を一時停止します。
+
+```typescript {9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .sleep(1000)
+  .then(step2)
+  .commit();
+```
+
+### `.sleep(callback)`による一時停止
+
+`sleep()`メソッドは、一時停止するミリ秒数を返すコールバックも受け取ることができます。コールバックは`inputData`を受け取るため、遅延を動的に計算することができます。
+
+```typescript {9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .sleep(async ({ inputData }) => {
+    const { delayInMs }  = inputData
+    return delayInMs;
+  })
+  .then(step2)
+  .commit();
+```
+
+
+
+## `.sleepUntil()`による一時停止
+
+`sleepUntil()`メソッドは、指定された日時まで、ステップ間の実行を一時停止します。
+
+```typescript {9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .sleepUntil(new Date(Date.now() + 5000))
+  .then(step2)
+  .commit();
+```
+
+### `.sleepUntil(callback)`による一時停止
+
+`sleepUntil()`メソッドは、`Date`オブジェクトを返すコールバックも受け取ることができます。コールバックは`inputData`を受け取るため、対象時刻を動的に計算することができます。
+
+```typescript {9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .sleepUntil(async ({ inputData }) => {
+    const { delayInMs }  = inputData
+    return new Date(Date.now() + delayInMs);
+  })
+  .then(step2)
+  .commit();
+```
+
+
+> `Date.now()`は、`sleepUntil()`メソッドが呼び出された瞬間ではなく、ワークフローが開始されたときに評価されます。
+
+
+
+## `.waitForEvent()`による一時停止
+
+`waitForEvent()`メソッドは、特定のイベントを受信するまで実行を一時停止します。イベントを送信するには`run.sendEvent()`を使用します。イベント名と再開するステップの両方を提供する必要があります。
+
+![.waitForEvent()による一時停止](/image/workflows/workflows-sleep-events-waitforevent.jpg)
+
+```typescript {10} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+const step3 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .waitForEvent("my-event-name", step2)
+  .then(step3)
+  .commit();
+```
+## `.sendEvent()`によるイベント送信
+
+`.sendEvent()`メソッドはワークフローにイベントを送信します。イベント名とオプションのイベントデータを受け取り、イベントデータはJSONシリアライズ可能な任意の値にできます。
+
+```typescript {5,12,15} filename="src/test-workflow.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+
+const result = run.start({
+  inputData: {
+    value: "hello"
+  }
+});
+
+setTimeout(() => {
+  run.sendEvent("my-event-name", { value: "from event" });
+}, 3000);
+
+console.log(JSON.stringify(await result, null, 2));
+```
+
+> この例では、`await run.start()`を直接使用することは避けてください。ワークフローが待機状態に到達する前にイベント送信をブロックしてしまいます。

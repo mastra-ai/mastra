@@ -1,0 +1,196 @@
+---
+title: "例: スーパーバイザーエージェント | エージェント | Mastra"
+description: Mastra を使ってスーパーバイザーエージェントを作成し、エージェント同士がツール関数を通じてやり取りする例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+
+
+# 監督エージェント
+
+複雑なAIアプリケーションを構築する際には、タスクの異なる側面に取り組む複数の専門エージェントが連携する必要があります。監督エージェントは、あるエージェントが監督者として振る舞い、各自の専門領域に特化した他のエージェントの作業を調整できるようにします。この構造により、エージェントは委任し、協働し、単独のエージェントでは実現できない高度な成果を生み出せます。
+
+この例では、システムは3つのエージェントで構成されています:
+
+1. 初期コンテンツを作成する[**Copywriter エージェント**](#copywriter-agent)。
+2. コンテンツを洗練する[**Editor エージェント**](#editor-agent)。
+3. 他のエージェントを監督・調整する[**Publisher エージェント**](#publisher-agent)。
+
+
+
+## 前提条件
+
+このサンプルでは `openai` モデルを使用します。.env ファイルに `OPENAI_API_KEY` を追加してください。
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+```
+
+
+
+## コピーライターエージェント
+
+この `copywriterAgent` は、与えられたトピックに基づいてブログ記事の初稿を作成します。
+
+```typescript filename="src/mastra/agents/example-copywriter-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+export const copywriterAgent = new Agent({
+  name: "copywriter-agent",
+  instructions: "You are a copywriter agent that writes blog post copy.",
+  model: openai("gpt-4o")
+});
+```
+
+
+
+## コピーライター・ツール
+
+`copywriterTool` は `copywriterAgent` を呼び出し、`topic` を渡すためのインターフェースを提供します。
+
+```typescript filename="src/mastra/tools/example-copywriter-tool.ts"
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const copywriterTool = createTool({
+  id: "copywriter-agent",
+  description: "Calls the copywriter agent to write blog post copy.",
+  inputSchema: z.object({
+    topic: z.string()
+  }),
+  outputSchema: z.object({
+    copy: z.string()
+  }),
+  execute: async ({ context, mastra }) => {
+    const { topic } = context;
+
+    const agent = mastra!.getAgent("copywriterAgent");
+    const result = await agent!.generate(`Create a blog post about ${topic}`);
+
+    return {
+      copy: result.text
+    };
+  }
+});
+```
+
+
+
+## 編集エージェント
+
+この `editorAgent` は初稿を受け取り、品質と読みやすさを高めるためにブラッシュアップします。
+
+```typescript filename="src/mastra/agents/example-editor-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+export const editorAgent = new Agent({
+  name: "Editor",
+  instructions: "You are an editor agent that edits blog post copy.",
+  model: openai("gpt-4o-mini")
+});
+```
+
+
+
+## Editor ツール
+
+`editorTool` は `editorAgent` を呼び出すためのインターフェースを提供し、`copy` を引き渡します。
+
+```typescript filename="src/mastra/tools/example-editor-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const editorTool = createTool({
+  id: "editor-agent",
+  description: "ブログ記事の本文を編集するためにエディターエージェントを呼び出します。",
+  inputSchema: z.object({
+    copy: z.string()
+  }),
+  outputSchema: z.object({
+    copy: z.string()
+  }),
+  execute: async ({ context, mastra }) => {
+    const { copy } = context;
+
+    const agent = mastra!.getAgent("editorAgent");
+    const result = await agent.generate(`次のブログ記事を編集し、編集後の本文のみを返してください: ${copy}`);
+
+    return {
+      copy: result.text
+    };
+  }
+});
+```
+
+
+
+## Publisher agent
+
+この`publisherAgent`は、まず`copywriterTool`を呼び出し、続いて`editorTool`を呼び出して、プロセス全体をオーケストレーションします。
+
+```typescript filename="src/mastra/agents/example-publisher-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+import { copywriterTool } from "../tools/example-copywriter-tool";
+import { editorTool } from "../tools/example-editor-tool";
+
+export const publisherAgent = new Agent({
+  name: "publisherAgent",
+  instructions:
+    "You are a publisher agent that first calls the copywriter agent to write blog post copy about a specific topic and then calls the editor agent to edit the copy. Just return the final edited copy.",
+  model: openai("gpt-4o-mini"),
+  tools: { copywriterTool, editorTool }
+});
+```
+
+
+
+## エージェントの登録
+
+3つのエージェントはすべて、相互にアクセスできるようメインの Mastra インスタンスに登録されています。
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+
+import { publisherAgent } from "./agents/example-publisher-agent";
+import { copywriterAgent } from "./agents/example-copywriter-agent";
+import { editorAgent } from "./agents/example-editor-agent";
+
+export const mastra = new Mastra({
+  agents: { copywriterAgent, editorAgent, publisherAgent }
+});
+```
+
+
+
+## 使用例
+
+`getAgent()` を使ってエージェントの参照を取得し、プロンプトを渡して `generate()` を呼び出します。
+
+```typescript filename="src/test-publisher-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("publisherAgent");
+
+const response = await agent.generate("Write a blog post about React JavaScript frameworks. Only return the final edited copy.");
+
+console.log(response.text);
+```
+
+<GithubLink
+  outdated={true}
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/hierarchical-multi-agent"
+/>
+
+
+
+## 関連項目
+
+- [エージェントの呼び出し](./calling-agents.mdx#from-the-command-line)

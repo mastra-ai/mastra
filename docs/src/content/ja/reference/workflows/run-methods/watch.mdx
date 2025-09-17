@@ -1,0 +1,88 @@
+---
+title: "リファレンス: Run.watch() | Workflows | Mastra ドキュメント"
+description: ワークフローで使用する `Run.watch()` メソッドのドキュメント。ワークフロー実行の進行状況を監視できます。
+---
+
+
+
+# Run.watch()
+
+`.watch()` メソッドを使うと、ワークフロー実行の進行状況を監視し、各ステップの状態に関する更新をリアルタイムで受け取れます。
+
+
+
+## 使い方の例
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+run.watch((event) => {
+  console.log(event?.payload?.currentStep?.id);
+});
+
+const result = await run.start({ inputData: { value: "initial data" } });
+```
+
+
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "callback",
+      type: "(event: WatchEvent) => void",
+      description: "ステップの完了時やワークフローの状態が変化したときに呼び出されるコールバック関数。event パラメータには、type（'watch'）、payload（currentStep と workflowState）、eventTimestamp が含まれます。",
+      isOptional: false,
+    },
+    {
+      name: "type",
+      type: "'watch' | 'watch-v2'",
+      description: "受信する watch イベントの種類。ステップ完了イベントには 'watch'、データストリームイベントには 'watch-v2' を指定します。",
+      isOptional: true,
+      defaultValue: "'watch'",
+    },
+  ]}
+/>
+
+
+
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "unwatch",
+      type: "() => void",
+      description:
+        "ワークフロー実行の監視を停止するために呼び出せる関数",
+    },
+  ]}
+/>
+
+
+
+## 拡張された使用例
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+run.watch((event) => {
+  console.log(event?.payload?.currentStep?.id);
+}, "watch");
+
+const result = await run.start({ inputData: { value: "initial data" } });
+```
+
+
+
+## 関連項目
+
+
+
+## 関連情報
+
+- [Workflows の概要](../../../docs/workflows/overview.mdx#run-workflow)
+- [Workflow.createRunAsync()](../create-run.mdx)
+- [ワークフローの監視](../../../docs/workflows/overview.mdx#watch-workflow)

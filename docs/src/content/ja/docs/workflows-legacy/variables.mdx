@@ -1,0 +1,332 @@
+---
+title: "ワークフロー（レガシー）変数によるデータマッピング | Mastra ドキュメント"
+description: "ワークフロー変数を使用してステップ間でデータをマッピングし、Mastra ワークフローで動的なデータフローを作成する方法を学びます。"
+---
+
+
+
+# ワークフロー変数によるデータマッピング
+
+Mastraのワークフロー変数は、ステップ間でデータをマッピングするための強力な仕組みを提供し、動的なデータフローの作成や、あるステップから別のステップへ情報を渡すことができます。
+
+
+
+## ワークフロー変数の理解
+
+Mastra のワークフローでは、変数は次のような目的で使用されます：
+
+- トリガー入力からステップ入力へのデータのマッピング
+- あるステップの出力を別のステップの入力へ渡す
+- ステップ出力内のネストされたプロパティへアクセスする
+- より柔軟で再利用可能なワークフローステップを作成する
+
+
+
+## データマッピングのための変数の使用
+
+### 基本的な変数マッピング
+
+ワークフローにステップを追加する際、`variables` プロパティを使ってステップ間でデータをマッピングできます。
+
+```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+
+const workflow = new LegacyWorkflow({
+  name: "data-mapping-workflow",
+  triggerSchema: z.object({
+    inputData: z.string(),
+  }),
+});
+
+workflow
+  .step(step1, {
+    variables: {
+      // Map trigger data to step input
+      inputData: { step: "trigger", path: "inputData" },
+    },
+  })
+  .then(step2, {
+    variables: {
+      // Map output from step1 to input for step2
+      previousValue: { step: step1, path: "outputField" },
+    },
+  })
+  .commit();
+
+// Register the workflow with Mastra
+export const mastra = new Mastra({
+  legacy_workflows: { workflow },
+});
+```
+
+### ネストされたプロパティへのアクセス
+
+`path` フィールドでドット記法を使うことで、ネストされたプロパティにアクセスできます。
+
+```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
+workflow
+  .step(step1)
+  .then(step2, {
+    variables: {
+      // Access a nested property from step1's output
+      nestedValue: { step: step1, path: "nested.deeply.value" },
+    },
+  })
+  .commit();
+```
+
+### オブジェクト全体のマッピング
+
+`path` に `.` を指定することで、オブジェクト全体をマッピングできます。
+
+```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
+workflow
+  .step(step1, {
+    variables: {
+      // Map the entire trigger data object
+      triggerData: { step: "trigger", path: "." },
+    },
+  })
+  .commit();
+```
+
+### ループ内での変数の利用
+
+変数は `while` や `until` ループにも渡すことができます。これは、イテレーション間や外部ステップからデータを受け渡す際に便利です。
+
+```typescript showLineNumbers filename="src/mastra/workflows/loop-variables.ts" copy
+// Step that increments a counter
+const incrementStep = new LegacyStep({
+  id: "increment",
+  inputSchema: z.object({
+    // Previous value from last iteration
+    prevValue: z.number().optional(),
+  }),
+  outputSchema: z.object({
+    // Updated counter value
+    updatedCounter: z.number(),
+  }),
+  execute: async ({ context }) => {
+    const { prevValue = 0 } = context.inputData;
+    return { updatedCounter: prevValue + 1 };
+  },
+});
+
+const workflow = new LegacyWorkflow({
+  name: "counter",
+});
+
+workflow.step(incrementStep).while(
+  async ({ context }) => {
+    // Continue while counter is less than 10
+    const result = context.getStepResult(incrementStep);
+    return (result?.updatedCounter ?? 0) < 10;
+  },
+  incrementStep,
+  {
+    // Pass previous value to next iteration
+    prevValue: {
+      step: incrementStep,
+      path: "updatedCounter",
+    },
+  },
+);
+```
+
+
+
+## 変数の解決
+
+ワークフローが実行されると、Mastra は実行時に変数を次の手順で解決します。
+
+1. `step` プロパティで指定されたソースステップを特定する
+2. そのステップから出力を取得する
+3. `path` を使って指定されたプロパティに移動する
+4. 解決された値をターゲットステップのコンテキスト内の `inputData` プロパティとして挿入する
+
+
+
+## 例
+
+### トリガーデータからのマッピング
+
+この例では、ワークフロートリガーからステップへのデータのマッピング方法を示します。
+
+```typescript showLineNumbers filename="src/mastra/workflows/trigger-mapping.ts" copy
+import { Mastra } from "@mastra/core";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
+
+// Define a step that needs user input
+const processUserInput = new LegacyStep({
+  id: "processUserInput",
+  execute: async ({ context }) => {
+    // The inputData will be available in context because of the variable mapping
+    const { inputData } = context.inputData;
+
+    return {
+      processedData: `Processed: ${inputData}`,
+    };
+  },
+});
+
+// Create the workflow
+const workflow = new LegacyWorkflow({
+  name: "trigger-mapping",
+  triggerSchema: z.object({
+    inputData: z.string(),
+  }),
+});
+
+// Map the trigger data to the step
+workflow
+  .step(processUserInput, {
+    variables: {
+      inputData: { step: "trigger", path: "inputData" },
+    },
+  })
+  .commit();
+
+// Register the workflow with Mastra
+export const mastra = new Mastra({
+  legacy_workflows: { workflow },
+});
+```
+
+### ステップ間のマッピング
+
+この例では、あるステップから別のステップへのデータのマッピング方法を示します。
+
+```typescript showLineNumbers filename="src/mastra/workflows/step-mapping.ts" copy
+import { Mastra } from "@mastra/core";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
+
+// Step 1: Generate data
+const generateData = new LegacyStep({
+  id: "generateData",
+  outputSchema: z.object({
+    nested: z.object({
+      value: z.string(),
+    }),
+  }),
+  execute: async () => {
+    return {
+      nested: {
+        value: "step1-data",
+      },
+    };
+  },
+});
+
+// Step 2: Process the data from step 1
+const processData = new LegacyStep({
+  id: "processData",
+  inputSchema: z.object({
+    previousValue: z.string(),
+  }),
+  execute: async ({ context }) => {
+    // previousValue will be available because of the variable mapping
+    const { previousValue } = context.inputData;
+
+    return {
+      result: `Processed: ${previousValue}`,
+    };
+  },
+});
+
+// Create the workflow
+const workflow = new LegacyWorkflow({
+  name: "step-mapping",
+});
+
+// Map data from step1 to step2
+workflow
+  .step(generateData)
+  .then(processData, {
+    variables: {
+      // Map the nested.value property from generateData's output
+      previousValue: { step: generateData, path: "nested.value" },
+    },
+  })
+  .commit();
+
+// Register the workflow with Mastra
+export const mastra = new Mastra({
+  legacy_workflows: { workflow },
+});
+```
+
+
+
+## 型安全性
+
+Mastraは、TypeScriptを使用する際に変数マッピングの型安全性を提供します。
+
+```typescript showLineNumbers filename="src/mastra/workflows/type-safe.ts" copy
+import { Mastra } from "@mastra/core";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
+
+// Define schemas for better type safety
+const triggerSchema = z.object({
+  inputValue: z.string(),
+});
+
+type TriggerType = z.infer<typeof triggerSchema>;
+
+// Step with typed context
+const step1 = new LegacyStep({
+  id: "step1",
+  outputSchema: z.object({
+    nested: z.object({
+      value: z.string(),
+    }),
+  }),
+  execute: async ({ context }) => {
+    // TypeScript knows the shape of triggerData
+    const triggerData = context.getStepResult<TriggerType>("trigger");
+
+    return {
+      nested: {
+        value: `processed-${triggerData?.inputValue}`,
+      },
+    };
+  },
+});
+
+// Create the workflow with the schema
+const workflow = new LegacyWorkflow({
+  name: "type-safe-workflow",
+  triggerSchema,
+});
+
+workflow.step(step1).commit();
+
+// Register the workflow with Mastra
+export const mastra = new Mastra({
+  legacy_workflows: { workflow },
+});
+```
+
+
+
+## ベストプラクティス
+
+1. **入力と出力を検証する**: `inputSchema` と `outputSchema` を使用してデータの一貫性を確保しましょう。
+
+2. **マッピングをシンプルに保つ**: 可能な限り、過度に複雑なネストされたパスは避けましょう。
+
+3. **デフォルト値を考慮する**: マッピングされたデータが未定義の場合の対応を行いましょう。
+
+
+
+## 直接コンテキストアクセスとの比較
+
+`context.steps` を使って前のステップの結果に直接アクセスすることもできますが、変数マッピングを使用することでいくつかの利点があります。
+
+| 機能        | 変数マッピング                                 | 直接コンテキストアクセス             |
+| ----------- | ------------------------------------------- | ------------------------------- |
+| 明確さ      | データ依存関係が明示的                        | 依存関係が暗黙的                   |
+| 再利用性    | ステップを異なるマッピングで再利用可能         | ステップが密接に結合されている       |
+| 型安全性    | TypeScript との統合がより良い                 | 手動で型アサーションが必要           |

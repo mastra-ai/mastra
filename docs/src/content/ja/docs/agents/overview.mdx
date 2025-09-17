@@ -1,303 +1,327 @@
 ---
-title: "エージェントの作成と呼び出し | エージェントドキュメンテーション | Mastra"
-description: Mastraにおけるエージェントの概要、その機能とツール、ワークフロー、外部システムとの連携方法の詳細。
+title: "エージェント概要 | エージェント ドキュメント | Mastra"
+description: Mastra におけるエージェントの概要。エージェントの機能や、ツール、ワークフロー、外部システムとの連携方法について解説します。
 ---
 
-# エージェントの作成と呼び出し
+import { Steps } from "nextra/components";
 
-Mastraのエージェントは、言語モデルがタスクを実行するために一連のアクションを自律的に決定できるシステムです。エージェントはツール、ワークフロー、同期されたデータにアクセスでき、複雑なタスクを実行し、外部システムと対話することができます。エージェントはカスタム関数を呼び出したり、インテグレーションを通じてサードパーティAPIを利用したり、構築した知識ベースにアクセスしたりすることができます。
 
-エージェントは、継続的なプロジェクトに使用できる従業員のようなものです。彼らには名前、永続的なメモリ、一貫したモデル構成、呼び出し間での一貫した指示、そして有効化されたツールのセットがあります。
 
-## 1. エージェントの作成
+# エージェントの使用
 
-Mastraでエージェントを作成するには、`Agent`クラスを使用してそのプロパティを定義します：
+エージェントを使用すると、言語モデルを活用して意思決定を行い、アクションを実行できるインテリジェントなアシスタントを構築できます。各エージェントには必須の指示とLLMがあり、オプションでツールとメモリを持ちます。
 
-```ts showLineNumbers filename="src/mastra/agents/index.ts" copy
-import { Agent } from "@mastra/core/agent";
+エージェントは会話を調整し、必要に応じてツールを呼び出し、メモリを通じてコンテキストを維持し、やり取りに応じた応答を生成します。エージェントは単独で動作することも、より大きなワークフローの一部として機能することもできます。
+
+![Agents overview](/image/agents/agents-overview.jpg)
+
+エージェントを作成するには：
+
+- `Agent`クラスで**指示**を定義し、使用する**LLM**を設定します。
+- オプションで**ツール**と**メモリ**を設定して機能を拡張します。
+- エージェントを実行して応答を生成します。ストリーミング、構造化出力、動的設定をサポートしています。
+
+このアプローチは型安全性とランタイム検証を提供し、すべてのエージェントのやり取りにおいて信頼性の高い動作を保証します。
+
+> **📹 視聴**：  → エージェントの紹介とワークフローとの比較 [YouTube（7分）](https://youtu.be/0jg2g3sNvgw)
+
+
+
+## はじめに
+
+エージェントを使用するには、必要な依存関係をインストールします：
+
+```bash
+npm install @mastra/core @ai-sdk/openai
+```
+
+> MastraはすべてのAI SDKプロバイダーに対応しています。詳細については[モデルプロバイダー](../getting-started/model-providers.mdx)をご覧ください。
+
+エージェントモジュールから必要なクラスとLLMプロバイダーをインポートします：
+
+```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+```
+### LLMプロバイダー
 
-export const myAgent = new Agent({
-  name: "My Agent",
+各LLMプロバイダーには、プロバイダーの識別子を使用して命名された専用のAPIキーが必要です：
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+```
+
+> Vercel AI SDKドキュメントの[AI SDKプロバイダー](https://ai-sdk.dev/providers/ai-sdk-providers)をご覧ください。
+
+### エージェントの作成
+
+Mastraでエージェントを作成するには、`Agent`クラスを使用します。すべてのエージェントには、動作を定義する`instructions`と、LLMプロバイダーとモデルを指定する`model`パラメータが必要です：
+
+```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+export const testAgent = new Agent({
+  name: "test-agent",
   instructions: "You are a helpful assistant.",
-  model: openai("gpt-4o-mini"),
+  model: openai("gpt-4o-mini")
 });
 ```
 
-**注意:** OpenAI APIキーなどの必要な環境変数を`.env`ファイルに設定していることを確認してください：
+> 詳細については[エージェント](../../reference/agents/agent.mdx)をご覧ください。
 
-```.env filename=".env" copy
-OPENAI_API_KEY=your_openai_api_key
-```
-
-また、`@mastra/core`パッケージがインストールされていることを確認してください：
-
-```bash npm2yarn copy
-npm install @mastra/core@latest
-```
 
 ### エージェントの登録
 
-エージェントをMastraに登録して、ロギングや設定されたツールと統合へのアクセスを有効にします：
+Mastraインスタンスにエージェントを登録します：
 
-```ts showLineNumbers filename="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core";
-import { myAgent } from "./agents";
+```typescript showLineNumbers filename="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core/mastra";
+import { testAgent } from './agents/test-agent';
 
 export const mastra = new Mastra({
-  agents: { myAgent },
+  // ...
+  agents: { testAgent },
 });
 ```
 
-## 2. テキストの生成とストリーミング
+
+
+## エージェントの参照
+
+ワークフローステップ、ツール、Mastraクライアント、またはコマンドラインからエージェントを呼び出すことができます。セットアップに応じて、`mastra`または`mastraClient`インスタンスの`.getAgent()`を呼び出して参照を取得します：
+
+```typescript showLineNumbers copy
+const testAgent = mastra.getAgent("testAgent");
+```
+
+> 詳細については、[エージェントの呼び出し](../../examples/agents/calling-agents.mdx)を参照してください。
+
+
+
+## レスポンスの生成
+
+エージェントからレスポンスを取得するには`.generate()`を使用します。シンプルなプロンプトには単一の文字列を、複数のコンテキストを提供する場合は文字列の配列を、ロールと会話フローを正確に制御する場合は`role`と`content`を含むメッセージオブジェクトの配列を渡します。
+
+> 詳細については[.generate()](../../reference/agents/generate.mdx)を参照してください。
 
 ### テキストの生成
 
-エージェントにテキスト応答を生成させるには、`.generate()`メソッドを使用します：
+`role`と`content`を含むメッセージオブジェクトの配列を使用して`.generate()`を呼び出します：
 
-```ts showLineNumbers filename="src/mastra/index.ts" copy
-const response = await myAgent.generate([
-  { role: "user", content: "Hello, how can you assist me today?" },
+```typescript showLineNumbers copy
+const response = await testAgent.generate([
+  { role: "user", content: "一日のスケジュールを整理するのを手伝って" },
+  { role: "user", content: "私の一日は午前9時に始まり、午後5時30分に終わります" },
+  { role: "user", content: "昼食は12時30分から13時30分の間に取ります" },
+  { role: "user", content: "月曜日から金曜日まで10時30分から11時30分の間に会議があります" }
 ]);
 
-console.log("Agent:", response.text);
+console.log(response.text);
 ```
 
-generateメソッドとそのオプションの詳細については、[generate リファレンスドキュメント](/reference/agents/generate)を参照してください。
 
-### レスポンスのストリーミング
 
-よりリアルタイムなレスポンスを得るには、エージェントのレスポンスをストリーミングできます：
+## ストリーミングレスポンス
 
-```ts showLineNumbers filename="src/mastra/index.ts" copy
-const stream = await myAgent.stream([
-  { role: "user", content: "Tell me a story." },
+リアルタイムレスポンスには`.stream()`を使用します。シンプルなプロンプトには単一の文字列を、複数のコンテキストを提供する場合は文字列の配列を、ロールと会話フローを正確に制御する場合は`role`と`content`を含むメッセージオブジェクトの配列を渡します。
+
+> 詳細については[.stream()](../../reference/agents/stream.mdx)を参照してください。
+
+### テキストのストリーミング
+
+`role`と`content`を含むメッセージオブジェクトの配列で`.stream()`を呼び出します：
+
+```typescript showLineNumbers copy
+const stream = await testAgent.stream([
+  { role: "user", content: "Help me organize my day" },
+  { role: "user", content: "My day starts at 9am and finishes at 5.30pm" },
+  { role: "user", content: "I take lunch between 12:30 and 13:30" },
+  { role: "user", content: "I have meetings Monday to Friday between 10:30 and 11:30" }
 ]);
-
-console.log("Agent:");
 
 for await (const chunk of stream.textStream) {
   process.stdout.write(chunk);
 }
 ```
 
-ストリーミングレスポンスの詳細については、[stream リファレンスドキュメント](/reference/agents/stream)を参照してください。
+### `onFinish()`を使用した完了処理
 
-## 3. 構造化された出力
+ストリーミングレスポンス使用時、`onFinish()`コールバックはLLMがレスポンスの生成を完了し、すべてのツール実行が完了した後に実行されます。
+最終的な`text`、実行`steps`、`finishReason`、トークン`usage`統計、およびモニタリングやログ記録に有用なその他のメタデータが提供されます。
 
-エージェントはJSONスキーマまたはZodスキーマを提供することで、構造化されたデータを返すことができます。
+```typescript showLineNumbers copy
+const stream = await testAgent.stream("Help me organize my day", {
+  onFinish: ({ steps, text, finishReason, usage }) => {
+    console.log({ steps, text, finishReason, usage });
+  }
+});
 
-### JSONスキーマの使用
-
-```typescript
-const schema = {
-  type: "object",
-  properties: {
-    summary: { type: "string" },
-    keywords: { type: "array", items: { type: "string" } },
-  },
-  additionalProperties: false,
-  required: ["summary", "keywords"],
-};
-
-const response = await myAgent.generate(
-  [
-    {
-      role: "user",
-      content:
-        "Please provide a summary and keywords for the following text: ...",
-    },
-  ],
-  {
-    output: schema,
-  },
-);
-
-console.log("Structured Output:", response.object);
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
 ```
 
-### Zodの使用
 
-型安全な構造化出力のためにZodスキーマを使用することもできます。
 
-まず、Zodをインストールします：
+## 構造化出力
 
-```bash npm2yarn copy
-npm install zod
-```
+エージェントは、[Zod](https://zod.dev/) または [JSON Schema](https://json-schema.org/) で期待される出力を定義することで、型安全な構造化データを返すことができます。いずれの場合も、パース済みの結果は `response.object` に格納されており、検証済みかつ型情報付きのデータを直接扱えます。
 
-次に、Zodスキーマを定義してエージェントで使用します：
+### Zod の使用
 
-```ts showLineNumbers filename="src/mastra/index.ts" copy
+[Zod](https://zod.dev/) を使って `output` のスキーマを定義します:
+
+```typescript showLineNumbers copy
 import { z } from "zod";
 
-// Define the Zod schema
-const schema = z.object({
-  summary: z.string(),
-  keywords: z.array(z.string()),
-});
-
-// Use the schema with the agent
-const response = await myAgent.generate(
+const response = await testAgent.generate(
   [
     {
-      role: "user",
-      content:
-        "Please provide a summary and keywords for the following text: ...",
+      role: "system",
+      content: "Provide a summary and keywords for the following text:"
     },
-  ],
-  {
-    output: schema,
-  },
-);
-
-console.log("Structured Output:", response.object);
-```
-
-### ツールの使用
-
-ツール呼び出しと一緒に構造化された出力を生成する必要がある場合は、`output`の代わりに`experimental_output`プロパティを使用する必要があります。方法は次のとおりです：
-
-```typescript
-const schema = z.object({
-  summary: z.string(),
-  keywords: z.array(z.string()),
-});
-
-const response = await myAgent.generate(
-  [
     {
       role: "user",
-      content:
-        "Please analyze this repository and provide a summary and keywords...",
-    },
+      content: "Monkey, Ice Cream, Boat"
+    }
   ],
   {
-    // Use experimental_output to enable both structured output and tool calls
-    experimental_output: schema,
-  },
+    output: z.object({
+      summary: z.string(),
+      keywords: z.array(z.string())
+    })
+  }
 );
 
-console.log("Structured Output:", response.object);
+console.log(response.object);
 ```
 
-<br />
+#### ツールを使うエージェント
 
-これにより、エージェントから返される構造化データに対して強力な型付けと検証を行うことができます。
+ツールを使用するエージェントで構造化出力を生成するには、`experimental_output` プロパティを使用します:
 
-## 4. 複数ステップのツール使用エージェント
-
-エージェントはツールで強化することができます - ツールとはテキスト生成を超えてエージェントの能力を拡張する関数です。ツールを使用することで、エージェントは計算の実行、外部システムへのアクセス、データ処理などを行うことができます。ツールの作成と設定の詳細については、[ツールの追加に関するドキュメント](/docs/agents/using-tools-and-mcp)を参照してください。
-
-### maxStepsの使用
-
-`maxSteps`パラメータは、エージェントが行うことができる連続したLLM呼び出しの最大数を制御します。これは特にツール呼び出しを使用する際に重要です。デフォルトでは、誤設定されたツールによる無限ループを防ぐために1に設定されています。ユースケースに応じてこの制限を増やすことができます：
-
-```ts showLineNumbers filename="src/mastra/agents/index.ts" copy
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-import * as mathjs from "mathjs";
+```typescript {6} showLineNumbers copy
 import { z } from "zod";
 
-export const myAgent = new Agent({
-  name: "My Agent",
-  instructions: "You are a helpful assistant that can solve math problems.",
-  model: openai("gpt-4o-mini"),
-  tools: {
-    calculate: {
-      description: "Calculator for mathematical expressions",
-      schema: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => mathjs.evaluate(expression),
-    },
-  },
-});
-
-const response = await myAgent.generate(
-  [
-    {
-      role: "user",
-      content:
-        "If a taxi driver earns $9461 per hour and works 12 hours a day, how much do they earn in one day?",
-    },
-  ],
+const response = await testAgent.generate(
+  // ...
   {
-    maxSteps: 5, // 最大5回のツール使用ステップを許可
-  },
+    experimental_output: z.object({
+      summary: z.string(),
+      keywords: z.array(z.string())
+    })
+  }
 );
+
+console.log(response.object);
 ```
 
-### onStepFinishの使用
 
-`onStepFinish`コールバックを使用して、複数ステップの操作の進行状況を監視できます。これはデバッグやユーザーへの進捗状況の更新の提供に役立ちます。
-`onStepFinish`は、ストリーミング時または構造化された出力なしでテキストを生成する場合にのみ利用可能です。
 
-```ts showLineNumbers filename="src/mastra/agents/index.ts" copy
-const response = await myAgent.generate(
-  [{ role: "user", content: "Calculate the taxi driver's daily earnings." }],
+## 画像の説明
+
+エージェントは、視覚的なコンテンツとその中に含まれるテキストの両方を処理することで、画像を分析し説明することができます。画像分析を有効にするには、`content`配列内で`type: 'image'`と画像URLを含むオブジェクトを渡します。画像コンテンツをテキストプロンプトと組み合わせることで、エージェントの分析を誘導することができます。
+
+```typescript showLineNumbers copy
+const response = await testAgent.generate([
   {
-    maxSteps: 5,
-    onStepFinish: ({ text, toolCalls, toolResults }) => {
-      console.log("Step completed:", { text, toolCalls, toolResults });
-    },
-  },
-);
-```
-
-### onFinishの使用
-
-`onFinish`コールバックはレスポンスをストリーミングする際に利用可能で、完了した対話に関する詳細情報を提供します。これはLLMがレスポンスの生成を終了し、すべてのツール実行が完了した後に呼び出されます。
-このコールバックは、最終的なレスポンステキスト、実行ステップ、トークン使用統計、およびモニタリングとログ記録に役立つその他のメタデータを受け取ります：
-
-```ts showLineNumbers filename="src/mastra/agents/index.ts" copy
-const stream = await myAgent.stream(
-  [{ role: "user", content: "Calculate the taxi driver's daily earnings." }],
-  {
-    maxSteps: 5,
-    onFinish: ({
-      steps,
-      text,
-      finishReason, // 'complete', 'length', 'tool'など
-      usage, // トークン使用統計
-      reasoningDetails, // エージェントの決定に関する追加コンテキスト
-    }) => {
-      console.log("Stream complete:", {
-        totalSteps: steps.length,
-        finishReason,
-        usage,
-      });
-    },
-  },
-);
-```
-
-## 5. エージェントの実行
-
-Mastraは、エージェントをAPIの背後で実行するための`mastra dev`というCLIコマンドを提供しています。デフォルトでは、`src/mastra/agents`ディレクトリ内のファイルでエクスポートされたエージェントを探します。
-
-### サーバーの起動
-
-```bash
-mastra dev
-```
-
-これによりサーバーが起動し、エージェントは`http://localhost:4111/api/agents/myAgent/generate`で利用可能になります。
-
-### エージェントとの対話
-
-コマンドラインから`curl`を使用してエージェントと対話できます：
-
-```bash
-curl -X POST http://localhost:4111/api/agents/myAgent/generate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [
-      { "role": "user", "content": "Hello, how can you assist me today?" }
+    role: "user",
+    content: [
+      {
+        type: "image",
+        image: "https://placebear.com/cache/395-205.jpg",
+        mimeType: "image/jpeg"
+      },
+      {
+        type: "text",
+        text: "画像を詳細に説明し、画像内のすべてのテキストを抽出してください。"
+      }
     ]
-  }'
+  }
+]);
+
+console.log(response.text);
 ```
 
-## 次のステップ
 
-- [エージェントメモリ](./agent-memory.mdx)ガイドでエージェントメモリについて学びましょう。
-- [エージェントツールとMCP](./using-tools-and-mcp.mdx)ガイドでエージェントツールについて学びましょう。
-- [シェフ・ミシェル](../../guides/guide/chef-michel.mdx)の例でエージェントの例を確認しましょう。
+
+## マルチステップツール使用
+
+エージェントはツールによって機能を拡張できます。ツールとは、テキスト生成を超えてエージェントの能力を拡張する関数です。ツールを使用することで、エージェントは計算の実行、外部システムへのアクセス、データ処理が可能になります。エージェントは与えられたツールを呼び出すかどうかを判断するだけでなく、そのツールに渡すパラメータも決定します。
+
+ツールの作成と設定に関する詳細なガイドについては、[ツール概要](../tools-mcp/overview.mdx)ページを参照してください。
+
+### `maxSteps`の使用
+
+`maxSteps`パラメータは、エージェントが実行できる連続したLLM呼び出しの最大数を制御します。これは特にツール呼び出しを使用する際に重要です。デフォルトでは、設定ミスのツールによる無限ループを防ぐために1に設定されています：
+
+```typescript showLineNumbers copy
+const response = await testAgent.generate("Help me organize my day", {
+  maxSteps: 5
+});
+
+console.log(response.text);
+```
+
+### `onStepFinish`の使用
+
+`onStepFinish`コールバックを使用して、マルチステップ操作の進行状況を監視できます。これはデバッグやユーザーへの進行状況更新に役立ちます。
+
+`onStepFinish`は、ストリーミング時または構造化出力なしでテキストを生成する際にのみ利用可能です。
+
+```typescript showLineNumbers copy
+const response = await testAgent.generate("Help me organize my day", {
+  onStepFinish: ({ text, toolCalls, toolResults, finishReason, usage }) => {
+    console.log({ text, toolCalls, toolResults, finishReason, usage });
+  }
+});
+```
+
+
+
+## エージェントをローカルでテストする
+エージェントを実行・テストする方法は2つあります。
+
+<Steps>
+
+### Mastra Playground
+
+Mastra Dev Server を起動した状態で、ブラウザで [http://localhost:4111/agents](http://localhost:4111/agents) にアクセスすると、Mastra Playground からエージェントをテストできます。
+
+> くわしくは、[Local Dev Playground](/docs/server-db/local-dev-playground) のドキュメントをご覧ください。
+
+### コマンドライン
+
+`.generate()` または `.stream()` を使ってエージェントのレスポンスを生成します。
+
+```typescript {7} filename="src/test-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("testAgent");
+
+const response = await agent.generate("Help me organize my day");
+
+console.log(response.text);
+```
+
+> くわしくは [.generate()](../../reference/agents/generate.mdx) または [.stream()](../../reference/agents/stream.mdx) を参照してください。
+
+このエージェントをテストするには、次を実行します:
+
+```bash copy
+npx tsx src/test-agent.ts
+```
+
+</Steps>
+
+
+
+## 関連項目
+
+- [エージェントメモリ](./agent-memory.mdx)
+- [ダイナミックエージェント](./dynamic-agents.mdx)
+- [エージェントツールとMCP](./using-tools-and-mcp.mdx)
+- [エージェントの呼び出し](../../examples/agents/calling-agents.mdx)

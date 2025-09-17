@@ -1,11 +1,19 @@
 ---
-title: "リファレンス: コンテクスチュアルリコール | メトリクス | Evals | Mastra ドキュメント"
-description: コンテクスチュアルリコールメトリクスのドキュメント。関連するコンテキストを取り入れたLLMの応答の完全性を評価します。
+title: "リファレンス: Contextual Recall | メトリクス | Evals | Mastra Docs"
+description: 関連するコンテキストを組み込んだLLMレスポンスの完全性を評価するContextual Recallメトリクスのドキュメント。
 ---
+
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
 
 # ContextualRecallMetric
 
-`ContextualRecallMetric` クラスは、LLM の応答が提供されたコンテキストからどれだけ効果的に関連情報を取り入れているかを評価します。このクラスは、参照ドキュメントの重要な情報が応答にきちんと含まれているかどうかを測定し、精度よりも網羅性に重点を置いています。
+<ScorerCallout />
+
+`ContextualRecallMetric`クラスは、LLMの応答が提供されたコンテキストからすべての関連情報をどれだけ効果的に組み込んでいるかを評価します。これは、参照文書からの重要な情報が応答に正常に含まれているかどうかを測定し、精度よりも完全性に焦点を当てています。
+
+
 
 ## 基本的な使い方
 
@@ -33,6 +41,8 @@ const result = await metric.measure(
 console.log(result.score); // Score from 0-1
 ```
 
+
+
 ## コンストラクタのパラメータ
 
 <PropertiesTable
@@ -40,7 +50,8 @@ console.log(result.score); // Score from 0-1
     {
       name: "model",
       type: "LanguageModel",
-      description: "コンテキストリコールを評価するために使用されるモデルの設定",
+      description:
+        "コンテキストリコールを評価するために使用されるモデルの設定",
       isOptional: false,
     },
     {
@@ -66,11 +77,14 @@ console.log(result.score); // Score from 0-1
     {
       name: "context",
       type: "string[]",
-      description: "照合対象となる参照ドキュメントや情報の配列",
+      description:
+        "照合対象となる参照ドキュメントや情報の配列",
       isOptional: false,
     },
   ]}
 />
+
+
 
 ## measure() のパラメーター
 
@@ -90,6 +104,8 @@ console.log(result.score); // Score from 0-1
     },
   ]}
 />
+
+
 
 ## 戻り値
 
@@ -120,6 +136,8 @@ console.log(result.score); // Score from 0-1
   ]}
 />
 
+
+
 ## スコアリングの詳細
 
 このメトリックは、応答内容と関連するコンテキスト項目を比較することでリコールを評価します。
@@ -148,6 +166,8 @@ console.log(result.score); // Score from 0-1
 - 0.4-0.6: 中程度のリコール - 一部の関連情報が抜けている
 - 0.1-0.3: 低いリコール - 重要な情報が多く抜けている
 - 0.0: リコールなし - 関連情報がまったく含まれていない
+
+
 
 ## カスタム設定の例
 
@@ -183,6 +203,8 @@ const result = await metric.measure(
 //   }
 // }
 ```
+
+
 
 ## 関連
 

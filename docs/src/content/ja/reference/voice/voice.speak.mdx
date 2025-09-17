@@ -3,9 +3,13 @@ title: "リファレンス: voice.speak() | 音声プロバイダー | Mastra �
 description: "すべてのMastra音声プロバイダーで利用可能なspeak()メソッドのドキュメント。テキストを音声に変換します。"
 ---
 
+
+
 # voice.speak()
 
 `speak()` メソッドは、すべてのMastra音声プロバイダーで利用可能な中核機能で、テキストを音声に変換します。テキスト入力を受け取り、再生または保存できるオーディオストリームを返します。
+
+
 
 ## 使用例
 
@@ -31,6 +35,8 @@ import { Readable } from "stream";
 const textStream = Readable.from(["Hello", " from", " a", " stream!"]);
 const audioStreamFromTextStream = await voice.speak(textStream);
 ```
+
+
 
 ## パラメータ
 
@@ -59,12 +65,16 @@ const audioStreamFromTextStream = await voice.speak(textStream);
   ]}
 />
 
+
+
 ## 戻り値
 
 `Promise<NodeJS.ReadableStream | void>` を返します。内容は以下の通りです：
 
 - `NodeJS.ReadableStream`: 再生または保存が可能な音声データのストリーム
 - `void`: 音声を直接返すのではなく、イベントを通じてリアルタイムで音声を出力するプロバイダーを使用する場合
+
+
 
 ## プロバイダー固有のオプション
 
@@ -120,7 +130,8 @@ const audioStreamFromTextStream = await voice.speak(textStream);
     {
       name: "options.audioConfig",
       type: "object",
-      description: "Google Cloud Text-to-Speech API の音声設定オプション。",
+      description:
+        "Google Cloud Text-to-Speech API の音声設定オプション。",
       isOptional: true,
       defaultValue: "{ audioEncoding: 'LINEAR16' }",
     },
@@ -152,6 +163,8 @@ const audioStreamFromTextStream = await voice.speak(textStream);
   ]}
 />
 
+
+
 ## リアルタイム音声プロバイダー
 
 `OpenAIRealtimeVoice`のようなリアルタイム音声プロバイダーを使用する場合、`speak()`メソッドは異なる動作をします：
@@ -180,6 +193,8 @@ voice.on("speaker", (stream) => {
 await voice.speak("Hello, this is realtime speech!");
 ```
 
+
+
 ## CompositeVoiceでの使用
 
 `CompositeVoice`を使用する場合、`speak()`メソッドは設定された音声提供プロバイダーに処理を委任します：
@@ -195,6 +210,8 @@ const voice = new CompositeVoice({
 // これはPlayAIVoiceプロバイダーを使用します
 const audioStream = await voice.speak("Hello, world!");
 ```
+
+
 
 ## 注意事項
 

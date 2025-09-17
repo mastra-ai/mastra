@@ -5,13 +5,19 @@ description: Mastra を使って音声から音声へのアプリケーション
 
 import { GithubLink } from "@/components/github-link";
 
+
+
 # Mastraによる通話分析
 
 このガイドでは、Mastraを使用して分析機能付きの音声会話システムを構築する方法を説明します。例として、リアルタイムの音声対話、録音管理、そして通話分析のためのRoark Analyticsとの連携が含まれています。
 
+
+
 ## 概要
 
 このシステムは、Mastraエージェントとの音声会話を作成し、やり取り全体を録音して、その録音をCloudinaryにアップロードして保存します。その後、会話データをRoark Analyticsに送信し、詳細な通話分析を行います。
+
+
 
 ## セットアップ
 
@@ -40,6 +46,8 @@ ROARK_API_KEY=
 ```bash copy
 npm install
 ```
+
+
 
 ## 実装
 
@@ -182,6 +190,8 @@ async function speechToSpeechServerExample() {
 speechToSpeechServerExample().catch(console.error);
 ```
 
+
+
 ## 会話ユーティリティ
 
 `utils.ts` ファイルには、会話を管理するための補助関数が含まれています。主な内容は以下の通りです。
@@ -190,6 +200,8 @@ speechToSpeechServerExample().catch(console.error);
 2. 音声録音の処理
 3. ツール呼び出しの処理
 4. 会話ライフサイクルイベントの管理
+
+
 
 ## サンプルの実行
 
@@ -207,6 +219,8 @@ npm run dev
 4. 会話データをRoark Analyticsに送信して分析します
 5. 分析結果を表示します
 
+
+
 ## 主な機能
 
 - **リアルタイム音声対音声変換**: OpenAIの音声モデルを使用し、自然な会話を実現
@@ -214,6 +228,8 @@ npm run dev
 - **ツール呼び出しの追跡**: 会話中にAIツールがいつ、どのように使われたかを記録
 - **分析ツール連携**: 会話データをRoark Analyticsに送信し、詳細な分析を実施
 - **クラウドストレージ**: 録音をCloudinaryにアップロードし、安全に保存・アクセス
+
+
 
 ## カスタマイズ
 

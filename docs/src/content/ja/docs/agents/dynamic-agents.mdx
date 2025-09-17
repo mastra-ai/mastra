@@ -1,55 +1,102 @@
 ---
-title: "動的エージェント | エージェント | Mastra ドキュメント"
-description: ランタイムコンテキストを使用して、エージェントの指示、モデル、ツールを動的に設定します。
+title: "Dynamic Agents"
+description: 実行時コンテキストを用いて、エージェントの指示、モデル、ツール、メモリを動的に設定します。
 ---
 
-# 動的エージェント
+# ダイナミックエージェント
 
-動的エージェントは、ユーザーIDやその他の重要なパラメータなどの[ランタイムコンテキスト](./runtime-variables)を使用して、リアルタイムで設定を調整します。
+ダイナミックエージェントは、ユーザーIDやその他の重要なパラメータなどの[ランタイムコンテキスト](./runtime-context)を用いて、設定をリアルタイムに調整します。
 
-これにより、使用するモデルの変更、指示の更新、必要に応じて異なるツールの選択が可能になります。
+つまり、使用するモデルを切り替えたり、インストラクションを更新したり、別のツールを選択したり、必要に応じてメモリを設定したりできます。
 
-このコンテキストを活用することで、エージェントは各ユーザーのニーズにより適切に対応できます。また、さらに情報を収集するために任意のAPIを呼び出すことができ、エージェントの機能を向上させるのに役立ちます。
+このコンテキストを活用することで、エージェントは各ユーザーのニーズにより適切に対応できます。また、追加情報を取得するために任意のAPIを呼び出すこともでき、それによってエージェントの能力を高められます。
 
 ### 設定例
 
-以下は、ランタイムコンテキストを使用して動的エージェントを設定する例です。このエージェントは、ユーザーがプレミアム会員かどうかに応じて、指示、モデル、ツールを調整します：
+以下は、ユーザーのサブスクリプションプランと言語設定に応じて動作を調整する動的サポートエージェントの例です：
 
 ```typescript
-const dynamicAgent = new Agent({
-  name: "Master Chef Agent",
+const supportAgent = new Agent({
+  name: "Dynamic Support Agent",
+
   instructions: async ({ runtimeContext }) => {
-    // Fetch user preferences from an API using user ID from runtime context
-    const userId = runtimeContext.get("userId");
-    const prefs = await fetchUserPreferences(userId);
-    const premium = runtimeContext.get("premiumUser") === true;
+    const userTier = runtimeContext.get("user-tier");
+    const language = runtimeContext.get("language");
 
-    const base = `The current user (${userId}) has the following preferences:
-    - Allergies: ${prefs.allergies.join(", ") || "None"}
-    - Preferred cuisines: ${prefs.cuisines.join(", ")}
-    - Dietary restrictions: ${prefs.restrictions.join(", ") || "None"}`;
+    return `You are a customer support agent for our SaaS platform.
+    The current user is on the ${userTier} tier and prefers ${language} language.
 
-    return premium
-      ? `You are a master chef creating gourmet dishes.\n${base}`
-      : `You are a home cook giving simple recipes.\n${base}`;
+    For ${userTier} tier users:
+    ${userTier === "free" ? "- Provide basic support and documentation links" : ""}
+    ${userTier === "pro" ? "- Offer detailed technical support and best practices" : ""}
+    ${userTier === "enterprise" ? "- Provide priority support with custom solutions" : ""}
+
+    Always respond in ${language} language.`;
   },
-  model: ({ runtimeContext }) =>
-    runtimeContext.get("premiumUser") === true
-      ? openai("gpt-4o")
-      : openai("gpt-3.5-turbo"),
+
+  model: ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier");
+    return userTier === "enterprise"
+      ? openai("gpt-4")
+      : openai("gpt-3.5-turbo");
+  },
+
   tools: ({ runtimeContext }) => {
-    const premium = runtimeContext.get("premiumUser") === true;
-    return premium
-      ? {
-          recipeDatabase,
-          ingredientSubstitutions,
-          nutritionalCalculator,
-        }
-      : {
-          recipeDatabase,
-        };
+    const userTier = runtimeContext.get("user-tier");
+    const baseTools = [knowledgeBase, ticketSystem];
+
+    if (userTier === "pro" || userTier === "enterprise") {
+      baseTools.push(advancedAnalytics);
+    }
+
+    if (userTier === "enterprise") {
+      baseTools.push(customIntegration);
+    }
+
+    return baseTools;
+  },
+
+  memory: ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier");
+
+    if (userTier === "enterprise") {
+      return new Memory({
+        storage: new LibSQLStore({ url: "file:enterprise.db" }),
+        options: {
+          semanticRecall: { topK: 15, messageRange: 8 },
+          workingMemory: { enabled: true },
+        },
+      });
+    } else if (userTier === "pro") {
+      return new Memory({
+        storage: new LibSQLStore({ url: "file:pro.db" }),
+        options: {
+          semanticRecall: { topK: 8, messageRange: 4 },
+          workingMemory: { enabled: true },
+        },
+      });
+    }
+
+    // Basic memory for free tier
+    return new Memory({
+      storage: new LibSQLStore({ url: "file:free.db" }),
+      options: {
+        semanticRecall: { topK: 3, messageRange: 2 },
+        workingMemory: { enabled: false },
+      },
+    });
   },
 });
 ```
 
-この例では、エージェントの指示、モデル、ツールがランタイムコンテキストを使用して設定されており、非常に適応性が高く応答性のあるエージェントを実現しています。
+この例では、エージェントは次のことを行います：
+
+- ユーザーのサブスクリプションプラン（free、pro、enterprise）に応じて指示を調整する
+- enterprise ユーザーには、より高性能なモデル（GPT-4）を使用する
+- ユーザーのプランに応じて異なるツールセットを提供する
+- ユーザーのプランに応じて能力の異なるメモリを構成する
+- ユーザーが希望する言語で応答する
+
+これにより、ランタイムコンテキストを活用することで、単一のエージェントがさまざまなタイプのユーザーやシナリオに対応でき、各ユースケースごとに個別のエージェントを作成するよりも柔軟で保守しやすいことが示されています。
+
+API ルート、ミドルウェア設定、ランタイムコンテキストの取り扱いを含む完全な実装例については、[Dynamic Agents Example](/examples/agents/dynamic-agents) を参照してください。

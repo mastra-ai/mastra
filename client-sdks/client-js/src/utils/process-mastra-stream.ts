@@ -29,7 +29,7 @@ async function sharedProcessMastraStream({
           const data = line.slice(6); // Remove 'data: '
 
           if (data === '[DONE]') {
-            console.log('🏁 Stream finished');
+            console.info('🏁 Stream finished');
             return;
           }
 

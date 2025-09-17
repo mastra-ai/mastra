@@ -1,71 +1,94 @@
 ---
-title: "例: ワークフローからエージェントを呼び出す | Mastra ドキュメント"
-description: ワークフローのステップ内で Mastra を使って AI エージェントを呼び出す例。
+title: "例：ワークフローからエージェントを呼び出す | Mastra ドキュメント"
+description: ワークフローのステップ内で AI エージェントを呼び出すために Mastra を使用する例。
 ---
 
-import { GithubLink } from "@/components/github-link";
 
-# ワークフローからエージェントを呼び出す
 
-この例では、AIエージェントを呼び出してメッセージを処理し、応答を生成するワークフローを作成し、それをワークフローステップ内で実行する方法を示します。
+# ステップ内でエージェントを呼び出す
 
-```ts showLineNumbers copy
+ワークフローはステップ内でエージェントを呼び出し、動的な応答を生成できます。この例では、エージェントの定義、Mastra インスタンスへの登録、そしてワークフローステップ内で `.generate()` を使った呼び出し方法を示します。ワークフローは都市名を入力として受け取り、その都市に関する事実を返します。
+
+
+
+## エージェントの作成
+
+都市に関する豆知識を返すシンプルなエージェントを作成します。
+
+```typescript filename="src/mastra/agents/example-city-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
-import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
-import { Step, Workflow } from "@mastra/core/workflows";
-import { z } from "zod";
 
-const penguin = new Agent({
-  name: "agent skipper",
-  instructions: `You are skipper from penguin of madagascar, reply as that`,
-  model: openai("gpt-4o-mini"),
+export const cityAgent = new Agent({
+  name: "city-agent",
+  description: "Create facts for a city",
+  instructions: `Return an interesting fact based on the city provided`,
+  model: openai("gpt-4o")
 });
-
-const newWorkflow = new Workflow({
-  name: "pass message to the workflow",
-  triggerSchema: z.object({
-    message: z.string(),
-  }),
-});
-
-const replyAsSkipper = new Step({
-  id: "reply",
-  outputSchema: z.object({
-    reply: z.string(),
-  }),
-  execute: async ({ context, mastra }) => {
-    const skipper = mastra?.getAgent("penguin");
-
-    const res = await skipper?.generate(context?.triggerData?.message);
-    return { reply: res?.text || "" };
-  },
-});
-
-newWorkflow.step(replyAsSkipper);
-newWorkflow.commit();
-
-const mastra = new Mastra({
-  agents: { penguin },
-  workflows: { newWorkflow },
-});
-
-const { runId, start } = await mastra.getWorkflow("newWorkflow").createRun();
-
-const runResult = await start({
-  triggerData: { message: "Give me a run down of the mission to save private" },
-});
-
-console.log(runResult.results);
 ```
 
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/calling-agent-from-workflow"
+
+
+## エージェントの登録
+
+ワークフローからエージェントを呼び出すには、Mastra インスタンスにエージェントを登録しておく必要があります。
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { cityAgent } from "./agents/example-city-agent";
+
+export const mastra = new Mastra({
+  // ...
+  agents: { cityAgent },
+});
+```
+
+
+
+## エージェントを呼び出す
+
+`getAgent()` で登録済みエージェントへの参照を取得し、ステップ内で `.generate()` を呼び出して入力データを渡します。
+
+```typescript filename="src/mastra/workflows/example-call-agent.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  id: "step-1",
+  description: "入力の値をエージェントに渡す",
+  inputSchema: z.object({
+    city: z.string()
+  }),
+  outputSchema: z.object({
+    facts: z.string()
+  }),
+  execute: async ({ inputData, mastra }) => {
+    const { city } = inputData;
+
+    const agent = mastra.getAgent("cityAgent");
+    const response = await agent.generate(`Create an interesting fact about ${city}`);
+
+    return {
+      facts: response.text
+    };
   }
-/>
+});
+
+export const callAgent = createWorkflow({
+  id: "agent-workflow",
+  inputSchema: z.object({
+    city: z.string()
+  }),
+  outputSchema: z.object({
+    facts: z.string()
+  })
+})
+  .then(step1)
+  .commit();
+```
+
+
+
+## 関連情報
+
+- [ワークフローの実行](./running-workflows.mdx)

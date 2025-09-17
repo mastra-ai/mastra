@@ -1,0 +1,142 @@
+---
+title: "Middleware"
+description: "リクエストをインターセプトするためのカスタムミドルウェア関数を適用します。"
+---
+
+
+
+# Middleware
+
+Mastraサーバーは、APIルートハンドラーが呼び出される前後にカスタムミドルウェア関数を実行できます。これは認証、ログ記録、リクエスト固有のコンテキストの注入、CORSヘッダーの追加などに便利です。
+
+ミドルウェアは[Hono](https://hono.dev)の`Context`（`c`）と`next`関数を受け取ります。`Response`を返すとリクエストが短絡されます。`next()`を呼び出すと、次のミドルウェアまたはルートハンドラーの処理が続行されます。
+
+```typescript copy showLineNumbers
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    middleware: [
+      {
+        handler: async (c, next) => {
+          // Example: Add authentication check
+          const authHeader = c.req.header("Authorization");
+          if (!authHeader) {
+            return new Response("Unauthorized", { status: 401 });
+          }
+
+          await next();
+        },
+        path: "/api/*",
+      },
+      // Add a global request logger
+      async (c, next) => {
+        console.log(`${c.req.method} ${c.req.url}`);
+        await next();
+      },
+    ],
+  },
+});
+```
+
+単一のルートにミドルウェアを付加するには、`registerApiRoute`に`middleware`オプションを渡します：
+
+```typescript copy showLineNumbers
+registerApiRoute("/my-custom-route", {
+  method: "GET",
+  middleware: [
+    async (c, next) => {
+      console.log(`${c.req.method} ${c.req.url}`);
+      await next();
+    },
+  ],
+  handler: async (c) => {
+    const mastra = c.get("mastra");
+    return c.json({ message: "Hello, world!" });
+  },
+});
+```
+
+---
+
+
+
+## 一般的な例
+
+### 認証
+
+```typescript copy
+{
+  handler: async (c, next) => {
+    const authHeader = c.req.header('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+
+    // Validate token here
+    await next();
+  },
+  path: '/api/*',
+}
+```
+
+### CORSサポート
+
+```typescript copy
+{
+  handler: async (c, next) => {
+    c.header('Access-Control-Allow-Origin', '*');
+    c.header(
+      'Access-Control-Allow-Methods',
+      'GET, POST, PUT, DELETE, OPTIONS',
+    );
+    c.header(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization',
+    );
+
+    if (c.req.method === 'OPTIONS') {
+      return new Response(null, { status: 204 });
+    }
+
+    await next();
+  },
+}
+```
+
+### リクエストログ
+
+```typescript copy
+{
+  handler: async (c, next) => {
+    const start = Date.now();
+    await next();
+    const duration = Date.now() - start;
+    console.log(`${c.req.method} ${c.req.url} - ${duration}ms`);
+  },
+}
+```
+
+### 特別なMastraヘッダー
+
+Mastra Cloudやカスタムクライアントと統合する際、以下のヘッダーをミドルウェアで検査して動作を調整できます：
+
+```typescript copy
+{
+  handler: async (c, next) => {
+    const isFromMastraCloud = c.req.header('x-mastra-cloud') === 'true';
+    const clientType = c.req.header('x-mastra-client-type');
+    const isDevPlayground =
+      c.req.header('x-mastra-dev-playground') === 'true';
+
+    if (isFromMastraCloud) {
+      // Special handling
+    }
+    await next();
+  },
+}
+```
+
+- `x-mastra-cloud`: リクエストがMastra Cloudから発信されたもの
+- `x-mastra-client-type`: クライアントSDKを識別、例：`js`または`python`
+- `x-mastra-dev-playground`: ローカルプレイグラウンドからトリガーされたリクエスト

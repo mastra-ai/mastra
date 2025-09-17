@@ -170,7 +170,3 @@ pnpm test
 # Lint code
 pnpm lint
 ```
-
-## License
-
-Apache-2.0

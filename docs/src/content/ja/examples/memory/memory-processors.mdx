@@ -1,190 +1,174 @@
 ---
-title: メモリプロセッサ
-description: 呼び出されたメッセージをフィルタリングおよび変換するためのメモリプロセッサの使用例
+title: "例: メモリプロセッサ | Memory | Mastra Docs"
+description: メモリプロセッサを使ってトークンを制限し、ツール呼び出しをフィルタリングし、カスタムフィルタを作成する方法の例。
 ---
 
-# メモリープロセッサー
 
-この例では、メモリープロセッサーを使用してトークン使用量を制限し、ツール呼び出しをフィルタリングし、シンプルなカスタムプロセッサーを作成する方法を示します。
 
-## セットアップ
+# メモリプロセッサ
 
-まず、メモリパッケージをインストールします：
+エージェントに渡す前に、メモリプロセッサを使って想起されたメッセージをフィルタリング、変換、または制限します。これらの例では、トークン上限の適用、ツール呼び出しの除外、カスタムプロセッサの実装方法を示します。
 
-```bash copy
-npm install @mastra/memory@latest
-# or
-pnpm add @mastra/memory@latest
-# or
-yarn add @mastra/memory@latest
+
+
+## 前提条件
+
+この例では `openai` モデルを使用します。`.env` ファイルに `OPENAI_API_KEY` を追加してください。
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
 ```
 
-## プロセッサを使用した基本的なメモリ設定
+次のパッケージをインストールします:
 
-```typescript
+```bash copy
+npm install @mastra/libsql
+```
+
+
+
+## エージェントにメモリを追加する
+
+エージェントに LibSQL のメモリを追加するには、`Memory` クラスを使用し、`LibSQLStore` を用いて `storage` インスタンスを渡します。`url` はリモートの場所またはローカルファイルを指せます。
+
+### メモリプロセッサの設定
+
+`workingMemory.enabled` を `true` に設定してワーキングメモリを有効化します。これにより、エージェントは対話間で構造化された情報を記憶できます。この例では、`TokenLimiter` でリコールされるトークン数を制限し、`ToolCallFilter` でツール呼び出しを除外するメモリプロセッサも使用しています。
+
+```typescript filename="src/mastra/agents/example-working-memory-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { TokenLimiter, ToolCallFilter } from "@mastra/memory/processors";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { LibSQLStore } from "@mastra/libsql";
 
-// Create memory with processors
-const memory = new Memory({
-  processors: [new TokenLimiter(127000), new ToolCallFilter()],
+export const memoryProcessorAgent = new Agent({
+  name: "memory-processor-agent",
+  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:memory-processor.db"
+    }),
+    processors: [new TokenLimiter(127000), new ToolCallFilter()],
+    options: {
+      workingMemory: {
+        enabled: true
+      },
+      threads: {
+        generateTitle: true
+      }
+    }
+  })
 });
 ```
 
-## トークン制限の使用
+### トークンリミッターの使用
 
-`TokenLimiter` は、モデルのコンテキストウィンドウ内に収まるように支援します:
+トークンリミッターは、リコールされたメッセージをトリミングしてエージェントに渡すトークン数を制御します。これによりコンテキストサイズを管理し、モデルの上限超過を防げます。
 
-```typescript
+```typescript showLineNumbers
 import { Memory } from "@mastra/memory";
 import { TokenLimiter } from "@mastra/memory/processors";
 
-// トークン制限を設定してメモリをセットアップ
-const memory = new Memory({
-  processors: [
-    // 約12700トークンに制限 (GPT-4o用)
-    new TokenLimiter(127000),
-  ],
+export const memoryProcessorAgent = new Agent({
+  // ...
+  memory: new Memory({
+    // ...
+    processors: [new TokenLimiter(127000)],
+  }),
 });
 ```
 
-必要に応じて異なるエンコーディングを指定することもできます:
+### トークンエンコーディングの使用
 
-```typescript
+`js-tiktoken` パッケージの `cl100k_base` など、特定のエンコーディングを指定してトークンのカウント方法をカスタマイズできます。これにより、モデルごとに正確なトークン上限を確保できます。
+
+```typescript showLineNumbers
 import { Memory } from "@mastra/memory";
 import { TokenLimiter } from "@mastra/memory/processors";
 import cl100k_base from "js-tiktoken/ranks/cl100k_base";
 
-const memory = new Memory({
-  processors: [
-    new TokenLimiter({
-      limit: 16000,
-      encoding: cl100k_base, // 特定のモデル用の特定のエンコーディング 例: GPT-3.5
-    }),
-  ],
+export const memoryProcessorAgent = new Agent({
+  // ...
+  memory: new Memory({
+    // ...
+    processors: [
+      new TokenLimiter({
+        limit: 16000,
+        encoding: cl100k_base,
+      }),
+    ],
+  }),
 });
 ```
 
-## ツール呼び出しのフィルタリング
+### ツール呼び出しのフィルタリング
 
-`ToolCallFilter` プロセッサは、メモリからツール呼び出しとその結果を削除します:
+`ToolCallFilter` プロセッサは、特定のツール呼び出しとその結果をメモリから除去します。ログ出力や画像生成などのツールを除外することでノイズを減らし、エージェントのフォーカスを維持できます。
 
-```typescript
+```typescript showLineNumbers
 import { Memory } from "@mastra/memory";
 import { ToolCallFilter } from "@mastra/memory/processors";
 
-// すべてのツール呼び出しをフィルタリング
-const memoryNoTools = new Memory({
-  processors: [new ToolCallFilter()],
-});
-
-// 特定のツール呼び出しをフィルタリング
-const memorySelectiveFilter = new Memory({
-  processors: [
-    new ToolCallFilter({
-      exclude: ["imageGenTool", "clipboardTool"],
-    }),
-  ],
+export const memoryProcessorAgent = new Agent({
+  // ...
+  memory: new Memory({
+    // ...
+    processors: [
+      new ToolCallFilter({
+        exclude: ["exampleLoggerTool", "exampleImageGenTool"],
+      }),
+    ],
+  }),
 });
 ```
 
-## 複数のプロセッサの組み合わせ
 
-プロセッサは定義された順に実行されます：
 
-```typescript
-import { Memory } from "@mastra/memory";
-import { TokenLimiter, ToolCallFilter } from "@mastra/memory/processors";
+## カスタムプロセッサの作成
 
-const memory = new Memory({
-  processors: [
-    // 最初にツール呼び出しをフィルタリング
-    new ToolCallFilter({ exclude: ["imageGenTool"] }),
-    // 次にトークンを制限（他のフィルタ/変換後の正確な測定のためにトークンリミッターは常に最後に配置）
-    new TokenLimiter(16000),
-  ],
-});
-```
+カスタムメモリプロセッサは `MemoryProcessor` クラスを拡張して作成でき、エージェントに送信する前に、想起されたメッセージ一覧に独自のロジックを適用できます。
 
-## シンプルなカスタムプロセッサの作成
-
-`MemoryProcessor` クラスを拡張することで、独自のプロセッサを作成できます：
-
-```typescript
-import type { CoreMessage } from "@mastra/core";
+```typescript filename="src/mastra/processors/example-recent-messages-processor.ts" showLineNumbers copy
 import { MemoryProcessor } from "@mastra/core/memory";
-import { Memory } from "@mastra/memory";
+import type { CoreMessage } from "@mastra/core";
 
-// 最新のメッセージのみを保持するシンプルなプロセッサ
-class RecentMessagesProcessor extends MemoryProcessor {
+export class RecentMessagesProcessor extends MemoryProcessor {
   private limit: number;
 
   constructor(limit: number = 10) {
-    super();
+    super({ name: "RecentMessagesProcessor" });
     this.limit = limit;
   }
 
   process(messages: CoreMessage[]): CoreMessage[] {
-    // 最新のメッセージのみを保持
     return messages.slice(-this.limit);
   }
 }
+```
 
-// カスタムプロセッサを使用
-const memory = new Memory({
-  processors: [
-    new RecentMessagesProcessor(5), // 最新の5件のメッセージのみを保持
-    new TokenLimiter(16000),
-  ],
+### カスタムプロセッサの使用
+
+この例では、`RecentMessagesProcessor` を上限 `5` で使用し、メモリから直近の5件のメッセージのみを返します。
+
+```typescript showLineNumbers
+import { Memory } from "@mastra/memory";
+import { ToolCallFilter } from "@mastra/memory/processors";
+import { RecentMessagesProcessor } from "../processors/example-recent-messages-processor";
+
+export const memoryProcessorAgent = new Agent({
+  // ...
+  memory: new Memory({
+    // ...
+    processors: [new RecentMessagesProcessor(5)],
+  }),
 });
 ```
 
-注意: この例はカスタムプロセッサの動作を理解しやすくするためのもので、`new Memory({ options: { lastMessages: 5 } })` を使用してメッセージをより効率的に制限できます。メモリプロセッサは、メモリがストレージから取得された後に適用されますが、`options.lastMessages` はメッセージがストレージから取得される前に適用されます。
 
-## エージェントとの統合
 
-エージェントでプロセッサを使用してメモリを使用する方法は次のとおりです:
+## 関連項目
 
-```typescript
-import { Agent } from "@mastra/core/agent";
-import { Memory, TokenLimiter, ToolCallFilter } from "@mastra/memory";
-import { openai } from "@ai-sdk/openai";
-
-// Set up memory with processors
-const memory = new Memory({
-  processors: [
-    new ToolCallFilter({ exclude: ["debugTool"] }),
-    new TokenLimiter(16000),
-  ],
-});
-
-// Create an agent with the memory
-const agent = new Agent({
-  name: "ProcessorAgent",
-  instructions: "You are a helpful assistant with processed memory.",
-  model: openai("gpt-4o-mini"),
-  memory,
-});
-
-// Use the agent
-const response = await agent.stream("Hi, can you remember our conversation?", {
-  threadId: "unique-thread-id",
-  resourceId: "user-123",
-});
-
-for await (const chunk of response.textStream) {
-  process.stdout.write(chunk);
-}
-```
-
-## 概要
-
-この例では以下のことを示しています：
-
-1. コンテキストウィンドウのオーバーフローを防ぐためのトークン制限付きメモリの設定
-2. ノイズとトークン使用量を減らすためのツール呼び出しのフィルタリング
-3. 最近のメッセージのみを保持するシンプルなカスタムプロセッサの作成
-4. 複数のプロセッサを正しい順序で組み合わせる
-5. 処理されたメモリをエージェントと統合する
-
-メモリプロセッサの詳細については、[メモリプロセッサのドキュメント](/docs/memory/memory-processors)をご覧ください。
+- [エージェントの呼び出し](../agents/calling-agents.mdx#from-the-command-line)
+- [メモリプロセッサ](../../docs/memory/memory-processors.mdx)

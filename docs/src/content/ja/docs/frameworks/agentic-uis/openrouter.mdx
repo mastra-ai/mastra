@@ -1,0 +1,169 @@
+---
+title: "OpenRouterとの使用"
+description: "OpenRouterをMastraと統合する方法を学ぶ"
+---
+
+import { Steps } from 'nextra/components'
+
+
+
+# MastraでOpenRouterを使用する
+
+OpenRouterをMastraと統合して、OpenRouterで利用可能な多数のモデルを活用しましょう。
+
+<Steps>
+## Mastraプロジェクトを初期化する
+
+Mastraを始める最も簡単な方法は、`mastra` CLIを使用して新しいプロジェクトを初期化することです：
+
+```bash copy
+npx create-mastra@latest
+```
+
+プロジェクトをセットアップするためのプロンプトが表示されます。この例では、以下を選択してください：
+- プロジェクト名：my-mastra-openrouter-app
+- コンポーネント：Agents（推奨）
+- デフォルトプロバイダーには、OpenAI（推奨）を選択 - 後でOpenRouterを手動で設定します
+- オプションでサンプルコードを含める
+
+## OpenRouterを設定する
+
+`create-mastra`でプロジェクトを作成した後、プロジェクトルートに`.env`ファイルが見つかります。
+セットアップ時にOpenAIを選択したので、OpenRouterを手動で設定します：
+
+```bash filename=".env" copy
+OPENROUTER_API_KEY=
+```
+
+プロジェクトから`@ai-sdk/openai`パッケージを削除します：
+
+```bash copy
+npm uninstall @ai-sdk/openai
+```
+
+次に、`@openrouter/ai-sdk-provider`パッケージをインストールします：
+
+```bash copy
+npm install @openrouter/ai-sdk-provider
+```
+
+## AgentでOpenRouterを使用するように設定する
+
+エージェントがOpenRouterを使用するように設定します。
+
+```typescript filename="src/mastra/agents/assistant.ts" copy showLineNumbers {4-6,11}
+import { Agent } from "@mastra/core/agent";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+
+const openrouter = createOpenRouter({
+    apiKey: process.env.OPENROUTER_API_KEY,
+})
+
+export const assistant = new Agent({
+    name: "assistant",
+    instructions: "You are a helpful assistant.",
+    model: openrouter("anthropic/claude-sonnet-4"),
+})
+```
+
+エージェントをMastraインスタンスに登録することを忘れずに：
+
+```typescript filename="src/mastra/index.ts" copy showLineNumbers {4}
+import { assistant } from "./agents/assistant";
+
+export const mastra = new Mastra({
+    agents: { assistant }
+})
+```
+
+## エージェントを実行してテストする
+
+```bash copy
+npm run dev
+```
+
+これによりMastra開発サーバーが起動します。
+
+プレイグラウンドの場合は[http://localhost:4111](http://localhost:4111)にアクセスするか、Mastra APIの[http://localhost:4111/api/agents/assistant/stream](http://localhost:4111/api/agents/assistant/stream)経由でエージェントをテストできます。
+
+</Steps>
+
+
+
+## 高度な設定
+
+OpenRouterリクエストをより詳細に制御するために、追加の設定オプションを渡すことができます。
+
+### プロバイダー全体のオプション:
+
+OpenRouterプロバイダーにプロバイダー全体のオプションを渡すことができます:
+
+```typescript filename="src/mastra/agents/assistant.ts" {6-10} copy showLineNumbers
+import { Agent } from "@mastra/core/agent";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+
+const openrouter = createOpenRouter({
+    apiKey: process.env.OPENROUTER_API_KEY,
+    extraBody: {
+        reasoning: {
+            max_tokens: 10,
+        }
+    }
+})
+
+export const assistant = new Agent({
+    name: "assistant",
+    instructions: "You are a helpful assistant.",
+    model: openrouter("anthropic/claude-sonnet-4"),
+})
+```
+
+### モデル固有のオプション:
+
+OpenRouterプロバイダーにモデル固有のオプションを渡すことができます:
+
+```typescript filename="src/mastra/agents/assistant.ts" {11-17} copy showLineNumbers
+import { Agent } from "@mastra/core/agent";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+
+const openrouter = createOpenRouter({
+    apiKey: process.env.OPENROUTER_API_KEY,
+})
+
+export const assistant = new Agent({
+    name: "assistant",
+    instructions: "You are a helpful assistant.",
+    model: openrouter("anthropic/claude-sonnet-4", {
+        extraBody: {
+            reasoning: {
+                max_tokens: 10,
+            }
+        }
+    }),
+})
+```
+
+### プロバイダー固有のオプション:
+
+OpenRouterプロバイダーにプロバイダー固有のオプションを渡すことができます:
+
+```typescript copy showLineNumbers {7-12}
+// プロバイダー固有のオプションでレスポンスを取得
+const response = await assistant.generate([
+  {
+    role: 'system',
+    content:
+      'You are Chef Michel, a culinary expert specializing in ketogenic (keto) diet...',
+    providerOptions: {
+      // プロバイダー固有のオプション - キーは 'anthropic' または 'openrouter' を指定可能
+      anthropic: {
+        cacheControl: { type: 'ephemeral' },
+      },
+    },
+  },
+  {
+    role: 'user',
+    content: 'Can you suggest a keto breakfast?',
+  },
+]);
+```

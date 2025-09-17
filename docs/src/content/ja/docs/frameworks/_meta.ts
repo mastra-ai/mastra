@@ -1,6 +1,9 @@
 const meta = {
-  "ai-sdk": "Vercel AI SDKを使用",
-  "next-js": "Next.jsを使用",
-  copilotkit: "CopilotKitを使用",
+  "agentic-uis": {
+    title: "エージェンティックUI",
+    href: "/docs/frameworks/agentic-uis/ai-sdk",
+  },
+  servers: "サーバー",
+  "web-frameworks": "Webフレームワーク",
 };
 export default meta;

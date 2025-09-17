@@ -1,0 +1,97 @@
+---
+title: "Cloudflare Deployer"
+description: "Mastra CloudflareDeployerを使用してMastraアプリケーションをCloudflareにデプロイする方法を学ぶ"
+---
+
+import { FileTree } from "nextra/components";
+
+
+
+# CloudflareDeployer
+
+`CloudflareDeployer`クラスは、スタンドアロンのMastraアプリケーションをCloudflare Workersにデプロイすることを処理します。設定とデプロイメントを管理し、Cloudflare固有の機能でベースの[Deployer](/reference/deployer/deployer)クラスを拡張します。
+
+
+
+## インストール
+
+```bash copy
+npm install @mastra/deployer-cloudflare@latest
+```
+
+
+
+## 使用例
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
+
+export const mastra = new Mastra({
+  // ...
+  deployer: new CloudflareDeployer({
+    projectName: "hello-mastra",
+    env: {
+      NODE_ENV: "production",
+    },
+  }),
+});
+```
+
+> 利用可能なすべての設定項目については、[CloudflareDeployer](/reference/deployer/cloudflare) の API リファレンスをご覧ください。
+
+
+
+## 手動デプロイ
+
+[Cloudflare Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/)を使用した手動デプロイも可能です。Wrangler CLIをインストールした後、プロジェクトルートから以下を実行してアプリケーションをデプロイします。
+
+Wrangler CLIをインストールした後、Cloudflareアカウントでログインして認証を行います：
+
+```bash copy
+npx wrangler login
+```
+
+以下を実行してアプリケーションをビルドし、Cloudflareにデプロイします
+
+```bash copy
+npm run build && wrangler deploy --config .mastra/output/wrangler.json
+```
+
+> プロジェクトルートから`wrangler dev --config .mastra/output/wrangler.json`を実行して、Mastraアプリケーションをローカルでテストすることもできます。
+
+
+
+## ビルド出力
+
+`CloudflareDeployer`を使用したMastraアプリケーションのビルド出力には、プロジェクト内のすべてのエージェント、ツール、ワークフローと、Cloudflareでアプリケーションを実行するために必要なMastra固有のファイルが含まれます。
+
+<FileTree>
+  <FileTree.Folder name=".mastra" defaultOpen>
+    <FileTree.Folder name="output" defaultOpen>
+      <FileTree.File name="index.mjs" />
+      <FileTree.File name="wrangler.json" />
+      </FileTree.Folder>
+  </FileTree.Folder>
+  <FileTree.File name="package.json" />
+</FileTree>
+
+`CloudflareDeployer`は、以下の設定で`.mastra/output`に`wrangler.json`設定ファイルを自動生成します：
+
+```json
+{
+  "name": "hello-mastra",
+  "main": "./index.mjs",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat", "nodejs_compat_populate_process_env"],
+  "observability": { "logs": { "enabled": true } },
+  "vars": {
+    "OPENAI_API_KEY": "...",
+    "CLOUDFLARE_API_TOKEN": "..."
+  }
+}
+
+```
+## 次のステップ
+
+- [Mastra Client SDK](/docs/client-js/overview)

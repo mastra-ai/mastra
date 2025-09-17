@@ -20,7 +20,7 @@ const getWeather = async (location: string) => {
 };
 
 const serverId = 'weather-server-fixture';
-console.log(`[${serverId}] Initializing`);
+console.info(`[${serverId}] Initializing`);
 
 const weatherInputSchema = z.object({
   location: z.string().describe('City name'),
@@ -192,7 +192,7 @@ const mcpServer = new MCPServer({
 const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   const url = new URL(req.url || '', `http://${req.headers.host}`);
   const connectionLogPrefix = `[${serverId}] REQ: ${req.method} ${url.pathname}`;
-  console.log(connectionLogPrefix);
+  console.info(connectionLogPrefix);
 
   await mcpServer.startSSE({
     url,
@@ -204,9 +204,9 @@ const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse
 });
 
 const PORT = process.env.WEATHER_SERVER_PORT || 60808;
-console.log(`[${serverId}] Starting HTTP server on port ${PORT}`);
+console.info(`[${serverId}] Starting HTTP server on port ${PORT}`);
 httpServer.listen(PORT, () => {
-  console.log(`[${serverId}] Weather server is running on SSE at http://localhost:${PORT}`);
+  console.info(`[${serverId}] Weather server is running on SSE at http://localhost:${PORT}`);
 });
 
 // --- Interval-based Notifications ---
@@ -256,12 +256,12 @@ const promptNotificationInterval = setInterval(async () => {
 
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('Shutting down weather server...');
+  console.info('Shutting down weather server...');
   clearInterval(notificationInterval); // Clear the interval
   clearInterval(promptNotificationInterval); // Clear the interval
   await mcpServer.close();
   httpServer.close(() => {
-    console.log('Weather server shut down complete');
+    console.info('Weather server shut down complete');
     process.exit(0);
   });
 });

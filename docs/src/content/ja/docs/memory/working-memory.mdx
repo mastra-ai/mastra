@@ -1,23 +1,36 @@
+---
+title: "ワーキングメモリ | メモリ | Mastra ドキュメント"
+description: "Mastra でワーキングメモリを設定し、永続的なユーザーデータやユーザーの好みを保存する方法を学びます。"
+---
+
 import YouTube from "@/components/youtube";
+
 
 # ワーキングメモリ
 
-[会話履歴](/docs/memory/overview#conversation-history)や[セマンティック検索](./semantic-recall.mdx)がエージェントが会話を記憶するのに役立つ一方、ワーキングメモリはエージェントがスレッド内の対話全体でユーザーに関する永続的な情報を維持することを可能にします。
+[会話履歴](/docs/memory/overview#conversation-history) や [セマンティックリコール](./semantic-recall.mdx) がエージェントの会話の記憶を助ける一方で、ワーキングメモリはインタラクションをまたいでユーザーに関する情報を持続的に保持します。
 
-これはエージェントのアクティブな思考やメモ帳のようなものと考えてください - ユーザーやタスクについて利用可能な状態に保つ重要な情報です。これは、人が会話中に自然に相手の名前、好み、または重要な詳細を覚えておくのと似ています。
+これは、エージェントのアクティブな思考やメモ帳のようなもので、ユーザーやタスクに関する重要な情報を常に手元に置いておく仕組みです。人が会話中に自然と相手の名前や好み、重要な詳細を覚えているのと似ています。
 
-これは、常に関連性があり、エージェントが常に利用できるべき継続的な状態を維持するのに役立ちます。
+これは、常に関連性があり、常にエージェントが利用できるべき進行中の状態を維持するのに役立ちます。
+
+ワーキングメモリは次の2つのスコープで保持されます:
+
+- **スレッドスコープ**（デフォルト）：メモリは会話スレッドごとに分離されます
+- **リソーススコープ**：同一ユーザーのすべての会話スレッドにまたがってメモリが保持されます
+
+**重要:** スコープを切り替えると、エージェントはもう一方のスコープのメモリを参照できません。スレッドスコープのメモリはリソーススコープのメモリと完全に分離されています。
 
 ## クイックスタート
 
-以下は、ワーキングメモリを設定したエージェントの最小限の例です：
+ワーキングメモリ付きのエージェントを設定する最小構成の例です:
 
 ```typescript {12-15}
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
 
-// Create agent with working memory enabled
+// ワーキングメモリを有効にしてエージェントを作成
 const agent = new Agent({
   name: "PersonalAssistant",
   instructions: "You are a helpful personal assistant.",
@@ -26,7 +39,6 @@ const agent = new Agent({
     options: {
       workingMemory: {
         enabled: true,
-        use: "tool-call", // Will be the only option in a future breaking change release
       },
     },
   }),
@@ -35,15 +47,97 @@ const agent = new Agent({
 
 ## 仕組み
 
-ワーキングメモリは、エージェントが継続的に関連する情報を保存するために時間の経過とともに更新できるMarkdownテキストのブロックです：
+作業記憶とは、エージェントが時間の経過とともに更新し、常に必要となる情報を蓄えるための Markdown テキストのブロックです。
 
-<YouTube id="ik-ld_XA96s" />
+<YouTube id="UMy_JHLf1n8" />
+
+## メモリの永続スコープ
+
+ワーキングメモリは2種類のスコープで動作し、会話間でメモリをどのように保持するかを選択できます。
+
+### スレッド単位のメモリ（デフォルト）
+
+デフォルトでは、ワーキングメモリは各会話スレッド単位でスコープされます。各スレッドは独立したメモリを保持します。
+
+```typescript
+const memory = new Memory({
+  storage,
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: 'thread', // Default - memory is isolated per thread
+      template: `# User Profile
+- **Name**:
+- **Interests**:
+- **Current Goal**:
+`,
+    },
+  },
+});
+```
+
+**ユースケース:**
+
+- 異なるトピックごとの別個の会話
+- 一時的またはセッション固有の情報
+- 各スレッドでワーキングメモリは必要だが、スレッドが短命で相互に関連しないワークフロー
+
+### リソーススコープのメモリ
+
+リソーススコープのメモリは、同一ユーザー（resourceId）のすべての会話スレッドにわたって保持され、ユーザー情報を永続的に記憶できます。
+
+```typescript
+const memory = new Memory({
+  storage,
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: 'resource', // すべてのユーザースレッドにわたってメモリが保持される
+      template: `# User Profile
+- **Name**:
+- **Location**:
+- **Interests**:
+- **Preferences**:
+- **Long-term Goals**:
+`,
+    },
+  },
+});
+```
+
+**ユースケース:**
+
+- ユーザーの嗜好を記憶するパーソナルアシスタント
+- 顧客の状況を保持するカスタマーサービスボット
+- 学習者の進捗を追跡する教育アプリ
+
+### エージェントでの使用
+
+resource-scoped memory を使用する場合は、`resourceId` パラメータを必ず渡してください:
+
+```typescript
+// resource-scoped memory には resourceId が必須
+const response = await agent.generate("Hello!", {
+  threadId: "conversation-123",
+  resourceId: "user-alice-456" // 異なるスレッド間で同一のユーザーを示す
+});
+```
+
+## ストレージアダプターのサポート
+
+リソーススコープのワーキングメモリには、`mastra_resources` テーブルに対応した特定のストレージアダプターが必要です。
+
+### ✅ サポートされているストレージアダプター
+
+- **LibSQL** (`@mastra/libsql`)
+- **PostgreSQL** (`@mastra/pg`)
+- **Upstash** (`@mastra/upstash`)
 
 ## カスタムテンプレート
 
-テンプレートは、エージェントがワーキングメモリで追跡および更新する情報を指示します。テンプレートが提供されない場合はデフォルトのテンプレートが使用されますが、通常はエージェントの特定のユースケースに合わせたカスタムテンプレートを定義して、最も関連性の高い情報を確実に記憶させたいでしょう。
+テンプレートは、エージェントが作業メモリで追跡・更新すべき情報を指示します。テンプレートが指定されていない場合はデフォルトのテンプレートが使用されますが、通常はエージェントのユースケースに合わせてカスタムテンプレートを定義し、最も重要な情報を確実に記憶させるのが望ましいでしょう。
 
-以下はカスタムテンプレートの例です。この例では、ユーザーが情報を含むメッセージを送信するとすぐに、エージェントはユーザーの名前、場所、タイムゾーンなどを保存します：
+以下はカスタムテンプレートの例です。この例では、ユーザーが該当する情報を含むメッセージを送信した時点で、エージェントはユーザー名、居住地、タイムゾーンなどを保存します。
 
 ```typescript {5-28}
 const memory = new Memory({
@@ -52,23 +146,23 @@ const memory = new Memory({
       enabled: true,
       template: `
 # User Profile
- 
+
 ## Personal Info
- 
+
 - Name:
 - Location:
 - Timezone:
- 
+
 ## Preferences
- 
+
 - Communication Style: [e.g., Formal, Casual]
 - Project Goal:
 - Key Deadlines:
   - [Deadline 1]: [Date]
   - [Deadline 2]: [Date]
- 
+
 ## Session State
- 
+
 - Last Task Discussed:
 - Open Questions:
   - [Question 1]
@@ -81,17 +175,19 @@ const memory = new Memory({
 
 ## 効果的なテンプレートの設計
 
-適切に構造化されたテンプレートは、エージェントが情報を解析して更新しやすくします。テンプレートを、アシスタントが最新の状態を保つべき簡潔なフォームとして扱いましょう。
+よく構造化されたテンプレートは、エージェントが情報を解釈・更新しやすくします。テンプレートは、アシスタントに常に最新の状態で保ってもらうための短いフォームとして扱いましょう。
 
-- **短く、焦点を絞ったラベル。** 段落や非常に長い見出しは避けてください。ラベルは簡潔に（例えば `## Personal Info` や `- Name:`）して、更新が読みやすく、切り捨てられる可能性を減らします。
-- **一貫した大文字小文字の使用。** 大文字小文字の不一致（`Timezone:` と `timezone:`）は、更新を乱雑にする可能性があります。見出しや箇条書きのラベルには、タイトルケースまたは小文字を一貫して使用してください。
-- **プレースホルダーテキストはシンプルに。** `[e.g., Formal]` や `[Date]` などのヒントを使用して、LLMが正しい場所に入力できるようにします。
-- **非常に長い値は省略する。** 短い形式だけが必要な場合は、`- Name: [First name or nickname]` や `- Address (short):` のようなガイダンスを含めて、完全な法的テキストではなく簡潔にします。
-- **更新ルールは `instructions` で言及する。** テンプレートの一部をいつどのように埋めるか、またはクリアするかの指示を、エージェントの `instructions` フィールドに直接記述できます。
+- **短く要点を押さえたラベル。** 段落や長すぎる見出しは避けましょう。ラベルは簡潔に（例：
+  `## Personal Info` や `- Name:`）しておくと、更新が読みやすく、切り捨てられにくくなります。
+- **大文字・小文字の表記を統一。** 大文字小文字が不一致（`Timezone:` と `timezone:`）だと、更新が乱雑になります。見出しや箇条書きのラベルは Title Case か lower case に統一しましょう。
+- **プレースホルダーはシンプルに。** `[e.g., Formal]` や `[Date]` のようなヒントを使って、LLM が正しい箇所を埋めやすくしましょう。
+- **長すぎる値は省略。** 短い形式だけで十分な場合は、正式な全文ではなく、
+  `- Name: [First name or nickname]` や `- Address (short):` のようなガイダンスを含めてください。
+- **更新ルールは `instructions` に明記。** テンプレートのどの部分をいつ埋めるか、またはクリアするかを、エージェントの `instructions` フィールドで直接指示できます。
 
 ### 代替テンプレートスタイル
 
-少数の項目だけが必要な場合は、より短い単一ブロックを使用します：
+必要な項目が少ない場合は、短い単一ブロックを使用します:
 
 ```typescript
 const basicMemory = new Memory({
@@ -104,7 +200,7 @@ const basicMemory = new Memory({
 });
 ```
 
-より物語的なスタイルを好む場合は、重要な事実を短い段落形式で保存することもできます：
+より記述的なスタイルを好む場合は、主要な情報を短い段落形式で保存することもできます:
 
 ```typescript
 const paragraphMemory = new Memory({
@@ -117,9 +213,64 @@ const paragraphMemory = new Memory({
 });
 ```
 
-## 例：複数ステップの保持
+## 構造化ワーキングメモリ
 
-以下は、短いユーザー会話を通じて`User Profile`テンプレートがどのように更新されるかを簡略化して示したものです：
+ワーキングメモリは、Markdown テンプレートの代わりに構造化スキーマで定義することもできます。これにより、追跡するフィールドや型を [Zod](https://zod.dev/) のスキーマで正確に指定できます。スキーマを使用すると、エージェントはスキーマに適合する JSON オブジェクトとしてワーキングメモリを表示・更新します。
+
+**重要:** `template` と `schema` はどちらか一方のみを指定してください。両方を同時に指定することはできません。
+
+### 例: スキーマベースのワーキングメモリ
+
+```typescript
+import { z } from 'zod';
+import { Memory } from '@mastra/memory';
+
+const userProfileSchema = z.object({
+  name: z.string().optional(),
+  location: z.string().optional(),
+  timezone: z.string().optional(),
+  preferences: z.object({
+    communicationStyle: z.string().optional(),
+    projectGoal: z.string().optional(),
+    deadlines: z.array(z.string()).optional(),
+  }).optional(),
+});
+
+const memory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      schema: userProfileSchema,
+      // template: ... (設定しない)
+    },
+  },
+});
+```
+
+スキーマが指定されている場合、エージェントはワーキングメモリを JSON オブジェクトとして受け取ります。例:
+
+```json
+{
+  "name": "Sam",
+  "location": "Berlin",
+  "timezone": "CET",
+  "preferences": {
+    "communicationStyle": "Formal",
+    "projectGoal": "Launch MVP",
+    "deadlines": ["2025-07-01"]
+  }
+}
+```
+
+## Template と Schema の選択
+
+- エージェントに、ユーザープロフィールやスクラッチパッドのような自由形式のテキストブロックとして記憶を保持させたい場合は、**template**（Markdown）を使用します。
+- 検証可能で、JSON としてプログラムからアクセスできる構造化かつ型安全なデータが必要な場合は、**schema** を使用します。
+- 同時に有効にできるモードは 1 つだけです。`template` と `schema` の両方を設定することはサポートされていません。
+
+## 例: 複数ステップの保持
+
+以下は、短いユーザーとの会話の中で `User Profile` テンプレートがどのように更新されるかを簡略化して示したものです:
 
 ```nohighlight
 # User Profile
@@ -130,14 +281,14 @@ const paragraphMemory = new Memory({
 - Location:
 - Timezone:
 
---- ユーザーが「私の名前は**Sam**で、**ベルリン**出身です」と言った後 ---
+--- After user says "My name is **Sam** and I'm from **Berlin**" ---
 
 # User Profile
 - Name: Sam
 - Location: Berlin
 - Timezone:
 
---- ユーザーが「ちなみに普段は**CET**にいます」と追加した後 ---
+--- After user adds "By the way I'm normally in **CET**" ---
 
 # User Profile
 - Name: Sam
@@ -145,11 +296,80 @@ const paragraphMemory = new Memory({
 - Timezone: CET
 ```
 
-エージェントは情報を再度要求することなく、後の応答で`Sam`や`Berlin`を参照できるようになります。これは、その情報がワーキングメモリに保存されているためです。
+このエージェントは、作業メモリに保存されているため、後続の応答で `Sam` や `Berlin` に対して情報を再度尋ねることなく言及できます。
 
-エージェントが期待通りにワーキングメモリを更新していない場合は、エージェントの`instructions`設定でこのテンプレートを*どのように*、*いつ*使用するかについてのシステム指示を追加することができます。
+エージェントが期待どおりに作業メモリを更新しない場合は、エージェントの `instructions` 設定に、このテンプレートをどのように、いつ使用するかを示すシステム指示を追加できます。
+
+## 初期ワーキングメモリの設定
+
+エージェントは通常、`updateWorkingMemory` ツールを使ってワーキングメモリを更新しますが、スレッドの作成や更新時に初期ワーキングメモリをプログラムから設定することもできます。これは、ユーザーの名前や嗜好、その他の情報といったデータを、毎回のリクエストで渡さなくてもエージェントが利用できるようにしておきたい場合に役立ちます。
+
+### スレッドのメタデータでワーキングメモリを設定する
+
+スレッドを作成する際は、メタデータの `workingMemory` キーで初期ワーキングメモリを指定できます。
+
+```typescript filename="src/app/medical-consultation.ts" showLineNumbers copy
+// 初期ワーキングメモリ付きのスレッドを作成
+const thread = await memory.createThread({
+  threadId: "thread-123",
+  resourceId: "user-456",
+  title: "Medical Consultation",
+  metadata: {
+    workingMemory: `# Patient Profile
+- Name: John Doe
+- Blood Type: O+
+- Allergies: Penicillin
+- Current Medications: None
+- Medical History: Hypertension (controlled)
+`
+  }
+});
+
+// エージェントは以後、すべてのメッセージでこの情報にアクセスできます
+await agent.generate("What's my blood type?", {
+  threadId: thread.id,
+  resourceId: "user-456"
+});
+// 応答: "Your blood type is O+."
+```
+
+### 作業メモリをプログラムで更新する
+
+既存のスレッドの作業メモリを更新することもできます：
+
+```typescript filename="src/app/medical-consultation.ts" showLineNumbers copy
+// スレッドのメタデータを更新して作業メモリを追加・変更する
+await memory.updateThread({
+  id: "thread-123",
+  title: thread.title,
+  metadata: {
+    ...thread.metadata,
+    workingMemory: `# 患者プロフィール
+- 氏名: John Doe
+- 血液型: O+
+- アレルギー: ペニシリン、イブプロフェン  // 更新
+- 服用中の薬: リシノプリル 10mg（1日1回）  // 追加
+- 既往歴: 高血圧（コントロール良好）
+`
+  }
+});
+```
+
+### メモリを直接更新する
+
+別の方法として、`updateWorkingMemory` メソッドを直接使用します:
+
+```typescript filename="src/app/medical-consultation.ts" showLineNumbers copy
+await memory.updateWorkingMemory({
+  threadId: "thread-123",
+  resourceId: "user-456", // リソース単位のメモリで必須
+  workingMemory: "メモリ内容を更新しました..."
+});
+```
 
 ## 例
 
-- [ストリーミングワーキングメモリ](/examples/memory/streaming-working-memory)
-- [ワーキングメモリテンプレートの使用](/examples/memory/streaming-working-memory-advanced)
+- [基本的なワーキングメモリ](/examples/memory/working-memory-basic)
+- [テンプレートを用いたワーキングメモリ](/examples/memory/working-memory-template)
+- [スキーマを用いたワーキングメモリ](/examples/memory/working-memory-schema)
+- [リソースごとのワーキングメモリ](https://github.com/mastra-ai/mastra/tree/main/examples/memory-per-resource-example) - リソース単位のメモリ永続化を示す完全なサンプル

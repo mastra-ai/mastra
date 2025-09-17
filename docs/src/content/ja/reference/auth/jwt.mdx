@@ -1,0 +1,41 @@
+---
+title: "MastraJwtAuth クラス"
+description: "JSON Web Token を使用して Mastra アプリケーションを認証する MastraJwtAuth クラスの API リファレンス。"
+---
+
+# MastraJwtAuth クラス
+
+`MastraJwtAuth` クラスは、JSON Web Token（JWT）を用いて Mastra に軽量な認証機構を提供します。共有シークレットに基づいて受信リクエストを検証し、`experimental_auth` オプションを使って Mastra サーバーと統合します。
+
+## 使用例
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { MastraJwtAuth } from '@mastra/auth';
+
+export const mastra = new Mastra({
+  // ..
+  server: {
+    experimental_auth: new MastraJwtAuth({
+        secret: "<your-secret>"
+    }),
+  },
+});
+```
+
+## コンストラクターのパラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "secret",
+      type: "string",
+      description: "受信リクエストを認証するために、JSON Web Token (JWT) の署名と検証に使用される一意の文字列。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 関連項目
+
+[MastraJwtAuth](/docs/auth/jwt.mdx)

@@ -1,0 +1,30 @@
+---
+title: "リファレンス: Workflow.commit() | Workflows | Mastra ドキュメント"
+description: ワークフローで使用する `Workflow.commit()` メソッドのドキュメント。ワークフローを確定し、最終結果を返します。
+---
+
+# Workflow.commit()
+
+`.commit()` メソッドはワークフローを確定し、最終結果を返します。
+
+## 使用例
+
+```typescript copy
+workflow.then(step1).commit();
+```
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "メソッドチェーンのためのワークフローインスタンス",
+    },
+  ]}
+/>
+
+## 関連項目
+
+- [制御フロー](../../docs/workflows/control-flow.mdx)

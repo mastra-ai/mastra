@@ -1,237 +1,105 @@
 ---
-title: "リファレンス: Workflow クラス | ワークフローの構築 | Mastra ドキュメント"
-description: Mastra の Workflow クラスのドキュメント。条件分岐やデータ検証を伴う複雑な操作シーケンスのためのステートマシンを作成できます。
+title: "リファレンス: Workflowクラス | Workflows | Mastra Docs"
+description: "Mastraの`Workflow`クラスのドキュメントです。条件分岐とデータ検証を含む複雑な操作シーケンスのステートマシンを作成することができます。"
 ---
 
-# Workflow クラス
 
-Workflow クラスは、条件分岐やデータ検証を含む複雑な一連の操作のためのステートマシンを作成できるようにします。
 
-```ts copy
-import { Workflow } from "@mastra/core/workflows";
+# Workflow Class
 
-const workflow = new Workflow({ name: "my-workflow" });
-```
+`Workflow`クラスは、条件分岐とデータ検証を伴う複雑な操作シーケンスのステートマシンを作成することができます。
 
-## APIリファレンス
 
-### コンストラクタ
 
-<PropertiesTable
-  content={[
-    {
-      name: "name",
-      type: "string",
-      description: "ワークフローの識別子",
-    },
-    {
-      name: "logger",
-      type: "Logger<WorkflowLogMessage>",
-      isOptional: true,
-      description:
-        "ワークフロー実行の詳細を記録するためのオプションのロガーインスタンス",
-    },
-    {
-      name: "steps",
-      type: "Step[]",
-      description: "ワークフローに含めるステップの配列",
-    },
-    {
-      name: "triggerSchema",
-      type: "z.Schema",
-      description:
-        "ワークフロートリガーデータを検証するためのオプションのスキーマ",
-    },
-  ]}
-/>
+## 使用例
 
-### コアメソッド
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
 
-#### `step()`
-
-[Step](./step-class.mdx) をワークフローに追加し、他のステップへの遷移も含めます。チェーンのためにワークフローインスタンスを返します。[ステップの詳細はこちら](./step-class.mdx)。
-
-#### `commit()`
-
-ワークフローの設定を検証し、確定します。すべてのステップを追加した後に呼び出す必要があります。
-
-#### `execute()`
-
-オプションのトリガーデータとともにワークフローを実行します。[トリガースキーマ](./workflow.mdx#trigger-schemas)に基づいて型付けされます。
-
-## トリガースキーマ
-
-トリガースキーマは、Zod を使用してワークフローに渡される初期データを検証します。
-
-```ts showLineNumbers copy
-const workflow = new Workflow({
-  name: "order-process",
-  triggerSchema: z.object({
-    orderId: z.string(),
-    customer: z.object({
-      id: z.string(),
-      email: z.string().email(),
-    }),
+export const workflow = createWorkflow({
+  id: "test-workflow",
+  inputSchema: z.object({
+    value: z.string(),
   }),
-});
+  outputSchema: z.object({
+    value: z.string(),
+  })
+})
 ```
 
-このスキーマは以下を行います：
 
-- `execute()` に渡されるデータを検証します
-- ワークフロー入力のための TypeScript 型を提供します
 
-## バリデーション
-
-ワークフローのバリデーションは、主に2つのタイミングで行われます。
-
-### 1. コミット時
-
-`.commit()` を呼び出すと、ワークフローは次の点をバリデートします:
-
-```ts showLineNumbers copy
-workflow
-  .step('step1', {...})
-  .step('step2', {...})
-  .commit(); // ワークフロー構造のバリデーション
-```
-
-- ステップ間の循環依存
-- 終端パス（すべてのパスが終了していること）
-- 到達不能なステップ
-- 存在しないステップへの変数参照
-- ステップIDの重複
-
-### 2. 実行時
-
-`start()` を呼び出すと、次の点をバリデートします:
-
-```ts showLineNumbers copy
-const { runId, start } = workflow.createRun();
-
-// トリガーデータがスキーマに合致しているかバリデート
-await start({
-  triggerData: {
-    orderId: "123",
-    customer: {
-      id: "cust_123",
-      email: "invalid-email", // バリデーションに失敗します
-    },
-  },
-});
-```
-
-- トリガーデータがトリガースキーマに合致しているか
-- 各ステップの入力データがその inputSchema に合致しているか
-- 参照されているステップ出力内に変数パスが存在するか
-- 必須変数が存在しているか
-
-## ワークフローのステータス
-
-ワークフローのステータスは、その現在の実行状態を示します。考えられる値は以下の通りです。
+## コンストラクタパラメータ
 
 <PropertiesTable
   content={[
     {
-      name: "CREATED",
+      name: "id",
+      type: "string",
+      description: "ワークフローの一意識別子",
+    },
+    {
+      name: "inputSchema",
+      type: "z.ZodType<any>",
+      description: "ワークフローの入力構造を定義するZodスキーマ",
+    },
+    {
+      name: "outputSchema",
+      type: "z.ZodType<any>",
+      description: "ワークフローの出力構造を定義するZodスキーマ",
+    }
+  ]}
+/>
+
+
+
+## ワークフローステータス
+
+ワークフローの`status`は、現在の実行状態を示します。可能な値は以下の通りです：
+
+<PropertiesTable
+  content={[
+    {
+      name: "success",
       type: "string",
       description:
-        "ワークフローインスタンスが作成されたが、まだ開始されていません",
+        "すべてのステップが正常に実行完了し、有効な結果が出力されている",
     },
     {
-      name: "RUNNING",
+      name: "failed",
       type: "string",
-      description: "ワークフローがアクティブにステップを実行しています",
+      description:
+        "ワークフローの実行中にエラーが発生し、エラーの詳細情報が利用可能",
     },
     {
-      name: "SUSPENDED",
+      name: "suspended",
       type: "string",
-      description: "ワークフローの実行が一時停止され、再開を待っています",
-    },
-    {
-      name: "COMPLETED",
-      type: "string",
-      description: "すべてのステップが正常に実行完了しました",
-    },
-    {
-      name: "FAILED",
-      type: "string",
-      description: "ワークフローの実行中にエラーが発生しました",
+      description:
+        "ワークフローの実行が再開待ちで一時停止中、中断されたステップの情報を保持",
     },
   ]}
 />
 
-### 例：異なるステータスの処理
 
-```typescript showLineNumbers copy
-const { runId, start, watch } = workflow.createRun();
 
-watch(async ({ status }) => {
-  switch (status) {
-    case "SUSPENDED":
-      // Handle suspended state
-      break;
-    case "COMPLETED":
-      // Process results
-      break;
-    case "FAILED":
-      // Handle error state
-      break;
-  }
-});
+## 拡張使用例
 
-await start({ triggerData: data });
-```
+```typescript filename="src/test-run.ts" showLineNumbers copy
+import { mastra } from "./mastra";
 
-## エラー処理
+const run = await mastra.getWorkflow("workflow").createRunAsync();
 
-```ts showLineNumbers copy
-try {
-  const { runId, start, watch, resume } = workflow.createRun();
-  await start({ triggerData: data });
-} catch (error) {
-  if (error instanceof ValidationError) {
-    // Handle validation errors
-    console.log(error.type); // 'circular_dependency' | 'no_terminal_path' | 'unreachable_step'
-    console.log(error.details); // { stepId?: string, path?: string[] }
-  }
+const result = await run.start({...});
+
+if (result.status === "suspended") {
+  const resumedResult = await run.resume({...});
 }
 ```
 
-## ステップ間でのコンテキストの受け渡し
 
-各ステップは、コンテキストオブジェクトを通じてワークフロー内の前のステップからデータにアクセスできます。各ステップは、実行されたすべての前のステップから蓄積されたコンテキストを受け取ります。
 
-```typescript showLineNumbers copy
-workflow
-  .step({
-    id: "getData",
-    execute: async ({ context }) => {
-      return {
-        data: { id: "123", value: "example" },
-      };
-    },
-  })
-  .step({
-    id: "processData",
-    execute: async ({ context }) => {
-      // Access data from previous step through context.steps
-      const previousData = context.steps.getData.output.data;
-      // Process previousData.id and previousData.value
-    },
-  });
-```
+## 関連項目
 
-コンテキストオブジェクトは以下の特徴があります：
-
-- `context.steps` にすべての完了したステップの結果が含まれています
-- `context.steps.[stepId].output` を通じてステップの出力にアクセスできます
-- ステップの出力スキーマに基づいて型付けされています
-- データの一貫性を保つためにイミュータブルです
-
-## 関連ドキュメント
-
-- [Step](./step-class.mdx)
-- [.then()](./then.mdx)
-- [.step()](./step-function.mdx)
-- [.after()](./after.mdx)
+- [Step クラス](./step.mdx)
+- [制御フロー](../../docs/workflows/control-flow.mdx)

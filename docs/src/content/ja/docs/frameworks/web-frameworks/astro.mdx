@@ -1,0 +1,537 @@
+---
+title: "Mastra と Astro のはじめ方 | Mastra ガイド"
+description: Mastra を Astro と統合するための手順ガイド。
+---
+
+import { Callout, Steps, Tabs } from "nextra/components";
+
+
+
+# AstroプロジェクトにMastraを統合する
+
+MastraはAstroと統合されており、次のことが簡単に行えます:
+
+- AI機能を提供する柔軟なAPIの構築
+- フロントエンドとバックエンドを単一のコードベースで統合し、デプロイを簡素化
+- 効率的なサーバー・クライアント間のワークフローのために、Astroの組み込みの[Actions](https://docs.astro.build/en/guides/actions/)や[Server Endpoints](https://docs.astro.build/en/guides/endpoints/#server-endpoints-api-routes)を活用
+
+このガイドでは、AstroプロジェクトでMastraのひな型作成と統合を行う手順を説明します。
+
+
+
+<Tabs items={["Actions", "Server Endpoints"]}>
+  <Tabs.Tab>
+    <Callout type="warning">
+      このガイドは、Astro の Actions を React と Vercel アダプターと組み合わせて使用していることを前提としています。
+    </Callout>
+
+    <Steps>
+      ## Mastra のインストール
+
+      必要な Mastra パッケージをインストールします：
+
+      {/*
+              LLM CONTEXT: この Tabs コンポーネントは、異なるパッケージマネージャーを使って新しい Mastra バックエンドプロジェクトを統合するためのコマンドを表示します。
+              各タブには、そのパッケージマネージャー用のコマンドが表示され、統合済みの Mastra バックエンドサービスを作成します。
+              これは Astro プロジェクト向けの「統合バックエンド方式」の一部です。
+              すべてのコマンドは同じ Mastra プロジェクトを作成しますが、パッケージマネージャーごとに記法が異なります。
+              */}
+
+      <Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+        <Tabs.Tab>
+          ```bash copy
+          npm install mastra@latest @mastra/core@latest @mastra/libsql@latest
+          ```
+        </Tabs.Tab>
+
+        <Tabs.Tab>
+          ```bash copy
+          yarn add mastra@latest @mastra/core@latest @mastra/libsql@latest
+          ```
+        </Tabs.Tab>
+
+        <Tabs.Tab>
+          ```bash copy
+          pnpm add mastra@latest @mastra/core@latest @mastra/libsql@latest
+          ```
+        </Tabs.Tab>
+
+        <Tabs.Tab>
+          ```bash copy
+          bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
+          ```
+        </Tabs.Tab>
+      </Tabs>
+
+      ## Mastra を導入する
+
+      プロジェクトに Mastra を組み込むには、次の2つの方法があります。
+
+      ### 1. ワンライナーを使う
+
+      以下のコマンドを実行して、適切な既定設定付きのデフォルトの Weather エージェントを素早く作成します:
+
+      ```bash copy
+      npx mastra@latest init --default
+      ```
+
+      > 詳細は [mastra init](/reference/cli/init) を参照してください。
+
+      ### 2. 対話型 CLI を使う
+
+      セットアップをカスタマイズしたい場合は、`init` コマンドを実行し、プロンプトで表示されるオプションから選択してください:
+
+      ```bash copy
+      npx mastra@latest init
+      ```
+
+      `package.json` に `dev` と `build` のスクリプトを追加します:
+
+      ```json filename="package.json"
+      {
+        "scripts": {
+          ...
+          "dev:mastra": "mastra dev",
+          "build:mastra": "mastra build"
+        }
+      }
+      ```
+
+      ## TypeScript を設定する
+
+      プロジェクトのルートにある `tsconfig.json` ファイルを編集します:
+
+      ```json filename="tsconfig.json"
+      {
+        ...
+        "exclude": ["dist", ".mastra"]
+      }
+      ```
+
+      ## API キーを設定する
+
+      ```bash filename=".env" copy
+      OPENAI_API_KEY=<your-api-key>
+      ```
+
+      ## .gitignore を更新する
+
+      `.gitignore` ファイルに `.mastra` と `.vercel` を追加します：
+
+      ```bash filename=".gitignore" copy
+      .mastra
+      .vercel
+      ```
+
+      ## Mastra Agent を更新する
+
+      Astro は Vite を使用しており、環境変数には `process.env` ではなく `import.meta.env` を通じてアクセスします。したがって、モデルのコンストラクターは、次のように Vite の環境から明示的に `apiKey` を受け取る必要があります:
+
+      ```diff filename="src/mastra/agents/weather-agent.ts"
+      - import { openai } from "@ai-sdk/openai";
+      + import { createOpenAI } from "@ai-sdk/openai";
+
+      + const openai = createOpenAI({
+      +   apiKey: import.meta.env?.OPENAI_API_KEY,
+      +   compatibility: "strict"
+      + });
+      ```
+
+      > 設定の詳細は AI SDK のドキュメントをご覧ください。詳しくは [Provider Instance](https://ai-sdk.dev/providers/ai-sdk-providers/openai#provider-instance) を参照してください。
+
+      ## Mastra Dev Server を起動する
+
+      Mastra Dev Server を起動して、エージェントを REST エンドポイントとして公開します。
+
+      <Tabs items={["npm", "CLI"]}>
+        <Tabs.Tab>
+          ```bash copy
+          npm run dev:mastra
+          ```
+        </Tabs.Tab>
+
+        <Tabs.Tab>
+          ```bash copy
+          mastra dev:mastra
+          ```
+        </Tabs.Tab>
+      </Tabs>
+
+      > 起動後、エージェントはローカル環境で利用可能になります。詳しくは [ローカル開発環境](/docs/server-db/local-dev-playground) を参照してください。
+
+      ## Astro Dev サーバーを起動する
+
+      Mastra Dev Server が起動していれば、通常どおり Astro サイトを起動できます。
+
+      ## Actions ディレクトリを作成
+
+      ```bash copy
+      mkdir src/actions
+      ```
+
+      ### テスト用の Action を作成
+
+      新しい Action を作成し、次のサンプルコードを追加します:
+
+      ```bash copy
+      touch src/actions/index.ts
+      ```
+
+      ```typescript filename="src/actions/index.ts" showLineNumbers copy
+      import { defineAction } from "astro:actions";
+      import { z } from "astro:schema";
+
+      import { mastra } from "../mastra";
+
+      export const server = {
+        getWeatherInfo: defineAction({
+          input: z.object({
+            city: z.string()
+          }),
+          handler: async (input) => {
+            const city = input.city;
+            const agent = mastra.getAgent("weatherAgent");
+
+            const result = await agent.generate(`What's the weather like in ${city}?`);
+
+            return result.text;
+          }
+        })
+      };
+      ```
+
+      ### テスト用フォームを作成
+
+      新しい Form コンポーネントを作成し、次のサンプルコードを追加します:
+
+      ```bash copy
+      touch src/components/form.tsx
+      ```
+
+      ```typescript filename="src/components/form.tsx" showLineNumbers copy
+      import { actions } from "astro:actions";
+      import { useState } from "react";
+
+      export const Form = () => {
+        const [result, setResult] = useState<string | null>(null);
+
+        async function handleSubmit(formData: FormData) {
+          const city = formData.get("city")!.toString();
+          const { data } = await actions.getWeatherInfo({ city });
+
+          setResult(data || null);
+        }
+
+        return (
+          <>
+            <form action={handleSubmit}>
+              <input name="city" placeholder="Enter city" required />
+              <button type="submit">Get Weather</button>
+            </form>
+            {result && <pre>{result}</pre>}
+          </>
+        );
+      };
+      ```
+
+      ### テスト用ページを作成
+
+      新しい Page を作成し、次のサンプルコードを追加します:
+
+      ```bash copy
+      touch src/pages/test.astro
+      ```
+
+      ```astro filename="src/pages/test.astro" showLineNumbers copy
+      ---
+      import { Form } from '../components/form'
+      ---
+
+      <h1>Test</h1>
+      <Form client:load />
+      ```
+
+      > これでブラウザで `/test` にアクセスして試せます。
+
+      都市に「**London**」を送信すると、次のような結果が返ってきます:
+
+      ```plaintext
+      Agent response: The current weather in London is as follows:
+
+      - **Temperature:** 12.9°C (Feels like 9.7°C)
+      - **Humidity:** 63%
+      - **Wind Speed:** 14.7 km/h
+      - **Wind Gusts:** 32.4 km/h
+      - **Conditions:** Overcast
+
+      Let me know if you need more information!
+      ```
+    </Steps>
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    <Callout type="warning">
+      このガイドは、Astro の Endpoints を React と Vercel アダプターと併用し、出力が server に設定されていることを前提としています。
+    </Callout>
+
+    ## 前提条件
+
+    続行する前に、Astro プロジェクトが次のように設定されていることを確認してください：
+
+    * Astro の React 連携: [@astrojs/react](https://docs.astro.build/en/guides/integrations-guide/react/)
+    * Vercel アダプター: [@astrojs/vercel](https://docs.astro.build/en/guides/integrations-guide/vercel/)
+    * `astro.config.mjs` の `output` が `"server"` に設定されていること
+
+    <Steps>
+      ## Mastra のインストール
+
+      必要な Mastra パッケージをインストールします:
+
+      {/*
+              LLM コンテキスト: この Tabs コンポーネントは、異なるパッケージマネージャーを使って新規の Mastra バックエンドプロジェクトを統合するためのコマンドを表示します。
+              各タブには、そのパッケージマネージャー専用のコマンドが表示され、統合済みの Mastra バックエンドサービスを作成します。
+              これは Astro プロジェクト向けの「統合型バックエンド統合」アプローチの一部です。
+              すべてのコマンドは同じ Mastra プロジェクトを作成しますが、パッケージマネージャーごとに記法が異なります。
+              */}
+
+      <Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+        <Tabs.Tab>
+          ```bash copy
+          npm install mastra@latest @mastra/core@latest @mastra/libsql@latest
+          ```
+        </Tabs.Tab>
+
+        <Tabs.Tab>
+          ```bash copy
+          yarn add mastra@latest @mastra/core@latest @mastra/libsql@latest
+          ```
+        </Tabs.Tab>
+
+        <Tabs.Tab>
+          ```bash copy
+          pnpm add mastra@latest @mastra/core@latest @mastra/libsql@latest
+          ```
+        </Tabs.Tab>
+
+        <Tabs.Tab>
+          ```bash copy
+          bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
+          ```
+        </Tabs.Tab>
+      </Tabs>
+
+      ## Mastra を統合する
+
+      プロジェクトに Mastra を導入するには、次の2つの方法があります。
+
+      ### 1. ワンライナーを使う
+
+      以下のコマンドを実行すると、適切なデフォルト設定の Weather エージェントを手早くスキャフォールドできます:
+
+      ```bash copy
+      npx mastra@latest init --default
+      ```
+
+      > 詳細は [mastra init](/reference/cli/init) を参照してください。
+
+      ### 2. 対話型 CLI を使う
+
+      セットアップをカスタマイズしたい場合は、`init` コマンドを実行し、表示されるプロンプトからオプションを選択してください:
+
+      ```bash copy
+      npx mastra@latest init
+      ```
+
+      `package.json` に `dev` と `build` スクリプトを追加します:
+
+      ```json filename="package.json"
+      {
+        "scripts": {
+          ...
+          "dev:mastra": "mastra dev",
+          "build:mastra": "mastra build"
+        }
+      }
+      ```
+
+      ## TypeScript を設定する
+
+      プロジェクトのルートにある `tsconfig.json` ファイルを編集します:
+
+      ```json filename="tsconfig.json"
+      {
+        ...
+        "exclude": ["dist", ".mastra"]
+      }
+      ```
+
+      ## API キーを設定する
+
+      ```bash filename=".env" copy
+      OPENAI_API_KEY=<your-api-key>
+      ```
+
+      ## .gitignore を更新する
+
+      `.gitignore` ファイルに `.mastra` を追加します:
+
+      ```bash filename=".gitignore" copy
+      .mastra
+      .vercel
+      ```
+
+      ## Mastra Agent を更新する
+
+      Astro は Vite を使用しており、環境変数には `process.env` ではなく `import.meta.env` を介してアクセスします。したがって、モデルのコンストラクタには、次のように Vite の環境から `apiKey` を明示的に渡す必要があります：
+
+      ```diff filename="src/mastra/agents/weather-agent.ts"
+      - import { openai } from "@ai-sdk/openai";
+      + import { createOpenAI } from "@ai-sdk/openai";
+
+      + const openai = createOpenAI({
+      +   apiKey: import.meta.env?.OPENAI_API_KEY,
+      +   compatibility: "strict"
+      + });
+      ```
+
+      > 設定に関する詳細は AI SDK のドキュメントをご覧ください。詳しくは [Provider Instance](https://ai-sdk.dev/providers/ai-sdk-providers/openai#provider-instance) を参照してください。
+
+      ## Mastra Dev Server を起動する
+
+      Mastra Dev Server を起動して、エージェントを REST エンドポイントとして公開します:
+
+      <Tabs items={["npm", "CLI"]}>
+        <Tabs.Tab>
+          ```bash copy
+          npm run dev:mastra
+          ```
+        </Tabs.Tab>
+
+        <Tabs.Tab>
+          ```bash copy
+          mastra dev:mastra
+          ```
+        </Tabs.Tab>
+      </Tabs>
+
+      > 起動後、エージェントはローカル環境で利用できるようになります。詳しくは「[ローカル開発環境](/docs/server-db/local-dev-playground)」を参照してください。
+
+      ## Astro の開発サーバーを起動する
+
+      Mastra Dev Server が起動していれば、通常どおり Astro サイトを起動できます。
+
+      ## API ディレクトリを作成
+
+      ```bash copy
+      mkdir src/pages/api
+      ```
+
+      ### テスト用エンドポイントを作成
+
+      新しいエンドポイントを作成し、以下のサンプルコードを追加します:
+
+      ```bash copy
+      touch src/pages/api/test.ts
+      ```
+
+      ```typescript filename="src/pages/api/test.ts" showLineNumbers copy
+      import type { APIRoute } from "astro";
+
+      import { mastra } from "../../mastra";
+
+      export const POST: APIRoute = async ({ request }) => {
+        const { city } = await new Response(request.body).json();
+        const agent = mastra.getAgent("weatherAgent");
+
+        const result = await agent.generate(`What's the weather like in ${city}?`);
+
+        return new Response(JSON.stringify(result.text));
+      };
+      ```
+
+      ### テスト用フォームを作成
+
+      新しいフォームコンポーネントを作成し、以下のサンプルコードを追加します:
+
+      ```bash copy
+      touch src/components/form.tsx
+      ```
+
+      ```typescript filename="src/components/form.tsx" showLineNumbers copy
+      import { useState } from "react";
+
+      export const Form = () => {
+        const [result, setResult] = useState<string | null>(null);
+
+        async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+          event.preventDefault();
+
+          const formData = new FormData(event.currentTarget);
+          const city = formData.get("city")?.toString();
+
+          const response = await fetch("/api/test", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ city })
+          });
+
+          const text = await response.json();
+          setResult(text);
+        }
+
+        return (
+          <>
+            <form onSubmit={handleSubmit}>
+              <input name="city" placeholder="Enter city" required />
+              <button type="submit">Get Weather</button>
+            </form>
+            {result && <pre>{result}</pre>}
+          </>
+        );
+      };
+      ```
+
+      ### テストページを作成
+
+      新しいページを作成し、以下のサンプルコードを追加します:
+
+      ```bash copy
+      touch src/pages/test.astro
+      ```
+
+      ```astro filename="src/pages/test.astro" showLineNumbers copy
+      ---
+      import { Form } from '../components/form'
+      ---
+
+      <h1>Test</h1>
+      <Form client:load />
+      ```
+
+      > これでブラウザで `/test` にアクセスして試せます。
+
+      都市に **London** を入力して送信すると、次のような結果が返ってきます:
+
+      ```plaintext
+      Agent response: The current weather in London is as follows:
+
+      - **Temperature:** 12.9°C (Feels like 9.7°C)
+      - **Humidity:** 63%
+      - **Wind Speed:** 14.7 km/h
+      - **Wind Gusts:** 32.4 km/h
+      - **Conditions:** Overcast
+
+      Let me know if you need more information!
+      ```
+    </Steps>
+  </Tabs.Tab>
+</Tabs>
+
+
+
+
+
+## 次のステップ
+
+- [デプロイ | Vercel での Astro](/docs/deployment/web-framework#with-astro-on-vercel)
+- [モノレポのデプロイ](../../deployment/monorepo.mdx)

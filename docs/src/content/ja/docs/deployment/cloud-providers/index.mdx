@@ -1,0 +1,58 @@
+---
+title: "クラウドプロバイダー"
+description: "人気のクラウドプロバイダーにMastraアプリケーションをデプロイします。"
+---
+
+
+
+## Cloud Providers
+
+スタンドアロンのMastraアプリケーションは人気のクラウドプロバイダーにデプロイできます。詳細については以下のガイドのいずれかを参照してください：
+
+- [Amazon EC2](/docs/deployment/cloud-providers/amazon-ec2)
+- [AWS Lambda](/docs/deployment/cloud-providers/aws-lambda)
+- [Digital Ocean](/docs/deployment/cloud-providers/digital-ocean)
+- [Azure App Services](/docs/deployment/cloud-providers/azure-app-services)
+
+セルフホストのNode.jsサーバーデプロイメントについては、[Creating A Mastra Server](/docs/deployment/server)ガイドを参照してください。
+
+
+
+## 前提条件
+
+クラウドプロバイダーにデプロイする前に、以下を確認してください：
+
+- [Mastraアプリケーション](/docs/getting-started/installation)
+- Node.js `v20.0`以上
+- アプリケーション用のGitHubリポジトリ（ほとんどのCI/CDセットアップに必要）
+- ドメイン名管理へのアクセス（SSLとHTTPS用）
+- サーバーセットアップの基本的な知識（例：Nginx、環境変数）
+
+
+
+## LibSQLStore
+
+`LibSQLStore`はローカルファイルシステムに書き込みを行いますが、これは一時的なファイルシステムを使用するクラウド環境ではサポートされていません。**AWS Lambda**、**Azure App Services**、または**Digital Ocean App Platform**などのプラットフォームにデプロイする場合は、`LibSQLStore`の使用を**すべて削除する必要があります**。
+
+具体的には、`src/mastra/index.ts`と`src/mastra/agents/weather-agent.ts`の両方から削除してください：
+
+```typescript filename="src/mastra/index.ts" showLineNumbers
+export const mastra = new Mastra({
+  // ...
+  storage: new LibSQLStore({ // [!code --]
+    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db // [!code --]
+    url: ":memory:", // [!code --]
+  })//[!code --]
+});
+```
+
+```typescript filename="src/mastra/agents/weather-agent.ts" showLineNumbers
+export const weatherAgent = new Agent({
+ // ..
+ memory: new Memory({  // [!code --]
+   storage: new LibSQLStore({ // [!code --]
+      url: "file:../mastra.db" // path is relative to the .mastra/output directory // [!code --]
+   }) // [!code --]
+ })//  [!code --]
+});
+```

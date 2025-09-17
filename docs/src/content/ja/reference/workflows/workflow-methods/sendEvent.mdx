@@ -1,0 +1,49 @@
+---
+title: "リファレンス: Workflow.sendEvent() | Workflows | Mastra ドキュメント"
+description: ワークフローにおける `Workflow.sendEvent()` メソッドのドキュメント。イベントが送信されると、実行が再開されます。
+---
+
+# Workflow.sendEvent()
+
+`.sendEvent()` は、イベントが送信されると実行を再開します。
+
+## 使用例
+
+```typescript copy
+workflow.sendEvent('event-name', step1);
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "eventName",
+      type: "string",
+      description: "送信するイベント名",
+      isOptional: false,
+    },
+    {
+      name: "step",
+      type: "Step",
+      description: "イベント送信後に再開するステップ",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "メソッドチェーンのための Workflow インスタンス",
+    },
+  ]}
+/>
+
+## 関連情報
+
+- [Sleep とイベント](../../docs/workflows/pausing-execution.mdx)

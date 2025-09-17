@@ -1,0 +1,71 @@
+---
+title: 動的ツールの例 | ツール | Mastra ドキュメント
+description: Mastraでランタイムコンテキストを使用して動的ツールを作成・設定する方法を学習します。
+---
+
+
+
+# 動的ツール
+
+動的ツールは、コンテキスト入力に基づいて実行時に動作と機能を適応させます。固定設定に依存せず、ユーザー、環境、シナリオに応じて調整することで、単一のエージェントでパーソナライズされたコンテキスト対応の応答を実現できます。
+
+
+
+## ツールの作成
+
+`runtimeContext`を通じて提供される動的な値を使用して、為替レートデータを取得するツールを作成します。
+
+```typescript filename="src/mastra/tools/example-exchange-rates-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const getExchangeRatesTool = createTool({
+  id: "get-exchange-rates-tool",
+  description: "Gets exchanges rates for a currency",
+  inputSchema: z.null(),
+  outputSchema: z.object({
+    base: z.string(),
+    date: z.string(),
+    rates: z.record(z.number())
+  }),
+  execute: async ({ runtimeContext }) => {
+    const currency = runtimeContext.get("currency");
+
+    const response = await fetch(`https://api.frankfurter.dev/v1/latest?base=${currency}`);
+
+    const { base, date, rates } = await response.json();
+
+    return { base, date, rates };
+  }
+});
+```
+
+> 設定オプションの詳細については、[createTool()](../../reference/tools//create-tool.mdx)をご覧ください。
+
+
+
+## 使用例
+
+`set()`を使って`RuntimeContext`を設定し、`runtimeContext`を渡して`execute()`を呼び出します。
+
+```typescript filename="src/test-exchange-rate.ts" showLineNumbers copy
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import { getExchangeRatesTool } from "../src/mastra/tools/example-exchange-rates-tool";
+
+const runtimeContext = new RuntimeContext();
+
+runtimeContext.set("currency", "USD");
+
+const result = await getExchangeRatesTool.execute({
+  context: null,
+  runtimeContext
+});
+
+console.log(result);
+```
+
+
+
+## 関連項目
+
+- [ツールの呼び出し](./calling-tools.mdx#from-the-command-line)

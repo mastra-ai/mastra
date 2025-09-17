@@ -33,7 +33,7 @@ const planningIterationStep = createStep({
       userAnswers,
     } = inputData;
 
-    console.log('Starting planning iteration...');
+    console.info('Starting planning iteration...');
 
     // Get or initialize Q&A tracking in runtime context
     const qaKey = 'workflow-builder-qa';
@@ -47,8 +47,8 @@ const planningIterationStep = createStep({
     // Process new answers from user input or resume data
     const newAnswers = { ...(userAnswers || {}), ...(resumeData?.answers || {}) };
 
-    console.log('before', storedQAPairs);
-    console.log('newAnswers', newAnswers);
+    // console.info('before', storedQAPairs);
+    // console.info('newAnswers', newAnswers);
     // Update existing Q&A pairs with new answers
     if (Object.keys(newAnswers).length > 0) {
       storedQAPairs = storedQAPairs.map(pair => {
@@ -66,11 +66,11 @@ const planningIterationStep = createStep({
       runtimeContext.set(qaKey, storedQAPairs);
     }
 
-    console.log('after', storedQAPairs);
+    // console.info('after', storedQAPairs);
 
-    console.log(
-      `Current Q&A state: ${storedQAPairs.length} question-answer pairs, ${storedQAPairs.filter(p => p.answer).length} answered`,
-    );
+    // console.info(
+    //   `Current Q&A state: ${storedQAPairs.length} question-answer pairs, ${storedQAPairs.filter(p => p.answer).length} answered`,
+    // );
 
     try {
       // const filteredMcpTools = await initializeMcpTools();
@@ -131,9 +131,9 @@ const planningIterationStep = createStep({
 
       // If we have questions and plan is not complete, suspend for user input
       if (planResult.questions && planResult.questions.length > 0 && !planResult.planComplete) {
-        console.log(`Planning needs user clarification: ${planResult.questions.length} questions`);
+        console.info(`Planning needs user clarification: ${planResult.questions.length} questions`);
 
-        console.log(planResult.questions);
+        console.info(planResult.questions);
 
         // Store new questions as Q&A pairs in runtime context
         const newQAPairs = planResult.questions.map((question: any) => ({
@@ -146,7 +146,7 @@ const planningIterationStep = createStep({
         storedQAPairs = [...storedQAPairs, ...newQAPairs];
         runtimeContext.set(qaKey, storedQAPairs);
 
-        console.log(
+        console.info(
           `Updated Q&A state: ${storedQAPairs.length} total question-answer pairs, ${storedQAPairs.filter(p => p.answer).length} answered`,
         );
 
@@ -161,11 +161,11 @@ const planningIterationStep = createStep({
       }
 
       // Plan is complete
-      console.log(`Planning complete with ${planResult.tasks.length} tasks`);
+      console.info(`Planning complete with ${planResult.tasks.length} tasks`);
 
       // Update runtime context with final state
       runtimeContext.set(qaKey, storedQAPairs);
-      console.log(
+      console.info(
         `Final Q&A state: ${storedQAPairs.length} total question-answer pairs, ${storedQAPairs.filter(p => p.answer).length} answered`,
       );
 
@@ -213,7 +213,7 @@ const taskApprovalStep = createStep({
 
     // If no resume data, suspend for user approval
     if (!resumeData?.approved && resumeData?.approved !== false) {
-      console.log(`Requesting user approval for ${tasks.length} tasks`);
+      console.info(`Requesting user approval for ${tasks.length} tasks`);
 
       const summary = `Task List for Approval:
 
@@ -229,14 +229,14 @@ ${tasks.map((task, i) => `${i + 1}. [${task.priority.toUpperCase()}] ${task.cont
 
     // User responded
     if (resumeData.approved) {
-      console.log('Task list approved by user');
+      console.info('Task list approved by user');
       return {
         approved: true,
         tasks,
         message: 'Task list approved, ready for execution',
       };
     } else {
-      console.log('Task list rejected by user');
+      console.info('Task list rejected by user');
       return {
         approved: false,
         tasks,
@@ -257,7 +257,7 @@ export const planningAndApprovalWorkflow = createWorkflow({
 })
   // Step 1: Planning iteration (with questions suspension)
   .dountil(planningIterationStep, async ({ inputData }) => {
-    console.log(`Sub-workflow planning check: planComplete=${inputData.planComplete}`);
+    console.info(`Sub-workflow planning check: planComplete=${inputData.planComplete}`);
     return inputData.planComplete === true;
   })
   // Map to approval step input format

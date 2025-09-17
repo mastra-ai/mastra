@@ -1,6 +1,6 @@
 ---
-title: "Reference: Snapshots | Workflow State Persistence | Mastra Docs"
-description: "Technical reference on snapshots in Mastra - the serialized workflow state that enables suspend and resume functionality"
+title: "Snapshots | Mastra Docs"
+description: "Learn how to save and resume workflow execution state with snapshots in Mastra"
 ---
 
 # Snapshots
@@ -16,7 +16,7 @@ In Mastra, a snapshot is a serializable representation of a workflow's complete 
 
 Snapshots are automatically created and managed by Mastra whenever a workflow is suspended, and are persisted to the configured storage system.
 
-## The Role of Snapshots in Suspend and Resume
+## The role of snapshots in suspend and resume
 
 Snapshots are the key mechanism enabling Mastra's suspend and resume capabilities. When a workflow step calls `await suspend()`:
 
@@ -29,59 +29,51 @@ Snapshots are the key mechanism enabling Mastra's suspend and resume capabilitie
 
 This mechanism provides a powerful way to implement human-in-the-loop workflows, handle rate limiting, wait for external resources, and implement complex branching workflows that may need to pause for extended periods.
 
-## Snapshot Anatomy
+## Snapshot anatomy
 
-A Mastra workflow snapshot consists of several key components:
+Each snapshot includes the `runId`, input, step status (`success`, `suspended`, etc.), any suspend and resume payloads, and the final output. This ensures full context is available when resuming execution.
 
-```typescript
-export interface WorkflowRunState {
-  // Core state info
-  value: Record<string, string>; // Current state machine value
-  context: {
-    // Workflow context
-    [key: string]: Record<
-      string,
-      | {
-          status: "success";
-          output: any;
-        }
-      | {
-          status: "failed";
-          error: string;
-        }
-      | {
-          status: "suspended";
-          payload?: any;
-        }
-    >;
-    input: Record<string, any>; // Initial input data
-  };
 
-  activePaths: Array<{
-    // Currently active execution paths
-    stepPath: string[];
-    stepId: string;
-    status: string;
-  }>;
-
-  // Paths to suspended steps
-  suspendedPaths: Record<string, number[]>;
-
-  // Metadata
-  runId: string; // Unique run identifier
-  timestamp: number; // Time snapshot was created
+```json
+{
+  "runId": "34904c14-e79e-4a12-9804-9655d4616c50",
+  "status": "success",
+  "value": {},
+  "context": {
+    "input": { "value": 100, "user": "Michael", "requiredApprovers": ["manager", "finance"] },
+    "approval-step": {
+      "payload": { "value": 100, "user": "Michael", "requiredApprovers": ["manager", "finance"] },
+      "startedAt": 1758027577955,
+      "status": "success",
+      "suspendPayload": { "message": "Workflow suspended", "requestedBy": "Michael", "approvers": ["manager", "finance"] },
+      "suspendedAt": 1758027578065,
+      "resumePayload": { "confirm": true, "approver": "manager" },
+      "resumedAt": 1758027578517,
+      "output": { "value": 100, "approved": true },
+      "endedAt": 1758027578634
+    }
+  },
+  "activePaths": [],
+  "serializedStepGraph": [{ "type": "step", "step": { "id": "approval-step", "description": "Accepts a value, waits for confirmation" } }],
+  "suspendedPaths": {},
+  "waitingPaths": {},
+  "result": { "value": 100, "approved": true },
+  "runtimeContext": {},
+  "timestamp": 1758027578740
 }
 ```
 
-## How Snapshots Are Saved and Retrieved
+## How snapshots are saved and retrieved
 
-Mastra persists snapshots to the configured storage system. By default, snapshots are saved to a LibSQL database, but can be configured to use other storage providers like Upstash.
-The snapshots are stored in the `workflow_snapshots` table and identified uniquely by the `run_id` for the associated run when using libsql.
-Utilizing a persistence layer allows for the snapshots to be persisted across workflow runs, allowing for advanced human-in-the-loop functionality.
+Snapshots are saved to the configured storage system. By default, they use LibSQL, but you can configure Upstash or PostgreSQL instead. Each snapshot is saved in the `workflow_snapshots` table and identified by the workflow’s `runId`.
 
-Read more about [libsql storage](../../reference/storage/libsql.mdx) and [upstash storage](../../reference/storage/upstash.mdx) here.
+Read more about:
+- [LibSQL Storage](../../reference/storage/libsql.mdx)
+- [Upstash Storage](../../reference/storage/upstash.mdx)
+- [PostgreSQL Storage](../../reference/storage/postgresql.mdx)
 
-### Saving Snapshots
+
+### Saving snapshots
 
 When a workflow is suspended, Mastra automatically persists the workflow snapshot with these steps:
 
@@ -91,7 +83,7 @@ When a workflow is suspended, Mastra automatically persists the workflow snapsho
 4. The snapshot is serialized and stored in the configured database in the `workflow_snapshots` table
 5. The storage record includes the workflow name, run ID, and the serialized snapshot
 
-### Retrieving Snapshots
+### Retrieving snapshots
 
 When a workflow is resumed, Mastra retrieves the persisted snapshot with these steps:
 
@@ -101,105 +93,154 @@ When a workflow is resumed, Mastra retrieves the persisted snapshot with these s
 4. The workflow execution is recreated with the snapshot state
 5. The suspended step is resumed, and execution continues
 
-## Storage Options for Snapshots
-
-Mastra provides multiple storage options for persisting snapshots.
-
-A `storage` instance is configured on the `Mastra` class, and is used to setup a snapshot persistence layer for all workflows registered on the `Mastra` instance.
-This means that storage is shared across all workflows registered with the same `Mastra` instance.
-
-### LibSQL (Default)
-
-The default storage option is LibSQL, a SQLite-compatible database:
 
 ```typescript
-import { Mastra } from "@mastra/core/mastra";
-import { DefaultStorage } from "@mastra/core/storage/libsql";
+const storage = mastra.getStorage();
 
-const mastra = new Mastra({
-  storage: new DefaultStorage({
-    config: {
-      url: "file:storage.db", // Local file-based database
-      // For production:
-      // url: process.env.DATABASE_URL,
-      // authToken: process.env.DATABASE_AUTH_TOKEN,
-    },
-  }),
-  workflows: {
-    weatherWorkflow,
-    travelWorkflow,
-  },
+const snapshot = await storage!.loadWorkflowSnapshot({
+  runId: "<run-id>",
+  workflowName: "<workflow-id>"
+});
+
+console.log(snapshot);
+```
+
+## Storage options for snapshots
+
+Snapshots are persisted using a `storage` instance configured on the `Mastra` class. This storage layer is shared across all workflows registered to that instance. Mastra supports multiple storage options for flexibility in different environments.
+
+### LibSQL `@mastra/libsql`
+
+This example demonstrates how to use snapshots with LibSQL.
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  // ...
+  storage: new LibSQLStore({
+    url: ":memory:"
+  })
 });
 ```
 
-### Upstash (Redis-Compatible)
+### Upstash `@mastra/upstash`
 
-For serverless environments:
+This example demonstrates how to use snapshots with Upstash.
 
-```typescript
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { UpstashStore } from "@mastra/upstash";
 
-const mastra = new Mastra({
+export const mastra = new Mastra({
+  // ...
   storage: new UpstashStore({
-    url: process.env.UPSTASH_URL,
-    token: process.env.UPSTASH_TOKEN,
-  }),
-  workflows: {
-    weatherWorkflow,
-    travelWorkflow,
-  },
+    url: "<upstash-redis-rest-url>",
+    token: "<upstash-redis-rest-token>"
+  })
+})
+```
+
+### Postgres `@mastra/pg`
+
+This example demonstrates how to use snapshots with PostgreSQL.
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { PostgresStore } from "@mastra/pg";
+
+export const mastra = new Mastra({
+  // ...
+  storage: new PostgresStore({
+    connectionString: "<database-url>"
+  })
 });
 ```
 
-## Best Practices for Working with Snapshots
+## Best practices
 
 1. **Ensure Serializability**: Any data that needs to be included in the snapshot must be serializable (convertible to JSON).
-
 2. **Minimize Snapshot Size**: Avoid storing large data objects directly in the workflow context. Instead, store references to them (like IDs) and retrieve the data when needed.
-
 3. **Handle Resume Context Carefully**: When resuming a workflow, carefully consider what context to provide. This will be merged with the existing snapshot data.
-
 4. **Set Up Proper Monitoring**: Implement monitoring for suspended workflows, especially long-running ones, to ensure they are properly resumed.
-
 5. **Consider Storage Scaling**: For applications with many suspended workflows, ensure your storage solution is appropriately scaled.
 
-## Advanced Snapshot Patterns
+## Custom snapshot metadata
 
-### Custom Snapshot Metadata
+You can attach custom metadata when suspending a workflow by defining a `suspendSchema`. This metadata is stored in the snapshot and made available when the workflow is resumed.
 
-When suspending a workflow, you can include custom metadata that can help when resuming:
+```typescript {30-34} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
 
-```typescript
-await suspend({
-  reason: "Waiting for customer approval",
-  requiredApprovers: ["manager", "finance"],
-  requestedBy: currentUser,
-  urgency: "high",
-  expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+const approvalStep = createStep({
+  id: "approval-step",
+  description: "Accepts a value, waits for confirmation",
+  inputSchema: z.object({
+    value: z.number(),
+    user: z.string(),
+    requiredApprovers: z.array(z.string())
+  }),
+  suspendSchema: z.object({
+    message: z.string(),
+    requestedBy: z.string(),
+    approvers: z.array(z.string())
+  }),
+  resumeSchema: z.object({
+    confirm: z.boolean(),
+    approver: z.string()
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+    approved: z.boolean()
+  }),
+  execute: async ({ inputData, resumeData, suspend }) => {
+    const { value, user, requiredApprovers } = inputData;
+    const { confirm } = resumeData ?? {};
+
+    if (!confirm) {
+      return await suspend({
+        message: "Workflow suspended",
+        requestedBy: user,
+        approvers: [...requiredApprovers]
+      });
+    }
+
+    return {
+      value,
+      approved: confirm
+    };
+  }
 });
 ```
 
-This metadata is stored with the snapshot and available when resuming.
+### Providing resume data
 
-### Conditional Resumption
+Use `resumeData` to pass structured input when resuming a suspended step. It must match the step’s `resumeSchema`.
 
-You can implement conditional logic based on the suspend payload when resuming:
+```typescript {14-20} showLineNumbers copy
+const workflow = mastra.getWorkflow("approvalWorkflow");
 
-```typescript
-run.watch(async ({ activePaths }) => {
-  const isApprovalStepSuspended =
-    activePaths.get("approval")?.status === "suspended";
-  if (isApprovalStepSuspended) {
-    const payload = activePaths.get("approval")?.suspendPayload;
-    if (payload.urgency === "high" && currentUser.role === "manager") {
-      await resume({
-        stepId: "approval",
-        context: { approved: true, approver: currentUser.id },
-      });
-    }
+const run = await workflow.createRunAsync();
+
+const result = await run.start({
+  inputData: {
+    value: 100,
+    user: "Michael",
+    requiredApprovers: ["manager", "finance"]
   }
 });
+
+if (result.status === "suspended") {
+  const resumedResult = await run.resume({
+    step: "approval-step",
+    resumeData: {
+      confirm: true,
+      approver: "manager"
+    }
+  });
+}
 ```
 
 ## Related

@@ -3,6 +3,8 @@ title: 文書のチャンキングと埋め込み | RAG | Mastra ドキュメン
 description: Mastraでの効率的な処理と検索のための文書のチャンキングと埋め込みに関するガイド。
 ---
 
+
+
 ## ドキュメントのチャンク化と埋め込み
 
 処理を行う前に、コンテンツからMDocumentインスタンスを作成します。様々な形式から初期化することができます：
@@ -14,35 +16,66 @@ const docFromMarkdown = MDocument.fromMarkdown("# Your Markdown content...");
 const docFromJSON = MDocument.fromJSON(`{ "key": "value" }`);
 ```
 
-## ステップ1：ドキュメント処理
 
-`chunk`を使用してドキュメントを管理しやすい部分に分割します。Mastraは異なるドキュメントタイプに最適化された複数のチャンキング戦略をサポートしています：
 
-- `recursive`：コンテンツ構造に基づくスマートな分割
-- `character`：シンプルな文字ベースの分割
-- `token`：トークンを考慮した分割
-- `markdown`：Markdownを考慮した分割
-- `html`：HTML構造を考慮した分割
-- `json`：JSON構造を考慮した分割
-- `latex`：LaTeX構造を考慮した分割
+## ステップ1: ドキュメント処理
 
-以下は`recursive`戦略を使用する例です：
+`chunk`を使用してドキュメントを扱いやすいサイズに分割します。Mastraは、さまざまなドキュメントタイプに最適化された複数のチャンク戦略をサポートしています：
+
+- `recursive`: コンテンツ構造に基づくスマート分割
+- `character`: シンプルな文字ベースの分割
+- `token`: トークンを考慮した分割
+- `markdown`: Markdown対応分割
+- `semantic-markdown`: 関連するヘッダーグループに基づくMarkdown分割
+- `html`: HTML構造対応分割
+- `json`: JSON構造対応分割
+- `latex`: LaTeX構造対応分割
+- `sentence`: 文単位での分割
+
+**注意:** 各戦略は、そのチャンク手法に最適化された異なるパラメータを受け取ります。
+
+以下は`recursive`戦略の使用例です：
 
 ```ts showLineNumbers copy
 const chunks = await doc.chunk({
   strategy: "recursive",
-  size: 512,
+  maxSize: 512,
   overlap: 50,
-  separator: "\n",
+  separators: ["\n"],
   extract: {
     metadata: true, // オプションでメタデータを抽出
   },
 });
 ```
 
-**注意：** メタデータ抽出にはLLM呼び出しが使用される場合があるため、APIキーが設定されていることを確認してください。
+文の構造を保持することが重要なテキストの場合、以下は`sentence`戦略の使用例です：
 
-チャンキング戦略についての詳細は[チャンクドキュメント](/reference/rag/chunk.mdx)で説明しています。
+```ts showLineNumbers copy
+const chunks = await doc.chunk({
+  strategy: "sentence",
+  maxSize: 450,
+  minSize: 50,
+  overlap: 0,
+  sentenceEnders: ["."],
+  keepSeparator: true,
+});
+```
+
+セクション間の意味的な関係を保持することが重要なMarkdownドキュメントの場合、以下は`semantic-markdown`戦略の使用例です：
+
+```ts showLineNumbers copy
+const chunks = await doc.chunk({
+  strategy: "semantic-markdown",
+  joinThreshold: 500,
+  modelName: "gpt-3.5-turbo",
+});
+```
+
+**注意:** メタデータ抽出はLLM呼び出しを使用する場合があるため、APIキーが設定されていることを確認してください。
+
+チャンク戦略の詳細については、[chunkドキュメント](/reference/rag/chunk.mdx)をご覧ください。
+
+
 
 ## ステップ 2: 埋め込み生成
 
@@ -110,9 +143,11 @@ const { embeddings } = await embedMany({
 
 埋め込みを保存する際は、ベクトルデータベースのインデックスが埋め込みモデルの出力サイズと一致するように設定する必要があります。次元数が一致しない場合、エラーやデータの破損が発生することがあります。
 
+
+
 ## 例：完全なパイプライン
 
-以下は、両方のプロバイダーを使用したドキュメント処理と埋め込み生成の例です：
+以下は、両方のプロバイダーを使用したドキュメント処理とエンベディング生成を示す例です：
 
 ```ts showLineNumbers copy
 import { embedMany } from "ai";
@@ -121,39 +156,41 @@ import { cohere } from "@ai-sdk/cohere";
 
 import { MDocument } from "@mastra/rag";
 
-// Initialize document
+// ドキュメントを初期化
 const doc = MDocument.fromText(`
   Climate change poses significant challenges to global agriculture.
   Rising temperatures and changing precipitation patterns affect crop yields.
 `);
 
-// Create chunks
+// チャンクを作成
 const chunks = await doc.chunk({
   strategy: "recursive",
-  size: 256,
+  maxSize: 256,
   overlap: 50,
 });
 
-// Generate embeddings with OpenAI
+// OpenAIでエンベディングを生成
 const { embeddings: openAIEmbeddings } = await embedMany({
   model: openai.embedding("text-embedding-3-small"),
   values: chunks.map((chunk) => chunk.text),
 });
 
-// OR
+// または
 
-// Generate embeddings with Cohere
+// Cohereでエンベディングを生成
 const { embeddings: cohereEmbeddings } = await embedMany({
   model: cohere.embedding("embed-english-v3.0"),
   values: chunks.map((chunk) => chunk.text),
 });
 
-// Store embeddings in your vector database
+// ベクトルデータベースにエンベディングを保存
 await vectorStore.upsert({
   indexName: "embeddings",
   vectors: embeddings,
 });
 ```
+
+
 
 ##
 

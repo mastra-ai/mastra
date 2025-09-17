@@ -899,7 +899,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
 
         const chunkSize = Math.ceil(totalMessages / NUMBER_OF_WORKERS);
         const workerPromises = [];
-        console.log(`Using ${NUMBER_OF_WORKERS} generic Memory workers to process ${totalMessages} messages.`);
+        console.info(`Using ${NUMBER_OF_WORKERS} generic Memory workers to process ${totalMessages} messages.`);
         for (let i = 0; i < NUMBER_OF_WORKERS; i++) {
           const chunk = messagesForWorkers.slice(i * chunkSize, (i + 1) * chunkSize);
           if (chunk.length === 0) continue;

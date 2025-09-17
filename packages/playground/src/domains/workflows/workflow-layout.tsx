@@ -7,21 +7,21 @@ import {
   MainContentLayout,
   MastraResizablePanel,
   MainContentContent,
+  useWorkflow,
+  useWorkflowRuns,
 } from '@mastra/playground-ui';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
-import { useWorkflow } from '@/hooks/use-workflows';
 import { cn } from '@/lib/utils';
 
 import { WorkflowHeader } from './workflow-header';
-import { useWorkflowRuns } from '@/pages/workflows/workflow/hooks/use-workflow-runs';
 import { WorkflowInformation } from './workflow-information';
 
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();
   const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId!);
-  const { data: runs } = useWorkflowRuns({ workflowId: workflowId! });
+  const { data: runs } = useWorkflowRuns(workflowId!);
   const location = useLocation();
   const isGraphPage = location.pathname.includes('/graph');
 

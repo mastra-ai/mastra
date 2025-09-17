@@ -73,7 +73,3 @@ Verifies a JWT token and returns the associated user if valid.
 ### `authorizeUser(user: ClerkUser): Promise<boolean>`
 
 Checks if a user is authorized by verifying their organization membership.
-
-## License
-
-MIT

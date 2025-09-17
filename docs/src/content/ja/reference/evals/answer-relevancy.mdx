@@ -1,11 +1,19 @@
 ---
-title: "リファレンス: 回答の関連性 | メトリクス | 評価 | Mastra ドキュメント"
-description: Mastra における回答の関連性メトリクスのドキュメント。LLM の出力が入力クエリにどれだけ適切に対応しているかを評価します。
+title: "リファレンス: Answer Relevancy | メトリクス | Evals | Mastra Docs"
+description: MastraのAnswer Relevancyメトリクスのドキュメント。LLMの出力が入力クエリにどの程度適切に対応しているかを評価します。
 ---
+
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
 
 # AnswerRelevancyMetric
 
-`AnswerRelevancyMetric` クラスは、LLM の出力が入力クエリにどれだけ適切に回答または対応しているかを評価します。判定者ベースのシステムを用いて関連性を判断し、詳細なスコアリングと理由付けを提供します。
+<ScorerCallout />
+
+`AnswerRelevancyMetric`クラスは、LLMの出力が入力クエリにどの程度適切に回答または対処しているかを評価します。判定ベースのシステムを使用して関連性を判定し、詳細なスコアリングと推論を提供します。
+
+
 
 ## 基本的な使い方
 
@@ -29,6 +37,8 @@ const result = await metric.measure(
 console.log(result.score); // Score from 0-1
 console.log(result.info.reason); // Explanation of the score
 ```
+
+
 
 ## コンストラクタのパラメータ
 
@@ -71,6 +81,8 @@ console.log(result.info.reason); // Explanation of the score
   ]}
 />
 
+
+
 ## measure() のパラメーター
 
 <PropertiesTable
@@ -89,6 +101,8 @@ console.log(result.info.reason); // Explanation of the score
     },
   ]}
 />
+
+
 
 ## 戻り値
 
@@ -119,6 +133,8 @@ console.log(result.info.reason); // Explanation of the score
   ]}
 />
 
+
+
 ## スコアリングの詳細
 
 この指標は、クエリと回答の整合性を通じて関連性を評価し、完全性、正確性、詳細レベルを考慮します。
@@ -146,6 +162,8 @@ console.log(result.info.reason); // Explanation of the score
 - 0.4-0.6: 中程度の関連性 - 重要な抜け
 - 0.1-0.3: 低い関連性 - 重大な問題
 - 0.0: 関連性なし - 誤りまたは的外れ
+
+
 
 ## カスタム設定の例
 
@@ -178,6 +196,8 @@ const result = await metric.measure(
 //   }
 // }
 ```
+
+
 
 ## 関連
 

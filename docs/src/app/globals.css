@@ -506,10 +506,10 @@ aside > div:nth-child(1) ul li.active:has(> a) {
   }
 }
 
-aside > div:nth-child(1) ul li.active:has(a[href="/docs"]),
-aside > div:nth-child(1) ul li.active:has(a[href="/examples"]),
-aside > div:nth-child(1) ul li.active:has(a[href="/guides"]),
-aside > div:nth-child(1) ul li.active:has(a[href="/reference"]) {
+aside > div:nth-child(1) ul li.active:has(a[href$="/docs"]),
+aside > div:nth-child(1) ul li.active:has(a[href$="/examples"]),
+aside > div:nth-child(1) ul li.active:has(a[href$="/guides"]),
+aside > div:nth-child(1) ul li.active:has(a[href$="/reference"]) {
   &::before {
     content: "";
     background: transparent;
@@ -520,20 +520,20 @@ article main li:has(ul) ul {
   margin-top: calc(var(--x-spacing) * 2);
 }
 
-aside a[href="/docs"],
-aside button[data-href="/docs/reference"],
-aside a[href="/examples"],
-aside a[href="/guides"],
-aside a[href="/reference"] {
+aside a[href$="/docs"],
+aside button[data-href$="/docs/reference"],
+aside a[href$="/examples"],
+aside a[href$="/guides"],
+aside a[href$="/reference"] {
   position: relative;
   padding-inline-start: calc((var(--button-gap) * 3) + var(--icon-position));
 }
 
-aside a[href="/docs"]::before,
-aside button[data-href="/docs/reference"]::before,
-aside a[href="/examples"]::before,
-aside a[href="/guides"]::before,
-aside a[href="/reference"]::before {
+aside a[href$="/docs"]::before,
+aside button[data-href$="/docs/reference"]::before,
+aside a[href$="/examples"]::before,
+aside a[href$="/guides"]::before,
+aside a[href$="/reference"]::before {
   content: "";
   position: absolute;
   left: var(--icon-position);
@@ -545,18 +545,18 @@ aside a[href="/reference"]::before {
   background-repeat: no-repeat;
 }
 
-aside a[href="/docs"]::before,
-aside a[href="/examples"]::before,
-aside a[href="/guides"]::before {
+aside a[href$="/docs"]::before,
+aside a[href$="/examples"]::before,
+aside a[href$="/guides"]::before {
   background-image: url("icons/introduction.svg");
 }
 
-aside button[data-href="/docs/reference"]::before,
-aside a[href="/reference"]::before {
+aside button[data-href$="/docs/reference"]::before,
+aside a[href$="/reference"]::before {
   background-image: url("icons/reference.svg");
 }
 
-button[data-href="/docs/reference"] svg {
+button[data-href$="/docs/reference"] svg {
   display: none;
 }
 

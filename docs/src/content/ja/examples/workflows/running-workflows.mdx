@@ -1,0 +1,127 @@
+---
+title: "ワークフローを実行する | Workflows | Mastra Docs"
+description: ワークフローの実行方法の例。
+---
+
+
+
+# ワークフローの実行
+
+ワークフローはさまざまな環境で実行できます。以下の例では、コマンドラインスクリプトの使用、またはクライアントサイドコンポーネントから [Mastra Client SDK](../../docs/server-db/mastra-client.mdx) を呼び出して実行する方法を示します。
+
+
+
+## Mastra Client から
+
+この例では、クライアント側で [Mastra Client SDK](../../docs/server-db/mastra-client.mdx) を使用してリクエストを実行します。`inputData` は、[sequentialSteps](./sequential-steps.mdx) の例で定義された `inputSchema` に一致します。
+
+```typescript filename="src/components/test-run-workflow.tsx"
+import { mastraClient } from "../../lib/mastra-client";
+
+export const TestWorkflow = () => {
+  async function handleClick() {
+    const workflow = await mastraClient.getWorkflow("sequentialSteps");
+
+    const run = await workflow.createRunAsync();
+
+    const result = await workflow.startAsync({
+      runId: run.runId,
+      inputData: {
+        value: 10
+      }
+    });
+
+    console.log(JSON.stringify(result, null, 2));
+  }
+
+  return <button onClick={handleClick}>Test Workflow</button>;
+};
+```
+
+> 詳細は [Mastra Client SDK](../../docs/server-db/mastra-client.mdx) をご覧ください。
+
+
+
+## コマンドラインから
+
+この例では、`src` ディレクトリに実行用スクリプトを追加しています。`inputData` は、[sequentialSteps](./sequential-steps.mdx) の例における `inputSchema` と一致します。
+
+```typescript filename="src/test-run-workflow.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+const run = await mastra.getWorkflow("sequentialSteps").createRunAsync();
+
+const result = await run.start({
+  inputData: {
+    value: 10,
+  },
+});
+
+console.log(result);
+```
+
+### スクリプトを実行する
+
+次のコマンドでワークフローを実行します：
+
+```bash
+npx tsx src/test-run-workflow.ts
+```
+
+
+
+## curl から
+
+Mastra アプリケーションの `/start-async` エンドポイントに `POST` リクエストを送ることで、ワークフローを実行できます。ワークフローの `inputSchema` に合致する `inputData` を含めてください。
+
+```bash
+curl -X POST http://localhost:4111/api/workflows/sequentialSteps/start-async \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inputData": {
+      "value": 10
+    }
+  }' | jq
+```
+
+
+
+## 出力例
+
+このワークフローの実行結果は次のようになります：
+
+```json
+{
+  "status": "success",
+  "steps": {
+    "input": {
+      "value": 10
+    },
+    "step-1": {
+      "payload": {
+        "value": 10
+      },
+      "startedAt": 1756823641918,
+      "status": "success",
+      "output": {
+        "value": 10
+      },
+      "endedAt": 1756823641918
+    },
+    "step-2": {
+      "payload": {
+        "value": 10
+      },
+      "startedAt": 1756823641918,
+      "status": "success",
+      "output": {
+        "value": 10
+      },
+      "endedAt": 1756823641918
+    }
+  },
+  "result": {
+    "value": 10
+  }
+}
+```

@@ -173,7 +173,7 @@ export const useCreateTemplateInstallRun = () => {
   return useMutation({
     mutationFn: async ({ runId }: { runId?: string }) => {
       const template = client.getAgentBuilderAction('merge-template');
-      return await template.createRun({ runId });
+      return await template.createRunAsync({ runId });
     },
   });
 };

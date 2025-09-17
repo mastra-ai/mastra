@@ -3,9 +3,13 @@ title: "リファレンス: GraphRAG | グラフベースRAG | RAG | Mastra ド�
 description: MastraのGraphRAGクラスのドキュメント。グラフベースの検索拡張生成手法を実装しています。
 ---
 
+
+
 # GraphRAG
 
 `GraphRAG` クラスは、グラフベースのリトリーバル拡張生成手法を実装しています。ドキュメントのチャンクからナレッジグラフを作成し、ノードはドキュメントを、エッジはセマンティックな関係を表します。これにより、直接的な類似性マッチングだけでなく、グラフの探索を通じて関連コンテンツを発見することも可能になります。
+
+
 
 ## 基本的な使い方
 
@@ -29,6 +33,8 @@ const results = await graphRag.query({
 });
 ```
 
+
+
 ## コンストラクタのパラメータ
 
 <PropertiesTable
@@ -43,12 +49,15 @@ const results = await graphRag.query({
     {
       name: "threshold",
       type: "number",
-      description: "ノード間のエッジを作成するための類似度しきい値（0-1）",
+      description:
+        "ノード間のエッジを作成するための類似度しきい値（0-1）",
       isOptional: true,
       defaultValue: "0.7",
     },
   ]}
 />
+
+
 
 ## メソッド
 
@@ -160,6 +169,8 @@ query({
   ]}
 />
 
+
+
 ## 高度な例
 
 ```typescript
@@ -179,6 +190,8 @@ const results = await graphRag.query({
   restartProb: 0.2,
 });
 ```
+
+
 
 ## 関連
 

@@ -3,9 +3,13 @@ title: "リファレンス: OpenAI Realtime Voice | Voice Providers | Mastra ド
 description: "OpenAIRealtimeVoice クラスのドキュメント。WebSocket を通じてリアルタイムのテキスト読み上げおよび音声認識機能を提供します。"
 ---
 
+
+
 # OpenAI Realtime Voice
 
 OpenAIRealtimeVoice クラスは、OpenAI の WebSocket ベースの API を使用してリアルタイムの音声対話機能を提供します。リアルタイムの音声から音声への変換、音声活動検出、イベントベースの音声ストリーミングをサポートしています。
+
+
 
 ## 使用例
 
@@ -57,6 +61,8 @@ await voice.send(microphoneStream);
 // When done, disconnect
 voice.connect();
 ```
+
+
 
 ## 設定
 
@@ -110,7 +116,8 @@ voice.connect();
     {
       name: "prefix_padding_ms",
       type: "number",
-      description: "音声が検出される前に含める音声のミリ秒数。",
+      description:
+        "音声が検出される前に含める音声のミリ秒数。",
       isOptional: true,
       defaultValue: "1000",
     },
@@ -123,6 +130,8 @@ voice.connect();
     },
   ]}
 />
+
+
 
 ## メソッド
 
@@ -290,6 +299,8 @@ OpenAI リアルタイムセッションから切断し、リソースをクリ�
 
 戻り値: `void`
 
+
+
 ## イベント
 
 OpenAIRealtimeVoiceクラスは以下のイベントを発生させます：
@@ -351,6 +362,8 @@ OpenAIRealtimeVoiceクラスは以下のイベントを発生させます：
   ]}
 />
 
+
+
 ## 利用可能な音声
 
 以下の音声オプションが利用できます：
@@ -363,6 +376,8 @@ OpenAIRealtimeVoiceクラスは以下のイベントを発生させます：
 - `sage`: 落ち着いて思慮深い
 - `shimmer`: 明るくエネルギッシュ
 - `verse`: 多才で表現力豊か
+
+
 
 ## メモ
 

@@ -1,47 +1,97 @@
 ---
-title: "リファレンス: Chroma ベクトルストア | ベクトルデータベース | RAG | Mastra ドキュメント"
-description: Mastraにおける、ChromaDBを使用したベクトル検索を提供するChromaVectorクラスのドキュメント。
+title: "リファレンス: Chroma Vector Store | ベクトルデータベース | RAG | Mastra ドキュメント"
+description: Mastra の ChromaVector クラスに関するドキュメント。ChromaDB を用いたベクトル検索を提供します。
 ---
 
-# Chroma ベクトルストア
+import { Callout } from "nextra/components";
 
-ChromaVectorクラスは、[ChromaDB](https://www.trychroma.com/)を使用したベクトル検索を提供します。ChromaDBはオープンソースの埋め込みデータベースです。
-メタデータフィルタリングとハイブリッド検索機能を備えた効率的なベクトル検索を提供します。
 
-## コンストラクタオプション
+
+# Chroma ベクターストア
+
+ChromaVector クラスは、オープンソースの埋め込みデータベースである [Chroma](https://docs.trychroma.com/docs/overview/getting-started) を用いたベクター検索を提供します。
+メタデータによるフィルタリングやハイブリッド検索に対応し、高効率なベクター検索を実現します。
+
+<Callout type="info">
+  <b>Chroma Cloud</b>
+  <p>
+    Chroma Cloud は、サーバーレスでのベクター検索と全文検索を提供します。非常に高速でコスト効率に優れ、スケーラブルかつ手間いらずです。データベースを作成し、$5 の無料クレジットで 30 秒以内に試せます。
+
+    [Chroma Cloud を始める](https://trychroma.com/signup)
+  </p>
+</Callout>
+
+
+
+## コンストラクターのオプション
 
 <PropertiesTable
   content={[
     {
-      name: "path",
+      name: "host",
       type: "string",
-      description: "ChromaDBインスタンスへのURLパス",
-    },
-    {
-      name: "auth",
-      type: "object",
       isOptional: true,
-      description: "認証設定",
+      description: "Chroma サーバーのホストアドレス。既定値は 'localhost'",
     },
+    {
+      name: "port",
+      type: "number",
+      isOptional: true,
+      description: "Chroma サーバーのポート番号。既定値は 8000",
+    },
+    {
+      name: "ssl",
+      type: "boolean",
+      isOptional: true,
+      description: "接続に SSL/HTTPS を使用するかどうか。既定値は false",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      isOptional: true,
+      description: "Chroma Cloud の API キー",
+    },
+    {
+      name: "tenant",
+      type: "string",
+      isOptional: true,
+      description: "接続先の Chroma サーバー内のテナント名。シングルノード版 Chroma の既定値は 'default_tenant'。Chroma Cloud の場合は、提供された API キーに基づき自動解決されます",
+    },
+    {
+      name: "database",
+      type: "string",
+      isOptional: true,
+      description: "接続先のデータベース名。シングルノード版 Chroma の既定値は 'default_database'。Chroma Cloud の場合は、提供された API キーに基づき自動解決されます",
+    },
+    {
+      name: "headers",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "リクエストに付与する追加の HTTP ヘッダー",
+    },
+    {
+      name: "fetchOptions",
+      type: "RequestInit",
+      isOptional: true,
+      description: "HTTP リクエストに対する追加の fetch オプション",
+    }
   ]}
 />
 
-### auth
 
-<PropertiesTable
-  content={[
-    {
-      name: "provider",
-      type: "string",
-      description: "認証プロバイダー",
-    },
-    {
-      name: "credentials",
-      type: "string",
-      description: "認証資格情報",
-    },
-  ]}
-/>
+
+## Chroma サーバーの実行
+
+Chroma Cloud のユーザーは、`ChromaVector` コンストラクタに API キー、テナント、データベース名を渡すだけで構いません。
+
+`@mastra/chroma` パッケージをインストールすると、[Chroma CLI](https://docs.trychroma.com/docs/cli/db) を利用でき、次のコマンドでこれらを環境変数として設定できます: `chroma db connect [DB-NAME] --env-file`
+
+それ以外の場合、単一ノードの Chroma サーバーをセットアップする方法はいくつかあります:
+* Chroma CLI を使ってローカルで実行: `chroma run`。詳細な設定オプションは [Chroma ドキュメント](https://docs.trychroma.com/docs/cli/run) を参照してください。
+* 公式の Chroma イメージを使い、[Docker](https://docs.trychroma.com/guides/deploy/docker) 上で実行。
+* 任意のプロバイダーに独自の Chroma サーバーをデプロイ。Chroma は [AWS](https://docs.trychroma.com/guides/deploy/aws)、[Azure](https://docs.trychroma.com/guides/deploy/azure)、[GCP](https://docs.trychroma.com/guides/deploy/gcp) 向けのサンプルテンプレートを提供しています。
+
+
 
 ## メソッド
 
@@ -52,20 +102,41 @@ ChromaVectorクラスは、[ChromaDB](https://www.trychroma.com/)を使用した
     {
       name: "indexName",
       type: "string",
-      description: "作成するインデックスの名前",
+      description: "作成するインデックス名",
     },
     {
       name: "dimension",
       type: "number",
-      description: "ベクトルの次元数（埋め込みモデルと一致する必要があります）",
+      description: "ベクトル次元（利用する埋め込みモデルに一致させる必要があります）",
     },
     {
       name: "metric",
       type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
       defaultValue: "cosine",
-      description: "類似性検索の距離メトリック",
+      description: "類似検索に用いる距離尺度",
     },
+  ]}
+/>
+
+### forkIndex()
+
+注: フォークは Chroma Cloud 上、または自前で OSS の**分散**版 Chroma をデプロイしている場合にのみサポートされています。
+
+`forkIndex` を使うと、既存の Chroma インデックスを即座にフォークできます。フォークしたインデックスへの操作は元のインデックスに影響しません。詳しくは [Chroma docs](https://docs.trychroma.com/cloud/collection-forking) をご覧ください。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "フォーク対象のインデックス名",
+    },
+    {
+      name: "newIndexName",
+      type: "string",
+      description: "フォーク後のインデックス名",
+    }
   ]}
 />
 
@@ -76,7 +147,7 @@ ChromaVectorクラスは、[ChromaDB](https://www.trychroma.com/)を使用した
     {
       name: "indexName",
       type: "string",
-      description: "アップサートするインデックスの名前",
+      description: "アップサート先のインデックス名",
     },
     {
       name: "vectors",
@@ -87,33 +158,46 @@ ChromaVectorクラスは、[ChromaDB](https://www.trychroma.com/)を使用した
       name: "metadata",
       type: "Record<string, any>[]",
       isOptional: true,
-      description: "各ベクトルのメタデータ",
+      description: "各ベクトルに対応するメタデータ",
     },
     {
       name: "ids",
       type: "string[]",
       isOptional: true,
-      description:
-        "オプションのベクトルID（提供されない場合は自動生成されます）",
+      description: "任意のベクトル ID（未指定の場合は自動生成）",
     },
     {
       name: "documents",
       type: "string[]",
       isOptional: true,
       description:
-        "Chroma固有：ベクトルに関連付けられた元のテキストドキュメント",
+        "Chroma 固有: ベクトルに紐づく元のテキストドキュメント",
     },
   ]}
 />
 
 ### query()
 
+`queryVector` を使ってインデックスをクエリします。`queryVector` からの距離順に、意味的に類似したレコードの配列を返します。各レコードの形は次のとおりです:
+
+```typescript
+{
+  id: string;
+  score: number;
+  document?: string;
+  metadata?: Record<string, string | number | boolean>;
+  embedding?: number[]
+}
+```
+
+`query` 呼び出しにメタデータの型を指定して型推論させることもできます: `query<T>()`。
+
 <PropertiesTable
   content={[
     {
       name: "indexName",
       type: "string",
-      description: "クエリを実行するインデックスの名前",
+      description: "クエリ対象のインデックス名",
     },
     {
       name: "queryVector",
@@ -125,13 +209,13 @@ ChromaVectorクラスは、[ChromaDB](https://www.trychroma.com/)を使用した
       type: "number",
       isOptional: true,
       defaultValue: "10",
-      description: "返す結果の数",
+      description: "返す結果の件数",
     },
     {
       name: "filter",
       type: "Record<string, any>",
       isOptional: true,
-      description: "クエリのメタデータフィルター",
+      description: "クエリに適用するメタデータフィルター",
     },
     {
       name: "includeVector",
@@ -144,7 +228,73 @@ ChromaVectorクラスは、[ChromaDB](https://www.trychroma.com/)を使用した
       name: "documentFilter",
       type: "Record<string, any>",
       isOptional: true,
-      description: "Chroma固有：ドキュメントコンテンツに適用するフィルター",
+      description: "Chroma 固有: ドキュメント内容に適用するフィルター",
+    },
+  ]}
+/>
+
+### get()
+
+ID、メタデータ、ドキュメントフィルターで Chroma インデックスからレコードを取得します。返されるレコード配列の形は次のとおりです:
+
+```typescript
+{
+  id: string;
+  document?: string;
+  metadata?: Record<string, string | number | boolean>;
+  embedding?: number[]
+}
+```
+
+`get` 呼び出しにメタデータの型を指定して型推論させることもできます: `get<T>()`。
+
+
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "クエリ対象のインデックス名",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "返却するレコードIDのリスト。指定しない場合は、すべてのレコードが返されます。",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "メタデータのフィルター条件。",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "結果にベクトルを含めるかどうか",
+    },
+    {
+      name: "documentFilter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Chroma 固有: ドキュメント内容に適用するフィルター",
+    },
+    {
+      name: "limit",
+      type: "number",
+      isOptional: true,
+      defaultValue: 100,
+      description: "返却するレコードの最大数",
+    },
+    {
+      name: "offset",
+      type: "number",
+      isOptional: true,
+      defaultValue: 0,
+      description: "レコード返却のオフセット。`limit` と併用してページネーションします。",
     },
   ]}
 />
@@ -160,12 +310,12 @@ ChromaVectorクラスは、[ChromaDB](https://www.trychroma.com/)を使用した
     {
       name: "indexName",
       type: "string",
-      description: "説明するインデックスの名前",
+      description: "詳細を取得するインデックス名",
     },
   ]}
 />
 
-戻り値：
+Returns:
 
 ```typescript copy
 interface IndexStats {
@@ -182,7 +332,7 @@ interface IndexStats {
     {
       name: "indexName",
       type: "string",
-      description: "削除するインデックスの名前",
+      description: "削除するインデックス名",
     },
   ]}
 />
@@ -194,7 +344,7 @@ interface IndexStats {
     {
       name: "indexName",
       type: "string",
-      description: "更新するベクトルを含むインデックスの名前",
+      description: "更新対象のベクトルを含むインデックス名",
     },
     {
       name: "id",
@@ -204,12 +354,12 @@ interface IndexStats {
     {
       name: "update",
       type: "object",
-      description: "更新パラメータ",
+      description: "更新パラメーター",
     },
   ]}
 />
 
-`update`オブジェクトには以下を含めることができます：
+`update` オブジェクトには次を含めることができます:
 
 <PropertiesTable
   content={[
@@ -235,7 +385,7 @@ interface IndexStats {
     {
       name: "indexName",
       type: "string",
-      description: "削除するベクトルを含むインデックスの名前",
+      description: "削除対象のベクトルを含むインデックス名",
     },
     {
       name: "id",
@@ -244,6 +394,8 @@ interface IndexStats {
     },
   ]}
 />
+
+
 
 ## レスポンスタイプ
 
@@ -258,6 +410,8 @@ interface QueryResult {
   vector?: number[]; // Only included if includeVector is true
 }
 ```
+
+
 
 ## エラー処理
 
@@ -276,6 +430,8 @@ try {
   }
 }
 ```
+
+
 
 ## 関連
 

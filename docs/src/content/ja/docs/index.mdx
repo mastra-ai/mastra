@@ -3,20 +3,22 @@ title: "はじめに | Mastra ドキュメント"
 description: "Mastraは、TypeScriptエージェントフレームワークです。AIアプリケーションや機能を素早く構築するのに役立ちます。ワークフロー、エージェント、RAG、統合、同期、評価など、必要なプリミティブセットを提供します。"
 ---
 
+
+
 # Mastraについて
 
 MastraはオープンソースのTypeScriptエージェントフレームワークです。
 
 AIアプリケーションや機能を構築するために必要なプリミティブを提供するように設計されています。
 
-Mastraを使用して、記憶を持ち関数を実行できる[AIエージェント](/docs/agents/overview.mdx)を構築したり、決定論的な[ワークフロー](/docs/workflows/overview.mdx)でLLM呼び出しを連鎖させたりすることができます。Mastraの[ローカル開発環境](/docs/local-dev/mastra-dev.mdx)でエージェントとチャットしたり、[RAG](/docs/rag/overview.mdx)でアプリケーション固有の知識を提供したり、Mastraの[評価](/docs/evals/overview.mdx)で出力を採点したりすることができます。
+Mastraを使用して、メモリを持ち関数を実行できる[AIエージェント](/docs/agents/overview.mdx)を構築したり、決定論的な[ワークフロー](/docs/workflows/overview.mdx)でLLM呼び出しをチェーンしたりできます。Mastraの[ローカル開発プレイグラウンド](/docs/server-db/local-dev-playground.mdx)でエージェントとチャットしたり、[RAG](/docs/rag/overview.mdx)でアプリケーション固有の知識を提供したり、Mastraの[評価](/docs/evals/overview.mdx)でその出力をスコア化したりできます。
 
-主な機能は以下の通りです：
+主な機能には以下が含まれます：
 
-- **[モデルルーティング](https://sdk.vercel.ai/docs/introduction)**: Mastraは[Vercel AI SDK](https://sdk.vercel.ai/docs/introduction)をモデルルーティングに使用し、OpenAI、Anthropic、Google Geminiなど、あらゆるLLMプロバイダーと対話するための統一されたインターフェースを提供します。
-- **[エージェントメモリとツール呼び出し](/docs/agents/agent-memory.mdx)**: Mastraを使用すると、エージェントに呼び出し可能なツール（関数）を提供できます。エージェントのメモリを永続化し、最新性、意味的類似性、または会話スレッドに基づいて取得することができます。
-- **[ワークフローグラフ](/docs/workflows/overview.mdx)**: 決定論的な方法でLLM呼び出しを実行したい場合、Mastraはグラフベースのワークフローエンジンを提供します。個別のステップを定義し、各実行の各ステップで入出力をログに記録し、それらを可観測性ツールにパイプすることができます。Mastraワークフローには、分岐と連鎖を可能にする制御フローのシンプルな構文（`step()`、`.then()`、`.after()`）があります。
-- **[エージェント開発環境](/docs/local-dev/mastra-dev.mdx)**: ローカルでエージェントを開発する際、Mastraのエージェント開発環境でエージェントとチャットし、その状態とメモリを確認できます。
-- **[検索拡張生成（RAG）](/docs/rag/overview.mdx)**: Mastraは、ドキュメント（テキスト、HTML、Markdown、JSON）をチャンクに処理し、埋め込みを作成し、ベクトルデータベースに保存するためのAPIを提供します。クエリ時には、関連するチャンクを取得してLLMの応答をデータに基づいたものにします。複数のベクトルストア（Pinecone、pgvectorなど）と埋め込みプロバイダー（OpenAI、Cohereなど）の上に統一されたAPIを提供します。
-- **[デプロイメント](/docs/deployment/deployment.mdx)**: Mastraは、既存のReact、Next.js、またはNode.jsアプリケーション内、あるいはスタンドアロンのエンドポイントにエージェントとワークフローをバンドルすることをサポートしています。Mastraデプロイヘルパーを使用すると、エージェントとワークフローをHonoを使用したNode.jsサーバーに簡単にバンドルしたり、Vercel、Cloudflare Workers、Netlifyなどのサーバーレスプラットフォームにデプロイしたりできます。
-- **[評価](/docs/evals/overview.mdx)**: Mastraは、モデル評価、ルールベース、統計的手法を使用してLLM出力を評価する自動評価指標を提供し、毒性、バイアス、関連性、事実の正確性のための組み込み指標を備えています。また、独自の評価を定義することもできます。
+- **[モデルルーティング](https://sdk.vercel.ai/docs/introduction)**: Mastraは[Vercel AI SDK](https://sdk.vercel.ai/docs/introduction)をモデルルーティングに使用し、OpenAI、Anthropic、Google Geminiを含む任意のLLMプロバイダーとやり取りするための統一されたインターフェースを提供します。
+- **[エージェントメモリとツール呼び出し](/docs/agents/agent-memory.mdx)**: Mastraを使用すると、エージェントが呼び出すことができるツール（関数）を提供できます。エージェントメモリを永続化し、最新性、意味的類似性、または会話スレッドに基づいて取得できます。
+- **[ワークフローグラフ](/docs/workflows/overview.mdx)**: LLM呼び出しを決定論的な方法で実行したい場合、Mastraはグラフベースのワークフローエンジンを提供します。個別のステップを定義し、各実行の各ステップで入力と出力をログに記録し、それらを観測可能性ツールにパイプできます。Mastraワークフローには、分岐とチェーンを可能にする制御フロー（`.then()`、`.branch()`、`.parallel()`）のシンプルな構文があります。
+- **[エージェント開発プレイグラウンド](/docs/server-db/local-dev-playground.mdx)**: ローカルでエージェントを開発している際、Mastraのエージェント開発環境でエージェントとチャットし、その状態とメモリを確認できます。
+- **[検索拡張生成（RAG）](/docs/rag/overview.mdx)**: Mastraは、ドキュメント（テキスト、HTML、Markdown、JSON）をチャンクに処理し、埋め込みを作成し、ベクトルデータベースに保存するAPIを提供します。クエリ時には、関連するチャンクを取得してLLM応答をあなたのデータに基づかせ、複数のベクトルストア（Pinecone、pgvectorなど）と埋め込みプロバイダー（OpenAI、Cohereなど）の上に統一されたAPIを提供します。
+- **[デプロイメント](/docs/deployment/deployment.mdx)**: Mastraは、既存のReact、Next.js、またはNode.jsアプリケーション内、またはスタンドアロンエンドポイントへのエージェントとワークフローのバンドルをサポートします。Mastraデプロイヘルパーを使用すると、Honoを使用してエージェントとワークフローをNode.jsサーバーに簡単にバンドルしたり、Vercel、Cloudflare Workers、Netlifyなどのサーバーレスプラットフォームにデプロイしたりできます。
+- **[評価](/docs/evals/overview.mdx)**: Mastraは、モデル評価、ルールベース、統計的手法を使用してLLM出力を評価する自動評価メトリクスを提供し、毒性、バイアス、関連性、事実の正確性のための組み込みメトリクスを備えています。独自の評価を定義することもできます。

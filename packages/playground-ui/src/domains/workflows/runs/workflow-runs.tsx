@@ -2,17 +2,17 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Txt } from '@/ds/components/Txt';
 import { formatDate } from 'date-fns';
 import clsx from 'clsx';
-import { WorkflowRun } from '@mastra/core/storage';
+import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
 
 export interface WorkflowRunsProps {
   workflowId: string;
   runId?: string;
-  isLoading: boolean;
-  runs: WorkflowRun[];
   onPressRun: ({ workflowId, runId }: { workflowId: string; runId: string }) => void;
 }
 
-export const WorkflowRuns = ({ workflowId, runId, isLoading, runs, onPressRun }: WorkflowRunsProps) => {
+export const WorkflowRuns = ({ workflowId, runId, onPressRun }: WorkflowRunsProps) => {
+  const { isLoading, data: runs } = useWorkflowRuns(workflowId);
+
   if (isLoading) {
     return (
       <div className="p-4">
@@ -21,7 +21,9 @@ export const WorkflowRuns = ({ workflowId, runId, isLoading, runs, onPressRun }:
     );
   }
 
-  if (runs.length === 0) {
+  const actualRuns = runs?.runs || [];
+
+  if (actualRuns.length === 0) {
     return (
       <div className="p-4">
         <Txt variant="ui-md" className="text-icon6 text-center">
@@ -33,7 +35,7 @@ export const WorkflowRuns = ({ workflowId, runId, isLoading, runs, onPressRun }:
 
   return (
     <ol className="pb-10">
-      {runs.map(run => (
+      {actualRuns.map(run => (
         <li key={run.runId}>
           <button
             onClick={() => onPressRun({ workflowId, runId: run.runId })}

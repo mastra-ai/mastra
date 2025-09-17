@@ -3,12 +3,18 @@ title: Mastraにおける音声対音声機能 | Mastra ドキュメント
 description: Mastraの音声対音声機能の概要。リアルタイムの対話やイベント駆動型アーキテクチャについて説明します。
 ---
 
+
+
 # Mastraの音声対音声機能
+
+
 
 ## はじめに
 
 MastraのSpeech-to-Speech（STS）は、複数のプロバイダー間でリアルタイムなやり取りを可能にする標準化されたインターフェースを提供します。  
 STSは、Realtimeモデルからのイベントをリッスンすることで、継続的な双方向音声通信を実現します。個別のTTSやSTT操作とは異なり、STSは両方向の音声を継続的に処理するオープンな接続を維持します。
+
+
 
 ## 設定
 
@@ -27,7 +33,9 @@ const voice = new OpenAIRealtimeVoice({
 const voice = new OpenAIRealtimeVoice();
 ```
 
-## STSの使用
+
+
+## STS の利用
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
@@ -41,20 +49,67 @@ const agent = new Agent({
   voice: new OpenAIRealtimeVoice(),
 });
 
-// Connect to the voice service
+// 音声サービスに接続
 await agent.voice.connect();
 
-// Listen for agent audio responses
+// エージェントの音声応答をリッスン
 agent.voice.on("speaker", ({ audio }) => {
   playAudio(audio);
 });
 
-// Initiate the conversation
-await agent.voice.speak("How can I help you today?");
+// 会話を開始
+await agent.voice.speak("本日はいかがお手伝いできますか？");
 
-// Send continuous audio from the microphone
+// マイクからの連続音声を送信
 const micStream = getMicrophoneStream();
 await agent.voice.send(micStream);
 ```
 
-音声対音声機能をエージェントに統合するには、[エージェントに音声を追加する](../agents/adding-voice.mdx)のドキュメントを参照してください。
+エージェントに Speech-to-Speech 機能を統合するには、[Adding Voice to Agents](../agents/adding-voice.mdx) を参照してください。
+
+
+
+## Google Gemini Live（リアルタイム）
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+
+const agent = new Agent({
+  name: 'Agent',
+  instructions: 'You are a helpful assistant with real-time voice capabilities.',
+  // テキスト生成にはこのモデルを使用。リアルタイム音声は音声プロバイダ側で処理
+  model: openai("gpt-4o"),
+  voice: new GeminiLiveVoice({
+    apiKey: process.env.GOOGLE_API_KEY,
+    model: 'gemini-2.0-flash-exp',
+    speaker: 'Puck',
+    debug: true,
+    // Vertex AI の場合のオプション:
+    // vertexAI: true, 
+    // project: 'your-gcp-project', 
+    // location: 'us-central1',
+    // serviceAccountKeyFile: '/path/to/service-account.json',
+  }),
+});
+
+await agent.voice.connect();
+
+agent.voice.on('speaker', ({ audio }) => {
+  playAudio(audio);
+});
+
+agent.voice.on('writing', ({ role, text }) => {
+  console.log(`${role}: ${text}`);
+});
+
+await agent.voice.speak('How can I help you today?');
+
+const micStream = getMicrophoneStream();
+await agent.voice.send(micStream);
+```
+
+Note:
+- Live API には `GOOGLE_API_KEY` が必要です。Vertex AI を利用する場合は、project/location とサービスアカウントの認証情報が必要です。
+- イベント: `speaker`（音声ストリーム）、`writing`（テキスト）、`turnComplete`、`usage`、`error`。

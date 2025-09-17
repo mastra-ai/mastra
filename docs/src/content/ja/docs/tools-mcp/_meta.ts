@@ -1,7 +1,7 @@
 const meta = {
   overview: "概要",
-  "mcp-overview": "MCP概要",
-  "dynamic-context": "動的ツールコンテキスト",
-  "advanced-usage": "高度な使用法",
+  "mcp-overview": "MCP 概要",
+  "runtime-context": "ランタイムコンテキスト",
+  "advanced-usage": "高度な使い方",
 };
 export default meta;

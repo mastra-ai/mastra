@@ -1,0 +1,113 @@
+---
+title: "リファレンス: Run.streamVNext() | Workflows | Mastra Docs"
+description: ワークフローにおける `Run.streamVNext()` メソッドのドキュメント。応答をリアルタイムでストリーミングします。
+---
+
+import { StreamVNextCallout } from "@/components/streamVNext-callout.tsx"
+
+
+
+# Run.streamVNext()（実験的）
+
+<StreamVNextCallout />
+
+`.streamVNext()` メソッドは、ワークフローからの応答をリアルタイムにストリーミングします。この強化されたストリーミング機能は、将来的に現在の `stream()` メソッドに置き換わる予定です。
+
+
+
+## 使い方の例
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+const stream = run.streamVNext({
+  inputData: {
+    value: "initial data",
+  },
+});
+```
+
+
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "inputData",
+      type: "z.infer<TInput>",
+      description: "ワークフローの入力スキーマに適合する入力データ",
+      isOptional: true,
+    },
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      description: "ワークフロー実行時に使用するランタイムコンテキストのデータ",
+      isOptional: true,
+    },
+  ]}
+/>
+
+
+
+## 返り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "stream",
+      type: "MastraWorkflowStream<ChunkType>",
+      description: "ReadableStream<ChunkType> を拡張し、ワークフロー固有のプロパティを追加したカスタムストリーム",
+    },
+    {
+      name: "stream.status",
+      type: "Promise<RunStatus>",
+      description: "現在のワークフロー実行ステータスに解決される Promise",
+    },
+    {
+      name: "stream.result",
+      type: "Promise<WorkflowResult<TOutput, TSteps>>",
+      description: "最終的なワークフロー結果に解決される Promise",
+    },
+    {
+      name: "stream.usage",
+      type: "Promise<{ promptTokens: number; completionTokens: number; totalTokens: number }>",
+      description: "トークン使用量の統計情報に解決される Promise",
+    },
+  ]}
+/>
+
+
+
+## 発展的な使用例
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+const stream = run.streamVNext({
+  inputData: {
+    value: "initial data",
+  },
+});
+
+const result = await stream.result;
+```
+
+
+
+## ストリームイベント
+
+ストリームはワークフローの実行中にさまざまな種類のイベントを発行します。各イベントには `type` フィールドと、関連データを格納する `payload` が含まれます:
+
+- **`workflow-start`**: ワークフローの実行を開始
+- **`workflow-step-start`**: ステップの実行を開始
+- **`workflow-step-output`**: ステップからのカスタム出力
+- **`workflow-step-result`**: ステップが結果とともに完了
+- **`workflow-finish`**: 使用状況統計を含むワークフローの実行が完了
+
+
+
+## 関連情報
+
+- [Workflows の概要](../../../docs/workflows/overview.mdx#run-workflow)
+- [Workflow.createRunAsync()](../create-run.mdx)

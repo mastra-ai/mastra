@@ -1,0 +1,80 @@
+---
+title: "リファレンス: suspend() | 制御フロー | Mastra ドキュメント"
+description: "Mastra ワークフローにおける suspend 関数のドキュメント。実行を一時停止し、再開されるまで待機します。"
+---
+
+
+
+# suspend()
+
+ワークフローの実行を現在のステップで一時停止し、明示的に再開されるまで停止します。ワークフローの状態は保存され、後で続行できます。
+
+
+
+## 使用例
+
+```typescript
+const approvalStep = new LegacyStep({
+  id: "needsApproval",
+  execute: async ({ context, suspend }) => {
+    if (context.steps.amount > 1000) {
+      await suspend();
+    }
+    return { approved: true };
+  },
+});
+```
+
+
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      description: "サスペンド状態と一緒に保存するための任意のデータ",
+      isOptional: true,
+    },
+  ]}
+/>
+
+
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "Promise<void>",
+      type: "Promise",
+      description: "ワークフローが正常に一時停止されたときに解決されます",
+    },
+  ]}
+/>
+
+
+
+## 追加の例
+
+メタデータ付きのサスペンド:
+
+```typescript
+const reviewStep = new LegacyStep({
+  id: "review",
+  execute: async ({ context, suspend }) => {
+    await suspend({
+      reason: "Needs manager approval",
+      requestedBy: context.user,
+    });
+    return { reviewed: true };
+  },
+});
+```
+
+### 関連
+
+- [サスペンドと再開ワークフロー](../../docs/workflows-legacy/suspend-and-resume.mdx)
+- [.resume()](./resume.mdx)
+- [.watch()](./watch.mdx)

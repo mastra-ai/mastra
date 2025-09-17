@@ -1,0 +1,314 @@
+---
+title: "例: カスタムジャッジ | スコアラー | Mastra ドキュメント"
+description: プロンプトオブジェクトを使用してcreateScorerでカスタムスコアラーを作成する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+
+
+# カスタムジャッジスコアラー
+
+この例では、プロンプトオブジェクトを使用して`createScorer`でカスタムスコアラーを作成する方法を示します。言語モデルを判定者として使用して、レシピにグルテンが含まれているかどうかを評価する「グルテンチェッカー」を構築します。
+
+
+
+## インストール
+
+```bash copy
+npm install @mastra/core
+```
+
+> 完全なAPIドキュメントと設定オプションについては、[`createScorer`](/reference/scorers/create-scorer)をご参照ください。
+
+
+
+## カスタムスコアラーの作成
+
+Mastraのカスタムスコアラーは、4つの核となるコンポーネントを持つ`createScorer`を使用します：
+
+1. [**ジャッジ設定**](#judge-configuration)
+2. [**分析ステップ**](#analysis-step)
+3. [**スコア生成**](#score-generation)
+4. [**理由生成**](#reason-generation)
+
+これらのコンポーネントを組み合わせることで、LLMをジャッジとして使用したカスタム評価ロジックを定義できます。
+
+> 完全なAPIと設定オプションについては、[createScorer](/reference/scorers/create-scorer)を参照してください。
+
+```typescript filename="src/mastra/scorers/gluten-checker.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { createScorer } from '@mastra/core/scores';
+import { z } from 'zod';
+
+export const GLUTEN_INSTRUCTIONS = `あなたはレシピにグルテンが含まれているかを識別するシェフです。`;
+
+export const generateGlutenPrompt = ({ output }: { output: string }) => `このレシピがグルテンフリーかどうかをチェックしてください。
+
+チェック項目：
+- 小麦
+- 大麦
+- ライ麦
+- 小麦粉、パスタ、パンなどの一般的な原料
+
+グルテンを含む例：
+"小麦粉と水を混ぜて生地を作る"
+レスポンス: {
+  "isGlutenFree": false,
+  "glutenSources": ["小麦粉"]
+}
+
+グルテンフリーの例：
+"米、豆、野菜を混ぜる"
+レスポンス: {
+  "isGlutenFree": true,
+  "glutenSources": []
+}
+
+分析するレシピ：
+${output}
+
+この形式でレスポンスを返してください：
+{
+  "isGlutenFree": boolean,
+  "glutenSources": ["グルテンを含む材料のリスト"]
+}`;
+
+export const generateReasonPrompt = ({
+  isGlutenFree,
+  glutenSources,
+}: {
+  isGlutenFree: boolean;
+  glutenSources: string[];
+}) => `このレシピが${isGlutenFree ? 'グルテンフリーである' : 'グルテンフリーではない'}理由を説明してください。
+
+${glutenSources.length > 0 ? `グルテンの原因：${glutenSources.join('、')}` : 'グルテンを含む材料は見つかりませんでした'}
+
+この形式でレスポンスを返してください：
+"このレシピは[グルテンフリー/グルテンを含む]です。理由は[説明]"`;
+
+export const glutenCheckerScorer = createScorer({
+  name: 'Gluten Checker',
+  description: '出力にグルテンが含まれているかをチェックします',
+  judge: {
+    model: openai('gpt-4o'),
+    instructions: GLUTEN_INSTRUCTIONS,
+  },
+})
+  .analyze({
+    description: '出力のグルテンを分析します',
+    outputSchema: z.object({
+      isGlutenFree: z.boolean(),
+      glutenSources: z.array(z.string()),
+    }),
+    createPrompt: ({ run }) => {
+      const { output } = run;
+      return generateGlutenPrompt({ output: output.text });
+    },
+  })
+  .generateScore(({ results }) => {
+    return results.analyzeStepResult.isGlutenFree ? 1 : 0;
+  })
+  .generateReason({
+    description: 'スコアの理由を生成します',
+    createPrompt: ({ results }) => {
+      return generateReasonPrompt({
+        glutenSources: results.analyzeStepResult.glutenSources,
+        isGlutenFree: results.analyzeStepResult.isGlutenFree,
+      });
+    },
+  });
+```
+
+### ジャッジ設定
+
+LLMモデルを設定し、ドメインエキスパートとしての役割を定義します。
+
+```typescript
+judge: {
+  model: openai('gpt-4o'),
+  instructions: GLUTEN_INSTRUCTIONS,
+}
+```
+
+### 分析ステップ
+
+LLMが入力をどのように分析し、どのような構造化された出力を返すかを定義します。
+
+```typescript
+.analyze({
+  description: '出力のグルテンを分析します',
+  outputSchema: z.object({
+    isGlutenFree: z.boolean(),
+    glutenSources: z.array(z.string()),
+  }),
+  createPrompt: ({ run }) => {
+    const { output } = run;
+    return generateGlutenPrompt({ output: output.text });
+  },
+})
+```
+
+分析ステップはプロンプトオブジェクトを使用して以下を行います：
+- 分析タスクの明確な説明を提供
+- Zodスキーマで期待される出力構造を定義（ブール値の結果とグルテン源のリストの両方）
+- 入力内容に基づいて動的なプロンプトを生成
+
+### スコア生成
+
+LLMの構造化された分析を数値スコアに変換します。
+
+```typescript
+.generateScore(({ results }) => {
+  return results.analyzeStepResult.isGlutenFree ? 1 : 0;
+})
+```
+
+スコア生成関数は分析結果を受け取り、ビジネスロジックを適用してスコアを生成します。この場合、LLMがレシピがグルテンフリーかどうかを直接判定するため、そのブール値の結果を使用します：グルテンフリーの場合は1、グルテンを含む場合は0。
+
+### 理由生成
+
+別のLLM呼び出しを使用して、スコアに対する人間が読める説明を提供します。
+
+
+
+```typescript
+.generateReason({
+  description: 'スコアの理由を生成する',
+  createPrompt: ({ results }) => {
+    return generateReasonPrompt({
+      glutenSources: results.analyzeStepResult.glutenSources,
+      isGlutenFree: results.analyzeStepResult.isGlutenFree,
+    });
+  },
+})
+```
+
+理由生成ステップでは、分析ステップで特定された具体的なグルテン源と判定結果の両方を使用して、なぜそのスコアが付けられたのかをユーザーが理解できるような説明を作成します。
+```
+
+## グルテンフリー度が高い例
+
+```typescript filename="src/example-high-gluten-free.ts" showLineNumbers copy
+const result = await glutenCheckerScorer.run({
+  input: [{ role: 'user', content: 'Mix rice, beans, and vegetables' }],
+  output: { text: 'Mix rice, beans, and vegetables' },
+});
+
+console.log('Score:', result.score);
+console.log('Gluten sources:', result.analyzeStepResult.glutenSources);
+console.log('Reason:', result.reason);
+```
+
+### グルテンフリー度が高い場合の出力
+
+```typescript
+{
+  score: 1,
+  analyzeStepResult: { 
+    isGlutenFree: true,
+    glutenSources: [] 
+  },
+  reason: 'このレシピはグルテンフリーです。米、豆、野菜は天然のグルテンフリー食材であり、セリアック病の方でも安心してお召し上がりいただけます。'
+}
+```
+
+
+
+## グルテン含有例
+
+```typescript filename="src/example-partial-gluten.ts" showLineNumbers copy
+const result = await glutenCheckerScorer.run({
+  input: [{ role: 'user', content: 'Mix flour and water to make dough' }],
+  output: { text: 'Mix flour and water to make dough' },
+});
+
+console.log('Score:', result.score);
+console.log('Gluten sources:', result.analyzeStepResult.glutenSources);
+console.log('Reason:', result.reason);
+```
+
+### グルテン含有例の出力
+
+```typescript
+{
+  score: 0,
+  analyzeStepResult: { 
+    isGlutenFree: false,
+    glutenSources: ['flour'] 
+  },
+  reason: 'This recipe is not gluten-free because it contains flour. Regular flour is made from wheat and contains gluten, making it unsafe for people with celiac disease or gluten sensitivity.'
+}
+```
+
+
+
+## グルテンフリー度が低い例
+
+```typescript filename="src/example-low-gluten-free.ts" showLineNumbers copy
+const result = await glutenCheckerScorer.run({
+  input: [{ role: 'user', content: 'Add soy sauce and noodles' }],
+  output: { text: 'Add soy sauce and noodles' },
+});
+
+console.log('Score:', result.score);
+console.log('Gluten sources:', result.analyzeStepResult.glutenSources);
+console.log('Reason:', result.reason);
+```
+
+### グルテンフリー度が低い場合の出力
+
+```typescript
+{
+  score: 0,
+  analyzeStepResult: { 
+    isGlutenFree: false,
+    glutenSources: ['soy sauce', 'noodles'] 
+  },
+  reason: 'This recipe is not gluten-free because it contains soy sauce, noodles. Regular soy sauce contains wheat and most noodles are made from wheat flour, both of which contain gluten and are unsafe for people with gluten sensitivity.'
+}
+```
+
+
+
+## 結果について
+
+`.run()` は以下の形式で結果を返します：
+
+```typescript
+{
+  runId: string,
+  analyzeStepResult: {
+    isGlutenFree: boolean,
+    glutenSources: string[]
+  },
+  score: number,
+  reason: string,
+  analyzePrompt?: string,
+  generateReasonPrompt?: string
+}
+```
+
+### score
+スコアが1の場合、レシピはグルテンフリーです。スコアが0の場合、グルテンが検出されています。
+
+### runId
+このスコアラー実行の一意識別子です。
+
+### analyzeStepResult
+グルテン分析結果を含むオブジェクト：
+- **isGlutenFree**: レシピがグルテンフリー食品として安全かどうかを示すブール値
+- **glutenSources**: レシピ内で見つかったグルテン含有食材の配列
+
+### reason
+レシピがグルテンフリーかどうかについて、LLMが生成した説明。
+
+### プロンプトフィールド
+- **analyzePrompt**: 分析のためにLLMに送信された実際のプロンプト
+- **generateReasonPrompt**: 理由生成のためにLLMに送信された実際のプロンプト
+
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/scorers/custom-scorer"
+/>

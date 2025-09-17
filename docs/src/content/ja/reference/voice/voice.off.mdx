@@ -3,9 +3,13 @@ title: "リファレンス: voice.off() | 音声プロバイダー | Mastra ド�
 description: "音声プロバイダーで利用可能なoff()メソッドのドキュメント。音声イベントのイベントリスナーを削除します。"
 ---
 
+
+
 # voice.off()
 
 `off()` メソッドは、以前に `on()` メソッドで登録されたイベントリスナーを削除します。これは、リアルタイム音声機能を持つ長時間実行アプリケーションでリソースをクリーンアップし、メモリリークを防ぐのに特に役立ちます。
+
+
 
 ## 使用例
 
@@ -40,6 +44,8 @@ voice.on("writing", writingCallback);
 voice.off("writing", writingCallback);
 ```
 
+
+
 ## パラメータ
 
 <br />
@@ -61,9 +67,13 @@ voice.off("writing", writingCallback);
   ]}
 />
 
+
+
 ## 戻り値
 
 このメソッドは値を返しません。
+
+
 
 ## メモ
 

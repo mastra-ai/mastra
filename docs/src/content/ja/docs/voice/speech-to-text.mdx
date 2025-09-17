@@ -3,10 +3,14 @@ title: Mastra における音声認識（STT） | Mastra ドキュメント
 description: Mastra の音声認識機能の概要、設定方法、使用方法、音声プロバイダーとの連携について説明します。
 ---
 
+
+
 # 音声認識（STT）
 
 Mastraの音声認識（STT）は、複数のサービスプロバイダー間で音声入力をテキストに変換するための標準化されたインターフェースを提供します。
 STTは、人間の音声に応答できる音声対応アプリケーションの作成を支援し、ハンズフリーでの操作、障害を持つユーザーのためのアクセシビリティ、そしてより自然な人間とコンピューターのインターフェースを可能にします。
+
+
 
 ## 設定
 
@@ -30,6 +34,8 @@ const voice = new OpenAIVoice({
 const voice = new OpenAIVoice();
 ```
 
+
+
 ## 利用可能なプロバイダー
 
 Mastra は複数の Speech-to-Text プロバイダーをサポートしており、それぞれ独自の機能と強みがあります。
@@ -47,6 +53,8 @@ Mastra は複数の Speech-to-Text プロバイダーをサポートしており
 ```bash
 pnpm add @mastra/voice-openai  # Example for OpenAI
 ```
+
+
 
 ## Listen メソッドの使用方法
 

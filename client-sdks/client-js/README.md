@@ -81,8 +81,8 @@ const client = new MastraClient({
 - `getWorkflows()`: Get all workflows
 - `getWorkflow(workflowId)`: Get a workflow instance
   - `workflow.details()`: Get workflow details
-  - `workflow.createRun()`: Create workflow run
-  - `workflow.createRunAsync()`: Create workflow run (alias)
+  - `workflow.createRunAsync()`: Create workflow run
+  - `workflow.createRun()`: Deprecated - use createRunAsync() instead
   - `workflow.startAsync(params)`: Execute the workflow and wait for execution results
   - `workflow.resumeAsync(params)`: Resume suspended workflow step async
   - `workflow.watch({runId},(record)=>{})`: Watch the step transitions of the workflow run
@@ -125,7 +125,3 @@ The client uses the native `fetch` API internally for making HTTP requests. All 
 - Retry logic with exponential backoff
 - Custom header management
 - Error handling
-
-## License
-
-MIT

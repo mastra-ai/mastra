@@ -13,7 +13,8 @@ export async function newContributorMessage() {
       process.exit(1);
     }
 
-    const { start } = workflow.createRun();
+    const run = await workflow.createRunAsync();
+    const { start } = run;
 
     const result = await start({
       triggerData: {

@@ -3,10 +3,14 @@ title: "リファレンス: PG Vector Store | ベクターデータベース | R
 description: Mastra の PgVector クラスのドキュメント。pgvector 拡張機能を使用した PostgreSQL によるベクター検索を提供します。
 ---
 
+
+
 # PG Vector Store
 
 PgVectorクラスは、[PostgreSQL](https://www.postgresql.org/)と[pgvector](https://github.com/pgvector/pgvector)拡張機能を使用したベクトル検索を提供します。
 既存のPostgreSQLデータベース内で堅牢なベクトル類似性検索機能を実現します。
+
+
 
 ## コンストラクタオプション
 
@@ -27,24 +31,22 @@ PgVectorクラスは、[PostgreSQL](https://www.postgresql.org/)と[pgvector](ht
   ]}
 />
 
+
+
 ## コンストラクタの例
 
-`PgVector`を2つの方法でインスタンス化できます：
+`PgVector`は設定オブジェクトを使用してインスタンス化できます（オプションのschemaNameを含む）：
 
 ```ts
 import { PgVector } from "@mastra/pg";
 
-// 接続文字列を使用する方法（文字列形式）
-const vectorStore1 = new PgVector(
-  "postgresql://user:password@localhost:5432/mydb",
-);
-
-// 設定オブジェクトを使用する方法（オプションのschemaNameを含む）
-const vectorStore2 = new PgVector({
+const vectorStore = new PgVector({
   connectionString: "postgresql://user:password@localhost:5432/mydb",
-  schemaName: "custom_schema", // オプション
+  schemaName: "custom_schema", // optional
 });
 ```
+
+
 
 ## メソッド
 
@@ -153,7 +155,8 @@ const vectorStore2 = new PgVector({
             {
               name: "m",
               type: "number",
-              description: "ノードごとの最大接続数（デフォルト: 8）",
+              description:
+                "ノードごとの最大接続数（デフォルト: 8）",
               isOptional: true,
             },
             {
@@ -210,12 +213,14 @@ M値やefConstruction値を大きくすると、必要なメモリも大幅に�
 
 ### query()
 
+
+
 <PropertiesTable
   content={[
     {
       name: "indexName",
       type: "string",
-      description: "クエリを実行するインデックスの名前",
+      description: "クエリを実行するインデックス名",
     },
     {
       name: "vector",
@@ -227,7 +232,7 @@ M値やefConstruction値を大きくすると、必要なメモリも大幅に�
       type: "number",
       isOptional: true,
       defaultValue: "10",
-      description: "返す結果の数",
+      description: "返す結果数",
     },
     {
       name: "filter",
@@ -253,7 +258,7 @@ M値やefConstruction値を大きくすると、必要なメモリも大幅に�
       name: "options",
       type: "{ ef?: number; probes?: number }",
       isOptional: true,
-      description: "HNSWおよびIVFインデックスの追加オプション",
+      description: "HNSWおよびIVFインデックス用の追加オプション",
       properties: [
         {
           type: "object",
@@ -279,7 +284,7 @@ M値やefConstruction値を大きくすると、必要なメモリも大幅に�
 
 ### listIndexes()
 
-インデックス名の文字列配列を返します。
+インデックス名の配列（文字列）を返します。
 
 ### describeIndex()
 
@@ -288,12 +293,12 @@ M値やefConstruction値を大きくすると、必要なメモリも大幅に�
     {
       name: "indexName",
       type: "string",
-      description: "説明するインデックスの名前",
+      description: "説明するインデックス名",
     },
   ]}
 />
 
-戻り値：
+返り値:
 
 ```typescript copy
 interface PGIndexStats {
@@ -317,7 +322,7 @@ interface PGIndexStats {
     {
       name: "indexName",
       type: "string",
-      description: "削除するインデックスの名前",
+      description: "削除するインデックス名",
     },
   ]}
 />
@@ -329,7 +334,7 @@ interface PGIndexStats {
     {
       name: "indexName",
       type: "string",
-      description: "ベクトルを含むインデックスの名前",
+      description: "ベクトルを含むインデックス名",
     },
     {
       name: "id",
@@ -363,10 +368,10 @@ interface PGIndexStats {
   ]}
 />
 
-IDによって既存のベクトルを更新します。ベクトルまたはメタデータの少なくとも一方を提供する必要があります。
+既存のベクトルをIDで更新します。`vector`または`metadata`のいずれか一方以上を指定する必要があります。
 
 ```typescript copy
-// ベクトルのみを更新
+// Update just the vector
 await pgVector.updateVector({
   indexName: "my_vectors",
   id: "vector123",
@@ -375,7 +380,7 @@ await pgVector.updateVector({
   },
 });
 
-// メタデータのみを更新
+// Update just the metadata
 await pgVector.updateVector({
   indexName: "my_vectors",
   id: "vector123",
@@ -384,7 +389,7 @@ await pgVector.updateVector({
   },
 });
 
-// ベクトルとメタデータの両方を更新
+// Update both vector and metadata
 await pgVector.updateVector({
   indexName: "my_vectors",
   id: "vector123",
@@ -402,7 +407,7 @@ await pgVector.updateVector({
     {
       name: "indexName",
       type: "string",
-      description: "ベクトルを含むインデックスの名前",
+      description: "ベクトルを含むインデックス名",
     },
     {
       name: "id",
@@ -412,15 +417,17 @@ await pgVector.updateVector({
   ]}
 />
 
-指定されたインデックスからIDによって単一のベクトルを削除します。
+指定したインデックスからIDで単一のベクトルを削除します。
 
 ```typescript copy
 await pgVector.deleteVector({ indexName: "my_vectors", id: "vector123" });
 ```
 
+
+
 ### disconnect()
 
-データベース接続プールを閉じます。ストアの使用が終了したら呼び出す必要があります。
+データベース接続プールを閉じます。ストアの使用が終わったら呼び出す必要があります。
 
 ### buildIndex()
 
@@ -436,7 +443,7 @@ await pgVector.deleteVector({ indexName: "my_vectors", id: "vector123" });
       type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
       defaultValue: "cosine",
-      description: "類似検索に使用する距離メトリック",
+      description: "類似検索のための距離メトリック",
     },
     {
       name: "indexConfig",
@@ -472,6 +479,8 @@ await pgVector.buildIndex("my_vectors", "cosine", {
 });
 ```
 
+
+
 ## レスポンスタイプ
 
 クエリ結果は次の形式で返されます：
@@ -484,6 +493,8 @@ interface QueryResult {
   vector?: number[]; // Only included if includeVector is true
 }
 ```
+
+
 
 ## エラー処理
 
@@ -503,11 +514,32 @@ try {
 }
 ```
 
+
+
 ## ベストプラクティス
 
 - 最適なパフォーマンスを確保するために、インデックス設定を定期的に評価してください。
 - データセットのサイズやクエリ要件に応じて、`lists` や `m` などのパラメータを調整しましょう。
 - 特に大きなデータ変更の後は、効率を維持するためにインデックスを定期的に再構築してください。
+
+
+
+## 直接プール アクセス
+
+`PgVector` クラスは、その基盤となるPostgreSQLコネクションプールをパブリックフィールドとして公開しています：
+
+```typescript
+pgVector.pool // instance of pg.Pool
+```
+
+これにより、直接SQLクエリの実行、トランザクションの管理、プール状態の監視などの高度な使用が可能になります。プールを直接使用する場合：
+- 使用後にクライアントを解放する（`client.release()`）責任があります。
+- `disconnect()` を呼び出した後もプールにアクセス可能ですが、新しいクエリは失敗します。
+- 直接アクセスは、PgVectorメソッドが提供する検証やトランザクションロジックをバイパスします。
+
+この設計は高度な使用例をサポートしますが、ユーザーによる慎重なリソース管理が必要です。
+
+
 
 ## 関連
 

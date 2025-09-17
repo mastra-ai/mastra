@@ -1,11 +1,19 @@
 ---
-title: "リファレンス: トーンの一貫性 | メトリクス | 評価 | Mastra ドキュメント"
-description: Mastra におけるトーンの一貫性メトリクスのドキュメント。テキスト内の感情的なトーンや感情の一貫性を評価します。
+title: "リファレンス: トーン一貫性 | メトリクス | Evals | Mastra Docs"
+description: テキストの感情的なトーンと感情の一貫性を評価するMastraのトーン一貫性メトリクスのドキュメント。
 ---
+
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
 
 # ToneConsistencyMetric
 
-`ToneConsistencyMetric` クラスは、テキストの感情的なトーンと感情の一貫性を評価します。このクラスは、入力と出力のペア間でトーンを比較するモードと、単一のテキスト内でトーンの安定性を分析するモードの2つのモードで動作します。
+<ScorerCallout />
+
+`ToneConsistencyMetric`クラスは、テキストの感情的なトーンと感情の一貫性を評価します。このクラスは2つのモードで動作できます：入力/出力ペア間のトーンを比較するか、単一のテキスト内でのトーンの安定性を分析するかです。
+
+
 
 ## 基本的な使い方
 
@@ -30,6 +38,8 @@ console.log(result1.score); // Tone consistency score from 0-1
 console.log(result2.score); // Tone stability score from 0-1
 ```
 
+
+
 ## measure() のパラメーター
 
 <PropertiesTable
@@ -49,6 +59,8 @@ console.log(result2.score); // Tone stability score from 0-1
     },
   ]}
 />
+
+
 
 ## 戻り値
 
@@ -106,6 +118,8 @@ console.log(result2.score); // Tone stability score from 0-1
   ]}
 />
 
+
+
 ## スコアリングの詳細
 
 このメトリックは、トーンパターンの分析とモード別スコアリングを通じて感情の一貫性を評価します。
@@ -143,6 +157,8 @@ console.log(result2.score); // Tone stability score from 0-1
 - 0.1-0.3: 大きなトーン変化を伴う低い一貫性
 - 0.0: 一貫性なし ― 完全に異なるトーン
 
+
+
 ## 両方のモードの例
 
 ```typescript
@@ -179,6 +195,8 @@ const stabilityResult = await metric.measure(
 //   }
 // }
 ```
+
+
 
 ## 関連
 

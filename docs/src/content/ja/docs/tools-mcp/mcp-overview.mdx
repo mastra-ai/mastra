@@ -1,130 +1,243 @@
 ---
-title: "MCP概要 | ツール＆MCP | Mastraドキュメント"
-description: モデルコンテキストプロトコル（MCP）について学び、MCPClientを通じてサードパーティツールを使用する方法、レジストリへの接続方法、MCPServerを使用して自分のツールを共有する方法を理解しましょう。
+title: "MCP 概要 | Tools & MCP | Mastra Docs"
+description: Model Context Protocol（MCP）、MCPClient を通じたサードパーティ製ツールの利用、レジストリへの接続、そして MCPServer を用いた自作ツールの共有について学びます。
 ---
 
 import { Tabs } from "nextra/components";
 
-# MCP 概要
 
-[Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction)は、AIモデルが外部ツールやリソースを発見し、相互作用できるように設計されたオープンスタンダードです。これはAIエージェント向けの汎用プラグインシステムと考えることができ、エージェントがツールの記述言語やホスティング場所に関係なくツールを使用できるようにします。
+# MCP の概要
 
-Mastraは、エージェントを外部ツールサーバーに接続するためにMCPを使用しています。
+Mastra は、AI エージェントを外部のツールやリソースに接続するためのオープン標準である [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) をサポートしています。汎用的なプラグインシステムとして機能し、言語やホスティング環境にかかわらずエージェントがツールを呼び出せます。
 
-## MCPクライアントでサードパーティツールを使用する
+Mastra は MCP サーバーの作成にも利用でき、MCP インターフェースを通じてエージェント、ツール、その他の構造化リソースを公開します。これらは、プロトコルをサポートするあらゆるシステムやエージェントから利用できます。
 
-Mastraは、1つまたは複数のMCPサーバーへの接続を管理し、そのツールにアクセスするための`MCPClient`クラスを提供しています。
+Mastra は現在、2 つの MCP クラスをサポートしています:
 
-### インストール
+1. **`MCPClient`**: ツール、リソース、プロンプトへのアクセスや、エリシテーション（情報引き出し）要求の処理のために、1 つまたは複数の MCP サーバーに接続します。
+2. **`MCPServer`**: MCP 互換クライアントに対して、Mastra のツール、エージェント、ワークフロー、プロンプト、リソースを公開します。
 
-まだインストールしていない場合は、Mastra MCPパッケージをインストールしてください：
+## はじめに
 
-```bash npm2yarn copy
+MCP を利用するには、必要な依存関係をインストールします。
+
+```bash
 npm install @mastra/mcp@latest
 ```
 
-### `MCPClient`の設定
+## `MCPClient` の設定
 
-`MCPClient`は、接続したいサーバーのマップで設定します。サブプロセス（Stdio）またはHTTP（SSEフォールバック付きのストリーム可能なHTTP）を介した接続をサポートしています。
+`MCPClient` は、Mastra のプリミティブを外部の MCP サーバーに接続します。サーバーはローカルパッケージ（`npx` で実行）またはリモートの HTTP(S) エンドポイントのいずれかです。各サーバーは、ホスティング形態に応じて `command` または `url` のいずれかで設定する必要があります。
 
-```typescript
+```typescript filename="src/mastra/mcp/test-mcp-client.ts" showLineNumbers copy
 import { MCPClient } from "@mastra/mcp";
 
-const mcp = new MCPClient({
+export const testMcpClient = new MCPClient({
+  id: "test-mcp-client",
   servers: {
-    // Stdioの例
-    sequential: {
+    wikipedia: {
       command: "npx",
-      args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      args: ["-y", "wikipedia-mcp"]
     },
-    // HTTPの例
     weather: {
-      url: new URL("http://localhost:8080/mcp"),
-      requestInit: {
-        headers: {
-          Authorization: "Bearer your-token",
-        },
-      },
+      url: new URL(`https://server.smithery.ai/@smithery-ai/national-weather-service/mcp?api_key=${process.env.SMITHERY_API_KEY}`)
     },
-  },
+  }
 });
 ```
 
-詳細な設定オプションについては、[`MCPClient`リファレンスドキュメント](/reference/tools/mcp-client)を参照してください。
+> すべての設定オプションについては [MCPClient](../../reference/tools/mcp-client.mdx) を参照してください。
 
-### 静的vs動的ツール設定
+## エージェントでの`MCPClient`の使用
 
-`MCPClient`は、接続されたサーバーからツールを取得するための2つのアプローチを提供し、異なるアプリケーションアーキテクチャに適しています：
+エージェントでMCPサーバーのツールを使うには、`MCPClient`をインポートし、`tools`パラメータで`.getTools()`を呼び出します。これにより、定義済みのMCPサーバーからツールが読み込まれ、エージェントで利用できるようになります。
 
-| 機能                 | 静的設定 (`await mcp.getTools()`)       | 動的設定 (`await mcp.getToolsets()`)                 |
-| :------------------- | :-------------------------------------- | :--------------------------------------------------- |
-| **ユースケース**     | 単一ユーザー、静的設定（CLIツールなど） | 複数ユーザー、動的設定（SaaSアプリなど）             |
-| **設定**             | エージェント初期化時に固定              | リクエストごとに動的                                 |
-| **認証情報**         | すべての使用で共有                      | ユーザー/リクエストごとに変更可能                    |
-| **エージェント設定** | `Agent`コンストラクタでツールを追加     | `generate()`または`stream()`オプションでツールを渡す |
+```typescript {4,16} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 
-- **静的設定（`getTools()`）：** 設定されたすべてのサーバーからすべてのツールを取得します。ツール設定（APIキーなど）が静的で、すべてのユーザーまたはリクエスト間で共有される場合に最適です。通常、これを一度呼び出し、結果を`Agent`を定義する際の`tools`プロパティに渡します。
-  [リファレンス：`getTools()`](/reference/tools/mcp-client#gettools)
+import { testMcpClient } from "../mcp/test-mcp-client";
 
-  ```typescript
-  import { Agent } from "@mastra/core/agent";
-  // ... mcpクライアントの設定
+export const testAgent = new Agent({
+  name: "Test Agent",
+  description: "You are a helpful AI assistant",
+  instructions: `
+      You are a helpful assistant that has access to the following MCP Servers.
+      - Wikipedia MCP Server
+      - US National Weather Service
 
-  const agent = new Agent({
-    // ... その他のエージェント設定
-    tools: await mcp.getTools(),
+      Answer questions using the information you find using the MCP Servers.`,
+  model: openai("gpt-4o-mini"),
+  tools: await testMcpClient.getTools()
+});
+```
+
+> 設定オプションの全一覧は[Agent Class](../../reference/agents/agent.mdx)を参照してください。
+
+## `MCPServer` の設定
+
+Mastra アプリケーションのエージェント、ツール、ワークフローを HTTP(S) 経由で外部システムに公開するには、`MCPServer` クラスを使用します。これにより、プロトコルをサポートするあらゆるシステムやエージェントから利用可能になります。
+
+```typescript filename="src/mastra/mcp/test-mcp-server.ts" showLineNumbers copy
+import { MCPServer } from "@mastra/mcp";
+
+import { testAgent } from "../agents/test-agent";
+import { testWorkflow } from "../workflows/test-workflow";
+import { testTool } from "../tools/test-tool";
+
+export const testMcpServer = new MCPServer({
+  id: "test-mcp-server",
+  name: "Test Server",
+  version: "1.0.0",
+  agents: { testAgent },
+  tools: { testTool },
+  workflows: { testWorkflow }
+});
+```
+
+> 設定オプションの一覧については、[MCPServer](../../reference/tools/mcp-server.mdx) を参照してください。
+
+## `MCPServer` の登録
+
+プロトコルに対応する他のシステムやエージェントで MCP サーバーを利用可能にするには、メインの `Mastra` インスタンスで `mcpServers` に登録します。
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+
+import { testMcpServer } from "./mcp/test-mcp-server";
+
+export const mastra = new Mastra({
+  // ...
+  mcpServers: { testMcpServer }
+});
+```
+
+## 静的ツールと動的ツール
+
+`MCPClient` は、接続先サーバーからツールを取得するために、さまざまなアプリケーションアーキテクチャに適した2つのアプローチを提供します:
+
+| 機能               | 静的構成 (`await mcp.getTools()`)            | 動的構成 (`await mcp.getToolsets()`)                 |
+| :---------------- | :-------------------------------------------- | :--------------------------------------------------- |
+| **ユースケース**   | 単一ユーザー向けの静的設定（例：CLI ツール）   | 複数ユーザー向けの動的設定（例：SaaS アプリ）         |
+| **構成**           | エージェント初期化時に固定                   | リクエストごとに動的                                 |
+| **認証情報**       | すべての利用で共有                            | ユーザー／リクエストごとに可変                        |
+| **エージェント設定** | `Agent` コンストラクターでツールを追加         | `.generate()` または `.stream()` のオプションとしてツールを渡す |
+
+### 静的ツール
+
+すべての設定済み MCP サーバーからツールを取得するには、`.getTools()` メソッドを使用します。これは、設定（API キーなど）がユーザーやリクエスト間で静的かつ一貫している場合に適しています。エージェントを定義する際に一度だけ呼び出し、その結果を `tools` プロパティに渡してください。
+
+> 詳細は [getTools()](../../reference/tools/mcp-client.mdx#gettools) を参照してください。
+
+```typescript {8} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+import { testMcpClient } from "../mcp/test-mcp-client";
+
+export const testAgent = new Agent({
+  // ...
+  tools: await testMcpClient.getTools()
+});
+```
+
+### 動的ツール
+
+各リクエストやユーザーごとにツールの構成が変わる場合（例：各ユーザーが自分の API キーを提供するマルチテナントシステム）、`.getToolsets()` メソッドを使用します。このメソッドは、エージェントの `.generate()` または `.stream()` 呼び出しの `toolsets` オプションに渡せるツールセットを返します。
+
+```typescript {5-16,21} showLineNumbers copy
+import { MCPClient } from "@mastra/mcp";
+import { mastra } from "./mastra";
+
+async function handleRequest(userPrompt: string, userApiKey: string) {
+  const userMcp = new MCPClient({
+    servers: {
+      weather: {
+        url: new URL("http://localhost:8080/mcp"),
+        requestInit: {
+          headers: {
+            Authorization: `Bearer ${userApiKey}`
+          }
+        }
+      }
+    }
   });
-  ```
 
-- **動的設定（`getToolsets()`）：** 設定がリクエストごとまたはユーザーごとに変更される可能性があるシナリオ（例：マルチユーザーアプリケーションの異なるテナントに対する異なるAPIキー）向けに設計されています。`getToolsets()`の結果をエージェントの`generate()`または`stream()`メソッドの`toolsets`オプションに渡します。
-  [リファレンス：`getToolsets()`](/reference/tools/mcp-client#gettoolsets)
+  const agent = mastra.getAgent("testAgent");
 
-  ```typescript
-  import { Agent } from "@mastra/core/agent";
-  // ... 最初はツールなしでエージェントを設定
+  const response = await agent.generate(userPrompt, {
+    toolsets: await userMcp.getToolsets()
+  });
 
-  async function handleRequest(userPrompt: string, userApiKey: string) {
-    const userMcp = new MCPClient({
-      /* userApiKeyを含む設定 */
-    });
-    const toolsets = await userMcp.getToolsets();
+  await userMcp.disconnect();
 
-    const response = await agent.stream(userPrompt, {
-      toolsets, // 動的ツールセットを渡す
-    });
-    // ... レスポンスを処理
-    await userMcp.disconnect();
-  }
-  ```
+  return Response.json({
+    data: response.text
+  });
+}
+```
 
-## MCPレジストリへの接続
+> 詳細は [getToolsets()](../../reference/tools/mcp-client.mdx#gettoolsets) を参照してください。
 
-MCPサーバーはレジストリを通じて発見できます。以下は、`MCPClient`を使用して人気のあるレジストリに接続する方法です：
+## MCP レジストリへの接続
 
-<Tabs items={["mcp.run", "Composio.dev", "Smithery.ai"]}>
+MCP サーバーはレジストリ経由で探索できます。`MCPClient` を使って一般的なレジストリに接続する方法は次のとおりです。
+
+{/*
+LLM コンテキスト: この Tabs コンポーネントは、さまざまな MCP（Model Context Protocol）レジストリへの接続方法を示します。
+各タブは、特定の MCP レジストリサービス（mcp.run、Composio.dev、Smithery.ai）の設定を示します。
+タブは、各種 MCP サーバープロバイダーとそれぞれの認証方式への接続方法の理解に役立ちます。
+各タブでは、そのレジストリサービスに必要な具体的な URL パターンと設定を示します。
+*/}
+
+<Tabs items={["Klavis AI", "mcp.run", "Composio.dev", "Smithery.ai", "Ampersand"]}>
   <Tabs.Tab>
-    [mcp.run](https://www.mcp.run/)は事前認証済みの管理されたMCPサーバーを提供しています。ツールはプロファイルにグループ化され、それぞれに固有の署名付きURLがあります。
+    [Klavis AI](https://klavis.ai) は、ホスティング型でエンタープライズ認証に対応した高品質な MCP サーバーを提供します。
 
     ```typescript
     import { MCPClient } from "@mastra/mcp";
 
     const mcp = new MCPClient({
       servers: {
-        marketing: { // プロファイル名の例
-          url: new URL(process.env.MCP_RUN_SSE_URL!), // mcp.runプロファイルからURLを取得
+        salesforce: {
+          url: new URL("https://salesforce-mcp-server.klavis.ai/mcp/?instance_id={private-instance-id}"),
+        },
+        hubspot: {
+          url: new URL("https://hubspot-mcp-server.klavis.ai/mcp/?instance_id={private-instance-id}"),
         },
       },
     });
     ```
 
-    > **重要:** mcp.run SSE URLはパスワードのように扱ってください。環境変数などに安全に保存してください。
+    Klavis AI は、本番運用向けにエンタープライズレベルの認証とセキュリティを提供します。
+
+    Mastra と Klavis の統合方法の詳細については、[ドキュメント](https://docs.klavis.ai/documentation/ai-platform-integration/mastra)をご覧ください。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    [mcp.run](https://www.mcp.run/) は、事前認証済みのマネージド MCP サーバーを提供します。ツールはプロファイルにまとめられ、各プロファイルには一意の署名付き URL が割り当てられます。
+
+    ```typescript
+    import { MCPClient } from "@mastra/mcp";
+
+    const mcp = new MCPClient({
+      servers: {
+        marketing: { // 例: プロファイル名
+          url: new URL(process.env.MCP_RUN_SSE_URL!), // mcp.run のプロファイルから取得した URL
+        },
+      },
+    });
+    ```
+
+    > **重要:** mcp.run の SSE URL はパスワード同等に扱ってください。環境変数などに安全に保管してください。
+    >
     > ```bash filename=".env"
     > MCP_RUN_SSE_URL=https://www.mcp.run/api/mcp/sse?nonce=...
     > ```
-
   </Tabs.Tab>
+
   <Tabs.Tab>
-    [Composio.dev](https://composio.dev)は[SSEベースのMCPサーバー](https://mcp.composio.dev)のレジストリを提供しています。Cursorなどのツール用に生成されたSSE URLを直接使用できます。
+    [Composio.dev](https://composio.dev) は、[SSE ベースの MCP サーバー](https://mcp.composio.dev) のレジストリを提供しています。Cursor などのツールで生成された SSE の URL をそのまま利用できます。
 
     ```typescript
     import { MCPClient } from "@mastra/mcp";
@@ -141,13 +254,13 @@ MCPサーバーはレジストリを通じて発見できます。以下は、`M
     });
     ```
 
-    Google Sheetsなどのサービスとの認証は、通常エージェントとの会話を通じてインタラクティブに行われます。
+    Google Sheets のようなサービスとの認証は、多くの場合、エージェントとのやり取りの中で対話的に行われます。
 
-    *注意: ComposioのURLは通常、単一のユーザーアカウントに紐づいているため、マルチテナントアプリケーションよりも個人的な自動化に適しています。*
-
+    *注: Composio の URL は通常、単一のユーザーアカウントに紐づくため、マルチテナントのアプリケーションよりも個人向けの自動化に適しています。*
   </Tabs.Tab>
+
   <Tabs.Tab>
-    [Smithery.ai](https://smithery.ai)はCLIを通じてアクセス可能なレジストリを提供しています。
+    [Smithery.ai](https://smithery.ai) は、CLI からアクセス可能なレジストリを提供しています。
 
     ```typescript
     // Unix/Mac
@@ -177,10 +290,8 @@ MCPサーバーはレジストリを通じて発見できます。以下は、`M
     const mcp = new MCPClient({
       servers: {
         sequentialThinking: {
-          command: "cmd",
+          command: "npx",
           args: [
-            "/c",
-            "npx",
             "-y",
             "@smithery/cli@latest",
             "run",
@@ -192,35 +303,65 @@ MCPサーバーはレジストリを通じて発見できます。以下は、`M
       },
     });
     ```
+  </Tabs.Tab>
 
+  <Tabs.Tab>
+    [Ampersand](https://withampersand.com?utm_source=mastra-docs) は、Salesforce、HubSpot、Zendesk などの SaaS 製品と 150 以上の連携にあなたのエージェントを接続できる [MCP Server](https://docs.withampersand.com/mcp) を提供しています。
+
+    ```typescript
+
+    // SSE を使用した Ampersand MCP Server と MCPClient
+    export const mcp = new MCPClient({
+        servers: {
+        "@amp-labs/mcp-server": {
+          "url": `https://mcp.withampersand.com/v1/sse?${new URLSearchParams({
+            apiKey: process.env.AMPERSAND_API_KEY,
+            project: process.env.AMPERSAND_PROJECT_ID,
+            integrationName: process.env.AMPERSAND_INTEGRATION_NAME,
+            groupRef: process.env.AMPERSAND_GROUP_REF
+          })}`
+        }
+      }
+    });
+
+    ```
+
+    ```typescript
+    // MCP サーバーをローカルで実行する場合:
+
+    import { MCPClient } from "@mastra/mcp";
+
+    // stdio トランスポートを使用した Ampersand MCP Server と MCPClient
+    export const mcp = new MCPClient({
+        servers: {
+          "@amp-labs/mcp-server": {
+            command: "npx",
+            args: [
+              "-y",
+              "@amp-labs/mcp-server@latest",
+              "--transport",
+              "stdio",
+              "--project",
+              process.env.AMPERSAND_PROJECT_ID,
+              "--integrationName",
+              process.env.AMPERSAND_INTEGRATION_NAME,
+              "--groupRef",
+              process.env.AMPERSAND_GROUP_REF, // 任意
+            ],
+            env: {
+              AMPERSAND_API_KEY: process.env.AMPERSAND_API_KEY,
+            },
+          },
+        },
+    });
+    ```
+
+    MCP の代替として、Ampersand の AI SDK には Mastra 向けのアダプターもあり、エージェントが利用できるように [Ampersand のツールを直接インポート](https://docs.withampersand.com/ai-sdk#use-with-mastra) できます。
   </Tabs.Tab>
 </Tabs>
 
-## MCPサーバーでツールを共有する
+## 関連情報
 
-独自のMastraツールを作成した場合、Mastraの`MCPServer`クラスを使用して、MCP互換のクライアントにそれらを公開することができます。
-
-これにより、他のユーザーはあなたのコードベースに直接アクセスすることなく、あなたのツールを使用できるようになります。
-
-### `MCPServer`の使用方法
-
-`MCPServer`は、名前、バージョン、共有したいMastraツールで初期化します。
-
-```typescript
-import { MCPServer } from "@mastra/mcp";
-import { weatherTool } from "./tools"; // Your Mastra tool
-
-const server = new MCPServer({
-  name: "My Weather Server",
-  version: "1.0.0",
-  tools: { weatherTool }, // Provide your tool(s) here
-});
-
-// Start the server (e.g., using stdio for a CLI tool)
-// await server.startStdio();
-
-// Or integrate with an HTTP server using startSSE()
-// See MCPServer reference for details
-```
-
-詳細な使用方法と例については、[`MCPServer`リファレンスドキュメント](/reference/tools/mcp-server)を参照してください。
+- [ツールとMCPの利用](../agents/using-tools-and-mcp.mdx)
+- [MCPClient](../../reference/tools/mcp-client.mdx)
+- [MCPServer](../../reference/tools/mcp-server.mdx)

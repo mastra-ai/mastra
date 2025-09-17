@@ -43,7 +43,3 @@ const mastra = new Mastra({
 - **Type-specific metadata**: Extracts relevant metadata for each span type (agents, tools, workflows)
 - **Error tracking**: Automatic error status and message tracking
 - **Hierarchical traces**: Maintains parent-child relationships
-
-## License
-
-Apache 2.0

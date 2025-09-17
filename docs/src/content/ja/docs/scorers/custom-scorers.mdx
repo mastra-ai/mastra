@@ -1,0 +1,219 @@
+## スコアラーの作成
+
+Mastraは統一された`createScorer`ファクトリを提供し、各ステップでJavaScript関数またはLLMベースのプロンプトオブジェクトのいずれかを使用してカスタム評価ロジックを構築できます。この柔軟性により、評価パイプラインの各部分に最適なアプローチを選択できます。
+
+### 4ステップパイプライン
+
+Mastraのすべてのスコアラーは、一貫した4ステップの評価パイプラインに従います：
+
+1. **preprocess**（オプション）：入力/出力データの準備または変換
+2. **analyze**（オプション）：評価分析の実行と洞察の収集
+3. **generateScore**（必須）：分析を数値スコアに変換
+4. **generateReason**（オプション）：人間が読める説明の生成
+
+各ステップは**関数**または**プロンプトオブジェクト**（LLMベースの評価）のいずれかを使用でき、必要に応じて決定論的アルゴリズムとAI判断を組み合わせる柔軟性を提供します。
+
+### 関数 vs プロンプトオブジェクト
+
+**関数**は決定論的ロジックにJavaScriptを使用します。以下の場合に最適です：
+- 明確な基準を持つアルゴリズム評価
+- パフォーマンスが重要なシナリオ
+- 既存ライブラリとの統合
+- 一貫性があり再現可能な結果
+
+**プロンプトオブジェクト**は評価にLLMを判定者として使用します。以下の場合に最適です：
+- 人間のような判断を必要とする主観的評価
+- アルゴリズム的にコード化するのが困難な複雑な基準
+- 自然言語理解タスク
+- 微妙なコンテキスト評価
+
+単一のスコアラー内でアプローチを組み合わせることができます。例えば、データの前処理に関数を使用し、品質分析にLLMを使用することができます。
+
+### スコアラーの初期化
+
+すべてのスコアラーは`createScorer`ファクトリ関数から始まり、名前と説明が必要で、オプションでLLMベースのステップ用のjudge設定を受け入れます。
+
+```typescript
+import { createScorer } from '@mastra/core/scores';
+import { openai } from '@ai-sdk/openai';
+
+const glutenCheckerScorer = createScorer({
+  name: 'Gluten Checker',
+  description: 'Check if recipes contain gluten ingredients',
+  judge: {                    // オプション：プロンプトオブジェクトステップ用
+    model: openai('gpt-4o'),
+    instructions: 'You are a Chef that identifies if recipes contain gluten.'
+  }
+})
+// ここでステップメソッドをチェーン
+.preprocess(...)
+.analyze(...)
+.generateScore(...)
+.generateReason(...)
+```
+
+judge設定は、いずれかのステップでプロンプトオブジェクトを使用する予定がある場合にのみ必要です。個々のステップは、独自のjudge設定でこのデフォルト設定を上書きできます。
+
+### ステップバイステップの詳細
+
+#### preprocessステップ（オプション）
+
+特定の要素を抽出したり、コンテンツをフィルタリングしたり、複雑なデータ構造を変換したりする必要がある場合に、入力/出力データを準備します。
+
+**関数：** `({ run, results }) => any`
+
+```typescript
+const glutenCheckerScorer = createScorer(...)
+.preprocess(({ run }) => {
+  // レシピテキストの抽出とクリーニング
+  const recipeText = run.output.text.toLowerCase();
+  const wordCount = recipeText.split(' ').length;
+  
+  return {
+    recipeText,
+    wordCount,
+    hasCommonGlutenWords: /flour|wheat|bread|pasta/.test(recipeText)
+  };
+})
+```
+
+**プロンプトオブジェクト：** `description`、`outputSchema`、`createPrompt`を使用してLLMベースの前処理を構造化します。
+
+```typescript
+const glutenCheckerScorer = createScorer(...)
+.preprocess({
+  description: 'Extract ingredients from the recipe',
+  outputSchema: z.object({
+    ingredients: z.array(z.string()),
+    cookingMethods: z.array(z.string())
+  }),
+  createPrompt: ({ run }) => `
+    Extract all ingredients and cooking methods from this recipe:
+    ${run.output.text}
+    
+    Return JSON with ingredients and cookingMethods arrays.
+  `
+})
+```
+
+**データフロー：** 結果は後続のステップで`results.preprocessStepResult`として利用できます
+
+#### analyzeステップ（オプション）
+
+コア評価分析を実行し、スコアリング決定に情報を提供する洞察を収集します。
+
+**関数：** `({ run, results }) => any`
+
+```typescript
+const glutenCheckerScorer = createScorer({...})
+.preprocess(...)
+.analyze(({ run, results }) => {
+  const { recipeText, hasCommonGlutenWords } = results.preprocessStepResult;
+  
+  // シンプルなグルテン検出アルゴリズム
+  const glutenKeywords = ['wheat', 'flour', 'barley', 'rye', 'bread'];
+  const foundGlutenWords = glutenKeywords.filter(word => 
+    recipeText.includes(word)
+  );
+  
+  return {
+    isGlutenFree: foundGlutenWords.length === 0,
+    detectedGlutenSources: foundGlutenWords,
+    confidence: hasCommonGlutenWords ? 0.9 : 0.7
+  };
+})
+```
+
+**プロンプトオブジェクト：** LLMベースの分析には`description`、`outputSchema`、`createPrompt`を使用します。
+
+
+
+```typescript
+const glutenCheckerScorer = createScorer({...})
+.preprocess(...)
+.analyze({
+  description: 'Analyze recipe for gluten content',
+  outputSchema: z.object({
+    isGlutenFree: z.boolean(),
+    glutenSources: z.array(z.string()),
+    confidence: z.number().min(0).max(1)
+  }),
+  createPrompt: ({ run, results }) => `
+    Analyze this recipe for gluten content:
+    "${results.preprocessStepResult.recipeText}"
+    
+    Look for wheat, barley, rye, and hidden sources like soy sauce.
+    Return JSON with isGlutenFree, glutenSources array, and confidence (0-1).
+  `
+})
+```
+
+**データフロー：** 結果は後続のステップで `results.analyzeStepResult` として利用可能です
+
+#### generateScore ステップ（必須）
+
+分析結果を数値スコアに変換します。これはパイプライン内で唯一の必須ステップです。
+
+**関数：** `({ run, results }) => number`
+
+```typescript
+const glutenCheckerScorer = createScorer({...})
+.preprocess(...)
+.analyze(...)
+.generateScore(({ results }) => {
+  const { isGlutenFree, confidence } = results.analyzeStepResult;
+  
+  // グルテンフリーの場合は1、グルテン含有の場合は0を返す
+  // 信頼度レベルで重み付けする
+  return isGlutenFree ? confidence : 0;
+})
+```
+
+**プロンプトオブジェクト：** generateScoreでプロンプトオブジェクトを使用する詳細については、必須の `calculateScore` 関数を含む [`createScorer`](/reference/scorers/create-scorer) APIリファレンスを参照してください。
+
+**データフロー：** スコアは generateReason で `score` パラメータとして利用可能です
+
+#### generateReason ステップ（オプション）
+
+スコアの人間が理解しやすい説明を生成します。デバッグ、透明性、またはユーザーフィードバックに役立ちます。
+
+**関数：** `({ run, results, score }) => string`
+
+```typescript
+const glutenCheckerScorer = createScorer({...})
+.preprocess(...)
+.analyze(...)
+.generateScore(...)
+.generateReason(({ results, score }) => {
+  const { isGlutenFree, glutenSources } = results.analyzeStepResult;
+  
+  if (isGlutenFree) {
+    return `スコア：${score}。このレシピはグルテンフリーで、有害な成分は検出されませんでした。`;
+  } else {
+    return `スコア：${score}。以下の成分からグルテンを含有：${glutenSources.join('、')}`;
+  }
+})
+```
+
+**プロンプトオブジェクト：** LLM生成の説明には `description` と `createPrompt` を使用します。
+
+```typescript
+const glutenCheckerScorer = createScorer({...})
+.preprocess(...)
+.analyze(...)
+.generateScore(...)
+.generateReason({
+  description: 'Explain the gluten assessment',
+  createPrompt: ({ results, score }) => `
+    Explain why this recipe received a score of ${score}.
+    Analysis: ${JSON.stringify(results.analyzeStepResult)}
+    
+    Provide a clear explanation for someone with dietary restrictions.
+  `
+})
+```
+
+**例とリソース：**
+- [カスタムスコアラーの例](/examples/scorers/custom-scorer) - 完全なウォークスルー
+- [createScorer APIリファレンス](/reference/scorers/create-scorer) - 完全な技術文書
+- [組み込みスコアラーのソースコード](https://github.com/mastra-ai/mastra/tree/main/packages/evals/src/scorers) - 参考実装

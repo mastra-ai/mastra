@@ -1,0 +1,44 @@
+---
+title: "リファレンス: Mastra.getWorkflows() | Core | Mastra Docs"
+description: "Mastra の `Mastra.getWorkflows()` メソッドのドキュメント。設定済みのすべてのワークフローを取得します。"
+---
+
+# Mastra.getWorkflows()
+
+`.getWorkflows()` メソッドは、Mastra インスタンスで構成済みのすべてのワークフローを取得するために使用します。メソッドは、オプションの options オブジェクトを受け取ります。
+
+## 使い方の例
+
+```typescript copy
+mastra.getWorkflows();
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ serialized?: boolean }",
+      description: "オプションの設定オブジェクト。`serialized` が true の場合、完全なワークフローインスタンスではなく、name プロパティのみを持つ簡略化されたワークフローオブジェクトを返します。",
+      optional: true,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflows",
+      type: "Record<string, Workflow>",
+      description: "設定済みのすべてのワークフローを保持するレコード。キーはワークフローID、値はワークフローインスタンス（serialized が true の場合は簡略化されたオブジェクト）です。",
+    },
+  ]}
+/>
+
+## 関連項目
+
+- [ワークフローの概要](../../docs/workflows/overview.mdx)
+- [動的ワークフロー](../../docs/workflows/dynamic-workflows.mdx)

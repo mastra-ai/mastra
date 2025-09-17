@@ -3,9 +3,13 @@ title: "リファレンス: Google Voice | 音声プロバイダー | Mastra ド
 description: "Google Voice 実装のドキュメント。テキスト読み上げおよび音声認識機能を提供します。"
 ---
 
+
+
 # Google
 
 Mastra における Google Voice の実装は、Google Cloud サービスを利用してテキスト読み上げ（TTS）と音声認識（STT）の両方の機能を提供します。複数の音声、言語、そして高度なオーディオ設定オプションに対応しています。
+
+
 
 ## 使用例
 
@@ -45,6 +49,8 @@ const transcript = await voice.listen(audioStream, {
 // Get available voices for a specific language
 const voices = await voice.getSpeakers({ languageCode: "en-US" });
 ```
+
+
 
 ## コンストラクタのパラメータ
 
@@ -88,6 +94,8 @@ const voices = await voice.getSpeakers({ languageCode: "en-US" });
   ]}
 />
 
+
+
 ## メソッド
 
 ### speak()
@@ -125,7 +133,8 @@ Google Cloud Text-to-Speech サービスを使用してテキストを音声に�
     {
       name: "options.audioConfig",
       type: "ISynthesizeSpeechRequest['audioConfig']",
-      description: "Google Cloud Text-to-Speech API の音声設定オプション",
+      description:
+        "Google Cloud Text-to-Speech API の音声設定オプション",
       isOptional: true,
       defaultValue: "{ audioEncoding: 'LINEAR16' }",
     },
@@ -161,7 +170,8 @@ Google Cloud Speech-to-Text サービスを使用して音声をテキストに�
     {
       name: "options.config",
       type: "IRecognitionConfig",
-      description: "Google Cloud Speech-to-Text API の認識設定",
+      description:
+        "Google Cloud Speech-to-Text API の認識設定",
       isOptional: true,
       defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
     },
@@ -190,6 +200,8 @@ Google Cloud Speech-to-Text サービスを使用して音声をテキストに�
     },
   ]}
 />
+
+
 
 ## 重要な注意事項
 

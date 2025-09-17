@@ -65,8 +65,3 @@ pnpm run pull:openapispec
 ```
 
 within the `@mastra/server` directory.
-
-## License
-
-Released under the Elastic License 2.0. The full license text is available in
-this repository.

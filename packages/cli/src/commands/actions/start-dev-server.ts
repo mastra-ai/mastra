@@ -20,6 +20,7 @@ export const startDevServer = async (args: any) => {
     inspect: args?.inspect && !args?.inspectBrk,
     inspectBrk: args?.inspectBrk,
     customArgs: args?.customArgs ? args.customArgs.split(',') : [],
+    https: args?.https,
   }).catch(err => {
     logger.error(err.message);
   });

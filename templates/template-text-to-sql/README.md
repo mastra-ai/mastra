@@ -288,7 +288,3 @@ Key dependencies:
 - `ai`: AI SDK for structured generation
 - `pg`: PostgreSQL client
 - `zod`: Schema validation
-
-## License
-
-This project is part of the Mastra ecosystem and follows the same licensing terms.

@@ -1,102 +1,159 @@
-# Upstashを使用したメモリ
+---
+title: "例：Upstash を使ったメモリ | Memory | Mastra Docs"
+description: Mastra のメモリシステムを、Upstash Redis のストレージとベクター機能と組み合わせて使用する方法の例です。
+---
 
-この例では、ストレージバックエンドとしてUpstashを使用してMastraのメモリシステムを使用する方法を示します。
 
-## セットアップ
 
-まず、Upstashのストレージとベクター機能を使用してメモリシステムをセットアップします:
+# Upstash を使ったメモリ
 
-```typescript
+この例では、ストレージのバックエンドとして Upstash を使用して、Mastra のメモリシステムを利用する方法を紹介します。
+
+
+
+## 前提条件
+
+この例では `openai` モデルを使用し、Upstash Redis と Upstash Vector の両サービスが必要です。以下を `.env` ファイルに追加してください:
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+UPSTASH_REDIS_REST_URL=<your-redis-url>
+UPSTASH_REDIS_REST_TOKEN=<your-redis-token>
+UPSTASH_VECTOR_REST_URL=<your-vector-index-url>
+UPSTASH_VECTOR_REST_TOKEN=<your-vector-index-token>
+```
+
+[upstash.com](https://upstash.com) にサインアップし、Redis と Vector のデータベースをそれぞれ作成すると、Upstash の認証情報を取得できます。
+
+次のパッケージをインストールしてください:
+
+```bash copy
+npm install @mastra/upstash
+```
+
+
+
+## エージェントにメモリを追加する
+
+エージェントに Upstash のメモリを追加するには、`Memory` クラスを使い、`UpstashStore` で新しい `storage` キーを、`UpstashVector` で新しい `vector` キーをそれぞれ作成します。設定はリモートサービスにもローカル環境にも向けられます。
+
+```typescript filename="src/mastra/agents/example-upstash-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
-import { UpstashStore, UpstashVector } from "@mastra/upstash";
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
+import { UpstashStore } from "@mastra/upstash";
 
-// Upstashのストレージとベクター検索を使用してメモリを初期化
-const memory = new Memory({
-  storage: new UpstashStore({
-    url: process.env.UPSTASH_REDIS_REST_URL,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN,
-  }),
-  vector: new UpstashVector({
-    url: process.env.UPSTASH_REDIS_REST_URL,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN,
-  }),
-  options: {
-    lastMessages: 10,
-    semanticRecall: {
-      topK: 3,
-      messageRange: 2,
-    },
-  },
-});
-
-// メモリ機能を持つエージェントを作成
-const chefAgent = new Agent({
-  name: "chefAgent",
-  instructions:
-    "あなたはMichelです。実用的で経験豊富な家庭料理のシェフで、利用可能な食材で素晴らしい料理を作る手助けをします。",
-  model: openai("gpt-4o-mini"),
-  memory,
+export const upstashAgent = new Agent({
+  name: "upstash-agent",
+  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new UpstashStore({
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!
+    }),
+    options: {
+      threads: {
+        generateTitle: true
+      }
+    }
+  })
 });
 ```
 
-## 環境設定
 
-環境変数にUpstashの資格情報を設定してください：
 
-```bash
-UPSTASH_REDIS_REST_URL=your-redis-url
-UPSTASH_REDIS_REST_TOKEN=your-redis-token
+
+## fastembed を使ったローカル埋め込み
+
+埋め込みは、メモリの `semanticRecall` が（キーワードではなく）意味に基づいて関連メッセージを検索するために用いる数値ベクトルです。このセットアップでは、ベクトル埋め込みの生成に `@mastra/fastembed` を使用します。
+
+まずは `fastembed` をインストールします:
+
+```bash copy
+npm install @mastra/fastembed
 ```
+
+次をエージェントに追加します:
+
+```typescript filename="src/mastra/agents/example-upstash-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { UpstashStore, UpstashVector } from "@mastra/upstash";
+import { fastembed } from "@mastra/fastembed";
+
+export const upstashAgent = new Agent({
+  name: "upstash-agent",
+  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new UpstashStore({
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!
+    }),
+    vector: new UpstashVector({
+      url: process.env.UPSTASH_VECTOR_REST_URL!,
+      token: process.env.UPSTASH_VECTOR_REST_TOKEN!
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2
+      }
+    }
+  })
+});
+```
+
+
 
 ## 使用例
 
-```typescript
-import { randomUUID } from "crypto";
+このリクエストのリコール範囲を絞るには、`memoryOptions` を使用します。`lastMessages: 5` を設定して直近メッセージに基づくリコールを制限し、`semanticRecall` を使って、各一致の前後の文脈として `messageRange: 2` の隣接メッセージを含めつつ、最も関連性の高い `topK: 3` 件のメッセージを取得します。
 
-// Start a conversation
-const threadId = randomUUID();
-const resourceId = "SOME_USER_ID";
+```typescript filename="src/test-upstash-agent.ts" showLineNumbers copy
+import "dotenv/config";
 
-// Ask about ingredients
-const response1 = await chefAgent.stream(
-  "私のキッチンには、パスタ、缶詰のトマト、ニンニク、オリーブオイル、そしていくつかの乾燥ハーブ（バジルとオレガノ）があります。何が作れますか？",
-  {
-    threadId,
-    resourceId,
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("upstashAgent");
+
+const message = await agent.stream("My name is Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  }
+});
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("What's my name?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
   },
-);
+  memoryOptions: {
+    lastMessages: 5,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2
+    }
+  }
+});
 
-// Ask about different ingredients
-const response2 = await chefAgent.stream(
-  "今、私は友達の家にいて、彼らは鶏もも肉、ココナッツミルク、サツマイモ、カレーパウダーを持っています。",
-  {
-    threadId,
-    resourceId,
-  },
-);
-
-// Use memory to recall previous conversation
-const response3 = await chefAgent.stream(
-  "友達の家に行く前に何を料理しましたか？",
-  {
-    threadId,
-    resourceId,
-    memoryOptions: {
-      lastMessages: 3, // Get last 3 messages for context
-      semanticRecall: {
-        topK: 2, // Also get 2 most relevant messages
-        messageRange: 2, // Include context around matches
-      },
-    },
-  },
-);
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
 ```
 
-この例は以下を示しています：
 
-1. ベクター検索機能を備えたUpstashストレージの設定
-2. Upstash接続のための環境変数の設定
-3. メモリ統合を備えたエージェントの作成
-4. 同じクエリで最近の履歴とセマンティック検索の両方を使用
+
+## 関連項目
+
+- [エージェントの呼び出し](../agents/calling-agents.mdx)

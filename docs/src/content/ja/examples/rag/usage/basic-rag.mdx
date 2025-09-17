@@ -5,9 +5,13 @@ description: OpenAI の埋め込みと PGVector を使って、Mastra で基本�
 
 import { GithubLink } from "@/components/github-link";
 
+
+
 # ベクタークエリツールの使い方
 
 この例では、RAGシステムにおけるセマンティック検索のための `createVectorQueryTool` の実装と使用方法を示します。ツールの設定方法、ベクターストレージの管理、関連するコンテキストの効果的な取得方法について説明します。
+
+
 
 ## 概要
 
@@ -19,6 +23,8 @@ import { GithubLink } from "@/components/github-link";
 4. Mastra エージェントを使ってコンテキストに応じた応答を生成します
 
 > **注意**: 埋め込みの作成と保存方法については、[Upsert Embeddings](/examples/rag/upsert/upsert-embeddings) ガイドをご覧ください。
+
+
 
 ## セットアップ
 
@@ -43,6 +49,8 @@ import { createVectorQueryTool } from "@mastra/rag";
 import { PgVector } from "@mastra/pg";
 ```
 
+
+
 ## ベクタークエリツールの作成
 
 ベクターデータベースをクエリできるツールを作成します：
@@ -54,6 +62,8 @@ const vectorQueryTool = createVectorQueryTool({
   model: openai.embedding("text-embedding-3-small"),
 });
 ```
+
+
 
 ## エージェントの設定
 
@@ -71,12 +81,16 @@ export const ragAgent = new Agent({
 });
 ```
 
+
+
 ## PgVector と Mastra のインスタンス化
 
-すべてのコンポーネントを使って PgVector と Mastra をインスタンス化します。
+すべてのコンポーネントを使って PgVector と Mastra をインスタンス化します：
 
 ```typescript copy showLineNumbers{23} filename="src/index.ts"
-const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
+const pgVector = new PgVector({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+});
 
 export const mastra = new Mastra({
   agents: { ragAgent },
@@ -85,6 +99,8 @@ export const mastra = new Mastra({
 
 const agent = mastra.getAgent("ragAgent");
 ```
+
+
 
 ## 使用例
 

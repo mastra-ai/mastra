@@ -107,7 +107,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const base: any = {
       status: lastOutput.status,
       steps: stepResults,
+      input: stepResults.input,
     };
+
     if (lastOutput.status === 'success') {
       await emitter.emit('watch', {
         type: 'watch',
@@ -259,7 +261,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           tracingContext: {
             currentSpan: workflowAISpan,
-            isInternal: workflowAISpan?.isInternal,
           },
           abortController: params.abortController,
           emitter: params.emitter,
@@ -459,7 +460,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         durationMs: duration,
         sleepType: fn ? 'dynamic' : 'fixed',
       },
-      isInternal: tracingContext?.isInternal,
+      tracingPolicy: this.options?.tracingPolicy,
     });
 
     if (fn) {
@@ -473,7 +474,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runCount: -1,
         tracingContext: {
           currentSpan: sleepSpan,
-          isInternal: sleepSpan?.isInternal,
         },
         getInitData: () => stepResults?.input as any,
         getStepResult: (step: any) => {
@@ -574,7 +574,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         durationMs: date ? Math.max(0, date.getTime() - Date.now()) : undefined,
         sleepType: fn ? 'dynamic' : 'fixed',
       },
-      isInternal: tracingContext?.isInternal,
+      tracingPolicy: this.options?.tracingPolicy,
     });
 
     if (fn) {
@@ -588,7 +588,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runCount: -1,
         tracingContext: {
           currentSpan: sleepUntilSpan,
-          isInternal: sleepUntilSpan?.isInternal,
         },
         getInitData: () => stepResults?.input as any,
         getStepResult: (step: any) => {
@@ -662,7 +661,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         eventName: event,
         timeoutMs: timeout,
       },
-      isInternal: tracingContext?.isInternal,
+      tracingPolicy: this.options?.tracingPolicy,
     });
 
     const startTime = Date.now();
@@ -754,7 +753,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       attributes: {
         stepId: step.id,
       },
-      isInternal: tracingContext?.isInternal,
+      tracingPolicy: this.options?.tracingPolicy,
     });
 
     if (!skipEmits) {
@@ -849,7 +848,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           inputData: prevOutput,
           runCount: this.getOrGenerateRunCount(step.id),
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
-          tracingContext: { currentSpan: stepAISpan, isInternal: stepAISpan?.isInternal },
+          tracingContext: { currentSpan: stepAISpan },
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
             if (!step?.id) {
@@ -911,7 +910,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             stepId: step.id,
             runtimeContext,
             disableScorers,
-            tracingContext: { currentSpan: tracingContext.currentSpan, isInternal: true },
+            tracingContext: { currentSpan: tracingContext.currentSpan },
           });
         }
 
@@ -1132,7 +1131,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         branchCount: entry.steps.length,
         parallelSteps: entry.steps.map(s => (s.type === 'step' ? s.step.id : `control-${s.type}`)),
       },
-      isInternal: tracingContext?.isInternal,
+      tracingPolicy: this.options?.tracingPolicy,
     });
 
     let execResults: any;
@@ -1157,7 +1156,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           tracingContext: {
             currentSpan: parallelSpan,
-            isInternal: parallelSpan?.isInternal,
           },
           emitter,
           abortController,
@@ -1255,7 +1253,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       attributes: {
         conditionCount: entry.conditions.length,
       },
-      isInternal: tracingContext?.isInternal,
+      tracingPolicy: this.options?.tracingPolicy,
     });
 
     let execResults: any;
@@ -1269,7 +1267,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             attributes: {
               conditionIndex: index,
             },
-            isInternal: tracingContext?.isInternal,
+            tracingPolicy: this.options?.tracingPolicy,
           });
 
           try {
@@ -1282,7 +1280,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               runCount: -1,
               tracingContext: {
                 currentSpan: evalSpan,
-                isInternal: evalSpan?.isInternal,
               },
               getInitData: () => stepResults?.input as any,
               getStepResult: (step: any) => {
@@ -1393,7 +1390,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           tracingContext: {
             currentSpan: conditionalSpan,
-            isInternal: conditionalSpan?.isInternal,
           },
           emitter,
           abortController,
@@ -1516,7 +1512,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       attributes: {
         loopType: entry.loopType,
       },
-      isInternal: tracingContext?.isInternal,
+      tracingPolicy: this.options?.tracingPolicy,
     });
 
     let isTrue = true;
@@ -1537,7 +1533,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         prevOutput: (result as { output: any }).output,
         tracingContext: {
           currentSpan: loopSpan,
-          isInternal: loopSpan?.isInternal,
         },
         emitter,
         abortController,
@@ -1569,7 +1564,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         attributes: {
           conditionIndex: iteration,
         },
-        isInternal: tracingContext?.isInternal,
+        tracingPolicy: this.options?.tracingPolicy,
       });
 
       isTrue = await condition({
@@ -1581,7 +1576,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runCount: -1,
         tracingContext: {
           currentSpan: evalSpan,
-          isInternal: evalSpan?.isInternal,
         },
         getInitData: () => stepResults?.input as any,
         getStepResult: (step: any) => {
@@ -1694,7 +1688,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         loopType: 'foreach',
         concurrency,
       },
-      isInternal: tracingContext?.isInternal,
+      tracingPolicy: this.options?.tracingPolicy,
     });
 
     await emitter.emit('watch', {
@@ -1742,7 +1736,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             executionContext,
             resume,
             prevOutput: item,
-            tracingContext: { currentSpan: loopSpan, isInternal: loopSpan?.isInternal },
+            tracingContext: { currentSpan: loopSpan },
             emitter,
             abortController,
             runtimeContext,

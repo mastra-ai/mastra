@@ -1,266 +1,132 @@
 ---
-title: "例一覧：ワークフロー、エージェント、RAG | Mastra Docs"
-description: "Mastraを使ったAI開発の実用的な例を探索してください。テキスト生成、RAG実装、構造化された出力、マルチモーダルインタラクションなどが含まれます。OpenAI、Anthropic、Google Geminiを使用してAIアプリケーションを構築する方法を学びましょう。"
+title: "サンプル一覧: Workflows、Agents、RAG | Mastra ドキュメント"
+description: "Mastra を使った AI 開発の実践的なサンプルを紹介します。テキスト生成、RAG の実装、構造化出力、マルチモーダルなインタラクションなどを取り上げ、OpenAI、Anthropic、Google Gemini を用いた AI アプリケーションの構築方法を学べます。"
 ---
 
 import { CardItems } from "@/components/cards/card-items";
 import { Tabs } from "nextra/components";
 
+
 # 例
 
-例のセクションでは、Mastraを使用した基本的なAIエンジニアリングを示す短いプロジェクト例のリストを紹介しています。これには、テキスト生成、構造化された出力、ストリーミングレスポンス、検索拡張生成（RAG）、音声などが含まれます。
+Examples セクションでは、Mastra を使った基本的な AI エンジニアリングを示すサンプルプロジェクトを短く紹介します。内容には、テキスト生成、構造化出力、ストリーミング応答、検索拡張生成（RAG）、および音声が含まれます。
 
-<CardItems titles={["Agent", "Workflow", "vNextWorkflow", "Memory", "RAG", "Evals", "Voice"]} items={
-  {
+<CardItems
+  titles={["Agent", "Workflow", "Tool", "legacyWorkflow", "Memory", "RAG", "Evals", "Scorers (Experimental)", "Voice"]}
+  items={{
     Agent: [
-      {
-        title: "システムプロンプトを使用したエージェント",
-        href: "/examples/agents/system-prompt",
-      },
-      {
-        title: "エージェント型ワークフロー",
-        href: "/examples/agents/agentic-workflows",
-      },
-      {
-        title: "ツールの使用",
-        href: "/examples/agents/using-a-tool",
-      },
-      {
-        title: "階層型マルチエージェントシステム",
-        href: "/examples/agents/hierarchical-multi-agent",
-      },
-      {
-        title: "マルチエージェントワークフロー",
-        href: "/examples/agents/multi-agent-workflow",
-      },
-      {
-        title: "鳥チェッカー",
-        href: "/examples/agents/bird-checker",
-      },
+      { title: "Calling Agents", href: "/examples/agents/calling-agents" },
+      { title: "Agent System Prompt", href: "/examples/agents/system-prompt" },
+      { title: "Agents with Tools", href: "/examples/agents/using-a-tool" },
+      { title: "Supervisor Agent", href: "/examples/agents/supervisor-agent" },
+      { title: "Image Analysis Agent", href: "/examples/agents/image-analysis" },
+      { title: "Voice Agents", href: "/examples/agents/adding-voice-capabilities" },
+      { title: "Dynamic Agents", href: "/examples/agents/dynamic-agents" },
+      { title: "Deploying an MCPServer", href: "/examples/agents/deploying-mcp-server" },
+      { title: "AI SDK v5 Integration", href: "/examples/agents/ai-sdk-v5-integration" }
     ],
     Workflow: [
-      {
-        title: "ワークフローの作成",
-        href: "/examples/workflows/creating-a-workflow",
-      },
-      {
-        title: "ステップとしてツールを使用する",
-        href: "/examples/workflows/using-a-tool-as-a-step",
-      },
-      { title: "並列ステップ", href: "/examples/workflows/parallel-steps" },
-      {
-        title: "連続ステップ",
-        href: "/examples/workflows/sequential-steps",
-      },
-      { title: "分岐パス", href: "/examples/workflows/branching-paths" },
-      {
-        title: "循環依存関係",
-        href: "/examples/workflows/cyclical-dependencies",
-      },
-      {
-        title: "一時停止と再開",
-        href: "/examples/workflows/suspend-and-resume",
-      },
-      { title: "エージェントの呼び出し", href: "/examples/workflows/calling-agent" },
+      { title: "Running Workflows", href: "/examples/workflows/running-workflows" },
+      { title: "Sequential Steps", href: "/examples/workflows/sequential-steps" },
+      { title: "Parallel Steps", href: "/examples/workflows/parallel-steps" },
+      { title: "Conditional Branching", href: "/examples/workflows/conditional-branching" },
+      { title: "Array as Input", href: "/examples/workflows/array-as-input" },
+      { title: "Calling an Agent", href: "/examples/workflows/calling-agent" },
+      { title: "Agent as Step", href: "/examples/workflows/agent-as-step" },
+      { title: "Tool as Step", href: "/examples/workflows/tool-as-step" },
+      { title: "Human in the Loop", href: "/examples/workflows/human-in-the-loop" },
+      { title: "Multi-Turn Human in the Loop", href: "/examples/workflows/human-in-the-loop-multi-turn" },
+      { title: "Inngest Workflow", href: "/examples/workflows/inngest-workflow" }
     ],
-    vNextWorkflow: [
-      {
-        title: "条件分岐",
-        href: "/examples/workflows_vNext/conditional-branching",
-      },
-      {
-        title: "並列ステップ",
-        href: "/examples/workflows_vNext/parallel-steps",
-      },
-      {
-        title: "エージェントの呼び出し",
-        href: "/examples/workflows_vNext/calling-agent",
-      },
-      {
-        title: "ステップとしてのツールとエージェント",
-        href: "/examples/workflows_vNext/agent-and-tool-interop",
-      },
-      {
-        title: "ヒューマンインザループ",
-        href: "/examples/workflows_vNext/human-in-the-loop",
-      },
-      {
-        title: "制御フロー",
-        href: "/examples/workflows_vNext/control-flow",
-      },
-      {
-        title: "配列を入力として",
-        href: "/examples/workflows_vNext/array-as-input",
-      }
+    Tool: [
+      { title: "Calling Tools", href: "/examples/tools/calling-tools" },
+      { title: "Dynamic Tools", href: "/examples/tools/dynamic-tools" },
+      { title: "Tools with Workflows", href: "/examples/tools/workflow-as-tools" }
     ],
-    Memory:[
-      {
-        title: "LibSQLを使用した長期メモリ",
-        href: "/examples/memory/memory-with-libsql",
-      },
-      {
-        title: "Postgresを使用した長期メモリ",
-        href: "/examples/memory/memory-with-pg",
-      },
-      {
-        title: "Upstashを使用した長期メモリ",
-        href: "/examples/memory/memory-with-upstash",
-      },
-      {
-        title: "Mem0を使用した長期記憶",
-        href: "/examples/memory/memory-with-mem0",
-      },
-      {
-        title: "ストリーミングワーキングメモリ（クイックスタート）",
-        href: "/examples/memory/streaming-working-memory",
-      },
-      {
-        title: "ストリーミングワーキングメモリ（高度）",
-        href: "/examples/memory/streaming-working-memory-advanced",
-      },
+    legacyWorkflow: [
+      { title: "Creating a Workflow", href: "/examples/workflows_legacy/creating-a-workflow" },
+      { title: "Sequential Steps", href: "/examples/workflows_legacy/sequential-steps" },
+      { title: "Parallel Steps", href: "/examples/workflows_legacy/parallel-steps" },
+      { title: "Branching Paths", href: "/examples/workflows_legacy/branching-paths" },
+      { title: "Conditional Branching", href: "/examples/workflows_legacy/conditional-branching" },
+      { title: "Calling an Agent", href: "/examples/workflows_legacy/calling-agent" },
+      { title: "Using a Tool as a Step", href: "/examples/workflows_legacy/using-a-tool-as-a-step" },
+      { title: "Cyclical Dependencies", href: "/examples/workflows_legacy/cyclical-dependencies" },
+      { title: "Workflow Variables", href: "/examples/workflows_legacy/workflow-variables" }
     ],
-  RAG: [
-      { title: "テキストのチャンク化", href: "/examples/rag/chunking/chunk-text" },
-      { title: "マークダウンのチャンク化", href: "/examples/rag/chunking/chunk-markdown" },
-      { title: "HTMLのチャンク化", href: "/examples/rag/chunking/chunk-html" },
-      { title: "JSONのチャンク化", href: "/examples/rag/chunking/chunk-json" },
-      { title: "テキストチャンクの埋め込み", href: "/examples/rag/embedding/embed-text-chunk" },
-      { title: "チャンク配列の埋め込み", href: "/examples/rag/embedding/embed-chunk-array" },
-      { title: "チャンクサイズの調整", href: "/examples/rag/chunking/adjust-chunk-size" },
-      {
-        title: "チャンク区切り文字の調整",
-        href: "/examples/rag/chunking/adjust-chunk-delimiters",
-      },
-      {
-        title: "メタデータ抽出",
-        href: "/examples/rag/embedding/metadata-extraction",
-      },
-      {
-        title: "ハイブリッドベクトル検索",
-        href: "/examples/rag/query/hybrid-vector-search",
-      },
-      {
-        title: "Cohereを使用したテキスト埋め込み",
-        href: "/examples/rag/embedding/embed-text-with-cohere",
-      },
-      {
-        title: "埋め込みのアップサート",
-        href: "/examples/rag/upsert/upsert-embeddings",
-      },
-      { title: "結果の取得", href: "/examples/rag/query/retrieve-results" },
-      { title: "ベクトルクエリツールの使用", href: "/examples/rag/usage/basic-rag" },
-      {
-        title: "情報密度の最適化",
-        href: "/examples/rag/usage/cleanup-rag",
-      },
-      { title: "メタデータフィルタリング", href: "/examples/rag/usage/filter-rag" },
-      {
-        title: "結果の再ランク付け",
-        href: "/examples/rag/rerank/rerank",
-      },
-      {
-        title: "ツールを使用した結果の再ランク付け",
-        href: "/examples/rag/rerank/rerank-rag",
-      },
-      { title: "思考連鎖プロンプティング", href: "/examples/rag/usage/cot-rag" },
-      {
-        title: "ワークフローを使用した構造化推論",
-        href: "/examples/rag/usage/cot-workflow-rag",
-      },
-      { title: "グラフRAG", href: "/examples/rag/usage/graph-rag" },
+    Memory: [
+      { title: "Basic Working Memory", href: "/examples/memory/working-memory-basic" },
+      { title: "Memory with Template", href: "/examples/memory/working-memory-template" },
+      { title: "Memory with Schema", href: "/examples/memory/working-memory-schema" },
+      { title: "Memory with LibSQL", href: "/examples/memory/memory-with-libsql" },
+      { title: "Memory with PostgreSQL", href: "/examples/memory/memory-with-pg" },
+      { title: "Memory with Upstash", href: "/examples/memory/memory-with-upstash" },
+      { title: "Memory with Mem0", href: "/examples/memory/memory-with-mem0" },
+      { title: "Memory Processors", href: "/examples/memory/memory-processors" }
     ],
-  Evals: [
-    {
-      title: "回答の関連性",
-      href: "/examples/evals/answer-relevancy",
-    },
-    {
-      title: "バイアス",
-      href: "/examples/evals/bias",
-    },
-    {
-      title: "完全性",
-      href: "/examples/evals/completeness",
-    },
-    {
-      title: "コンテンツの類似性",
-      href: "/examples/evals/content-similarity",
-    },
-    {
-      title: "コンテキスト位置",
-      href: "/examples/evals/context-position",
-    },
-    {
-      title: "コンテキスト精度",
-      href: "/examples/evals/context-precision",
-    },
-    {
-      title: "コンテキスト関連性",
-      href: "/examples/evals/context-relevancy",
-    },
-    {
-      title: "コンテキスト再現率",
-      href: "/examples/evals/contextual-recall",
-    },
-    {
-      title: "LLMを審判とするカスタム評価",
-      href: "/examples/evals/custom-eval",
-    },
-    {
-      title: "忠実性",
-      href: "/examples/evals/faithfulness",
-    },
-    {
-      title: "幻覚",
-      href: "/examples/evals/hallucination",
-    },
-    {
-      title: "キーワードカバレッジ",
-      href: "/examples/evals/keyword-coverage",
-    },
-    {
-      title: "プロンプト整合性",
-      href: "/examples/evals/prompt-alignment",
-    },
-    {
-      title: "要約",
-      href: "/examples/evals/summarization",
-    },
-    {
-      title: "テキスト差異",
-      href: "/examples/evals/textual-difference",
-    },
-    {
-      title: "トーン一貫性", 
-      href: "/examples/evals/tone-consistency",
-    },
-    {
-      title: "有害性",
-      href: "/examples/evals/toxicity",
-    },
-    {
-      title: "単語包含",
-      href: "/examples/evals/word-inclusion",
-    },
-  ],
-  Voice: [
-    {
-      title: "テキスト読み上げ",
-      href: "/examples/voice/text-to-speech",
-    },
-    {
-      title: "音声認識",
-      href: "/examples/voice/speech-to-text",
-    },
-    {
-      title: "ターンテイキング",
-      href: "/examples/voice/turn-taking",
-    },
-    {
-      title: "音声から音声へ",
-      href: "/examples/voice/speech-to-speech",
-    },
-  ],
-}}>
-
-</CardItems>
+    RAG: [
+      { title: "Chunk Text", href: "/examples/rag/chunking/chunk-text" },
+      { title: "Chunk Markdown", href: "/examples/rag/chunking/chunk-markdown" },
+      { title: "Chunk HTML", href: "/examples/rag/chunking/chunk-html" },
+      { title: "Chunk JSON", href: "/examples/rag/chunking/chunk-json" },
+      { title: "Adjust Chunk Size", href: "/examples/rag/chunking/adjust-chunk-size" },
+      { title: "Adjust Chunk Delimiters", href: "/examples/rag/chunking/adjust-chunk-delimiters" },
+      { title: "Embed Text Chunk", href: "/examples/rag/embedding/embed-text-chunk" },
+      { title: "Embed Chunk Array", href: "/examples/rag/embedding/embed-chunk-array" },
+      { title: "Embed Text with Cohere", href: "/examples/rag/embedding/embed-text-with-cohere" },
+      { title: "Metadata Extraction", href: "/examples/rag/embedding/metadata-extraction" },
+      { title: "Upsert Embeddings", href: "/examples/rag/upsert/upsert-embeddings" },
+      { title: "Using the Vector Query Tool", href: "/examples/rag/usage/basic-rag" },
+      { title: "Optimizing Information Density", href: "/examples/rag/usage/cleanup-rag" },
+      { title: "Metadata Filtering", href: "/examples/rag/usage/filter-rag" },
+      { title: "Chain of Thought Prompting", href: "/examples/rag/usage/cot-rag" },
+      { title: "Structured Reasoning with Workflows", href: "/examples/rag/usage/cot-workflow-rag" },
+      { title: "Graph RAG", href: "/examples/rag/usage/graph-rag" }
+    ],
+    Evals: [
+      { title: "Answer Relevancy", href: "/examples/evals/answer-relevancy" },
+      { title: "Bias", href: "/examples/evals/bias" },
+      { title: "Completeness", href: "/examples/evals/completeness" },
+      { title: "Content Similarity", href: "/examples/evals/content-similarity" },
+      { title: "Context Position", href: "/examples/evals/context-position" },
+      { title: "Context Precision", href: "/examples/evals/context-precision" },
+      { title: "Context Relevancy", href: "/examples/evals/context-relevancy" },
+      { title: "Contextual Recall", href: "/examples/evals/contextual-recall" },
+      { title: "Faithfulness", href: "/examples/evals/faithfulness" },
+      { title: "Hallucination", href: "/examples/evals/hallucination" },
+      { title: "Keyword Coverage", href: "/examples/evals/keyword-coverage" },
+      { title: "Prompt Alignment", href: "/examples/evals/prompt-alignment" },
+      { title: "Summarization", href: "/examples/evals/summarization" },
+      { title: "Textual Difference", href: "/examples/evals/textual-difference" },
+      { title: "Tone Consistency", href: "/examples/evals/tone-consistency" },
+      { title: "Toxicity", href: "/examples/evals/toxicity" },
+      { title: "LLM as a Judge", href: "/examples/evals/custom-llm-judge-eval" },
+      { title: "Native JavaScript", href: "/examples/evals/custom-native-javascript-eval" }
+    ],
+    "Scorers (Experimental)": [
+      { title: "Custom Scorer", href: "/examples/scorers/custom-scorer" },
+      { title: "Answer Relevancy", href: "/examples/scorers/answer-relevancy" },
+      { title: "Answer Similarity", href: "/examples/scorers/answer-similarity" },
+      { title: "Bias", href: "/examples/scorers/bias" },
+      { title: "Completeness", href: "/examples/scorers/completeness" },
+      { title: "Content Similarity", href: "/examples/scorers/content-similarity" },
+      { title: "Faithfulness", href: "/examples/scorers/faithfulness" },
+      { title: "Hallucination", href: "/examples/scorers/hallucination" },
+      { title: "Keyword Coverage", href: "/examples/scorers/keyword-coverage" },
+      { title: "Textual Difference", href: "/examples/scorers/textual-difference" },
+      { title: "Tone Consistency", href: "/examples/scorers/tone-consistency" },
+      { title: "Toxicity", href: "/examples/scorers/toxicity" },
+      { title: "Noise Sensitivity", href: "/examples/scorers/noise-sensitivity" },
+      { title: "Prompt Alignment", href: "/examples/scorers/prompt-alignment" },
+      { title: "Tool Call Accuracy", href: "/examples/scorers/tool-call-accuracy" },
+      { title: "Context Relevance", href: "/examples/scorers/context-relevance" },
+      { title: "Context Precision", href: "/examples/scorers/context-precision" },
+    ],
+    Voice: [
+      { title: "Text to Speech", href: "/examples/voice/text-to-speech" },
+      { title: "Speech to Text", href: "/examples/voice/speech-to-text" },
+      { title: "Turn Taking", href: "/examples/voice/turn-taking" },
+      { title: "Speech to Speech", href: "/examples/voice/speech-to-speech" }
+    ]
+  }}
+/>

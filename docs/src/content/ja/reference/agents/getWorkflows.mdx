@@ -1,99 +1,79 @@
 ---
 title: "リファレンス: Agent.getWorkflows() | エージェント | Mastra ドキュメント"
-description: "Mastraエージェントの`.getWorkflows()`メソッドに関するドキュメント。エージェントが実行できるワークフローを取得します。"
+description: "Mastraエージェントの`Agent.getWorkflows()`メソッドに関するドキュメントです。エージェントが実行可能なワークフローを取得するメソッドについて説明します。"
 ---
+
+
 
 # Agent.getWorkflows()
 
-`getWorkflows()`メソッドは、エージェントに設定されたワークフローを取得し、それらが関数である場合は解決します。これらのワークフローにより、エージェントは定義された実行パスを持つ複雑な複数ステップのプロセスを実行できるようになります。
+`.getWorkflows()`メソッドは、エージェントに設定されたワークフローを取得し、それらが関数である場合は解決します。これらのワークフローにより、エージェントは定義された実行経路を持つ複雑な多段階処理を実行することができます。
 
-## 構文
 
-```typescript
-getWorkflows({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}): Record<string, NewWorkflow> | Promise<Record<string, NewWorkflow>>
+
+## 使い方の例
+
+```typescript copy
+await agent.getWorkflows();
 ```
+
+
 
 ## パラメータ
 
-<br />
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ runtimeContext?: RuntimeContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "ランタイムコンテキストを含むオプションの設定オブジェクト。",
+    },
+  ]}
+/>
+
+
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflows",
+      type: "Promise<Record<string, Workflow>>",
+      description: "ワークフロー名をキーとし、対応するWorkflowインスタンスを値とするレコードオブジェクトに解決されるPromise。",
+    },
+  ]}
+/>
+
+
+
+## 詳細な使用例
+
+```typescript copy
+await agent.getWorkflows({
+  runtimeContext: new RuntimeContext()
+});
+```
+
+### オプションパラメータ
+
 <PropertiesTable
   content={[
     {
       name: "runtimeContext",
       type: "RuntimeContext",
       isOptional: true,
-      description:
-        "依存性注入とコンテキスト情報のためのランタイムコンテキスト。",
+      defaultValue: "new RuntimeContext()",
+      description: "依存性注入とコンテキスト情報のためのランタイムコンテキスト。",
     },
   ]}
 />
 
-## 戻り値
 
-エージェントのワークフローを含む `Record<string, NewWorkflow>` オブジェクト、または `Record<string, NewWorkflow>` オブジェクトに解決されるPromiseを返します。
 
-## 説明
+## 関連項目
 
-`getWorkflows()`メソッドは、エージェントが実行できるワークフローにアクセスするために使用されます。これは、オブジェクトとして直接提供されるか、ランタイムコンテキストを受け取る関数から返されるワークフローを解決します。
-
-## 例
-
-```typescript
-import { Agent } from "@mastra/core/agent";
-import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
-import { openai } from "@ai-sdk/openai";
-import { z } from "zod";
-
-const generateSuggestionsStep = createStep({
-  id: "generate-suggestions",
-  inputSchema: z.object({
-    topic: z.string().describe("The topic to research"),
-  }),
-  outputSchema: z.object({
-    summary: z.string(),
-  }),
-  execute: async ({ inputData, mastra }) => {
-    const researchAgent = mastra?.getAgent("researchAgent");
-
-    if (!researchAgent) {
-      throw new Error("Research agent is not initialized");
-    }
-
-    const { topic } = inputData;
-
-    const result = await researchAgent.generate([
-      { role: "assistant", content: topic },
-    ]);
-
-    return { summary: result.text };
-  },
-});
-
-const researchWorkflow = createWorkflow({
-  id: "research-workflow",
-  inputSchema: z.object({
-    topic: z.string().describe("The topic to research"),
-  }),
-  outputSchema: z.object({
-    summary: z.string(),
-  }),
-});
-
-researchWorkflow.then(generateSuggestionsStep).commit();
-
-// Create an agent with the workflow
-const agent = new Agent({
-  name: "research-organizer",
-  instructions:
-    "You are a research organizer that can delegate tasks to gather information and create summaries.",
-  model: openai("gpt-4o"),
-  workflows: {
-    research: researchWorkflow,
-  },
-});
-
-// Get the workflows
-const workflows = await agent.getWorkflows();
-
-console.log(Object.keys(workflows)); // ["research"]
-```
+- [エージェントの概要](../../docs/agents/overview.mdx)
+- [ワークフローの概要](../../docs/workflows/overview.mdx)

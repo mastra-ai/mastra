@@ -101,6 +101,7 @@ program
     '-c, --custom-args <args>',
     'Comma-separated list of custom arguments to pass to the dev server. IE: --experimental-transform-types',
   )
+  .option('-s, --https', 'Enable local HTTPS')
   .action(startDevServer);
 
 program

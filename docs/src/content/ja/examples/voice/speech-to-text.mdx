@@ -5,9 +5,13 @@ description: Mastra を使って音声からテキストへのアプリケーシ
 
 import { GithubLink } from "@/components/github-link";
 
+
+
 # Smart Voice Memo App
 
 以下のコードスニペットは、Next.js に Mastra を直接統合してスマートボイスメモアプリケーションで音声認識（STT）機能を実装する例を示しています。Mastra を Next.js と統合する方法の詳細については、[Integrate with Next.js](/docs/frameworks/next-js) のドキュメントをご参照ください。
+
+
 
 ## STT機能を持つエージェントの作成
 
@@ -30,9 +34,11 @@ export const noteTakerAgent = new Agent({
 });
 ```
 
-## Mastra へのエージェント登録
 
-このスニペットは、STT対応エージェントをあなたの Mastra インスタンスに登録する方法を示しています。
+
+## Mastraでエージェントを登録する
+
+このスニペットは、STT対応エージェントをMastraインスタンスに登録する方法を示しています：
 
 ```typescript filename="src/mastra/index.ts"
 import { PinoLogger } from "@mastra/loggers";
@@ -48,6 +54,8 @@ export const mastra = new Mastra({
   }),
 });
 ```
+
+
 
 ## 音声の文字起こし処理
 

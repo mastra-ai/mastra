@@ -3,9 +3,13 @@ title: "リファレンス: Speechify Voice | Voice Providers | Mastra ドキュ
 description: "Speechify voice 実装のドキュメント。テキスト読み上げ機能について説明します。"
 ---
 
+
+
 # Speechify
 
 MastraにおけるSpeechifyの音声実装は、SpeechifyのAPIを利用してテキスト読み上げ機能を提供します。
+
+
 
 ## 使用例
 
@@ -29,6 +33,8 @@ const audioStream = await voice.speak("Hello, world!", {
   speaker: "henry", // Override default voice
 });
 ```
+
+
 
 ## コンストラクタのパラメータ
 
@@ -71,6 +77,8 @@ const audioStream = await voice.speak("Hello, world!", {
     },
   ]}
 />
+
+
 
 ## メソッド
 
@@ -138,6 +146,8 @@ const audioStream = await voice.speak("Hello, world!", {
 ### listen()
 
 このメソッドはSpeechifyではサポートされておらず、エラーが発生します。Speechifyは音声認識（音声からテキストへの変換）機能を提供していません。
+
+
 
 ## 注意事項
 

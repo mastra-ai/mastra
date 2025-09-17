@@ -1,0 +1,93 @@
+---
+title: "リファレンス: Run.resume() | Workflows | Mastra ドキュメント"
+description: ワークフローにおける `Run.resume()` メソッドのドキュメント。保留中のワークフロー実行を新しいデータで再開します。
+---
+
+
+
+# Run.resume()
+
+`.resume()` メソッドは、一時停止中のワークフロー実行を新しいデータで再開し、特定のステップから処理を続行できるようにします。
+
+
+
+## 使用例
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+const result = await run.start({ inputData: { value: "initial data" } });
+
+if (result.status === "suspended") {
+  const resumedResults = await run.resume({
+    resumeData: { value: "resume data" }
+  });
+}
+```
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "resumeData",
+      type: "z.infer<TResumeSchema>",
+      description: "一時停止されたステップを再開するためのデータ",
+      isOptional: true,
+    },
+    {
+      name: "step",
+      type: "Step<string, any, any, TResumeSchema, any, TEngineType> | [...Step<string, any, any, any, any, TEngineType>[], Step<string, any, any, TResumeSchema, any, TEngineType>] | string | string[]",
+      description: "再開時の起点となるステップ。Step インスタンス、Step の配列、ステップ ID の文字列、またはステップ ID の文字列配列を指定可能",
+      isOptional: true,
+    },
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      description: "再開時に使用するランタイムコンテキストデータ",
+      isOptional: true,
+    },
+    {
+      name: "runCount",
+      type: "number",
+      description: "ネストされたワークフロー実行における任意の実行回数",
+      isOptional: true,
+    },
+  ]}
+/>
+
+
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<WorkflowResult<TOutput, TSteps>>",
+      description: "ステップの出力とステータスを含むワークフロー実行結果へと解決される Promise",
+    },
+  ]}
+/>
+
+
+
+## 応用例
+
+```typescript showLineNumbers copy
+if (result.status === "suspended") {
+  const resumedResults = await run.resume({
+    step: result.suspended[0],
+    resumeData: { value: "resume data" }
+  });
+}
+```
+> **注記**: 中断されたステップが1つだけの場合は `step` パラメータを省略でき、ワークフローはそのステップを自動的に再開します。複数のステップが中断されているワークフローでは、再開するステップを明示的に指定する必要があります。
+
+
+
+## 関連
+
+- [Workflows の概要](../../../docs/workflows/overview.mdx#run-workflow)
+- [Workflow.createRunAsync()](../create-run.mdx)
+- [一時停止と再開](../../../docs/workflows/suspend-and-resume.mdx)
+- [ヒューマン・イン・ザ・ループの例](../../../examples/workflows/human-in-the-loop.mdx)

@@ -1,11 +1,11 @@
 ---
 title: "リファレンス: メタデータフィルター | メタデータフィルタリング | RAG | Mastra ドキュメント"
-description: Mastra のメタデータフィルタリング機能に関するドキュメント。これにより、さまざまなベクトルストアでのベクトル検索結果に対して精密なクエリが可能になります。
+description: さまざまなベクトルストアでのベクトル検索結果に対して、正確なクエリを可能にする Mastra のメタデータフィルタリング機能に関するドキュメント。
 ---
 
 # メタデータフィルター
 
-Mastra は、すべてのベクトルストアで統一されたメタデータフィルタリング構文を提供しており、MongoDB/Sift クエリ構文に基づいています。各ベクトルストアは、これらのフィルターを自分たちのネイティブな形式に変換します。
+Mastra は、MongoDB/Sift のクエリ構文に基づき、すべてのベクトルストアで統一的なメタデータフィルタリング構文を提供します。各ベクトルストアは、これらのフィルターをそれぞれのネイティブ形式に変換します。
 
 ## 基本例
 
@@ -19,9 +19,9 @@ const results = await store.query({
   queryVector: queryVector,
   topK: 10,
   filter: {
-    category: "electronics", // Simple equality
-    price: { $gt: 100 }, // Numeric comparison
-    tags: { $in: ["sale", "new"] }, // Array membership
+    category: "electronics", // 単純な等価比較
+    price: { $gt: 100 }, // 数値比較
+    tags: { $in: ["sale", "new"] }, // 配列内の要素一致
   },
 });
 ```
@@ -33,39 +33,39 @@ const results = await store.query({
   operators={[
     {
       name: "$eq",
-      description: "指定した値と等しい値に一致します",
+      description: "指定した値と等しい値にマッチ",
       example: "{ age: { $eq: 25 } }",
-      supportedBy: ["All"],
+      supportedBy: ["Couchbase を除くすべて"],
     },
     {
       name: "$ne",
-      description: "等しくない値に一致します",
+      description: "等しくない値にマッチ",
       example: "{ status: { $ne: 'inactive' } }",
-      supportedBy: ["All"],
+      supportedBy: ["Couchbase を除くすべて"],
     },
     {
       name: "$gt",
       description: "より大きい",
       example: "{ price: { $gt: 100 } }",
-      supportedBy: ["All"],
+      supportedBy: ["Couchbase を除くすべて"],
     },
     {
       name: "$gte",
       description: "以上",
       example: "{ rating: { $gte: 4.5 } }",
-      supportedBy: ["All"],
+      supportedBy: ["Couchbase を除くすべて"],
     },
     {
       name: "$lt",
       description: "より小さい",
       example: "{ stock: { $lt: 20 } }",
-      supportedBy: ["All"],
+      supportedBy: ["Couchbase を除くすべて"],
     },
     {
       name: "$lte",
       description: "以下",
       example: "{ priority: { $lte: 3 } }",
-      supportedBy: ["All"],
+      supportedBy: ["Couchbase を除くすべて"],
     },
   ]}
 />
@@ -75,25 +75,25 @@ const results = await store.query({
   operators={[
     {
       name: "$in",
-      description: "配列内のいずれかの値に一致します",
+      description: "配列内のいずれかの値にマッチ",
       example: '{ category: { $in: ["A", "B"] } }',
-      supportedBy: ["All"],
+      supportedBy: ["Couchbase を除くすべて"],
     },
     {
       name: "$nin",
-      description: "いずれの値にも一致しません",
+      description: "いずれの値にもマッチしない",
       example: '{ status: { $nin: ["deleted", "archived"] } }',
-      supportedBy: ["All"],
+      supportedBy: ["Couchbase を除くすべて"],
     },
     {
       name: "$all",
-      description: "すべての要素を含む配列に一致します",
+      description: "すべての要素を含む配列にマッチ",
       example: '{ tags: { $all: ["urgent", "high"] } }',
       supportedBy: ["Astra", "Pinecone", "Upstash", "MongoDB"],
     },
     {
       name: "$elemMatch",
-      description: "条件を満たす配列要素に一致します",
+      description: "条件を満たす配列要素にマッチ",
       example: "{ scores: { $elemMatch: { $gt: 80 } } }",
       supportedBy: ["LibSQL", "PgVector", "MongoDB"],
     },
@@ -105,19 +105,19 @@ const results = await store.query({
   operators={[
     {
       name: "$and",
-      description: "論理積（AND）",
+      description: "論理 AND",
       example: "{ $and: [{ price: { $gt: 100 } }, { stock: { $gt: 0 } }] }",
-      supportedBy: ["All except Vectorize"],
+      supportedBy: ["Vectorize、Couchbase を除くすべて"],
     },
     {
       name: "$or",
-      description: "論理和（OR）",
+      description: "論理 OR",
       example: '{ $or: [{ status: "active" }, { priority: "high" }] }',
-      supportedBy: ["All except Vectorize"],
+      supportedBy: ["Vectorize、Couchbase を除くすべて"],
     },
     {
       name: "$not",
-      description: "論理否定（NOT）",
+      description: "論理 NOT",
       example: "{ price: { $not: { $lt: 100 } } }",
       supportedBy: [
         "Astra",
@@ -130,7 +130,7 @@ const results = await store.query({
     },
     {
       name: "$nor",
-      description: "論理否定和（NOR）",
+      description: "論理 NOR",
       example: '{ $nor: [{ status: "deleted" }, { archived: true }] }',
       supportedBy: ["Qdrant", "Upstash", "PgVector", "LibSQL", "MongoDB"],
     },
@@ -142,9 +142,9 @@ const results = await store.query({
   operators={[
     {
       name: "$exists",
-      description: "フィールドが存在するドキュメントに一致します",
+      description: "フィールドが存在するドキュメントにマッチ",
       example: "{ rating: { $exists: true } }",
-      supportedBy: ["All except Vectorize, Chroma"],
+      supportedBy: ["Vectorize、Chroma、Couchbase を除くすべて"],
     },
   ]}
 />
@@ -160,13 +160,13 @@ const results = await store.query({
     },
     {
       name: "$regex",
-      description: "正規表現による一致",
+      description: "正規表現マッチ",
       example: '{ name: { $regex: "^test" } }',
       supportedBy: ["Qdrant", "PgVector", "Upstash", "MongoDB"],
     },
     {
       name: "$size",
-      description: "配列の長さをチェック",
+      description: "配列長のチェック",
       example: "{ tags: { $size: { $gt: 2 } } }",
       supportedBy: ["Astra", "LibSQL", "PgVector", "MongoDB"],
     },
@@ -184,139 +184,157 @@ const results = await store.query({
     },
     {
       name: "$hasId",
-      description: "ベクターIDの存在チェック",
+      description: "ベクトルIDの存在チェック",
       example: '{ $hasId: ["id1", "id2"] }',
       supportedBy: ["Qdrant"],
     },
     {
       name: "$hasVector",
-      description: "ベクターの存在チェック",
+      description: "ベクトルの存在チェック",
       example: "{ $hasVector: true }",
       supportedBy: ["Qdrant"],
     },
   ]}
 />
 
-## 共通ルールと制限事項
+## 共通ルールと制限
 
-1. フィールド名は以下のことができません:
+1. フィールド名についての禁止事項:
 
-   - ネストされたフィールドを参照する場合を除き、ドット（.）を含むこと
-   - $で始まる、またはヌル文字を含むこと
-   - 空文字列であること
+   - ネストされたフィールドを参照する場合を除き、ドット (.) を含めない
+   - $ で始めない、または null 文字を含めない
+   - 空文字列にしない
 
-2. 値は以下でなければなりません:
+2. 値の要件:
 
-   - 有効なJSON型（文字列、数値、真偽値、オブジェクト、配列）
-   - undefinedでないこと
-   - 演算子に対して適切な型であること（例：数値比較には数値）
+   - 有効な JSON 型であること（string、number、boolean、object、array）
+   - undefined でないこと
+   - 使用する演算子に対して適切な型であること（例: 数値比較には number）
 
 3. 論理演算子:
 
-   - 有効な条件を含む必要があります
-   - 空であってはなりません
-   - 適切にネストされている必要があります
-   - トップレベル、または他の論理演算子内でのみ使用可能です
-   - フィールドレベルやフィールド内でネストして使用することはできません
-   - 演算子内で使用することはできません
+   - 有効な条件を含めること
+   - 空にしないこと
+   - 適切にネストされていること
+   - トップレベル、または他の論理演算子内にネストしてのみ使用できる
+   - フィールドレベルで、またはフィールド内にネストして使用してはならない
+   - 他の演算子の内部で使用してはならない
    - 有効: `{ "$and": [{ "field": { "$gt": 100 } }] }`
    - 有効: `{ "$or": [{ "$and": [{ "field": { "$gt": 100 } }] }] }`
    - 無効: `{ "field": { "$and": [{ "$gt": 100 }] } }`
    - 無効: `{ "field": { "$gt": { "$and": [{...}] } } }`
 
-4. $not演算子:
+4. $not 演算子:
 
-   - オブジェクトでなければなりません
-   - 空であってはなりません
-   - フィールドレベルまたはトップレベルで使用可能です
+   - オブジェクトでなければならない
+   - 空にしてはならない
+   - フィールドレベルまたはトップレベルで使用できる
    - 有効: `{ "$not": { "field": "value" } }`
    - 有効: `{ "field": { "$not": { "$eq": "value" } } }`
 
 5. 演算子のネスト:
-   - 論理演算子はフィールド条件を含む必要があり、直接演算子を含んではいけません
+   - 論理演算子は、演算子そのものではなくフィールド条件を含めなければならない
    - 有効: `{ "$and": [{ "field": { "$gt": 100 } }] }`
    - 無効: `{ "$and": [{ "$gt": 100 }] }`
 
-## ストア固有の注意事項
+## ストア別の注意事項
 
 ### Astra
 
-- ネストされたフィールドクエリはドット表記でサポートされています
-- 配列フィールドはメタデータ内で明示的に配列として定義する必要があります
-- メタデータの値は大文字と小文字が区別されます
+- ネストされたフィールドのクエリはドット記法でサポートされています
+- 配列フィールドはメタデータで明示的に配列として定義する必要があります
+- メタデータの値は大文字・小文字を区別します
 
 ### ChromaDB
 
-- Whereフィルターは、フィルター対象のフィールドがメタデータに存在する場合のみ結果を返します
-- 空のメタデータフィールドはフィルター結果に含まれません
-- 否定一致（例：$ne）には、メタデータフィールドが存在している必要があります（フィールドが存在しないドキュメントには一致しません）
+- フィルタは、メタデータ内に対象フィールドが存在する結果のみを返します
+- 空のメタデータフィールドはフィルタ結果に含まれません
+- 否定条件での一致には当該メタデータフィールドが存在している必要があります（例：$ne はそのフィールドが欠落しているドキュメントには一致しません）
 
 ### Cloudflare Vectorize
 
-- フィルタリングを使用する前に、明示的なメタデータインデックス作成が必要です
-- フィルター対象のフィールドをインデックスするには `createMetadataIndex()` を使用してください
-- Vectorizeインデックスごとに最大10個のメタデータインデックスが作成可能です
-- 文字列値は最初の64バイトまでインデックスされます（UTF-8境界で切り捨て）
-- 数値値はfloat64精度で扱われます
-- フィルター用JSONは2048バイト未満である必要があります
-- フィールド名にドット（.）を含めたり、$で始めることはできません
-- フィールド名は512文字までに制限されています
-- 新しいメタデータインデックス作成後、ベクトルを再アップサートしないとフィルター結果に含まれません
-- 非常に大規模なデータセット（約1,000万ベクトル以上）では範囲クエリの精度が低下する場合があります
+- フィルタリングを使う前に、メタデータの明示的なインデックス作成が必要
+- フィルタ対象のフィールドをインデックスするには `createMetadataIndex()` を使用
+- Vectorize のインデックスあたり最大 10 個のメタデータインデックス
+- 文字列値は先頭 64 バイトまでをインデックス化（UTF-8 の境界で切り詰め）
+- 数値は float64 精度を使用
+- フィルター用 JSON は 2048 バイト未満である必要がある
+- フィールド名にドット (.) を含めたり、$ で始めることはできない
+- フィールド名は最大 512 文字まで
+- 新しいメタデータインデックスを作成した後、フィルタ結果に反映させるにはベクトルを再アップサートする必要がある
+- 非常に大規模なデータセット（約 1,000 万件以上のベクトル）では、範囲クエリの精度が低下する場合がある
 
 ### LibSQL
 
-- ドット表記によるネストされたオブジェクトクエリをサポートしています
-- 配列フィールドは有効なJSON配列であることが検証されます
-- 数値比較は適切な型処理を維持します
-- 条件内の空配列も適切に処理されます
-- メタデータは効率的なクエリのためにJSONBカラムに格納されます
+- ドット記法でネストされたオブジェクトのクエリをサポート
+- 配列フィールドは、有効な JSON 配列であることを確認するために検証されます
+- 数値比較では適切な型処理を維持
+- 条件での空配列は適切に処理されます
+- メタデータは効率的なクエリのために JSONB カラムに格納されます
 
 ### PgVector
 
-- PostgreSQLのネイティブなJSONクエリ機能を完全サポート
-- ネイティブの配列関数による効率的な配列操作
+- PostgreSQL のネイティブな JSON クエリ機能を完全にサポート
+- ネイティブの配列関数による配列操作の効率的な処理
 - 数値、文字列、ブール値の適切な型処理
-- ネストされたフィールドクエリは内部的にPostgreSQLのJSONパス構文を使用
-- メタデータは効率的なインデックス作成のためにJSONBカラムに格納されます
+- ネストされたフィールドのクエリは内部的に PostgreSQL の JSON パス構文を使用
+- メタデータは効率的なインデックス作成のために JSONB 列に保存
 
 ### Pinecone
 
-- メタデータフィールド名は512文字までに制限されています
-- 数値値は±1e38の範囲内でなければなりません
-- メタデータ内の配列は合計64KBまでに制限されています
-- ネストされたオブジェクトはドット表記でフラット化されます
+- メタデータのフィールド名は512文字までです
+- 数値は±1e38の範囲内である必要があります
+- メタデータ内の配列は合計サイズが64KBまでです
+- ネストされたオブジェクトはドット記法でフラット化されます
 - メタデータの更新はメタデータオブジェクト全体を置き換えます
 
 ### Qdrant
 
 - ネストされた条件による高度なフィルタリングをサポート
-- フィルタリングにはペイロード（メタデータ）フィールドを明示的にインデックス化する必要があります
-- ジオスペーシャルクエリの効率的な処理
-- null値や空値の特別な取り扱い
-- ベクトル固有のフィルタリング機能
-- 日時値はRFC 3339形式でなければなりません
+- フィルタリングには Payload（メタデータ）フィールドを明示的にインデックス化する必要がある
+- 位置情報（ジオ空間）クエリを効率的に処理
+- null および空値を特別に処理
+- ベクター固有のフィルタリング機能
+- 日時値は RFC 3339 形式である必要がある
 
 ### Upstash
 
-- メタデータフィールドキーは512文字まで
-- クエリサイズに制限あり（大きなIN句は避けてください）
-- フィルターでnull/undefined値はサポートされていません
-- 内部的にSQLライクな構文に変換されます
-- 文字列比較は大文字小文字を区別します
-- メタデータの更新はアトミックに行われます
+- メタデータフィールドのキーは512文字まで
+- クエリのサイズに制限あり（大きな IN 句は避ける）
+- フィルターでの null/undefined 値は非対応
+- 内部的に SQL 風の構文へ変換
+- 文字列比較は大文字・小文字を区別
+- メタデータの更新はアトミックに実行
 
 ### MongoDB
 
-- メタデータフィルターに対してMongoDB/Siftクエリ構文を完全サポート
-- すべての標準的な比較、配列、論理、要素演算子をサポート
-- メタデータ内のネストされたフィールドや配列もサポート
-- フィルタリングは `metadata` および元のドキュメント内容の両方に `filter` と `documentFilter` オプションで適用可能
-- `filter` はメタデータオブジェクトに、`documentFilter` は元のドキュメントフィールドに適用されます
-- フィルターサイズや複雑さに人工的な制限はありません（MongoDBのクエリ制限の範囲内）
-- 最適なパフォーマンスのためにメタデータフィールドのインデックス作成を推奨します
+- メタデータ用フィルタに対する MongoDB/Sift クエリ構文を完全サポート
+- 標準的な比較・配列・論理・要素オペレーターをすべてサポート
+- メタデータ内のネストされたフィールドや配列に対応
+- `filter` と `documentFilter` オプションを使用して、`metadata` と元のドキュメント内容の両方にフィルタリングを適用可能
+- `filter` はメタデータオブジェクトに、`documentFilter` は元のドキュメントのフィールドに適用
+- フィルタのサイズや複雑さに人工的な制限はなし（MongoDB のクエリ制限に準拠）
+- 最適なパフォーマンスのため、メタデータフィールドのインデックス化を推奨
 
-## 関連
+### Couchbase
+
+- 現在、メタデータフィルターには対応していません。フィルタリングは結果取得後にクライアント側で行うか、より複雑なクエリの場合は Couchbase SDK の Search 機能を直接使用してください。
+
+### Amazon S3 ベクター
+
+* 等価比較の値はプリミティブ（string/number/boolean）でなければなりません。`null`/`undefined`、配列、オブジェクト、Date は等価比較には使用できません。範囲演算子は number または Date を受け付けます（Date はエポック ms に正規化されます）。
+* `$in`/`$nin` は**空でないプリミティブの配列**が必要です。Date 要素は許可され、エポック ms に正規化されます。**配列の等価比較**はサポートされません。
+* 暗黙の AND は正規化されます（`{a:1,b:2}` → `{$and:[{a:1},{b:2}]}`）。論理演算子はフィールド条件を含み、空でない配列を使用し、ルートまたは他の論理演算子内にのみ記述できます（フィールド値の内部は不可）。
+* インデックス作成時に `nonFilterableMetadataKeys` に指定したキーは保存されますが、フィルターには使用できません。この設定は変更できません。
+* $exists には boolean 値が必要です。
+* undefined/null/空のフィルターは、フィルターなしとして扱われます。
+* 各メタデータキー名は最大 63 文字。
+* ベクターあたりのメタデータ合計：最大 40 KB（フィルタ可能 + フィルタ不可）
+* ベクターあたりのメタデータキー数合計：最大 10
+* ベクターあたりのフィルタ可能メタデータ：最大 2 KB
+* ベクターインデックスあたりのフィルタ不可メタデータキー数：最大 10
+
+## 関連項目
 
 - [Astra](./astra)
 - [Chroma](./chroma)
@@ -327,3 +345,4 @@ const results = await store.query({
 - [Pinecone](./pinecone)
 - [Qdrant](./qdrant)
 - [Upstash](./upstash)
+- [Amazon S3 Vectors](./s3vectors)

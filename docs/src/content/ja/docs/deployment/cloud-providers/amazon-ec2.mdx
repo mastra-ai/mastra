@@ -1,0 +1,125 @@
+---
+title: "Amazon EC2"
+description: "MastraアプリケーションをAmazon EC2にデプロイします。"
+---
+
+import { Callout, Steps, Tabs } from "nextra/components";
+
+
+
+# Amazon EC2
+
+Mastra アプリケーションを Amazon EC2（Elastic Compute Cloud）にデプロイします。
+
+<Callout>
+  このガイドは、Mastra アプリケーションが既定の
+  `npx create-mastra@latest` コマンドで作成されていることを前提としています。
+  新しい Mastra アプリケーションの作成方法については、
+  [クイックスタートガイド](/docs/getting-started/installation)をご覧ください。
+</Callout>
+
+
+
+## 前提条件
+
+- [EC2](https://aws.amazon.com/ec2/) にアクセスできる AWS アカウント
+- Ubuntu 24+ または Amazon Linux を実行している EC2 インスタンス
+- インスタンスを指す A レコードを設定したドメイン名
+- リバースプロキシの設定（例: [nginx](https://nginx.org/)）
+- SSL 証明書の設定（例: [Let's Encrypt](https://letsencrypt.org/)）
+- インスタンスに Node.js 18+ がインストール済みであること
+
+
+
+## デプロイ手順
+
+<Steps>
+
+### Mastra アプリケーションをクローンする
+
+EC2 インスタンスに接続し、リポジトリをクローンします:
+
+<Tabs items={["Public Repository", "Private Repository"]}>
+<Tabs.Tab>
+
+```bash copy
+git clone https://github.com/<your-username>/<your-repository>.git
+```
+
+</Tabs.Tab>
+
+<Tabs.Tab>
+
+```bash copy
+git clone https://<your-username>:<your-personal-access-token>@github.com/<your-username>/<your-repository>.git
+```
+
+</Tabs.Tab>
+</Tabs>
+
+リポジトリのディレクトリへ移動します:
+
+```bash copy
+cd "<your-repository>"
+```
+
+### 依存関係をインストール
+
+```bash copy
+npm install
+```
+
+### 環境変数を設定
+
+`.env` ファイルを作成し、環境変数を追加します:
+
+```bash copy
+touch .env
+```
+
+`.env` ファイルを編集し、環境変数を追加します:
+
+```bash copy
+OPENAI_API_KEY=<your-openai-api-key>
+# 必要な他の環境変数を追加
+```
+
+### アプリケーションをビルド
+
+```bash copy
+npm run build
+```
+
+### アプリケーションを実行
+
+```bash copy
+node --import=./.mastra/output/instrumentation.mjs --env-file=".env" .mastra/output/index.mjs
+```
+
+<Callout>
+Mastra アプリケーションは既定でポート 4111 で動作します。リバースプロキシがこのポートへリクエストを転送するように設定されていることを確認してください。
+</Callout>
+
+</Steps>
+
+
+
+## Mastra サーバーに接続する
+
+`@mastra/client-js` パッケージの `MastraClient` を使って、クライアントアプリケーションから Mastra サーバーに接続できます。
+
+詳しくは [`MastraClient` のドキュメント](/docs/client-js/overview)をご覧ください。
+
+```typescript copy showLineNumbers
+import { MastraClient } from "@mastra/client-js";
+
+const mastraClient = new MastraClient({
+  baseUrl: "https://<your-domain-name>",
+});
+```
+
+
+
+## 次のステップ
+
+- [Mastra Client SDK](/docs/client-js/overview)

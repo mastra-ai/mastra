@@ -11,7 +11,7 @@ export class FileTransport extends LoggerTransport {
     this.path = path;
 
     if (!existsSync(this.path)) {
-      console.log(this.path);
+      console.info(this.path);
       throw new Error('File path does not exist');
     }
 

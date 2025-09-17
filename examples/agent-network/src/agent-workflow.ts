@@ -3,7 +3,8 @@ import { mastra } from './mastra';
 async function main() {
   const wflow = mastra.getWorkflow('agentWorkflow');
 
-  const { runId, start } = wflow.createRun();
+  const run = await wflow.createRunAsync();
+  const { runId, start } = run;
 
   const result = await start({
     triggerData: {

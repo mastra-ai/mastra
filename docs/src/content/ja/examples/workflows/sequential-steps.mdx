@@ -1,94 +1,73 @@
 ---
-title: "例：順次ステップ | ワークフロー | Mastra ドキュメント"
-description: Mastra を使用してワークフローステップを特定の順序で連結し、データを受け渡す例。
+title: "例：順次実行 | Workflows | Mastra Docs"
+description: ワークフロー内で複数の独立したタスクを順番に実行するために Mastra を使用する例。
 ---
 
-import { GithubLink } from "@/components/github-link";
 
-# 順次ステップによるワークフロー
 
-ワークフローは、特定の順序で次々と連鎖して実行することができます。
+# 逐次実行
 
-## 制御フローダイアグラム
+多くのワークフローでは、定められた順序でステップを順番に実行します。この例では、`.then()` を使って、あるステップの出力を次のステップの入力として受け渡す、シンプルな逐次ワークフローの組み立て方を示します。
 
-この例では、`then` メソッドを使ってワークフローのステップを連結し、順番に実行しながらデータを受け渡す方法を示しています。
 
-制御フローダイアグラムは以下の通りです：
 
-<img
-  src="/sequential-chains.png"
-  alt="順次ステップを持つワークフローのダイアグラム"
-  width={600}
-/>
+## ステップを使った順次実行
 
-## ステップの作成
+この例では、ワークフローは `step1` と `step2` を順に実行し、各ステップに入力を受け渡して、最終的な結果を `step2` から返します。
 
-まず、ステップを作成し、ワークフローを初期化しましょう。
-
-```ts showLineNumbers copy
-import { Step, Workflow } from "@mastra/core/workflows";
+```typescript filename="src/mastra/workflows/example-sequential-steps.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
-const stepOne = new Step({
-  id: "stepOne",
-  execute: async ({ context }) => ({
-    doubledValue: context.triggerData.inputValue * 2,
+const step1 = createStep({
+  id: "step-1",
+  description: "入力の値を出力に渡す",
+  inputSchema: z.object({
+    value: z.number()
   }),
-});
-
-const stepTwo = new Step({
-  id: "stepTwo",
-  execute: async ({ context }) => {
-    if (context.steps.stepOne.status !== "success") {
-      return { incrementedValue: 0 };
-    }
-
-    return { incrementedValue: context.steps.stepOne.output.doubledValue + 1 };
-  },
-});
-
-const stepThree = new Step({
-  id: "stepThree",
-  execute: async ({ context }) => {
-    if (context.steps.stepTwo.status !== "success") {
-      return { tripledValue: 0 };
-    }
-
-    return { tripledValue: context.steps.stepTwo.output.incrementedValue * 3 };
-  },
-});
-
-// Build the workflow
-const myWorkflow = new Workflow({
-  name: "my-workflow",
-  triggerSchema: z.object({
-    inputValue: z.number(),
+  outputSchema: z.object({
+    value: z.number()
   }),
-});
-```
-
-## ステップを連結してワークフローを実行する
-
-それでは、ステップを順番につなげてみましょう。
-
-```ts showLineNumbers copy
-// sequential steps
-myWorkflow.step(stepOne).then(stepTwo).then(stepThree);
-
-myWorkflow.commit();
-
-const { start } = myWorkflow.createRun();
-
-const res = await start({ triggerData: { inputValue: 90 } });
-```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-sequential-steps"
+  execute: async ({ inputData }) => {
+    const { value } = inputData;
+    return {
+      value
+    };
   }
-/>
+});
+const step2 = createStep({
+  id: "step-2",
+  description: "入力の値を出力に渡す",
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    value: z.number()
+  }),
+  execute: async ({ inputData }) => {
+    const { value } = inputData;
+    return {
+      value
+    };
+  }
+});
+
+export const sequentialSteps = createWorkflow({
+  id: "sequential-workflow",
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    value: z.number()
+  })
+})
+  .then(step1)
+  .then(step2)
+  .commit();
+```
+
+
+
+## 関連項目
+
+- [ワークフローの実行](./running-workflows.mdx)

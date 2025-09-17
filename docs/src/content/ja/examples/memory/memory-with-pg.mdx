@@ -1,97 +1,150 @@
-# Postgresを使用したメモリ
+---
+title: "例: PostgreSQL を使ったメモリ | メモリ | Mastra ドキュメント"
+description: PostgreSQL のストレージとベクター機能を使って Mastra のメモリシステムを利用する方法の例。
+---
 
-この例では、PostgreSQLをストレージバックエンドとして使用して、Mastraのメモリシステムを使用する方法を示します。
 
-## セットアップ
 
-まず、PostgreSQLストレージとベクター機能を使用してメモリシステムをセットアップします:
+# PostgreSQL を用いたメモリ
 
-```typescript
+この例では、Mastra のメモリシステムをストレージのバックエンドとして PostgreSQL と組み合わせて使用する方法を示します。
+
+
+
+## 前提条件
+
+この例では `openai` モデルを使用し、`pgvector` 拡張機能を有効にした PostgreSQL データベースが必要です。`.env` ファイルに次を追加してください:
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+DATABASE_URL=<your-connection-string>
+```
+
+また、次のパッケージをインストールしてください:
+
+```bash copy
+npm install @mastra/pg
+```
+
+
+
+## エージェントにメモリを追加する
+
+エージェントに PostgreSQL のメモリ機能を追加するには、`Memory` クラスを使用し、`PostgresStore` を用いて新たに `storage` キーを作成します。`connectionString` にはリモートの接続先またはローカルのデータベース接続を指定できます。
+
+```typescript filename="src/mastra/agents/example-pg-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
-import { PostgresStore, PgVector } from "@mastra/pg";
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
+import { PostgresStore } from "@mastra/pg";
 
-// PostgreSQL接続の詳細
-const host = "localhost";
-const port = 5432;
-const user = "postgres";
-const database = "postgres";
-const password = "postgres";
-const connectionString = `postgresql://${user}:${password}@${host}:${port}`;
-
-// PostgreSQLストレージとベクター検索でメモリを初期化
-const memory = new Memory({
-  storage: new PostgresStore({
-    host,
-    port,
-    user,
-    database,
-    password,
-  }),
-  vector: new PgVector({ connectionString }),
-  options: {
-    lastMessages: 10,
-    semanticRecall: {
-      topK: 3,
-      messageRange: 2,
-    },
-  },
-});
-
-// メモリ機能を持つエージェントを作成
-const chefAgent = new Agent({
-  name: "chefAgent",
-  instructions:
-    "あなたはMichelです。実用的で経験豊富な家庭料理のシェフで、利用可能な食材で素晴らしい料理を作る手助けをします。",
-  model: openai("gpt-4o-mini"),
-  memory,
+export const pgAgent = new Agent({
+  name: "pg-agent",
+  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new PostgresStore({
+      connectionString: process.env.DATABASE_URL!
+    }),
+    options: {
+      threads: {
+        generateTitle: true
+      }
+    }
+  })
 });
 ```
+
+
+
+## fastembed を使ったローカル埋め込み
+
+埋め込みは、メモリの `semanticRecall` が意味ベース（キーワードではなく）で関連するメッセージを検索するために用いる数値ベクトルです。このセットアップでは、ベクトル埋め込みの生成に `@mastra/fastembed` を使用します。
+
+まずは `fastembed` をインストールします:
+
+```bash copy
+npm install @mastra/fastembed
+```
+
+次のコードをエージェントに追加します:
+
+```typescript filename="src/mastra/agents/example-pg-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { PostgresStore, PgVector } from "@mastra/pg";
+import { fastembed } from "@mastra/fastembed";
+
+export const pgAgent = new Agent({
+  name: "pg-agent",
+  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new PostgresStore({
+      connectionString: process.env.DATABASE_URL!
+    }),
+    vector: new PgVector({
+      connectionString: process.env.DATABASE_URL!
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2
+      }
+    }
+  })
+});
+```
+
+
 
 ## 使用例
 
-```typescript
-import { randomUUID } from "crypto";
+このリクエストのリコール範囲を絞るには `memoryOptions` を使用します。`lastMessages: 5` を設定して直近メッセージに基づく想起を制限し、`semanticRecall` を使って、各一致の前後文脈として `messageRange: 2` 件の隣接メッセージを含めつつ、最も関連性の高い `topK: 3` 件のメッセージを取得します。
 
-// 会話を開始する
-const threadId = randomUUID();
-const resourceId = "SOME_USER_ID";
+```typescript filename="src/test-pg-agent.ts" showLineNumbers copy
+import "dotenv/config";
 
-// 材料について尋ねる
-const response1 = await chefAgent.stream(
-  "私のキッチンには、パスタ、缶詰のトマト、ニンニク、オリーブオイル、そしていくつかの乾燥ハーブ（バジルとオレガノ）があります。何が作れますか？",
-  {
-    threadId,
-    resourceId,
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("pgAgent");
+
+const message = await agent.stream("My name is Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  }
+});
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("What's my name?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
   },
-);
+  memoryOptions: {
+    lastMessages: 5,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2
+    }
+  }
+});
 
-// 別の材料について尋ねる
-const response2 = await chefAgent.stream(
-  "今、友達の家にいて、彼らは鶏もも肉、ココナッツミルク、サツマイモ、カレーパウダーを持っています。",
-  {
-    threadId,
-    resourceId,
-  },
-);
-
-// メモリを使用して以前の会話を思い出す
-const response3 = await chefAgent.stream(
-  "友達の家に行く前に何を料理しましたか？",
-  {
-    threadId,
-    resourceId,
-    memoryOptions: {
-      lastMessages: 3, // コンテキストのために最後の3つのメッセージを取得
-    },
-  },
-);
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
 ```
 
-この例は以下を示しています：
 
-1. ベクトル検索機能を備えたPostgreSQLストレージの設定
-2. メッセージ履歴とセマンティック検索のためのメモリオプションの設定
-3. メモリ統合を備えたエージェントの作成
-4. 複数のやり取りを通じて会話のコンテキストを維持するためのエージェントの使用
+
+## 関連情報
+
+- [エージェントの呼び出し](../agents/calling-agents.mdx)

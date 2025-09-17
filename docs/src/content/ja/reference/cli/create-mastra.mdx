@@ -1,0 +1,111 @@
+---
+title: "create-mastra | プロジェクト作成 | Mastra CLI"
+description: create-mastraコマンドのドキュメント。インタラクティブなセットアップオプションで新しいMastraプロジェクトを作成します。
+---
+
+
+
+# create-mastra
+
+`create-mastra`コマンドは新しいスタンドアロンのMastraプロジェクトを**作成**します。このコマンドを使用して、専用ディレクトリに完全なMastraセットアップをスキャフォールドします。
+
+
+
+## 使用方法
+
+```bash
+create-mastra [options]
+```
+
+
+
+## オプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "--version",
+      type: "boolean",
+      description: "バージョン番号を出力する",
+      isOptional: true,
+    },
+    {
+      name: "--project-name",
+      type: "string",
+      description:
+        "package.jsonとプロジェクトディレクトリ名に使用されるプロジェクト名",
+      isOptional: true,
+    },
+    {
+      name: "--default",
+      type: "boolean",
+      description: "デフォルト設定でクイックスタート（src、OpenAI、サンプルなし）",
+      isOptional: true,
+    },
+    {
+      name: "--components",
+      type: "string",
+      description:
+        "コンポーネントのカンマ区切りリスト（agents、tools、workflows）",
+      isOptional: true,
+    },
+    {
+      name: "--llm",
+      type: "string",
+      description:
+        "デフォルトのモデルプロバイダー（openai、anthropic、groq、google、またはcerebras）",
+      isOptional: true,
+    },
+    {
+      name: "--llm-api-key",
+      type: "string",
+      description: "モデルプロバイダーのAPIキー",
+      isOptional: true,
+    },
+    {
+      name: "--example",
+      type: "boolean",
+      description: "サンプルコードを含める",
+      isOptional: true,
+    },
+    {
+      name: "--no-example",
+      type: "boolean",
+      description: "サンプルコードを含めない",
+      isOptional: true,
+    },
+    {
+      name: "--template",
+      type: "string",
+      description:
+        "テンプレートからプロジェクトを作成（テンプレート名、公開GitHub URL、または空白でリストから選択）",
+      isOptional: true,
+    },
+    {
+      name: "--timeout",
+      type: "number",
+      description:
+        "パッケージインストールの設定可能なタイムアウト、デフォルトは60000ms",
+      isOptional: true,
+    },
+    {
+      name: "--dir",
+      type: "string",
+      description: "Mastraソースコードのターゲットディレクトリ（デフォルト：src/）",
+      isOptional: true,
+    },
+    {
+      name: "--mcp",
+      type: "string",
+      description:
+        "コードエディター用のMCPサーバー（cursor、cursor-global、windsurf、vscode）",
+      isOptional: true,
+    },
+    {
+      name: "--help",
+      type: "boolean",
+      description: "コマンドのヘルプを表示する",
+      isOptional: true,
+    },
+  ]}
+/>

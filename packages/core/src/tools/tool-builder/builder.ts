@@ -18,7 +18,7 @@ import { RuntimeContext } from '../../runtime-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { ToolStream } from '../stream';
-import type { CoreTool, ToolAction, VercelTool, VercelToolV5 } from '../types';
+import type { CoreTool, ToolAction, ToolInvocationOptions, VercelTool, VercelToolV5 } from '../types';
 import { validateToolInput } from '../validation';
 
 export type ToolToConvert = VercelTool | ToolAction<any, any, any> | VercelToolV5;
@@ -120,7 +120,7 @@ export class CoreToolBuilder extends MastraBase {
       type: logType,
     });
 
-    const execFunction = async (args: unknown, execOptions: ToolExecutionOptions | ToolCallOptions) => {
+    const execFunction = async (args: unknown, execOptions: ToolInvocationOptions) => {
       // Create tool span if we have an current span available
       const toolSpan = options.tracingContext?.currentSpan?.createChildSpan({
         type: AISpanType.TOOL_CALL,
@@ -131,7 +131,7 @@ export class CoreToolBuilder extends MastraBase {
           toolDescription: options.description,
           toolType: logType || 'tool',
         },
-        isInternal: options.tracingContext?.isInternal,
+        tracingPolicy: options.tracingPolicy,
       });
 
       try {
@@ -194,7 +194,7 @@ export class CoreToolBuilder extends MastraBase {
       }
     };
 
-    return async (args: unknown, execOptions?: ToolExecutionOptions | ToolCallOptions) => {
+    return async (args: unknown, execOptions?: ToolInvocationOptions) => {
       let logger = options.logger || this.logger;
       try {
         logger.debug(start, { ...rest, args });

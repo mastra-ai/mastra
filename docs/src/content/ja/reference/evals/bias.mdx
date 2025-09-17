@@ -1,11 +1,19 @@
 ---
-title: "リファレンス: バイアス | 出力メトリクス | Evals | Mastra ドキュメント"
-description: Mastra におけるバイアスメトリクスのドキュメント。ジェンダー、政治、民族・人種、地理的バイアスなど、さまざまなバイアスについて LLM の出力を評価します。
+title: "リファレンス: Bias | Output Metrics | Evals | Mastra Docs"
+description: MastraのBiasメトリックのドキュメント。LLM出力における性別、政治的、人種・民族的、地理的バイアスなど、様々な形態のバイアスを評価します。
 ---
+
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
 
 # BiasMetric
 
-`BiasMetric` クラスは、LLM の出力に性別、政治、民族・人種、または地理的なバイアスが含まれているかどうかを評価します。このメトリクスは、モデルのファインチューニングや最適化の適用後に発生する可能性のある意図しないバイアスを検出するのに特に有用です。
+<ScorerCallout />
+
+`BiasMetric`クラスは、LLMの出力に性別、政治的、人種・民族的、地理的バイアスなど、さまざまな形式のバイアスが含まれているかどうかを評価します。このメトリクスは、モデルのファインチューニングや最適化の適用後に現れる可能性のある意図しないバイアスを検出するのに特に有用です。
+
+
 
 ## 基本的な使い方
 
@@ -27,6 +35,8 @@ const result = await metric.measure(
 
 console.log(result.score); // Score from 0-1, higher means more biased
 ```
+
+
 
 ## コンストラクタのパラメータ
 
@@ -62,6 +72,8 @@ console.log(result.score); // Score from 0-1, higher means more biased
   ]}
 />
 
+
+
 ## measure() のパラメーター
 
 <PropertiesTable
@@ -80,6 +92,8 @@ console.log(result.score); // Score from 0-1, higher means more biased
     },
   ]}
 />
+
+
 
 ## 戻り値
 
@@ -111,6 +125,8 @@ console.log(result.score); // Score from 0-1, higher means more biased
   ]}
 />
 
+
+
 ## バイアスのカテゴリ
 
 この指標は、いくつかの種類のバイアスを評価します：
@@ -119,6 +135,8 @@ console.log(result.score); // Score from 0-1, higher means more biased
 2. **政治的バイアス**：政治的イデオロギーや信念に対する偏見
 3. **人種・民族バイアス**：人種、民族、または国籍に基づく差別
 4. **地理的バイアス**：場所や地域的なステレオタイプに基づく偏見
+
+
 
 ## スコアリングの詳細
 
@@ -155,6 +173,8 @@ console.log(result.score); // Score from 0-1, higher means more biased
 - 0.1-0.3: 最小限のバイアス - ほとんどの意見がバランスの取れた視点を示す
 - 0.0: バイアス検出なし - 意見はバランスが取れており中立的
 
+
+
 ## 異なる種類のバイアスの例
 
 ```typescript
@@ -182,6 +202,8 @@ const results = await Promise.all([
 // Political bias example: { score: 1.0 }
 // Unbiased example: { score: 0.0 }
 ```
+
+
 
 ## 関連
 

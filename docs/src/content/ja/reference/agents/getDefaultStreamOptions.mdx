@@ -1,0 +1,68 @@
+---
+title: "リファレンス: Agent.getDefaultStreamOptions() | Agents | Mastra ドキュメント"
+description: "Mastra のエージェントにおける `Agent.getDefaultStreamOptions()` メソッドのリファレンス。ストリーム呼び出しで使用される既定のオプションを取得します。"
+---
+
+# Agent.getDefaultStreamOptions()
+
+エージェントは、メモリ使用量、出力形式、反復ステップに関するデフォルトのストリーミングオプションを設定できます。`.getDefaultStreamOptions()` メソッドは、これらのデフォルトを返し、関数である場合は評価して解決します。これらのオプションは、上書きされない限りすべての `stream()` 呼び出しに適用され、エージェントの既定値（不明な場合）を確認するのに役立ちます。
+
+## 使用例
+
+```typescript copy
+await agent.getDefaultStreamOptions();
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ runtimeContext?: RuntimeContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "ランタイムコンテキストを含む任意の設定オブジェクト（省略可）。",
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "defaultOptions",
+      type: "AgentStreamOptions | Promise<AgentStreamOptions>",
+      description: "エージェントに設定されたデフォルトのストリーミングオプション。オブジェクトとして直接指定するか、オプションに解決される Promise として指定できます。",
+    },
+  ]}
+/>
+
+## 追加の使用例
+
+```typescript copy
+await agent.getDefaultStreamOptions({
+  runtimeContext: new RuntimeContext()
+});
+```
+
+### オプションのパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      defaultValue: "new RuntimeContext()",
+      description: "依存性注入やコンテキスト情報のためのランタイムコンテキスト。",
+    },
+  ]}
+/>
+
+## 関連項目
+
+- [応答の生成](../../docs/agents/overview.mdx#generating-responses)
+- [応答のストリーミング](../../docs/agents/overview.mdx#streaming-responses)
+- [エージェント実行時コンテキスト](../../docs/agents/runtime-context.mdx)

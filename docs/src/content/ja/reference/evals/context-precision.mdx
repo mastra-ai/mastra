@@ -1,11 +1,19 @@
 ---
-title: "リファレンス: コンテキスト精度 | メトリクス | Evals | Mastra ドキュメント"
-description: Mastra におけるコンテキスト精度メトリクスのドキュメント。期待される出力を生成するために取得されたコンテキストノードの関連性と精度を評価します。
+title: "リファレンス: Context Precision | メトリクス | Evals | Mastra Docs"
+description: 期待される出力を生成するために取得されたコンテキストノードの関連性と精度を評価する、MastraのContext Precisionメトリクスのドキュメント。
 ---
+
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
 
 # ContextPrecisionMetric
 
-`ContextPrecisionMetric` クラスは、取得されたコンテキストノードが期待される出力を生成するためにどれだけ関連性が高く、正確であるかを評価します。判定者ベースのシステムを用いて各コンテキスト要素の貢献度を分析し、位置に基づいた重み付きスコアを提供します。
+<ScorerCallout />
+
+`ContextPrecisionMetric`クラスは、期待される出力を生成するために取得されたコンテキストノードがどの程度関連性があり、正確であるかを評価します。これは判定ベースのシステムを使用して各コンテキスト部分の貢献を分析し、位置に基づいた重み付けスコアリングを提供します。
+
+
 
 ## 基本的な使い方
 
@@ -33,6 +41,8 @@ console.log(result.score); // Precision score from 0-1
 console.log(result.info.reason); // Explanation of the score
 ```
 
+
+
 ## コンストラクタのパラメータ
 
 <PropertiesTable
@@ -40,7 +50,8 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "model",
       type: "LanguageModel",
-      description: "コンテキストの関連性を評価するために使用されるモデルの設定",
+      description:
+        "コンテキストの関連性を評価するために使用されるモデルの設定",
       isOptional: false,
     },
     {
@@ -72,6 +83,8 @@ console.log(result.info.reason); // Explanation of the score
   ]}
 />
 
+
+
 ## measure() のパラメーター
 
 <PropertiesTable
@@ -90,6 +103,8 @@ console.log(result.info.reason); // Explanation of the score
     },
   ]}
 />
+
+
 
 ## 戻り値
 
@@ -120,6 +135,8 @@ console.log(result.info.reason); // Explanation of the score
   ]}
 />
 
+
+
 ## スコアリングの詳細
 
 このメトリックは、バイナリ関連性評価と平均適合率（MAP）スコアリングを通じてコンテキストの精度を評価します。
@@ -147,6 +164,8 @@ console.log(result.info.reason); // Explanation of the score
 - 0.4-0.6：関連性が混在、または順序が最適でない
 - 0.1-0.3：関連性が限定的、または順序が悪い
 - 0.0：関連するコンテキストがない
+
+
 
 ## 分析付きの例
 
@@ -182,6 +201,8 @@ const result = await metric.measure(
 //   }
 // }
 ```
+
+
 
 ## 関連
 

@@ -1,32 +1,35 @@
 ---
-title: "リファレンス: エージェント | エージェント | Mastra ドキュメント"
-description: "Mastraのエージェントクラスに関するドキュメント。様々な機能を持つAIエージェントを作成するための基盤を提供します。"
+title: "リファレンス: Agent クラス | Agents | Mastra ドキュメント"
+description: "Mastra の `Agent` クラスに関するドキュメント。多様な機能を備えた AI エージェントを構築するための土台を提供します。"
 ---
 
-# Agent
+# Agent クラス
 
-`Agent` クラスは、MastraでのAIエージェント作成の基盤です。レスポンスの生成、ストリーミング対話、音声機能の処理のためのメソッドを提供します。
+`Agent` クラスは、Mastra で AI エージェントを作成するための基盤となるクラスです。応答の生成、インタラクションのストリーミング、音声機能の扱いに関するメソッドを提供します。
 
-## インポート
+## 使い方の例
 
-```typescript
+```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
+
+export const agent = new Agent({
+  name: "test-agent",
+  instructions: 'message for agent',
+  model: openai("gpt-4o")
+});
 ```
 
-## コンストラクタ
-
-指定された設定で新しいAgentインスタンスを作成します。
-
-```typescript
-constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
-```
-
-### パラメータ
-
-<br />
+## コンストラクターのパラメータ
 
 <PropertiesTable
   content={[
+    {
+      name: "id",
+      type: "string",
+      isOptional: true,
+      description: "エージェントの任意の一意の識別子。指定しない場合は `name` が既定値になります。",
+    },
     {
       name: "name",
       type: "string",
@@ -34,64 +37,117 @@ constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
       description: "エージェントの一意の識別子。",
     },
     {
+      name: "description",
+      type: "string",
+      isOptional: true,
+      description: "エージェントの目的や機能に関する任意の説明。",
+    },
+    {
       name: "instructions",
       type: "string | ({ runtimeContext: RuntimeContext }) => string | Promise<string>",
       isOptional: false,
-      description:
-        "エージェントの動作を導くための指示。静的な文字列または文字列を返す関数のいずれかです。",
+      description: "エージェントの振る舞いを導くための指示。固定の文字列、または動的に文字列を返す関数を指定できます。",
     },
     {
       name: "model",
       type: "MastraLanguageModel | ({ runtimeContext: RuntimeContext }) => MastraLanguageModel | Promise<MastraLanguageModel>",
       isOptional: false,
-      description:
-        "レスポンス生成に使用する言語モデル。モデルインスタンスまたはモデルを返す関数のいずれかです。",
+      description: "エージェントが使用する言語モデル。静的に提供することも、実行時に解決することもできます。",
+    },
+    {
+      name: "agents",
+      type: "Record<string, Agent> | ({ runtimeContext: RuntimeContext }) => Record<string, Agent> | Promise<Record<string, Agent>>",
+      isOptional: true,
+      description: "エージェントがアクセスできるサブエージェント。静的に提供することも、動的に解決することもできます。",
     },
     {
       name: "tools",
       type: "ToolsInput | ({ runtimeContext: RuntimeContext }) => ToolsInput | Promise<ToolsInput>",
       isOptional: true,
-      description:
-        "エージェントが使用できるツール。静的なオブジェクトまたはツールを返す関数のいずれかです。",
-    },
-    {
-      name: "defaultGenerateOptions",
-      type: "AgentGenerateOptions",
-      isOptional: true,
-      description: "generate()を呼び出す際に使用するデフォルトオプション。",
-    },
-    {
-      name: "defaultStreamOptions",
-      type: "AgentStreamOptions",
-      isOptional: true,
-      description: "stream()を呼び出す際に使用するデフォルトオプション。",
+      description: "エージェントがアクセスできるツール。静的に提供することも、動的に解決することもできます。",
     },
     {
       name: "workflows",
-      type: "Record<string, NewWorkflow> | ({ runtimeContext: RuntimeContext }) => Record<string, NewWorkflow> | Promise<Record<string, NewWorkflow>>",
+      type: "Record<string, Workflow> | ({ runtimeContext: RuntimeContext }) => Record<string, Workflow> | Promise<Record<string, Workflow>>",
       isOptional: true,
-      description:
-        "エージェントが実行できるワークフロー。静的なオブジェクトまたはワークフローを返す関数のいずれかです。",
+      description: "エージェントが実行できるワークフロー。静的に指定することも、動的に解決することもできます。",
+    },
+    {
+      name: "defaultGenerateOptions",
+      type: "AgentGenerateOptions | ({ runtimeContext: RuntimeContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>",
+      isOptional: true,
+      description: "`generate()` 呼び出し時に使用される既定のオプション。",
+    },
+    {
+      name: "defaultStreamOptions",
+      type: "AgentStreamOptions | ({ runtimeContext: RuntimeContext }) => AgentStreamOptions | Promise<AgentStreamOptions>",
+      isOptional: true,
+      description: "`stream()` 呼び出し時に使用される既定のオプション。",
+    },
+    {
+      name: "defaultVNextStreamOptions",
+      type: "AgentExecutionOptions | ({ runtimeContext: RuntimeContext }) => AgentExecutionOptions | Promise<AgentExecutionOptions>",
+      isOptional: true,
+      description: "vNext モードで `stream()` を呼び出す際に使用される既定のオプション。",
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      isOptional: true,
+      description: "Mastra ランタイム インスタンスへの参照（自動的に注入されます）。",
+    },
+    {
+      name: "scorers",
+      type: "MastraScorers | ({ runtimeContext: RuntimeContext }) => MastraScorers | Promise<MastraScorers>",
+      isOptional: true,
+      description: "実行時評価とテレメトリのためのスコアリング設定。静的または動的に提供できます。",
     },
     {
       name: "evals",
       type: "Record<string, Metric>",
       isOptional: true,
-      description: "エージェントのパフォーマンスを評価するための評価指標。",
+      description: "エージェントの応答を採点するための評価指標。",
     },
     {
       name: "memory",
-      type: "MastraMemory",
+      type: "MastraMemory | ({ runtimeContext: RuntimeContext }) => MastraMemory | Promise<MastraMemory>",
       isOptional: true,
-      description:
-        "エージェントが情報を保存および取得するためのメモリシステム。",
+      description: "状態付きコンテキストの保存および取得に使用されるメモリ モジュール。",
     },
     {
       name: "voice",
       type: "CompositeVoice",
       isOptional: true,
-      description:
-        "音声テキスト変換およびテキスト音声変換機能のための音声機能。",
+      description: "音声入出力の設定。",
+    },
+    {
+      name: "inputProcessors",
+      type: "Processor[] | ({ runtimeContext: RuntimeContext }) => Processor[] | Promise<Processor[]>",
+      isOptional: true,
+      description: "エージェントで処理される前にメッセージを変更または検証する入力プロセッサ。`processInput` 関数を実装する必要があります。",
+    },
+    {
+      name: "outputProcessors",
+      type: "Processor[] | ({ runtimeContext: RuntimeContext }) => Processor[] | Promise<Processor[]>",
+      isOptional: true,
+      description: "クライアントに送信する前にエージェントからのメッセージを変更または検証する出力プロセッサ。`processOutputResult` と/または `processOutputStream` 関数を実装する必要があります。",
     },
   ]}
 />
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "agent",
+      type: "Agent<TAgentId, TTools, TMetrics>",
+      description: "指定された構成の新しい Agent インスタンス。",
+    },
+  ]}
+/>
+
+## 関連情報
+
+- [エージェントの概要](../../docs/agents/overview.mdx)
+- [エージェントの呼び出し](../../examples/agents/calling-agents.mdx)

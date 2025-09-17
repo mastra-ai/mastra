@@ -1,0 +1,43 @@
+---
+title: "リファレンス: Workflow.parallel() | Workflows | Mastra Docs"
+description: ワークフローで複数のステップを並列に実行する `Workflow.parallel()` メソッドのドキュメントです。
+---
+
+# Workflow.parallel()
+
+`.parallel()` メソッドは、複数のステップを並列に実行します。
+
+## 使い方の例
+
+```typescript copy
+workflow.parallel([step1, step2]);
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "steps",
+      type: "Step[]",
+      description: "並列で実行するステップのインスタンス",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "メソッドチェーンのためのワークフローインスタンス",
+    },
+  ]}
+/>
+
+## 関連項目
+
+- [並列ワークフローの例](../../examples/workflows/parallel-steps.mdx)

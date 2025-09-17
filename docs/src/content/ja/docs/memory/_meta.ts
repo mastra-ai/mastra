@@ -1,7 +1,7 @@
 const meta = {
   overview: "概要",
-  "semantic-recall": "意味記憶",
-  "working-memory": "作業記憶",
-  "memory-processors": "メモリプロセッサ",
+  "working-memory": "ワーキングメモリ",
+  "semantic-recall": "意味記憶想起",
+  "memory-processors": "メモリプロセッサー",
 };
 export default meta;

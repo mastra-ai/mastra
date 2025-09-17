@@ -1,0 +1,149 @@
+---
+title: ".resumeWithEvent() メソッド | Mastra ドキュメント"
+description: "イベントデータを使用して一時停止中のワークフローを再開する resumeWithEvent メソッドのリファレンス。"
+---
+
+
+
+# resumeWithEvent()
+
+`resumeWithEvent()` メソッドは、ワークフローが待機している特定のイベントに対するデータを提供することで、ワークフローの実行を再開します。
+
+
+
+## 構文
+
+```typescript
+const run = workflow.createRun();
+
+// After the workflow has started and suspended at an event step
+await run.resumeWithEvent(eventName: string, data: any): Promise<WorkflowRunResult>
+```
+
+
+
+## パラメーター
+
+| パラメーター | 型     | 説明                                                                                                   |
+| ----------- | ------ | ------------------------------------------------------------------------------------------------------ |
+| eventName   | string | トリガーするイベントの名前。ワークフローの `events` 設定で定義されたイベント名と一致する必要があります。   |
+| data        | any    | 提供するイベントデータ。そのイベント用に定義されたスキーマに準拠している必要があります。                 |
+
+
+
+## 戻り値
+
+Promise を返し、`WorkflowRunResult` オブジェクトで解決されます。このオブジェクトには以下が含まれます：
+
+- `results`: ワークフロー内の各ステップの結果ステータスと出力
+- `activePaths`: アクティブなワークフローパスとその状態のマップ
+- `value`: ワークフローの現在の状態値
+- その他のワークフロー実行メタデータ
+
+
+
+## 説明
+
+`resumeWithEvent()` メソッドは、`afterEvent()` メソッドによって作成されたイベントステップで一時停止しているワークフローを再開するために使用されます。このメソッドを呼び出すと、以下の処理が行われます。
+
+1. 指定されたイベントデータが、そのイベント用に定義されたスキーマに適合しているか検証します
+2. ストレージからワークフローのスナップショットを読み込みます
+3. `resumedEvent` フィールドにイベントデータを設定してコンテキストを更新します
+4. イベントステップから実行を再開します
+5. その後のステップでワークフローの実行を継続します
+
+このメソッドは、Mastra のイベント駆動型ワークフロー機能の一部であり、外部イベントやユーザー操作に応答できるワークフローを作成することを可能にします。
+
+
+
+## 使用上の注意
+
+- ワークフローは一時停止状態であり、特に `afterEvent(eventName)` で作成されたイベントステップで停止している必要があります
+- イベントデータは、ワークフロー設定でそのイベントのために定義されたスキーマに準拠している必要があります
+- ワークフローは、一時停止された地点から実行を再開します
+- ワークフローが一時停止していない場合や、別のステップで一時停止している場合、このメソッドはエラーをスローすることがあります
+- イベントデータは、`context.inputData.resumedEvent` を通じて後続のステップで利用可能になります
+
+
+
+## 例
+
+### 基本的な使い方
+
+```typescript
+// Define and start a workflow
+const workflow = mastra.legacy_getWorkflow("approval-workflow");
+const run = workflow.createRun();
+
+// Start the workflow
+await run.start({ triggerData: { requestId: "req-123" } });
+
+// Later, when the approval event occurs:
+const result = await run.resumeWithEvent("approval", {
+  approved: true,
+  approverName: "John Doe",
+  comment: "Looks good to me!",
+});
+
+console.log(result.results);
+```
+
+### エラー処理を含めた例
+
+```typescript
+try {
+  const result = await run.resumeWithEvent("paymentReceived", {
+    amount: 100.5,
+    transactionId: "tx-456",
+    paymentMethod: "credit-card",
+  });
+
+  console.log("Workflow resumed successfully:", result.results);
+} catch (error) {
+  console.error("Failed to resume workflow with event:", error);
+  // Handle error - could be invalid event data, workflow not suspended, etc.
+}
+```
+
+### 監視と自動再開
+
+```typescript
+// Start a workflow
+const { start, watch, resumeWithEvent } = workflow.createRun();
+
+// Watch for suspended event steps
+watch(async ({ activePaths }) => {
+  const isApprovalEventSuspended =
+    activePaths.get("__approval_event")?.status === "suspended";
+  // Check if suspended at the approval event step
+  if (isApprovalEventSuspended) {
+    console.log("Workflow waiting for approval");
+
+    // In a real scenario, you would wait for the actual event
+    // Here we're simulating with a timeout
+    setTimeout(async () => {
+      try {
+        await resumeWithEvent("approval", {
+          approved: true,
+          approverName: "Auto Approver",
+        });
+      } catch (error) {
+        console.error("Failed to auto-resume workflow:", error);
+      }
+    }, 5000); // Wait 5 seconds before auto-approving
+  }
+});
+
+// Start the workflow
+await start({ triggerData: { requestId: "auto-123" } });
+```
+
+
+
+## 関連項目
+
+- [イベント駆動型ワークフロー](./events.mdx)
+- [afterEvent()](./afterEvent.mdx)
+- [一時停止と再開](../../docs/workflows-legacy/suspend-and-resume.mdx)
+- [resume()](./resume.mdx)
+- [watch()](./watch.mdx)

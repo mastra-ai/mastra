@@ -16,8 +16,7 @@ import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-
 import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
 import { MastraModelOutput } from '@mastra/core/stream';
-import { flushSync } from 'react-dom';
-import { mapWorkflowStreamChunkToWatchResult } from '@/domains/workflows/utils';
+
 import { handleNetworkMessageFromMemory } from './agent-network-message';
 import {
   createRootToolAssistantMessage,

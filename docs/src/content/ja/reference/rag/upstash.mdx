@@ -3,9 +3,13 @@ title: "リファレンス: Upstashベクトルストア | ベクトルデータ
 description: Mastraにおける、Upstash Vectorを使用したベクトル検索を提供するUpstashVectorクラスのドキュメント。
 ---
 
+
+
 # Upstash Vector Store
 
-UpstashVectorクラスは、[Upstash Vector](https://upstash.com/vector)を使用したベクトル検索を提供します。Upstash Vectorは、メタデータフィルタリング機能を備えたベクトル類似性検索を提供するサーバーレスベクトルデータベースサービスです。
+UpstashVectorクラスは[Upstash Vector](https://upstash.com/vector)を使用してベクトル検索を提供します。これは、メタデータフィルタリング機能とハイブリッド検索サポートを備えたベクトル類似性検索を提供するサーバーレスベクトルデータベースサービスです。
+
+
 
 ## コンストラクタオプション
 
@@ -24,11 +28,13 @@ UpstashVectorクラスは、[Upstash Vector](https://upstash.com/vector)を使�
   ]}
 />
 
+
+
 ## メソッド
 
 ### createIndex()
 
-注意：Upstashではインデックスは自動的に作成されるため、このメソッドは何も実行しません。
+注意: このメソッドは、インデックスが自動的に作成されるため、Upstashでは何も実行しません。
 
 <PropertiesTable
   content={[
@@ -47,7 +53,7 @@ UpstashVectorクラスは、[Upstash Vector](https://upstash.com/vector)を使�
       type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
       defaultValue: "cosine",
-      description: "類似性検索の距離メトリック",
+      description: "類似性検索のための距離メトリック",
     },
   ]}
 />
@@ -67,6 +73,12 @@ UpstashVectorクラスは、[Upstash Vector](https://upstash.com/vector)を使�
       description: "埋め込みベクトルの配列",
     },
     {
+      name: "sparseVectors",
+      type: "{ indices: number[], values: number[] }[]",
+      isOptional: true,
+      description: "ハイブリッド検索用のスパースベクトルの配列。各スパースベクトルは、一致するindicesとvalues配列を持つ必要があります。",
+    },
+    {
       name: "metadata",
       type: "Record<string, any>[]",
       isOptional: true,
@@ -76,8 +88,7 @@ UpstashVectorクラスは、[Upstash Vector](https://upstash.com/vector)を使�
       name: "ids",
       type: "string[]",
       isOptional: true,
-      description:
-        "オプションのベクトルID（提供されない場合は自動生成されます）",
+      description: "オプションのベクトルID（提供されない場合は自動生成されます）",
     },
   ]}
 />
@@ -89,12 +100,18 @@ UpstashVectorクラスは、[Upstash Vector](https://upstash.com/vector)を使�
     {
       name: "indexName",
       type: "string",
-      description: "クエリを実行するインデックスの名前",
+      description: "クエリするインデックスの名前",
     },
     {
       name: "queryVector",
       type: "number[]",
-      description: "類似ベクトルを検索するためのクエリベクトル",
+      description: "類似ベクトルを見つけるためのクエリベクトル",
+    },
+    {
+      name: "sparseVector",
+      type: "{ indices: number[], values: number[] }",
+      isOptional: true,
+      description: "ハイブリッド検索用のオプションのスパースベクトル。一致するindicesとvalues配列を持つ必要があります。",
     },
     {
       name: "topK",
@@ -116,12 +133,24 @@ UpstashVectorクラスは、[Upstash Vector](https://upstash.com/vector)を使�
       defaultValue: "false",
       description: "結果にベクトルを含めるかどうか",
     },
+    {
+      name: "fusionAlgorithm",
+      type: "FusionAlgorithm",
+      isOptional: true,
+      description: "ハイブリッド検索でデンス検索とスパース検索の結果を組み合わせるために使用されるアルゴリズム（例：RRF - Reciprocal Rank Fusion）",
+    },
+    {
+      name: "queryMode",
+      type: "QueryMode",
+      isOptional: true,
+      description: "検索モード：デンスのみの場合は'DENSE'、スパースのみの場合は'SPARSE'、組み合わせ検索の場合は'HYBRID'",
+    },
   ]}
 />
 
 ### listIndexes()
 
-インデックス名（名前空間）の文字列配列を返します。
+インデックス名（名前空間）の配列を文字列として返します。
 
 ### describeIndex()
 
@@ -174,19 +203,20 @@ interface IndexStats {
     {
       name: "update",
       type: "object",
-      description: "ベクトルやメタデータを含む更新オブジェクト",
+      description: "ベクトル、スパースベクトル、および/またはメタデータを含む更新オブジェクト",
     },
   ]}
 />
 
-`update`オブジェクトは以下のプロパティを持つことができます：
+`update`オブジェクトには以下のプロパティを含めることができます：
 
-- `vector`（オプション）：新しいベクトルを表す数値の配列。
+- `vector`（オプション）：新しいデンスベクトルを表す数値の配列。
+- `sparseVector`（オプション）：ハイブリッドインデックス用の`indices`と`values`配列を持つスパースベクトルオブジェクト。
 - `metadata`（オプション）：メタデータのキーと値のペアのレコード。
 
-`vector`も`metadata`も提供されない場合、または`metadata`のみが提供される場合はエラーがスローされます。
-
 ### deleteVector()
+
+
 
 <PropertiesTable
   content={[
@@ -203,7 +233,95 @@ interface IndexStats {
   ]}
 />
 
-指定されたインデックスからIDによってアイテムを削除しようとします。削除に失敗した場合はエラーメッセージをログに記録します。
+指定されたインデックスからIDによってアイテムの削除を試行します。削除に失敗した場合はエラーメッセージをログに記録します。
+
+
+
+## ハイブリッドベクトル検索
+
+Upstash Vectorは、セマンティック検索（密ベクトル）とキーワードベース検索（疎ベクトル）を組み合わせたハイブリッド検索をサポートし、関連性と精度を向上させます。
+
+### 基本的なハイブリッド使用法
+
+```typescript copy
+import { UpstashVector } from '@mastra/upstash';
+
+const vectorStore = new UpstashVector({
+  url: process.env.UPSTASH_VECTOR_URL,
+  token: process.env.UPSTASH_VECTOR_TOKEN
+});
+
+// 密ベクトルと疎ベクトルの両方のコンポーネントでベクトルをアップサート
+const denseVectors = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]];
+const sparseVectors = [
+  { indices: [1, 5, 10], values: [0.8, 0.6, 0.4] },
+  { indices: [2, 6, 11], values: [0.7, 0.5, 0.3] }
+];
+
+await vectorStore.upsert({
+  indexName: 'hybrid-index',
+  vectors: denseVectors,
+  sparseVectors: sparseVectors,
+  metadata: [{ title: 'Document 1' }, { title: 'Document 2' }]
+});
+
+// ハイブリッド検索でクエリ
+const results = await vectorStore.query({
+  indexName: 'hybrid-index',
+  queryVector: [0.1, 0.2, 0.3],
+  sparseVector: { indices: [1, 5], values: [0.9, 0.7] },
+  topK: 10
+});
+```
+
+### 高度なハイブリッド検索オプション
+
+```typescript copy
+import { FusionAlgorithm, QueryMode } from '@upstash/vector';
+
+// 特定の融合アルゴリズムでクエリ
+const fusionResults = await vectorStore.query({
+  indexName: 'hybrid-index',
+  queryVector: [0.1, 0.2, 0.3],
+  sparseVector: { indices: [1, 5], values: [0.9, 0.7] },
+  fusionAlgorithm: FusionAlgorithm.RRF,
+  topK: 10
+});
+
+// 密ベクトルのみの検索
+const denseResults = await vectorStore.query({
+  indexName: 'hybrid-index',
+  queryVector: [0.1, 0.2, 0.3],
+  queryMode: QueryMode.DENSE,
+  topK: 10
+});
+
+// 疎ベクトルのみの検索
+const sparseResults = await vectorStore.query({
+  indexName: 'hybrid-index',
+  queryVector: [0.1, 0.2, 0.3], // インデックス構造のために依然として必要
+  sparseVector: { indices: [1, 5], values: [0.9, 0.7] },
+  queryMode: QueryMode.SPARSE,
+  topK: 10
+});
+```
+
+### ハイブリッドベクトルの更新
+
+```typescript copy
+// 密ベクトルと疎ベクトルの両方のコンポーネントを更新
+await vectorStore.updateVector({
+  indexName: 'hybrid-index',
+  id: 'vector-id',
+  update: {
+    vector: [0.2, 0.3, 0.4],
+    sparseVector: { indices: [2, 7, 12], values: [0.9, 0.8, 0.6] },
+    metadata: { title: 'Updated Document' }
+  }
+});
+```
+
+
 
 ## レスポンスタイプ
 
@@ -217,6 +335,8 @@ interface QueryResult {
   vector?: number[]; // Only included if includeVector is true
 }
 ```
+
+
 
 ## エラー処理
 
@@ -236,12 +356,16 @@ try {
 }
 ```
 
+
+
 ## 環境変数
 
 必要な環境変数：
 
 - `UPSTASH_VECTOR_URL`: あなたのUpstash VectorデータベースのURL
 - `UPSTASH_VECTOR_TOKEN`: あなたのUpstash Vector APIトークン
+
+
 
 ## 関連
 

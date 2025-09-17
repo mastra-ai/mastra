@@ -1073,7 +1073,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                 WHERE id = {var_id_${paramIdx}:String}
               `;
 
-          console.log('Updating message:', id, 'with query:', updateQuery, 'values:', values);
+          console.info('Updating message:', id, 'with query:', updateQuery, 'values:', values);
 
           updatePromises.push(
             this.client.command({
@@ -1150,7 +1150,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             }
 
             if (needsRetry) {
-              console.log('Update not applied correctly, retrying with DELETE + INSERT for message:', id);
+              console.info('Update not applied correctly, retrying with DELETE + INSERT for message:', id);
 
               // Use DELETE + INSERT as fallback
               await this.client.command({

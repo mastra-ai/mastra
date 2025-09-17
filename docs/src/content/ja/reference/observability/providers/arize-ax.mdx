@@ -1,0 +1,81 @@
+---
+title: "リファレンス: Arize AX 連携 | Mastra Observability ドキュメント"
+description: Mastra と Arize AX の連携方法に関するドキュメント。LLM アプリケーションの監視と評価を行う、包括的な AI 可観測性プラットフォーム。
+---
+
+# Arize AX
+
+Arize AXは、本番環境で稼働するLLMアプリケーションの監視・評価・改善に特化して設計された、包括的なAI可観測性プラットフォームです。
+
+## 設定
+
+Mastra で Arize AX を使用するには、環境変数を使用するか、Mastra の設定で直接設定します。
+
+### 環境変数の使用
+
+次の環境変数を設定します：
+
+```env
+ARIZE_SPACE_ID="your-space-id"
+ARIZE_API_KEY="your-api-key"
+```
+
+### 資格情報の取得
+
+1. [app.arize.com](https://app.arize.com) で Arize AX アカウントに登録する
+2. スペースの設定に移動して、Space ID と API Key を確認する
+
+## インストール
+
+まず、Mastra 用の OpenInference のインストルメンテーションパッケージをインストールします：
+
+```bash
+npm install @arizeai/openinference-mastra
+```
+
+## 実装
+
+以下は、OpenTelemetry と併用して Arize AX を使うように Mastra を設定する方法です：
+
+```typescript
+import { Mastra } from "@mastra/core";
+import {
+  isOpenInferenceSpan,
+  OpenInferenceOTLPTraceExporter,
+} from "@arizeai/openinference-mastra";
+
+export const mastra = new Mastra({
+  // ... other config
+  telemetry: {
+    serviceName: "your-mastra-app",
+    enabled: true,
+    export: {
+      type: "custom",
+      exporter: new OpenInferenceOTLPTraceExporter({
+        url: "https://otlp.arize.com/v1/traces",
+        headers: {
+          "space_id": process.env.ARIZE_SPACE_ID!,
+          "api_key": process.env.ARIZE_API_KEY!,
+        },
+        spanFilter: isOpenInferenceSpan,
+      }),
+    },
+  },
+});
+```
+
+## 自動でトレースされる内容
+
+Mastra の包括的なトレーシングは次を捕捉します：
+
+- **エージェントの操作**：エージェントによる生成、ストリーミング、対話のすべての呼び出し
+- **LLM とのやり取り**：入出力メッセージとメタデータを含むモデル呼び出しの全体
+- **ツール実行**：エージェントが行う、パラメータと結果を伴う関数呼び出し
+- **ワークフローの実行**：タイミングや依存関係を含むステップごとの実行
+- **メモリ操作**：エージェントメモリのクエリ、更新、取得
+
+すべてのトレースは OpenTelemetry 規格に準拠しており、モデルパラメータ、トークン使用量、実行時間、エラー詳細などの関連メタデータを含みます。
+
+## ダッシュボード
+
+設定後は、[app.arize.com](https://app.arize.com) の Arize AX ダッシュボードでトレースやアナリティクスを閲覧できます

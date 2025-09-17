@@ -1,0 +1,147 @@
+---
+title: "リファレンス: StepCondition | ワークフローの構築（レガシー） | Mastra"
+description: ワークフロー内のステップ条件クラスのドキュメント。前のステップの出力やトリガーデータに基づいて、ステップを実行するかどうかを決定します。
+---
+
+
+
+# StepCondition
+
+条件は、前のステップの出力やトリガーデータに基づいてステップを実行するかどうかを決定します。
+
+
+
+## 使用方法
+
+条件を指定する方法は3つあります：関数、クエリオブジェクト、シンプルなパス比較です。
+
+### 1. 関数による条件
+
+```typescript copy showLineNumbers
+workflow.step(processOrder, {
+  when: async ({ context }) => {
+    const auth = context?.getStepResult<{ status: string }>("auth");
+    return auth?.status === "authenticated";
+  },
+});
+```
+
+### 2. クエリオブジェクト
+
+```typescript copy showLineNumbers
+workflow.step(processOrder, {
+  when: {
+    ref: { step: "auth", path: "status" },
+    query: { $eq: "authenticated" },
+  },
+});
+```
+
+### 3. シンプルなパス比較
+
+```typescript copy showLineNumbers
+workflow.step(processOrder, {
+  when: {
+    "auth.status": "authenticated",
+  },
+});
+```
+
+条件のタイプに応じて、ワークフローランナーはこれらのいずれかのタイプに条件をマッチさせようとします。
+
+1. シンプルなパス条件（キーにドットが含まれている場合）
+2. ベース／クエリ条件（'ref' プロパティがある場合）
+3. 関数条件（非同期関数の場合）
+
+
+
+## StepCondition
+
+<PropertiesTable
+  content={[
+    {
+      name: "ref",
+      type: "{ stepId: string | 'trigger'; path: string }",
+      description:
+        "ステップ出力値への参照。stepId にはステップIDまたは初期データ用の 'trigger' を指定します。path はステップ結果内の値の場所を指定します。",
+      isOptional: false,
+    },
+    {
+      name: "query",
+      type: "Query<any>",
+      description: "sift演算子（$eq, $gt など）を使用したMongoDBスタイルのクエリ",
+      isOptional: false,
+    },
+  ]}
+/>
+
+
+
+## クエリ
+
+Queryオブジェクトは、前のステップやトリガーデータの値を比較するためのMongoDBスタイルのクエリ演算子を提供します。`$eq`、`$gt`、`$lt`などの基本的な比較演算子や、`$in`、`$nin`のような配列演算子をサポートしており、and/or演算子と組み合わせて複雑な条件を作成できます。
+
+このクエリ構文により、ステップを実行するかどうかを判断するための可読性の高い条件ロジックを記述できます。
+
+<PropertiesTable
+  content={[
+    {
+      name: "$eq",
+      type: "any",
+      description: "値と等しい",
+    },
+    {
+      name: "$ne",
+      type: "any",
+      description: "値と等しくない",
+    },
+    {
+      name: "$gt",
+      type: "number",
+      description: "値より大きい",
+    },
+    {
+      name: "$gte",
+      type: "number",
+      description: "値以上",
+    },
+    {
+      name: "$lt",
+      type: "number",
+      description: "値より小さい",
+    },
+    {
+      name: "$lte",
+      type: "number",
+      description: "値以下",
+    },
+    {
+      name: "$in",
+      type: "any[]",
+      description: "配列内に値が存在する",
+    },
+    {
+      name: "$nin",
+      type: "any[]",
+      description: "配列内に値が存在しない",
+    },
+    {
+      name: "and",
+      type: "StepCondition[]",
+      description: "すべての条件がtrueでなければならない条件の配列",
+    },
+    {
+      name: "or",
+      type: "StepCondition[]",
+      description: "少なくとも1つがtrueでなければならない条件の配列",
+    },
+  ]}
+/>
+
+
+
+## 関連
+
+- [Step Options リファレンス](./step-options.mdx)
+- [Step Function リファレンス](./step-function.mdx)
+- [Control Flow ガイド](../../docs/workflows-legacy/control-flow.mdx)

@@ -3,23 +3,29 @@ title: "デフォルトベクトルストア | ベクターデータベース | 
 description: Mastraにおける、ベクター拡張機能を持つLibSQLを使用したベクター検索を提供するLibSQLVectorクラスのドキュメント。
 ---
 
+
+
 # LibSQLVector ストア
 
-LibSQLストレージ実装は、SQLite互換のベクトル検索[LibSQL](https://github.com/tursodatabase/libsql)（ベクトル拡張機能を持つSQLiteのフォーク）と、ベクトル拡張機能を持つ[Turso](https://turso.tech/)を提供し、軽量で効率的なベクトルデータベースソリューションを提供します。
-これは`@mastra/core`パッケージの一部であり、メタデータフィルタリングによる効率的なベクトル類似性検索を提供します。
+LibSQL ストレージ実装は、SQLite互換のベクトル検索 [LibSQL](https://github.com/tursodatabase/libsql)（ベクトル拡張機能を持つSQLiteのフォーク）と、ベクトル拡張機能を持つ[Turso](https://turso.tech/)を提供し、軽量で効率的なベクトルデータベースソリューションを提供します。
+これは`@mastra/libsql`パッケージの一部であり、メタデータフィルタリングによる効率的なベクトル類似性検索を提供します。
+
+
 
 ## インストール
 
 デフォルトのベクトルストアはコアパッケージに含まれています：
 
 ```bash copy
-npm install @mastra/core@latest
+npm install @mastra/libsql@latest
 ```
+
+
 
 ## 使用方法
 
 ```typescript copy showLineNumbers
-import { LibSQLVector } from "@mastra/core/vector/libsql";
+import { LibSQLVector } from "@mastra/libsql";
 
 // Create a new vector store instance
 const store = new LibSQLVector({
@@ -56,6 +62,8 @@ const results = await store.query({
 });
 ```
 
+
+
 ## コンストラクタオプション
 
 <PropertiesTable
@@ -82,10 +90,13 @@ const results = await store.query({
       name: "syncInterval",
       type: "number",
       isOptional: true,
-      description: "データベース同期の間隔（ミリ秒）（Turso固有）",
+      description:
+        "データベース同期の間隔（ミリ秒）（Turso固有）",
     },
   ]}
 />
+
+
 
 ## メソッド
 
@@ -103,8 +114,7 @@ const results = await store.query({
     {
       name: "dimension",
       type: "number",
-      description:
-        "ベクトルの次元サイズ（埋め込みモデルと一致する必要があります）",
+      description: "ベクトルの次元サイズ（埋め込みモデルと一致する必要があります）",
     },
     {
       name: "metric",
@@ -292,6 +302,8 @@ IDによって特定のベクトルエントリを新しいベクトルデータ
 
 IDによってインデックスから特定のベクトルエントリを削除します。
 
+
+
 <PropertiesTable
   content={[
     {
@@ -307,6 +319,8 @@ IDによってインデックスから特定のベクトルエントリを削除
   ]}
 />
 
+
+
 ## レスポンスタイプ
 
 クエリ結果は以下の形式で返されます：
@@ -319,6 +333,8 @@ interface QueryResult {
   vector?: number[]; // Only included if includeVector is true
 }
 ```
+
+
 
 ## エラー処理
 
@@ -351,6 +367,8 @@ try {
 - テーブル/インデックスが見つからない
 - データベース接続の問題
 - アップサート中のトランザクション失敗
+
+
 
 ## 関連
 

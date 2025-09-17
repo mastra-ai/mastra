@@ -1,0 +1,217 @@
+---
+title: "例: Hallucination | Scorers | Mastra Docs"
+description: Hallucinationスコアラーを使用して回答の事実的矛盾を評価する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+
+
+# Hallucination Scorer
+
+`createHallucinationScorer`を使用して、レスポンスが提供されたコンテキストの一部と矛盾するかどうかを評価します。
+
+
+
+## インストール
+
+```bash copy
+npm install @mastra/evals
+```
+
+> 完全なAPIドキュメントと設定オプションについては、[`createHallucinationScorer`](/reference/scorers/hallucination)を参照してください。
+
+
+
+## 幻覚なしの例
+
+この例では、レスポンスが提供されたコンテキストと完全に一致しています。すべての主張が事実的に正確で、ソース資料によって直接サポートされており、幻覚スコアが低くなっています。
+
+```typescript filename="src/example-no-hallucination.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createHallucinationScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createHallucinationScorer({ model: openai("gpt-4o-mini"), options: {
+  context: [
+    "The iPhone was first released in 2007.",
+    "Steve Jobs unveiled it at Macworld.",
+    "The original model had a 3.5-inch screen."
+  ]
+});
+
+const query = "When was the first iPhone released?";
+const response = "The iPhone was first released in 2007, when Steve Jobs unveiled it at Macworld. The original iPhone featured a 3.5-inch screen.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+### 幻覚なしの出力
+
+矛盾がないため、レスポンスは0のスコアを受け取ります。すべての文がコンテキストと一致しており、新しい情報や作り話の情報は導入されていません。
+
+```typescript
+{
+  score: 0,
+  reason: 'The score is 0 because none of the statements from the context were contradicted by the output.'
+}
+```
+
+
+
+## 混合幻覚の例
+
+この例では、レスポンスに正確な主張と不正確な主張の両方が含まれています。一部の詳細はコンテキストと一致していますが、他の詳細は誇張された数字や間違った場所など、コンテキストと直接矛盾しています。これらの矛盾により幻覚スコアが上昇します。
+
+```typescript filename="src/example-mixed-hallucination.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createHallucinationScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createHallucinationScorer({ model: openai("gpt-4o-mini"), options: {
+  context: [
+    "The first Star Wars movie was released in 1977.",
+    "It was directed by George Lucas.",
+    "The film earned $775 million worldwide.",
+    "The movie was filmed in Tunisia and England."
+  ]
+});
+
+const query = "Tell me about the first Star Wars movie.";
+const response = "The first Star Wars movie came out in 1977 and was directed by George Lucas. It made over $1 billion at the box office and was filmed entirely in California.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+### 混合幻覚の出力
+
+Scorerは、レスポンスの一部がコンテキストと矛盾するため、中程度のスコアを割り当てます。一部の事実は正確ですが、他の事実は不正確または作り話であり、全体的な信頼性が低下しています。
+
+```typescript
+{
+  score: 0.5,
+  reason: 'The score is 0.5 because two out of four statements from the output were contradicted by claims in the context, indicating a balance of accurate and inaccurate information.'
+}
+```
+
+
+
+## 完全な幻覚の例
+
+この例では、レスポンスがコンテキストのすべての重要な事実と矛盾しています。どの主張も検証できず、提示されたすべての詳細が事実として正しくありません。
+
+```typescript filename="src/example-complete-hallucination.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createHallucinationScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createHallucinationScorer({ model: openai("gpt-4o-mini"), options: {
+  context: [
+    "The Wright brothers made their first flight in 1903.",
+    "The flight lasted 12 seconds.",
+    "It covered a distance of 120 feet."
+  ]
+});
+
+const query = "When did the Wright brothers first fly?";
+const response = "The Wright brothers achieved their historic first flight in 1908. The flight lasted about 2 minutes and covered nearly a mile.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+
+```
+
+### 完全な幻覚の出力
+
+Scorerは、レスポンス内のすべての記述がコンテキストと矛盾するため、スコア1を割り当てます。詳細は全面的に作り話であるか不正確です。
+
+```typescript
+{
+  score: 1,
+  reason: 'The score is 1.0 because all three statements from the output directly contradict the context: the first flight was in 1903, not 1908; it lasted 12 seconds, not about 2 minutes; and it covered 120 feet, not nearly a mile.'
+}
+```
+
+
+
+## 設定
+
+オプションパラメータを設定することで、`HallucinationScorer`がレスポンスをスコアリングする方法を調整できます。例えば、`scale`はスコアラーが返す最大可能スコアを設定します。
+
+```typescript
+const scorer = createHallucinationScorer({ model: openai("gpt-4o-mini"), options: {
+  context: [""],
+  scale: 1
+});
+```
+
+> 設定オプションの完全なリストについては、[HallucinationScorer](/reference/scorers/hallucination.mdx)を参照してください。
+
+
+
+## 結果の理解
+
+`.run()` は以下の形式で結果を返します：
+
+```typescript
+{
+  runId: string,
+  extractStepResult: { claims: string[] },
+  extractPrompt: string,
+  analyzeStepResult: {
+    verdicts: Array<{ statement: string, verdict: 'yes' | 'no', reason: string }>
+  },
+  analyzePrompt: string,
+  score: number,
+  reason: string,
+  reasonPrompt: string
+}
+```
+
+### score
+0から1の間のハルシネーションスコア：
+
+- **0.0**: ハルシネーションなし — すべての主張がコンテキストと一致。
+- **0.3–0.4**: 低いハルシネーション — わずかな矛盾。
+- **0.5–0.6**: 混合ハルシネーション — いくつかの矛盾。
+- **0.7–0.8**: 高いハルシネーション — 多くの矛盾。
+- **0.9–1.0**: 完全なハルシネーション — ほとんどまたはすべての主張がコンテキストと矛盾。
+
+### runId
+このスコアラー実行の一意識別子。
+
+### extractStepResult
+出力から抽出された主張を含むオブジェクト：
+- **claims**: コンテキストに対してチェックされる事実的な記述の配列。
+
+### extractPrompt
+抽出ステップでLLMに送信されたプロンプト。
+
+### analyzeStepResult
+各主張に対する判定を含むオブジェクト：
+- **verdicts**: 各主張に対して`statement`、`verdict`（'yes'または'no'）、および`reason`を含むオブジェクトの配列。
+
+### analyzePrompt
+分析ステップでLLMに送信されたプロンプト。
+
+### reasonPrompt
+理由ステップでLLMに送信されたプロンプト。
+
+### reason
+スコアと特定された矛盾の詳細な説明。
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/scorers/hallucination"
+/>

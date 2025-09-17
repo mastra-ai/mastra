@@ -1,0 +1,79 @@
+---
+title: "リファレンス: Keywords AI統合 | Mastra Observability ドキュメント"
+description: Keywords AI（LLMアプリケーション向けの可観測性プラットフォーム）とMastraの統合に関するドキュメント。
+---
+
+
+
+## Keywords AI
+
+[Keywords AI](https://docs.keywordsai.co/get-started/overview)は、開発者とPMが信頼性の高いAI製品をより迅速に構築できるよう支援するフルスタックLLMエンジニアリングプラットフォームです。共有ワークスペースで、プロダクトチームはAIパフォーマンスの構築、監視、改善を行うことができます。
+
+このチュートリアルでは、[Mastra](https://mastra.ai/)でKeywords AIトレーシングを設定し、AI駆動アプリケーションを監視・トレースする方法を説明します。
+
+素早く開始できるよう、事前に構築された例を提供しています。コードは[GitHub](https://github.com/Keywords-AI/keywordsai-example-projects/tree/main/mastra-ai-weather-agent)で確認できます。
+
+
+
+
+## セットアップ
+
+Mastra Weather Agentの例についてのチュートリアルです。
+
+### 1. 依存関係のインストール
+
+```bash copy
+pnpm install
+```
+
+### 2. 環境変数
+
+サンプル環境ファイルをコピーして、APIキーを追加してください：
+
+```bash copy
+cp .env.local.example .env.local
+```
+
+.env.localを認証情報で更新してください：
+
+```bash .env.local copy
+OPENAI_API_KEY=your-openai-api-key
+KEYWORDSAI_API_KEY=your-keywordsai-api-key
+KEYWORDSAI_BASE_URL=https://api.keywordsai.co
+```
+
+### 3. Keywords AIトレーシングでMastraクライアントをセットアップ
+
+`src/mastra/index.ts`でKeywordsAIテレメトリを設定してください：
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+
+import { Mastra } from "@mastra/core/mastra";
+import { KeywordsAIExporter } from "@keywordsai/exporter-vercel";
+
+telemetry: {
+  serviceName: "keywordai-mastra-example",
+  enabled: true,
+  export: {
+    type: "custom",
+    exporter: new KeywordsAIExporter({
+      apiKey: process.env.KEYWORDSAI_API_KEY,
+      baseUrl: process.env.KEYWORDSAI_BASE_URL,
+      debug: true,
+    })
+  }
+}
+```
+
+### 3. プロジェクトの実行
+
+```bash copy
+mastra dev
+```
+これによりMastraプレイグラウンドが開き、weather agentと対話できます。
+
+
+
+## 可観測性
+
+設定が完了すると、[Keywords AI platform](https://platform.keywordsai.co/platform/traces)でトレースと分析を表示できます。

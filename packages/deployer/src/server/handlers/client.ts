@@ -39,12 +39,12 @@ export function handleTriggerClientsRefresh(c: Context) {
 // Functions to control hot reload during template installation
 export function disableHotReload() {
   hotReloadDisabled = true;
-  console.log('🔒 Hot reload disabled for template installation');
+  console.info('🔒 Hot reload disabled for template installation');
 }
 
 export function enableHotReload() {
   hotReloadDisabled = false;
-  console.log('🔓 Hot reload re-enabled after template installation');
+  console.info('🔓 Hot reload re-enabled after template installation');
 }
 
 export function isHotReloadDisabled(): boolean {

@@ -3,9 +3,13 @@ title: "リファレンス: OpenAI Voice | 音声プロバイダー | Mastra ド
 description: "テキスト読み上げと音声認識機能を提供するOpenAIVoiceクラスのドキュメント。"
 ---
 
+
+
 # OpenAI
 
 Mastraの中のOpenAIVoiceクラスは、OpenAIのモデルを使用してテキスト読み上げと音声認識の機能を提供します。
+
+
 
 ## 使用例
 
@@ -39,6 +43,8 @@ const text = await voice.listen(audioStream, {
   filetype: "mp3",
 });
 ```
+
+
 
 ## 設定
 
@@ -77,8 +83,7 @@ const text = await voice.listen(audioStream, {
     {
       name: "name",
       type: "'tts-1' | 'tts-1-hd' | 'whisper-1'",
-      description:
-        "モデル名。より高品質な音声には'tts-1-hd'を使用してください。",
+      description: "モデル名。より高品質な音声には'tts-1-hd'を使用してください。",
       isOptional: true,
     },
     {
@@ -90,6 +95,8 @@ const text = await voice.listen(audioStream, {
     },
   ]}
 />
+
+
 
 ## メソッド
 
@@ -162,6 +169,8 @@ OpenAIのWhisperモデルを使用して音声を文字起こしします。
     },
   ]}
 />
+
+
 
 ## メモ
 

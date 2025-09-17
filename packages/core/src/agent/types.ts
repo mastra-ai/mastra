@@ -1,7 +1,7 @@
 import type { GenerateTextOnStepFinishCallback, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema, ZodTypeAny } from 'zod';
-import type { TracingContext, TracingOptions } from '../ai-tracing';
+import type { TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
@@ -23,6 +23,7 @@ import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import type { RuntimeContext } from '../runtime-context';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
+import type { ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { CompositeVoice } from '../voice';
@@ -55,6 +56,10 @@ export type StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny> = {
   instructions?: string;
 } & FallbackFields<S>;
 
+export interface AgentCreateOptions {
+  tracingPolicy?: TracingPolicy;
+}
+
 export interface AgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
@@ -64,7 +69,14 @@ export interface AgentConfig<
   name: TAgentId;
   description?: string;
   instructions: DynamicArgument<string>;
-  model: DynamicArgument<MastraLanguageModel>;
+  model:
+    | DynamicArgument<MastraLanguageModel>
+    | {
+        model: DynamicArgument<MastraLanguageModel>;
+        maxRetries?: number; //defaults to 0
+        enabled?: boolean; //defaults to true
+      }[];
+  maxRetries?: number; //defaults to 0
   tools?: DynamicArgument<TTools>;
   workflows?: DynamicArgument<Record<string, Workflow>>;
   defaultGenerateOptions?: DynamicArgument<AgentGenerateOptions>;
@@ -78,6 +90,7 @@ export interface AgentConfig<
   voice?: CompositeVoice;
   inputProcessors?: DynamicArgument<InputProcessor[]>;
   outputProcessors?: DynamicArgument<OutputProcessor[]>;
+  options?: AgentCreateOptions;
 }
 
 export type AgentMemoryOption = {
@@ -249,3 +262,5 @@ export type AgentStreamOptions<
     }
 ) &
   (OUTPUT extends undefined ? DefaultLLMStreamOptions : DefaultLLMStreamObjectOptions);
+
+export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };

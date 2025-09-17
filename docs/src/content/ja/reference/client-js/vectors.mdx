@@ -3,25 +3,23 @@ title: Mastra クライアントベクトル API
 description: client-js SDKを使用して、セマンティック検索や類似性マッチングのためのベクトル埋め込みをMastraで操作する方法を学びます。
 ---
 
+
+
 # Vectors API
 
 Vectors APIは、Mastraでのセマンティック検索や類似性マッチングのためのベクトル埋め込みを操作するメソッドを提供します。
 
-## Mastraクライアントの初期化
+
+
+## ベクターの操作
+
+ベクターストアのインスタンスを取得する：
 
 ```typescript
-import { MastraClient } from "@mastra/client-js";
-
-const client = new MastraClient();
+const vector = mastraClient.getVector("vector-name");
 ```
 
-## ベクトルの操作
 
-ベクトルストアのインスタンスを取得する：
-
-```typescript
-const vector = client.getVector("vector-name");
-```
 
 ## ベクトルメソッド
 

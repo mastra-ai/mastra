@@ -1,11 +1,19 @@
 ---
-title: "リファレンス: テキスト差分 | Evals | Mastra ドキュメント"
-description: Mastra におけるテキスト差分メトリクスのドキュメント。これはシーケンスマッチングを用いて文字列間のテキスト差分を測定します。
+title: "リファレンス: テキスト差分 | Evals | Mastra Docs"
+description: シーケンスマッチングを使用して文字列間のテキスト差分を測定するMastraのテキスト差分メトリックのドキュメント。
 ---
+
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
 
 # TextualDifferenceMetric
 
-`TextualDifferenceMetric` クラスは、シーケンスマッチングを使用して2つの文字列間のテキスト差分を測定します。このクラスは、一方のテキストをもう一方に変換するために必要な操作数を含む、変更に関する詳細な情報を提供します。
+<ScorerCallout />
+
+`TextualDifferenceMetric`クラスは、シーケンスマッチングを使用して2つの文字列間のテキストの違いを測定します。このクラスは、あるテキストを別のテキストに変換するために必要な操作数を含む、変更に関する詳細な情報を提供します。
+
+
 
 ## 基本的な使い方
 
@@ -22,6 +30,8 @@ const result = await metric.measure(
 console.log(result.score); // 0〜1の類似度比率
 console.log(result.info); // 詳細な変更メトリクス
 ```
+
+
 
 ## measure() のパラメーター
 
@@ -42,6 +52,8 @@ console.log(result.info); // 詳細な変更メトリクス
   ]}
 />
 
+
+
 ## 戻り値
 
 <PropertiesTable
@@ -49,8 +61,7 @@ console.log(result.info); // 詳細な変更メトリクス
     {
       name: "score",
       type: "number",
-      description:
-        "類似度比率（0～1）。1はテキストが完全に一致していることを示します",
+      description: "類似度比率（0～1）。1はテキストが完全に一致していることを示します",
     },
     {
       name: "info",
@@ -62,7 +73,8 @@ console.log(result.info); // 詳細な変更メトリクス
             {
               name: "confidence",
               type: "number",
-              description: "テキスト間の長さの違いに基づく信頼度スコア（0～1）",
+              description:
+                "テキスト間の長さの違いに基づく信頼度スコア（0～1）",
             },
           ],
         },
@@ -82,7 +94,8 @@ console.log(result.info); // 詳細な変更メトリクス
             {
               name: "changes",
               type: "number",
-              description: "変更操作の回数（挿入、削除、置換）",
+              description:
+                "変更操作の回数（挿入、削除、置換）",
             },
           ],
         },
@@ -92,7 +105,8 @@ console.log(result.info); // 詳細な変更メトリクス
             {
               name: "lengthDiff",
               type: "number",
-              description: "入力と出力の長さの正規化された差分（0～1）",
+              description:
+                "入力と出力の長さの正規化された差分（0～1）",
             },
           ],
         },
@@ -100,6 +114,8 @@ console.log(result.info); // 詳細な変更メトリクス
     },
   ]}
 />
+
+
 
 ## スコアリングの詳細
 
@@ -135,6 +151,8 @@ console.log(result.info); // 詳細な変更メトリクス
 - 0.1-0.3：大きな違い - 大幅な変更が必要
 - 0.0：全く異なるテキスト
 
+
+
 ## 分析付きの例
 
 ```typescript
@@ -158,6 +176,8 @@ const result = await metric.measure(
 //   }
 // }
 ```
+
+
 
 ## 関連
 

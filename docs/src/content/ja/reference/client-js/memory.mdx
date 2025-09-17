@@ -3,26 +3,18 @@ title: Mastra クライアントメモリAPI
 description: client-js SDKを使用してMastraで会話スレッドとメッセージ履歴を管理する方法を学びます。
 ---
 
-# メモリーAPI
 
-メモリーAPIは、Mastraでの会話スレッドとメッセージ履歴を管理するためのメソッドを提供します。
 
-## Mastraクライアントの初期化
+# Memory API
 
-```typescript
-import { MastraClient } from "@mastra/client-js";
-
-const client = new MastraClient();
-```
-
-## メモリスレッド操作
+Memory APIは、Mastraにおける会話スレッドとメッセージ履歴を管理するためのメソッドを提供します。
 
 ### すべてのスレッドを取得
 
-特定のリソースに対するすべてのメモリスレッドを取得します：
+特定のリソースのすべてのメモリスレッドを取得します：
 
 ```typescript
-const threads = await client.getMemoryThreads({
+const threads = await mastraClient.getMemoryThreads({
   resourceId: "resource-1",
   agentId: "agent-1",
 });
@@ -33,33 +25,35 @@ const threads = await client.getMemoryThreads({
 新しいメモリスレッドを作成します：
 
 ```typescript
-const thread = await client.createMemoryThread({
+const thread = await mastraClient.createMemoryThread({
   title: "New Conversation",
   metadata: { category: "support" },
-  resourceid: "resource-1",
+  resourceId: "resource-1",
   agentId: "agent-1",
 });
 ```
 
-### 特定のスレッドを操作する
+### 特定のスレッドでの作業
 
 特定のメモリスレッドのインスタンスを取得します：
 
 ```typescript
-const thread = client.getMemoryThread("thread-id", "agent-id");
+const thread = mastraClient.getMemoryThread("thread-id", "agent-id");
 ```
 
-## スレッドメソッド
 
-### スレッド詳細の取得
 
-特定のスレッドに関する詳細を取得します：
+## Thread Methods
+
+### Get Thread Details
+
+特定のスレッドの詳細を取得します：
 
 ```typescript
 const details = await thread.get();
 ```
 
-### スレッドの更新
+### Update Thread
 
 スレッドのプロパティを更新します：
 
@@ -71,7 +65,7 @@ const updated = await thread.update({
 });
 ```
 
-### スレッドの削除
+### Delete Thread
 
 スレッドとそのメッセージを削除します：
 
@@ -79,14 +73,16 @@ const updated = await thread.update({
 await thread.delete();
 ```
 
+
+
 ## メッセージ操作
 
 ### メッセージの保存
 
-メッセージをメモリに保存します：
+メッセージをメモリに保存する：
 
 ```typescript
-const savedMessages = await client.saveMessageToMemory({
+const savedMessages = await mastraClient.saveMessageToMemory({
   messages: [
     {
       role: "user",
@@ -101,10 +97,40 @@ const savedMessages = await client.saveMessageToMemory({
 });
 ```
 
-### メモリステータスの取得
+### スレッドメッセージの取得
 
-メモリシステムのステータスを確認します：
+メモリスレッドに関連付けられたメッセージを取得する：
 
 ```typescript
-const status = await client.getMemoryStatus("agent-id");
+// スレッド内のすべてのメッセージを取得
+const { messages } = await thread.getMessages();
+
+// 取得するメッセージ数を制限
+const { messages } = await thread.getMessages({ limit: 10 });
+```
+
+### メッセージの削除
+
+スレッドから特定のメッセージを削除する：
+
+```typescript
+const result = await thread.deleteMessage("message-id");
+// 戻り値: { success: true, message: "Message deleted successfully" }
+```
+
+### 複数メッセージの削除
+
+単一の操作でスレッドから複数のメッセージを削除する：
+
+```typescript
+const result = await thread.deleteMessages(["message-1", "message-2", "message-3"]);
+// 戻り値: { success: true, message: "3 messages deleted successfully" }
+```
+
+### メモリステータスの取得
+
+メモリシステムのステータスを確認する：
+
+```typescript
+const status = await mastraClient.getMemoryStatus("agent-id");
 ```

@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { Agent } from '../agent';
+import { InternalSpans } from '../ai-tracing';
 import type { TracingContext } from '../ai-tracing';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
@@ -450,6 +451,12 @@ class MastraScorer<
         generateScorePrompt: z.string().optional(),
         generateReasonPrompt: z.string().optional(),
       }),
+      options: {
+        // mark all spans generated as part of the scorer workflow internal
+        tracingPolicy: {
+          internal: InternalSpans.ALL,
+        },
+      },
     });
 
     let chainedWorkflow = workflow;
@@ -501,7 +508,12 @@ class MastraScorer<
       });
     }
 
-    const judge = new Agent({ name: 'judge', model, instructions });
+    const judge = new Agent({
+      name: 'judge',
+      model,
+      instructions,
+      options: { tracingPolicy: { internal: InternalSpans.ALL } },
+    });
 
     // GenerateScore output must be a number
     if (scorerStep.name === 'generateScore') {

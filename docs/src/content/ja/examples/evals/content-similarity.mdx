@@ -1,136 +1,169 @@
 ---
 title: "例: コンテンツ類似度 | Evals | Mastra Docs"
-description: コンテンツ類似度メトリクスを使用して、コンテンツ間のテキスト類似度を評価する例。
+description: コンテンツ間のテキスト類似性を評価するために Content Similarity 指標を用いる例。
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
 
-# コンテンツ類似度
 
-この例では、Mastra のコンテンツ類似度メトリクスを使用して、2つのコンテンツ間のテキスト類似度を評価する方法を示します。
 
-## 概要
+# コンテンツ類似度の評価
 
-この例では、以下の方法を示します。
+<ScorerCallout />
 
-1. Content Similarityメトリクスの設定方法
-2. 異なるテキストバリエーションの比較方法
-3. 類似度スコアの分析方法
-4. 様々な類似度シナリオへの対応方法
+`ContentSimilarityMetric` を使用して、コンテンツの重複度に基づき、応答が参照とどれほど似ているかを評価します。メトリクスは `query` と `response` を受け取り、スコアと、類似度の値を含む `info` オブジェクトを返します。
 
-## セットアップ
 
-### 依存関係
 
-必要な依存関係をインポートします：
+## インストール
 
-```typescript copy showLineNumbers filename="src/index.ts"
-import { ContentSimilarityMetric } from "@mastra/evals/nlp";
+```bash copy
+npm install @mastra/evals
 ```
+
+
+
+## 高い類似度の例
+
+この例では、応答は構造と意味の両面でクエリと非常に近似しています。時制や言い回しのわずかな違いは、全体的な類似度にほとんど影響しません。
+
+```typescript filename="src/example-high-similarity.ts" showLineNumbers copy
+import { ContentSimilarityMetric } from "@mastra/evals/nlp";
+
+const metric = new ContentSimilarityMetric();
+
+const query = "The quick brown fox jumps over the lazy dog.";
+const response = "A quick brown fox jumped over a lazy dog.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 高い類似度の出力
+
+この出力は、応答がわずかな言い換えのみでクエリの意図と内容を保っているため、高いスコアとなります。
+
+```typescript
+{
+  score: 0.7761194029850746,
+  info: {
+    similarity: 0.7761194029850746
+  }
+}
+```
+
+
+
+## 中程度の類似度の例
+
+この例では、応答はクエリと概念的にはいくつか重なっていますが、構造や表現が異なります。主要な要素は含まれているものの、言い回しに中程度の差異があります。
+
+```typescript filename="src/example-moderate-similarity.ts" showLineNumbers copy
+import { ContentSimilarityMetric } from "@mastra/evals/nlp";
+
+const metric = new ContentSimilarityMetric();
+
+const query = "A brown fox quickly leaps across a sleeping dog.";
+const response = "The quick brown fox jumps over the lazy dog.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 中程度の類似度の出力
+
+この出力は、応答がクエリの大意を捉えている一方で、表現の違いにより全体の類似度が下がっているため、中間的なスコアとなります。
+
+```typescript
+{
+  score: 0.40540540540540543,
+  info: {
+    similarity: 0.40540540540540543
+  }
+}
+```
+
+
+
+## 低類似度の例
+
+この例では、文法構造は似ていても、`response` と `query` の意味は無関係です。共有される内容の重なりはほとんど、あるいはまったくありません。
+
+```typescript filename="src/example-low-similarity.ts" showLineNumbers copy
+import { ContentSimilarityMetric } from "@mastra/evals/nlp";
+
+const metric = new ContentSimilarityMetric();
+
+const query = "The cat sleeps on the windowsill.";
+const response = "The quick brown fox jumps over the lazy dog.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 低類似度の出力
+
+`response` が `query` の内容や意図と整合しないため、出力は低いスコアになります。
+
+```typescript
+{
+  score: 0.25806451612903225,
+  info: {
+    similarity: 0.25806451612903225
+  }
+}
+```
+
+
 
 ## メトリックの設定
 
-Content Similarityメトリックを設定します：
+`ContentSimilarityMetric` インスタンスは既定の設定で作成できます。追加の設定は不要です。
 
-```typescript copy showLineNumbers{4} filename="src/index.ts"
+```typescript showLineNumbers copy
 const metric = new ContentSimilarityMetric();
 ```
+> 設定オプションの一覧については、[ContentSimilarityMetric](/reference/evals/content-similarity.mdx) を参照してください。
 
-## 使用例
 
-### 高い類似度の例
-
-ほとんど同じテキストを比較します：
-
-```typescript copy showLineNumbers{7} filename="src/index.ts"
-const text1 = "The quick brown fox jumps over the lazy dog.";
-const reference1 = "A quick brown fox jumped over a lazy dog.";
-
-console.log("Example 1 - High Similarity:");
-console.log("Text:", text1);
-console.log("Reference:", reference1);
-
-const result1 = await metric.measure(reference1, text1);
-console.log("Metric Result:", {
-  score: result1.score,
-  info: {
-    similarity: result1.info.similarity,
-  },
-});
-// Example Output:
-// Metric Result: { score: 0.7761194029850746, info: { similarity: 0.7761194029850746 } }
-```
-
-### 中程度の類似度の例
-
-意味は似ているが表現が異なるテキストを比較します：
-
-```typescript copy showLineNumbers{23} filename="src/index.ts"
-const text2 = "A brown fox quickly leaps across a sleeping dog.";
-const reference2 = "The quick brown fox jumps over the lazy dog.";
-
-console.log("Example 2 - Moderate Similarity:");
-console.log("Text:", text2);
-console.log("Reference:", reference2);
-
-const result2 = await metric.measure(reference2, text2);
-console.log("Metric Result:", {
-  score: result2.score,
-  info: {
-    similarity: result2.info.similarity,
-  },
-});
-// Example Output:
-// Metric Result: {
-//   score: 0.40540540540540543,
-//   info: { similarity: 0.40540540540540543 }
-// }
-```
-
-### 低い類似度の例
-
-明らかに異なるテキストを比較します：
-
-```typescript copy showLineNumbers{39} filename="src/index.ts"
-const text3 = "The cat sleeps on the windowsill.";
-const reference3 = "The quick brown fox jumps over the lazy dog.";
-
-console.log("Example 3 - Low Similarity:");
-console.log("Text:", text3);
-console.log("Reference:", reference3);
-
-const result3 = await metric.measure(reference3, text3);
-console.log("Metric Result:", {
-  score: result3.score,
-  info: {
-    similarity: result3.info.similarity,
-  },
-});
-// Example Output:
-// Metric Result: {
-//   score: 0.25806451612903225,
-//   info: { similarity: 0.25806451612903225 }
-// }
-```
 
 ## 結果の理解
 
-この指標は以下を提供します：
+`ContentSimilarityMetric` は次の形式の結果を返します:
 
-1. 0から1までの類似度スコア：
-   - 1.0: 完全一致 - テキストが全く同じ
-   - 0.7-0.9: 高い類似度 - 言い回しにわずかな違い
-   - 0.4-0.6: 中程度の類似度 - 同じトピックだが表現が異なる
-   - 0.1-0.3: 低い類似度 - 一部の単語は共通するが意味が異なる
-   - 0.0: 類似性なし - 全く異なるテキスト
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/content-similarity"
+```typescript
+{
+  score: number,
+  info: {
+    similarity: number
   }
+}
+```
+
+### 類似度スコア
+
+0〜1 の範囲の類似度スコア:
+
+- **1.0**: 完全一致 – コンテンツはほぼ同一。
+- **0.7–0.9**: 高い類似度 – 語彙や構成にわずかな違い。
+- **0.4–0.6**: 中程度の類似度 – 全体としては重なるが、目立つ差異もある。
+- **0.1–0.3**: 低い類似度 – 共通要素や意味の共有が少ない。
+- **0.0**: 類似なし – まったく異なるコンテンツ。
+
+### 類似度情報
+
+スコアに関する説明で、次の内容を含みます:
+
+- クエリとレスポンスの重なりの程度
+- 一致する句やキーワード
+- テキスト類似度に基づく意味的近さ
+
+<GithubLink
+  outdated={true}
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/content-similarity"
 />

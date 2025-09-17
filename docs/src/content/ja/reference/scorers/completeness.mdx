@@ -1,0 +1,101 @@
+---
+title: "リファレンス: Completeness | Scorers | Mastra Docs"
+description: "Mastraの Completeness Scorer のドキュメント。入力に含まれる主要な要素をLLM出力がどの程度網羅的にカバーしているかを評価します。"
+---
+
+
+
+# Completeness Scorer
+
+`createCompletenessScorer()`関数は、LLMの出力が入力に含まれる主要な要素をどの程度網羅的にカバーしているかを評価します。名詞、動詞、トピック、用語を分析してカバレッジを判定し、詳細な完全性スコアを提供します。
+
+使用例については、[Completeness Examples](/examples/scorers/completeness)を参照してください。
+
+
+
+## パラメータ
+
+`createCompletenessScorer()` 関数はオプションを受け取りません。
+
+この関数は MastraScorer クラスのインスタンスを返します。`.run()` メソッドとその入力/出力の詳細については、[MastraScorer リファレンス](./mastra-scorer) を参照してください。
+
+
+
+## .run() の戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "実行のID（任意）。",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "object",
+      description: "抽出された要素とカバレッジの詳細を含むオブジェクト: { inputElements: string[], outputElements: string[], missingElements: string[], elementCounts: { input: number, output: number } }",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "出力でカバーされた入力要素の割合を表す完全性スコア（0-1）。",
+    },
+  ]}
+/>
+
+
+
+## 要素抽出の詳細
+
+スコアラーは以下のタイプの要素を抽出・分析します：
+
+- 名詞：主要なオブジェクト、概念、エンティティ
+- 動詞：アクションと状態（不定詞形に変換）
+- トピック：主要な主題とテーマ
+- 用語：個別の重要な単語
+
+抽出プロセスには以下が含まれます：
+
+- テキストの正規化（発音区別符号の除去、小文字への変換）
+- camelCase単語の分割
+- 単語境界の処理
+- 短い単語（3文字以下）の特別な処理
+- 要素の重複除去
+
+
+
+## スコアリング詳細
+
+スコアラーは言語要素カバレッジ分析を通じて完全性を評価します。
+
+### スコアリングプロセス
+
+1. 主要要素を抽出：
+   - 名詞と固有名詞
+   - 動作動詞
+   - トピック固有の用語
+   - 正規化された語形
+2. 入力要素のカバレッジを計算：
+   - 短い用語（≤3文字）の完全一致
+   - 長い用語の実質的重複（>60%）
+
+最終スコア：`(covered_elements / total_input_elements) * scale`
+
+### スコア解釈
+
+（0からscale、デフォルト0-1）
+
+- 1.0：完全カバレッジ - すべての入力要素を含む
+- 0.7-0.9：高カバレッジ - ほとんどの主要要素を含む
+- 0.4-0.6：部分カバレッジ - いくつかの主要要素を含む
+- 0.1-0.3：低カバレッジ - ほとんどの主要要素が欠如
+- 0.0：カバレッジなし - 出力にすべての入力要素が欠如
+
+
+
+## 関連
+
+- [Answer Relevancy Scorer](./answer-relevancy)
+- [Content Similarity Scorer](./content-similarity)
+- [Textual Difference Scorer](./textual-difference)
+- [Keyword Coverage Scorer](./keyword-coverage)

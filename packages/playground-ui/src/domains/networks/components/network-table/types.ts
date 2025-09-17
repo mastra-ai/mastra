@@ -6,5 +6,4 @@ export type NetworkTableColumn = {
   routingModel: string;
   workflowsSize?: number;
   toolsSize?: number;
-  isVNext?: boolean;
 };

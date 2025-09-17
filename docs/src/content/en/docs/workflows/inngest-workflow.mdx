@@ -138,6 +138,13 @@ export const mastra = new Mastra({
         //    - Handle workflow state persistence and real-time updates
         // 3. Establishing a publish-subscribe system for real-time monitoring
         //    through the workflow:${workflowId}:${runId} channel
+        //
+        // Optional: You can also pass additional Inngest functions to serve alongside workflows:
+        // createHandler: async ({ mastra }) => inngestServe({
+        //   mastra,
+        //   inngest,
+        //   functions: [customFunction1, customFunction2] // User-defined Inngest functions
+        // }),
       },
     ],
   },
@@ -275,3 +282,78 @@ vercel --prod
 - Go to the **Runs** tab.
 - Click the latest run to see step-by-step execution progress.
   ![Inngest Function Run](/inngest-runs-dashboard-prod.png)
+
+## Advanced Usage: Adding Custom Inngest Functions
+
+You can serve additional Inngest functions alongside your Mastra workflows by using the optional `functions` parameter in `inngestServe`.
+
+### Creating Custom Functions
+
+First, create your custom Inngest functions:
+
+```ts showLineNumbers copy filename="src/inngest/custom-functions.ts"
+import { inngest } from "./inngest";
+
+// Define custom Inngest functions
+export const customEmailFunction = inngest.createFunction(
+  { id: 'send-welcome-email' },
+  { event: 'user/registered' },
+  async ({ event }) => {
+    // Custom email logic here
+    console.log(`Sending welcome email to ${event.data.email}`);
+    return { status: 'email_sent' };
+  }
+);
+
+export const customWebhookFunction = inngest.createFunction(
+  { id: 'process-webhook' },
+  { event: 'webhook/received' },
+  async ({ event }) => {
+    // Custom webhook processing
+    console.log(`Processing webhook: ${event.data.type}`);
+    return { processed: true };
+  }
+);
+```
+
+### Serving Custom Functions with Workflows
+
+Update your Mastra configuration to include the custom functions:
+
+```ts showLineNumbers copy filename="src/mastra/index.ts"
+import { Mastra } from "@mastra/core/mastra";
+import { serve as inngestServe } from "@mastra/inngest";
+import { incrementWorkflow } from "./workflows";
+import { inngest } from "./inngest";
+import { customEmailFunction, customWebhookFunction } from "./inngest/custom-functions";
+
+export const mastra = new Mastra({
+  workflows: {
+    incrementWorkflow,
+  },
+  server: {
+    host: "0.0.0.0",
+    apiRoutes: [
+      {
+        path: "/api/inngest",
+        method: "ALL",
+        createHandler: async ({ mastra }) => inngestServe({
+          mastra,
+          inngest,
+          functions: [customEmailFunction, customWebhookFunction] // Add your custom functions
+        }),
+      },
+    ],
+  },
+});
+```
+
+### Function Registration
+
+When you include custom functions:
+
+1. **Mastra workflows** are automatically converted to Inngest functions with IDs like `workflow.${workflowId}`
+2. **Custom functions** retain their specified IDs (e.g., `send-welcome-email`, `process-webhook`)
+3. **All functions** are served together on the same `/api/inngest` endpoint
+
+This allows you to combine Mastra's workflow orchestration with your existing Inngest functions seamlessly.

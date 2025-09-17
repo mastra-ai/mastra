@@ -5,6 +5,8 @@ description: PGVector でメタデータフィルターを使用し、Mastra の
 
 import { GithubLink } from "@/components/github-link";
 
+
+
 # ハイブリッドベクター検索
 
 ベクター類似性検索とメタデータフィルターを組み合わせることで、より精度が高く効率的なハイブリッド検索を実現できます。
@@ -14,6 +16,8 @@ import { GithubLink } from "@/components/github-link";
 - 追加の条件に基づいて検索結果を絞り込むためのメタデータフィルター
 
 この例では、Mastra と PGVector を使ったハイブリッドベクター検索の方法を示します。
+
+
 
 ## 概要
 
@@ -26,6 +30,8 @@ import { GithubLink } from "@/components/github-link";
 > **注意**: ドキュメントからメタデータを抽出する方法の例については、[Metadata Extraction](../embedding/metadata-extraction.mdx) ガイドをご覧ください。
 >
 > 埋め込みの作成と保存方法については、[Upsert Embeddings](/examples/rag/upsert/upsert-embeddings) ガイドをご参照ください。
+
+
 
 ## セットアップ
 
@@ -48,13 +54,19 @@ import { PgVector } from "@mastra/pg";
 import { openai } from "@ai-sdk/openai";
 ```
 
+
+
 ## ベクターストアの初期化
 
 接続文字列を使ってPgVectorを初期化します：
 
 ```typescript copy showLineNumbers{4} filename="src/index.ts"
-const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
+const pgVector = new PgVector({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+});
 ```
+
+
 
 ## 使用例
 

@@ -1,0 +1,39 @@
+---
+title: "リファレンス: Mastra.setStorage() | Core | Mastra ドキュメント"
+description: "Mastra の `Mastra.setStorage()` メソッドのドキュメント。Mastra インスタンスに対して使用するストレージインスタンスを設定します。"
+---
+
+# Mastra.setStorage()
+
+`.setStorage()` メソッドは、Mastra インスタンスに使用するストレージインスタンスを設定します。このメソッドは、`MastraStorage` を1つだけ受け取ります。
+
+## 使い方の例
+
+```typescript copy
+mastra.setStorage(
+  new LibSQLStore({
+    url: ":memory:"
+  })
+);
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "storage",
+      type: "MastraStorage",
+      description: "Mastra インスタンスに設定するストレージのインスタンス。",
+    },
+  ]}
+/>
+
+## 戻り値
+
+このメソッドは値を返しません。
+
+## 関連項目
+
+- [Storage の概要](../../docs/server-db/storage.mdx)
+- [Storage リファレンス](../../reference/storage/libsql.mdx)

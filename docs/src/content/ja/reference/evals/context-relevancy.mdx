@@ -1,11 +1,19 @@
 ---
-title: "リファレンス: コンテキスト関連性 | Evals | Mastra Docs"
-description: RAGパイプラインで取得されたコンテキストの関連性を評価する、コンテキスト関連性メトリクスのドキュメント。
+title: "リファレンス: Context Relevancy | Evals | Mastra Docs"
+description: RAGパイプラインにおける取得されたコンテキストの関連性を評価するContext Relevancyメトリックのドキュメント。
 ---
+
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
 
 # ContextRelevancyMetric
 
-`ContextRelevancyMetric` クラスは、RAG（Retrieval-Augmented Generation）パイプラインのリトリーバーが取得したコンテキストが入力クエリにどれだけ関連しているかを測定することで、その品質を評価します。このクラスは、まずコンテキストからステートメントを抽出し、それらが入力にどれだけ関連しているかを評価する、LLMベースの評価システムを使用します。
+<ScorerCallout />
+
+`ContextRelevancyMetric`クラスは、取得されたコンテキストが入力クエリにどの程度関連しているかを測定することで、RAG（Retrieval-Augmented Generation）パイプラインのリトリーバーの品質を評価します。このクラスは、まずコンテキストからステートメントを抽出し、次にそれらの入力に対する関連性を評価するLLMベースの評価システムを使用します。
+
+
 
 ## 基本的な使い方
 
@@ -34,6 +42,8 @@ console.log(result.score); // Score from 0-1
 console.log(result.info.reason); // Explanation of the relevancy assessment
 ```
 
+
+
 ## コンストラクタのパラメータ
 
 <PropertiesTable
@@ -41,7 +51,8 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
     {
       name: "model",
       type: "LanguageModel",
-      description: "コンテキストの関連性を評価するために使用されるモデルの設定",
+      description:
+        "コンテキストの関連性を評価するために使用されるモデルの設定",
       isOptional: false,
     },
     {
@@ -74,6 +85,8 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
   ]}
 />
 
+
+
 ## measure() のパラメーター
 
 <PropertiesTable
@@ -92,6 +105,8 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
     },
   ]}
 />
+
+
 
 ## 戻り値
 
@@ -122,6 +137,8 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
   ]}
 />
 
+
+
 ## スコアリングの詳細
 
 このメトリックは、取得されたコンテキストがクエリにどれだけ適合しているかを、バイナリ関連性分類によって評価します。
@@ -149,6 +166,8 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
 - 0.4-0.6: 中程度の関連性 - 関連するコンテキストと無関係なコンテキストが混在している
 - 0.1-0.3: 低い関連性 - ほとんどが無関係なコンテキスト
 - 0.0: 関連性なし - 完全に無関係なコンテキスト
+
+
 
 ## カスタム設定の例
 
@@ -184,6 +203,8 @@ const result = await metric.measure(
 //   }
 // }
 ```
+
+
 
 ## 関連
 

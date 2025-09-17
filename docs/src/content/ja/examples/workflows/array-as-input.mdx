@@ -1,0 +1,86 @@
+---
+title: "例: 配列を入力として扱う (.foreach()) | Workflows | Mastra Docs"
+description: ワークフローで .foreach() を使って配列を処理する際の Mastra の使用例。
+---
+
+
+
+# 入力としての配列
+
+一部のワークフローでは、配列内の各要素に同じ処理を行う必要があります。この例では、`.foreach()` を使って文字列のリストをループし、各要素に同じステップを適用して、変換後の配列を出力として生成する方法を示します。
+
+
+
+## `.foreach()` を使った繰り返し
+
+この例では、ワークフローは `.foreach()` を使って、入力配列内の各文字列に `mapStep` ステップを適用します。各アイテムについて、元の値の末尾に文字列 `" mapStep"` を付与します。すべてのアイテムの処理が終わると、`step2` が実行され、更新された配列が出力に渡されます。
+
+```typescript filename="src/mastra/workflows/example-looping-foreach.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const mapStep = createStep({
+  id: "map-step",
+  description: "adds mapStep suffix to input value",
+  inputSchema: z.string(),
+  outputSchema: z.object({
+    value: z.string()
+  }),
+  execute: async ({ inputData }) => {
+    return {
+      value: `${inputData} mapStep`
+    };
+  }
+});
+
+const step2 = createStep({
+  id: "step-2",
+  description: "passes value from input to output",
+  inputSchema: z.array(
+    z.object({
+      value: z.string()
+    })
+  ),
+  outputSchema: z.array(
+    z.object({
+      value: z.string()
+    })
+  ),
+  execute: async ({ inputData }) => {
+    return inputData.map(({ value }) => ({
+      value: value
+    }));
+  }
+});
+
+export const loopingForeach = createWorkflow({
+  id: "foreach-workflow",
+  inputSchema: z.array(z.string()),
+  outputSchema: z.array(
+    z.object({
+      value: z.string()
+    })
+  )
+})
+  .foreach(mapStep)
+  .then(step2)
+  .commit();
+
+```
+
+> この例は複数の文字列入力で実行してください。
+
+
+
+## 関連項目
+
+- [ワークフローを実行する](./running-workflows.mdx)
+
+
+
+## ワークフロー（レガシー）
+
+以下のリンクは、旧ワークフローに関するサンプルドキュメントです。
+
+- [シンプルなワークフローの作成（レガシー）](/examples/workflows_legacy/creating-a-workflow)
+- [ワークフロー変数を使用したデータマッピング（レガシー）](/examples/workflows_legacy/workflow-variables)

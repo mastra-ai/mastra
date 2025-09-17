@@ -1,8 +1,7 @@
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
-import { rollup } from 'rollup';
 import { join } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, rm } from 'fs/promises';
+import { mkdtemp, rm, readFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
@@ -35,19 +34,9 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
   describe('tsconfig paths', { timeout: 60 * 1000 }, () => {
     it('should resolve paths', async () => {
       const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
-      const bundle = await rollup({
-        logLevel: 'silent',
-        input: inputFile,
-      });
+      const content = await readFile(inputFile, 'utf-8');
 
-      const result = await bundle.generate({
-        format: 'esm',
-      });
-      let hasMappedPkg = false;
-      for (const output of Object.values(result.output)) {
-        // @ts-expect-error - dont want to narrow the type
-        hasMappedPkg = hasMappedPkg || output.imports?.includes('@/agents');
-      }
+      const hasMappedPkg = content.includes('@/agents');
 
       expect(hasMappedPkg).toBeFalsy();
     });

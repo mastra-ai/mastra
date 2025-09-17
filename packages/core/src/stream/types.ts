@@ -5,6 +5,7 @@ import type {
   SharedV2ProviderMetadata,
   LanguageModelV2CallWarning,
   LanguageModelV2ResponseMetadata,
+  LanguageModelV2,
 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1StreamPart, LanguageModelRequestMetadata } from 'ai';
 import type { CoreMessage, StepResult } from 'ai-v5';
@@ -165,7 +166,7 @@ interface StepStartPayload {
   [key: string]: any;
 }
 
-interface StepFinishPayload {
+export interface StepFinishPayload {
   id?: string;
   providerMetadata?: SharedV2ProviderMetadata;
   totalUsage?: LanguageModelV2Usage;
@@ -439,3 +440,13 @@ export interface BufferedByStep {
   toolResults: any[];
   msgCount: number;
 }
+
+export type ExecuteStreamModelManager<T> = (
+  callback: (model: LanguageModelV2, isLastModel: boolean) => Promise<T>,
+) => Promise<T>;
+
+export type ModelManagerModelConfig = {
+  model: LanguageModelV2;
+  maxRetries: number;
+  id: string;
+};

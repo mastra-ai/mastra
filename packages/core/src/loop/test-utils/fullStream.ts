@@ -7,7 +7,7 @@ import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import {
-  createTestModel,
+  createTestModels,
   defaultSettings,
   mockDate,
   modelWithFiles,
@@ -45,45 +45,51 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       );
       const result = loopFn({
         runId,
-        model: new MockLanguageModelV2({
-          doStream: async ({ prompt }) => {
-            expect(prompt).toStrictEqual([
-              {
-                role: 'user',
-                content: [{ type: 'text', text: 'test-input' }],
-              },
-              {
-                role: 'assistant',
-                content: [{ type: 'text', text: 'test-input' }],
-              },
-              {
-                role: 'user',
-                content: [{ type: 'text', text: 'test-input' }],
-              },
-            ]);
+        models: [
+          {
+            maxRetries: 0,
+            id: 'test-model',
+            model: new MockLanguageModelV2({
+              doStream: async ({ prompt }) => {
+                expect(prompt).toStrictEqual([
+                  {
+                    role: 'user',
+                    content: [{ type: 'text', text: 'test-input' }],
+                  },
+                  {
+                    role: 'assistant',
+                    content: [{ type: 'text', text: 'test-input' }],
+                  },
+                  {
+                    role: 'user',
+                    content: [{ type: 'text', text: 'test-input' }],
+                  },
+                ]);
 
-            return {
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'response-metadata',
-                  id: 'response-id',
-                  modelId: 'response-model-id',
-                  timestamp: new Date(5000),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: `world!` },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: testUsage,
-                },
-              ]),
-            };
+                return {
+                  stream: convertArrayToReadableStream([
+                    {
+                      type: 'response-metadata',
+                      id: 'response-id',
+                      modelId: 'response-model-id',
+                      timestamp: new Date(5000),
+                    },
+                    { type: 'text-start', id: '1' },
+                    { type: 'text-delta', id: '1', delta: 'Hello' },
+                    { type: 'text-delta', id: '1', delta: ', ' },
+                    { type: 'text-delta', id: '1', delta: `world!` },
+                    { type: 'text-end', id: '1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: testUsage,
+                    },
+                  ]),
+                };
+              },
+            }),
           },
-        }),
+        ],
         messageList,
         _internal: {
           generateId: mockId({ prefix: 'id' }),
@@ -140,20 +146,16 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             },
             "type": "finish-step",
             "usage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
           },
           {
             "finishReason": "stop",
             "totalUsage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
             "type": "finish",
@@ -173,38 +175,44 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       );
       const result = await loopFn({
         runId,
-        model: new MockLanguageModelV2({
-          doStream: async ({ prompt }) => {
-            expect(prompt).toStrictEqual([
-              {
-                role: 'user',
-                content: [{ type: 'text', text: 'test-input' }],
-                // providerOptions: undefined,
-              },
-            ]);
+        models: [
+          {
+            maxRetries: 0,
+            id: 'test-model',
+            model: new MockLanguageModelV2({
+              doStream: async ({ prompt }) => {
+                expect(prompt).toStrictEqual([
+                  {
+                    role: 'user',
+                    content: [{ type: 'text', text: 'test-input' }],
+                    // providerOptions: undefined,
+                  },
+                ]);
 
-            return {
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'response-metadata',
-                  id: 'response-id',
-                  modelId: 'response-model-id',
-                  timestamp: new Date(5000),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: `world!` },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: testUsage,
-                },
-              ]),
-            };
+                return {
+                  stream: convertArrayToReadableStream([
+                    {
+                      type: 'response-metadata',
+                      id: 'response-id',
+                      modelId: 'response-model-id',
+                      timestamp: new Date(5000),
+                    },
+                    { type: 'text-start', id: '1' },
+                    { type: 'text-delta', id: '1', delta: 'Hello' },
+                    { type: 'text-delta', id: '1', delta: ', ' },
+                    { type: 'text-delta', id: '1', delta: `world!` },
+                    { type: 'text-end', id: '1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: testUsage,
+                    },
+                  ]),
+                };
+              },
+            }),
           },
-        }),
+        ],
         messageList,
         _internal: {
           generateId: mockId({ prefix: 'id' }),
@@ -261,20 +269,16 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             },
             "type": "finish-step",
             "usage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
           },
           {
             "finishReason": "stop",
             "totalUsage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
             "type": "finish",
@@ -288,7 +292,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const result = await loopFn({
         runId,
-        model: modelWithReasoning,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         messageList,
         ...defaultSettings(),
       });
@@ -474,20 +478,16 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             },
             "type": "finish-step",
             "usage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
           },
           {
             "finishReason": "stop",
             "totalUsage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
             "type": "finish",
@@ -501,7 +501,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const result = await loopFn({
         runId,
-        model: modelWithSources,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
         messageList,
         ...defaultSettings(),
       });
@@ -567,24 +567,22 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               "headers": undefined,
               "id": "id-0",
               "modelId": "mock-model-id",
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
               "timestamp": 1970-01-01T00:00:00.000Z,
             },
             "type": "finish-step",
             "usage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
           },
           {
             "finishReason": "stop",
             "totalUsage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
             "type": "finish",
@@ -599,7 +597,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       const result = await loopFn({
         runId,
         messageList,
-        model: modelWithFiles,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
         ...defaultSettings(),
       });
 
@@ -656,24 +654,22 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               "headers": undefined,
               "id": "id-0",
               "modelId": "mock-model-id",
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
               "timestamp": 1970-01-01T00:00:00.000Z,
             },
             "type": "finish-step",
             "usage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
           },
           {
             "finishReason": "stop",
             "totalUsage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
             "type": "finish",
@@ -695,32 +691,38 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       const result = await loopFn({
         runId,
         messageList,
-        model: new MockLanguageModelV2({
-          doStream: async ({ prompt }) => {
-            expect(prompt).toStrictEqual([
-              {
-                role: 'user',
-                content: [{ type: 'text', text: 'test-input' }],
-                // providerOptions: undefined,
-              },
-            ]);
+        models: [
+          {
+            maxRetries: 0,
+            id: 'test-model',
+            model: new MockLanguageModelV2({
+              doStream: async ({ prompt }) => {
+                expect(prompt).toStrictEqual([
+                  {
+                    role: 'user',
+                    content: [{ type: 'text', text: 'test-input' }],
+                    // providerOptions: undefined,
+                  },
+                ]);
 
-            return {
-              stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: `world!` },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: testUsage,
-                },
-              ]),
-            };
+                return {
+                  stream: convertArrayToReadableStream([
+                    { type: 'text-start', id: '1' },
+                    { type: 'text-delta', id: '1', delta: 'Hello' },
+                    { type: 'text-delta', id: '1', delta: ', ' },
+                    { type: 'text-delta', id: '1', delta: `world!` },
+                    { type: 'text-end', id: '1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: testUsage,
+                    },
+                  ]),
+                };
+              },
+            }),
           },
-        }),
+        ],
         _internal: {
           currentDate: mockValues(new Date(2000)),
           generateId: mockValues('id-2000'),
@@ -772,24 +774,22 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               "headers": undefined,
               "id": "id-2000",
               "modelId": "mock-model-id",
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
               "timestamp": 1970-01-01T00:00:02.000Z,
             },
             "type": "finish-step",
             "usage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
           },
           {
             "finishReason": "stop",
             "totalUsage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
             "type": "finish",
@@ -811,62 +811,68 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       const result = await loopFn({
         runId,
         messageList,
-        model: new MockLanguageModelV2({
-          doStream: async ({ prompt, tools, toolChoice }) => {
-            expect(tools).toStrictEqual([
-              {
-                type: 'function',
-                name: 'tool1',
-                description: undefined,
-                inputSchema: {
-                  $schema: 'http://json-schema.org/draft-07/schema#',
-                  additionalProperties: false,
-                  properties: { value: { type: 'string' } },
-                  required: ['value'],
-                  type: 'object',
-                },
-                providerOptions: undefined,
-              },
-            ]);
-
-            expect(toolChoice).toStrictEqual({ type: 'required' });
-
-            expect(prompt).toStrictEqual([
-              {
-                role: 'user',
-                content: [{ type: 'text', text: 'test-input' }],
-                // providerOptions: undefined,
-              },
-            ]);
-
-            return {
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                {
-                  type: 'tool-call',
-                  toolCallId: 'call-1',
-                  toolName: 'tool1',
-                  input: `{ "value": "value" }`,
-                  providerMetadata: {
-                    testProvider: {
-                      signature: 'sig',
+        models: [
+          {
+            maxRetries: 0,
+            id: 'test-model',
+            model: new MockLanguageModelV2({
+              doStream: async ({ prompt, tools, toolChoice }) => {
+                expect(tools).toStrictEqual([
+                  {
+                    type: 'function',
+                    name: 'tool1',
+                    description: undefined,
+                    inputSchema: {
+                      $schema: 'http://json-schema.org/draft-07/schema#',
+                      additionalProperties: false,
+                      properties: { value: { type: 'string' } },
+                      required: ['value'],
+                      type: 'object',
                     },
+                    providerOptions: undefined,
                   },
-                },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: testUsage,
-                },
-              ]),
-            };
+                ]);
+
+                expect(toolChoice).toStrictEqual({ type: 'required' });
+
+                expect(prompt).toStrictEqual([
+                  {
+                    role: 'user',
+                    content: [{ type: 'text', text: 'test-input' }],
+                    // providerOptions: undefined,
+                  },
+                ]);
+
+                return {
+                  stream: convertArrayToReadableStream([
+                    {
+                      type: 'response-metadata',
+                      id: 'id-0',
+                      modelId: 'mock-model-id',
+                      timestamp: new Date(0),
+                    },
+                    {
+                      type: 'tool-call',
+                      toolCallId: 'call-1',
+                      toolName: 'tool1',
+                      input: `{ "value": "value" }`,
+                      providerMetadata: {
+                        testProvider: {
+                          signature: 'sig',
+                        },
+                      },
+                    },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: testUsage,
+                    },
+                  ]),
+                };
+              },
+            }),
           },
-        }),
+        ],
         tools: {
           tool1: tool({
             inputSchema: z.object({ value: z.string() }),
@@ -893,7 +899,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const result = await loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -1094,7 +1100,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const result = await loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -1119,7 +1125,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
           tool1: tool({
             inputSchema: z.object({ value: z.string() }),
             execute: async (input, options) => {
-              console.log('TOOL 1', input, options);
+              console.info('TOOL 1', input, options);
 
               expect(input).toStrictEqual({ value: 'value' });
               expect(options.messages).toStrictEqual([
@@ -1155,7 +1161,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const result = await loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -1210,7 +1216,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const result = await loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -1291,20 +1297,16 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             },
             "type": "finish-step",
             "usage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
           },
           {
             "finishReason": "stop",
             "totalUsage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
             "type": "finish",

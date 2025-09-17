@@ -5,51 +5,42 @@ description: Mastraでのフォルダとファイルの整理に関するガイ�
 
 import { FileTree } from "nextra/components";
 
+
+
 # プロジェクト構造
 
-このページでは、Mastraでフォルダとファイルを整理するためのガイドを提供します。Mastraはモジュラーフレームワークであり、各モジュールを個別に、または組み合わせて使用することができます。
+このページではMastraでのフォルダとファイルの整理方法についてのガイドを提供します。Mastraはモジュラーフレームワークであり、各モジュールを個別に、または組み合わせて使用することができます。
 
-すべてを1つのファイルに記述することも（クイックスタートで示したように）、各エージェント、ツール、ワークフローを独自のファイルに分けることもできます。
+すべてを1つのファイルに書くこともできますし、各エージェント、ツール、ワークフローを独自のファイルに分けることもできます。
 
 特定のフォルダ構造を強制することはありませんが、いくつかのベストプラクティスを推奨しており、CLIは適切な構造でプロジェクトをスキャフォールドします。
 
-## CLIの使用
 
-`mastra init`はインタラクティブなCLIで、以下のことができます：
 
-- **Mastraファイルのディレクトリを選択する**：Mastraファイルを配置する場所を指定します（デフォルトは`src/mastra`）。
-- **インストールするコンポーネントを選択する**：プロジェクトに含めたいコンポーネントを選択します：
-  - エージェント
-  - ツール
-  - ワークフロー
-- **デフォルトのLLMプロバイダーを選択する**：OpenAI、Anthropic、Groq、GoogleやCerebrasなどのサポートされているプロバイダーから選択します。
-- **サンプルコードを含める**：開始するのに役立つサンプルコードを含めるかどうかを決定します。
-- **Mastra docs MCPサーバーをインストールする**：あなたのAI IDEをMastraのエキスパートにします
+## プロジェクト構造の例
 
-### プロジェクト構造の例
-
-すべてのコンポーネントを選択し、サンプルコードを含める場合、プロジェクト構造は次のようになります：
+CLIで作成されたデフォルトプロジェクトは次のような構造になります：
 
 <FileTree>
-  <FileTree.Folder name="root" defaultOpen>
-    <FileTree.Folder name="src" defaultOpen>
-      <FileTree.Folder name="mastra" defaultOpen>
-        <FileTree.Folder name="agents" defaultOpen>
-          <FileTree.File name="index.ts" />
-        </FileTree.Folder>
-        <FileTree.Folder name="tools" defaultOpen>
-          <FileTree.File name="index.ts" />
-        </FileTree.Folder>
-        <FileTree.Folder name="workflows" defaultOpen>
-          <FileTree.File name="index.ts" />
-        </FileTree.Folder>
-        <FileTree.File name="index.ts" />
+  <FileTree.Folder name="src" defaultOpen>
+    <FileTree.Folder name="mastra" defaultOpen>
+      <FileTree.Folder name="agents" defaultOpen>
+        <FileTree.File name="agent-name.ts" />
       </FileTree.Folder>
+      <FileTree.Folder name="tools" defaultOpen>
+        <FileTree.File name="tool-name.ts" />
+      </FileTree.Folder>
+      <FileTree.Folder name="workflows" defaultOpen>
+        <FileTree.File name="workflow-name.ts" />
+      </FileTree.Folder>
+      <FileTree.File name="index.ts" />
     </FileTree.Folder>
-    <FileTree.File name=".env" />
   </FileTree.Folder>
+  <FileTree.File name=".env" />
+  <FileTree.File name="package.json" />
+  <FileTree.File name="tsconfig.json" />
 </FileTree>
-{/* 
+{/*
 ```
 root/
 ├── src/
@@ -62,20 +53,24 @@ root/
 │       │   └── index.ts
 │       ├── index.ts
 ├── .env
+├── package.json
+├── tssconfig.json
 ``` */}
 
 ### トップレベルフォルダ
 
-| フォルダ               | 説明                         |
-| ---------------------- | ---------------------------- |
-| `src/mastra`           | コアアプリケーションフォルダ |
-| `src/mastra/agents`    | エージェントの設定と定義     |
-| `src/mastra/tools`     | カスタムツールの定義         |
-| `src/mastra/workflows` | ワークフローの定義           |
+| フォルダ               | 説明                                 |
+| ---------------------- | ------------------------------------ |
+| `src/mastra`           | コアアプリケーションフォルダ         |
+| `src/mastra/agents`    | エージェントの設定と定義             |
+| `src/mastra/tools`     | カスタムツールの定義                 |
+| `src/mastra/workflows` | ワークフローの定義                   |
 
 ### トップレベルファイル
 
-| ファイル              | 説明                       |
-| --------------------- | -------------------------- |
-| `src/mastra/index.ts` | Mastraのメイン設定ファイル |
-| `.env`                | 環境変数                   |
+| ファイル              | 説明                                                |
+| --------------------- | --------------------------------------------------- |
+| `src/mastra/index.ts` | Mastraのメイン設定ファイル                          |
+| `.env`                | 環境変数                                            |
+| `package.json`        | Node.jsプロジェクトのメタデータ、スクリプト、依存関係 |
+| `tsconfig.json`       | TypeScriptコンパイラの設定                          |

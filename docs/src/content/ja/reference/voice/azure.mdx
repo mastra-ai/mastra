@@ -3,9 +3,13 @@ title: "リファレンス: Azure Voice | 音声プロバイダー | Mastra ド�
 description: "Azure Cognitive Services を使用したテキスト読み上げおよび音声認識機能を提供する AzureVoice クラスのドキュメント。"
 ---
 
+
+
 # Azure
 
 MastraのAzureVoiceクラスは、Microsoft Azure Cognitive Servicesを利用してテキスト読み上げ（テキスト・トゥ・スピーチ）および音声認識（スピーチ・トゥ・テキスト）機能を提供します。
+
+
 
 ## 使用例
 
@@ -39,6 +43,8 @@ const text = await voice.listen(audioStream, {
   language: "en-US",
 });
 ```
+
+
 
 ## 設定
 
@@ -93,6 +99,8 @@ const text = await voice.listen(audioStream, {
     },
   ]}
 />
+
+
 
 ## メソッド
 
@@ -178,7 +186,8 @@ Azure の音声認識サービスを使用して音声をテキストに書き�
     {
       name: "voiceId",
       type: "string",
-      description: "音声の一意な識別子（例: 'en-US-JennyNeural'）",
+      description:
+        "音声の一意な識別子（例: 'en-US-JennyNeural'）",
       isOptional: false,
     },
     {
@@ -207,6 +216,8 @@ Azure の音声認識サービスを使用して音声をテキストに書き�
     },
   ]}
 />
+
+
 
 ## 注意事項
 

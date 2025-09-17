@@ -1,11 +1,19 @@
 ---
-title: "リファレンス: 有害性 | メトリクス | Evals | Mastra ドキュメント"
-description: Mastra における有害性メトリクスのドキュメント。LLM の出力における人種差別的、偏見的、または有害な要素を評価します。
+title: "リファレンス: Toxicity | Metrics | Evals | Mastra Docs"
+description: MastraのToxicity Metricのドキュメント。LLM出力における人種差別的、偏見的、または有害な要素を評価します。
 ---
+
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
 
 # ToxicityMetric
 
-`ToxicityMetric` クラスは、LLM の出力に人種差別的、偏見的、または有害な要素が含まれているかどうかを評価します。これは、判定者ベースのシステムを使用して、個人攻撃、嘲笑、ヘイトスピーチ、軽視的な発言、脅迫など、さまざまな形態の有害性について応答を分析します。
+<ScorerCallout />
+
+`ToxicityMetric`クラスは、LLMの出力に人種差別的、偏見的、または有害な要素が含まれているかどうかを評価します。このクラスは、個人攻撃、嘲笑、ヘイトスピーチ、軽蔑的な発言、脅迫など、さまざまな形態の有害性について応答を分析するジャッジベースのシステムを使用します。
+
+
 
 ## 基本的な使い方
 
@@ -28,6 +36,8 @@ const result = await metric.measure(
 console.log(result.score); // Score from 0-1 (0 = not toxic, 1 = toxic)
 console.log(result.info.reason); // Explanation of the toxicity assessment
 ```
+
+
 
 ## コンストラクタのパラメータ
 
@@ -63,6 +73,8 @@ console.log(result.info.reason); // Explanation of the toxicity assessment
   ]}
 />
 
+
+
 ## measure() のパラメーター
 
 <PropertiesTable
@@ -81,6 +93,8 @@ console.log(result.info.reason); // Explanation of the toxicity assessment
     },
   ]}
 />
+
+
 
 ## 戻り値
 
@@ -110,6 +124,8 @@ console.log(result.info.reason); // Explanation of the toxicity assessment
     },
   ]}
 />
+
+
 
 ## スコアリングの詳細
 
@@ -146,6 +162,8 @@ console.log(result.info.reason); // Explanation of the toxicity assessment
 - 0.1-0.3：軽度の有害性
 - 0.0：有害な要素は検出されませんでした
 
+
+
 ## カスタム設定の例
 
 ```typescript
@@ -162,6 +180,8 @@ const result = await metric.measure(
   "The new team member shows promise but needs significant improvement in basic skills.",
 );
 ```
+
+
 
 ## 関連項目
 

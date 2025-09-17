@@ -1,6 +1,7 @@
 import type { ChildProcess } from 'child_process';
 import process from 'node:process';
 import { join } from 'path';
+import devcert from '@expo/devcert';
 import { FileService } from '@mastra/deployer';
 import { getServerOptions } from '@mastra/deployer/build';
 import { isWebContainer } from '@webcontainer/env';
@@ -17,6 +18,18 @@ let isRestarting = false;
 let serverStartTime: number | undefined;
 const ON_ERROR_MAX_RESTARTS = 3;
 
+interface HTTPSOptions {
+  key: Buffer;
+  cert: Buffer;
+}
+
+interface StartOptions {
+  inspect?: boolean;
+  inspectBrk?: boolean;
+  customArgs?: string[];
+  https?: HTTPSOptions;
+}
+
 const startServer = async (
   dotMastraPath: string,
   {
@@ -27,7 +40,7 @@ const startServer = async (
     host: string;
   },
   env: Map<string, string>,
-  startOptions: { inspect?: boolean; inspectBrk?: boolean; customArgs?: string[] } = {},
+  startOptions: StartOptions = {},
   errorRestartCount = 0,
 ) => {
   let serverIsReady = false;
@@ -68,6 +81,12 @@ const startServer = async (
         MASTRA_DEV: 'true',
         PORT: port.toString(),
         MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
+        ...(startOptions?.https
+          ? {
+              MASTRA_HTTPS_KEY: startOptions.https.key.toString('base64'),
+              MASTRA_HTTPS_CERT: startOptions.https.cert.toString('base64'),
+            }
+          : {}),
       },
       stdio: ['inherit', 'pipe', 'pipe', 'ipc'],
       reject: false,
@@ -112,7 +131,7 @@ const startServer = async (
     currentServerProcess.on('message', async (message: any) => {
       if (message?.type === 'server-ready') {
         serverIsReady = true;
-        devLogger.ready(host, port, serverStartTime);
+        devLogger.ready(host, port, serverStartTime, startOptions.https);
         devLogger.watching();
 
         // Send refresh signal
@@ -188,7 +207,7 @@ async function checkAndRestart(
     host: string;
   },
   bundler: DevBundler,
-  startOptions: { inspect?: boolean; inspectBrk?: boolean; customArgs?: string[] } = {},
+  startOptions: StartOptions = {},
 ) {
   if (isRestarting) {
     return;
@@ -224,7 +243,7 @@ async function rebundleAndRestart(
     host: string;
   },
   bundler: DevBundler,
-  startOptions: { inspect?: boolean; inspectBrk?: boolean; customArgs?: string[] } = {},
+  startOptions: StartOptions = {},
 ) {
   if (isRestarting) {
     return;
@@ -269,6 +288,7 @@ export async function dev({
   inspect,
   inspectBrk,
   customArgs,
+  https,
 }: {
   dir?: string;
   root?: string;
@@ -278,6 +298,7 @@ export async function dev({
   inspect?: boolean;
   inspectBrk?: boolean;
   customArgs?: string[];
+  https?: boolean;
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
@@ -289,10 +310,9 @@ export async function dev({
     `!${join(mastraDir, 'tools/**/*.{test,spec}.{js,ts}')}`,
     `!${join(mastraDir, 'tools/**/__tests__/**')}`,
   ];
-  // We pass an array to globby to allow for the aforementioned negations
+  // We pass an array to tinyglobby to allow for the aforementioned negations
   const defaultTools = [defaultToolsPath, ...defaultToolsIgnorePaths];
   const discoveredTools = [defaultTools, ...(tools ?? [])];
-  const startOptions = { inspect, inspectBrk, customArgs };
 
   const fileService = new FileService();
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
@@ -318,6 +338,27 @@ export async function dev({
       }),
     );
   }
+
+  let httpsOptions: HTTPSOptions | undefined = undefined;
+
+  /**
+   * A user can enable HTTPS in two ways:
+   * 1. By passing the --https flag to the dev command (we then generate a cert for them)
+   * 2. By specifying https options in the mastra server config
+   *
+   * If both are specified, the config options takes precedence.
+   */
+  if (https && serverOptions?.https) {
+    devLogger.warn('--https flag and server.https config are both specified. Using server.https config.');
+  }
+  if (serverOptions?.https) {
+    httpsOptions = serverOptions.https;
+  } else if (https) {
+    const { key, cert } = await devcert.certificateFor(serverOptions?.host ?? 'localhost');
+    httpsOptions = { key, cert };
+  }
+
+  const startOptions: StartOptions = { inspect, inspectBrk, customArgs, https: httpsOptions };
 
   await bundler.prepare(dotMastraPath);
 

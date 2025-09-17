@@ -1,0 +1,461 @@
+---
+title: "リファレンス: カスタムスコアラーの作成 | スコアラー | Mastra ドキュメント"
+description: Mastra でカスタムスコアラーを作成するためのドキュメント。ユーザーは JavaScript 関数または LLM ベースのプロンプトを用いて、独自の評価ロジックを定義できます。
+---
+
+
+
+# createScorer
+
+Mastra は、入出力ペアを評価するためのカスタムスコアラーを定義できる、統一的な `createScorer` ファクトリを提供します。各評価ステップでは、ネイティブの JavaScript 関数または LLM ベースのプロンプトオブジェクトを使用できます。カスタムスコアラーは、Agents や Workflow のステップに追加できます。
+
+
+
+## カスタムスコアラーの作成方法
+
+`createScorer` ファクトリを使って、名前、説明、任意の judge 設定を指定し、スコアラーを定義します。続いてステップメソッドをチェーンして評価パイプラインを構築します。最低でも `generateScore` ステップは必須です。
+
+```typescript
+const scorer = createScorer({
+  name: "My Custom Scorer",
+  description: "Evaluates responses based on custom criteria",
+  judge: {
+    model: myModel,
+    instructions: "You are an expert evaluator..."
+  }
+})
+.preprocess({ /* step config */ })
+.analyze({ /* step config */ })
+.generateScore(({ run, results }) => {
+  // 数値を返す
+})
+.generateReason({ /* step config */ });
+```
+
+
+
+## createScorer のオプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      required: true,
+      description: "スコアラーの名前。",
+    },
+    {
+      name: "description",
+      type: "string",
+      required: true,
+      description: "スコアラーの機能の説明。",
+    },
+    {
+      name: "judge",
+      type: "object",
+      required: false,
+      description: "LLM を用いるステップ向けの任意のジャッジ設定。下記の Judge Object セクションを参照。",
+    },
+  ]}
+/>
+
+この関数は、ステップメソッドをチェーンできるスコアラービルダーを返します。`.run()` メソッドとその入出力の詳細は、[MastraScorer リファレンス](./mastra-scorer)を参照してください。
+
+
+
+## Judge オブジェクト
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      required: true,
+      description: "評価に使用する LLM のモデルインスタンス。",
+    },
+    {
+      name: "instructions",
+      type: "string",
+      required: true,
+      description: "LLM 用のシステムプロンプト／指示。",
+    },
+  ]}
+/>
+
+
+
+## 型安全性
+
+より良い型推論と IntelliSense のサポートのために、scorer を作成する際に入出力の型を指定できます:
+
+```typescript
+import { createScorer, ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scorers';
+
+// エージェント評価における完全な型安全性のために
+const agentScorer = createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  name: 'Agent Response Quality',
+  description: 'Evaluates agent responses'
+})
+.preprocess(({ run }) => {
+  // run.input は ScorerRunInputForAgent として型付けされています
+  const userMessage = run.input.inputMessages[0]?.content;
+  return { userMessage };
+})
+.generateScore(({ run, results }) => {
+  // run.output は ScorerRunOutputForAgent として型付けされています
+  const response = run.output[0]?.content;
+  return response.length > 10 ? 1.0 : 0.5;
+});
+
+// カスタムの入出力型を使う場合
+type CustomInput = { query: string; context: string[] };
+type CustomOutput = { answer: string; confidence: number };
+
+const customScorer = createScorer<CustomInput, CustomOutput>({
+  name: 'Custom Scorer',
+  description: 'Evaluates custom data'
+})
+.generateScore(({ run }) => run.output.confidence);
+```
+
+### 組み込みのエージェント型
+
+- **`ScorerRunInputForAgent`** - エージェント評価用の `inputMessages`、`rememberedMessages`、`systemMessages`、`taggedSystemMessages` を含みます
+- **`ScorerRunOutputForAgent`** - エージェントの応答メッセージの配列
+
+これらの型を使用することで、オートコンプリート、コンパイル時検証、スコアリングロジックのドキュメント性が向上します。
+
+
+
+## ステップメソッドのシグネチャ
+
+### preprocess
+
+分析の前にデータを抽出または変換できる任意の前処理ステップ。
+
+**関数モード:**
+関数: `({ run, results }) => any`
+
+<PropertiesTable
+  content={[
+    {
+      name: "run.input",
+      type: "any",
+      required: true,
+      description: "スコアラーに渡される入力レコード。スコアラーがエージェントに追加されている場合はユーザーメッセージの配列（例: `[{ role: 'user', content: 'hello world' }]`）。スコアラーがワークフローで使用される場合はワークフローの入力。",
+    },
+    {
+      name: "run.output",
+      type: "any",
+      required: true,
+      description: "スコアラーに渡される出力レコード。エージェントの場合は通常エージェントの応答。ワークフローの場合はワークフローの出力。",
+    },
+    {
+      name: "run.runId",
+      type: "string",
+      required: true,
+      description: "このスコアリング実行の一意の識別子。",
+    },
+    {
+      name: "run.runtimeContext",
+      type: "object",
+      required: false,
+      description: "評価対象のエージェントまたはワークフローステップのランタイムコンテキスト（任意）。",
+    },
+    {
+      name: "results",
+      type: "object",
+      required: true,
+      description: "空のオブジェクト（前段のステップなし）。",
+    },
+  ]}
+/>
+
+戻り値: `any`  
+このメソッドは任意の値を返せます。返り値は後続のステップで `preprocessStepResult` として利用できます。
+
+**プロンプトオブジェクトモード:**
+<PropertiesTable
+  content={[
+    {
+      name: "description",
+      type: "string",
+      required: true,
+      description: "この前処理ステップの内容（何を行うか）の説明。",
+    },
+    {
+      name: "outputSchema",
+      type: "ZodSchema",
+      required: true,
+      description: "preprocess ステップの期待される出力に対する Zod スキーマ。",
+    },
+    {
+      name: "createPrompt",
+      type: "function",
+      required: true,
+      description: "関数: ({ run, results }) => string。LLM に渡すプロンプトを返します。",
+    },
+    {
+      name: "judge",
+      type: "object",
+      required: false,
+      description: "（任意）このステップ専用の LLM ジャッジ（メインのジャッジを上書き可能）。Judge Object セクションを参照。",
+    },
+  ]}
+/>
+
+### analyze
+
+入力・出力および前処理されたデータを処理する任意の分析ステップ。
+
+**関数モード:**
+関数: `({ run, results }) => any`
+
+<PropertiesTable
+  content={[
+    {
+      name: "run.input",
+      type: "any",
+      required: true,
+      description: "スコアラーに渡される入力レコード。スコアラーがエージェントに追加されている場合はユーザーメッセージの配列（例: `[{ role: 'user', content: 'hello world' }]`）。スコアラーがワークフローで使用される場合はワークフローの入力。",
+    },
+    {
+      name: "run.output",
+      type: "any",
+      required: true,
+      description: "スコアラーに渡される出力レコード。エージェントの場合は通常エージェントの応答。ワークフローの場合はワークフローの出力。",
+    },
+    {
+      name: "run.runId",
+      type: "string",
+      required: true,
+      description: "このスコアリング実行の一意の識別子。",
+    },
+    {
+      name: "run.runtimeContext",
+      type: "object",
+      required: false,
+      description: "評価対象のエージェントまたはワークフローステップのランタイムコンテキスト（任意）。",
+    },
+    {
+      name: "results.preprocessStepResult",
+      type: "any",
+      required: false,
+      description: "preprocess ステップの結果（定義されている場合、任意）。",
+    },
+  ]}
+/>
+
+戻り値: `any`  
+このメソッドは任意の値を返せます。返り値は後続のステップで `analyzeStepResult` として利用できます。
+
+**プロンプトオブジェクトモード:**
+<PropertiesTable
+  content={[
+    {
+      name: "description",
+      type: "string",
+      required: true,
+      description: "この分析ステップの内容（何を行うか）の説明。",
+    },
+    {
+      name: "outputSchema",
+      type: "ZodSchema",
+      required: true,
+      description: "analyze ステップの期待される出力に対する Zod スキーマ。",
+    },
+    {
+      name: "createPrompt",
+      type: "function",
+      required: true,
+      description: "関数: ({ run, results }) => string。LLM に渡すプロンプトを返します。",
+    },
+    {
+      name: "judge",
+      type: "object",
+      required: false,
+      description: "（任意）このステップ専用の LLM ジャッジ（メインのジャッジを上書き可能）。Judge Object セクションを参照。",
+    },
+  ]}
+/>
+
+
+
+### generateScore
+
+最終的な数値スコアを算出するための必須ステップです。
+
+**関数モード:**
+関数: `({ run, results }) => number`
+
+<PropertiesTable
+  content={[
+    {
+      name: "run.input",
+      type: "any",
+      required: true,
+      description: "スコアラーに渡される入力レコード。スコアラーがエージェントに追加されている場合はユーザーメッセージの配列（例: `[{ role: 'user', content: 'hello world' }]`）。スコアラーをワークフローで使用する場合は、そのワークフローの入力。",
+    },
+    {
+      name: "run.output",
+      type: "any",
+      required: true,
+      description: "スコアラーに渡される出力レコード。エージェントの場合は通常エージェントの応答。ワークフローの場合はワークフローの出力。",
+    },
+    {
+      name: "run.runId",
+      type: "string",
+      required: true,
+      description: "このスコアリング実行の一意の識別子。",
+    },
+    {
+      name: "run.runtimeContext",
+      type: "object",
+      required: false,
+      description: "評価対象のエージェントまたはワークフローステップのランタイムコンテキスト（任意）。",
+    },
+    {
+      name: "results.preprocessStepResult",
+      type: "any",
+      required: false,
+      description: "preprocess ステップの結果（定義されていれば、任意）。",
+    },
+    {
+      name: "results.analyzeStepResult",
+      type: "any",
+      required: false,
+      description: "analyze ステップの結果（定義されていれば、任意）。",
+    },
+  ]}
+/>
+
+戻り値: `number`  
+このメソッドは数値スコアを返す必要があります。
+
+**プロンプトオブジェクトモード:**
+<PropertiesTable
+  content={[
+    {
+      name: "description",
+      type: "string",
+      required: true,
+      description: "このスコアリングステップの内容の説明。",
+    },
+    {
+      name: "outputSchema",
+      type: "ZodSchema",
+      required: true,
+      description: "generateScore ステップの想定出力に対する Zod スキーマ。",
+    },
+    {
+      name: "createPrompt",
+      type: "function",
+      required: true,
+      description: "関数: ({ run, results }) => string。LLM に渡すプロンプトを返します。",
+    },
+    {
+      name: "judge",
+      type: "object",
+      required: false,
+      description: "（任意）このステップ用の LLM ジャッジ（メインのジャッジを上書き可能）。詳細は Judge Object セクションを参照。",
+    },
+  ]}
+/>
+
+プロンプトオブジェクトモードを使用する場合は、LLM の出力を数値スコアに変換する `calculateScore` 関数も提供する必要があります:
+
+<PropertiesTable
+  content={[
+    {
+      name: "calculateScore",
+      type: "function",
+      required: true,
+      description: "関数: ({ run, results, analyzeStepResult }) => number。LLM の構造化出力を数値スコアに変換します。",
+    },
+  ]}
+/>
+
+### generateReason
+
+スコアの根拠を説明する任意ステップです。
+
+**関数モード:**
+関数: `({ run, results, score }) => string`
+
+<PropertiesTable
+  content={[
+    {
+      name: "run.input",
+      type: "any",
+      required: true,
+      description: "スコアラーに渡される入力レコード。スコアラーがエージェントに追加されている場合はユーザーメッセージの配列（例: `[{ role: 'user', content: 'hello world' }]`）。スコアラーをワークフローで使用する場合は、そのワークフローの入力。",
+    },
+    {
+      name: "run.output",
+      type: "any",
+      required: true,
+      description: "スコアラーに渡される出力レコード。エージェントの場合は通常エージェントの応答。ワークフローの場合はワークフローの出力。",
+    },
+    {
+      name: "run.runId",
+      type: "string",
+      required: true,
+      description: "このスコアリング実行の一意の識別子。",
+    },
+    {
+      name: "run.runtimeContext",
+      type: "object",
+      required: false,
+      description: "評価対象のエージェントまたはワークフローステップのランタイムコンテキスト（任意）。",
+    },
+    {
+      name: "results.preprocessStepResult",
+      type: "any",
+      required: false,
+      description: "preprocess ステップの結果（定義されていれば、任意）。",
+    },
+    {
+      name: "results.analyzeStepResult",
+      type: "any",
+      required: false,
+      description: "analyze ステップの結果（定義されていれば、任意）。",
+    },
+    {
+      name: "score",
+      type: "number",
+      required: true,
+      description: "generateScore ステップで算出されたスコア。",
+    },
+  ]}
+/>
+
+戻り値: `string`  
+このメソッドはスコアの説明を表す文字列を返す必要があります。
+
+**プロンプトオブジェクトモード:**
+
+
+<PropertiesTable
+  content={[
+    {
+      name: "description",
+      type: "string",
+      required: true,
+      description: "この推論ステップの内容についての説明。",
+    },
+    {
+      name: "createPrompt",
+      type: "function",
+      required: true,
+      description: "関数: ({ run, results, score }) => string。LLM に渡すプロンプトを返します。",
+    },
+    {
+      name: "judge",
+      type: "object",
+      required: false,
+      description: "（任意）このステップ用の LLM 判定器（メインの判定器を上書き可能）。Judge Object セクションを参照。",
+    },
+  ]}
+/>
+
+すべてのステップ関数は非同期関数にできます。

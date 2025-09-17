@@ -3,11 +3,10 @@ import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 
 // Import agents
-import { flashCardsAgent } from './agents/flash-cards-agent';
+import { pdfProcessorAgent } from './agents/pdf-processor-agent';
 import { contentAnalyzerAgent } from './agents/content-analyzer-agent';
-import { flashCardsGeneratorAgent } from './agents/flash-cards-generator-agent';
-import { pdfContentAgent } from './agents/pdf-content-agent';
-import { pdfSummarizationAgent } from './agents/pdf-summarization-agent';
+import { flashCardCreatorAgent } from './agents/flash-card-creator-agent';
+import { educationalImageAgent } from './agents/educational-image-agent';
 
 // Import workflows
 import { flashCardsGenerationWorkflow } from './workflows/flash-cards-generation-workflow';
@@ -17,11 +16,10 @@ export const mastra = new Mastra({
     flashCardsGenerationWorkflow,
   },
   agents: {
-    flashCardsAgent,
+    pdfProcessorAgent,
     contentAnalyzerAgent,
-    flashCardsGeneratorAgent,
-    pdfContentAgent,
-    pdfSummarizationAgent,
+    flashCardCreatorAgent,
+    educationalImageAgent,
   },
   storage: new LibSQLStore({
     url: 'file:../mastra.db',

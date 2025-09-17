@@ -1,0 +1,91 @@
+---
+title: "ツールの呼び出し | ツール | Mastra Docs"
+description: ツールエージェントの使用方法の例
+---
+
+
+
+# ツールの呼び出し
+
+Mastraで作成したツールを操作する方法は複数あります。以下では、ワークフローステップ、エージェント、コマンドラインを使用したツールの呼び出し方法について、ローカルでの迅速なテスト用の例を含めて説明します。
+
+
+
+## ワークフローステップから
+
+ツールをインポートし、必要な`context`と`runtimeContext`パラメータを指定して`execute()`を呼び出します。`runtimeContext`は、ステップの`execute`関数の引数として使用できます。
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+import { testTool } from "../tools/test-tool";
+
+const step1 = createStep({
+  // ...
+  execute: async ({ inputData, runtimeContext }) => {
+    const { value } = inputData
+
+    const response = await testTool.execute({
+      context: {
+        value
+      },
+      runtimeContext
+    })
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .then(step1)
+  .commit();
+```
+
+
+
+## エージェントから
+
+ツールは設定時にエージェントに登録されます。エージェントはユーザーのリクエストに基づいてこれらのツールを自動的に呼び出すか、エージェントのtoolsプロパティを通じて直接アクセスできます。ツールは必要なコンテキストとランタイムコンテキストで実行されます。
+
+```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+import { testTool } from "../tools/test-tool";
+
+export const testAgent = new Agent({
+  // ...
+  tools: {
+    testTool,
+  },
+});
+```
+
+
+
+## コマンドラインから
+
+ツールをローカルでテストするためのシンプルなスクリプトを作成できます。ツールを直接インポートして、ランタイムコンテキストを作成します。ツールの機能をテストするために、必要な`context`と`runtimeContext`を指定して`execute()`を呼び出します。
+
+```typescript filename="src/test-tool.ts" showLineNumbers copy
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import { testTool } from "../src/mastra/tools/test-tool";
+
+const runtimeContext = new RuntimeContext();
+
+const result = await testTool.execute({
+  context: {
+    value: 'foo'
+  },
+  runtimeContext
+});
+
+console.log(result);
+```
+
+このスクリプトをコマンドラインから実行するには、以下のコマンドを使用します：
+
+```bash
+npx tsx src/test-tool.ts
+```

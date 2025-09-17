@@ -1,0 +1,86 @@
+---
+title: "リファレンス: Workflow.then() | ワークフローの構築（レガシー） | Mastra ドキュメント"
+description: ワークフロー内の `.then()` メソッドのドキュメント。ステップ間に順次依存関係を作成します。
+---
+
+
+
+# Workflow.then()
+
+`.then()` メソッドは、ワークフローの各ステップ間に順次的な依存関係を作り、ステップが特定の順序で実行されることを保証します。
+
+
+
+## 使用方法
+
+```typescript
+workflow.step(stepOne).then(stepTwo).then(stepThree);
+```
+
+
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "step",
+      type: "Step | string",
+      description:
+        "前のステップが完了した後に実行されるステップインスタンスまたはステップID",
+      isOptional: false,
+    },
+  ]}
+/>
+
+
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "LegacyWorkflow",
+      description: "メソッドチェーン用のワークフローインスタンス",
+    },
+  ]}
+/>
+
+
+
+## バリデーション
+
+`then` を使用する場合：
+
+- 前のステップがワークフロー内に存在している必要があります
+- ステップ同士で循環参照を作成してはいけません
+- 各ステップはシーケンシャルチェーン内で一度だけ登場できます
+
+
+
+## エラー処理
+
+```typescript
+try {
+  workflow
+    .step(stepA)
+    .then(stepB)
+    .then(stepA) // Will throw error - circular dependency
+    .commit();
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.log(error.type); // 'circular_dependency'
+    console.log(error.details);
+  }
+}
+```
+
+
+
+## 関連
+
+- [step リファレンス](./step-class.mdx)
+- [after リファレンス](./after.mdx)
+- [順次ステップの例](../../examples/workflows_legacy/sequential-steps.mdx)
+- [制御フローガイド](../../docs/workflows-legacy/control-flow.mdx)

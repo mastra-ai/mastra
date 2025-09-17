@@ -1,474 +1,420 @@
 ---
-title: "Mastraをローカルにインストールする | はじめに | Mastraドキュメント"
-description: Mastraのインストール方法と、様々なLLMプロバイダーで実行するために必要な前提条件のセットアップガイド。
+title: "Mastra のインストール | はじめに | Mastra ドキュメント"
+description: さまざまな LLM プロバイダーでの実行に必要な前提条件のセットアップと、Mastra のインストール方法を解説します。
 ---
 
-import { Callout, Steps, Tabs } from "nextra/components";
-import YouTube from "@/components/youtube";
+import { Callout, Steps } from "nextra/components";
+import { Tabs, Tab } from "@/components/tabs";
 
-# Mastraをローカルにインストールする
 
-Mastraを実行するには、LLMへのアクセスが必要です。通常は、[OpenAI](https://platform.openai.com/)、[Anthropic](https://console.anthropic.com/settings/keys)、または[Google Gemini](https://ai.google.dev/gemini-api/docs)などのLLMプロバイダーからAPIキーを取得することになります。また、[Ollama](https://ollama.ai/)を使用してローカルLLMでMastraを実行することもできます。
+# Mastra をインストール
+
+Mastra を使い始めるには、大規模言語モデル（LLM）へのアクセスが必要です。既定では Mastra は [OpenAI](https://platform.openai.com/) と連携するように設定されているため、利用を開始するには API キーが必要です。
+
+Mastra は他の LLM プロバイダーにも対応しています。対応モデルの一覧とセットアップ手順は、[Model Providers](/docs/getting-started/model-providers) を参照してください。
 
 ## 前提条件
 
 - Node.js `v20.0` 以上
-- [サポートされている大規模言語モデル（LLM）](/docs/frameworks/ai-sdk)へのアクセス
+- サポート対象の[モデルプロバイダー](/docs/getting-started/model-providers)の API キー
 
-## 自動インストール
+## `create mastra` CLI でインストールする
 
-<YouTube id="spGlcTEjuXY" />
+CLI は Mastra を始める最速の方法です。`create mastra` はマシン上のどこからでも実行できます。
+
+<Callout type="warning">
+  現在の CLI は `ai-sdk v4` にのみ対応したプロジェクトを生成します。`ai-sdk v5` を使用する場合は、[ai-sdk v5 compatibility](#ai-sdk-v5-compatibility) を参照してください。
+</Callout>
 
 <Steps>
 
-### 新しいプロジェクトを作成する
+## CLI ウィザードを開始する
 
-`create-mastra`を使用して新しいMastraプロジェクトを開始することをお勧めします。これによりプロジェクトの足場が構築されます。プロジェクトを作成するには、次のコマンドを実行します：
+対話型セットアップを開始するには、次のコマンドを実行します：
 
-<Tabs items={["npx", "npm", "yarn", "pnpm"]}>
+{/*
+LLM CONTEXT: This Tabs component shows different package manager commands for creating a new Mastra project.
+Each tab displays the equivalent command for that specific package manager (npx, npm, yarn, pnpm, bun).
+This helps users choose their preferred package manager while following the same installation process.
+All commands achieve the same result - creating a new Mastra project with the interactive setup.
+*/}
 
-  <Tabs.Tab>
-  ```bash copy 
-npx create-mastra@latest 
-  ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-  ```bash copy
-npm create mastra@latest 
-   ```
-   </Tabs.Tab>
-  <Tabs.Tab>
-  ```bash copy
-yarn create mastra@latest 
-   ```
-   </Tabs.Tab>
-  <Tabs.Tab>
-  ```bash copy
-pnpm create mastra@latest
-  ```
-  </Tabs.Tab>
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+  <Tab>
+    ```bash copy
+    npx create-mastra@latest
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    yarn dlx create-mastra@latest
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    pnpm create mastra@latest
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    bun create mastra@latest
+    ```
+  </Tab>
 </Tabs>
 
-インストール時に、以下のプロンプトが表示されます：
 
-```bash
-What do you want to name your project? my-mastra-app
-Choose components to install:
-  ◯ Agents (recommended)
-  ◯ Tools
-  ◯ Workflows
-Select default provider:
-  ◯ OpenAI (recommended)
-  ◯ Anthropic
-  ◯ Groq
-Would you like to include example code? No / Yes
-Turn your IDE into a Mastra expert? (Installs MCP server)
-  ◯ Skip for now
-  ◯ Cursor
-  ◯ Windsurf
+**CLI フラグでインストールする**
+
+必要なフラグをすべて渡すことで、Mastra CLI を非対話モードでも実行できます。例：
+
+```bash copy
+npx create-mastra@latest --project-name hello-mastra --example --components tools,agents,workflows --llm openai
 ```
 
-プロンプトの後、`create-mastra`は以下を行います：
+**テンプレートでインストールする**
 
-1. TypeScriptでプロジェクトディレクトリをセットアップ
-2. 依存関係のインストール
-3. 選択したコンポーネントとLLMプロバイダーの設定
-4. IDEにMCPサーバーを設定（選択した場合）- コーディング中にドキュメント、例、ヘルプにすぐにアクセスできます
+特定のユースケースを示すプリセットのテンプレートから始められます：
 
-**MCPに関する注意：** 別のIDEを使用している場合は、[MCPサーバードキュメント](/docs/getting-started/mcp-docs-server)の指示に従ってMCPサーバーを手動でインストールできます。**また**、MCPサーバーを有効化するには[CursorとWindsurf](/docs/getting-started/mcp-docs-server#after-configuration)に追加の手順があることに注意してください。
+```bash copy
+npx create-mastra@latest --template template-name
+```
 
-### APIキーの設定
+> 利用可能なテンプレートの一覧や詳細は [Templates](/docs/getting-started/templates) を参照してください。
 
-設定したLLMプロバイダーのAPIキーを`.env`ファイルに追加します。
+たとえば、text-to-SQL アプリケーションを作成するには：
+
+```bash copy
+npx create-mastra@latest --template text-to-sql
+```
+
+> 利用可能な CLI オプションの一覧は [create-mastra](/reference/cli/create-mastra) のドキュメントを参照してください。
+
+### API キーを追加する
+
+`.env` ファイルに API キーを追加します：
 
 ```bash filename=".env" copy
-OPENAI_API_KEY=<your-openai-key>
+OPENAI_API_KEY=<your-api-key>
 ```
+> この例では OpenAI を使用しています。各 LLM プロバイダーで使用する環境変数名は異なります。詳細は [Model Capabilities](/docs/getting-started/model-capability) を参照してください。
+
+### Mastra Development Server を起動する
+
+[Mastra Development Server](/docs/server-db/local-dev-playground) を起動し、Mastra Playground でエージェントをテストできます。
+
+{/*
+LLM CONTEXT: This Tabs component shows different package manager commands for starting Mastra's development server.
+Each tab displays the equivalent command for that specific package manager (npx, npm, yarn, pnpm, bun).
+This helps users choose their preferred package manager.
+All commands achieve the same result - starting Mastra's development server.
+*/}
+
+<Tabs items={["npm", "yarn", "pnpm", "bun", "Mastra CLI"]}>
+  <Tab>
+    ```bash copy
+    npm run dev
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    yarn run dev
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    pnpm run dev
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    bun run dev
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    mastra dev
+    ```
+  </Tab>
+</Tabs>
 
 </Steps>
 
-**非インタラクティブモード**：
+## 手動でインストールする
 
-プロジェクト名を位置引数として、または`-p, --project-name`オプションで指定できるようになりました。これはMastra CLI（`mastra create`）と`create-mastra`パッケージの両方で一貫して機能します。両方が提供された場合、引数はオプションよりも優先されます。
-
-**例：**
-
-```bash copy
-npx create-mastra@latest my-app --components agents,tools --llm openai --example
-npx create-mastra@latest --project-name my-app --components agents,tools --llm openai --example
-# 両方が提供された場合、引数が優先されます：
-npx create-mastra@latest my-app --project-name ignored-name --components agents,tools --llm openai --example
-# プロジェクトは「my-app」として作成されます
-```
-
-サンプルコードを明示的に除外するには、`--no-example`または`-n`フラグを使用します：
-
-```bash copy
-npx create-mastra@latest my-app --components agents,tools --llm openai --no-example
-# または省略形を使用
-npx create-mastra@latest my-app --components agents,tools --llm openai -n
-```
-
-オプションの`--dir`または`-d`フラグを使用して、ソースコードのターゲットディレクトリを指定することもできます（デフォルト：`src/`）：
-
-```bash copy
-npx create-mastra@latest my-app --components agents,tools --llm openai --dir src/
-```
-
-**インストールタイムアウトの設定**：
-インストールに時間がかかりすぎる場合にタイムアウトを設定して指定するには、timeoutフラグを使用します：
-
-```bash copy
-npx create-mastra@latest --timeout 120000
-```
-
-**LLMに関する注意**：
-例を含む簡単なワンライナーを実行するには：
-
-```bash copy
-npx -y mastra@latest --project-name <your-project> --example --components "tools,agents,workflows" --llm <llm-provider>
-```
-
-`--llm`フラグで使用できるオプションは：`openai|anthropic|groq|google|cerebras`です。
-
-> **ヒント：** 必要なすべてのフラグ（引数またはオプション`-p, --project-name`でのプロジェクト名、`--components`、`--llm`、および`--example`または`--no-example`のいずれか）を提供すれば、CLIはプロンプトなしで完全に非インタラクティブに実行されます。
-
-## 手動インストール
-
-<br />
+以下の手順では、Mastra を手動でインストールする方法を順を追って説明します。
 
 <Steps>
-  Mastraプロジェクトを手動でセットアップしたい場合は、以下の手順に従ってください：
+  ### 新規プロジェクトを作成
 
-### 新しいプロジェクトの作成
+  新規プロジェクトを作成し、ディレクトリへ移動します：
 
-プロジェクトディレクトリを作成し、その中に移動します：
+  ```bash copy
+  mkdir hello-mastra && cd hello-mastra
+  ```
 
-```bash copy
-mkdir hello-mastra
-cd hello-mastra
-```
+  `@mastra/core` パッケージを含む TypeScript プロジェクトを初期化する:
 
-次に、`@mastra/core`パッケージを含むTypeScriptプロジェクトを初期化します：
+  {/*
+    LLM コンテキスト: この Tabs コンポーネントは、パッケージマネージャーごとの手動インストールコマンドを表示します。
+    各タブには、そのパッケージマネージャーにおけるプロジェクトの初期化、
+    開発用依存関係のインストール、そして Mastra のコアパッケージのインストールまで、セットアップ手順が一通り表示されます。
+    これにより、ユーザーは好みのパッケージマネージャーで Mastra プロジェクトを手動でセットアップできます。
+    */}
 
   <Tabs items={["npm", "pnpm", "yarn", "bun"]}>
-    <Tabs.Tab>
+    <Tab>
       ```bash copy
       npm init -y
-      npm install typescript tsx @types/node mastra@latest --save-dev
-      npm install @mastra/core@latest zod @ai-sdk/openai
-      npx tsc --init
-      ```
-    </Tabs.Tab>
 
-    <Tabs.Tab>
+      npm install typescript tsx @types/node mastra@latest --save-dev
+
+      npm install @mastra/core@latest zod@^3 @ai-sdk/openai@^1
+      ```
+    </Tab>
+
+    <Tab>
       ```bash copy
       pnpm init
-      pnpm add typescript tsx @types/node mastra@latest --save-dev
-      pnpm add @mastra/core@latest zod @ai-sdk/openai
-      pnpm dlx tsc --init
-      ```
-    </Tabs.Tab>
 
-    <Tabs.Tab>
+      pnpm add typescript tsx @types/node mastra@latest --save-dev
+
+      pnpm add @mastra/core@latest zod@^3 @ai-sdk/openai@^1
+      ```
+    </Tab>
+
+    <Tab>
       ```bash copy
       yarn init -y
-      yarn add typescript tsx @types/node mastra@latest --dev
-      yarn add @mastra/core@latest zod @ai-sdk/openai
-      yarn dlx tsc --init
-      ```
-    </Tabs.Tab>
 
-    <Tabs.Tab>
+      yarn add typescript tsx @types/node mastra@latest --dev
+
+      yarn add @mastra/core@latest zod@^3 @ai-sdk/openai@^1
+      ```
+    </Tab>
+
+    <Tab>
       ```bash copy
       bun init -y
-      bun add typescript tsx @types/node mastra@latest --dev
-      bun add @mastra/core@latest zod @ai-sdk/openai
-      bunx tsc --init
-      ```
-    </Tabs.Tab>
 
+      bun add typescript tsx @types/node mastra@latest --dev
+
+      bun add @mastra/core@latest zod@^3 @ai-sdk/openai@^1
+      ```
+    </Tab>
   </Tabs>
 
-### TypeScriptの初期化
+  `package.json` に `dev` と `build` のスクリプトを追加します：
 
-プロジェクトのルートに以下の設定で`tsconfig.json`ファイルを作成します：
-
-```json copy
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ES2022",
-    "moduleResolution": "bundler",
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "skipLibCheck": true,
-    "outDir": "dist"
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", ".mastra"]
-}
-```
-
-このTypeScript設定は、最新のモジュール解決と厳格な型チェックを使用して、Mastraプロジェクト向けに最適化されています。
-
-### APIキーの設定
-
-プロジェクトのルートディレクトリに`.env`ファイルを作成し、APIキーを追加します：
-
-```bash filename=".env" copy
-OPENAI_API_KEY=<your-openai-key>
-```
-
-your_openai_api_keyを実際のAPIキーに置き換えてください。
-
-### ツールの作成
-
-`weather-tool`ツールファイルを作成します：
-
-```bash copy
-mkdir -p src/mastra/tools && touch src/mastra/tools/weather-tool.ts
-```
-
-次に、`src/mastra/tools/weather-tool.ts`に以下のコードを追加します：
-
-```ts filename="src/mastra/tools/weather-tool.ts" showLineNumbers copy
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
-
-interface WeatherResponse {
-  current: {
-    time: string;
-    temperature_2m: number;
-    apparent_temperature: number;
-    relative_humidity_2m: number;
-    wind_speed_10m: number;
-    wind_gusts_10m: number;
-    weather_code: number;
-  };
-}
-
-export const weatherTool = createTool({
-  id: "get-weather",
-  description: "Get current weather for a location",
-  inputSchema: z.object({
-    location: z.string().describe("City name"),
-  }),
-  outputSchema: z.object({
-    temperature: z.number(),
-    feelsLike: z.number(),
-    humidity: z.number(),
-    windSpeed: z.number(),
-    windGust: z.number(),
-    conditions: z.string(),
-    location: z.string(),
-  }),
-  execute: async ({ context }) => {
-    return await getWeather(context.location);
-  },
-});
-
-const getWeather = async (location: string) => {
-  const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`;
-  const geocodingResponse = await fetch(geocodingUrl);
-  const geocodingData = await geocodingResponse.json();
-
-  if (!geocodingData.results?.[0]) {
-    throw new Error(`Location '${location}' not found`);
+  ```json filename="package.json" copy
+  {
+    "scripts": {
+      // ...
+      "dev": "mastra dev",
+      "build": "mastra build"
+    }
   }
+  ```
 
-  const { latitude, longitude, name } = geocodingData.results[0];
+  ### TypeScript の初期化
 
-  const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code`;
+  `tsconfig.json` ファイルを作成する：
 
-  const response = await fetch(weatherUrl);
-  const data: WeatherResponse = await response.json();
+  ```bash copy
+  touch tsconfig.json
+  ```
 
-  return {
-    temperature: data.current.temperature_2m,
-    feelsLike: data.current.apparent_temperature,
-    humidity: data.current.relative_humidity_2m,
-    windSpeed: data.current.wind_speed_10m,
-    windGust: data.current.wind_gusts_10m,
-    conditions: getWeatherCondition(data.current.weather_code),
-    location: name,
-  };
-};
+  次の設定を追加する：
 
-function getWeatherCondition(code: number): string {
-  const conditions: Record<number, string> = {
-    0: "Clear sky",
-    1: "Mainly clear",
-    2: "Partly cloudy",
-    3: "Overcast",
-    45: "Foggy",
-    48: "Depositing rime fog",
-    51: "Light drizzle",
-    53: "Moderate drizzle",
-    55: "Dense drizzle",
-    56: "Light freezing drizzle",
-    57: "Dense freezing drizzle",
-    61: "Slight rain",
-    63: "Moderate rain",
-    65: "Heavy rain",
-    66: "Light freezing rain",
-    67: "Heavy freezing rain",
-    71: "Slight snow fall",
-    73: "Moderate snow fall",
-    75: "Heavy snow fall",
-    77: "Snow grains",
-    80: "Slight rain showers",
-    81: "Moderate rain showers",
-    82: "Violent rain showers",
-    85: "Slight snow showers",
-    86: "Heavy snow showers",
-    95: "Thunderstorm",
-    96: "Thunderstorm with slight hail",
-    99: "Thunderstorm with heavy hail",
-  };
-  return conditions[code] || "Unknown";
-}
-```
+  Mastra では、最新の Node.js バージョンに対応した `module` と `moduleResolution` の設定値が必要です。`CommonJS` や `node` といった古い設定は Mastra のパッケージと互換性がなく、モジュール解決エラーの原因になります。
 
-### エージェントを作成する
+  ```json {4-5} filename="tsconfig.json" copy
+  {
+    "compilerOptions": {
+      "target": "ES2022",
+      "module": "ES2022",
+      "moduleResolution": "bundler",
+      "esModuleInterop": true,
+      "forceConsistentCasingInFileNames": true,
+      "strict": true,
+      "skipLibCheck": true,
+      "noEmit": true,
+      "outDir": "dist"
+    },
+    "include": [
+      "src/**/*"
+    ]
+  }
+  ```
 
-`weather`エージェントファイルを作成します：
+  > この TypeScript 設定は、最新のモジュール解決と厳格な型チェックを採用し、Mastra プロジェクト向けに最適化されています。
 
-```bash copy
-mkdir -p src/mastra/agents && touch src/mastra/agents/weather.ts
-```
+  ### APIキーを設定
 
-次に、以下のコードを`src/mastra/agents/weather.ts`に追加します：
+  `.env` ファイルを作成する：
 
-```ts filename="src/mastra/agents/weather.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
-import { weatherTool } from "../tools/weather-tool";
+  ```bash copy
+  touch .env
+  ```
 
-export const weatherAgent = new Agent({
-  name: "Weather Agent",
-  instructions: `You are a helpful weather assistant that provides accurate weather information.
+  API キーを追加：
 
-Your primary function is to help users get weather details for specific locations. When responding:
-- Always ask for a location if none is provided
-- If the location name isn't in English, please translate it
-- Include relevant details like humidity, wind conditions, and precipitation
-- Keep responses concise but informative
+  ```bash filename=".env" copy
+  OPENAI_API_KEY=<あなたのAPIキー>
+  ```
 
-Use the weatherTool to fetch current weather data.`,
-  model: openai("gpt-4o-mini"),
-  tools: { weatherTool },
-});
-```
+  > この例では OpenAI を使用します。LLM プロバイダーごとにモデル名は異なります。詳細は [Model Capabilities](/docs/getting-started/model-capability) を参照してください。
 
-### エージェントの登録
+  ### ツールを作成
 
-最後に、`src/mastra/index.ts`にMastraのエントリーポイントを作成し、エージェントを登録します：
+  「weather-tool.ts」ファイルを作成する：
 
-```ts filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
+  ```bash copy
+  mkdir -p src/mastra/tools && touch src/mastra/tools/weather-tool.ts
+  ```
 
-import { weatherAgent } from "./agents/weather";
+  次のコードを追加してください：
 
-export const mastra = new Mastra({
-  agents: { weatherAgent },
-});
-```
+  ```ts filename="src/mastra/tools/weather-tool.ts" showLineNumbers copy
+  import { createTool } from "@mastra/core/tools";
+  import { z } from "zod";
 
-これにより、エージェントがMastraに登録され、`mastra dev`がそれを検出して提供できるようになります。
+  export const weatherTool = createTool({
+    id: "get-weather",
+    description: "指定した場所の現在の天気を取得する"
+    inputSchema: z.object({
+      location: z.string().describe("都市名")
+    }),
+    outputSchema: z.object({
+      output: z.string()
+    }),
+    execute: async () => {
+      return {
+        output: "天気は晴れです"
+      };
+    }
+  });
+  ```
 
+  > weatherTool の完全な例は、[Giving an Agent a Tool](/examples/agents/using-a-tool)をご覧ください。
+
+  ### エージェントを作成
+
+  「weather-agent.ts」ファイルを作成する：
+
+  ```bash copy
+  mkdir -p src/mastra/agents && touch src/mastra/agents/weather-agent.ts
+  ```
+
+  次のコードを追加してください：
+
+  ```ts filename="src/mastra/agents/weather-agent.ts" showLineNumbers copy
+  import { openai } from "@ai-sdk/openai";
+  import { Agent } from "@mastra/core/agent";
+  import { weatherTool } from "../tools/weather-tool";
+
+  export const weatherAgent = new Agent({
+    name: 'Weather Agent',
+    instructions: `
+        あなたは正確な気象情報を提供する、役に立つ天気アシスタントです。
+
+        主な役割は、ユーザーが特定の場所の天気情報を取得できるよう支援することです。応答時は次を守ってください:
+        - 場所が指定されていない場合は、必ず場所を確認する
+        - 場所名が英語でない場合は、英語に翻訳する
+        - 複数の要素を含む場所（例: "New York, NY"）が指定された場合は、最も関連性の高い部分（例: "New York"）を用いる
+        - 湿度、風況、降水などの関連情報を含める
+        - 簡潔でありながら有用な回答を心がける
+
+        現在の天気データを取得するには、weatherTool を使用する。
+  `,
+    model: openai('gpt-4o-mini'),
+    tools: { weatherTool }
+  });
+  ```
+
+  ### エージェントを登録
+
+  Mastra のエントリポイントを作成し、エージェントを登録する：
+
+  ```bash copy
+  touch src/mastra/index.ts
+  ```
+
+  次のコードを追加してください：
+
+  ```ts filename="src/mastra/index.ts" showLineNumbers copy
+  import { Mastra } from "@mastra/core/mastra";
+  import { weatherAgent } from "./agents/weather-agent";
+
+  export const mastra = new Mastra({
+    agents: { weatherAgent }
+  });
+  ```
+
+  [Mastra Development Server](/docs/server-db/local-dev-playground) を起動し、Mastra Playground でエージェントをテストできるようになりました。
 </Steps>
 
-## 既存プロジェクトへのインストール
+## 既存のプロジェクトに追加する
 
-既存のプロジェクトにMastraを追加するには、[既存プロジェクトへのMastra追加](/docs/local-dev/add-to-existing-project)に関するローカル開発ドキュメントをご覧ください。
+Mastra は幅広いプロジェクトにインストールして統合できます。以下は、導入の手助けとなる統合ガイドへのリンクです：
 
-また、[Next.js](/docs/frameworks/next-js)など、フレームワーク別のドキュメントもご確認いただけます。
+- [Next.js](/docs/frameworks/web-frameworks/next-js)
+- [Vite + React](/docs/frameworks/web-frameworks/vite-react)
+- [Astro](/docs/frameworks/web-frameworks/astro)
+- [Express](/docs/frameworks/servers/express)
 
-## Mastraサーバーを起動する
+### `mastra init`
 
-Mastraは、エージェントをRESTエンドポイントを通じて提供するためのコマンドを提供しています
+既存のプロジェクトに Mastra を導入するには、`mastra init` コマンドを使用します。
 
-### 開発サーバー
+> 詳細は [mastra init](/reference/cli/init) を参照してください。
 
-以下のコマンドを実行してMastraサーバーを起動します：
+## ai-sdk v5 互換性
 
-```bash copy
-npm run dev
-```
+デフォルトでは、Mastra プロジェクトは `ai-sdk v4` のみに対応しています。`ai-sdk v5` を使用する場合は、生成されたプロジェクトに対して以下の変更を行ってください。
 
-mastra CLIをインストールしている場合は、次のコマンドを実行します：
+`@ai-sdk/openai` パッケージの最新バージョンをインストールします:
 
-```bash copy
-mastra dev
-```
+<Tabs items={["npm", "pnpm", "yarn", "bun"]}>
 
-このコマンドはエージェント用のREST APIエンドポイントを作成します。
+  <Tab>
+    ```bash copy
+    npm install @ai-sdk/openai@latest
+    ```
 
-### エンドポイントのテスト
+  </Tab>
+  <Tab>
+    ```bash copy
+    pnpm add @ai-sdk/openai@latest
+    ```
 
-`curl`または`fetch`を使用してエージェントのエンドポイントをテストできます：
+  </Tab>
+  <Tab>
+    ```bash copy
+    yarn add @ai-sdk/openai@latest
+    ```
 
-<Tabs items={['curl', 'fetch']}>
-  <Tabs.Tab>
-```bash copy
-curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
--H "Content-Type: application/json" \
--d '{"messages": ["What is the weather in London?"]}'
-```
-  </Tabs.Tab>
-  <Tabs.Tab>
-```js copy showLineNumbers
-fetch('http://localhost:4111/api/agents/weatherAgent/generate', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    messages: ['What is the weather in London?'],
-  }),
-})
-  .then(response => response.json())
-  .then(data => {
-    console.log('Agent response:', data.text);
-  })
-  .catch(error => {
-    console.error('Error:', error);
-  });
-```
-  </Tabs.Tab>
+  </Tab>
+  <Tab>
+    ```bash copy
+    bun add @ai-sdk/openai@latest
+    ```
+
+  </Tab>
 </Tabs>
 
-## クライアントでMastraを使用する
+`src/mastra/workflows/weather-workflow.ts` の `planActivities` ステップを次のように更新します:
 
-フロントエンドアプリケーションでMastraを使用するには、タイプセーフなクライアントSDKを使用して
-MastraのREST APIとやり取りすることができます。
-
-詳細な使用方法については、[Mastra クライアントSDKのドキュメント](/docs/deployment/client)を参照してください。
-
-## コマンドラインから実行する
-
-コマンドラインから直接エージェントを呼び出したい場合は、エージェントを取得して呼び出すスクリプトを作成できます。
-
-```ts filename="src/index.ts" showLineNumbers copy
-import { mastra } from "./mastra";
-
-async function main() {
-  const agent = await mastra.getAgent("weatherAgent");
-
-  const result = await agent.generate("What is the weather in London?");
-
-  console.log("Agent response:", result.text);
-}
-
-main();
+```ts filename="src/mastra/workflows/weather-workflow.ts" showLineNumbers{150} copy
+const response = await agent.stream([ // [!code --]
+const response = await agent.streamVNext([ // [!code ++]
+  {
+    role: 'user',
+    content: prompt,
+  },
+]);
 ```
 
-その後、スクリプトを実行してすべてが正しく設定されているかテストします。
+## 次のステップ
 
-```bash copy
-npx tsx src/index.ts
-```
-
-これにより、エージェントの応答がコンソールに出力されるはずです。
+- [ローカルでの開発](/docs/server-db/local-dev-playground)
+- [Mastra Cloud へのデプロイ](/docs/deployment/overview)

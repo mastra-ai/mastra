@@ -1023,7 +1023,7 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
 
-    it('should throw error when execution flow not defined', () => {
+    it('should throw error when execution flow not defined', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
@@ -1041,12 +1041,13 @@ describe('Workflow', () => {
         steps: [step1],
       });
 
-      expect(() => workflow.createRun()).toThrowError(
+      const run = await workflow.createRunAsync();
+      await expect(run.start({})).rejects.toThrowError(
         'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
       );
     });
 
-    it('should throw error when execution graph is not committed', () => {
+    it('should throw error when execution graph is not committed', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
@@ -1066,7 +1067,8 @@ describe('Workflow', () => {
 
       workflow.then(step1);
 
-      expect(() => workflow.createRun()).toThrowError(
+      const run = await workflow.createRunAsync();
+      await expect(run.start({})).rejects.toThrowError(
         'Uncommitted step flow changes detected. Call .commit() to register the steps.',
       );
     });
@@ -6136,7 +6138,7 @@ describe('Workflow', () => {
 
       workflow.parallel([nestedWorkflow1, nestedWorkflow2]).then(finalStep).commit();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({
         inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
       });
@@ -6281,7 +6283,7 @@ describe('Workflow', () => {
 
         .commit();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({
         inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
       });
@@ -6408,7 +6410,7 @@ describe('Workflow', () => {
         )
         .commit();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({
         inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
       });
@@ -6522,7 +6524,7 @@ describe('Workflow', () => {
       });
       await mastra.startEventEngine();
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { startValue: 0 } });
 
       expect(start).toHaveBeenCalledTimes(2);
@@ -6631,7 +6633,7 @@ describe('Workflow', () => {
       });
       await mastra.startEventEngine();
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { startValue: 0 } });
 
       expect(start).toHaveBeenCalledTimes(1);
@@ -6746,7 +6748,7 @@ describe('Workflow', () => {
       });
       await mastra.startEventEngine();
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { startValue: 0 } });
 
       expect(start).toHaveBeenCalledTimes(2);
@@ -6882,7 +6884,7 @@ describe('Workflow', () => {
       });
       await mastra.startEventEngine();
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { startValue: 0 } });
 
       expect(start).toHaveBeenCalledTimes(2);
@@ -7021,7 +7023,7 @@ describe('Workflow', () => {
         });
         await mastra.startEventEngine();
 
-        const run = counterWorkflow.createRun();
+        const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 0 } });
 
         expect(start).toHaveBeenCalledTimes(1);
@@ -7165,7 +7167,7 @@ describe('Workflow', () => {
         });
         await mastra.startEventEngine();
 
-        const run = counterWorkflow.createRun();
+        const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 0 } });
 
         expect(start).toHaveBeenCalledTimes(1);
@@ -7347,7 +7349,7 @@ describe('Workflow', () => {
         });
         await mastra.startEventEngine();
 
-        const run = counterWorkflow.createRun();
+        const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 1 } });
 
         expect(start).toHaveBeenCalledTimes(1);
@@ -7489,7 +7491,7 @@ describe('Workflow', () => {
         });
         await mastra.startEventEngine();
 
-        const run = counterWorkflow.createRun();
+        const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 0 } });
         expect(begin).toHaveBeenCalledTimes(1);
         expect(start).toHaveBeenCalledTimes(1);
@@ -7612,7 +7614,7 @@ describe('Workflow', () => {
         });
         await mastra.startEventEngine();
 
-        const run = counterWorkflow.createRun();
+        const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 0 } });
         const results = result.steps;
 
@@ -7774,7 +7776,7 @@ describe('Workflow', () => {
       });
       await mastra.startEventEngine();
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { startValue: 0 } });
       console.dir({ result }, { depth: null });
 
@@ -7838,7 +7840,7 @@ describe('Workflow', () => {
       });
       await mastra.startEventEngine();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({ runtimeContext });
 
       // @ts-ignore
@@ -7884,7 +7886,7 @@ describe('Workflow', () => {
       });
       await mastra.startEventEngine();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       await run.start({ runtimeContext });
 
       const resumeruntimeContext = new RuntimeContext();
@@ -7993,7 +7995,7 @@ describe('Workflow', () => {
       });
       await mastra.startEventEngine();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: { input: 'test-data' } });
 
       // Verify the final results
@@ -8065,7 +8067,8 @@ describe('Workflow', () => {
       });
       await mastra.startEventEngine();
 
-      const result = await workflow.createRun().start({ inputData: {} });
+      const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: {} });
 
       expect(result.status).toBe('success');
       expect(result.steps.repeatingStep).toHaveProperty('output', { count: 3 });
@@ -8152,7 +8155,7 @@ describe('Workflow', () => {
       });
       await mastra.startEventEngine();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       await run.start({ inputData: {} });
 
       expect(mockExec).toHaveBeenCalledTimes(1);

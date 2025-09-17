@@ -1,0 +1,179 @@
+---
+title: "リファレンス: Answer Similarity | Scorer | Mastra Docs"
+description: Mastra の Answer Similarity Scorer に関するドキュメント。CI/CD テストのために、エージェントの出力を正解（グラウンドトゥルース）と比較します。
+---
+
+# Answer Similarity Scorer
+
+`createAnswerSimilarityScorer()` 関数は、エージェントの出力が正解（ground truth）の回答にどれだけ近いかを評価するスコアラーを作成します。このスコアラーは、想定される回答があり、時間の経過にわたって一貫性を担保したい CI/CD テストのシナリオ向けに特化して設計されています。
+
+使用例については、[Answer Similarity Examples](/examples/scorers/answer-similarity) を参照してください。
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      required: true,
+      description: "出力と正解との意味的類似性を評価するために使用する言語モデル。",
+    },
+    {
+      name: "options",
+      type: "AnswerSimilarityOptions",
+      required: false,
+      description: "スコアラーの設定オプション。",
+    },
+  ]}
+/>
+
+### AnswerSimilarityOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "requireGroundTruth",
+      type: "boolean",
+      required: false,
+      defaultValue: "true",
+      description: "評価にグラウンドトゥルースを必要とするかどうか。false の場合、グラウンドトゥルースがないとスコアは 0 になります。",
+    },
+    {
+      name: "semanticThreshold",
+      type: "number",
+      required: false,
+      defaultValue: "0.8",
+      description: "意味的一致と完全一致の重み付け (0〜1)。",
+    },
+    {
+      name: "exactMatchBonus",
+      type: "number",
+      required: false,
+      defaultValue: "0.2",
+      description: "完全一致に対する追加ボーナス (0〜1)。",
+    },
+    {
+      name: "missingPenalty",
+      type: "number",
+      required: false,
+      defaultValue: "0.15",
+      description: "グラウンドトゥルースから欠けている重要な概念1つにつき課されるペナルティ。",
+    },
+    {
+      name: "contradictionPenalty",
+      type: "number",
+      required: false,
+      defaultValue: "1.0",
+      description: "矛盾する情報に対するペナルティ。値を高くすると誤答のスコアは 0 に近づきます。",
+    },
+    {
+      name: "extraInfoPenalty",
+      type: "number",
+      required: false,
+      defaultValue: "0.05",
+      description: "グラウンドトゥルースにない余分な情報に対する軽微なペナルティ（上限 0.2）。",
+    },
+    {
+      name: "scale",
+      type: "number",
+      required: false,
+      defaultValue: "1",
+      description: "スコアのスケーリング係数。",
+    },
+  ]}
+/>
+
+この関数は MastraScorer クラスのインスタンスを返します。`.run()` メソッドは他のスコアラーと同じ入力を受け付けます（[MastraScorer リファレンス](./mastra-scorer)を参照）が、実行オブジェクトでグラウンドトゥルースの提供が必須です。
+
+## .run() の戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "実行のID（任意）。",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "0〜1の類似度スコア（カスタムスケール使用時はそのスケールに従う）。スコアが高いほど、正解との一致度が高いことを示します。",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "スコアの人間が読みやすい説明と、実行可能なフィードバック。",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "object",
+      description: "出力と正解から抽出された意味単位。",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description: "一致、矛盾、追加情報に関する詳細な分析。",
+    },
+    {
+      name: "preprocessPrompt",
+      type: "string",
+      description: "意味単位の抽出に使用したプロンプト。",
+    },
+    {
+      name: "analyzePrompt",
+      type: "string",
+      description: "類似度分析に使用したプロンプト。",
+    },
+    {
+      name: "generateReasonPrompt",
+      type: "string",
+      description: "説明文の生成に使用したプロンプト。",
+    },
+  ]}
+/>
+
+## runExperiment での使用方法
+
+このスコアラーは CI/CD テストで `runExperiment` と併用することを想定して設計されています:
+
+```typescript
+import { runExperiment } from '@mastra/core/scores';
+import { createAnswerSimilarityScorer } from '@mastra/evals/scorers/llm';
+
+const scorer = createAnswerSimilarityScorer({ model });
+
+await runExperiment({
+  data: [
+    { 
+      input: "What is the capital of France?",
+      groundTruth: "Paris is the capital of France"
+    }
+  ],
+  scorers: [scorer],
+  target: myAgent,
+  onItemComplete: ({ scorerResults }) => {
+    // 類似度スコアがしきい値を満たしていることを検証
+    expect(scorerResults['Answer Similarity Scorer'].score).toBeGreaterThan(0.8);
+  }
+});
+```
+
+## 主な機能
+
+- **セマンティック分析**: 単純な文字列一致ではなく、LLM を用いて意味単位を抽出・比較します
+- **矛盾検出**: 事実と異なる情報を特定し、スコアを 0 近くに評価します
+- **柔軟なマッチング**: 完全一致、意味一致、部分一致、未一致の各タイプに対応
+- **CI/CD 対応**: 正解データとの照合による自動テスト向けに設計
+- **実用的なフィードバック**: 何が一致し、何を改善すべきかを具体的に提示します
+
+## 採点アルゴリズム
+
+スコアラーは複数のステップからなるプロセスを用います：
+
+1. **Extract**: 出力と正解を意味単位に分解する
+2. **Analyze**: 単位を比較し、一致・矛盾・欠落を特定する
+3. **Score**: 矛盾に対するペナルティを考慮した重み付き類似度を算出する
+4. **Reason**: 人間が読める説明を生成する
+
+スコアの計算式：`max(0, base_score - contradiction_penalty - missing_penalty - extra_info_penalty) × scale`

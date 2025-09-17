@@ -5,9 +5,13 @@ description: Mastra のワークフロー機能を使った RAG システムで�
 
 import { GithubLink } from "@/components/github-link";
 
+
+
 # ワークフローによる構造化推論
 
 この例では、Mastra、OpenAIの埋め込み、そしてベクトルストレージとしてPGVectorを使用し、定義されたワークフローを通じて構造化推論を重視したRetrieval-Augmented Generation（RAG）システムの実装方法を示します。
+
+
 
 ## 概要
 
@@ -19,6 +23,8 @@ import { GithubLink } from "@/components/github-link";
 4. テキストドキュメントを処理し、チャンク化
 5. 埋め込みを作成し、PostgreSQL に保存
 6. ワークフローステップを通じて応答を生成
+
+
 
 ## セットアップ
 
@@ -46,6 +52,8 @@ import { embedMany } from "ai";
 import { z } from "zod";
 ```
 
+
+
 ## ワークフローの定義
 
 まず、トリガースキーマとともにワークフローを定義します。
@@ -59,6 +67,8 @@ export const ragWorkflow = new Workflow({
 });
 ```
 
+
+
 ## ベクタークエリツールの作成
 
 ベクターデータベースをクエリするためのツールを作成します：
@@ -70,6 +80,8 @@ const vectorQueryTool = createVectorQueryTool({
   model: openai.embedding("text-embedding-3-small"),
 });
 ```
+
+
 
 ## エージェント設定
 
@@ -85,6 +97,8 @@ export const ragAgent = new Agent({
   },
 });
 ```
+
+
 
 ## ワークフローステップ
 
@@ -236,6 +250,8 @@ const finalAnswer = new Step({
 });
 ```
 
+
+
 ## ワークフロー設定
 
 ワークフロー内のすべてのステップを接続します：
@@ -251,12 +267,16 @@ ragWorkflow
 ragWorkflow.commit();
 ```
 
+
+
 ## PgVector と Mastra のインスタンス化
 
 すべてのコンポーネントを使って PgVector と Mastra をインスタンス化します。
 
 ```typescript copy showLineNumbers{169} filename="index.ts"
-const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
+const pgVector = new PgVector({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+});
 
 export const mastra = new Mastra({
   agents: { ragAgent },
@@ -264,6 +284,8 @@ export const mastra = new Mastra({
   workflows: { ragWorkflow },
 });
 ```
+
+
 
 ## ドキュメント処理
 
@@ -281,6 +303,8 @@ const chunks = await doc.chunk({
   separator: "\n",
 });
 ```
+
+
 
 ## 埋め込みの作成と保存
 
@@ -304,9 +328,11 @@ await vectorStore.upsert({
 });
 ```
 
+
+
 ## ワークフローの実行
 
-クエリを使ってワークフローを実行する方法は次のとおりです。
+クエリを使用してワークフローを実行する方法は次のとおりです：
 
 ```typescript copy showLineNumbers{202} filename="index.ts"
 const query = "What are the main adaptation strategies for farmers?";
@@ -319,7 +345,7 @@ const prompt = `
     Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
     `;
 
-const { runId, start } = ragWorkflow.createRun();
+const { runId, start } = await ragWorkflow.createRunAsync();
 
 console.log("Run:", runId);
 

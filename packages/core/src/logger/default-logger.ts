@@ -26,7 +26,7 @@ export class ConsoleLogger extends MastraLogger {
 
   debug(message: string, ...args: any[]): void {
     if (this.level === LogLevel.DEBUG) {
-      console.debug(message, ...args);
+      console.info(message, ...args);
     }
   }
 

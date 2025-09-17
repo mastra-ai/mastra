@@ -3,9 +3,13 @@ title: "Cloudflare D1 ストレージ | ストレージシステム | Mastra Cor
 description: Mastra における Cloudflare D1 SQL ストレージ実装のドキュメントです。
 ---
 
+
+
 # Cloudflare D1 Storage
 
 Cloudflare D1ストレージの実装は、Cloudflare D1を利用したサーバーレスのSQLデータベースソリューションを提供し、リレーショナル操作とトランザクションの一貫性をサポートします。
+
+
 
 ## インストール
 
@@ -13,10 +17,17 @@ Cloudflare D1ストレージの実装は、Cloudflare D1を利用したサーバ
 npm install @mastra/cloudflare-d1@latest
 ```
 
+
+
 ## 使用方法
 
 ```typescript copy showLineNumbers
 import { D1Store } from "@mastra/cloudflare-d1";
+
+type Env = {
+  // Add your bindings here, e.g. Workers KV, D1, Workers AI, etc.
+  D1Database: D1Database;
+};
 
 // --- Example 1: Using Workers Binding ---
 const storageWorkers = new D1Store({
@@ -33,6 +44,17 @@ const storageRest = new D1Store({
 });
 ```
 
+そして、以下の内容を `wrangler.toml` または `wrangler.jsonc` ファイルに追加してください。
+
+```
+[[d1_databases]]
+binding = "D1Database"
+database_name = "db-name"
+database_id = "db-id"
+```
+
+
+
 ## パラメーター
 
 <PropertiesTable
@@ -40,8 +62,7 @@ const storageRest = new D1Store({
     {
       name: "binding",
       type: "D1Database",
-      description:
-        "Cloudflare D1 Workers バインディング（Workers ランタイム用）",
+      description: "Cloudflare D1 Workers バインディング（Workers ランタイム用）",
       isOptional: true,
     },
     {
@@ -71,6 +92,8 @@ const storageRest = new D1Store({
     },
   ]}
 />
+
+
 
 ## 追加の注意事項
 

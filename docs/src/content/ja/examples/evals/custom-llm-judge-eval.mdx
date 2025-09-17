@@ -1,0 +1,264 @@
+---
+title: "例: 実世界の国々 | Evals | Mastra Docs"
+description: カスタムのLLMベースの評価指標を作成する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from "@/components/scorer-callout";
+
+
+
+# 判定者としての LLM 評価
+
+<ScorerCallout />
+
+この例では、世界の実在する国を見極めるためのカスタム LLM ベースの評価指標の作り方を示します。この指標は `query` と `response` を受け取り、応答が問い合わせにどれだけ正確に合致しているかに基づいて、スコアとその理由を返します。
+
+
+
+## インストール
+
+```bash copy
+npm install @mastra/evals
+```
+
+
+
+## カスタム eval を作成する
+
+Mastra のカスタム eval は、構造化されたプロンプトと評価基準に基づいて、LLM を使って応答の品質を判定できます。これは次の4つの中核コンポーネントで構成されます:
+
+1. [**Instructions**](#eval-instructions)
+2. [**Prompt**](#eval-prompt)
+3. [**Judge**](#eval-judge)
+4. [**Metric**](#eval-metric)
+
+これらを組み合わせることで、Mastra の組み込みメトリクスではカバーしきれない独自の評価ロジックを定義できます。
+
+```typescript filename="src/mastra/evals/example-real-world-countries.ts" showLineNumbers copy
+import { Metric, type MetricResult } from "@mastra/core";
+import { MastraAgentJudge } from "@mastra/evals/judge";
+import { type LanguageModel } from "@mastra/core/llm";
+import { z } from "zod";
+
+const INSTRUCTIONS = `You are a geography expert. Score how many valid countries are listed in a response, based on the original question.`;
+
+const generatePrompt = (query: string, response: string) => `
+
+Here is the query: "${query}"
+Here is the response: "${response}"
+
+Evaluate how many valid, real countries are listed in the response.
+
+Return:
+{
+  "score": number (0 to 1),
+  "info": {
+    "reason": string,
+    "matches": [string, string],
+    "misses": [string]
+  }
+}
+`;
+
+class WorldCountryJudge extends MastraAgentJudge {
+  constructor(model: LanguageModel) {
+    super("WorldCountryJudge", INSTRUCTIONS, model);
+  }
+
+  async evaluate(query: string, response: string): Promise<MetricResult> {
+    const prompt = generatePrompt(query, response);
+    const result = await this.agent.generate(prompt, {
+      output: z.object({
+        score: z.number().min(0).max(1),
+        info: z.object({
+          reason: z.string(),
+          matches: z.array(z.string()),
+          misses: z.array(z.string())
+        })
+      })
+    });
+
+    return result.object;
+  }
+}
+
+export class WorldCountryMetric extends Metric {
+  judge: WorldCountryJudge;
+
+  constructor(model: LanguageModel) {
+    super();
+    this.judge = new WorldCountryJudge(model);
+  }
+
+  async measure(query: string, response: string): Promise<MetricResult> {
+    return this.judge.evaluate(query, response);
+  }
+}
+```
+
+### Eval instructions
+
+ジャッジの役割を定義し、LLM がどのように応答を評価すべきかの期待値を設定します。
+
+### Eval prompt
+
+`query` と `response` を用いて一貫した評価用プロンプトを作成し、LLM に `score` と構造化された `info` オブジェクトの返却を促します。
+
+### Eval judge
+
+`MastraAgentJudge` を拡張して、プロンプト生成とスコアリングを管理します。
+
+- `generatePrompt()` は、インストラクションとクエリおよびレスポンスを組み合わせます。
+- `evaluate()` は、プロンプトを LLM に送信し、Zod スキーマで出力を検証します。
+- 数値の `score` とカスタマイズ可能な `info` オブジェクトを持つ `MetricResult` を返します。
+
+### Eval metric
+
+Mastra の `Metric` クラスを拡張し、評価のエントリポイントとして機能します。`measure()` を通じてジャッジを利用し、結果を算出して返します。
+
+
+
+## 高評価のカスタム例
+
+この例は、応答と評価基準の強い整合性を示しています。メトリクスは高いスコアを付与し、出力が期待どおりである理由を説明する補足情報を含みます。
+
+```typescript filename="src/example-high-real-world-countries.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { WorldCountryMetric } from "./mastra/evals/example-real-world-countries";
+
+const metric = new WorldCountryMetric(openai("gpt-4o-mini"));
+
+const query = "Name some countries of the World.";
+const response = "France, Japan, Argentina";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 高評価のカスタム出力
+
+この出力は、応答の内容がすべて判定基準に合致しているため高いスコアを得ます。`info` オブジェクトは、そのスコアが付与された理由を理解するのに役立つ有用なコンテキストを追加します。
+
+```typescript
+{
+  score: 1,
+  info: {
+    reason: 'All listed countries are valid and recognized countries in the world.',
+    matches: [ 'France', 'Japan', 'Argentina' ],
+    misses: []
+  }
+}
+```
+
+
+
+## 部分的なカスタム例
+
+この例では、レスポンスに正しい要素と誤った要素が混在しています。メトリクスはその状況を反映して中間的なスコアを返し、何が正しく、何が見落とされたのかを説明する詳細を提供します。
+
+```typescript filename="src/example-partial-real-world-countries.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { WorldCountryMetric } from "./mastra/evals/example-real-world-countries";
+
+const metric = new WorldCountryMetric(openai("gpt-4o-mini"));
+
+const query = "Name some countries of the World.";
+const response = "Germany, Narnia, Australia";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 部分的なカスタム出力
+
+スコアは部分的な成功を反映しています。レスポンスには、基準を満たす有効な項目と基準を満たさない無効な項目の両方が含まれているためです。`info` フィールドは、何が一致し、何が一致しなかったかの内訳を示します。
+
+```typescript
+{
+  score: 0.67,
+  info: {
+    reason: '三つのうち二つは有効な国名です。',
+    matches: [ 'Germany', 'Australia' ],
+    misses: [ 'Narnia' ]
+  }
+}
+```
+
+
+
+## 低評価のカスタム例
+
+この例では、レスポンスが評価基準をまったく満たしていません。期待される要素が一切含まれていないため、メトリクスは低いスコアを返します。
+
+```typescript filename="src/example-low-real-world-countries.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { WorldCountryMetric } from "./mastra/evals/example-real-world-countries";
+
+const metric = new WorldCountryMetric(openai("gpt-4o-mini"));
+
+const query = "Name some countries of the World.";
+const response = "Gotham, Wakanda, Atlantis";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 低評価のカスタム出力
+
+スコアが0なのは、レスポンスに必要な要素が一つも含まれていないためです。`info` フィールドは結果の理由を説明し、スコアに至った不足点を列挙します。
+
+```typescript
+{
+  score: 0,
+  info: {
+    reason: 'The response contains fictional places rather than real countries.',
+    matches: [],
+    misses: [ 'Gotham', 'Wakanda', 'Atlantis' ]
+  }
+}
+```
+
+
+
+## 結果の理解
+
+`WorldCountryMetric` は次の形の結果を返します:
+
+```typescript
+{
+  score: number,
+  info: {
+    reason: string,
+    matches: string[],
+    misses: string[]
+  }
+}
+```
+
+### カスタムスコア
+
+0 から 1 のスコア:
+
+- **1.0**: 応答には誤りのない有効な項目のみが含まれている。
+- **0.7–0.9**: 応答はおおむね正しいが、1～2件の誤ったエントリを含む場合がある。
+- **0.4–0.6**: 応答は良否が混在している（有効なものと無効なものがある）。
+- **0.1–0.3**: 応答には主に誤りや無関係なエントリが含まれる。
+- **0.0**: 評価基準に照らして有効な内容がまったく含まれていない。
+
+### カスタム情報
+
+スコアの理由を説明し、次の詳細を含む:
+
+- 結果に対する平易な説明。
+- 応答内で見つかった正しい要素を列挙する `matches` 配列。
+- 誤っていた、または基準を満たさなかった項目を示す `misses` 配列。
+
+<GithubLink
+  outdated={true}
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/custom-eval"
+/>

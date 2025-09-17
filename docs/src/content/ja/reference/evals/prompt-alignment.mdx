@@ -1,11 +1,19 @@
 ---
-title: "リファレンス: プロンプトアラインメント | メトリクス | Evals | Mastra ドキュメント"
-description: Mastra におけるプロンプトアラインメントメトリクスのドキュメント。LLM の出力が与えられたプロンプト指示にどれだけ従っているかを評価します。
+title: "リファレンス: Prompt Alignment | Metrics | Evals | Mastra Docs"
+description: MastraのPrompt Alignmentメトリックのドキュメント。LLM出力が与えられたプロンプト指示にどの程度従っているかを評価します。
 ---
+
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
 
 # PromptAlignmentMetric
 
-`PromptAlignmentMetric` クラスは、LLM の出力が与えられたプロンプト指示にどれだけ厳密に従っているかを評価します。各指示が正確に守られているかを判定するジャッジベースのシステムを使用し、逸脱があった場合には詳細な理由を提供します。
+<ScorerCallout />
+
+`PromptAlignmentMetric`クラスは、LLMの出力が与えられたプロンプト指示のセットにどの程度厳密に従っているかを評価します。判定者ベースのシステムを使用して各指示が正確に従われているかを検証し、逸脱がある場合には詳細な理由を提供します。
+
+
 
 ## 基本的な使い方
 
@@ -36,6 +44,8 @@ console.log(result.score); // Alignment score from 0-1
 console.log(result.info.reason); // Explanation of the score
 ```
 
+
+
 ## コンストラクタのパラメータ
 
 <PropertiesTable
@@ -43,7 +53,8 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "model",
       type: "LanguageModel",
-      description: "命令整合性を評価するために使用されるモデルの設定",
+      description:
+        "命令整合性を評価するために使用されるモデルの設定",
       isOptional: false,
     },
     {
@@ -75,6 +86,8 @@ console.log(result.info.reason); // Explanation of the score
   ]}
 />
 
+
+
 ## measure() のパラメーター
 
 <PropertiesTable
@@ -94,6 +107,8 @@ console.log(result.info.reason); // Explanation of the score
   ]}
 />
 
+
+
 ## 戻り値
 
 <PropertiesTable
@@ -106,7 +121,8 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "info",
       type: "object",
-      description: "指示遵守に関する詳細なメトリクスを含むオブジェクト",
+      description:
+        "指示遵守に関する詳細なメトリクスを含むオブジェクト",
       properties: [
         {
           type: "string",
@@ -114,7 +130,8 @@ console.log(result.info.reason); // Explanation of the score
             {
               name: "reason",
               type: "string",
-              description: "スコアおよび指示遵守の詳細な説明",
+              description:
+                "スコアおよび指示遵守の詳細な説明",
             },
           ],
         },
@@ -122,6 +139,8 @@ console.log(result.info.reason); // Explanation of the score
     },
   ]}
 />
+
+
 
 ## スコアリングの詳細
 
@@ -183,6 +202,8 @@ console.log(result.info.reason); // Explanation of the score
 - 0.1-0.3：適用可能なインストラクションの遵守が限定的
 - 0.0：適用可能なインストラクションがまったく遵守されていない
 
+
+
 ## 例と分析
 
 ```typescript
@@ -234,6 +255,8 @@ const result2 = await metric.measure(
 //   }
 // }
 ```
+
+
 
 ## 関連
 

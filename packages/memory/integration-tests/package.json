@@ -32,31 +32,39 @@
     "@ai-sdk/google": "^1.2.19",
     "@ai-sdk/openai": "^1.3.0",
     "@ai-sdk/react": "^1.2.1",
-    "@mastra/fastembed": "workspace:*",
-    "@mastra/libsql": "workspace:*",
-    "@mastra/memory": "workspace:*",
-    "@mastra/pg": "workspace:*",
-    "@mastra/upstash": "workspace:*",
+    "@mastra/fastembed": "*",
+    "@mastra/libsql": "*",
+    "@mastra/memory": "*",
+    "@mastra/pg": "*",
+    "@mastra/upstash": "*",
     "dotenv": "^16.4.7",
     "json-schema": "^0.4.0",
     "zod": "^3.24.3"
   },
   "devDependencies": {
-    "@faker-js/faker": "^9.6.0",
-    "@mastra/core": "workspace:*",
-    "@testing-library/react": "^16.2.0",
+    "@faker-js/faker": "^9.9.0",
+    "@mastra/core": "*",
+    "@testing-library/react": "^16.3.0",
     "@types/json-schema": "^7.0.15",
     "@types/node": "^20.17.27",
     "ai": "^4.2.2",
-    "jsdom": "^26.0.0",
-    "mastra": "workspace:*",
-    "next": "^15.2.4",
+    "jsdom": "^26.1.0",
+    "mastra": "*",
+    "next": "^15.5.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "typescript": "^5.8.2",
     "vitest": "^3.2.4"
   },
-  "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.17.0-0"
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../core",
+      "@mastra/memory": "link:../../memory",
+      "@mastra/fastembed": "link:../../fastembed",
+      "@mastra/libsql": "link:../../../stores/libsql",
+      "@mastra/pg": "link:../../../stores/pg",
+      "@mastra/upstash": "link:../../../stores/upstash",
+      "mastra": "link:../../cli"
+    }
   }
 }

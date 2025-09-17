@@ -191,12 +191,51 @@ export class Workflow extends BaseResource {
   }
 
   /**
+   * @deprecated Use createRunAsync() instead.
+   * @throws {Error} Always throws an error directing users to use createRunAsync()
+   */
+  async createRun(_params?: { runId?: string }): Promise<{
+    runId: string;
+    start: (params: {
+      inputData: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+    }) => Promise<{ message: string }>;
+    watch: (onRecord: (record: WorkflowWatchResult) => void) => Promise<void>;
+    resume: (params: {
+      step: string | string[];
+      resumeData?: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+    }) => Promise<{ message: string }>;
+    stream: (params: {
+      inputData: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+    }) => Promise<ReadableStream>;
+    startAsync: (params: {
+      inputData: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+    }) => Promise<WorkflowRunResult>;
+    resumeAsync: (params: {
+      step: string | string[];
+      resumeData?: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+    }) => Promise<WorkflowRunResult>;
+  }> {
+    throw new Error(
+      'createRun() has been deprecated. ' +
+        'Please use createRunAsync() instead.\n\n' +
+        'Migration guide:\n' +
+        '  Before: const run = workflow.createRun();\n' +
+        '  After:  const run = await workflow.createRunAsync();\n\n' +
+        'Note: createRunAsync() is an async method, so make sure your calling function is async.',
+    );
+  }
+
+  /**
    * Creates a new workflow run
    * @param params - Optional object containing the optional runId
-   * @returns Promise containing the runId of the created run
+   * @returns Promise containing the runId of the created run with methods to control execution
    */
-  /** @deprecated Use createRunAsync instead */
-  async createRun(params?: { runId?: string }): Promise<{
+  async createRunAsync(params?: { runId?: string }): Promise<{
     runId: string;
     start: (params: {
       inputData: Record<string, any>;
@@ -269,40 +308,6 @@ export class Workflow extends BaseResource {
         return this.resumeAsync({ runId, step: p.step, resumeData: p.resumeData, runtimeContext: p.runtimeContext });
       },
     };
-  }
-
-  /**
-   * Creates a new workflow run (alias for createRun)
-   * @param params - Optional object containing the optional runId
-   * @returns Promise containing the runId of the created run
-   */
-  createRunAsync(params?: { runId?: string }): Promise<{
-    runId: string;
-    start: (params: {
-      inputData: Record<string, any>;
-      runtimeContext?: RuntimeContext | Record<string, any>;
-    }) => Promise<{ message: string }>;
-    watch: (onRecord: (record: WorkflowWatchResult) => void) => Promise<void>;
-    resume: (params: {
-      step: string | string[];
-      resumeData?: Record<string, any>;
-      runtimeContext?: RuntimeContext | Record<string, any>;
-    }) => Promise<{ message: string }>;
-    stream: (params: {
-      inputData: Record<string, any>;
-      runtimeContext?: RuntimeContext | Record<string, any>;
-    }) => Promise<ReadableStream>;
-    startAsync: (params: {
-      inputData: Record<string, any>;
-      runtimeContext?: RuntimeContext | Record<string, any>;
-    }) => Promise<WorkflowRunResult>;
-    resumeAsync: (params: {
-      step: string | string[];
-      resumeData?: Record<string, any>;
-      runtimeContext?: RuntimeContext | Record<string, any>;
-    }) => Promise<WorkflowRunResult>;
-  }> {
-    return this.createRun(params);
   }
 
   /**
@@ -400,7 +405,68 @@ export class Workflow extends BaseResource {
     );
 
     if (!response.ok) {
-      throw new Error(`Failed to stream vNext workflow: ${response.statusText}`);
+      throw new Error(`Failed to stream workflow: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    //using undefined instead of empty string to avoid parsing errors
+    let failedChunk: string | undefined = undefined;
+
+    // Create a transform stream that processes the response body
+    const transformStream = new TransformStream<ArrayBuffer, { type: string; payload: any }>({
+      start() {},
+      async transform(chunk, controller) {
+        try {
+          // Decode binary data to text
+          const decoded = new TextDecoder().decode(chunk);
+
+          // Split by record separator
+          const chunks = decoded.split(RECORD_SEPARATOR);
+
+          // Process each chunk
+          for (const chunk of chunks) {
+            if (chunk) {
+              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
+              try {
+                const parsedChunk = JSON.parse(newChunk);
+                controller.enqueue(parsedChunk);
+                failedChunk = undefined;
+              } catch {
+                failedChunk = newChunk;
+              }
+            }
+          }
+        } catch {
+          // Silently ignore processing errors
+        }
+      },
+    });
+
+    // Pipe the response body through the transform stream
+    return response.body.pipeThrough(transformStream);
+  }
+
+  /**
+   * Observes workflow stream for a workflow run
+   * @param params - Object containing the runId
+   * @returns Promise containing the workflow execution results
+   */
+  async observeStream(params: { runId: string }) {
+    const searchParams = new URLSearchParams();
+    searchParams.set('runId', params.runId);
+    const response: Response = await this.request(
+      `/api/workflows/${this.workflowId}/observe-stream?${searchParams.toString()}`,
+      {
+        method: 'POST',
+        stream: true,
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to observe workflow stream: ${response.statusText}`);
     }
 
     if (!response.body) {

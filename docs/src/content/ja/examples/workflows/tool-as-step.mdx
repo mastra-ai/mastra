@@ -1,0 +1,91 @@
+---
+title: "例: ツールをステップとして使用する | ワークフロー | Mastra ドキュメント"
+description: ワークフローでツールをステップとして統合する例（Mastra を使用）。
+---
+
+
+
+# 手順としてのツール
+
+ワークフローには、ツールを手順として組み込むことができます。この例では、`createStep()` を使ってツールを手順として定義する方法を示します。
+
+
+
+## ツールの作成
+
+文字列を受け取り、その逆順を返すシンプルなツールを作成します。
+
+```typescript filename="src/mastra/tools/example-reverse-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const reverseTool = createTool({
+  id: "reverse-tool",
+  description: "入力文字列を反転する",
+  inputSchema: z.object({
+    input: z.string()
+  }),
+  outputSchema: z.object({
+    output: z.string()
+  }),
+  execute: async ({ context }) => {
+    const { input } = context;
+    const reversed = input.split("").reverse().join("");
+
+    return {
+      output: reversed
+    };
+  }
+});
+```
+
+
+
+## ステップとしてのツール
+
+`createStep()` にツールを直接渡して、ステップとして使用します。`.map()` の使用は任意です。ツールは独自の入出力スキーマを定義しますが、ワークフローの `inputSchema` がツールの `inputSchema` と一致しない場合に、整合を取るのに役立ちます。
+
+この例では、ワークフローは `word` を受け取り、それをツールの `input` にマッピングします。ツールは `output` という文字列を返し、それが追加の変換なしにワークフローの `reversed` 出力へそのまま渡されます。
+
+```typescript filename="src/mastra/workflows/example-tool-step.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+import { reverseTool } from "../tools/example-reverse-tool";
+
+const step1 = createStep(reverseTool);
+
+export const toolAsStep = createWorkflow({
+  id: "tool-step-workflow",
+  inputSchema: z.object({
+    word: z.string()
+  }),
+  outputSchema: z.object({
+    reversed: z.string()
+  })
+})
+  .map(async ({ inputData }) => {
+    const { word } = inputData;
+
+    return {
+      input: word
+    };
+  })
+  .then(step1)
+  .commit();
+```
+
+
+
+## 関連項目
+
+- [ワークフローの実行](./running-workflows.mdx)
+
+
+
+## ワークフロー（レガシー）
+
+以下のリンクは、レガシーワークフローのドキュメント例です。
+
+- [ワークフローからエージェントを呼び出す（レガシー）](/examples/workflows_legacy/calling-agent)
+- [ワークフローのステップとしてツールを使用する（レガシー）](/examples/workflows_legacy/using-a-tool-as-a-step)

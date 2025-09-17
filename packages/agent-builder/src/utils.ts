@@ -37,7 +37,7 @@ function isInWorkspaceSubfolder(cwd: string): boolean {
         continue;
       }
 
-      console.log(`Checking for workspace indicators in: ${currentDir}`);
+      console.info(`Checking for workspace indicators in: ${currentDir}`);
 
       // Check for pnpm workspace
       if (existsSync(resolve(currentDir, 'pnpm-workspace.yaml'))) {
@@ -65,7 +65,7 @@ function isInWorkspaceSubfolder(cwd: string): boolean {
 
     return false;
   } catch (error) {
-    console.log(`Error in workspace detection: ${error}`);
+    console.warn(`Error in workspace detection: ${error}`);
     return false; // Default to false on any error
   }
 }
@@ -148,12 +148,12 @@ export function spawnWithOutput(
 export async function spawnSWPM(cwd: string, command: string, packageNames: string[]) {
   // 1) Try local swpm module resolution/execution
   try {
-    console.log('Running install command with swpm');
+    console.info('Running install command with swpm');
     const swpmPath = createRequire(import.meta.filename).resolve('swpm');
     await spawn(swpmPath, [command, ...packageNames], { cwd });
     return;
   } catch (e) {
-    console.log('Failed to run install command with swpm', e);
+    console.warn('Failed to run install command with swpm', e);
     // ignore and try fallbacks
   }
 
@@ -195,11 +195,11 @@ export async function spawnSWPM(cwd: string, command: string, packageNames: stri
     }
     args.push(...packageNames);
 
-    console.log(`Falling back to ${packageManager} ${args.join(' ')}`);
+    console.info(`Falling back to ${packageManager} ${args.join(' ')}`);
     await spawn(packageManager, args, { cwd });
     return;
   } catch (e) {
-    console.log(`Failed to run install command with native package manager: ${e}`);
+    console.warn(`Failed to run install command with native package manager: ${e}`);
   }
 
   throw new Error(`Failed to run install command with swpm and native package managers`);
@@ -261,10 +261,10 @@ export async function logGitState(targetPath: string, label: string): Promise<vo
     const gitLogResult = await git(targetPath, 'log', '--oneline', '-3');
     const gitCountResult = await git(targetPath, 'rev-list', '--count', 'HEAD');
 
-    console.log(`📊 Git state ${label}:`);
-    console.log('Status:', gitStatusResult.stdout.trim() || 'Clean working directory');
-    console.log('Recent commits:', gitLogResult.stdout.trim());
-    console.log('Total commits:', gitCountResult.stdout.trim());
+    console.info(`📊 Git state ${label}:`);
+    console.info('Status:', gitStatusResult.stdout.trim() || 'Clean working directory');
+    console.info('Recent commits:', gitLogResult.stdout.trim());
+    console.info('Total commits:', gitCountResult.stdout.trim());
   } catch (gitError) {
     console.warn(`Could not get git state ${label}:`, gitError);
   }
@@ -358,7 +358,7 @@ export async function gitCheckoutBranch(branchName: string, targetPath: string) 
     if (!(await isInsideGitRepo(targetPath))) return;
     // Try to create new branch using centralized git runner
     await git(targetPath, 'checkout', '-b', branchName);
-    console.log(`Created new branch: ${branchName}`);
+    console.info(`Created new branch: ${branchName}`);
   } catch (error) {
     // If branch exists, check if we can switch to it or create a unique name
     const errorStr = error instanceof Error ? error.message : String(error);
@@ -366,13 +366,13 @@ export async function gitCheckoutBranch(branchName: string, targetPath: string) 
       try {
         // Try to switch to existing branch
         await git(targetPath, 'checkout', branchName);
-        console.log(`Switched to existing branch: ${branchName}`);
+        console.info(`Switched to existing branch: ${branchName}`);
       } catch {
         // If can't switch, create a unique branch name
         const timestamp = Date.now().toString().slice(-6);
         const uniqueBranchName = `${branchName}-${timestamp}`;
         await git(targetPath, 'checkout', '-b', uniqueBranchName);
-        console.log(`Created unique branch: ${uniqueBranchName}`);
+        console.info(`Created unique branch: ${uniqueBranchName}`);
       }
     } else {
       throw error; // Re-throw if it's a different error
@@ -385,11 +385,11 @@ export async function backupAndReplaceFile(sourceFile: string, targetFile: strin
   // Create backup of existing file
   const backupFile = `${targetFile}.backup-${Date.now()}`;
   await copyFile(targetFile, backupFile);
-  console.log(`📦 Created backup: ${basename(backupFile)}`);
+  console.info(`📦 Created backup: ${basename(backupFile)}`);
 
   // Replace with template file
   await copyFile(sourceFile, targetFile);
-  console.log(`🔄 Replaced file with template version (backup created)`);
+  console.info(`🔄 Replaced file with template version (backup created)`);
 }
 
 export async function renameAndCopyFile(sourceFile: string, targetFile: string): Promise<string> {
@@ -407,7 +407,7 @@ export async function renameAndCopyFile(sourceFile: string, targetFile: string):
   }
 
   await copyFile(sourceFile, uniqueTargetFile);
-  console.log(`📝 Copied with unique name: ${basename(uniqueTargetFile)}`);
+  console.info(`📝 Copied with unique name: ${basename(uniqueTargetFile)}`);
   return uniqueTargetFile;
 }
 
@@ -480,7 +480,7 @@ export const mergeGitignoreFiles = (targetContent: string, templateContent: stri
         if (!hasConflict) {
           newEntries.push(trimmed);
         } else {
-          console.log(`⚠ Skipping conflicting .gitignore rule: ${trimmed} (conflicts with existing rule)`);
+          console.info(`⚠ Skipping conflicting .gitignore rule: ${trimmed} (conflicts with existing rule)`);
         }
       }
     }
@@ -535,7 +535,7 @@ export const mergeEnvFiles = (
     if (!existingVars.has(key)) {
       newVars.push({ key, value });
     } else {
-      console.log(`⚠ Skipping existing environment variable: ${key} (already exists in .env)`);
+      console.info(`⚠ Skipping existing environment variable: ${key} (already exists in .env)`);
     }
   }
 
@@ -570,7 +570,7 @@ export const detectAISDKVersion = async (projectPath: string): Promise<'v1' | 'v
     const packageJsonPath = join(projectPath, 'package.json');
 
     if (!existsSync(packageJsonPath)) {
-      console.log('No package.json found, defaulting to v2');
+      console.info('No package.json found, defaulting to v2');
       return 'v2';
     }
 
@@ -592,17 +592,17 @@ export const detectAISDKVersion = async (projectPath: string): Promise<'v1' | 'v
         if (versionMatch) {
           const majorVersion = parseInt(versionMatch[1]);
           if (majorVersion >= 2) {
-            console.log(`Detected ${pkg} v${majorVersion} -> using v2 specification`);
+            console.info(`Detected ${pkg} v${majorVersion} -> using v2 specification`);
             return 'v2';
           } else {
-            console.log(`Detected ${pkg} v${majorVersion} -> using v1 specification`);
+            console.info(`Detected ${pkg} v${majorVersion} -> using v1 specification`);
             return 'v1';
           }
         }
       }
     }
 
-    console.log('No AI SDK version detected, defaulting to v2');
+    console.info('No AI SDK version detected, defaulting to v2');
     return 'v2';
   } catch (error) {
     console.warn(`Failed to detect AI SDK version: ${error instanceof Error ? error.message : String(error)}`);
@@ -672,7 +672,7 @@ export const createModelInstance = async (
     }
 
     const modelInstance = await providerFn();
-    console.log(`Created ${provider} model instance (${version}): ${modelId}`);
+    console.info(`Created ${provider} model instance (${version}): ${modelId}`);
     return modelInstance;
   } catch (error) {
     console.error(`Failed to create model instance: ${error instanceof Error ? error.message : String(error)}`);
@@ -693,7 +693,7 @@ export const resolveModel = async ({
   // First try to get model from runtime context
   const modelFromContext = runtimeContext.get('model');
   if (modelFromContext) {
-    console.log('Using model from runtime context');
+    console.info('Using model from runtime context');
     // Type check to ensure it's a MastraLanguageModel
     if (isValidMastraLanguageModel(modelFromContext)) {
       return modelFromContext;
@@ -706,7 +706,7 @@ export const resolveModel = async ({
   // Check for selected model info in runtime context
   const selectedModel = runtimeContext.get('selectedModel') as { provider: string; modelId: string } | undefined;
   if (selectedModel?.provider && selectedModel?.modelId && projectPath) {
-    console.log(`Resolving selected model: ${selectedModel.provider}/${selectedModel.modelId}`);
+    console.info(`Resolving selected model: ${selectedModel.provider}/${selectedModel.modelId}`);
 
     // Detect AI SDK version from project
     const version = await detectAISDKVersion(projectPath);
@@ -720,6 +720,6 @@ export const resolveModel = async ({
     }
   }
 
-  console.log('Using default model');
+  console.info('Using default model');
   return defaultModel;
 };

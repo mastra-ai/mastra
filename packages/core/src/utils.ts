@@ -5,7 +5,7 @@ import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
-import type { TracingContext } from './ai-tracing';
+import type { TracingContext, TracingPolicy } from './ai-tracing';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraLanguageModel, MastraMemory } from './memory';
@@ -225,6 +225,7 @@ export interface ToolOptions {
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
   runtimeContext: RuntimeContext;
   tracingContext?: TracingContext;
+  tracingPolicy?: TracingPolicy;
   memory?: MastraMemory;
   agentName?: string;
   model?: MastraLanguageModel;

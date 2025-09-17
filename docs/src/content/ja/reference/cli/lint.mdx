@@ -1,9 +1,15 @@
 ---
-title: "mastra lint"
-description: "Mastraプロジェクトのリント"
+title: "mastra lint | プロジェクトの検証 | Mastra CLI"
+description: "Mastraプロジェクトをlintする"
 ---
 
-`mastra lint` コマンドは、あなたのMastraプロジェクトの構造とコードを検証します。
+
+
+# mastra lint
+
+`mastra lint`コマンドは、Mastraプロジェクトの構造とコードを検証し、ベストプラクティスに従い、エラーがないことを確認します。
+
+
 
 ## 使用方法
 
@@ -11,20 +17,48 @@ description: "Mastraプロジェクトのリント"
 mastra lint [options]
 ```
 
+
+
 ## オプション
 
-| オプション                | 説明                                             |
-| ------------------------- | ------------------------------------------------ |
-| `-d, --dir <path>`        | Mastra フォルダへのパス                          |
-| `-r, --root <path>`       | ルートフォルダへのパス                           |
-| `-t, --tools <toolsDirs>` | 含めるツールファイルへのパスをカンマ区切りで指定 |
+<PropertiesTable
+  content={[
+    {
+      name: "--dir",
+      type: "string",
+      description: "Mastraフォルダへのパス",
+      isOptional: true,
+    },
+    {
+      name: "--root",
+      type: "string",
+      description: "ルートフォルダへのパス",
+      isOptional: true,
+    },
+    {
+      name: "--tools",
+      type: "string",
+      description: "含めるツールファイルへのパスのカンマ区切りリスト",
+      isOptional: true,
+    },
+    {
+      name: "--help",
+      type: "boolean",
+      description: "コマンドのヘルプを表示",
+      isOptional: true,
+    },
+  ]}
+/>
 
-## 高度な使い方
 
-### テレメトリーの無効化
 
-リント（および他のコマンド）を実行中にCLIの分析機能を無効にするには、`MASTRA_TELEMETRY_DISABLED=1` を設定してください。
+## 高度な使用方法
 
-```bash
+### テレメトリを無効にする
+
+リンティング（およびその他のコマンド）の実行中にCLI分析を無効にするには、
+`MASTRA_TELEMETRY_DISABLED=1`を設定してください：
+
+```bash copy
 MASTRA_TELEMETRY_DISABLED=1 mastra lint
 ```

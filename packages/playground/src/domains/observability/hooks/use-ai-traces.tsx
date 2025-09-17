@@ -12,23 +12,16 @@ const fetchAITracesFn = async ({
   page: number;
   perPage: number;
 }) => {
-  try {
-    const res = await client.getAITraces({
-      pagination: {
-        page,
-        perPage,
-        dateRange,
-      },
-      filters,
-    });
+  const res = await client.getAITraces({
+    pagination: {
+      page,
+      perPage,
+      dateRange,
+    },
+    filters,
+  });
 
-    if (!res.spans) {
-      throw new Error('Error fetching AI traces');
-    }
-    return res.spans;
-  } catch (error) {
-    throw error;
-  }
+  return res.spans || [];
 };
 
 export interface AITracesFilters {
@@ -63,6 +56,7 @@ export const useAITraces = ({ filters, dateRange }: AITracesFilters) => {
     select: data => {
       return data.pages.flatMap(page => page);
     },
+    retry: false,
   });
 
   useEffect(() => {

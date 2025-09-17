@@ -5,9 +5,13 @@ description: OpenAI の埋め込みと PGVector を使ったベクトルスト�
 
 import { GithubLink } from "@/components/github-link";
 
+
+
 # 再ランキング結果
 
 この例では、Mastra、OpenAIの埋め込み、そしてベクトルストレージとしてPGVectorを使用し、再ランキングを取り入れたRetrieval-Augmented Generation（RAG）システムの実装方法を示します。
+
+
 
 ## 概要
 
@@ -19,11 +23,13 @@ import { GithubLink } from "@/components/github-link";
 4. Mastra の rerank 関数を使い、ベクトル類似度・セマンティック関連性・位置スコアを組み合わせて結果を再ランキングします
 5. 初期結果と再ランキング後の結果を比較し、改善点を表示します
 
+
+
 ## セットアップ
 
 ### 環境設定
 
-環境変数を必ず設定してください：
+環境変数を設定してください：
 
 ```bash filename=".env"
 OPENAI_API_KEY=your_openai_api_key_here
@@ -37,9 +43,15 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 ```typescript copy showLineNumbers filename="src/index.ts"
 import { openai } from "@ai-sdk/openai";
 import { PgVector } from "@mastra/pg";
-import { MDocument, rerank } from "@mastra/rag";
+import { 
+  MDocument, 
+  rerankWithScorer as rerank, 
+  MastraAgentRelevanceScorer 
+} from "@mastra/rag";
 import { embedMany, embed } from "ai";
 ```
+
+
 
 ## ドキュメント処理
 
@@ -62,9 +74,11 @@ const chunks = await doc1.chunk({
 });
 ```
 
-## 埋め込みの作成と保存
 
-チャンクの埋め込みを生成し、それらをベクターデータベースに保存します。
+
+## エンベディングの作成と保存
+
+チャンクのエンベディングを生成し、ベクターデータベースに保存します：
 
 ```typescript copy showLineNumbers{36} filename="src/index.ts"
 const { embeddings } = await embedMany({
@@ -72,11 +86,15 @@ const { embeddings } = await embedMany({
   model: openai.embedding("text-embedding-3-small"),
 });
 
-const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
+const pgVector = new PgVector({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+});
+
 await pgVector.createIndex({
   indexName: "embeddings",
   dimension: 1536,
 });
+
 await pgVector.upsert({
   indexName: "embeddings",
   vectors: embeddings,
@@ -84,9 +102,11 @@ await pgVector.upsert({
 });
 ```
 
-## ベクター検索とリランキング
 
-ベクター検索を実行し、結果をリランキングします：
+
+## ベクトル検索と再ランキング
+
+ベクトル検索を実行し、結果を再ランキングします：
 
 ```typescript copy showLineNumbers{51} filename="src/index.ts"
 const query = "explain technical trading analysis";
@@ -105,11 +125,11 @@ const initialResults = await pgVector.query({
 });
 
 // Re-rank results
-const rerankedResults = await rerank(
-  initialResults,
+const rerankedResults = await rerank({
+  results: initialResults,
   query,
-  openai("gpt-4o-mini"),
-  {
+  scorer: new MastraAgentRelevanceScorer('relevance-scorer', openai("gpt-4o-mini")),
+  options: {
     weights: {
       semantic: 0.5, // How well the content matches the query semantically
       vector: 0.3, // Original vector similarity score
@@ -117,14 +137,16 @@ const rerankedResults = await rerank(
     },
     topK: 3,
   },
-);
+});
 ```
 
-重み付けによって、さまざまな要素が最終的なランキングにどのように影響するかを制御します：
+重みは、最終的なランキングに異なる要因がどのように影響するかを制御します：
 
-- `semantic`: 値が高いほど、クエリとの意味的な理解や関連性が優先されます
-- `vector`: 値が高いほど、元のベクター類似度スコアが重視されます
-- `position`: 値が高いほど、元の結果の順序が維持されやすくなります
+- `semantic`: 高い値は、クエリに対するセマンティックな理解と関連性を優先します
+- `vector`: 高い値は、元のベクトル類似度スコアを重視します
+- `position`: 高い値は、結果の元の順序を維持するのに役立ちます
+
+
 
 ## 結果の比較
 

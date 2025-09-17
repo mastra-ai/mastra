@@ -1,0 +1,120 @@
+---
+title: "リファレンス: Workflow.execute() | ワークフロー（レガシー） | Mastra ドキュメント"
+description: "Mastra ワークフローにおける `.execute()` メソッドのドキュメント。このメソッドはワークフローステップを実行し、結果を返します。"
+---
+
+
+
+# Workflow.execute()
+
+指定されたトリガーデータでワークフローを実行し、結果を返します。ワークフローは実行前にコミットされている必要があります。
+
+
+
+## 使用例
+
+```typescript
+const workflow = new LegacyWorkflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+
+workflow.step(stepOne).then(stepTwo).commit();
+
+const result = await workflow.execute({
+  triggerData: { inputValue: 42 },
+});
+```
+
+
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "ExecuteOptions",
+      description: "ワークフロー実行のためのオプション",
+      isOptional: true,
+      properties: [
+        {
+          name: "triggerData",
+          type: "TriggerSchema",
+          description: "ワークフローのトリガースキーマに一致する入力データ",
+          isOptional: false,
+        },
+        {
+          name: "runId",
+          type: "string",
+          description: "この実行ランを追跡するための任意のID",
+          isOptional: true,
+        },
+      ],
+    },
+  ]}
+/>
+
+
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "WorkflowResult",
+      type: "object",
+      description: "ワークフロー実行の結果",
+      properties: [
+        {
+          name: "runId",
+          type: "string",
+          description: "この実行ランの一意の識別子",
+        },
+        {
+          name: "results",
+          type: "Record<string, StepResult>",
+          description: "完了した各ステップの結果",
+        },
+        {
+          name: "status",
+          type: "WorkflowStatus",
+          description: "ワークフロー実行の最終ステータス",
+        },
+      ],
+    },
+  ]}
+/>
+
+
+
+## 追加の例
+
+run ID を指定して実行:
+
+```typescript
+const result = await workflow.execute({
+  runId: "custom-run-id",
+  triggerData: { inputValue: 42 },
+});
+```
+
+実行結果を処理する:
+
+```typescript
+const { runId, results, status } = await workflow.execute({
+  triggerData: { inputValue: 42 },
+});
+
+if (status === "COMPLETED") {
+  console.log("Step results:", results);
+}
+```
+
+### 関連
+
+- [Workflow.createRun()](./createRun.mdx)
+- [Workflow.commit()](./commit.mdx)
+- [Workflow.start()](./start.mdx)

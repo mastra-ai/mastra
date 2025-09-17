@@ -16,6 +16,7 @@ import { useMemory } from '@/hooks/use-memory';
 import { AgentMemory } from './agent-memory';
 import { useState, useEffect } from 'react';
 import { AgentPromptEnhancer } from './agent-instructions-enhancer';
+import { GetScorerResponse } from '@mastra/client-js';
 
 export function AgentInformation({ agentId }: { agentId: string }) {
   const { data: agent, isLoading } = useAgent(agentId);
@@ -79,6 +80,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
                 computeToolLink={tool => `/tools/${agentId}/${tool.id}`}
                 computeWorkflowLink={workflowId => `/workflows/${workflowId}/graph`}
                 promptSlot={<AgentPromptEnhancer agentId={agentId} />}
+                computeScorerLink={(scorerId: string) => `/scorers/${scorerId}`}
               />
             )}
           </TabContent>

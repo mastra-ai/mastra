@@ -1,0 +1,194 @@
+---
+title: "例: キーワードカバレッジ | Scorers | Mastra Docs"
+description: Keyword Coverageスコアラーを使用して、レスポンスが入力テキストの重要なキーワードをどの程度カバーしているかを評価する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+
+
+# Keyword Coverage Scorer
+
+`createKeywordCoverageScorer`を使用して、レスポンスがコンテキストから必要なキーワードやフレーズをどの程度正確に含んでいるかを評価します。このスコアラーは`query`と`response`を受け取り、スコアとキーワードマッチ統計を含む`info`オブジェクトを返します。
+
+
+
+## インストール
+
+```bash copy
+npm install @mastra/evals
+```
+
+> 完全なAPIドキュメントと設定オプションについては、[`createKeywordCoverageScorer`](/reference/scorers/keyword-coverage)を参照してください。
+
+
+
+## 完全カバレッジの例
+
+この例では、レスポンスが入力からのキーワードを完全に反映しています。必要なキーワードがすべて存在し、欠落のない完全なカバレッジが実現されています。
+
+```typescript filename="src/example-full-keyword-coverage.ts" showLineNumbers copy
+import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
+
+const scorer = createKeywordCoverageScorer();
+
+const input = 'JavaScript frameworks like React and Vue';
+const output = 'Popular JavaScript frameworks include React and Vue for web development';
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: input }],
+  output: { role: 'assistant', text: output },
+});
+
+console.log('Score:', result.score);
+console.log('AnalyzeStepResult:', result.analyzeStepResult);
+```
+
+### 完全カバレッジの出力
+
+スコア1は、期待されるキーワードがすべてレスポンスで見つかったことを示しています。`analyzeStepResult`フィールドは、マッチしたキーワードの数が入力から抽出された総数と等しいことを確認しています。
+
+```typescript
+{
+  score: 1,
+  analyzeStepResult: {
+    totalKeywords: 4,
+    matchedKeywords: 4
+  }
+}
+```
+
+
+
+## 部分カバレッジの例
+
+この例では、レスポンスに入力からの重要なキーワードの一部は含まれているものの、すべてが含まれているわけではありません。スコアは部分的なカバレッジを反映しており、重要な用語が欠落しているか、部分的にしかマッチしていません。
+
+```typescript filename="src/example-partial-keyword-coverage.ts" showLineNumbers copy
+import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
+
+const scorer = createKeywordCoverageScorer();
+
+const input = 'TypeScript offers interfaces, generics, and type inference';
+const output = 'TypeScript provides type inference and some advanced features';
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: input }],
+  output: { role: 'assistant', text: output },
+});
+
+console.log('Score:', result.score);
+console.log('AnalyzeStepResult:', result.analyzeStepResult);
+```
+
+### 部分カバレッジの出力
+
+0.5のスコアは、期待されるキーワードの半分のみがレスポンスで見つかったことを示しています。`analyzeStepResult`フィールドは、入力で特定された総数と比較して、どれだけの用語がマッチしたかを示しています。
+
+```typescript
+{
+  score: 0.5,
+  analyzeStepResult: {
+    totalKeywords: 6,
+    matchedKeywords: 3
+  }
+}
+```
+
+
+
+## 最小カバレッジの例
+
+この例では、レスポンスに入力からの重要なキーワードがほとんど含まれていません。スコアは最小限のカバレッジを反映しており、ほとんどの主要な用語が欠落しているか、考慮されていません。
+
+```typescript filename="src/example-minimal-keyword-coverage.ts" showLineNumbers copy
+import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
+
+const scorer = createKeywordCoverageScorer();
+
+const input = 'Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning';
+const output = 'Data preparation is important for models';
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: input }],
+  output: { role: 'assistant', text: output },
+});
+
+console.log('Score:', result.score);
+console.log('AnalyzeStepResult:', result.analyzeStepResult);
+```
+
+### 最小カバレッジの出力
+
+低いスコアは、期待されるキーワードのうち少数しかレスポンスに含まれていないことを示しています。`analyzeStepResult`フィールドは、総キーワード数とマッチしたキーワード数の間のギャップを強調し、不十分なカバレッジを示しています。
+
+```typescript
+{
+  score: 0.2,
+  analyzeStepResult: {
+    totalKeywords: 10,
+    matchedKeywords: 2
+  }
+}
+```
+
+
+
+## メトリック設定
+
+デフォルト設定で`KeywordCoverageMetric`インスタンスを作成できます。追加の設定は必要ありません。
+
+```typescript
+const metric = new KeywordCoverageMetric();
+```
+
+> 設定オプションの完全なリストについては、[KeywordCoverageScorer](/reference/scorers/keyword-coverage.mdx)を参照してください。
+
+
+
+## 結果の理解
+
+`.run()`は以下の形式で結果を返します：
+
+```typescript
+{
+  runId: string,
+  extractStepResult: {
+    referenceKeywords: Set<string>,
+    responseKeywords: Set<string>
+  },
+  analyzeStepResult: {
+    totalKeywords: number,
+    matchedKeywords: number
+  },
+  score: number
+}
+```
+
+### score
+0から1の間のカバレッジスコア：
+
+- **1.0**: 完全なカバレッジ – すべてのキーワードが存在。
+- **0.7–0.9**: 高いカバレッジ – ほとんどのキーワードが含まれている。
+- **0.4–0.6**: 部分的なカバレッジ – いくつかのキーワードが存在。
+- **0.1–0.3**: 低いカバレッジ – 少数のキーワードがマッチ。
+- **0.0**: カバレッジなし – キーワードが見つからない。
+
+### runId
+このスコアラー実行の一意識別子。
+
+### extractStepResult
+抽出されたキーワードを含むオブジェクト：
+- **referenceKeywords**: 入力から抽出されたキーワードのセット。
+- **responseKeywords**: 出力から抽出されたキーワードのセット。
+
+### analyzeStepResult
+キーワードカバレッジ統計を含むオブジェクト：
+- **totalKeywords**: 期待されるキーワードの数（入力から）。
+- **matchedKeywords**: レスポンスで見つかったキーワードの数。
+
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/scorers/keyword-coverage"
+/>

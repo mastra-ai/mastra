@@ -1,0 +1,225 @@
+---
+title: "リファレンス: ツール呼び出し精度 | スコアラー | Mastra ドキュメント"
+description: Mastra の「ツール呼び出し精度」スコアラーに関するドキュメント。利用可能な選択肢の中から、LLM の出力が正しいツールを呼び出しているかを評価します。
+---
+
+
+
+# ツール呼び出し精度スコアラー
+
+Mastra は、LLM が利用可能な候補から適切なツールを選択できているかを評価するために、2 種類のツール呼び出し精度スコアラーを提供しています。
+
+1. **コードベースのスコアラー** - ツールの完全一致に基づく決定的評価
+2. **LLM ベースのスコアラー** - AI が適切性を判断するセマンティック評価
+
+使用例は [Tool Call Accuracy Examples](/examples/scorers/tool-call-accuracy) を参照してください。
+
+
+
+## コードベースのツール呼び出し精度スコアラー
+
+`@mastra/evals/scorers/code` の `createToolCallAccuracyScorerCode()` 関数は、ツールの完全一致に基づく決定論的な二値スコアリングを提供し、厳格モードと寛容モードの両方に対応するとともに、ツール呼び出し順序の検証もサポートします。
+
+### パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "expectedTool",
+      type: "string",
+      description: "与えられたタスクで呼び出すべきツール名。expectedToolOrder が指定されている場合は無視されます。",
+      required: false,
+    },
+    {
+      name: "strictMode",
+      type: "boolean",
+      description: "評価の厳格さを制御します。単一ツールモード: 完全一致の単一ツール呼び出しのみ許可。順序チェックモード: 余分なツールを含めず、正確に一致する必要があります。",
+      required: false,
+      default: "false",
+    },
+    {
+      name: "expectedToolOrder",
+      type: "string[]",
+      description: "期待される呼び出し順のツール名配列。指定されている場合は順序チェックモードが有効になり、expectedTool パラメータは無視されます。",
+      required: false,
+    },
+  ]}
+/>
+
+この関数は MastraScorer クラスのインスタンスを返します。`.run()` メソッドとその入出力の詳細は、[MastraScorer リファレンス](./mastra-scorer)を参照してください。
+
+### 評価モード
+
+コードベースのスコアラーは、2つの異なるモードで動作します。
+
+#### 単一ツールモード
+
+`expectedToolOrder` が指定されていない場合、スコアラーは単一ツールの選択を評価します。
+
+- **標準モード (strictMode: false)**: 他のツールが呼び出されていても、期待されるツールが呼び出されていれば `1` を返します
+- **厳格モード (strictMode: true)**: 呼び出しがちょうど1つで、かつ期待されるツールと一致する場合にのみ `1` を返します
+
+#### 順序チェックモード
+
+`expectedToolOrder` が指定されている場合、スコアラーはツール呼び出しの順序を検証します。
+
+- **厳密な順序 (strictMode: true)**: 余分なツールなしで、指定された順序どおりに呼び出す必要があります
+- **柔軟な順序 (strictMode: false)**: 期待されるツールが相対的に正しい順序で現れていればよく（余分なツールは許可）
+
+### 例
+
+```typescript
+import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/code';
+
+// 単一ツールの検証
+const scorer = createToolCallAccuracyScorerCode({
+  expectedTool: 'weather-tool'
+});
+
+// 厳格な単一ツール（他のツールは不可）
+const strictScorer = createToolCallAccuracyScorerCode({
+  expectedTool: 'calculator-tool',
+  strictMode: true
+});
+
+// ツール順序の検証
+const orderScorer = createToolCallAccuracyScorerCode({
+  expectedTool: 'search-tool', // 順序が指定されている場合は無視
+  expectedToolOrder: ['search-tool', 'weather-tool'],
+  strictMode: true // 完全一致が必要
+});
+```
+
+
+
+## LLMベースのツール呼び出し適合度スコアラー
+
+`@mastra/evals/scorers/llm` の `createToolCallAccuracyScorerLLM()` 関数は、LLM を用いてエージェントが呼び出したツールがユーザーのリクエストに対して適切かどうかを評価し、厳密な一致ではなく意味的な評価を行います。
+
+### Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraLanguageModel",
+      description: "ツールの適切性を評価するために使用する LLM モデル",
+      required: true,
+    },
+    {
+      name: "availableTools",
+      type: "Array<{name: string, description: string}>",
+      description: "コンテキストのための説明付き・利用可能なツール一覧",
+      required: true,
+    },
+  ]}
+/>
+
+### Features
+
+この LLM ベースのスコアラーは次を提供します:
+
+- **セマンティック評価**: 文脈とユーザー意図を理解
+- **適切性の判定**: 「役に立つ」ツールと「適切な」ツールを区別
+- **確認依頼への対応**: エージェントが適切に確認を求めている場合を認識
+- **不足ツールの検出**: 本来呼び出すべきだったツールを特定
+- **理由生成**: スコアリング判断の説明を提示
+
+### Evaluation Process
+
+1. **ツール呼び出しの抽出**: エージェント出力で言及されたツールを特定
+2. **適切性の分析**: 各ツールをユーザーリクエストに照らして評価
+3. **スコアの算出**: 適切なツール呼び出し数と総呼び出し数に基づいてスコアを計算
+4. **理由の生成**: 人が読める形の説明を提供
+
+### Examples
+
+```typescript
+import { createToolCallAccuracyScorerLLM } from '@mastra/evals/scorers/llm';
+import { openai } from '@ai-sdk/openai';
+
+const llmScorer = createToolCallAccuracyScorerLLM({
+  model: openai('gpt-4o-mini'),
+  availableTools: [
+    {
+      name: 'weather-tool',
+      description: '任意の場所の現在の天気情報を取得する'
+    },
+    {
+      name: 'search-tool',
+      description: 'ウェブ上の情報を検索する'
+    },
+    {
+      name: 'calendar-tool',
+      description: 'カレンダーの予定やスケジュールを確認する'
+    }
+  ]
+});
+
+const result = await llmScorer.run(agentRun);
+console.log(result.score); // 0.0 〜 1.0
+console.log(result.reason); // スコアの説明
+```
+
+
+
+## スコアラーの選び方
+
+### コードベースのスコアラーを使うとよい場合:
+
+- **決定的で再現可能な**結果が必要なとき
+- **ツールの完全一致**をテストしたいとき
+- **特定のツール実行順序**を検証する必要があるとき
+- 速度とコストを重視する（LLM 呼び出しなし）
+- 自動テストを実行しているとき
+
+### LLM ベースのスコアラーを使うとよい場合:
+
+- 適切さについての**意味的な理解**が必要なとき
+- ツール選択が**文脈や意図**に依存する場合
+- 確認要求のような**例外的ケース**を扱いたいとき
+- スコアリング判断に対する**説明**が必要なとき
+- **本番環境のエージェント挙動**を評価しているとき
+
+
+
+## スコアリングの詳細
+
+### コードベースのスコアリング
+
+- **二値スコア**: 常に 0 または 1 を返す
+- **決定的**: 同じ入力なら常に同じ出力になる
+- **高速**: 外部 API 呼び出し不要
+
+### LLM ベースのスコアリング
+
+- **小数スコア**: 0.0 から 1.0 の値を返す
+- **コンテキスト対応**: ユーザーの意図や妥当性を考慮する
+- **説明的**: スコアの根拠を提示する
+
+
+
+## ユースケース
+
+### コードベースのスコアラーのユースケース
+
+- **単体テスト**: 特定のツール選択の動作を検証
+- **回帰テスト**: ツール選択が変わらないことを保証
+- **ワークフロー検証**: 複数ステップのプロセスにおけるツールのシーケンスを確認
+- **CI/CD パイプライン**: 高速かつ決定論的な検証
+
+### LLM ベースのスコアラーのユースケース
+
+- **品質保証**: 本番運用中のエージェントの動作を評価
+- **A/B テスト**: 異なるエージェント実装を比較
+- **ユーザー意図との整合**: ツールがユーザーのニーズに合致していることを確認
+- **エッジケース対応**: 確認やエラーに関するシナリオを評価
+
+
+
+## 関連項目
+
+- [回答関連度スコアラー](./answer-relevancy)
+- [網羅性スコアラー](./completeness)
+- [忠実性スコアラー](./faithfulness)
+- [カスタムスコアラー](/docs/scorers/custom-scorers)

@@ -7,7 +7,7 @@ import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import type { LoopOptions } from '../types';
 import { MockTracer } from './mockTracer';
-import { createTestModel, modelWithFiles, modelWithReasoning, modelWithSources, testUsage } from './utils';
+import { createTestModels, modelWithFiles, modelWithReasoning, modelWithSources, testUsage } from './utils';
 
 export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   const generateText = async (args: Omit<LoopOptions, 'runId'>): ReturnType<typeof generateText5> => {
@@ -45,7 +45,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         );
 
         const result = await generateText({
-          model: createTestModel({
+          models: createTestModels({
             stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
               { type: 'text-start', id: '1' },
               { type: 'text-delta', id: '1', delta: 'Hello, world!' },
@@ -162,7 +162,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     describe('result.text', () => {
       it('should generate text', async () => {
         const result = await generateText({
-          model: createTestModel(),
+          models: createTestModels(),
           messageList: new MessageList(),
         });
 
@@ -174,7 +174,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     describe('result.reasoningText', () => {
       it('should contain reasoning string from model response', async () => {
         const result = await generateText({
-          model: modelWithReasoning,
+          models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
           messageList: new MessageList(),
         });
 
@@ -187,7 +187,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     describe('result.sources', () => {
       it('should contain sources', async () => {
         const result = await generateText({
-          model: modelWithSources,
+          models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
           messageList: new MessageList(),
         });
 
@@ -198,7 +198,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     describe('result.files', () => {
       it.todo('should contain files', async () => {
         const result = await generateText({
-          model: modelWithFiles,
+          models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
           messageList: new MessageList(),
         });
 
@@ -290,7 +290,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
       it.todo('should add the reasoning from the model response to the step result', async () => {
         const result = await generateText({
-          model: modelWithReasoning,
+          models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
           messageList: new MessageList(),
           _internal: {
             generateId: mockId({ prefix: 'id' }),
@@ -303,7 +303,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
       it.todo('should contain sources', async () => {
         const result = await generateText({
-          model: modelWithSources,
+          models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
           messageList: new MessageList(),
           _internal: {
             generateId: mockId({ prefix: 'id' }),
@@ -318,7 +318,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
       // https://github.com/vercel/ai/blob/53569b8e0e5c958db0186009b83ce941a5bc91c1/packages/ai/src/generate-text/generate-text.ts#L540
       it.todo('should contain files', async () => {
         const result = await generateText({
-          model: modelWithFiles,
+          models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
           messageList: new MessageList(),
           _internal: {
             generateId: mockId({ prefix: 'id' }),
@@ -341,61 +341,67 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           'input',
         );
         const result = await generateText({
-          model: new MockLanguageModelV2({
-            doGenerate: async ({ prompt, tools, toolChoice }) => {
-              expect(tools).toStrictEqual([
-                {
-                  type: 'function',
-                  name: 'tool1',
-                  description: undefined,
-                  inputSchema: {
-                    $schema: 'http://json-schema.org/draft-07/schema#',
-                    additionalProperties: false,
-                    properties: { value: { type: 'string' } },
-                    required: ['value'],
-                    type: 'object',
-                  },
-                  providerOptions: undefined,
-                },
-                {
-                  type: 'function',
-                  name: 'tool2',
-                  description: undefined,
-                  inputSchema: {
-                    $schema: 'http://json-schema.org/draft-07/schema#',
-                    additionalProperties: false,
-                    properties: { somethingElse: { type: 'string' } },
-                    required: ['somethingElse'],
-                    type: 'object',
-                  },
-                  providerOptions: undefined,
-                },
-              ]);
+          models: [
+            {
+              maxRetries: 0,
+              id: 'test-model',
+              model: new MockLanguageModelV2({
+                doGenerate: async ({ prompt, tools, toolChoice }) => {
+                  expect(tools).toStrictEqual([
+                    {
+                      type: 'function',
+                      name: 'tool1',
+                      description: undefined,
+                      inputSchema: {
+                        $schema: 'http://json-schema.org/draft-07/schema#',
+                        additionalProperties: false,
+                        properties: { value: { type: 'string' } },
+                        required: ['value'],
+                        type: 'object',
+                      },
+                      providerOptions: undefined,
+                    },
+                    {
+                      type: 'function',
+                      name: 'tool2',
+                      description: undefined,
+                      inputSchema: {
+                        $schema: 'http://json-schema.org/draft-07/schema#',
+                        additionalProperties: false,
+                        properties: { somethingElse: { type: 'string' } },
+                        required: ['somethingElse'],
+                        type: 'object',
+                      },
+                      providerOptions: undefined,
+                    },
+                  ]);
 
-              expect(toolChoice).toStrictEqual({ type: 'required' });
+                  expect(toolChoice).toStrictEqual({ type: 'required' });
 
-              expect(prompt).toStrictEqual([
-                {
-                  role: 'user',
-                  content: [{ type: 'text', text: 'test-input' }],
-                  providerOptions: undefined,
+                  expect(prompt).toStrictEqual([
+                    {
+                      role: 'user',
+                      content: [{ type: 'text', text: 'test-input' }],
+                      providerOptions: undefined,
+                    },
+                  ]);
+
+                  return {
+                    ...dummyResponseValues,
+                    content: [
+                      {
+                        type: 'tool-call',
+                        toolCallType: 'function',
+                        toolCallId: 'call-1',
+                        toolName: 'tool1',
+                        input: `{ "value": "value" }`,
+                      },
+                    ],
+                  };
                 },
-              ]);
-
-              return {
-                ...dummyResponseValues,
-                content: [
-                  {
-                    type: 'tool-call',
-                    toolCallType: 'function',
-                    toolCallId: 'call-1',
-                    toolName: 'tool1',
-                    input: `{ "value": "value" }`,
-                  },
-                ],
-              };
+              }),
             },
-          }),
+          ],
           tools: {
             tool1: {
               inputSchema: z.object({ value: z.string() }),
@@ -442,48 +448,54 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           'input',
         );
         const result = await generateText({
-          model: new MockLanguageModelV2({
-            doGenerate: async ({ prompt, tools, toolChoice }) => {
-              expect(tools).toStrictEqual([
-                {
-                  type: 'function',
-                  name: 'tool1',
-                  description: undefined,
-                  inputSchema: {
-                    $schema: 'http://json-schema.org/draft-07/schema#',
-                    additionalProperties: false,
-                    properties: { value: { type: 'string' } },
-                    required: ['value'],
-                    type: 'object',
-                  },
-                  providerOptions: undefined,
+          models: [
+            {
+              maxRetries: 0,
+              id: 'test-model',
+              model: new MockLanguageModelV2({
+                doGenerate: async ({ prompt, tools, toolChoice }) => {
+                  expect(tools).toStrictEqual([
+                    {
+                      type: 'function',
+                      name: 'tool1',
+                      description: undefined,
+                      inputSchema: {
+                        $schema: 'http://json-schema.org/draft-07/schema#',
+                        additionalProperties: false,
+                        properties: { value: { type: 'string' } },
+                        required: ['value'],
+                        type: 'object',
+                      },
+                      providerOptions: undefined,
+                    },
+                  ]);
+
+                  expect(toolChoice).toStrictEqual({ type: 'auto' });
+
+                  expect(prompt).toStrictEqual([
+                    {
+                      role: 'user',
+                      content: [{ type: 'text', text: 'test-input' }],
+                      providerOptions: undefined,
+                    },
+                  ]);
+
+                  return {
+                    ...dummyResponseValues,
+                    content: [
+                      {
+                        type: 'tool-call',
+                        toolCallType: 'function',
+                        toolCallId: 'call-1',
+                        toolName: 'tool1',
+                        input: `{ "value": "value" }`,
+                      },
+                    ],
+                  };
                 },
-              ]);
-
-              expect(toolChoice).toStrictEqual({ type: 'auto' });
-
-              expect(prompt).toStrictEqual([
-                {
-                  role: 'user',
-                  content: [{ type: 'text', text: 'test-input' }],
-                  providerOptions: undefined,
-                },
-              ]);
-
-              return {
-                ...dummyResponseValues,
-                content: [
-                  {
-                    type: 'tool-call',
-                    toolCallType: 'function',
-                    toolCallId: 'call-1',
-                    toolName: 'tool1',
-                    input: `{ "value": "value" }`,
-                  },
-                ],
-              };
+              }),
             },
-          }),
+          ],
           tools: {
             tool1: {
               inputSchema: z.object({ value: z.string() }),
@@ -529,18 +541,24 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           'input',
         );
         const result = await generateText({
-          model: new MockLanguageModelV2({
-            doGenerate: async () => ({
-              ...dummyResponseValues,
-              content: [],
-              providerMetadata: {
-                exampleProvider: {
-                  a: 10,
-                  b: 20,
-                },
-              },
-            }),
-          }),
+          models: [
+            {
+              maxRetries: 0,
+              id: 'test-model',
+              model: new MockLanguageModelV2({
+                doGenerate: async () => ({
+                  ...dummyResponseValues,
+                  content: [],
+                  providerMetadata: {
+                    exampleProvider: {
+                      a: 10,
+                      b: 20,
+                    },
+                  },
+                }),
+              }),
+            },
+          ],
           messageList,
         });
 
@@ -565,17 +583,23 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         );
 
         const result = await generateText({
-          model: new MockLanguageModelV2({
-            doStream: async ({}) => ({
-              ...dummyResponseValues,
-              stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-                { type: 'text-end', id: '1' },
-                { type: 'finish', finishReason: 'stop', usage: testUsage },
-              ]),
-            }),
-          }),
+          models: [
+            {
+              maxRetries: 0,
+              id: 'test-model',
+              model: new MockLanguageModelV2({
+                doStream: async ({}) => ({
+                  ...dummyResponseValues,
+                  stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+                    { type: 'text-start', id: '1' },
+                    { type: 'text-delta', id: '1', delta: 'Hello, world!' },
+                    { type: 'text-end', id: '1' },
+                    { type: 'finish', finishReason: 'stop', usage: testUsage },
+                  ]),
+                }),
+              }),
+            },
+          ],
           messageList,
         });
 
@@ -592,21 +616,27 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           'input',
         );
         const result = await generateText({
-          model: new MockLanguageModelV2({
-            doGenerate: async () => ({
-              ...dummyResponseValues,
-              content: [
-                { type: 'text', text: 'Hello, world!' },
-                {
-                  type: 'tool-call',
-                  toolCallType: 'function',
-                  toolCallId: 'call-1',
-                  toolName: 'tool1',
-                  input: `{ "value": "value" }`,
-                },
-              ],
-            }),
-          }),
+          models: [
+            {
+              maxRetries: 0,
+              id: 'test-model',
+              model: new MockLanguageModelV2({
+                doGenerate: async () => ({
+                  ...dummyResponseValues,
+                  content: [
+                    { type: 'text', text: 'Hello, world!' },
+                    {
+                      type: 'tool-call',
+                      toolCallType: 'function',
+                      toolCallId: 'call-1',
+                      toolName: 'tool1',
+                      input: `{ "value": "value" }`,
+                    },
+                  ],
+                }),
+              }),
+            },
+          ],
           tools: {
             tool1: {
               inputSchema: z.object({ value: z.string() }),
@@ -633,7 +663,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           'input',
         );
         const result = await generateText({
-          model: modelWithReasoning,
+          models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
           messageList,
         });
 
@@ -644,20 +674,26 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     describe('result.request', () => {
       it('should contain request body', async () => {
         const result = await generateText({
-          model: new MockLanguageModelV2({
-            doStream: async ({}) => ({
-              ...dummyResponseValues,
-              stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-                { type: 'text-end', id: '1' },
-                { type: 'finish', finishReason: 'stop', usage: testUsage },
-              ]),
-              request: {
-                body: 'test body',
-              },
-            }),
-          }),
+          models: [
+            {
+              maxRetries: 0,
+              id: 'test-model',
+              model: new MockLanguageModelV2({
+                doStream: async ({}) => ({
+                  ...dummyResponseValues,
+                  stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+                    { type: 'text-start', id: '1' },
+                    { type: 'text-delta', id: '1', delta: 'Hello, world!' },
+                    { type: 'text-end', id: '1' },
+                    { type: 'finish', finishReason: 'stop', usage: testUsage },
+                  ]),
+                  request: {
+                    body: 'test body',
+                  },
+                }),
+              }),
+            },
+          ],
           messageList: new MessageList(),
         });
 
@@ -670,26 +706,34 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     describe('result.response', () => {
       it('should contain response body and headers', async () => {
         const result = await generateText({
-          model: new MockLanguageModelV2({
-            doStream: async ({}) => ({
-              ...dummyResponseValues,
-              stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-                { type: 'text-end', id: '1' },
-                { type: 'finish', finishReason: 'stop', usage: testUsage },
-              ]),
-              response: {
-                id: 'test-id-from-model',
-                timestamp: new Date(10000),
-                modelId: 'test-response-model-id',
-                headers: {
-                  'custom-response-header': 'response-header-value',
-                },
-                body: 'test body',
-              },
-            }),
-          }),
+          models: [
+            {
+              maxRetries: 0,
+              id: 'test-model',
+              model: new MockLanguageModelV2({
+                doStream: async ({}) => ({
+                  ...dummyResponseValues,
+                  stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+                    { type: 'text-start', id: '1' },
+                    { type: 'text-delta', id: '1', delta: 'Hello, world!' },
+                    { type: 'text-end', id: '1' },
+                    { type: 'finish', finishReason: 'stop', usage: testUsage },
+                  ]),
+                  response: {
+                    id: 'test-id-from-model',
+                    timestamp: new Date(10000),
+                    modelId: 'test-response-model-id',
+                    modelProvider: 'mock-provider',
+                    modelVersion: 'v2',
+                    headers: {
+                      'custom-response-header': 'response-header-value',
+                    },
+                    body: 'test body',
+                  },
+                }),
+              }),
+            },
+          ],
           _internal: { generateId: () => '1234', currentDate: () => new Date(0), now: () => 0 },
           messageList: new MessageList(),
         });
@@ -713,6 +757,8 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               },
             ],
             "modelId": "test-response-model-id",
+            "modelProvider": "mock-provider",
+            "modelVersion": "v2",
             "timestamp": 1970-01-01T00:00:10.000Z,
           }
         `);
@@ -735,6 +781,8 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               },
             ],
             "modelId": "test-response-model-id",
+            "modelProvider": "mock-provider",
+            "modelVersion": "v2",
             "timestamp": 1970-01-01T00:00:10.000Z,
             "uiMessages": [
               {
@@ -1175,6 +1223,8 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //                   },
     //                 ],
     //                 "modelId": "test-response-model-id",
+    //                 "modelProvider": "mock-provider",
+    //                 "modelVersion": "v2",
     //                 "timestamp": 1970-01-01T00:00:10.000Z,
     //               },
     //               "usage": {
@@ -1357,6 +1407,8 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //                   },
     //                 ],
     //                 "modelId": "test-response-model-id",
+    //                 "modelProvider": "mock-provider",
+    //                 "modelVersion": "v2",
     //                 "timestamp": 1970-01-01T00:00:10.000Z,
     //               },
     //               "usage": {
@@ -2003,25 +2055,31 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         'user',
       );
       await generateText({
-        model: new MockLanguageModelV2({
-          doStream: async ({}) => ({
-            ...dummyResponseValues,
-            stream: convertArrayToReadableStream([
-              {
-                type: 'tool-call',
-                toolCallType: 'function',
-                toolCallId: 'call-1',
-                toolName: 'tool1',
-                input: `{ "value": "value" }`,
-              },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: testUsage,
-              },
-            ]),
-          }),
-        }),
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockLanguageModelV2({
+              doStream: async ({}) => ({
+                ...dummyResponseValues,
+                stream: convertArrayToReadableStream([
+                  {
+                    type: 'tool-call',
+                    toolCallType: 'function',
+                    toolCallId: 'call-1',
+                    toolName: 'tool1',
+                    input: `{ "value": "value" }`,
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: testUsage,
+                  },
+                ]),
+              }),
+            }),
+          },
+        ],
         tools: {
           tool1: {
             inputSchema: z.object({ value: z.string() }),
@@ -2040,7 +2098,6 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         },
       });
 
-      console.log(JSON.stringify(tracer.jsonSpans, null, 2));
       expect(tracer.jsonSpans).toMatchInlineSnapshot(`
         [
           {

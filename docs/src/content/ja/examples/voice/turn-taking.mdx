@@ -5,9 +5,13 @@ description: Mastraを使用して、順番に発言するマルチエージェ�
 
 import { GithubLink } from "@/components/github-link";
 
+
+
 # ターン制AIディベート
 
 以下のコードスニペットは、Mastraを使ってターン制のマルチエージェント会話システムを実装する方法を示しています。この例では、2人のAIエージェント（楽観主義者と懐疑主義者）がユーザーが提供したトピックについてディベートを行い、お互いの意見に順番に応答します。
+
+
 
 ## 音声機能を持つエージェントの作成
 
@@ -39,9 +43,11 @@ export const skepticAgent = new Agent({
 });
 ```
 
-## Mastra へのエージェントの登録
 
-次に、両方のエージェントをあなたの Mastra インスタンスに登録します。
+
+## Mastraにエージェントを登録する
+
+次に、両方のエージェントをMastraインスタンスに登録します：
 
 ```typescript filename="src/mastra/index.ts"
 import { PinoLogger } from "@mastra/loggers";
@@ -59,6 +65,8 @@ export const mastra = new Mastra({
   }),
 });
 ```
+
+
 
 ## ディベートにおけるターンテイキングの管理
 
@@ -205,6 +213,8 @@ export async function runDebate(topic: string, turns: number = 3) {
 }
 ```
 
+
+
 ## コマンドラインからディベートを実行する
 
 コマンドラインからディベートを実行するためのシンプルなスクリプトはこちらです：
@@ -261,9 +271,13 @@ main().catch((error) => {
 });
 ```
 
+
+
 ## ディベート用のウェブインターフェースを作成する
 
 ウェブアプリケーションの場合、ユーザーがディベートを開始し、エージェントの応答を聞くことができるシンプルなNext.jsコンポーネントを作成できます。
+
+
 
 ```tsx filename="app/components/DebateInterface.tsx"
 "use client";
@@ -455,6 +469,8 @@ export default function DebateInterface() {
   );
 }
 ```
+
+
 
 この例では、Mastra を使用してターン制のマルチエージェント会話システムを作成する方法を示します。エージェントたちはユーザーが選んだトピックについてディベートを行い、それぞれが前のエージェントの発言に応答します。また、システムは各エージェントの応答を音声に変換し、没入感のあるディベート体験を提供します。
 

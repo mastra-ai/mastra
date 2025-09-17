@@ -160,7 +160,7 @@ const mastra = new Mastra({
   },
 });
 
-const run = mastra.vnext_getWorkflow('myWorkflow').createRun();
+const run = await mastra.vnext_getWorkflow('myWorkflow').createRunAsync();
 ```
 
 The `steps` property in the workflow options provides type safety for accessing step results. When you declare the steps used in your workflow, TypeScript will ensure type safety when accessing `result.steps`:
@@ -174,7 +174,8 @@ const workflow = createWorkflow({
   steps: [step1, step2], // TypeScript knows these steps exist
 });
 
-const result = await workflow.createRun().start({ inputData: {} });
+const run = await workflow.createRunAsync();
+const result = await run.start({ inputData: {} });
 if (result.status === 'success') {
   console.log(result.result); // only exists if status is success
 } else if (result.status === 'failed') {
@@ -359,7 +360,7 @@ const counterWorkflow = createWorkflow({
 
 counterWorkflow.foreach(mapStep).then(finalStep).commit();
 
-const run = counterWorkflow.createRun();
+const run = await counterWorkflow.createRunAsync();
 const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
 
 if (result.status === 'success') {
@@ -497,7 +498,7 @@ After defining a workflow, run it with:
 
 ```typescript
 // Create a run instance
-const run = myWorkflow.createRun();
+const run = await myWorkflow.createRunAsync();
 
 // Start the workflow with input data
 const result = await run.start({
@@ -580,7 +581,8 @@ export type WorkflowResult<...> =
 ### Example Usage
 
 ```typescript
-const result = await workflow.createRun().start({
+const run = await workflow.createRunAsync();
+const result = await run.start({
   inputData: {
     /* ... */
   },
@@ -610,7 +612,7 @@ if (result.status === 'success') {
 You can also watch workflow execution:
 
 ```typescript
-const run = myWorkflow.createRun();
+const run = await myWorkflow.createRunAsync();
 
 // Add a watcher to monitor execution
 run.watch(event => {
@@ -984,11 +986,11 @@ The vNext workflow API introduces several improvements over the original impleme
 
    ```typescript
    // vNext
-   const run = workflow.createRun();
+   const run = await workflow.createRunAsync();
    const result = await run.start({ inputData: { data: 'value' } });
 
    // Original Mastra API
-   const run = workflow.createRun();
+   const run = await workflow.createRunAsync();
    const result = await run.start({ triggerData: { data: 'value' } });
    ```
 

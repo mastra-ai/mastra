@@ -3,9 +3,13 @@ title: "リファレンス: voice.listen() | 音声プロバイダー | Mastra �
 description: "すべてのMastra音声プロバイダーで利用可能な、音声をテキストに変換するlisten()メソッドのドキュメント。"
 ---
 
+
+
 # voice.listen()
 
 `listen()` メソッドは、すべてのMastra音声プロバイダーで利用可能な、音声をテキストに変換するコア機能です。音声ストリームを入力として受け取り、文字起こしされたテキストを返します。
+
+
 
 ## 使用例
 
@@ -42,6 +46,8 @@ const transcriptWithOptions = await voice.listen(audioStream, {
 });
 ```
 
+
+
 ## パラメータ
 
 <PropertiesTable
@@ -62,6 +68,8 @@ const transcriptWithOptions = await voice.listen(audioStream, {
   ]}
 />
 
+
+
 ## 戻り値
 
 以下のいずれかを返します：
@@ -69,6 +77,8 @@ const transcriptWithOptions = await voice.listen(audioStream, {
 - `Promise<string>`: 文字起こしされたテキストを解決するプロミス
 - `Promise<NodeJS.ReadableStream>`: 文字起こしされたテキストのストリームを解決するプロミス（ストリーミング文字起こし用）
 - `Promise<void>`: テキストを直接返す代わりに「writing」イベントを発行するリアルタイムプロバイダー用
+
+
 
 ## プロバイダー固有のオプション
 
@@ -114,7 +124,8 @@ const transcriptWithOptions = await voice.listen(audioStream, {
     {
       name: "options.config",
       type: "object",
-      description: "Google Cloud Speech-to-Text APIからの認識設定",
+      description:
+        "Google Cloud Speech-to-Text APIからの認識設定",
       isOptional: true,
       defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
     },
@@ -142,6 +153,8 @@ const transcriptWithOptions = await voice.listen(audioStream, {
   ]}
 />
 
+
+
 ## リアルタイム音声プロバイダー
 
 `OpenAIRealtimeVoice`のようなリアルタイム音声プロバイダーを使用する場合、`listen()`メソッドは異なる動作をします：
@@ -166,6 +179,8 @@ const microphoneStream = getMicrophoneStream();
 await voice.listen(microphoneStream);
 ```
 
+
+
 ## CompositeVoiceでの使用
 
 `CompositeVoice`を使用する場合、`listen()`メソッドは設定されたリスニングプロバイダーに処理を委譲します：
@@ -184,6 +199,8 @@ const voice = new CompositeVoice({
 const transcript = await voice.listen(audioStream);
 ```
 
+
+
 ## 注意事項
 
 - すべての音声プロバイダーが音声認識機能をサポートしているわけではありません（例：PlayAI、Speechify）
@@ -192,6 +209,8 @@ const transcript = await voice.listen(audioStream);
 - サポートされる音声フォーマットはプロバイダーによって異なります。一般的なフォーマットにはMP3、WAV、M4Aなどがあります
 - 一部のプロバイダーは、テキストが文字起こしされるとすぐに返される、ストリーミング文字起こしをサポートしています
 - 最高のパフォーマンスを得るには、使用が終わったら音声ストリームを閉じるか終了することを検討してください
+
+
 
 ## 関連メソッド
 

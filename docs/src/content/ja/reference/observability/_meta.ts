@@ -1,6 +1,6 @@
 const meta = {
-  providers: "プロバイダー",
-  logger: "ロガー",
+  providers: "Providers",
+  logger: "PinoLogger",
   "otel-config": "OTelConfig",
 };
 export default meta;

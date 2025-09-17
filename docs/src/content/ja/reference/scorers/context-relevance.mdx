@@ -1,0 +1,236 @@
+---
+title: "リファレンス: コンテキスト関連度スコアラー | Scorers | Mastra ドキュメント"
+description: Mastra の Context Relevance Scorer に関するドキュメント。重み付き関連度スコアリングにより、エージェントの応答生成に用いる提供コンテキストの関連性と有用性を評価します。
+---
+
+import { PropertiesTable } from "@/components/properties-table";
+
+
+
+# コンテキスト関連性スコアラー
+
+`createContextRelevanceScorerLLM()` 関数は、エージェントの応答生成にあたって提供されたコンテキストがどれほど関連性が高く有用だったかを評価するスコアラーを作成します。重み付けされた関連度レベルを用い、関連度の高いコンテキストが未使用だった場合や必要な情報が欠けている場合にペナルティを適用します。
+
+
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraLanguageModel",
+      description: "コンテキスト関連性の評価に使用する言語モデル",
+      required: true,
+    },
+    {
+      name: "options",
+      type: "ContextRelevanceOptions",
+      description: "スコアラーの構成オプション",
+      required: true,
+      children: [
+        {
+          name: "context",
+          type: "string[]",
+          description: "関連性を評価するコンテキスト要素の配列",
+          required: false,
+        },
+        {
+          name: "contextExtractor",
+          type: "(input, output) => string[]",
+          description: "実行時の入力と出力からコンテキストを動的に抽出する関数",
+          required: false,
+        },
+        {
+          name: "scale",
+          type: "number",
+          description: "最終スコアに乗じるスケール係数（デフォルト: 1）",
+          required: false,
+        },
+        {
+          name: "penalties",
+          type: "object",
+          description: "スコアリング用のペナルティ設定（カスタマイズ可）",
+          required: false,
+          children: [
+            {
+              name: "unusedHighRelevanceContext",
+              type: "number",
+              description: "未使用の高関連コンテキスト1件あたりのペナルティ（デフォルト: 0.1）",
+              required: false,
+            },
+            {
+              name: "missingContextPerItem",
+              type: "number",
+              description: "不足しているコンテキスト項目1件あたりのペナルティ（デフォルト: 0.15）",
+              required: false,
+            },
+            {
+              name: "maxMissingContextPenalty",
+              type: "number",
+              description: "不足コンテキストに対する合計ペナルティの上限（デフォルト: 0.5）",
+              required: false,
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+:::note
+`context` または `contextExtractor` のいずれかを指定する必要があります。両方を指定した場合は `contextExtractor` が優先されます。
+:::
+
+
+
+## .run() の戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "0 から scale（デフォルトは 0〜1）までの重み付き関連度スコア",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "コンテキストの関連性評価に関する人間が読める説明",
+    },
+  ]}
+/>
+
+
+
+## スコアの詳細
+
+### 重み付き関連度スコアリング
+
+Context Relevance は、次の要素を考慮する高度なスコアリングアルゴリズムを使用します：
+
+1. **関連度レベル**：各コンテキストは重み付きの値で分類されます：
+   - `high` = 1.0（クエリに直接対応）
+   - `medium` = 0.7（補助的情報）
+   - `low` = 0.3（周辺的に関連）
+   - `none` = 0.0（完全に無関係）
+
+2. **使用検知**：関連するコンテキストが実際に応答で使用されたかを追跡
+
+3. **適用されるペナルティ**（`penalties` オプションで設定可能）：
+   - **未使用の高関連度**：未使用の高関連度コンテキストごとの `unusedHighRelevanceContext` ペナルティ（デフォルト：0.1）
+   - **不足コンテキスト**：特定された不足情報に対して最大 `maxMissingContextPenalty` まで（デフォルト：0.5）
+
+### スコアの算出式
+
+```
+Base Score = Σ(relevance_weights) / (num_contexts × 1.0)
+Usage Penalty = count(unused_high_relevance) × unusedHighRelevanceContext
+Missing Penalty = min(count(missing_context) × missingContextPerItem, maxMissingContextPenalty)
+
+Final Score = max(0, Base Score - Usage Penalty - Missing Penalty) × scale
+```
+
+**デフォルト値**:
+- `unusedHighRelevanceContext` = 0.1（未使用の高関連度コンテキスト1件あたり10%のペナルティ）
+- `missingContextPerItem` = 0.15（不足コンテキスト1件あたり15%のペナルティ）
+- `maxMissingContextPenalty` = 0.5（不足コンテキストに対するペナルティの上限は50%）
+- `scale` = 1
+
+### スコアの解釈
+
+- **0.9-1.0** = ほぼ隙のない非常に高い関連性
+- **0.7-0.8** = 一部未使用または不足コンテキストはあるが良好な関連性
+- **0.4-0.6** = 隙が目立つ混在した関連性
+- **0.0-0.3** = 低い関連性、またはほぼ無関係なコンテキスト
+
+### Context Precision との違い
+
+| 観点 | Context Relevance | Context Precision |
+|--------|-------------------|-------------------|
+| **アルゴリズム** | ペナルティ付きの重み付きレベル | Mean Average Precision (MAP) |
+| **関連度** | 複数レベル（high/medium/low/none） | 二値（yes/no） |
+| **位置** | 考慮しない | 重要（早い位置を高評価） |
+| **使用状況** | 未使用のコンテキストを追跡しペナルティ | 考慮しない |
+| **不足** | ギャップを特定しペナルティ | 評価しない |
+
+
+
+## 使用例
+
+### 基本設定
+
+```typescript
+const scorer = createContextRelevanceScorerLLM({
+  model: openai('gpt-4o'),
+  options: {
+    context: ['アインシュタインは光電効果の研究でノーベル賞を受賞した'],
+    scale: 1,
+  },
+});
+```
+
+### ペナルティのカスタム設定
+
+```typescript
+const scorer = createContextRelevanceScorerLLM({
+  model: openai('gpt-4o'),
+  options: {
+    context: ['コンテキスト情報...'],
+    penalties: {
+      unusedHighRelevanceContext: 0.05, // 未使用の高関連コンテキストに対する低めのペナルティ
+      missingContextPerItem: 0.2, // 欠落項目ごとの高めのペナルティ
+      maxMissingContextPenalty: 0.4, // 最大ペナルティの上限を低く設定
+    },
+    scale: 2, // 最終スコアを2倍にする
+  },
+});
+```
+
+### 動的コンテキスト抽出
+
+```typescript
+const scorer = createContextRelevanceScorerLLM({
+  model: openai('gpt-4o'),
+  options: {
+    contextExtractor: (input, output) => {
+      // クエリに基づいてコンテキストを抽出
+      const userQuery = input?.inputMessages?.[0]?.content || '';
+      if (userQuery.includes('Einstein')) {
+        return [
+          'アインシュタインは光電効果でノーベル賞を受賞した',
+          '相対性理論を提唱した'
+        ];
+      }
+      return ['一般的な物理学情報'];
+    },
+    penalties: {
+      unusedHighRelevanceContext: 0.15,
+    },
+  },
+});
+```
+
+
+
+## 活用パターン
+
+### コンテンツ生成の評価
+以下のようなコンテキスト品質の評価に最適:
+- コンテキスト活用が重要なチャットシステム
+- 微妙な関連性評価を要するRAGパイプライン
+- コンテキスト欠如が品質に影響するシステム
+
+### コンテキスト選択の最適化
+次の最適化に使用:
+- 包括的なコンテキスト網羅
+- 効果的なコンテキスト活用
+- コンテキストギャップの特定
+
+
+
+## 関連
+
+- [Context Precision Scorer](/reference/scorers/context-precision) - MAP を用いてコンテキストのランキング精度を評価
+- [Faithfulness Scorer](/reference/scorers/faithfulness) - 回答がコンテキストにどれだけ基づいているかを測定
+- [Custom Scorers](/docs/scorers/custom-scorers) - 独自の評価指標を作成する

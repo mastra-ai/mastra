@@ -1,11 +1,19 @@
 ---
-title: "リファレンス: キーワードカバレッジ | メトリクス | Evals | Mastra ドキュメント"
-description: Mastra におけるキーワードカバレッジメトリクスのドキュメント。入力から重要なキーワードが LLM の出力でどれだけカバーされているかを評価します。
+title: "リファレンス: キーワードカバレッジ | メトリクス | 評価 | Mastra ドキュメント"
+description: 入力から重要なキーワードをLLM出力がどの程度カバーしているかを評価するMastraのキーワードカバレッジメトリクスのドキュメント。
 ---
+
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
 
 # KeywordCoverageMetric
 
-`KeywordCoverageMetric` クラスは、LLM の出力が入力の重要なキーワードをどれだけ網羅しているかを評価します。一般的な単語やストップワードを無視しながら、キーワードの存在と一致を分析します。
+<ScorerCallout />
+
+`KeywordCoverageMetric`クラスは、LLMの出力が入力からの重要なキーワードをどの程度カバーしているかを評価します。一般的な単語やストップワードを無視しながら、キーワードの存在とマッチングを分析します。
+
+
 
 ## 基本的な使い方
 
@@ -22,6 +30,8 @@ const result = await metric.measure(
 console.log(result.score); // Coverage score from 0-1
 console.log(result.info); // Object containing detailed metrics about keyword coverage
 ```
+
+
 
 ## measure() のパラメーター
 
@@ -42,6 +52,8 @@ console.log(result.info); // Object containing detailed metrics about keyword co
   ]}
 />
 
+
+
 ## 戻り値
 
 <PropertiesTable
@@ -49,7 +61,8 @@ console.log(result.info); // Object containing detailed metrics about keyword co
     {
       name: "score",
       type: "number",
-      description: "一致したキーワードの割合を表すカバレッジスコア（0～1）",
+      description:
+        "一致したキーワードの割合を表すカバレッジスコア（0～1）",
     },
     {
       name: "info",
@@ -80,6 +93,8 @@ console.log(result.info); // Object containing detailed metrics about keyword co
     },
   ]}
 />
+
+
 
 ## スコアリングの詳細
 
@@ -114,6 +129,8 @@ console.log(result.info); // Object containing detailed metrics about keyword co
 - 0.4-0.6: 一部のキーワードが欠落している中程度のカバレッジ
 - 0.1-0.3: 多くのキーワードが欠落している低いカバレッジ
 - 0.0: キーワードの一致なし
+
+
 
 ## 例と分析
 
@@ -162,6 +179,8 @@ const result3 = await metric.measure(
 // }
 ```
 
+
+
 ## 特殊なケース
 
 このメトリクスはいくつかの特殊なケースに対応しています：
@@ -171,6 +190,8 @@ const result3 = await metric.measure(
 - 技術用語：複合的な技術用語（例: "React.js", "machine learning"）を保持します
 - 大文字・小文字の違い："JavaScript"は"javascript"と一致します
 - 一般的な単語：意味のあるキーワードに集中するため、スコア計算時に無視されます
+
+
 
 ## 関連
 

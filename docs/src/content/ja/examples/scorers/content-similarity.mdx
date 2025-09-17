@@ -1,0 +1,183 @@
+---
+title: "例: コンテンツ類似性 | Scorers | Mastra Docs"
+description: Content Similarity scorerを使用してコンテンツ間のテキスト類似性を評価する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+
+
+# Content Similarity Scorer
+
+`createContentSimilarityScorer`を使用して、コンテンツの重複に基づいてレスポンスが参照とどの程度類似しているかを評価します。
+
+
+
+## インストール
+
+```bash copy
+npm install @mastra/evals
+```
+
+> 完全なAPIドキュメントと設定オプションについては、[`createContentSimilarityScorer`](/reference/scorers/content-similarity)を参照してください。
+
+
+
+## 高類似度の例
+
+この例では、レスポンスが構造と意味の両方でクエリに非常に似ています。時制や表現の軽微な違いは、全体的な類似度に大きく影響しません。
+
+```typescript filename="src/example-high-similarity.ts" showLineNumbers copy
+import { createContentSimilarityScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createContentSimilarityScorer();
+
+const query = "The quick brown fox jumps over the lazy dog.";
+const response = "A quick brown fox jumped over a lazy dog.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+### 高類似度の出力
+
+レスポンスがクエリの意図と内容を微妙な表現の変更のみで保持しているため、出力は高いスコアを受け取ります。
+
+```typescript
+{
+  score: 0.7761194029850746,
+  analyzeStepResult: {
+    similarity: 0.7761194029850746
+  },
+}
+```
+
+
+
+## 中程度の類似性の例
+
+この例では、レスポンスがクエリと概念的に重複する部分を共有していますが、構造と表現において分岐しています。主要な要素は残っていますが、表現に中程度の変化が導入されています。
+
+```typescript filename="src/example-moderate-similarity.ts" showLineNumbers copy
+import { createContentSimilarityScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createContentSimilarityScorer();
+
+const query = "A brown fox quickly leaps across a sleeping dog.";
+const response = "The quick brown fox jumps over the lazy dog.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+### 中程度の類似性の出力
+
+レスポンスがクエリの一般的なアイデアを捉えているものの、表現が十分に異なるため全体的な類似性が低下し、中間範囲のスコアを受け取ります。
+
+```typescript
+{
+  score: 0.40540540540540543,
+  analyzeStepResult: {
+    similarity: 0.40540540540540543
+  }
+}
+```
+
+
+
+## 低類似度の例
+
+この例では、レスポンスとクエリは似たような文法構造を持っているにもかかわらず、意味的には無関係です。共有されるコンテンツの重複はほとんどまたは全くありません。
+
+```typescript filename="src/example-low-similarity.ts" showLineNumbers copy
+import { createContentSimilarityScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createContentSimilarityScorer();
+
+const query = "The cat sleeps on the windowsill.";
+const response = "The quick brown fox jumps over the lazy dog.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+### 低類似度の出力
+
+レスポンスがクエリのコンテンツや意図と一致しないため、出力は低いスコアを受け取ります。
+
+```typescript
+{
+  score: 0.25806451612903225,
+  analyzeStepResult: {
+    similarity: 0.25806451612903225
+  },
+}
+```
+
+
+
+## スコアラーの設定
+
+`ContentSimilarityScorer`はオプションを受け付けません。常にデフォルト設定で作成されます：
+
+```typescript showLineNumbers copy
+const scorer = createContentSimilarityScorer();
+```
+
+
+
+## 結果の理解
+
+`.run()`は以下の形式で結果を返します：
+
+```typescript
+{
+  runId: string,
+  extractStepResult: {
+    processedInput: string,
+    processedOutput: string
+  },
+  analyzeStepResult: {
+    similarity: number
+  },
+  score: number
+}
+```
+
+### score
+0から1の間の類似度スコア：
+
+- **1.0**: 完全一致 – コンテンツがほぼ同一です。
+- **0.7–0.9**: 高い類似度 – 語彙選択や構造に軽微な違いがあります。
+- **0.4–0.6**: 中程度の類似度 – 顕著な違いがありながらも全体的な重複があります。
+- **0.1–0.3**: 低い類似度 – 共通要素や共有された意味がわずかです。
+- **0.0**: 類似度なし – 完全に異なるコンテンツです。
+
+### runId
+このスコアラー実行の一意識別子。
+
+### extractStepResult
+正規化後の処理済み入力および出力文字列を含むオブジェクト：
+- **processedInput**: 正規化された入力文字列。
+- **processedOutput**: 正規化された出力文字列。
+
+### analyzeStepResult
+類似度スコアを含むオブジェクト：
+- **similarity**: 0から1の間で計算された類似度値。
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/scorers/content-similarity"
+/>

@@ -1,88 +1,145 @@
 ---
-title: "`mastra dev` リファレンス | ローカル開発 | Mastra CLI"
+title: "mastra dev | 開発サーバー | Mastra CLI"
 description: エージェント、ツール、ワークフローの開発サーバーを起動するmastra devコマンドのドキュメント。
 ---
 
-# `mastra dev` リファレンス
 
-`mastra dev` コマンドは、エージェント、ツール、ワークフローのRESTルートを公開する開発サーバーを起動します。
 
-## パラメータ
+# mastra dev
+
+`mastra dev`コマンドは、エージェント、ツール、ワークフローのREST エンドポイントを公開する開発サーバーを起動します。
+
+
+
+## 使用方法
+
+```bash
+mastra dev [options]
+```
+
+
+
+## オプション
 
 <PropertiesTable
   content={[
     {
       name: "--dir",
       type: "string",
-      description:
-        "Mastraフォルダ（エージェント、ツール、ワークフローを含む）へのパスを指定します。デフォルトでは現在の作業ディレクトリになります。",
+      description: "mastraフォルダへのパス",
+      isOptional: true,
+    },
+    {
+      name: "--root",
+      type: "string",
+      description: "ルートフォルダへのパス",
       isOptional: true,
     },
     {
       name: "--tools",
       type: "string",
+      description: "含めるツールファイルへのパスのカンマ区切りリスト",
+      isOptional: true,
+    },
+    {
+      name: "--port",
+      type: "number",
       description:
-        "登録する追加のツールディレクトリへのパスをカンマ区切りで指定します。例：'src/tools/dbTools,src/tools/scraperTools'。",
+        "非推奨: 開発サーバーのポート番号（デフォルトは4111）",
+      isOptional: true,
+    },
+    {
+      name: "--env",
+      type: "string",
+      description: "カスタム環境ファイルへのパス",
+      isOptional: true,
+    },
+    {
+      name: "--inspect",
+      type: "boolean",
+      description: "デバッグ用にinspectモードで開発サーバーを起動（--inspect-brkとは併用不可）",
+      isOptional: true,
+    },
+    {
+      name: "--inspect-brk",
+      type: "boolean",
+      description: "inspectモードで開発サーバーを起動し、スクリプトの開始時にブレーク（--inspectとは併用不可）",
+      isOptional: true,
+    },
+    {
+      name: "--custom-args",
+      type: "string",
+      description: "開発サーバーに渡すカスタム引数のカンマ区切りリスト。例: --experimental-transform-types",
+      isOptional: true,
+    },
+    {
+      name: "--help",
+      type: "boolean",
+      description: "コマンドのヘルプを表示",
       isOptional: true,
     },
   ]}
 />
 
+
+
 ## ルート
 
-`mastra dev`でサーバーを起動すると、デフォルトで一連のRESTルートが公開されます。
+
+
+`mastra dev`でサーバーを起動すると、デフォルトで一連のRESTルートが公開されます：
 
 ### システムルート
 
-- **GET `/api`**: APIのステータスを取得します。
+- **GET `/api`**: API ステータスを取得します。
 
 ### エージェントルート
 
-エージェントは`src/mastra/agents`からエクスポートされている必要があります。
+エージェントは`src/mastra/agents`からエクスポートされることが期待されています。
 
-- **GET `/api/agents`**: Mastraフォルダ内で登録されているエージェントの一覧を取得します。
+- **GET `/api/agents`**: Mastraフォルダ内で見つかった登録済みエージェントをリストします。
 - **GET `/api/agents/:agentId`**: IDでエージェントを取得します。
 - **GET `/api/agents/:agentId/evals/ci`**: エージェントIDでCI評価を取得します。
 - **GET `/api/agents/:agentId/evals/live`**: エージェントIDでライブ評価を取得します。
-- **POST `/api/agents/:agentId/generate`**: 指定したエージェントにテキストベースのプロンプトを送信し、エージェントの応答を返します。
+- **POST `/api/agents/:agentId/generate`**: 指定されたエージェントにテキストベースのプロンプトを送信し、エージェントの応答を返します。
 - **POST `/api/agents/:agentId/stream`**: エージェントからの応答をストリームします。
 - **POST `/api/agents/:agentId/instructions`**: エージェントの指示を更新します。
 - **POST `/api/agents/:agentId/instructions/enhance`**: 指示から改良されたシステムプロンプトを生成します。
 - **GET `/api/agents/:agentId/speakers`**: エージェントで利用可能なスピーカーを取得します。
-- **POST `/api/agents/:agentId/speak`**: エージェントの音声プロバイダーを使ってテキストを音声に変換します。
-- **POST `/api/agents/:agentId/listen`**: エージェントの音声プロバイダーを使って音声をテキストに変換します。
+- **POST `/api/agents/:agentId/speak`**: エージェントの音声プロバイダーを使用してテキストを音声に変換します。
+- **POST `/api/agents/:agentId/listen`**: エージェントの音声プロバイダーを使用して音声をテキストに変換します。
 - **POST `/api/agents/:agentId/tools/:toolId/execute`**: エージェントを通じてツールを実行します。
 
 ### ツールルート
 
-ツールは`src/mastra/tools`（または設定されたツールディレクトリ）からエクスポートされている必要があります。
+ツールは`src/mastra/tools`（または設定されたツールディレクトリ）からエクスポートされることが期待されています。
 
 - **GET `/api/tools`**: すべてのツールを取得します。
 - **GET `/api/tools/:toolId`**: IDでツールを取得します。
-- **POST `/api/tools/:toolId/execute`**: 指定したツール名でツールを呼び出し、リクエストボディで入力データを渡します。
+- **POST `/api/tools/:toolId/execute`**: 名前で特定のツールを呼び出し、リクエストボディで入力データを渡します。
 
 ### ワークフロールート
 
-ワークフローは`src/mastra/workflows`（または設定されたワークフローディレクトリ）からエクスポートされている必要があります。
+ワークフローは`src/mastra/workflows`（または設定されたワークフローディレクトリ）からエクスポートされることが期待されています。
 
 - **GET `/api/workflows`**: すべてのワークフローを取得します。
 - **GET `/api/workflows/:workflowId`**: IDでワークフローを取得します。
-- **POST `/api/workflows/:workflowName/start`**: 指定したワークフローを開始します。
-- **POST `/api/workflows/:workflowName/:instanceId/event`**: 既存のワークフローインスタンスにイベントやトリガーシグナルを送信します。
+- **POST `/api/workflows/:workflowName/start`**: 指定されたワークフローを開始します。
+- **POST `/api/workflows/:workflowName/:instanceId/event`**: 既存のワークフローインスタンスにイベントまたはトリガーシグナルを送信します。
 - **GET `/api/workflows/:workflowName/:instanceId/status`**: 実行中のワークフローインスタンスのステータス情報を返します。
-- **POST `/api/workflows/:workflowId/resume`**: 一時停止中のワークフローステップを再開します。
-- **POST `/api/workflows/:workflowId/resume-async`**: 一時停止中のワークフローステップを非同期で再開します。
-- **POST `/api/workflows/:workflowId/createRun`**: 新しいワークフローランを作成します。
-- **POST `/api/workflows/:workflowId/start-async`**: ワークフローを非同期で実行・開始します。
+- **POST `/api/workflows/:workflowId/resume`**: 中断されたワークフローステップを再開します。
+- **POST `/api/workflows/:workflowId/resume-async`**: 中断されたワークフローステップを非同期で再開します。
+- **POST `/api/workflows/:workflowId/createRun`**: 新しいワークフロー実行を作成します。
+- **POST `/api/workflows/:workflowId/start-async`**: ワークフローを非同期で実行/開始します。
 - **GET `/api/workflows/:workflowId/watch`**: ワークフローの遷移をリアルタイムで監視します。
 
 ### メモリルート
 
-- **GET `/api/memory/status`**: メモリのステータスを取得します。
+- **GET `/api/memory/status`**: メモリステータスを取得します。
 - **GET `/api/memory/threads`**: すべてのスレッドを取得します。
 - **GET `/api/memory/threads/:threadId`**: IDでスレッドを取得します。
 - **GET `/api/memory/threads/:threadId/messages`**: スレッドのメッセージを取得します。
-- **GET `/api/memory/threads/:threadId/messages/paginated`**: スレッドのメッセージをページネーションで取得します。
+- **GET `/api/memory/threads/:threadId/messages/paginated`**: スレッドのページ分割されたメッセージを取得します。
 - **POST `/api/memory/threads`**: 新しいスレッドを作成します。
 - **PATCH `/api/memory/threads/:threadId`**: スレッドを更新します。
 - **DELETE `/api/memory/threads/:threadId`**: スレッドを削除します。
@@ -95,36 +152,38 @@ description: エージェント、ツール、ワークフローの開発サー�
 ### ログルート
 
 - **GET `/api/logs`**: すべてのログを取得します。
-- **GET `/api/logs/transports`**: すべてのログトランスポートの一覧。
+- **GET `/api/logs/transports`**: すべてのログトランスポートのリスト。
 - **GET `/api/logs/:runId`**: 実行IDでログを取得します。
 
-### ベクトルルート
+### ベクタールート
 
-- **POST `/api/vector/:vectorName/upsert`**: ベクターをインデックスにアップサートします。
+- **POST `/api/vector/:vectorName/upsert`**: インデックスにベクターをアップサートします。
 - **POST `/api/vector/:vectorName/create-index`**: 新しいベクターインデックスを作成します。
 - **POST `/api/vector/:vectorName/query`**: インデックスからベクターをクエリします。
-- **GET `/api/vector/:vectorName/indexes`**: ベクターストア内のすべてのインデックスを一覧表示します。
+- **GET `/api/vector/:vectorName/indexes`**: ベクターストアのすべてのインデックスを一覧表示します。
 - **GET `/api/vector/:vectorName/indexes/:indexName`**: 特定のインデックスの詳細を取得します。
 - **DELETE `/api/vector/:vectorName/indexes/:indexName`**: 特定のインデックスを削除します。
 
-### OpenAPI仕様
+### OpenAPI Specification
 
 - **GET `/openapi.json`**: プロジェクトのルート用に自動生成されたOpenAPI仕様を返します。
-- **GET `/swagger-ui`**: APIドキュメント用のSwagger UIにアクセスします。
+- **GET `/swagger-ui`**: API ドキュメント用のSwagger UIにアクセスします。
+
+
 
 ## 追加の注意事項
 
-ポートのデフォルトは4111です。ポートとホスト名の両方はmastraサーバー設定で構成できます。設定の詳細については[開発サーバーの起動](/docs/local-dev/mastra-dev#launch-development-server)を参照してください。
+ポートはデフォルトで4111に設定されています。ポートとホスト名の両方は、mastraサーバー設定で構成できます。設定の詳細については、[開発サーバーの起動](/docs/server-db/local-dev-playground)を参照してください。
 
-使用するプロバイダー（例：`OPENAI_API_KEY`、`ANTHROPIC_API_KEY`など）の環境変数が`.env.development`または`.env`ファイルに設定されていることを確認してください。
+使用するプロバイダーの環境変数が`.env.development`または`.env`ファイルに設定されていることを確認してください（例：`OPENAI_API_KEY`、`ANTHROPIC_API_KEY`など）。
 
-Mastraフォルダ内の`index.ts`ファイルが、開発サーバーが読み取るためのMastraインスタンスをエクスポートしていることを確認してください。
+Mastraフォルダ内の`index.ts`ファイルが、開発サーバーが読み取れるようにMastraインスタンスをエクスポートしていることを確認してください。
 
 ### リクエスト例
 
 `mastra dev`を実行した後にエージェントをテストするには：
 
-```bash
+```bash copy
 curl -X POST http://localhost:4111/api/agents/myAgent/generate \
   -H "Content-Type: application/json" \
   -d '{
@@ -134,54 +193,56 @@ curl -X POST http://localhost:4111/api/agents/myAgent/generate \
   }'
 ```
 
+
+
 ## 高度な使用方法
 
-`mastra dev`サーバーは、開発中に便利ないくつかの追加環境変数に従います：
+`mastra dev`サーバーは、開発中に便利ないくつかの追加の環境変数に従います：
 
-### ビルドキャッシュの無効化
+### ビルドキャッシュを無効にする
 
-`MASTRA_DEV_NO_CACHE=1`を設定すると、`.mastra/`以下のキャッシュされたアセットを使用する代わりに、完全な再ビルドを強制します：
+`MASTRA_DEV_NO_CACHE=1`を設定すると、`.mastra/`下のキャッシュされたアセットを使用するのではなく、完全な再ビルドを強制します：
 
-```bash
+```bash copy
 MASTRA_DEV_NO_CACHE=1 mastra dev
 ```
 
-これは、バンドラープラグインをデバッグしている場合や、古い出力が疑われる場合に役立ちます。
+これは、バンドラープラグインをデバッグしている場合や、古い出力を疑っている場合に役立ちます。
 
-### 並列処理の制限
+### 並列処理を制限する
 
-`MASTRA_CONCURRENCY`は、並列で実行される高負荷の操作（主にビルドと評価ステップ）の数を制限します。例えば：
+`MASTRA_CONCURRENCY`は、並列で実行される高コストな操作の数を制限します（主にビルドと評価ステップ）。例えば：
 
-```bash
+```bash copy
 MASTRA_CONCURRENCY=4 mastra dev
 ```
 
-未設定のままにすると、CLIがマシンに適した既定値を選択します。
+未設定のままにすると、CLIがマシンに適した適切なデフォルト値を選択します。
 
 ### カスタムプロバイダーエンドポイント
 
-Vercel AI SDKでサポートされているプロバイダーを使用する場合、ベースURLを設定することで、リクエストをプロキシや内部ゲートウェイを通じてリダイレクトできます。OpenAIの場合：
+Vercel AI SDKでサポートされているプロバイダーを使用する場合、ベースURLを設定することで、プロキシや内部ゲートウェイ経由でリクエストをリダイレクトできます。OpenAIの場合：
 
-```bash
-OPENAI_API_KEY=sk-this_key \
+```bash copy
+OPENAI_API_KEY=<your-api-key> \
 OPENAI_BASE_URL=https://openrouter.example/v1 \
 mastra dev
 ```
 
-そしてAnthropicの場合：
+Anthropicの場合：
 
-```bash
-ANTHROPIC_API_KEY=sk-anthropic42 \
+```bash copy
+OPENAI_API_KEY=<your-api-key> \
 ANTHROPIC_BASE_URL=https://anthropic.internal \
 mastra dev
 ```
 
-これらはAI SDKによって転送され、`openai()`または`anthropic()`呼び出しで動作します。
+これらはAI SDKによって転送され、任意の`openai()`または`anthropic()`呼び出しで動作します。
 
-### テレメトリの無効化
+### テレメトリを無効にする
 
-匿名のCLI分析をオプトアウトするには、`MASTRA_TELEMETRY_DISABLED=1`を設定します。これにより、ローカルプレイグラウンド内のトラッキングも防止されます。
+匿名のCLI分析をオプトアウトするには、`MASTRA_TELEMETRY_DISABLED=1`を設定します。これにより、ローカルプレイグラウンド内でのトラッキングも防止されます。
 
-```bash
+```bash copy
 MASTRA_TELEMETRY_DISABLED=1 mastra dev
 ```

@@ -1,168 +1,194 @@
 ---
-title: "例: Faithfulness | Evals | Mastra Docs"
-description: Faithfulnessメトリクスを使用して、回答がコンテキストと比較してどれだけ事実に忠実であるかを評価する例。
+title: "例: Faithfulness（忠実性） | Evals | Mastra Docs"
+description: コンテキストに対する応答の事実性（正確さ）を、Faithfulness 指標で評価する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
 
-# Faithfulness
 
-この例では、MastraのFaithfulnessメトリクスを使用して、回答が提供されたコンテキストと比較してどれだけ事実に忠実であるかを評価する方法を示します。
 
-## 概要
+## 忠実性評価
 
-この例では、以下の方法を示します。
+<ScorerCallout />
 
-1. Faithfulnessメトリクスの設定
-2. 事実の正確性の評価
-3. Faithfulnessスコアの分析
-4. 異なる正確性レベルへの対応
+`FaithfulnessMetric` を使用すると、提供されたコンテキストにより裏付けられている内容のみを応答が主張しているかを評価できます。このメトリックは `query` と `response` を受け取り、スコアと理由を含む `info` オブジェクトを返します。
 
-## セットアップ
 
-### 環境設定
 
-環境変数を必ず設定してください：
+## インストール
 
-```bash filename=".env"
-OPENAI_API_KEY=your_api_key_here
+```bash copy
+npm install @mastra/evals
 ```
 
-### 依存関係
 
-必要な依存関係をインポートします：
 
-```typescript copy showLineNumbers filename="src/index.ts"
+## 高忠実度の例
+
+この例では、レスポンスがコンテキストと密接に一致しています。出力内の各記述は検証可能で、提供されたコンテキスト項目によって裏付けられており、高いスコアにつながります。
+
+```typescript filename="src/example-high-faithfulness.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { FaithfulnessMetric } from "@mastra/evals/llm";
+
+const metric = new FaithfulnessMetric(openai("gpt-4o-mini"), {
+  context: [
+    "The Tesla Model 3 was launched in 2017.",
+    "It has a range of up to 358 miles.",
+    "The base model accelerates 0-60 mph in 5.8 seconds."
+  ]
+});
+
+const query = "Tell me about the Tesla Model 3.";
+const response = "The Tesla Model 3 was introduced in 2017. It can travel up to 358 miles on a single charge and the base version goes from 0 to 60 mph in 5.8 seconds.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
 ```
 
-## 使用例
+### 高忠実度の出力
 
-### 高い忠実度の例
+この出力は、提供されたすべての情報がコンテキストに直接ひもづけられるため、スコアは1となります。欠落や矛盾する事実はありません。
 
-すべての主張がコンテキストによって裏付けられている応答を評価します：
-
-```typescript copy showLineNumbers{5} filename="src/index.ts"
-const context1 = [
-  "The Tesla Model 3 was launched in 2017.",
-  "It has a range of up to 358 miles.",
-  "The base model accelerates 0-60 mph in 5.8 seconds.",
-];
-
-const metric1 = new FaithfulnessMetric(openai("gpt-4o-mini"), {
-  context: context1,
-});
-
-const query1 = "Tell me about the Tesla Model 3.";
-const response1 =
-  "The Tesla Model 3 was introduced in 2017. It can travel up to 358 miles on a single charge and the base version goes from 0 to 60 mph in 5.8 seconds.";
-
-console.log("Example 1 - High Faithfulness:");
-console.log("Context:", context1);
-console.log("Query:", query1);
-console.log("Response:", response1);
-
-const result1 = await metric1.measure(query1, response1);
-console.log("Metric Result:", {
-  score: result1.score,
-  reason: result1.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 1, reason: 'All claims are supported by the context.' }
+```typescript
+{
+  score: 1,
+  info: {
+    reason: 'The score is 1 because all claims made in the output are supported by the provided context.'
+  }
+}
 ```
 
-### 忠実度が混在している例
 
-一部の主張がコンテキストで裏付けられていない応答を評価します：
 
-```typescript copy showLineNumbers{31} filename="src/index.ts"
-const context2 = [
-  "Python was created by Guido van Rossum.",
-  "The first version was released in 1991.",
-  "Python emphasizes code readability.",
-];
+## 忠実性が混在する例
 
-const metric2 = new FaithfulnessMetric(openai("gpt-4o-mini"), {
-  context: context2,
+この例では、根拠のある主張とない主張が混在しています。レスポンスの一部はコンテキストで裏付けられていますが、他の部分は元の資料にない新情報を含んでいます。
+
+```typescript filename="src/example-mixed-faithfulness.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { FaithfulnessMetric } from "@mastra/evals/llm";
+
+const metric = new FaithfulnessMetric(openai("gpt-4o-mini"), {
+  context: [
+    "Python was created by Guido van Rossum.",
+    "The first version was released in 1991.",
+    "Python emphasizes code readability."
+  ]
 });
 
-const query2 = "What can you tell me about Python?";
-const response2 =
-  "Python was created by Guido van Rossum and released in 1991. It is the most popular programming language today and is used by millions of developers worldwide.";
+const query = "What can you tell me about Python?";
+const response = "Python was created by Guido van Rossum and released in 1991. It is the most popular programming language today and is used by millions of developers worldwide.";
 
-console.log("Example 2 - Mixed Faithfulness:");
-console.log("Context:", context2);
-console.log("Query:", query2);
-console.log("Response:", response2);
+const result = await metric.measure(query, response);
 
-const result2 = await metric2.measure(query2, response2);
-console.log("Metric Result:", {
-  score: result2.score,
-  reason: result2.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 0.5, reason: 'Only half of the claims are supported by the context.' }
+console.log(result);
 ```
 
-### 低い忠実度の例
+### 忠実性が混在する場合の出力
 
-コンテキストと矛盾する応答を評価します：
+スコアが低いのは、レスポンスの一部しか検証できないためです。いくつかの主張はコンテキストと一致しますが、他は未確認または範囲外であり、全体の忠実性を下げています。
 
-```typescript copy showLineNumbers{57} filename="src/index.ts"
-const context3 = [
-  "Mars is the fourth planet from the Sun.",
-  "It has a thin atmosphere of mostly carbon dioxide.",
-  "Two small moons orbit Mars: Phobos and Deimos.",
-];
-
-const metric3 = new FaithfulnessMetric(openai("gpt-4o-mini"), {
-  context: context3,
-});
-
-const query3 = "What do we know about Mars?";
-const response3 =
-  "Mars is the third planet from the Sun. It has a thick atmosphere rich in oxygen and nitrogen, and is orbited by three large moons.";
-
-console.log("Example 3 - Low Faithfulness:");
-console.log("Context:", context3);
-console.log("Query:", query3);
-console.log("Response:", response3);
-
-const result3 = await metric3.measure(query3, response3);
-console.log("Metric Result:", {
-  score: result3.score,
-  reason: result3.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 0, reason: 'The response contradicts the context.' }
+```typescript
+{
+  score: 0.5,
+  info: {
+    reason: "The score is 0.5 because while two claims are supported by the context (Python was created by Guido van Rossum and Python was released in 1991), the other two claims regarding Python's popularity and usage cannot be verified as they are not mentioned in the context."
+  }
+}
 ```
+
+
+
+## 忠実性が低い例
+
+この例では、回答が文脈と直接矛盾しています。どの主張にも裏付けがなく、いくつかは提示された事実と衝突しています。
+
+```typescript filename="src/example-low-faithfulness.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { FaithfulnessMetric } from "@mastra/evals/llm";
+
+const metric = new FaithfulnessMetric(openai("gpt-4o-mini"), {
+  context: [
+    "Mars is the fourth planet from the Sun.",
+    "It has a thin atmosphere of mostly carbon dioxide.",
+    "Two small moons orbit Mars: Phobos and Deimos."
+  ]
+});
+
+const query = "What do we know about Mars?";
+const response = "Mars is the third planet from the Sun. It has a thick atmosphere rich in oxygen and nitrogen, and is orbited by three large moons.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 忠実性が低い出力
+
+各主張が不正確、または文脈と矛盾しているため、スコアは0となります。
+
+```typescript
+{
+  score: 0,
+  info: {
+    reason: "The score is 0 because all claims made in the output contradict the provided context. The output states that Mars is the third planet from the Sun, while the context clearly states it is the fourth. Additionally, it claims that Mars has a thick atmosphere rich in oxygen and nitrogen, contradicting the context's description of a thin atmosphere mostly composed of carbon dioxide. Finally, the output mentions that Mars is orbited by three large moons, while the context specifies that it has only two small moons, Phobos and Deimos. Therefore, there are no supported claims, leading to a score of 0."
+  }
+}
+```
+
+
+
+## メトリックの構成
+
+評価の事実ベースとなる情報源を定義する `context` 配列を指定して、`FaithfulnessMetric` のインスタンスを作成できます。最大スコアを制御する `scale` などの任意パラメータも設定できます。
+
+```typescript showLineNumbers copy
+const metric = new FaithfulnessMetric(openai("gpt-4o-mini"), {
+  context: [""],
+  scale: 1
+});
+```
+> 設定可能なオプションの一覧は [FaithfulnessMetric](/reference/evals/faithfulness.mdx) を参照してください。
+
+
 
 ## 結果の理解
 
-この指標は以下を提供します：
+`FaithfulnessMetric` は次の形式で結果を返します：
 
-1. 0から1の間のfaithfulnessスコア：
-
-   - 1.0: 完全なfaithfulness - すべての主張が文脈によって裏付けられている
-   - 0.7-0.9: 高いfaithfulness - ほとんどの主張が裏付けられている
-   - 0.4-0.6: 混合的なfaithfulness - 一部の主張が裏付けられていない
-   - 0.1-0.3: 低いfaithfulness - ほとんどの主張が裏付けられていない
-   - 0.0: faithfulnessなし - 主張が文脈と矛盾している
-
-2. スコアの詳細な理由、以下の分析を含む：
-   - 主張の検証
-   - 事実の正確性
-   - 矛盾
-   - 全体的なfaithfulness
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/faithfulness"
+```typescript
+{
+  score: number,
+  info: {
+    reason: string
   }
+}
+```
+
+### Faithfulness スコア
+
+Faithfulness スコアは 0 から 1 の範囲です：
+
+- **1.0**: すべての主張が正確で、文脈によって直接裏付けられている。
+- **0.7–0.9**: ほとんどの主張は正しいが、軽微な追加や省略がある。
+- **0.4–0.6**: 一部の主張は裏付けられるが、他は検証不能。
+- **0.1–0.3**: 内容の大半が不正確、または裏付けがない。
+- **0.0**: すべての主張が誤り、または文脈と矛盾している。
+
+### Faithfulness 情報
+
+スコアの理由の説明。次の詳細を含む：
+
+- どの主張が検証されたか、あるいは矛盾していたか
+- 事実整合性の度合い
+- 欠落や捏造の詳細に関する指摘
+- 全体的な応答の信頼性の要約
+
+<GithubLink
+  outdated={true}
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/faithfulness"
 />

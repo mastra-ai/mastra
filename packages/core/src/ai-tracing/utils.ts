@@ -5,7 +5,15 @@
 
 import type { RuntimeContext } from '../runtime-context';
 import { getSelectedAITracing } from './registry';
-import type { AISpan, AISpanType, AISpanTypeMap, AnyAISpan, TracingContext, TracingOptions } from './types';
+import type {
+  AISpan,
+  AISpanTypeMap,
+  AnyAISpan,
+  TracingContext,
+  TracingOptions,
+  TracingPolicy,
+  AISpanType,
+} from './types';
 
 /**
  * Removes specific keys from an object.
@@ -106,15 +114,16 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
   input?: any;
   attributes?: AISpanTypeMap[T];
   metadata?: Record<string, any>;
-  tracingContext?: TracingContext;
+  tracingPolicy?: TracingPolicy;
   tracingOptions?: TracingOptions;
+  tracingContext?: TracingContext;
   runtimeContext?: RuntimeContext;
 }): AISpan<T> | undefined {
-  const { type, attributes, tracingContext, tracingOptions, runtimeContext, ...rest } = options;
+  const { type, attributes, tracingContext, runtimeContext, ...rest } = options;
 
   const metadata = {
     ...(rest.metadata ?? {}),
-    ...(tracingOptions?.metadata ?? {}),
+    ...(rest.tracingOptions?.metadata ?? {}),
   };
 
   // If we have a current span, create a child span
@@ -124,7 +133,6 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
       attributes,
       ...rest,
       metadata,
-      isInternal: tracingContext?.isInternal,
     });
   }
 
@@ -136,11 +144,11 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
   return aiTracing?.startSpan<T>({
     type,
     attributes,
+    ...rest,
+    metadata,
     customSamplerOptions: {
       runtimeContext,
       metadata,
     },
-    ...rest,
-    metadata,
   });
 }

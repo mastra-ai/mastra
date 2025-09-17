@@ -55,7 +55,7 @@ export default function VNextNetwork() {
             initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
           />
         </div>
-        <NetworkInformation networkId={networkId!} isVNext />
+        <NetworkInformation networkId={networkId!} />
       </MainContentContent>
     </NetworkProvider>
   );

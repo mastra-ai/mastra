@@ -253,9 +253,6 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     const { runId, workflowName } = args;
     this.logger.debug('Getting workflow run by ID', { runId, workflowName });
 
-    console.log('workflowName', workflowName);
-    console.log('runId', runId);
-
     try {
       // If we have a workflowName, we can do a direct get using the primary key
       if (workflowName) {
@@ -267,8 +264,6 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
             run_id: runId,
           })
           .go();
-
-        console.log('result', result);
 
         if (!result.data) {
           return null;

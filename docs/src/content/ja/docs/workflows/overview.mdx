@@ -1,166 +1,325 @@
 ---
-title: "複雑なLLM操作の処理 | ワークフロー | Mastra"
-description: "Mastraのワークフローは、分岐、並列実行、リソースの一時停止などの機能を使用して、複雑な操作のシーケンスを調整するのに役立ちます。"
+title: "複雑な LLM の操作を扱う | Workflows | Mastra"
+description: "Mastra の Workflows は、分岐や並列実行、一時停止などの機能を備え、複雑な一連の処理を柔軟にオーケストレーションできます。"
 ---
 
-# ワークフローを使用した複雑なLLM操作の処理
+import { Steps } from "nextra/components";
 
-Mastraのワークフローは、分岐、並列実行、リソースの一時停止などの機能を使用して、複雑な操作のシーケンスを調整するのに役立ちます。
 
-## ワークフローを使用するタイミング
+# ワークフローの概要
 
-ほとんどのAIアプリケーションは、言語モデルへの単一の呼び出し以上のものを必要とします。複数のステップを実行したり、特定のパスを条件付きでスキップしたり、ユーザー入力を受け取るまで実行を一時停止したりすることがあるかもしれません。時には、エージェントツールの呼び出しが十分に正確でないこともあります。
+Workflows は、データフローでつながる**型付きステップ**として、複雑なタスクの一連処理を定義・オーケストレーションできます。各ステップには、Zod スキーマで検証される明確に定義された入力と出力があります。
 
-Mastraのワークフローシステムは以下を提供します：
+ワークフローは、実行順序、依存関係、分岐、並列実行、エラー処理を管理し、堅牢で再利用可能なプロセスの構築を可能にします。ステップはネストやクローンにより、より大規模なワークフローを組み立てられます。
 
-- ステップを定義し、それらを結びつけるための標準化された方法。
-- 単純（線形）および高度（分岐、並列）パスの両方をサポート。
-- 各ワークフローの実行を追跡するためのデバッグおよび可観測性機能。
+![Workflows overview](/image/workflows/workflows-overview.jpg)
 
-## 例
+ワークフローは次の手順で作成します:
 
-ワークフローを作成するには、1つ以上のステップを定義し、それらをリンクしてから、開始する前にワークフローをコミットします。
+- `createStep` で**ステップ**を定義し、入出力スキーマとビジネスロジックを指定します。
+- `createWorkflow` で**ステップ**を組み合わせて、実行フローを定義します。
+- **ワークフロー**を実行して全体のシーケンスを動かします。サスペンド、レジューム、結果のストリーミングを標準でサポートします。
 
-### ワークフローの分解
+この構成により、完全な型安全性とランタイム検証が担保され、ワークフロー全体でデータの整合性が保証されます。
 
-ワークフロー作成プロセスの各部分を見てみましょう：
+> **📹 視聴**:  → ワークフローの紹介とエージェントとの比較 [YouTube（7 分）](https://youtu.be/0jg2g3sNvgw)
 
-#### 1. ワークフローの作成
+## はじめに
 
-Mastraでワークフローを定義する方法は次のとおりです。`name`フィールドはワークフローのAPIエンドポイント（`/workflows/$NAME/`）を決定し、`triggerSchema`はワークフローのトリガーデータの構造を定義します：
-
-```ts filename="src/mastra/workflow/index.ts"
-const myWorkflow = new Workflow({
-  name: "my-workflow",
-  triggerSchema: z.object({
-    inputValue: z.number(),
-  }),
-});
-```
-
-#### 2. ステップの定義
-
-次に、ワークフローのステップを定義します。各ステップは独自の入力および出力スキーマを持つことができます。ここでは、`stepOne`が入力値を2倍にし、`stepTwo`が`stepOne`が成功した場合にその結果をインクリメントします。（簡単にするために、この例ではLLM呼び出しは行っていません）：
-
-```ts filename="src/mastra/workflow/index.ts"
-const stepOne = new Step({
-  id: "stepOne",
-  outputSchema: z.object({
-    doubledValue: z.number(),
-  }),
-  execute: async ({ context }) => {
-    const doubledValue = context.triggerData.inputValue * 2;
-    return { doubledValue };
-  },
-});
-
-const stepTwo = new Step({
-  id: "stepTwo",
-  execute: async ({ context }) => {
-    const doubledValue = context.getStepResult(stepOne)?.doubledValue;
-    if (!doubledValue) {
-      return { incrementedValue: 0 };
-    }
-    return {
-      incrementedValue: doubledValue + 1,
-    };
-  },
-});
-```
-
-#### 3. ステップのリンク
-
-次に、制御フローを作成し、ワークフローを「コミット」（最終化）します。この場合、`stepOne`が最初に実行され、その後に`stepTwo`が続きます。
-
-```ts filename="src/mastra/workflow/index.ts"
-myWorkflow.step(stepOne).then(stepTwo).commit();
-```
-
-### ワークフローの登録
-
-Mastraにワークフローを登録して、ログとテレメトリを有効にします：
-
-```ts showLineNumbers filename="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-
-export const mastra = new Mastra({
-  workflows: { myWorkflow },
-});
-```
-
-動的なワークフローを作成する必要がある場合には、mastraインスタンスをコンテキストに注入することもできます：
-
-```ts filename="src/mastra/workflow/index.ts"
-import { Mastra } from "@mastra/core";
-
-const mastra = new Mastra();
-
-const myWorkflow = new Workflow({
-  name: "my-workflow",
-  mastra,
-});
-```
-
-### ワークフローの実行
-
-プログラム的にまたはAPI経由でワークフローを実行します：
-
-```ts showLineNumbers filename="src/mastra/run-workflow.ts" copy
-import { mastra } from "./index";
-
-// ワークフローを取得
-const myWorkflow = mastra.getWorkflow("myWorkflow");
-const { runId, start } = myWorkflow.createRun();
-
-// ワークフローの実行を開始
-await start({ triggerData: { inputValue: 45 } });
-```
-
-またはAPIを使用します（`mastra dev`を実行する必要があります）：
-
-// ワークフロー実行の作成
+ワークフローを使用するには、必要な依存関係をインストールします：
 
 ```bash
-curl --location 'http://localhost:4111/api/workflows/myWorkflow/start-async' \
-     --header 'Content-Type: application/json' \
-     --data '{
-       "inputValue": 45
-     }'
+npm install @mastra/core
 ```
 
-この例は基本を示しています：ワークフローを定義し、ステップを追加し、ワークフローをコミットし、それから実行します。
+`workflows` サブパスから必要な関数をインポートします：
 
-## ステップの定義
-
-ワークフローの基本的な構成要素[はステップです](./steps.mdx)。ステップは入力と出力のスキーマを使用して定義され、前のステップの結果を取得することができます。
-
-## フロー制御
-
-ワークフローを使用すると、並列ステップ、分岐パスなどでステップを連鎖させる[フロー制御](./control-flow.mdx)を定義できます。
-
-## ワークフロー変数
-
-ステップ間でデータをマッピングしたり、動的なデータフローを作成する必要がある場合、[ワークフロー変数](./variables.mdx)は、情報をあるステップから別のステップに渡し、ステップ出力内のネストされたプロパティにアクセスするための強力なメカニズムを提供します。
-
-## 可観測性とデバッグ
-
-Mastraワークフローは自動的に[ワークフロー実行内の各ステップの入力と出力をログに記録](../../reference/observability/otel-config.mdx)し、このデータを好みのロギング、テレメトリ、または可観測性ツールに送信できるようにします。
-
-以下のことが可能です：
-
-- 各ステップのステータス（例：`success`、`error`、または`suspended`）を追跡する。
-- 分析のための実行固有のメタデータを保存する。
-- ログを転送することで、DatadogやNew Relicなどのサードパーティの可観測性プラットフォームと統合する。
-
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
 ```
 
-## その他のリソース
+### ステップを作成する
 
-- ガイドセクションの[ワークフローガイド](../guides/ai-recruiter.mdx)は、主要な概念をカバーするチュートリアルです。
-- [シーケンシャルステップのワークフロー例](../../examples/workflows/sequential-steps.mdx)
-- [並列ステップのワークフロー例](../../examples/workflows/parallel-steps.mdx)
-- [分岐パスのワークフロー例](../../examples/workflows/branching-paths.mdx)
-- [ワークフロー変数の例](../../examples/workflows/workflow-variables.mdx)
-- [循環依存関係のワークフロー例](../../examples/workflows/cyclical-dependencies.mdx)
-- [一時停止と再開のワークフロー例](../../examples/workflows/suspend-and-resume.mdx)
+ステップはワークフローの基本要素です。`createStep` を使ってステップを作成します:
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
 ```
+
+> 詳細は [createStep](../../reference/workflows/step.mdx) を参照してください。
+
+### ワークフローの作成
+
+`createWorkflow` を使ってワークフローを作成し、`.commit()` で確定します。
+
+```typescript {6,17} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  description: 'Test workflow',
+  inputSchema: z.object({
+    input: z.string()
+  }),
+  outputSchema: z.object({
+    output: z.string()
+  })
+})
+  .then(step1)
+  .commit();
+```
+
+> 詳細は [workflow](../../reference/workflows/workflow.mdx) を参照してください。
+
+#### ステップの構成
+
+ワークフローのステップは、`.then()` を使って構成し、順次実行できます。
+
+```typescript {17,18} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  description: 'Test workflow',
+  inputSchema: z.object({
+    input: z.string()
+  }),
+  outputSchema: z.object({
+    output: z.string()
+  })
+})
+  .then(step1)
+  .then(step2)
+  .commit();
+```
+
+> ステップは複数の方法で構成できます。詳しくは [Control Flow](./control-flow.mdx) を参照してください。
+
+#### ステップのクローン
+
+ワークフローのステップは `cloneStep()` を使ってクローンでき、任意のワークフローのメソッドで使用できます。
+
+```typescript {5,19} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep, cloneStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+const clonedStep = cloneStep(step1, { id: "cloned-step" });
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  description: 'Test workflow',
+  inputSchema: z.object({
+    input: z.string()
+  }),
+  outputSchema: z.object({
+    output: z.string()
+  })
+})
+  .then(step1)
+  .then(clonedStep)
+  .then(step2)
+  .commit();
+```
+
+## ワークフローの登録
+
+メインの Mastra インスタンスで `workflows` を使ってワークフローを登録します:
+
+```typescript {8} filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { PinoLogger } from "@mastra/loggers";
+import { LibSQLStore } from "@mastra/libsql";
+
+import { testWorkflow } from "./workflows/test-workflow";
+
+export const mastra = new Mastra({
+  workflows: { testWorkflow },
+  storage: new LibSQLStore({
+    // テレメトリや評価などをメモリストレージに保存します。永続化が必要な場合は file:../mastra.db に変更してください
+    url: ":memory:"
+  }),
+  logger: new PinoLogger({
+    name: "Mastra",
+    level: "info"
+  })
+});
+```
+
+## ローカルでのワークフローのテスト
+
+ワークフローを実行してテストする方法は2つあります。
+
+<Steps>
+
+### Mastra Playground
+
+Mastra Dev Server を起動した状態で、ブラウザで [http://localhost:4111/workflows](http://localhost:4111/workflows) にアクセスすると、Mastra Playground からワークフローを実行できます。
+
+> 詳細は [Local Dev Playground](../server-db/local-dev-playground.mdx) のドキュメントを参照してください。
+
+### コマンドライン
+
+`createRunAsync` と `start` を使用してワークフローの実行インスタンスを作成します:
+
+```typescript {3,5} filename="src/test-workflow.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+
+const result = await run.start({
+  inputData: {
+    city: "London"
+  }
+});
+
+console.log(result);
+
+if (result.status === 'success') {
+  console.log(result.result.output);
+}
+```
+> 詳細は [createRunAsync](../../reference/workflows/run.mdx) および [start](../../reference/workflows/run-methods/start.mdx) を参照してください。
+
+このワークフローを実行するには、次を実行します:
+
+```bash copy
+npx tsx src/test-workflow.ts
+```
+
+</Steps>
+
+### ワークフローの実行結果
+
+`start()` または `resume()` を使ってワークフローを実行した場合の結果は、状況に応じて次のいずれかになります。
+
+#### ステータス: success
+
+```json
+{
+  "status": "success",
+  "steps": {
+    // ...
+    "step-1": {
+      // ...
+      "status": "success",
+    }
+  },
+  "result": {
+    "output": "London + step-1"
+  }
+}
+```
+
+- **status**: ワークフロー実行の最終状態を示します。`success`、`suspended`、`error` のいずれか
+- **steps**: 入力と出力を含めて、ワークフロー内の各ステップを一覧します
+- **status**: 各ステップの結果を示します
+- **result**: `outputSchema` に従って型付けされたワークフローの最終出力を含みます
+
+#### ステータス: suspended
+
+```json
+{
+  "status": "suspended",
+  "steps": {
+    // ...
+    "step-1": {
+      // ...
+      "status": "suspended",
+    }
+  },
+  "suspended": [
+    [
+      "step-1"
+    ]
+  ]
+}
+```
+
+- **suspended**: 続行する前に入力待ちのステップを列挙する任意の配列
+
+#### ステータス failed
+
+```json
+{
+  "status": "failed",
+  "steps": {
+    // ...
+    "step-1": {
+      // ...
+      "status": "failed",
+      "error": "Test error",
+    }
+  },
+  "error": "Test error"
+}
+```
+
+- **error**: ワークフローが失敗した場合にエラーメッセージを含む省略可能なフィールド
+
+## ストリームワークフロー
+
+上で示した run メソッドと同様に、ワークフローもストリーミングできます：
+
+```typescript {5} filename="src/test-workflow.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+
+const result = await run.stream({
+  inputData: {
+    city: "London"
+  }
+});
+
+for await (const chunk of result.stream) {
+  console.log(chunk);
+}
+```
+
+> 詳細は [stream](../../reference/workflows/run-methods/stream.mdx) を参照してください。
+
+## ワークフローの監視
+
+ワークフローは監視でき、発行される各イベントを確認できます。
+
+```typescript {5} filename="src/test-workflow.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+
+run.watch((event) => {
+  console.log(event);
+});
+
+const result = await run.start({
+  inputData: {
+    city: "London"
+  }
+});
+```
+
+> 詳細は [watch](../../reference/workflows/run-methods/watch.mdx) を参照してください。
+
+## 関連
+
+- ガイドセクションの [Workflow Guide](../../guides/guide/ai-recruiter.mdx) は、主要な概念を扱うチュートリアルです。
+- [Parallel Steps ワークフローの例](../../examples/workflows/parallel-steps.mdx)
+- [Conditional Branching ワークフローの例](../../examples/workflows/conditional-branching.mdx)
+- [Inngest ワークフローの例](../../examples/workflows/inngest-workflow.mdx)
+- [Suspend and Resume ワークフローの例](../../examples/workflows/human-in-the-loop.mdx)
+
+## ワークフロー（レガシー）
+
+レガシー版ワークフローのドキュメントについては、[Workflows (Legacy)](../workflows-legacy/overview.mdx) を参照してください。

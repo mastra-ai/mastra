@@ -1,0 +1,109 @@
+---
+title: "リファレンス: Memory.getThreadsByResourceIdPaginated() | Memory | Mastra ドキュメント"
+description: "Mastra の `Memory.getThreadsByResourceIdPaginated()` メソッドに関するドキュメント。特定のリソース ID に紐づくスレッドを、ページネーションに対応して取得します。"
+---
+
+# Memory.getThreadsByResourceIdPaginated()
+
+`.getThreadsByResourceIdPaginated()` メソッドは、特定のリソース ID に紐づくスレッドを、ページネーションに対応して取得します。
+
+## 使用例
+
+```typescript copy
+await memory.getThreadsByResourceIdPaginated({
+  resourceId: "user-123",
+  page: 0,
+  perPage: 10
+});
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "resourceId",
+      type: "string",
+      description: "スレッドを取得するリソースのID",
+      isOptional: false,
+    },
+    {
+      name: "page",
+      type: "number",
+      description: "取得するページ番号",
+      isOptional: false,
+    },
+    {
+      name: "perPage",
+      type: "number",
+      description: "1ページあたりのスレッド返却数",
+      isOptional: false,
+    },
+    {
+      name: "orderBy",
+      type: "'createdAt' | 'updatedAt'",
+      description: "スレッドの並び替え対象フィールド",
+      isOptional: true,
+    },
+    {
+      name: "sortDirection",
+      type: "'ASC' | 'DESC'",
+      description: "並び順の方向",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<PaginationInfo & { threads: StorageThreadType[] }>",
+      description: "メタデータ付きのページネーション済みスレッド結果を返す Promise",
+    },
+  ]}
+/>
+
+## さらに踏み込んだ使用例
+
+```typescript filename="src/test-memory.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("agent");
+const memory = await agent.getMemory();
+
+let currentPage = 0;
+let hasMorePages = true;
+
+while (hasMorePages) {
+  const threads = await memory?.getThreadsByResourceIdPaginated({
+    resourceId: "user-123",
+    page: currentPage,
+    perPage: 25,
+    orderBy: "createdAt",
+    sortDirection: "ASC"
+  });
+
+  if (!threads) {
+    console.log("No threads");
+    break;
+  }
+
+  threads.threads.forEach((thread) => {
+    console.log(`Thread: ${thread.id}, 作成日時: ${thread.createdAt}`);
+  });
+
+  hasMorePages = threads.hasMore;
+  currentPage++;
+}
+```
+
+## 関連
+
+- [Memory クラスリファレンス](/reference/memory/Memory.mdx)
+- [getThreadsByResourceId](/reference/memory/getThreadsByResourceId.mdx) - ページネーションなしのバージョン
+- [Memory のはじめかた](/docs/memory/overview.mdx)（スレッド／リソースの概念を解説）
+- [createThread](/reference/memory/createThread.mdx)
+- [getThreadById](/reference/memory/getThreadById.mdx)

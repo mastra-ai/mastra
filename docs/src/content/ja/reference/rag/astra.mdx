@@ -3,10 +3,14 @@ title: "リファレンス: Astra ベクトルストア | ベクトルデータ�
 description: Mastraの中のAstraVectorクラスのドキュメント。DataStax Astra DBを使用したベクトル検索を提供します。
 ---
 
+
+
 # Astra Vector Store
 
 AstraVectorクラスは、[DataStax Astra DB](https://www.datastax.com/products/datastax-astra)を使用したベクトル検索を提供します。これはApache Cassandraをベースにしたクラウドネイティブでサーバーレスなデータベースです。
 エンタープライズグレードのスケーラビリティと高可用性を備えたベクトル検索機能を提供します。
+
+
 
 ## コンストラクタオプション
 
@@ -30,6 +34,8 @@ AstraVectorクラスは、[DataStax Astra DB](https://www.datastax.com/products/
     },
   ]}
 />
+
+
 
 ## メソッド
 
@@ -82,8 +88,7 @@ AstraVectorクラスは、[DataStax Astra DB](https://www.datastax.com/products/
       name: "ids",
       type: "string[]",
       isOptional: true,
-      description:
-        "オプションのベクトルID（提供されない場合は自動生成されます）",
+      description: "オプションのベクトルID（提供されない場合は自動生成されます）",
     },
   ]}
 />
@@ -216,6 +221,8 @@ interface IndexStats {
   ]}
 />
 
+
+
 ## レスポンスタイプ
 
 クエリ結果は以下の形式で返されます：
@@ -228,6 +235,8 @@ interface QueryResult {
   vector?: number[]; // Only included if includeVector is true
 }
 ```
+
+
 
 ## エラー処理
 
@@ -247,12 +256,16 @@ try {
 }
 ```
 
+
+
 ## 環境変数
 
 必要な環境変数：
 
 - `ASTRA_DB_TOKEN`: Astra DBのAPIトークン
 - `ASTRA_DB_ENDPOINT`: Astra DBのAPIエンドポイント
+
+
 
 ## 関連
 

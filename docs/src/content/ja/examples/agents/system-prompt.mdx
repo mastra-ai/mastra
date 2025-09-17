@@ -1,74 +1,119 @@
 ---
-title: "例：システムプロンプトを持つエージェント | エージェント | Mastra ドキュメント"
-description: Mastraでシステムプロンプトを使用してAIエージェントの性格と能力を定義する例。
+title: "例: システムプロンプトを使ったエージェント | Agents | Mastra Docs"
+description: Mastraで、システムプロンプトにより性格と機能を定義したAIエージェントを作成する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# エージェントにシステムプロンプトを与える
 
-AIエージェントを構築する際には、特定のタスクを効果的に処理するための具体的な指示と能力を与える必要があります。システムプロンプトを使用すると、エージェントの性格、知識領域、および行動ガイドラインを定義できます。この例では、カスタム指示を持つAIエージェントを作成し、検証済みの情報を取得するための専用ツールと統合する方法を示します。
 
-```ts showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
-import { createTool } from "@mastra/core/tools";
+# システムプロンプトの変更
 
-import { z } from "zod";
+エージェントを作成する際、`instructions` はその挙動に関する一般的なルールを定義します。これらはエージェントの役割や人格、全体的な方針を定め、すべてのやり取りで一貫して適用されます。特定のリクエストに限ってエージェントの応答傾向に影響を与えたい場合は、元の `instructions` を変更せずに、`.generate()` に `system` プロンプトを渡せます。
 
-const instructions = `You are a helpful cat expert assistant. When discussing cats, you should always include an interesting cat fact.
+この例では、`system` プロンプトを使ってエージェントの声をハリー・ポッターのさまざまな登場人物風に切り替え、コアの設定を変えずに同じエージェントがスタイルを適応できることを示しています。
 
-  Your main responsibilities:
-  1. Answer questions about cats
-  2. Use the catFact tool to provide verified cat facts
-  3. Incorporate the cat facts naturally into your responses
 
-  Always use the catFact tool at least once in your responses to ensure accuracy.`;
 
-const getCatFact = async () => {
-  const { fact } = (await fetch("https://catfact.ninja/fact").then((res) =>
-    res.json(),
-  )) as {
-    fact: string;
-  };
+## 前提条件
 
-  return fact;
-};
+この例では `openai` モデルを使用します。`.env` ファイルに `OPENAI_API_KEY` を追加してください。
 
-const catFact = createTool({
-  id: "Get cat facts",
-  inputSchema: z.object({}),
-  description: "Fetches cat facts",
-  execute: async () => {
-    console.log("using tool to fetch cat fact");
-    return {
-      catFact: await getCatFact(),
-    };
-  },
-});
-
-const catOne = new Agent({
-  name: "cat-one",
-  instructions: instructions,
-  model: openai("gpt-4o-mini"),
-  tools: {
-    catFact,
-  },
-});
-
-const result = await catOne.generate("Tell me a cat fact");
-
-console.log(result.text);
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
 ```
 
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
+
+
+## エージェントの作成
+
+エージェントを定義し、`instructions` を指定します。これは既定の動作を定義し、実行時にシステムプロンプトが与えられない場合の応答方針を示します。
+
+```typescript filename="src/mastra/agents/example-harry-potter-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+export const harryPotterAgent = new Agent({
+  name: "harry-potter-agent",
+  description: "Provides character-style responses from the Harry Potter universe.",
+  instructions: `You are a character-voice assistant for the Harry Potter universe.
+    Reply in the speaking style of the requested character (e.g., Harry, Hermione, Ron, Dumbledore, Snape, Hagrid).
+    If no character is specified, default to Harry Potter.`,
+  model: openai("gpt-4o")
+});
+```
+
+> 設定オプションの一覧については、[Agent](../../reference/agents/agent.mdx) を参照してください。
+
+
+
+## エージェントの登録
+
+エージェントを使用するには、メインの Mastra インスタンスに登録します。
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+
+import { harryPotterAgent } from "./agents/example-harry-potter-agent";
+
+export const mastra = new Mastra({
+  // ...
+  agents: { harryPotterAgent }
+});
+```
+
+
+
+## デフォルトのキャラクターの応答
+
+`getAgent()` を使ってエージェントを取得し、プロンプトを渡して `generate()` を呼び出します。指示にあるとおり、キャラクターを指定しない場合、このエージェントは Harry Potter の口調がデフォルトになります。
+
+```typescript filename="src/test-harry-potter-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("harryPotterAgent");
+
+const response = await agent.generate("What is your favorite room in Hogwarts?");
+
+console.log(response.text);
+```
+
+### キャラクターの口調を変更する
+
+実行時に別の system プロンプトを与えることで、エージェントの口調を別のキャラクターに切り替えられます。これにより、元の指示を変えることなく、そのリクエストに対するエージェントの応答が変わります。
+
+```typescript {9-10} filename="src/test-harry-potter-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("harryPotterAgent");
+
+const response = await agent.generate([
+  {
+    role: "system",
+    content: "You are Draco Malfoy."
+  },
+  {
+    role: "user",
+    content: "What is your favorite room in Hogwarts?"
+  }
+]);
+
+console.log(response.text);
+```
 
 <GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/system-prompt"
-  }
+  outdated={true}
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/system-prompt"
 />
+
+
+
+
+## 関連項目
+
+- [エージェントの呼び出し](./calling-agents.mdx#from-the-command-line)
