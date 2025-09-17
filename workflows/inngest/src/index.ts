@@ -1331,7 +1331,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
     if (step instanceof InngestWorkflow) {
       const isResume = !!resume?.steps?.length;
-      let result: WorkflowResult<any, any>;
+      let result: WorkflowResult<any, any, any>;
       let runId: string;
       if (isResume) {
         // @ts-ignore
