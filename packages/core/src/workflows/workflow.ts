@@ -1460,37 +1460,9 @@ export class Run<
 
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
-    let currentToolData: { name: string; args: any } | undefined = undefined;
-
     const writer = writable.getWriter();
     const unwatch = this.watch(async event => {
-      if ((event as any).type === 'workflow-agent-call-start') {
-        currentToolData = {
-          name: (event as any).payload.name,
-          args: (event as any).payload.args,
-        };
-        await writer.write({
-          ...event.payload,
-          type: 'tool-call-streaming-start',
-        } as any);
-
-        return;
-      }
-
       try {
-        if ((event as any).type === 'workflow-agent-call-finish') {
-          return;
-        } else if (!(event as any).type.startsWith('workflow-')) {
-          if ((event as any).type === 'text-delta') {
-            await writer.write({
-              type: 'tool-call-delta',
-              ...(currentToolData ?? {}),
-              argsTextDelta: (event as any).textDelta,
-            } as any);
-          }
-          return;
-        }
-
         const e: any = {
           ...event,
           type: event.type.replace('workflow-', ''),

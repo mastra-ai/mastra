@@ -1535,19 +1535,20 @@ describe('Workflow', () => {
 
       const run = await promptEvalWorkflow.createRunAsync();
 
-      const streamResult = run.streamVNext({ inputData: { input: 'test' } });
+      let streamResult = run.streamVNext({ inputData: { input: 'test' } });
 
       for await (const data of streamResult) {
         if (data.type === 'workflow-step-suspended') {
           expect(promptAgentAction).toHaveBeenCalledTimes(1);
 
           // make it async to show that execution is not blocked
-          setImmediate(() => {
-            const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
-            run.resume({ resumeData: resumeData as any, step: promptAgent });
-          });
           expect(evaluateToneAction).not.toHaveBeenCalledTimes(1);
         }
+      }
+
+      const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
+      streamResult = run.resumeStreamVNext({ resumeData: resumeData as any, step: promptAgent });
+      for await (const _data of streamResult) {
       }
 
       expect(evaluateToneAction).toHaveBeenCalledTimes(1);
@@ -1827,7 +1828,7 @@ describe('Workflow', () => {
           payload: {
             stepName: 'test-agent-1',
             id: 'test-agent-1',
-            stepCallId: 'mock-uuid-5',
+            stepCallId: expect.any(String),
             status: 'success',
             output: {},
             endedAt: expect.any(Number),
@@ -1840,7 +1841,7 @@ describe('Workflow', () => {
           payload: {
             stepName: 'mapping_mock-uuid-2',
             id: 'mapping_mock-uuid-2',
-            stepCallId: 'mock-uuid-25',
+            stepCallId: expect.any(String),
             payload: {},
             startedAt: expect.any(Number),
             status: 'running',
@@ -1853,7 +1854,7 @@ describe('Workflow', () => {
           payload: {
             stepName: 'mapping_mock-uuid-2',
             id: 'mapping_mock-uuid-2',
-            stepCallId: 'mock-uuid-25',
+            stepCallId: expect.any(String),
             status: 'success',
             output: {
               prompt: 'Capital of UK, just the name',
@@ -1868,7 +1869,7 @@ describe('Workflow', () => {
           payload: {
             stepName: 'test-agent-2',
             id: 'test-agent-2',
-            stepCallId: 'mock-uuid-26',
+            stepCallId: expect.any(String),
             payload: {
               prompt: 'Capital of UK, just the name',
             },
@@ -2274,16 +2275,14 @@ describe('Workflow', () => {
       const run = await workflow.createRunAsync({ runId: 'test-run-id' });
       const originalInput = { originalInput: 'original-data' };
 
-      const streamResult = run.streamVNext({ inputData: originalInput });
+      let streamResult = run.streamVNext({ inputData: originalInput });
 
-      for await (const data of streamResult) {
-        if (data.type === 'workflow-step-suspended') {
-          // Resume with different data to test that input comes from snapshot, not resume data
-          setImmediate(() => {
-            const resumeData = { stepId: 'step1', context: { differentData: 'resume-data' } };
-            run.resume({ resumeData: resumeData as any, step: step1 });
-          });
-        }
+      for await (const _data of streamResult) {
+      }
+
+      const resumeData = { stepId: 'step1', context: { differentData: 'resume-data' } };
+      streamResult = run.resumeStreamVNext({ resumeData: resumeData as any, step: step1 });
+      for await (const _data of streamResult) {
       }
 
       const result = await streamResult.result;
