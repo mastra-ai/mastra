@@ -991,20 +991,16 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
             },
             "type": "finish-step",
             "usage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
           },
           {
             "finishReason": "stop",
             "totalUsage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
             "type": "finish",
