@@ -35,44 +35,44 @@ describe('StoreMemoryUpstash sorting functionality', () => {
   describe('sortThreads method', () => {
     it('should sort threads by updatedAt DESC correctly', () => {
       const sorted = sortThreads([...testThreads], 'updatedAt', 'DESC');
-      
+
       expect(sorted).toHaveLength(2);
       expect(sorted[0].title).toBe('Server Test: Verify Sidebar Update');
       expect(sorted[1].title).toBe('Final Test Update 2025');
-      
+
       // Verify the actual timestamps
       expect(sorted[0].updatedAt.getTime()).toBeGreaterThan(sorted[1].updatedAt.getTime());
     });
 
     it('should sort threads by updatedAt ASC correctly', () => {
       const sorted = sortThreads([...testThreads], 'updatedAt', 'ASC');
-      
+
       expect(sorted).toHaveLength(2);
       expect(sorted[0].title).toBe('Final Test Update 2025');
       expect(sorted[1].title).toBe('Server Test: Verify Sidebar Update');
-      
+
       // Verify the actual timestamps
       expect(sorted[0].updatedAt.getTime()).toBeLessThan(sorted[1].updatedAt.getTime());
     });
 
     it('should sort threads by createdAt DESC correctly', () => {
       const sorted = sortThreads([...testThreads], 'createdAt', 'DESC');
-      
+
       expect(sorted).toHaveLength(2);
       expect(sorted[0].title).toBe('Final Test Update 2025');
       expect(sorted[1].title).toBe('Server Test: Verify Sidebar Update');
-      
+
       // Verify the actual timestamps
       expect(sorted[0].createdAt.getTime()).toBeGreaterThan(sorted[1].createdAt.getTime());
     });
 
     it('should sort threads by createdAt ASC correctly', () => {
       const sorted = sortThreads([...testThreads], 'createdAt', 'ASC');
-      
+
       expect(sorted).toHaveLength(2);
       expect(sorted[0].title).toBe('Server Test: Verify Sidebar Update');
       expect(sorted[1].title).toBe('Final Test Update 2025');
-      
+
       // Verify the actual timestamps
       expect(sorted[0].createdAt.getTime()).toBeLessThan(sorted[1].createdAt.getTime());
     });
@@ -114,13 +114,13 @@ describe('StoreMemoryUpstash sorting functionality', () => {
     it('should fix the specific bug where threads with later updatedAt appear after ones with earlier updatedAt', () => {
       // This test specifically covers the bug reported in issue #7748
       // Before the fix, threads were always sorted by createdAt DESC regardless of parameters
-      
+
       const sorted = sortThreads([...testThreads], 'updatedAt', 'DESC');
-      
+
       // The thread with the later updatedAt (2025-09-11T19:07:24.186Z) should come first
       expect(sorted[0].title).toBe('Server Test: Verify Sidebar Update');
       expect(sorted[0].updatedAt.toISOString()).toBe('2025-09-11T19:07:24.186Z');
-      
+
       // The thread with the earlier updatedAt (2025-09-11T01:04:12.265Z) should come second
       expect(sorted[1].title).toBe('Final Test Update 2025');
       expect(sorted[1].updatedAt.toISOString()).toBe('2025-09-11T01:04:12.265Z');

@@ -485,7 +485,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       it('should fix bug where threads with later updatedAt appear after ones with earlier updatedAt', async () => {
         // This test specifically covers the bug reported in issue #7748
         const bugTestResourceId = `bug-test-resource-${randomUUID()}`;
-        
+
         // Create threads with specific dates that match the bug report
         const thread1 = await storage.saveThread({
           thread: {
@@ -517,11 +517,11 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         });
 
         expect(result).toHaveLength(2);
-        
+
         // Thread2 should come first (has later updatedAt: 2025-09-11T19:07:24.186Z)
         expect(result[0]!.title).toBe('Server Test: Verify Sidebar Update');
         expect(result[1]!.title).toBe('Final Test Update 2025');
-        
+
         // Verify the actual sorting is correct
         const firstUpdatedAt = getDateValue(result[0]!.updatedAt);
         const secondUpdatedAt = getDateValue(result[1]!.updatedAt);
