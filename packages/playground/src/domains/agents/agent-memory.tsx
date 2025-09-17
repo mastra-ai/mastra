@@ -22,7 +22,7 @@ export function AgentMemory({ agentId }: AgentMemoryProps) {
   const { data: config } = useMemoryConfig(agentId);
 
   // Check if semantic recall is enabled
-  const isSemanticRecallEnabled = config && config.semanticRecall !== false;
+  const isSemanticRecallEnabled = config && config.semanticRecall === true;
 
   // Get memory search hook
   const { searchMemory } = useMemorySearch({
