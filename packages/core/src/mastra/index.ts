@@ -2,6 +2,8 @@ import type { Agent } from '../agent';
 import { getAllAITracing, setupAITracing, shutdownAITracingRegistry } from '../ai-tracing';
 import type { ObservabilityRegistryConfig } from '../ai-tracing';
 import type { BundlerConfig } from '../bundler/types';
+import { InMemoryServerCache } from '../cache';
+import type { MastraServerCache } from '../cache';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import { EventEmitterPubSub } from '../events/event-emitter';
@@ -116,6 +118,8 @@ export class Mastra<
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
+  // This is only used internally for server handlers that require temporary persistence
+  #serverCache: MastraServerCache;
 
   /**
    * @deprecated use getTelemetry() instead
@@ -192,6 +196,13 @@ export class Mastra<
         path: m.path || '/api/*',
       }));
     }
+
+    /*
+    Server Cache
+    */
+
+    // This is only used internally for server handlers that require temporary persistence
+    this.#serverCache = new InMemoryServerCache();
 
     /*
     Events
@@ -1164,5 +1175,10 @@ do:
     await this.stopEventEngine();
 
     this.#logger?.info('Mastra shutdown completed');
+  }
+
+  // This method is only used internally for server hnadlers that require temporary persistence
+  public getServerCache() {
+    return this.#serverCache;
   }
 }
