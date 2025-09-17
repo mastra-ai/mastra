@@ -8,7 +8,7 @@ export class InMemoryServerCache extends MastraServerCache {
   });
 
   constructor() {
-    super();
+    super({ name: 'InMemoryServerCache' });
   }
 
   async get(key: string): Promise<unknown> {
@@ -39,7 +39,9 @@ export class InMemoryServerCache extends MastraServerCache {
   async listFromTo(key: string, from: number, to: number = -1): Promise<unknown[]> {
     const list = this.cache.get(key) as unknown[];
     if (Array.isArray(list)) {
-      return list.slice(from, to);
+      // Make 'to' inclusive like Redis LRANGE - add 1 unless it's -1
+      const endIndex = to === -1 ? undefined : to + 1;
+      return list.slice(from, endIndex);
     }
     return [];
   }
