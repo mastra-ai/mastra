@@ -13,7 +13,7 @@ const NameCell = ({ row }: { row: Row<ScorerTableData> }) => {
     <EntryCell
       icon={<GaugeIcon />}
       name={
-        <Link className="w-full space-y-0" href={row.original.name}>
+        <Link className="w-full space-y-0" href={row.original.id}>
           {row.original.name}
         </Link>
       }
