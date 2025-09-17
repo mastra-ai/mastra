@@ -34,13 +34,9 @@ export type StreamTextOnStepFinishCallback<Tools extends ToolSet> = (
   event: Parameters<OriginalStreamTextOnStepFinishCallback<Tools>>[0] & { runId: string },
 ) => Promise<void> | void;
 
-export type ModelLoopStreamArgs<
-  TOOLS extends ToolSet,
-  OUTPUT extends OutputSchema | undefined = undefined,
-  STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-> = {
+export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
   messages?: UIMessage[] | ModelMessage[];
-  structuredOutput?: STRUCTURED_OUTPUT extends z.ZodTypeAny ? StructuredOutputOptions<STRUCTURED_OUTPUT> : never;
+  structuredOutput?: OUTPUT extends OutputSchema ? StructuredOutputOptions<OUTPUT> : never;
   outputProcessors?: OutputProcessor[];
   runtimeContext: RuntimeContext;
   tracingContext: TracingContext;
