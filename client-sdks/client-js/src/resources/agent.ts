@@ -1335,7 +1335,7 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async streamVNext<OUTPUT extends OutputSchema | undefined = undefined>(
+  async streamVNext<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
     options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>,
   ): Promise<
