@@ -8,7 +8,7 @@ import type {
   UIMessage,
 } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema } from 'zod';
+import type { ZodSchema } from 'zod';
 import type { MessageList } from '../../agent';
 import type { TracingContext } from '../../ai-tracing';
 import type { LoopOptions } from '../../loop/types';
