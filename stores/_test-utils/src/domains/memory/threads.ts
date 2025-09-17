@@ -482,6 +482,52 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         expectThreadsSortedBy(result, 'updatedAt', 'DESC');
       });
 
+      it('should fix bug where threads with later updatedAt appear after ones with earlier updatedAt', async () => {
+        // This test specifically covers the bug reported in issue #7748
+        const bugTestResourceId = `bug-test-resource-${randomUUID()}`;
+        
+        // Create threads with specific dates that match the bug report
+        const thread1 = await storage.saveThread({
+          thread: {
+            id: `bug-thread-1-${randomUUID()}`,
+            resourceId: bugTestResourceId,
+            title: 'Final Test Update 2025',
+            createdAt: new Date('2025-09-10T23:24:11.004Z'),
+            updatedAt: new Date('2025-09-11T01:04:12.265Z'), // Earlier updatedAt
+            metadata: {},
+          },
+        });
+
+        const thread2 = await storage.saveThread({
+          thread: {
+            id: `bug-thread-2-${randomUUID()}`,
+            resourceId: bugTestResourceId,
+            title: 'Server Test: Verify Sidebar Update',
+            createdAt: new Date('2025-09-10T23:22:14.032Z'),
+            updatedAt: new Date('2025-09-11T19:07:24.186Z'), // Later updatedAt
+            metadata: {},
+          },
+        });
+
+        // Test the fix: orderBy updatedAt DESC should put thread2 first
+        const result = await storage.getThreadsByResourceId({
+          resourceId: bugTestResourceId,
+          orderBy: 'updatedAt',
+          sortDirection: 'DESC',
+        });
+
+        expect(result).toHaveLength(2);
+        
+        // Thread2 should come first (has later updatedAt: 2025-09-11T19:07:24.186Z)
+        expect(result[0]!.title).toBe('Server Test: Verify Sidebar Update');
+        expect(result[1]!.title).toBe('Final Test Update 2025');
+        
+        // Verify the actual sorting is correct
+        const firstUpdatedAt = getDateValue(result[0]!.updatedAt);
+        const secondUpdatedAt = getDateValue(result[1]!.updatedAt);
+        expect(firstUpdatedAt).toBeGreaterThan(secondUpdatedAt);
+      });
+
       it('should sort by createdAt DESC when only orderBy is specified (sortDirection defaults to DESC)', async () => {
         const result = await storage.getThreadsByResourceId({
           resourceId,
@@ -722,5 +768,5 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
 function isStorageSupportsSort(storage: MastraStorage): boolean {
   const storageType = storage.constructor.name;
-  return ['LibSQLStore', 'PostgresStore', 'MSSQLStore', 'DynamoDBStore'].includes(storageType);
+  return ['LibSQLStore', 'PostgresStore', 'MSSQLStore', 'DynamoDBStore', 'UpstashStore'].includes(storageType);
 }
