@@ -1276,7 +1276,7 @@ export class Run<
   }
 
   protected closeStreamAction?: () => Promise<void>;
-  protected activeStream?: MastraWorkflowStream;
+  protected activeStream?: MastraWorkflowStream<TOutput, TSteps>;
   protected executionResults?: Promise<WorkflowResult<TOutput, TSteps>>;
 
   protected cleanup?: () => void;
@@ -1611,14 +1611,14 @@ export class Run<
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     format?: 'aisdk' | 'mastra' | undefined;
-  } = {}) {
+  } = {}): MastraWorkflowStream<TOutput, TSteps> {
     if (this.closeStreamAction) {
       this.activeStream;
     }
 
     this.closeStreamAction = async () => {};
 
-    this.activeStream = new MastraWorkflowStream({
+    this.activeStream = new MastraWorkflowStream<TOutput, TSteps>({
       run: this,
       createStream: () => {
         const { readable, writable } = new TransformStream<ChunkType, ChunkType>({
@@ -2078,7 +2078,7 @@ export class Run<
    * @access private
    * @returns The execution results of the workflow run
    */
-  _getExecutionResults() {
+  _getExecutionResults(): Promise<WorkflowResult<TOutput, TSteps>> | undefined {
     return this.executionResults;
   }
 }
