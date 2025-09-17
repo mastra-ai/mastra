@@ -49,6 +49,7 @@ type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   outputProcessorRunnerMode?: ProcessorRunnerMode;
   returnScorerData?: boolean;
   tracingContext?: TracingContext;
+  maxSteps?: number;
 };
 export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
   #aisdkv5: AISDKV5OutputStream<OUTPUT>;
