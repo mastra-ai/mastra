@@ -1,5 +1,11 @@
 # @mastra/auth-firebase
 
+## 0.10.4-alpha.0
+
+### Patch Changes
+
+- Update package.json and README ([#7886](https://github.com/mastra-ai/mastra/pull/7886))
+
 ## 0.10.3
 
 ### Patch Changes

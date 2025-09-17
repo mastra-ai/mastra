@@ -90,6 +90,10 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) 
   return cb(value);
 }
 
+// Flags to track if deprecation warnings have been shown
+let streamDeprecationWarningShown = false;
+let generateDeprecationWarningShown = false;
+
 // Helper to resolve threadId from args (supports both new and old API)
 function resolveThreadIdFromArgs(args: {
   memory?: AgentMemoryOption;
@@ -3895,9 +3899,12 @@ export class Agent<
     messages: MessageListInput,
     generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
-    this.logger.warn(
-      "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 23rd, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
-    );
+    if (!generateDeprecationWarningShown) {
+      this.logger.warn(
+        "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 23rd, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
+      );
+      generateDeprecationWarningShown = true;
+    }
     // @ts-expect-error - generic type issues
     return this.generateLegacy(messages, generateOptions);
   }
@@ -4262,9 +4269,12 @@ export class Agent<
     | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
     | (StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties)
   > {
-    this.logger.warn(
-      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 23rd, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
-    );
+    if (!streamDeprecationWarningShown) {
+      this.logger.warn(
+        "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 23rd, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
+      );
+      streamDeprecationWarningShown = true;
+    }
     // @ts-expect-error - generic type issues
     return this.streamLegacy(messages, streamOptions);
   }

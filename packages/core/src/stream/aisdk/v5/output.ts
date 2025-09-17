@@ -156,7 +156,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
         onError: options?.onError,
       });
     } catch (error) {
-      console.log('consumeStream error', error);
+      console.error('consumeStream error', error);
       options?.onError?.(error);
     }
   }
