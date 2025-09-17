@@ -48,7 +48,8 @@ describe('watcher', () => {
 
       // Assert
       expect(bundlerGetInputOptions).toHaveBeenCalledWith(
-        expect.stringMatching(/\.mastra\/\.build\/entry-0\.mjs$/),
+        // expect.stringMatching(/\.mastra\/\.build\/entry-0\.mjs$/),
+        expect.stringMatching('test-entry.js'),
         expect.objectContaining({
           dependencies: expect.any(Map),
           externalDependencies: expect.any(Set),
@@ -73,7 +74,8 @@ describe('watcher', () => {
 
       // Assert
       expect(bundlerGetInputOptions).toHaveBeenCalledWith(
-        expect.stringMatching(/\.mastra\/\.build\/entry-0\.mjs$/),
+        // expect.stringMatching(/\.mastra\/\.build\/entry-0\.mjs$/),
+        expect.stringMatching('test-entry.js'),
         expect.objectContaining({
           dependencies: expect.any(Map),
           externalDependencies: expect.any(Set),
