@@ -39,16 +39,13 @@ npm install @mastra/auth-auth0@latest
 
 ### Basic usage with environment variables
 
-If you set the required environment variables (`AUTH0_DOMAIN` and `AUTH0_AUDIENCE`), you can initialize `MastraAuthAuth0` without any constructor arguments. The class will automatically read these environment variables as configuration:
-
-```typescript {2,8} filename="src/mastra/index.ts" showLineNumbers copy
+```typescript {2,7} filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { MastraAuthAuth0 } from '@mastra/auth-auth0';
 
 export const mastra = new Mastra({
   // ..
   server: {
-    // Automatically uses AUTH0_DOMAIN and AUTH0_AUDIENCE env vars
     experimental_auth: new MastraAuthAuth0(),
   },
 });
@@ -72,15 +69,6 @@ export const mastra = new Mastra({
 ```
 
 ## Configuration
-
-The `MastraAuthAuth0` class can be configured through constructor options or environment variables.
-
-### Environment Variables
-
-- `AUTH0_DOMAIN`: Your Auth0 domain (e.g., `your-tenant.auth0.com`)
-- `AUTH0_AUDIENCE`: Your Auth0 API identifier/audience
-
-> **Note:** When constructor options are not provided, the class automatically reads these environment variables. This means you can simply call `new MastraAuthAuth0()` without any arguments if your environment variables are properly configured.
 
 ### User Authorization
 
@@ -123,17 +111,13 @@ import React from 'react';
 import { Auth0Provider } from '@auth0/auth0-react';
 
 const Auth0ProviderWithHistory = ({ children }) => {
-  const domain = process.env.REACT_APP_AUTH0_DOMAIN;
-  const clientId = process.env.REACT_APP_AUTH0_CLIENT_ID;
-  const audience = process.env.REACT_APP_AUTH0_AUDIENCE;
-
   return (
     <Auth0Provider
-      domain={domain}
-      clientId={clientId}
+      domain={process.env.REACT_APP_AUTH0_DOMAIN}
+      clientId={process.env.REACT_APP_AUTH0_CLIENT_ID}
       authorizationParams={{
         redirect_uri: window.location.origin,
-        audience: audience,
+        audience: process.env.REACT_APP_AUTH0_AUDIENCE,
         scope: "read:current_user update:current_user_metadata"
       }}
     >
@@ -153,21 +137,11 @@ Use the Auth0 React SDK to authenticate users and retrieve their access tokens:
 import { useAuth0 } from '@auth0/auth0-react';
 
 export const useAuth0Token = () => {
-  const { getAccessTokenSilently, loginWithPopup, getAccessTokenWithPopup } = useAuth0();
+  const { getAccessTokenSilently } = useAuth0();
 
   const getAccessToken = async () => {
-    try {
-      const token = await getAccessTokenSilently();
-      return token;
-    } catch (error) {
-      // Handle consent or login required errors
-      if (error.error === 'consent_required') {
-        await getAccessTokenWithPopup();
-      } else if (error.error === 'login_required') {
-        await loginWithPopup();
-      }
-      throw error;
-    }
+    const token = await getAccessTokenSilently();
+    return token;
   };
 
   return { getAccessToken };
@@ -180,7 +154,7 @@ export const useAuth0Token = () => {
 
 When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid Auth0 access token in the `Authorization` header:
 
-```typescript {7} filename="lib/mastra/mastra-client.ts" showLineNumbers copy
+```typescript filename="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
 
 export const createMastraClient = (accessToken: string) => {
@@ -209,87 +183,37 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
     import { MastraClient } from '@mastra/client-js';
 
     export const MastraApiTest = () => {
-      const { getAccessTokenSilently, getAccessTokenWithPopup, loginWithPopup } = useAuth0();
+      const { getAccessTokenSilently } = useAuth0();
       const [result, setResult] = useState(null);
-      const [error, setError] = useState(null);
-      const [loading, setLoading] = useState(false);
-
-      const handleConsent = async () => {
-        try {
-          await getAccessTokenWithPopup();
-          setError(null);
-        } catch (error) {
-          setError(error.error);
-        }
-      };
-
-      const handleLoginAgain = async () => {
-        try {
-          await loginWithPopup();
-          setError(null);
-        } catch (error) {
-          setError(error.error);
-        }
-      };
 
       const callMastraApi = async () => {
-        setLoading(true);
-        try {
-          const token = await getAccessTokenSilently();
+        const token = await getAccessTokenSilently();
 
-          const mastra = new MastraClient({
-            baseUrl: "http://localhost:4111",
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
-          });
-
-          const weatherAgent = mastra.getAgent("weatherAgent");
-          const response = await weatherAgent.generate({
-            messages: "What's the weather like in New York"
-          });
-
-          setResult(response.text);
-          setError(null);
-        } catch (error) {
-          if (error.error === 'consent_required' || error.error === 'login_required') {
-            setError(error.error);
-          } else {
-            setError('An error occurred while calling the API');
+        const mastra = new MastraClient({
+          baseUrl: "http://localhost:4111",
+          headers: {
+            Authorization: `Bearer ${token}`
           }
-        } finally {
-          setLoading(false);
-        }
+        });
+
+        const weatherAgent = mastra.getAgent("weatherAgent");
+        const response = await weatherAgent.generate({
+          messages: "What's the weather like in New York"
+        });
+
+        setResult(response.text);
       };
 
       return (
         <div>
-          {error === 'consent_required' && (
-            <div className="alert alert-warning">
-              You need to{' '}
-              <button onClick={handleConsent} className="btn-link">
-                consent to get access to the API
-              </button>
-            </div>
-          )}
-
-          {error === 'login_required' && (
-            <div className="alert alert-warning">
-              You need to{' '}
-              <button onClick={handleLoginAgain} className="btn-link">
-                log in again
-              </button>
-            </div>
-          )}
-
-          <button onClick={callMastraApi} disabled={loading}>
-            {loading ? 'Calling API...' : 'Test Mastra API'}
+          <button onClick={callMastraApi}>
+            Test Mastra API
           </button>
 
           {result && (
             <div className="result">
               <h6>Result:</h6>
-              <pre>{JSON.stringify(result, null, 2)}</pre>
+              <pre>{result}</pre>
             </div>
           )}
         </div>

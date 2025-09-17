@@ -7,24 +7,7 @@ description: "API reference for the MastraAuthAuth0 class, which authenticates M
 
 The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It verifies incoming requests using Auth0-issued JWT tokens and integrates with the Mastra server using the `experimental_auth` option.
 
-## Usage examples
-
-### Basic usage with environment variables
-
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
-import { MastraAuthAuth0 } from '@mastra/auth-auth0';
-
-// Automatically uses AUTH0_DOMAIN and AUTH0_AUDIENCE env vars
-export const mastra = new Mastra({
-  // ..
-  server: {
-    experimental_auth: new MastraAuthAuth0(),
-  },
-});
-```
-
-### Custom configuration
+## Usage example
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
@@ -40,6 +23,8 @@ export const mastra = new Mastra({
   },
 });
 ```
+
+> **Note:** You can omit the constructor parameters if you have the appropriately named environment variables (`AUTH0_DOMAIN` and `AUTH0_AUDIENCE`) set. In that case, simply use `new MastraAuthAuth0()` without any arguments.
 
 ## Constructor parameters
 
