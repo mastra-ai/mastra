@@ -21,7 +21,7 @@ import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 
-type ProcessOutputStreamOptions<OUTPUT extends OutputSchema | undefined = undefined> = {
+type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   model: LanguageModelV2;
   tools?: ToolSet;
   messageId: string;
@@ -38,7 +38,7 @@ type ProcessOutputStreamOptions<OUTPUT extends OutputSchema | undefined = undefi
   };
 };
 
-async function processOutputStream<OUTPUT extends OutputSchema | undefined = undefined>({
+async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
   tools,
   messageId,
   messageList,
@@ -399,10 +399,7 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
   };
 }
 
-export function createLLMExecutionStep<
-  Tools extends ToolSet = ToolSet,
-  OUTPUT extends OutputSchema | undefined = undefined,
->({
+export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>({
   models,
   _internal,
   messageId,

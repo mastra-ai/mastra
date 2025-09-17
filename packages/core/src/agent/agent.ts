@@ -2935,10 +2935,11 @@ export class Agent<
     return finalOnFinish;
   }
 
-  async #execute<
-    OUTPUT extends OutputSchema | undefined = undefined,
-    FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-  >({ methodType, format = 'mastra', ...options }: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
+  async #execute<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' | undefined = undefined>({
+    methodType,
+    format = 'mastra',
+    ...options
+  }: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
     const runtimeContext = options.runtimeContext || new RuntimeContext();
     const threadFromArgs = resolveThreadIdFromArgs({ threadId: options.threadId, memory: options.memory });
 
@@ -3753,10 +3754,7 @@ export class Agent<
     });
   }
 
-  async generateVNext<
-    OUTPUT extends OutputSchema | undefined = undefined,
-    FORMAT extends 'aisdk' | 'mastra' = 'mastra',
-  >(
+  async generateVNext<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' = 'mastra'>(
     messages: MessageListInput,
     options?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<
@@ -3785,10 +3783,7 @@ export class Agent<
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
   }
 
-  async streamVNext<
-    OUTPUT extends OutputSchema | undefined = undefined,
-    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
-  >(
+  async streamVNext<OUTPUT extends OutputSchema = undefined, FORMAT extends 'mastra' | 'aisdk' | undefined = undefined>(
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {

@@ -2,7 +2,7 @@ import type { AgentExecutionOptions } from '@mastra/core/agent';
 import { registerApiRoute } from '@mastra/core/server';
 import type { OutputSchema } from '@mastra/core/stream';
 
-export type chatRouteOptions<OUTPUT extends OutputSchema | undefined = undefined> = {
+export type chatRouteOptions<OUTPUT extends OutputSchema = undefined> = {
   defaultOptions?: AgentExecutionOptions<OUTPUT, 'aisdk'>;
 } & (
   | {
@@ -15,7 +15,7 @@ export type chatRouteOptions<OUTPUT extends OutputSchema | undefined = undefined
     }
 );
 
-export function chatRoute<OUTPUT extends OutputSchema | undefined = undefined>({
+export function chatRoute<OUTPUT extends OutputSchema = undefined>({
   path = '/chat/:agentId',
   agent,
   defaultOptions,

@@ -34,7 +34,7 @@ export type MultiPrimitiveExecutionOptions = {
 };
 
 export type AgentExecutionOptions<
-  OUTPUT extends OutputSchema | undefined = undefined,
+  OUTPUT extends OutputSchema = undefined,
   FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
 > = {
   /**
@@ -122,7 +122,7 @@ export type AgentExecutionOptions<
   prepareStep?: PrepareStepFunction<any>;
 } & OutputOptions<OUTPUT>;
 
-type OutputOptions<OUTPUT extends OutputSchema | undefined = undefined> =
+type OutputOptions<OUTPUT extends OutputSchema = undefined> =
   | {
       /**
        * Schema for structured output generation (Zod schema or JSON Schema)

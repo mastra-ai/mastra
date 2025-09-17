@@ -323,15 +323,15 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async generateVNext<OUTPUT extends OutputSchema | undefined = undefined>(
+  async generateVNext<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
     options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>,
   ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
   // Backward compatibility overload
-  async generateVNext<OUTPUT extends OutputSchema | undefined = undefined>(
+  async generateVNext<OUTPUT extends OutputSchema = undefined>(
     params: StreamVNextParams<OUTPUT>,
   ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
-  async generateVNext<OUTPUT extends OutputSchema | undefined = undefined>(
+  async generateVNext<OUTPUT extends OutputSchema = undefined>(
     messagesOrParams: MessageListInput | StreamVNextParams<OUTPUT>,
     options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>,
   ): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {

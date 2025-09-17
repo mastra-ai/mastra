@@ -9,7 +9,7 @@ import { prepareToolsAndToolChoice } from './compat';
 import { AISDKV5InputStream } from './input';
 import { getModelSupport } from './model-supports';
 
-type ExecutionProps<OUTPUT extends OutputSchema | undefined = undefined> = {
+type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   runId: string;
   model: LanguageModelV2;
   providerOptions?: SharedV2ProviderOptions;
@@ -34,7 +34,7 @@ type ExecutionProps<OUTPUT extends OutputSchema | undefined = undefined> = {
   shouldThrowError?: boolean;
 };
 
-export function execute<OUTPUT extends OutputSchema | undefined = undefined>({
+export function execute<OUTPUT extends OutputSchema = undefined>({
   runId,
   model,
   providerOptions,

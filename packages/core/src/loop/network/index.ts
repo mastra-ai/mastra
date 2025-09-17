@@ -843,7 +843,7 @@ export async function createNetworkLoop({
 }
 
 export async function networkLoop<
-  OUTPUT extends OutputSchema | undefined = undefined,
+  OUTPUT extends OutputSchema = undefined,
   FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
 >({
   networkName,

@@ -106,7 +106,7 @@ export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefin
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
 >;
 
-export type StreamVNextParams<OUTPUT extends OutputSchema | undefined = undefined> = {
+export type StreamVNextParams<OUTPUT extends OutputSchema = undefined> = {
   messages: MessageListInput;
   output?: OUTPUT;
   runtimeContext?: RuntimeContext | Record<string, any>;
@@ -119,7 +119,7 @@ export type StreamVNextParams<OUTPUT extends OutputSchema | undefined = undefine
     >
   >;
 
-type OutputOptions<OUTPUT extends OutputSchema | undefined = undefined> =
+type OutputOptions<OUTPUT extends OutputSchema = undefined> =
   | {
       output?: OUTPUT;
       structuredOutput?: never;

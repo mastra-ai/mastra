@@ -34,7 +34,7 @@ export type StreamTextOnStepFinishCallback<Tools extends ToolSet> = (
   event: Parameters<OriginalStreamTextOnStepFinishCallback<Tools>>[0] & { runId: string },
 ) => Promise<void> | void;
 
-export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
+export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT extends OutputSchema = undefined> = {
   messages?: UIMessage[] | ModelMessage[];
   structuredOutput?: OUTPUT extends OutputSchema ? StructuredOutputOptions<OUTPUT> : never;
   outputProcessors?: OutputProcessor[];
