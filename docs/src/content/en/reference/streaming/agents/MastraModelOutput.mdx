@@ -124,7 +124,7 @@ These properties resolve to final values after the stream completes:
     },
     {
       name: "usage",
-      type: "Promise<Record<string, number>>",
+      type: "Promise<LanguageModelUsage>",
       description: "Token usage statistics including input tokens, output tokens, total tokens, and reasoning tokens (for reasoning models).",
       properties: [{
         type: "Record",
@@ -133,6 +133,7 @@ These properties resolve to final values after the stream completes:
           { name: "outputTokens", type: "number", description: "Tokens generated in the response" },
           { name: "totalTokens", type: "number", description: "Sum of input and output tokens" },
           { name: "reasoningTokens", type: "number", isOptional: true, description: "Hidden reasoning tokens (for reasoning models)" }
+          { name: "cachedInputTokens", type: "number", isOptional: true, description: "Number of input tokens that were a cache hit" }
         ]
       }]
     },

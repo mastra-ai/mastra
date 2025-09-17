@@ -1,5 +1,19 @@
 # @mastra/core
 
+## 0.17.0-alpha.8
+
+### Patch Changes
+
+- Improve error message when using V1 model with streamVNext ([#7948](https://github.com/mastra-ai/mastra/pull/7948))
+
+- Fix VNext generate/stream usage tokens. They used to be undefined, now we are receiving the proper values. ([#7901](https://github.com/mastra-ai/mastra/pull/7901))
+
+## 0.17.0-alpha.7
+
+### Patch Changes
+
+- fix error message when fetching observability things ([#7956](https://github.com/mastra-ai/mastra/pull/7956))
+
 ## 0.17.0-alpha.6
 
 ### Minor Changes
