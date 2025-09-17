@@ -47,6 +47,8 @@ import type {
   SaveScoreParams,
   SaveScoreResponse,
   GetAITracesResponse,
+  GetMemoryConfigParams,
+  GetMemoryConfigResponse,
 } from './types';
 import { base64RuntimeContext, parseClientRuntimeContext } from './utils';
 
@@ -91,6 +93,15 @@ export class MastraClient extends BaseResource {
    */
   public getMemoryThreads(params: GetMemoryThreadParams): Promise<GetMemoryThreadResponse> {
     return this.request(`/api/memory/threads?resourceid=${params.resourceId}&agentId=${params.agentId}`);
+  }
+
+  /**
+   * Retrieves memory config for a resource
+   * @param params - Parameters containing the resource ID
+   * @returns Promise containing array of memory threads
+   */
+  public getMemoryConfig(params: GetMemoryConfigParams): Promise<GetMemoryConfigResponse> {
+    return this.request(`/api/memory/config?agentId=${params.agentId}`);
   }
 
   /**

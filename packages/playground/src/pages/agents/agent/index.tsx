@@ -19,7 +19,7 @@ function Agent() {
   const { agentId, threadId } = useParams();
   const [searchParams] = useSearchParams();
   const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);
-  const { memory } = useMemory(agentId!);
+  const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
   const { messages, isLoading: isMessagesLoading } = useMessages({
     agentId: agentId!,

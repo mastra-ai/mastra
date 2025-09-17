@@ -5,31 +5,31 @@ import useSWR, { useSWRConfig } from 'swr';
 import { useQuery } from '@tanstack/react-query';
 
 import { fetcher } from '@/lib/utils';
-import type { MemoryConfigResponse, MemorySearchResponse, MemorySearchParams } from '@/types/memory';
+import type { MemorySearchResponse, MemorySearchParams } from '@/types/memory';
+import { useMastraClient } from '@mastra/playground-ui';
 
 export const useMemory = (agentId?: string) => {
-  const {
-    data: memory,
-    isLoading,
-    mutate,
-  } = useSWR<{ result: boolean }>(`/api/memory/status?agentId=${agentId}`, fetcher, {
-    fallbackData: { result: false },
-    isPaused: () => !agentId,
+  const client = useMastraClient();
+
+  return useQuery({
+    queryKey: ['memory', agentId],
+    queryFn: () => (agentId ? client.getMemoryStatus(agentId) : null),
+    enabled: Boolean(agentId),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
   });
-  return { memory, isLoading, mutate };
 };
 
 export const useMemoryConfig = (agentId?: string) => {
-  const {
-    data: config,
-    isLoading,
-    refetch: mutate,
-  } = useQuery<MemoryConfigResponse>({
+  const client = useMastraClient();
+
+  return useQuery({
     queryKey: ['memory', 'config', agentId],
-    queryFn: () => fetcher(`/api/memory/config?agentId=${agentId}`),
-    enabled: !!agentId,
+    queryFn: () => (agentId ? client.getMemoryConfig({ agentId }) : null),
+    enabled: Boolean(agentId),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
   });
-  return { config: config?.config, isLoading, mutate };
 };
 
 export const useThreads = ({
