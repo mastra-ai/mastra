@@ -25,7 +25,7 @@ export async function getInputOptions(
     [entryFile],
     entryFile,
     {
-      outputDir: join(process.cwd(), '.mastra', '.build'),
+      outputDir: posix.join(process.cwd(), '.mastra', '.build'),
       projectRoot: workspaceRoot || process.cwd(),
       platform: 'node',
       isDev: true,

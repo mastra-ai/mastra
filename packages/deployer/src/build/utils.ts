@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
 import { existsSync, mkdirSync } from 'fs';
-import { join, sep, posix } from 'path';
+import { join } from 'path';
 import { getPackageInfo } from 'local-pkg';
 
 export function upsertMastraDir({ dir = process.cwd() }: { dir?: string }) {
@@ -64,5 +64,5 @@ export function slash(path: string) {
     return path;
   }
 
-  return path.replaceAll(sep, posix.sep);
+  return path.replaceAll('\\', '/');
 }
