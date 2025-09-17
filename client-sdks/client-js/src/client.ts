@@ -49,6 +49,7 @@ import type {
   GetAITracesResponse,
   GetMemoryConfigParams,
   GetMemoryConfigResponse,
+  GetMemoryThreadMessagesResponse,
 } from './types';
 import { base64RuntimeContext, parseClientRuntimeContext } from './utils';
 
@@ -120,6 +121,10 @@ export class MastraClient extends BaseResource {
    */
   public getMemoryThread(threadId: string, agentId: string) {
     return new MemoryThread(this.options, threadId, agentId);
+  }
+
+  public getThreadMessages(threadId: string, agentId: string): Promise<GetMemoryThreadMessagesResponse> {
+    return this.request(`/api/memory/threads/${threadId}/messages?agentId=${agentId}`);
   }
 
   /**
