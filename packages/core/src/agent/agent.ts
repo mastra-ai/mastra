@@ -3015,7 +3015,6 @@ export class Agent<
     // Create a capabilities object with bound methods
     const capabilities = {
       agentName: this.name,
-      agentInstructions: instructions,
       logger: this.logger,
       getMemory: this.getMemory.bind(this),
       getModel: this.getModel.bind(this),

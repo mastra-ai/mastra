@@ -24,7 +24,7 @@ interface PrepareMemoryStepOptions<
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
   methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
   format?: FORMAT;
-  instructions?: string;
+  instructions: string;
   memoryConfig?: MemoryConfig;
   memory?: MastraMemory;
 }
@@ -64,7 +64,7 @@ export function createPrepareMemoryStep<
       })
         .addSystem({
           role: 'system',
-          content: instructions || `${capabilities.agentInstructions}.`,
+          content: instructions,
         })
         .add(options.context || [], 'context');
 
@@ -233,7 +233,7 @@ export function createPrepareMemoryStep<
         // @ts-ignore Flag for agent network messages
         _agentNetworkAppend: capabilities._agentNetworkAppend,
       })
-        .addSystem(instructions || `${capabilities.agentInstructions}.`)
+        .addSystem(instructions)
         .addSystem(memorySystemMessage)
         .addSystem(systemMessages)
         .add(options.context || [], 'context')

@@ -8,7 +8,6 @@ import type { AgentExecuteOnFinishOptions } from '../../types';
 
 export type AgentCapabilities = {
   agentName: string;
-  agentInstructions: DynamicArgument<string>;
   logger: MastraBase['logger'];
   getMemory: Agent['getMemory'];
   getModel: Agent['getModel'];
