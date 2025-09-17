@@ -63,7 +63,7 @@ const stream = run.streamVNext({
     },
     {
       name: "stream.usage",
-      type: "Promise<{ promptTokens: number; completionTokens: number; totalTokens: number }>",
+      type: "Promise<{ inputTokens: number; outputTokens: number; totalTokens: number, reasoningTokens?: number, cacheInputTokens?: number }>",
       description: "A promise that resolves to token usage statistics",
     },
   ]}
