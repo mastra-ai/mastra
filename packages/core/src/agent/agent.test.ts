@@ -3317,7 +3317,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     }, 500000);
   });
 
-  describe.only(`${version} - context parameter handling`, () => {
+  describe(`${version} - context parameter handling`, () => {
     const formatArray: ('mastra' | 'aisdk')[] = version === 'v1' ? ['mastra'] : ['mastra', 'aisdk'];
     formatArray.forEach(format => {
       it(`should handle system messages in context parameter ${version === 'v2' ? `format: ${format}` : ''}`, async () => {
