@@ -4,6 +4,9 @@ import globals from 'globals';
 const ERROR = 'error';
 const WARN = 'warn';
 
+// Enable certain rules only in CI environments
+const isCI = !!process.env.CI;
+
 const has = pkg => {
   try {
     import.meta.resolve(pkg, import.meta.url);
@@ -70,8 +73,8 @@ export const createConfig = async () =>
       files: ['**/*.ts?(x)', '**/*.js?(x)'],
       ignores: testFiles,
       rules: {
-        'no-console': [ERROR, { allow: ['warn', 'error', 'info', 'table', 'time', 'timeEnd', 'dir'] }],
-        'no-debugger': ERROR,
+        'no-console': isCI ? [ERROR, { allow: ['warn', 'error', 'info', 'table', 'time', 'timeEnd', 'dir'] }] : 'off',
+        'no-debugger': isCI ? ERROR : 'off',
       },
     },
 
