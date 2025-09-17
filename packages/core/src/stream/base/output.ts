@@ -630,9 +630,15 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     });
 
     // Bind methods to ensure they work when destructured
-    this.consumeStream = this.consumeStream.bind(this);
-    this.getFullOutput = this.getFullOutput.bind(this);
-    this.teeStream = this.teeStream.bind(this);
+    const methodsToBind = [
+      { name: 'consumeStream', fn: this.consumeStream },
+      { name: 'getFullOutput', fn: this.getFullOutput },
+      { name: 'teeStream', fn: this.teeStream },
+    ] as const;
+
+    methodsToBind.forEach(({ name, fn }) => {
+      (this as any)[name] = fn.bind(this);
+    });
 
     // Convert getters to bound properties to support destructuring
     // We need to do this because getters lose their 'this' context when destructured
