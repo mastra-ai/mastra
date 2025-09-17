@@ -65,6 +65,16 @@ export const createConfig = async () =>
       },
     },
 
+    // non-test files only - console and debugger rules
+    {
+      files: ['**/*.ts?(x)', '**/*.js?(x)'],
+      ignores: testFiles,
+      rules: {
+        'no-console': ERROR,
+        'no-debugger': ERROR,
+      },
+    },
+
     // JSX/TSX files
     hasReact
       ? {
