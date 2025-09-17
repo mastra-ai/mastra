@@ -16,7 +16,7 @@ export async function consumeStream({
       if (done) break;
     }
   } catch (error) {
-    console.log('consumeStream error', error);
+    console.error('consumeStream error', error);
     onError?.(error);
   } finally {
     reader.releaseLock();
