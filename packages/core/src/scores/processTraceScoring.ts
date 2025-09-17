@@ -1,5 +1,5 @@
 import z from 'zod';
-import { AISpanType, NoOpAISpan, getDefaultAITracing } from '../ai-tracing';
+import { InternalSpans } from '../ai-tracing';
 import type { Mastra } from '../mastra';
 import type { AISpanRecord } from '../storage';
 import { createStep, createWorkflow } from '../workflows';
@@ -19,16 +19,7 @@ export async function processTraceScoring({
   const workflow = createScoringWorkflow({ scorer, mastra });
   const run = await workflow.createRunAsync();
 
-  const aiTracing = getDefaultAITracing();
-  const noOpSpan = new NoOpAISpan(
-    {
-      name: 'scorer-run',
-      type: AISpanType.GENERIC,
-      isInternal: true,
-    },
-    aiTracing!,
-  );
-  const result = await run.start({ inputData: targets, tracingContext: { isInternal: true, currentSpan: noOpSpan } });
+  const result = await run.start({ inputData: targets });
 
   console.log(JSON.stringify(result, null, 2));
 }
@@ -123,14 +114,26 @@ const createScoringWorkflow = ({ scorer, mastra }: { scorer: MastraScorer; mastr
         const existingLinks = span.links || [];
         span.links = [
           ...existingLinks,
-          { type: 'score', scoreId: savedScore.score.id, scorerName: savedScore.score.scorer.name },
+          {
+            type: 'score',
+            scoreId: savedScore.score.id,
+            scorerName: savedScore.score.scorer.name,
+            score: savedScore.score.score,
+            createdAt: savedScore.score.createdAt,
+          },
         ];
         await storage.updateAISpan({ spanId: span.spanId, traceId: span.traceId, updates: { links: span.links } });
       } else {
         const existingLinks = parentSpan.links || [];
         parentSpan.links = [
           ...existingLinks,
-          { type: 'score', scoreId: savedScore.score.id, scorerName: savedScore.score.scorer.name },
+          {
+            type: 'score',
+            scoreId: savedScore.score.id,
+            scorerName: savedScore.score.scorer.name,
+            score: savedScore.score.score,
+            createdAt: savedScore.score.createdAt,
+          },
         ];
         await storage.updateAISpan({
           spanId: parentSpan.spanId,
@@ -151,6 +154,11 @@ const createScoringWorkflow = ({ scorer, mastra }: { scorer: MastraScorer; mastr
     ),
     outputSchema: z.any(),
     steps: [getTraceStep],
+    options: {
+      tracingPolicy: {
+        internal: InternalSpans.ALL,
+      },
+    },
   });
 
   workflow.foreach(getTraceStep, { concurrency: 1 }).commit();
