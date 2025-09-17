@@ -7,20 +7,23 @@ import type { MastraScorer } from './base';
 import { saveScorePayloadSchema } from './types';
 import type { ScoringEntityType } from './types';
 import pMap from 'p-map';
+import { transformTraceToScorerInput, transformTraceToScorerOutput } from './transformer';
 
 export async function processTraceScoring({
   scorerName,
   targets,
   mastra,
+  scorerPayloadFormat = 'span',
 }: {
   scorerName: string;
   targets: { traceId: string; spanId?: string }[];
   mastra: Mastra;
+  scorerPayloadFormat?: 'span' | 'agent';
 }) {
   const workflow = mastra.__getInternalWorkflow('__batch-scoring-traces');
   const run = await workflow.createRunAsync();
 
-  const result = await run.start({ inputData: { targets, scorerName } });
+  const result = await run.start({ inputData: { targets, scorerName, scorerPayloadFormat } });
 
   console.log(JSON.stringify(result, null, 2));
 }
@@ -39,6 +42,7 @@ const getTraceStep = createStep({
       }),
     ),
     scorerName: z.string(),
+    scorerPayloadFormat: z.enum(['span', 'agent']).optional(),
   }),
   outputSchema: z.any(),
   execute: async ({ inputData, tracingContext, mastra }) => {
@@ -83,9 +87,16 @@ const getTraceStep = createStep({
         let entityId;
         let runPayload;
         if (parentSpan?.spanType === 'agent_run') {
-          runPayload = span
-            ? { input: span.input, output: span.output }
-            : { input: parentSpan.input, output: parentSpan.output };
+          if (inputData.scorerPayloadFormat === 'span') {
+            runPayload = span
+              ? { input: span.input, output: span.output }
+              : { input: parentSpan.input, output: parentSpan.output };
+          } else {
+            runPayload = {
+              input: transformTraceToScorerInput(trace as any),
+              output: transformTraceToScorerOutput(trace as any),
+            };
+          }
           entityType = 'AGENT';
           entityId = parentSpan?.attributes?.agentId;
         } else if (parentSpan?.spanType === 'workflow_run') {
@@ -172,6 +183,7 @@ export const processTraceScoringWorkflow = createWorkflow({
       }),
     ),
     scorerName: z.string(),
+    scorerPayloadFormat: z.enum(['span', 'agent']).optional(),
   }),
   outputSchema: z.any(),
   steps: [getTraceStep],

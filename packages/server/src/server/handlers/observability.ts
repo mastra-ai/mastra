@@ -14,6 +14,7 @@ interface ObservabilityContext extends Context {
 interface ScoreTracesContext extends Context {
   body?: {
     scorerName: string;
+    scorerPayloadFormat?: 'span' | 'agent';
     targets: Array<{
       traceId: string;
       spanId?: string;
@@ -104,7 +105,7 @@ export async function scoreTracesHandler({ mastra, body }: ScoreTracesContext) {
       throw new HTTPException(400, { message: 'Request body is required' });
     }
 
-    const { scorerName, targets } = body;
+    const { scorerName, targets, scorerPayloadFormat = 'span' } = body;
 
     if (!scorerName) {
       throw new HTTPException(400, { message: 'Scorer ID is required' });
@@ -129,6 +130,7 @@ export async function scoreTracesHandler({ mastra, body }: ScoreTracesContext) {
       scorerName,
       targets,
       mastra,
+      scorerPayloadFormat,
     }).catch(error => {
       logger?.error(`Background trace scoring failed: ${error.message}`, error);
     });

@@ -112,6 +112,12 @@ export function observabilityRouter() {
                   description: 'Name of the scorer to use for evaluation',
                   example: 'relevance-scorer',
                 },
+                scorerPayloadFormat: {
+                  type: 'string',
+                  description: 'Format of the scorer payload',
+                  enum: ['span', 'agent'],
+                  example: 'span',
+                },
                 targets: {
                   type: 'array',
                   description: 'Array of trace targets to score',
