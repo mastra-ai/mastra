@@ -3,6 +3,8 @@ title: "リファレンス: Rerank | ドキュメント検索 | RAG | Mastra ド
 description: Mastra の rerank 機能に関するドキュメント。ベクトル検索結果に対して高度なリランキング機能を提供します。
 ---
 
+
+
 # rerank()
 
 `rerank()` 関数は、セマンティックな関連性、ベクトル類似度、位置に基づくスコアリングを組み合わせることで、ベクトル検索結果に対して高度なリランキング機能を提供します。
@@ -15,6 +17,8 @@ function rerank(
   options?: RerankerFunctionOptions,
 ): Promise<RerankResult[]>;
 ```
+
+
 
 ## 使用例
 
@@ -38,6 +42,8 @@ const rerankedResults = await rerank(
   },
 );
 ```
+
+
 
 ## パラメーター
 
@@ -136,6 +142,8 @@ rerank関数は、Vercel AI SDKの任意のLanguageModelを受け付けます。
   ]}
 />
 
+
+
 ## 戻り値
 
 この関数は `RerankResult` オブジェクトの配列を返します：
@@ -207,6 +215,8 @@ rerank関数は、Vercel AI SDKの任意のLanguageModelを受け付けます。
     },
   ]}
 />
+
+
 
 ## 関連
 

@@ -66,7 +66,3 @@ You can get a list of available speakers:
 ```typescript
 const speakers = await voice.getSpeakers();
 ```
-
-## License
-
-MIT

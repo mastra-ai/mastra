@@ -77,7 +77,8 @@ const myWorkflow = new Workflow({
 // Run steps sequentially.
 myWorkflow.step(copywriterStep).then(editorStep).commit();
 
-const { runId, start } = myWorkflow.createRun();
+const run = await myWorkflow.createRunAsync();
+const { runId, start } = run;
 
 const res = await start({
   triggerData: { topic: "React JavaScript frameworks" },

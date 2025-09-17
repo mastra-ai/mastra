@@ -922,6 +922,72 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
     });
+
+    it('should persist a workflow run with resourceId', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRunAsync({ resourceId: 'test-resource-id' });
+      const result = await run.start({ inputData: {} });
+
+      const runById = await workflow.getWorkflowRunById(run.runId);
+      expect(runById?.resourceId).toBe('test-resource-id');
+
+      expect(execute).toHaveBeenCalled();
+      expect(result.steps['step1']).toMatchObject({
+        status: 'success',
+        output: { result: 'success' },
+      });
+
+      srv.close();
+    });
   });
 
   describe('abort', () => {
@@ -8101,6 +8167,192 @@ describe('MastraInngestWorkflow', () => {
 
       const inngestFunction = workflow.getFunction();
       expect(inngestFunction).toBeDefined();
+    });
+  });
+
+  describe('serve function with user-supplied functions', () => {
+    it('should merge user-supplied functions with workflow functions', async _ctx => {
+      const inngest = new Inngest({
+        id: 'test-inngest-serve',
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      // Create a simple workflow
+      const testWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ text: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const step1 = createStep({
+        id: 'echo',
+        inputSchema: z.object({ text: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData }) => ({
+          result: `Echo: ${inputData.text}`,
+        }),
+      });
+
+      testWorkflow.then(step1).commit();
+
+      // Create user-supplied Inngest functions with distinct IDs
+      const userFunction1 = inngest.createFunction(
+        { id: 'custom-user-handler-one' },
+        { event: 'user/custom.event.one' },
+        async ({ event }) => {
+          return { customResult: event.data.value };
+        },
+      );
+
+      const userFunction2 = inngest.createFunction(
+        { id: 'custom-user-handler-two' },
+        { event: 'user/custom.event.two' },
+        async ({ event }) => {
+          return { doubledResult: event.data.value * 2 };
+        },
+      );
+
+      // Create a Mastra instance with our test workflow and user functions
+      const testMastra = new Mastra({
+        workflows: {
+          testWorkflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/api/inngest',
+              method: 'ALL',
+              createHandler: async ({ mastra }) =>
+                inngestServe({
+                  mastra,
+                  inngest,
+                  functions: [userFunction1, userFunction2], // Include user functions
+                }),
+            },
+          ],
+        },
+      });
+
+      // Create and start the server using the same pattern as other tests
+      const app = await createHonoServer(testMastra);
+
+      // Use a promise to get the actual listening port
+      const { server, port } = await new Promise<{ server: any; port: number }>(resolve => {
+        const server = serve(
+          {
+            fetch: app.fetch,
+            port: 0, // Use random available port
+          },
+          () => {
+            const address = server.address();
+            const port =
+              typeof address === 'string' ? parseInt(address.split(':').pop() || '3000') : address?.port || 3000;
+            resolve({ server, port });
+          },
+        );
+      });
+
+      try {
+        // Make a request to the Inngest endpoint to get function introspection
+        const response = await fetch(`http://127.0.0.1:${port}/api/inngest`);
+        expect(response.ok).toBe(true);
+
+        const introspectionData = await response.json();
+
+        // Inngest returns function metadata in the introspection response
+        expect(introspectionData).toBeDefined();
+
+        // The key validation: Inngest reports the correct function count
+        // This proves our serve function correctly merged 1 workflow function + 2 user functions
+        expect(introspectionData.function_count).toBe(3);
+
+        // Verify the response structure is as expected
+        expect(introspectionData.mode).toBe('dev');
+        expect(introspectionData.schema_version).toBeDefined();
+      } finally {
+        // Clean up the server
+        server.close();
+      }
+    });
+
+    it('should work with empty user functions array', async _ctx => {
+      const inngest = new Inngest({
+        id: 'test-inngest-serve-empty',
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const testWorkflow = createWorkflow({
+        id: 'test-workflow-empty',
+        inputSchema: z.object({ text: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const step1 = createStep({
+        id: 'echo',
+        inputSchema: z.object({ text: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData }) => ({
+          result: inputData.text,
+        }),
+      });
+
+      testWorkflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        workflows: {
+          testWorkflow,
+        },
+      });
+
+      // Call serve with empty user functions array
+      const serveResult = inngestServe({
+        mastra,
+        inngest,
+        functions: [],
+      });
+
+      expect(serveResult).toBeDefined();
+    });
+
+    it('should work when no functions parameter is provided', async _ctx => {
+      const inngest = new Inngest({
+        id: 'test-inngest-serve-no-param',
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const testWorkflow = createWorkflow({
+        id: 'test-workflow-no-param',
+        inputSchema: z.object({ text: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const step1 = createStep({
+        id: 'echo',
+        inputSchema: z.object({ text: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData }) => ({
+          result: inputData.text,
+        }),
+      });
+
+      testWorkflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        workflows: {
+          testWorkflow,
+        },
+      });
+
+      // Call serve without functions parameter (backwards compatibility)
+      const serveResult = inngestServe({
+        mastra,
+        inngest,
+      });
+
+      expect(serveResult).toBeDefined();
     });
   });
 }, 40e3);

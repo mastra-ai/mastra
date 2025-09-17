@@ -1,14 +1,15 @@
 import { generateId } from 'ai-v5';
 import type { ToolSet } from 'ai-v5';
+import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { ConsoleLogger } from '../logger';
 import { MastraModelOutput } from '../stream/base/output';
 import type { OutputSchema } from '../stream/base/schema';
 import { getRootSpan } from './telemetry';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
-import { workflowLoopStream } from './workflow/stream';
+import { workflowLoopStream } from './workflows/stream';
 
 export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
-  model,
+  models,
   logger,
   runId,
   idGenerator,
@@ -30,6 +31,19 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       level: 'debug',
     });
 
+  if (models.length === 0 || !models[0]) {
+    const mastraError = new MastraError({
+      id: 'LOOP_MODELS_EMPTY',
+      domain: ErrorDomain.LLM,
+      category: ErrorCategory.USER,
+    });
+    loggerToUse.trackException(mastraError);
+    loggerToUse.error(mastraError.toString());
+    throw mastraError;
+  }
+
+  const firstModel = models[0];
+
   let runIdToUse = runId;
 
   if (!runIdToUse) {
@@ -47,8 +61,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   const { rootSpan } = getRootSpan({
     operationId: mode === 'stream' ? `mastra.stream` : `mastra.generate`,
     model: {
-      modelId: model.modelId,
-      provider: model.provider,
+      modelId: firstModel.model.modelId,
+      provider: firstModel.model.provider,
     },
     modelSettings,
     headers: modelSettings?.headers ?? rest.headers,
@@ -66,8 +80,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   const { rootSpan: modelStreamSpan } = getRootSpan({
     operationId: `mastra.${mode}.aisdk.doStream`,
     model: {
-      modelId: model.modelId,
-      provider: model.provider,
+      modelId: firstModel.model.modelId,
+      provider: firstModel.model.provider,
     },
     modelSettings,
     headers: modelSettings?.headers ?? rest.headers,
@@ -77,7 +91,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   const messageId = rest.experimental_generateMessageId?.() || internalToUse.generateId?.();
 
   const workflowLoopProps: LoopRun<Tools, OUTPUT> = {
-    model,
+    models,
     runId: runIdToUse,
     logger: loggerToUse,
     startTimestamp: startTimestamp!,
@@ -94,15 +108,15 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     ...rest,
   };
 
-  const streamFn = workflowLoopStream(workflowLoopProps);
+  const stream = workflowLoopStream(workflowLoopProps);
 
   return new MastraModelOutput({
     model: {
-      modelId: model.modelId,
-      provider: model.provider,
-      version: model.specificationVersion,
+      modelId: firstModel.model.modelId,
+      provider: firstModel.model.provider,
+      version: firstModel.model.specificationVersion,
     },
-    stream: streamFn,
+    stream,
     messageList,
     messageId: messageId!,
     options: {

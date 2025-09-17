@@ -1,0 +1,49 @@
+---
+title: "リファレンス: Workflow.waitForEvent() | Workflows | Mastra ドキュメント"
+description: ワークフローで使用する `Workflow.waitForEvent()` メソッドのリファレンス。イベントを受信するまで実行を停止します。
+---
+
+# Workflow.waitForEvent()
+
+`.waitForEvent()` メソッドは、イベントを受け取るまで実行を一時停止します。
+
+## 使用例
+
+```typescript copy
+workflow.waitForEvent('event-name', step1);
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "eventName",
+      type: "string",
+      description: "待機するイベント名",
+      isOptional: false,
+    },
+    {
+      name: "step",
+      type: "Step",
+      description: "イベント受信後に再開するステップ",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "メソッドチェーン用のワークフローインスタンス",
+    },
+  ]}
+/>
+
+## 関連情報
+
+- [Sleep とイベント](../../docs/workflows/pausing-execution.mdx)

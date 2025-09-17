@@ -32,6 +32,7 @@ export const useWorkflow = (workflowId?: string) => {
     enabled: Boolean(workflowId),
     retry: false,
     refetchOnWindowFocus: false,
+    throwOnError: false,
   });
 };
 

@@ -1,10 +1,11 @@
 import z from 'zod';
+import { AISpanType, NoOpAISpan, getDefaultAITracing } from '../ai-tracing';
 import type { Mastra } from '../mastra';
 import type { AISpanRecord } from '../storage';
 import { createStep, createWorkflow } from '../workflows';
 import type { MastraScorer } from './base';
-import { saveScorePayloadSchema, type ScoringEntityType } from './types';
-import { AISpanType, NoOpAISpan, getDefaultAITracing } from '../ai-tracing';
+import { saveScorePayloadSchema } from './types';
+import type { ScoringEntityType } from './types';
 
 export async function processTraceScoring({
   scorer,
@@ -27,9 +28,9 @@ export async function processTraceScoring({
     },
     aiTracing!,
   );
-  run
-    .start({ inputData: targets, tracingContext: { isInternal: true, currentSpan: noOpSpan } })
-    .then(result => console.log(JSON.stringify(result, null, 2)));
+  const result = await run.start({ inputData: targets, tracingContext: { isInternal: true, currentSpan: noOpSpan } });
+
+  console.log(JSON.stringify(result, null, 2));
 }
 
 function getParentSpan(spans: AISpanRecord[]) {

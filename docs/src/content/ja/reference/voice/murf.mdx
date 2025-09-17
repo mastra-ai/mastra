@@ -3,9 +3,13 @@ title: "リファレンス: Murf Voice | Voice Providers | Mastra ドキュメ�
 description: "Murf voice 実装のドキュメント。テキスト読み上げ機能を提供します。"
 ---
 
+
+
 # Murf
 
 MastraにおけるMurfの音声実装は、MurfのAI音声サービスを利用したテキスト読み上げ（TTS）機能を提供します。さまざまな言語で複数の音声に対応しています。
+
+
 
 ## 使用例
 
@@ -47,6 +51,8 @@ const audioStream = await voice.speak("Hello, world!", {
 // 利用可能なボイスを取得
 const voices = await voice.getSpeakers();
 ```
+
+
 
 ## コンストラクタのパラメータ
 
@@ -169,6 +175,8 @@ const voices = await voice.getSpeakers();
   ]}
 />
 
+
+
 ## メソッド
 
 ### speak()
@@ -243,6 +251,8 @@ Murf の API を使用してテキストを音声に変換します。
 ### listen()
 
 このメソッドは Murf ではサポートされておらず、エラーが発生します。Murf は音声認識機能を提供していません。
+
+
 
 ## 重要な注意事項
 

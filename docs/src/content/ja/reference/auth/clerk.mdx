@@ -1,0 +1,70 @@
+---
+title: "MastraAuthClerk クラス"
+description: "Clerk 認証を用いて Mastra アプリケーションを認証する MastraAuthClerk クラスの API リファレンス。"
+---
+
+# MastraAuthClerk クラス
+
+`MastraAuthClerk` クラスは、Clerk を用いて Mastra アプリケーションの認証を提供します。Clerk が発行した JWT トークンで受信リクエストを検証し、`experimental_auth` オプションを使用して Mastra サーバーと統合します。
+
+## 使用例
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthClerk } from '@mastra/clerk-auth';
+
+export const mastra = new Mastra({
+  // ..
+  server: {
+    experimental_auth: new MastraAuthClerk({
+      jwksUri: process.env.CLERK_JWKS_URI,
+      publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+      secretKey: process.env.CLERK_SECRET_KEY,
+    }),
+  },
+});
+```
+
+## コンストラクターのパラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "publishableKey",
+      type: "string",
+      description: "Clerk のパブリッシャブルキー。Clerk Dashboard の API Keys で確認できます。",
+      isOptional: true,
+      defaultValue: "process.env.CLERK_PUBLISHABLE_KEY"
+    },
+    {
+      name: "secretKey",
+      type: "string",
+      description: "Clerk のシークレットキー。サーバーサイドの認証およびトークン検証に使用されます。",
+      isOptional: true,
+      defaultValue: "process.env.CLERK_SECRET_KEY"
+    },
+    {
+      name: "jwksUri",
+      type: "string",
+      description: "Clerk アプリケーションの JWKS URI。JWT の署名検証に使用されます。",
+      isOptional: true,
+      defaultValue: "process.env.CLERK_JWKS_URI"
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "認証プロバイダーインスタンスのカスタム名。",
+      isOptional: true,
+    },
+    {
+      name: "authorizeUser",
+      type: "(user: User, request: HonoRequest) => Promise<boolean> | boolean",
+      description: "ユーザーにアクセスを付与すべきかを判定するためのカスタム認可関数。トークン検証後に呼び出されます。デフォルトでは、認証済みのすべてのユーザーを許可します。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 関連項目
+
+[MastraAuthClerk クラス](/docs/auth/clerk.mdx)

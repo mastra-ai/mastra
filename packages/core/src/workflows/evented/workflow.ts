@@ -357,6 +357,16 @@ export class EventedRun<
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
+    // Add validation checks
+    if (this.serializedStepGraph.length === 0) {
+      throw new Error(
+        'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
+      );
+    }
+    if (!this.executionGraph.steps) {
+      throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
+    }
+
     runtimeContext = runtimeContext ?? new RuntimeContext();
 
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
@@ -445,10 +455,20 @@ export class EventedRun<
       { resume: { runtimeContextObj: snapshot?.runtimeContext, runtimeContext: params.runtimeContext } },
       { depth: null },
     );
+    // Start with the snapshot's runtime context (old values)
     const runtimeContextObj = snapshot?.runtimeContext ?? {};
-    const runtimeContext = params.runtimeContext ?? new RuntimeContext();
+    const runtimeContext = new RuntimeContext();
+
+    // First, set values from the snapshot
     for (const [key, value] of Object.entries(runtimeContextObj)) {
       runtimeContext.set(key, value);
+    }
+
+    // Then, override with any values from the passed runtime context (new values take precedence)
+    if (params.runtimeContext) {
+      for (const [key, value] of params.runtimeContext.entries()) {
+        runtimeContext.set(key, value);
+      }
     }
 
     const executionResultPromise = this.executionEngine
