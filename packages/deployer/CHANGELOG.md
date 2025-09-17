@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 0.17.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`05c7abf`](https://github.com/mastra-ai/mastra/commit/05c7abfe105a015b7760c9bf33ff4419727502a0), [`aee4f00`](https://github.com/mastra-ai/mastra/commit/aee4f00e61e1a42e81a6d74ff149dbe69e32695a)]:
+  - @mastra/core@0.17.0-alpha.8
+  - @mastra/server@0.17.0-alpha.8
+
 ## 0.17.0-alpha.7
 
 ### Patch Changes
