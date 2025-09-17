@@ -188,9 +188,7 @@ export class GoogleVoice extends MastraVoice {
           content: buffer.toString('base64'),
         },
       };
-      console.log(`BEFORE REQUEST`);
       const [response] = await this.speechClient.recognize(request as SpeechTypes.cloud.speech.v1.IRecognizeRequest);
-      console.log(`AFTER REQUEST`);
 
       if (!response.results || response.results.length === 0) {
         throw new Error('No transcription results returned');

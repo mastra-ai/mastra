@@ -557,7 +557,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
 
       if (this.debug) {
         const { delta, ...fields } = data;
-        console.log(data.type, fields, delta?.length < 100 ? delta : '');
+        console.info(data.type, fields, delta?.length < 100 ? delta : '');
       }
     });
 

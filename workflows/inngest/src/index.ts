@@ -30,7 +30,7 @@ import type {
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
-import type { Inngest, BaseContext } from 'inngest';
+import type { Inngest, BaseContext, InngestFunction } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
 import { z } from 'zod';
 
@@ -62,9 +62,20 @@ export type InngestEngineType = {
   step: any;
 };
 
-export function serve({ mastra, inngest }: { mastra: Mastra; inngest: Inngest }): ReturnType<typeof inngestServe> {
+export function serve({
+  mastra,
+  inngest,
+  functions: userFunctions = [],
+}: {
+  mastra: Mastra;
+  inngest: Inngest;
+  /**
+   * Optional array of additional functions to serve and register with Inngest.
+   */
+  functions?: InngestFunction.Like[];
+}): ReturnType<typeof inngestServe> {
   const wfs = mastra.getWorkflows();
-  const functions = Array.from(
+  const workflowFunctions = Array.from(
     new Set(
       Object.values(wfs).flatMap(wf => {
         if (wf instanceof InngestWorkflow) {
@@ -75,9 +86,10 @@ export function serve({ mastra, inngest }: { mastra: Mastra; inngest: Inngest })
       }),
     ),
   );
+
   return inngestServe({
     client: inngest,
-    functions,
+    functions: [...workflowFunctions, ...userFunctions],
   });
 }
 
@@ -447,28 +459,19 @@ export class InngestWorkflow<
     }
   }
 
-  createRun(options?: { runId?: string }): Run<TEngineType, TSteps, TInput, TOutput> {
-    const runIdToUse = options?.runId || randomUUID();
-
-    // Return a new Run instance with object parameters
-    const run: Run<TEngineType, TSteps, TInput, TOutput> =
-      this.runs.get(runIdToUse) ??
-      new InngestRun(
-        {
-          workflowId: this.id,
-          runId: runIdToUse,
-          executionEngine: this.executionEngine,
-          executionGraph: this.executionGraph,
-          serializedStepGraph: this.serializedStepGraph,
-          mastra: this.#mastra,
-          retryConfig: this.retryConfig,
-          cleanup: () => this.runs.delete(runIdToUse),
-        },
-        this.inngest,
-      );
-
-    this.runs.set(runIdToUse, run);
-    return run;
+  /**
+   * @deprecated Use createRunAsync() instead.
+   * @throws {Error} Always throws an error directing users to use createRunAsync()
+   */
+  createRun(_options?: { runId?: string }): Run<TEngineType, TSteps, TInput, TOutput> {
+    throw new Error(
+      'createRun() has been deprecated. ' +
+        'Please use createRunAsync() instead.\n\n' +
+        'Migration guide:\n' +
+        '  Before: const run = workflow.createRun();\n' +
+        '  After:  const run = await workflow.createRunAsync();\n\n' +
+        'Note: createRunAsync() is an async method, so make sure your calling function is async.',
+    );
   }
 
   async createRunAsync(options?: {

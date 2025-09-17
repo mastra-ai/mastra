@@ -471,10 +471,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       for (const message of validatedMessages) {
         // Check if this message already exists in a different thread
         const existingMessage = await this.findMessageInAnyThread(message.id);
-        console.log(`Checking message ${message.id}: existing=${existingMessage?.threadId}, new=${message.threadId}`);
+        console.info(`Checking message ${message.id}: existing=${existingMessage?.threadId}, new=${message.threadId}`);
         if (existingMessage && existingMessage.threadId && existingMessage.threadId !== message.threadId) {
           // Message exists in a different thread, migrate it
-          console.log(`Migrating message ${message.id} from ${existingMessage.threadId} to ${message.threadId}`);
+          console.info(`Migrating message ${message.id} from ${existingMessage.threadId} to ${message.threadId}`);
           messageMigrationTasks.push(this.migrateMessage(message.id, existingMessage.threadId, message.threadId!));
         }
       }
@@ -513,7 +513,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
                   ...cleanMessage,
                   createdAt: serializeDate(cleanMessage.createdAt),
                 };
-                console.log(`Saving message ${message.id} with content:`, {
+                console.info(`Saving message ${message.id} with content:`, {
                   content: serializedMessage.content,
                   contentType: typeof serializedMessage.content,
                   isArray: Array.isArray(serializedMessage.content),
@@ -642,7 +642,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       const latestIds = await this.getLastN(threadMessagesKey, limit);
       latestIds.forEach(id => messageIds.add(id));
     } catch {
-      console.log(`No message order found for thread ${threadId}, skipping latest messages`);
+      console.info(`No message order found for thread ${threadId}, skipping latest messages`);
     }
   }
 
@@ -688,7 +688,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           const data = await this.operations.getKV(TABLE_MESSAGES, key);
           if (!data) return null;
           const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-          console.log(`Retrieved message ${id} from thread ${threadId} with content:`, {
+          console.info(`Retrieved message ${id} from thread ${threadId} with content:`, {
             content: parsed.content,
             contentType: typeof parsed.content,
             isArray: Array.isArray(parsed.content),
@@ -712,11 +712,11 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     selectBy,
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    console.log(`getMessages called with format: ${format}, threadId: ${threadId}`);
+    console.info(`getMessages called with format: ${format}, threadId: ${threadId}`);
 
     // Default to v1 format if not specified
     const actualFormat = format || 'v1';
-    console.log(`Using format: ${actualFormat}`);
+    console.info(`Using format: ${actualFormat}`);
 
     const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
     const messageIds = new Set<string>();
@@ -782,7 +782,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       }));
       // For v1 format, return messages directly without using MessageList (like Upstash)
       if (actualFormat === `v1`) {
-        console.log(`Processing ${prepared.length} messages for v1 format - returning directly without MessageList`);
+        console.info(`Processing ${prepared.length} messages for v1 format - returning directly without MessageList`);
         // Return messages exactly as stored, without MessageList transformation
         return (prepared as MastraMessageV1[]).map(msg => ({
           ...msg,
