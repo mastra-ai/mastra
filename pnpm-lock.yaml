@@ -2112,7 +2112,7 @@ importers:
         specifier: ^8.38.0
         version: 8.38.0(eslint@9.34.0(jiti@2.4.2))(typescript@5.8.3)
       vite:
-        specifier: ^6.3.5
+        specifier: ^6.3.6
         version: 6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.1)
 
   packages/playground-ui:
@@ -2365,7 +2365,7 @@ importers:
         specifier: ^5.8.3
         version: 5.8.3
       vite:
-        specifier: ^6.3.5
+        specifier: ^6.3.6
         version: 6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.1)
       vite-plugin-dts:
         specifier: ^4.5.4
