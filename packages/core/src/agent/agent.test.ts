@@ -3318,172 +3318,179 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
   });
 
   describe(`${version} - context parameter handling`, () => {
-    it('should handle system messages in context parameter', async () => {
-      const agent = new Agent({
-        id: 'test-system-context',
-        name: 'Test System Context',
-        model: openaiModel,
-        instructions: 'You are a helpful assistant.',
-      });
-
-      const systemMessage = {
-        role: 'system' as const,
-        content: 'Additional system instructions from context',
-      };
-
-      const userMessage = {
-        role: 'user' as const,
-        content: 'What are your instructions?',
-      };
-
-      // Test with complex system message content (only for v2 as v1 doesn't support array content)
-      const complexSystemMessage =
-        version === 'v2'
-          ? {
-              role: 'system' as const,
-              content: [{ type: 'text' as const, text: 'Complex system message from context' }],
-            }
-          : {
-              role: 'system' as const,
-              content: 'Complex system message from context',
-            };
-
-      let result;
-      if (version === 'v1') {
-        result = await agent.stream('Tell me about yourself', {
-          context: [systemMessage, userMessage, complexSystemMessage],
+    const formatArray: ('mastra' | 'aisdk')[] = version === 'v1' ? ['mastra'] : ['mastra', 'aisdk'];
+    formatArray.forEach(format => {
+      it(`should handle system messages in context parameter ${version === 'v2' ? `format: ${format}` : ''}`, async () => {
+        const agent = new Agent({
+          id: 'test-system-context',
+          name: 'Test System Context',
+          model: openaiModel,
+          instructions: 'You are a helpful assistant.',
         });
-      } else {
-        result = await agent.streamVNext('Tell me about yourself', {
-          context: [systemMessage, userMessage, complexSystemMessage],
-        });
-      }
 
-      // Consume the stream
-      const parts: any[] = [];
-      for await (const part of result.fullStream) {
-        parts.push(part);
-      }
+        const systemMessage = {
+          role: 'system' as const,
+          content: 'Additional system instructions from context',
+        };
 
-      // Check the request format based on version
-      let messages: any[];
-      if (version === 'v1') {
-        const requestData = await result.request;
-        // v1 might not have body in test mocks
-        if (!requestData?.body) {
-          // We can't validate the exact request format in v1 mock
-          // but the test passes if no errors are thrown
-          return;
+        const userMessage = {
+          role: 'user' as const,
+          content: 'What are your instructions?',
+        };
+
+        // Test with complex system message content (only for v2 as v1 doesn't support array content)
+        const complexSystemMessage =
+          version === 'v2'
+            ? {
+                role: 'system' as const,
+                content: [{ type: 'text' as const, text: 'Complex system message from context' }],
+              }
+            : {
+                role: 'system' as const,
+                content: 'Complex system message from context',
+              };
+
+        let result;
+        if (version === 'v1') {
+          result = await agent.stream('Tell me about yourself', {
+            context: [systemMessage, userMessage, complexSystemMessage],
+          });
+        } else {
+          result = await agent.streamVNext('Tell me about yourself', {
+            context: [systemMessage, userMessage, complexSystemMessage],
+            format,
+          });
         }
-        messages = JSON.parse(requestData.body).messages;
-      } else {
-        messages = (await result.request).body.input;
-      }
 
-      // Count system messages
-      const systemMessages = messages.filter((m: any) => m.role === 'system');
+        // Consume the stream
+        const parts: any[] = [];
+        for await (const part of result.fullStream) {
+          parts.push(part);
+        }
 
-      // Should have exactly 3 system messages (default + 2 from context)
-      expect(systemMessages.length).toBe(3);
+        // Check the request format based on version
+        let messages: any[];
+        if (version === 'v1') {
+          const requestData = await result.request;
+          // v1 might not have body in test mocks
+          if (!requestData?.body) {
+            // We can't validate the exact request format in v1 mock
+            // but the test passes if no errors are thrown
+            return;
+          }
+          messages = JSON.parse(requestData.body).messages;
+        } else {
+          const requestData = await (result as any).getFullOutput();
+          messages = requestData.request.body.input;
+        }
 
-      // Should have the agent's default instructions as first system message
-      expect(messages[0].role).toBe('system');
-      expect(messages[0].content).toBe('You are a helpful assistant.');
+        // Count system messages
+        const systemMessages = messages.filter((m: any) => m.role === 'system');
 
-      // Should have the context system messages
-      expect(
-        systemMessages.find((m: any) => m.content === 'Additional system instructions from context'),
-      ).toBeDefined();
+        // Should have exactly 3 system messages (default + 2 from context)
+        expect(systemMessages.length).toBe(3);
 
-      expect(
-        systemMessages.find(
-          (m: any) =>
-            m.content === 'Complex system message from context' ||
-            m.content?.[0]?.text === 'Complex system message from context',
-        ),
-      ).toBeDefined();
+        // Should have the agent's default instructions as first system message
+        expect(messages[0].role).toBe('system');
+        expect(messages[0].content).toBe('You are a helpful assistant.');
 
-      // Should have the context user message
-      const userMessages = messages.filter((m: any) => m.role === 'user');
-      expect(userMessages.length).toBe(2);
-
-      // Check for context user message
-      if (version === 'v1') {
+        // Should have the context system messages
         expect(
-          userMessages.find(
+          systemMessages.find((m: any) => m.content === 'Additional system instructions from context'),
+        ).toBeDefined();
+
+        expect(
+          systemMessages.find(
             (m: any) =>
-              m.content?.[0]?.text === 'What are your instructions?' || m.content === 'What are your instructions?',
+              m.content === 'Complex system message from context' ||
+              m.content?.[0]?.text === 'Complex system message from context',
           ),
         ).toBeDefined();
-      } else {
-        expect(userMessages.find((m: any) => m.content?.[0]?.text === 'What are your instructions?')).toBeDefined();
-      }
-    });
 
-    it('should handle mixed message types in context parameter', async () => {
-      const agent = new Agent({
-        id: 'test-mixed-context',
-        name: 'Test Mixed Context',
-        model: openaiModel,
-        instructions: 'You are a helpful assistant.',
+        // Should have the context user message
+        const userMessages = messages.filter((m: any) => m.role === 'user');
+        expect(userMessages.length).toBe(2);
+
+        // Check for context user message
+        if (version === 'v1') {
+          expect(
+            userMessages.find(
+              (m: any) =>
+                m.content?.[0]?.text === 'What are your instructions?' || m.content === 'What are your instructions?',
+            ),
+          ).toBeDefined();
+        } else {
+          expect(userMessages.find((m: any) => m.content?.[0]?.text === 'What are your instructions?')).toBeDefined();
+        }
       });
 
-      const contextMessages = [
-        {
-          role: 'user' as const,
-          content: 'Previous user question',
-        },
-        {
-          role: 'assistant' as const,
-          content: 'Previous assistant response',
-        },
-        {
-          role: 'system' as const,
-          content: 'Additional context instructions',
-        },
-      ];
-
-      let result;
-      if (version === 'v1') {
-        result = await agent.stream('Current question', {
-          context: contextMessages,
+      it(`should handle mixed message types in context parameter ${version === 'v2' ? `format: ${format}` : ''}`, async () => {
+        const agent = new Agent({
+          id: 'test-mixed-context',
+          name: 'Test Mixed Context',
+          model: openaiModel,
+          instructions: 'You are a helpful assistant.',
         });
-      } else {
-        result = await agent.streamVNext('Current question', {
-          context: contextMessages,
-        });
-      }
 
-      // Consume the stream
-      for await (const _part of result.fullStream) {
-        // Just consume the stream
-      }
+        const contextMessages = [
+          {
+            role: 'user' as const,
+            content: 'Previous user question',
+          },
+          {
+            role: 'assistant' as const,
+            content: 'Previous assistant response',
+          },
+          {
+            role: 'system' as const,
+            content: 'Additional context instructions',
+          },
+        ];
 
-      // Check the request format based on version
-      let messages: any[];
-      if (version === 'v1') {
-        const requestData = await result.request;
-        if (!requestData?.body) {
-          return; // Can't validate in mock
+        let result;
+        if (version === 'v1') {
+          result = await agent.stream('Current question', {
+            context: contextMessages,
+          });
+        } else {
+          result = await agent.streamVNext('Current question', {
+            context: contextMessages,
+            format,
+          });
         }
-        messages = JSON.parse(requestData.body).messages;
-      } else {
-        messages = (await result.request).body.input;
-      }
 
-      // Verify message order and content
-      const systemMessages = messages.filter((m: any) => m.role === 'system');
-      const userMessages = messages.filter((m: any) => m.role === 'user');
-      const assistantMessages = messages.filter((m: any) => m.role === 'assistant');
+        // Consume the stream
+        for await (const _part of result.fullStream) {
+          // Just consume the stream
+        }
 
-      // Should have 2 system messages (default + context)
-      expect(systemMessages.length).toBe(2);
+        // Check the request format based on version
+        let messages: any[];
+        if (version === 'v1') {
+          const requestData = await result.request;
+          if (!requestData?.body) {
+            return; // Can't validate in mock
+          }
+          messages = JSON.parse(requestData.body).messages;
+        } else {
+          const requestData = await (result as any).getFullOutput();
+          messages = requestData.request.body.input;
+        }
 
-      // Should have 2 user messages (context + current)
-      expect(userMessages.length).toBe(2);
+        // Verify message order and content
+        const systemMessages = messages.filter((m: any) => m.role === 'system');
+        const userMessages = messages.filter((m: any) => m.role === 'user');
+        const assistantMessages = messages.filter((m: any) => m.role === 'assistant');
 
-      // Should have 1 assistant message (from context)
-      expect(assistantMessages.length).toBe(1);
+        // Should have 2 system messages (default + context)
+        expect(systemMessages.length).toBe(2);
+
+        // Should have 2 user messages (context + current)
+        expect(userMessages.length).toBe(2);
+
+        // Should have 1 assistant message (from context)
+        expect(assistantMessages.length).toBe(1);
+      });
     });
   });
 
