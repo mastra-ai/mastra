@@ -1,5 +1,17 @@
 # @mastra/playground-ui
 
+## 6.2.0-alpha.4
+
+### Patch Changes
+
+- Fixed createRun change in agent builder that was missed ([#7966](https://github.com/mastra-ai/mastra/pull/7966))
+
+- fix error message when fetching observability things ([#7956](https://github.com/mastra-ai/mastra/pull/7956))
+
+- Updated dependencies [[`4f9ea8c`](https://github.com/mastra-ai/mastra/commit/4f9ea8c95ea74ba9abbf3b2ab6106c7d7bc45689)]:
+  - @mastra/core@0.17.0-alpha.7
+  - @mastra/client-js@0.13.0-alpha.7
+
 ## 6.2.0-alpha.3
 
 ### Minor Changes

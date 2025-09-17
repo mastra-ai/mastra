@@ -1,5 +1,15 @@
 # mastra
 
+## 0.13.0-alpha.5
+
+### Patch Changes
+
+- fix error message when fetching observability things ([#7956](https://github.com/mastra-ai/mastra/pull/7956))
+
+- Updated dependencies [[`4f9ea8c`](https://github.com/mastra-ai/mastra/commit/4f9ea8c95ea74ba9abbf3b2ab6106c7d7bc45689)]:
+  - @mastra/core@0.17.0-alpha.7
+  - @mastra/deployer@0.17.0-alpha.7
+
 ## 0.13.0-alpha.4
 
 ### Patch Changes
