@@ -17,8 +17,6 @@ import type { MastraMemory } from '../memory/memory';
 import type { NewAgentNetwork } from '../network/vNext';
 import type { MastraScorer } from '../scores';
 import type { Middleware, ServerConfig } from '../server/types';
-import { InMemoryServerCache } from '../server-cache';
-import type { MastraServerCache } from '../server-cache';
 import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import { InstrumentClass, Telemetry } from '../telemetry';
@@ -117,7 +115,6 @@ export class Mastra<
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
-  #serverCache?: MastraServerCache;
   #pubsub: PubSub;
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
@@ -226,13 +223,7 @@ export class Mastra<
       }
     }
 
-    if (config?.serverCache) {
-      this.#serverCache = config.serverCache;
-    } else {
-      this.#serverCache = new InMemoryServerCache({
-        name: 'inmemory',
-      });
-    }
+    this.#serverCache = new InMemoryServerCache();
 
     const workflowEventProcessor = new WorkflowEventProcessor({ mastra: this });
     const workflowEventCb = async (event: Event, cb?: () => Promise<void>): Promise<void> => {
@@ -1194,7 +1185,7 @@ do:
   }
 
   // This method is only used internally for server hnadlers that require temporary persistence
-  public getServerCache() {
+  public get serverCache() {
     return this.#serverCache;
   }
 }
