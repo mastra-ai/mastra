@@ -90,8 +90,9 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) 
   return cb(value);
 }
 
-// Flag to track if deprecation warning has been shown
+// Flags to track if deprecation warnings have been shown
 let streamDeprecationWarningShown = false;
+let generateDeprecationWarningShown = false;
 
 // Helper to resolve threadId from args (supports both new and old API)
 function resolveThreadIdFromArgs(args: {
@@ -170,7 +171,6 @@ export class Agent<
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
-
 
   constructor(config: AgentConfig<TAgentId, TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
@@ -3889,9 +3889,12 @@ export class Agent<
     messages: MessageListInput,
     generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
-    this.logger.warn(
-      "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 23rd, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
-    );
+    if (!generateDeprecationWarningShown) {
+      this.logger.warn(
+        "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 23rd, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
+      );
+      generateDeprecationWarningShown = true;
+    }
     // @ts-expect-error - generic type issues
     return this.generateLegacy(messages, generateOptions);
   }
