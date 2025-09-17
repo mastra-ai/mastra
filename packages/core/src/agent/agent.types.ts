@@ -51,6 +51,9 @@ export type AgentExecutionOptions<
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: string;
 
+  /** Custom system message to include in the prompt */
+  system?: string;
+
   /** Additional context messages to provide to the agent */
   context?: ModelMessage[];
 

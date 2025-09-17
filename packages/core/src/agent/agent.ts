@@ -3087,6 +3087,11 @@ export class Agent<
           })
           .add(options.context || [], 'context');
 
+        // Add user-provided system message if present
+        if (options.system) {
+          messageList.addSystem(options.system, 'user-provided');
+        }
+
         if (!memory || (!thread?.id && !resourceId)) {
           messageList.add(options.messages, 'user');
           const { tripwireTriggered, tripwireReason } = await this.__runInputProcessors({
