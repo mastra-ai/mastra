@@ -1,0 +1,175 @@
+---
+title: "MastraClient"
+description: "Mastra Client SDKの設定と使用方法を学ぶ"
+---
+
+
+
+# Mastra Client SDK
+
+Mastra Client SDKは、クライアント環境から[Mastra Server](/docs/deployment/server)とやり取りするためのシンプルで型安全なインターフェースを提供します。
+
+
+
+## 開発要件
+
+スムーズなローカル開発を確保するために、以下が必要です：
+
+- Node.js 18.x以降がインストールされていること
+- TypeScript 4.7+（TypeScriptを使用する場合）
+- Fetch APIをサポートするモダンなブラウザ環境
+- ローカルのMastraサーバーが実行されていること（通常はポート4111）
+
+
+
+## インストール
+
+import { Tabs } from "nextra/components";
+
+{/*
+LLM CONTEXT:
+This Tabs component shows installation commands for the Mastra Client SDK using different package managers.
+Each tab displays the installation command for that specific package manager (npm, yarn, pnpm).
+This helps users install the client SDK with their preferred package manager.
+All commands install the same @mastra/client-js package but use different package manager syntax.
+*/}
+
+<Tabs items={["npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+    ```bash copy
+    npm install @mastra/client-js@latest
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn add @mastra/client-js@latest
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm add @mastra/client-js@latest
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+
+
+## Mastraクライアントの初期化
+
+開始するには、必要なパラメータでMastraClientを初期化する必要があります：
+
+```typescript filename="lib/mastra-client.ts" showLineNumbers copy
+import { MastraClient } from "@mastra/client-js";
+
+export const mastraClient = new MastraClient({
+  baseUrl: "http://localhost:4111", // デフォルトのMastra開発サーバーポート
+});
+```
+
+### 設定オプション
+
+様々なオプションでクライアントをカスタマイズできます：
+
+```typescript filename="lib/mastra-client.ts" showLineNumbers copy
+import { MastraClient } from "@mastra/client-js";
+
+export const mastraClient = new MastraClient({
+  // 必須
+  baseUrl: "http://localhost:4111",
+
+  // 開発用のオプション設定
+  retries: 3, // リトライ試行回数
+  backoffMs: 300, // 初期リトライバックオフ時間
+  maxBackoffMs: 5000, // 最大リトライバックオフ時間
+  headers: {
+    // 開発用のカスタムヘッダー
+    "X-Development": "true",
+  },
+});
+```
+
+
+
+## AbortSignal
+
+Mastra Client SDKは、標準のWeb API `AbortSignal`を使用したリクエストのキャンセルをサポートしています。クライアントコンストラクタに`AbortSignal`を渡すことで、すべてのリクエストのキャンセルを有効にできます：
+
+```typescript filename="lib/mastra-client.ts" showLineNumbers copy
+import { MastraClient } from "@mastra/client-js";
+
+const controller = new AbortController();
+
+export const mastraClient = new MastraClient({
+  baseUrl: "http://localhost:4111",
+  abortSignal: controller.signal,
+});
+
+// このクライアントからのすべてのリクエストをキャンセル
+controller.abort();
+```
+
+
+
+## 例
+
+MastraClientが初期化されたら、型安全なインターフェースを通じてクライアント呼び出しを開始できます
+
+```typescript
+// Get a reference to your local agent
+const agent = client.getAgent("dev-agent-id");
+
+// Generate responses
+const response = await agent.generate({
+  messages: [
+    {
+      role: "user",
+      content: "Hello, I'm testing the local development setup!",
+    },
+  ],
+});
+```
+
+
+
+## 利用可能な機能
+
+Mastraクライアントは、Mastra Serverによって提供されるすべてのリソースを公開します
+
+- [**Agents**](/reference/client-js/agents): AIエージェントの作成と管理、レスポンスの生成、ストリーミングインタラクションの処理
+- [**Memory**](/reference/client-js/memory): 会話スレッドとメッセージ履歴の管理
+- [**Tools**](/reference/client-js/tools): エージェントが利用可能なツールへのアクセスと実行
+- [**Workflows**](/reference/client-js/workflows): 自動化されたワークフローの作成と管理
+- [**Vectors**](/reference/client-js/vectors): セマンティック検索と類似性マッチングのためのベクトル操作の処理
+
+
+
+## ベストプラクティス
+
+1. **エラーハンドリング**: 開発シナリオに対して適切なエラーハンドリングを実装する
+2. **環境変数**: 設定には環境変数を使用する
+3. **デバッグ**: 必要に応じて詳細なログ記録を有効にする
+
+```typescript
+// Example with error handling and logging
+try {
+  const agent = client.getAgent("dev-agent-id");
+  const response = await agent.generate({
+    messages: [{ role: "user", content: "Test message" }],
+  });
+  console.log("Response:", response);
+} catch (error) {
+  console.error("Development error:", error);
+}
+```
+
+
+
+## Debug
+
+- サーバー上でMastraClientをクライアントの代わりに使用する場合（例：`/api/chat`）、
+  クライアントへのレスポンスを再作成する必要がある場合があります：
+
+```typescript
+const result = agent.stream(/* get your agent stream */);
+return new Response(result.body);
+```

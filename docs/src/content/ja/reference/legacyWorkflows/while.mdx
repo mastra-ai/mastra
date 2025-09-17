@@ -1,0 +1,184 @@
+---
+title: "リファレンス: Workflow.while() | ワークフロー内のループ処理（レガシー） | Mastra ドキュメント"
+description: "Mastra ワークフローにおける `.while()` メソッドのドキュメント。指定した条件が真である限り、ステップを繰り返します。"
+---
+
+
+
+# Workflow.while()
+
+`.while()` メソッドは、指定した条件が真である限り、ステップを繰り返します。これにより、条件が偽になるまで指定したステップを実行し続けるループが作成されます。
+
+
+
+## 使い方
+
+```typescript
+workflow.step(incrementStep).while(condition, incrementStep).then(finalStep);
+```
+
+
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "condition",
+      type: "Function | ReferenceCondition",
+      description:
+        "ループを継続するかどうかを判定する関数または参照条件",
+      isOptional: false,
+    },
+    {
+      name: "step",
+      type: "Step",
+      description: "条件が真の間に繰り返すステップ",
+      isOptional: false,
+    },
+  ]}
+/>
+
+
+
+## 条件タイプ
+
+### 関数条件
+
+真偽値を返す関数を使用できます：
+
+```typescript
+workflow
+  .step(incrementStep)
+  .while(async ({ context }) => {
+    const result = context.getStepResult<{ value: number }>("increment");
+    return (result?.value ?? 0) < 10; // Continue as long as value is less than 10
+  }, incrementStep)
+  .then(finalStep);
+```
+
+### 参照条件
+
+比較演算子を使った参照ベースの条件を使用できます：
+
+```typescript
+workflow
+  .step(incrementStep)
+  .while(
+    {
+      ref: { step: incrementStep, path: "value" },
+      query: { $lt: 10 }, // Continue as long as value is less than 10
+    },
+    incrementStep,
+  )
+  .then(finalStep);
+```
+
+
+
+## 比較演算子
+
+参照ベースの条件を使用する場合、次の比較演算子を使用できます。
+
+| 演算子    | 説明                     | 例              |
+| -------- | ------------------------ | -------------- |
+| `$eq`    | 等しい                   | `{ $eq: 10 }`  |
+| `$ne`    | 等しくない               | `{ $ne: 0 }`   |
+| `$gt`    | より大きい               | `{ $gt: 5 }`   |
+| `$gte`   | 以上                     | `{ $gte: 10 }` |
+| `$lt`    | より小さい               | `{ $lt: 20 }`  |
+| `$lte`   | 以下                     | `{ $lte: 15 }` |
+
+
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "LegacyWorkflow",
+      description: "連鎖処理のためのワークフローインスタンス",
+    },
+  ]}
+/>
+
+
+
+## 例
+
+```typescript
+import { LegacyWorkflow, LegacyStep } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
+
+// Create a step that increments a counter
+const incrementStep = new LegacyStep({
+  id: "increment",
+  description: "Increments the counter by 1",
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ context }) => {
+    // Get current value from previous execution or start at 0
+    const currentValue =
+      context.getStepResult<{ value: number }>("increment")?.value ||
+      context.getStepResult<{ startValue: number }>("trigger")?.startValue ||
+      0;
+
+    // Increment the value
+    const value = currentValue + 1;
+    console.log(`Incrementing to ${value}`);
+
+    return { value };
+  },
+});
+
+// Create a final step
+const finalStep = new LegacyStep({
+  id: "final",
+  description: "Final step after loop completes",
+  execute: async ({ context }) => {
+    const finalValue = context.getStepResult<{ value: number }>(
+      "increment",
+    )?.value;
+    console.log(`Loop completed with final value: ${finalValue}`);
+    return { finalValue };
+  },
+});
+
+// Create the workflow
+const counterWorkflow = new LegacyWorkflow({
+  name: "counter-workflow",
+  triggerSchema: z.object({
+    startValue: z.number(),
+    targetValue: z.number(),
+  }),
+});
+
+// Configure the workflow with a while loop
+counterWorkflow
+  .step(incrementStep)
+  .while(async ({ context }) => {
+    const targetValue = context.triggerData.targetValue;
+    const currentValue =
+      context.getStepResult<{ value: number }>("increment")?.value ?? 0;
+    return currentValue < targetValue;
+  }, incrementStep)
+  .then(finalStep)
+  .commit();
+
+// Execute the workflow
+const run = counterWorkflow.createRun();
+const result = await run.start({
+  triggerData: { startValue: 0, targetValue: 5 },
+});
+// Will increment from 0 to 4, then stop and execute finalStep
+```
+
+
+
+## 関連
+
+- [.until()](./until.mdx) - 条件が真になるまでループする
+- [制御フローガイド](../../docs/workflows-legacy/control-flow.mdx)
+- [Workflow クラスリファレンス](./workflow.mdx)

@@ -1,54 +1,64 @@
 ---
 title: "テキスト評価"
-description: "MastraがLLM-as-judgeの方法論を使用してテキストの品質を評価する方法を理解する。"
+description: "MastraがLLM-as-judge手法を使用してテキスト品質を評価する方法を理解します。"
 ---
 
-# Textual Evals
+import { ScorerCallout } from '@/components/scorer-callout'
 
-Textual evalsは、エージェントの出力を評価するためにLLM-as-judgeの方法論を使用します。このアプローチは、言語モデルを活用してテキストの品質のさまざまな側面を評価し、ティーチングアシスタントがルーブリックを使用して課題を採点する方法に似ています。
 
-各evalは特定の品質の側面に焦点を当て、0から1の間のスコアを返し、非決定的なAI出力のための定量的な指標を提供します。
 
-Mastraは、エージェントの出力を評価するためのいくつかの評価指標を提供します。Mastraはこれらの指標に限定されず、[独自の評価を定義する](/docs/evals/custom-eval)こともできます。
+# テキスト評価
 
-## テキスト評価を使用する理由
+<ScorerCallout />
 
-テキスト評価は、あなたのエージェントが以下を確実に行うのに役立ちます：
+テキスト評価は、エージェントの出力を評価するためにLLM-as-judge手法を使用します。このアプローチは、教育助手がルーブリックを使用して課題を採点するのと同様に、言語モデルを活用してテキスト品質の様々な側面を評価します。
 
-- 正確で信頼性の高い回答を生成する
+各評価は特定の品質側面に焦点を当て、0から1の間のスコアを返し、非決定論的なAI出力に対して定量化可能なメトリクスを提供します。
+
+MastraはAgent出力を評価するためのいくつかの評価メトリクスを提供します。Mastraはこれらのメトリクスに限定されず、[独自の評価を定義する](/docs/evals/custom-eval)こともできます。
+
+
+
+## なぜTextual Evalsを使用するのか？
+
+Textual evalsは、あなたのエージェントが以下を確実に行うのに役立ちます：
+
+- 正確で信頼性の高い応答を生成する
 - コンテキストを効果的に使用する
 - 出力要件に従う
 - 時間の経過とともに一貫した品質を維持する
 
-## 利用可能な指標
 
-### 正確性と信頼性
 
-これらの指標は、エージェントの回答がどれだけ正確で、真実で、完全であるかを評価します：
+## 利用可能なメトリクス
+
+### 精度と信頼性
+
+これらのメトリクスは、エージェントの回答がどれだけ正確で、真実性があり、完全であるかを評価します：
 
 - [`hallucination`](/reference/evals/hallucination): 提供されたコンテキストに存在しない事実や主張を検出
-- [`faithfulness`](/reference/evals/faithfulness): 提供されたコンテキストをどれだけ正確に表現しているかを測定
+- [`faithfulness`](/reference/evals/faithfulness): 提供されたコンテキストを回答がどれだけ正確に表現しているかを測定
 - [`content-similarity`](/reference/evals/content-similarity): 異なる表現における情報の一貫性を評価
-- [`completeness`](/reference/evals/completeness): 必要な情報がすべて含まれているかを確認
-- [`answer-relevancy`](/reference/evals/answer-relevancy): 回答が元の質問にどれだけ適切に対応しているかを評価
+- [`completeness`](/reference/evals/completeness): 回答に必要な情報がすべて含まれているかをチェック
+- [`answer-relevancy`](/reference/evals/answer-relevancy): 回答が元のクエリにどれだけ適切に対応しているかを評価
 - [`textual-difference`](/reference/evals/textual-difference): 文字列間のテキストの違いを測定
 
 ### コンテキストの理解
 
-これらの指標は、エージェントが提供されたコンテキストをどれだけうまく使用しているかを評価します：
+これらのメトリクスは、エージェントが提供されたコンテキストをどれだけうまく活用しているかを評価します：
 
 - [`context-position`](/reference/evals/context-position): 回答内でコンテキストがどこに現れるかを分析
 - [`context-precision`](/reference/evals/context-precision): コンテキストのチャンクが論理的にグループ化されているかを評価
-- [`context-relevancy`](/reference/evals/context-relevancy): 適切なコンテキスト部分の使用を測定
+- [`context-relevancy`](/reference/evals/context-relevancy): 適切なコンテキストピースの使用を測定
 - [`contextual-recall`](/reference/evals/contextual-recall): コンテキスト使用の完全性を評価
 
 ### 出力品質
 
-これらの指標は、フォーマットとスタイルの要件への準拠を評価します：
+これらのメトリクスは、フォーマットとスタイル要件への準拠を評価します：
 
-- [`tone`](/reference/evals/tone-consistency): 形式、複雑さ、スタイルの一貫性を測定
+- [`tone`](/reference/evals/tone-consistency): 形式性、複雑さ、スタイルの一貫性を測定
 - [`toxicity`](/reference/evals/toxicity): 有害または不適切なコンテンツを検出
 - [`bias`](/reference/evals/bias): 出力における潜在的なバイアスを検出
-- [`prompt-alignment`](/reference/evals/prompt-alignment): 長さの制限、フォーマットの要件、その他の制約などの明示的な指示への準拠を確認
-- [`summarization`](/reference/evals/summarization): 情報の保持と簡潔さを評価
+- [`prompt-alignment`](/reference/evals/prompt-alignment): 長さ制限、フォーマット要件、その他の制約などの明示的な指示への準拠をチェック
+- [`summarization`](/reference/evals/summarization): 情報保持と簡潔性を評価
 - [`keyword-coverage`](/reference/evals/keyword-coverage): 技術用語の使用を評価

@@ -1,0 +1,108 @@
+---
+title: "Netlify Deployer"
+description: "Mastra NetlifyDeployerを使用してMastraアプリケーションをNetlifyにデプロイする方法を学ぶ"
+---
+
+import { FileTree } from "nextra/components";
+
+
+
+# NetlifyDeployer
+
+`NetlifyDeployer`クラスは、スタンドアロンのMastraアプリケーションのNetlifyへのデプロイメントを処理します。設定とデプロイメントを管理し、Netlify固有の機能でベースの[Deployer](/reference/deployer/deployer)クラスを拡張します。
+
+
+
+## インストール
+
+```bash copy
+npm install @mastra/deployer-netlify@latest
+```
+
+
+
+## 使用例
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { NetlifyDeployer } from "@mastra/deployer-netlify";
+
+export const mastra = new Mastra({
+  // ...
+  deployer: new NetlifyDeployer()
+});
+```
+
+> 利用可能なすべての設定オプションについては、[NetlifyDeployer](/reference/deployer/netlify) APIリファレンスを参照してください。
+
+
+
+## 継続的インテグレーション
+
+MastraプロジェクトのGitリポジトリをNetlifyに接続した後、プロジェクト設定を更新します。Netlifyダッシュボードで、**Project configuration** > **Build & deploy** > **Continuous deployment**に移動し、**Build settings**の下で以下を設定します：
+
+- **Build command**: `npm run build` (オプション)
+
+### 環境変数
+
+初回デプロイメントの前に、アプリケーションで使用される環境変数を必ず追加してください。例えば、LLMとしてOpenAIを使用している場合、Netlifyプロジェクト設定で`OPENAI_API_KEY`を設定する必要があります。
+
+> 詳細については、[Environment variables overview](https://docs.netlify.com/environment-variables/overview/)を参照してください。
+
+
+これで、GitHubリポジトリの設定されたブランチにプッシュするたびに自動デプロイメントが実行されるようにプロジェクトが設定されました。
+
+
+
+
+## 手動デプロイ
+
+[Netlify CLI](https://docs.netlify.com/cli/get-started/)を使用した手動デプロイも可能です。Netlify CLIをインストールした後、プロジェクトルートから以下のコマンドを実行してアプリケーションをデプロイします。
+
+```bash copy
+netlify deploy --prod
+```
+
+> プロジェクトルートから`netlify dev`を実行して、Mastraアプリケーションをローカルでテストすることもできます。
+
+
+
+## ビルド出力
+
+`NetlifyDeployer`を使用したMastraアプリケーションのビルド出力には、プロジェクト内のすべてのエージェント、ツール、ワークフローと、Netlifyでアプリケーションを実行するために必要なMastra固有のファイルが含まれます。
+
+<FileTree>
+  <FileTree.Folder name=".netlify" defaultOpen>
+    <FileTree.Folder name="v1" defaultOpen>
+      <FileTree.Folder name="functions" defaultOpen>
+        <FileTree.Folder name="api" defaultOpen>
+          <FileTree.File name="index.mjs" />
+        </FileTree.Folder>
+      </FileTree.Folder>
+    <FileTree.File name="config.json" />
+    </FileTree.Folder>
+  </FileTree.Folder>
+  <FileTree.File name="package.json" />
+</FileTree>
+
+
+`NetlifyDeployer`は、以下の設定で`.netlify/v1`に`config.json`設定ファイルを自動的に生成します：
+
+```json
+{
+  "redirects": [
+    {
+      "force": true,
+      "from": "/*",
+      "to": "/.netlify/functions/api/:splat",
+      "status": 200
+    }
+  ]
+}
+```
+
+
+
+## 次のステップ
+
+- [Mastra Client SDK](/docs/client-js/overview)

@@ -1,5 +1,14 @@
 # @mastra/auth-workos
 
+## 0.10.7-alpha.0
+
+### Patch Changes
+
+- Update package.json and README ([#7886](https://github.com/mastra-ai/mastra/pull/7886))
+
+- Updated dependencies []:
+  - @mastra/auth@0.1.3
+
 ## 0.10.6
 
 ### Patch Changes

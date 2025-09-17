@@ -5,10 +5,14 @@ description: Mastra でドキュメントからメタデータを抽出し、強
 
 import { GithubLink } from "@/components/github-link";
 
+
+
 # メタデータ抽出
 
 この例では、Mastra のドキュメント処理機能を使ってドキュメントからメタデータを抽出し、活用する方法を示します。
 抽出されたメタデータは、ドキュメントの整理、フィルタリング、RAG システムでの高度な検索に利用できます。
+
+
 
 ## 概要
 
@@ -16,6 +20,8 @@ import { GithubLink } from "@/components/github-link";
 
 1. ドキュメントからの直接的なメタデータ抽出
 2. チャンク分割とメタデータ抽出
+
+
 
 ## セットアップ
 
@@ -26,6 +32,8 @@ import { GithubLink } from "@/components/github-link";
 ```typescript copy showLineNumbers filename="src/index.ts"
 import { MDocument } from "@mastra/rag";
 ```
+
+
 
 ## ドキュメント作成
 
@@ -46,6 +54,8 @@ Key Benefits:
 For optimal results, experts recommend at least 150 minutes of moderate exercise 
 per week.`);
 ```
+
+
 
 ## 1. 直接メタデータ抽出
 
@@ -75,6 +85,8 @@ console.log("Extracted Metadata:", meta);
 //   summary: 'Regular exercise provides multiple health benefits including improved cardiovascular health, muscle strength, and mental wellbeing. Key benefits include stress reduction, better sleep, weight management, and increased energy. Recommended exercise duration is 150 minutes per week.'
 // }
 ```
+
+
 
 ## 2. メタデータ付きチャンク化
 

@@ -1,0 +1,95 @@
+---
+title: ".afterEvent() メソッド | Mastra ドキュメント"
+description: "Mastra ワークフローにおける afterEvent メソッドのリファレンス。イベントベースのサスペンションポイントを作成します。"
+---
+
+
+
+# afterEvent()
+
+`afterEvent()` メソッドは、ワークフロー内で特定のイベントが発生するまで実行を一時停止し、その後に処理を続行するサスペンションポイントを作成します。
+
+
+
+## 構文
+
+```typescript
+workflow.afterEvent(eventName: string): Workflow
+```
+
+
+
+## パラメーター
+
+| パラメーター | 型     | 説明                                                                                                   |
+| ----------- | ------ | ------------------------------------------------------------------------------------------------------ |
+| eventName   | string | 待機するイベントの名前。ワークフローの `events` 設定で定義されたイベントと一致する必要があります。         |
+
+
+
+## 戻り値
+
+メソッドチェーンのためにワークフローインスタンスを返します。
+
+
+
+## 説明
+
+`afterEvent()` メソッドは、ワークフロー内で特定の名前付きイベントを待機する自動的なサスペンションポイントを作成するために使用されます。これは、ワークフローが一時停止し、外部イベントが発生するのを待つポイントを宣言的に定義する方法です。
+
+`afterEvent()` を呼び出すと、Mastra は以下の処理を行います:
+
+1. ID が `__eventName_event` の特別なステップを作成します
+2. このステップは自動的にワークフローの実行を一時停止します
+3. 指定されたイベントが `resumeWithEvent()` を通じてトリガーされるまで、ワークフローは一時停止したままになります
+4. イベントが発生すると、`afterEvent()` 呼び出しの次のステップから実行が再開されます
+
+このメソッドは Mastra のイベント駆動型ワークフロー機能の一部であり、サスペンションロジックを手動で実装することなく、外部システムやユーザー操作と連携するワークフローを作成できます。
+
+
+
+## 使用上の注意
+
+- `afterEvent()` で指定されたイベントは、ワークフローの `events` 設定でスキーマとともに定義されている必要があります
+- 作成される特別なステップには予測可能なID形式が使われます：`__eventName_event`（例：`__approvalReceived_event`）
+- `afterEvent()` の後に続く任意のステップは、`context.inputData.resumedEvent` を通じてイベントデータにアクセスできます
+- `resumeWithEvent()` が呼び出された際、イベントデータはそのイベント用に定義されたスキーマに対して検証されます
+
+
+
+## 例
+
+### 基本的な使い方
+
+```typescript
+import { LegacyWorkflow } from "@mastra/core/workflows/legacy";
+
+// Define workflow with events
+const workflow = new LegacyWorkflow({
+  name: "approval-workflow",
+  events: {
+    approval: {
+      schema: z.object({
+        approved: z.boolean(),
+        approverName: z.string(),
+      }),
+    },
+  },
+});
+
+// Build workflow with event suspension point
+workflow
+  .step(submitRequest)
+  .afterEvent("approval") // Workflow suspends here
+  .step(processApproval) // This step runs after the event occurs
+  .commit();
+```
+
+
+
+## 関連
+
+- [イベント駆動型ワークフロー](./events.mdx)
+- [resumeWithEvent()](./resumeWithEvent.mdx)
+- [サスペンドと再開](../../docs/workflows-legacy/suspend-and-resume.mdx)
+- [Workflow クラス](./workflow.mdx)

@@ -72,6 +72,12 @@ mastra dev [options]
       description: "display help for command",
       isOptional: true,
     },
+    {
+      name: "--https",
+      type: "boolean",
+      description: "Enable local HTTPS",
+      isOptional: true,
+    },
   ]}
 />
 
@@ -161,7 +167,7 @@ Workflows are expected to be exported from `src/mastra/workflows` (or the config
 
 ## Additional Notes
 
-The port defaults to 4111. Both the port and hostname can be configured via the mastra server config. See [Launch Development Server](/docs/server-db/local-dev-playground) for configuration details.
+The port defaults to `4111`. The port, hostname, and HTTPS settings can also be configured via the Mastra server configuration. See [Launch Development Server](/docs/server-db/local-dev-playground) for configuration details.
 
 Make sure you have your environment variables set up in your `.env.development` or `.env` file for any providers you use (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.).
 

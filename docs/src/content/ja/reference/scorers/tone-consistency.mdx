@@ -1,0 +1,85 @@
+---
+title: "リファレンス: トーン一貫性 | スコアラー | Mastra Docs"
+description: テキストの感情的なトーンと感情の一貫性を評価するMastraのトーン一貫性スコアラーのドキュメント。
+---
+
+
+
+# Tone Consistency Scorer
+
+`createToneScorer()`関数は、テキストの感情的なトーンと感情の一貫性を評価します。この関数は2つのモードで動作できます：入力/出力ペア間のトーンを比較するか、単一のテキスト内でのトーンの安定性を分析するかです。
+
+使用例については、[Tone Consistency Examples](/examples/scorers/tone-consistency)を参照してください。
+
+
+
+## パラメータ
+
+`createToneScorer()` 関数はオプションを受け取りません。
+
+この関数は MastraScorer クラスのインスタンスを返します。`.run()` メソッドとその入力/出力の詳細については、[MastraScorer リファレンス](./mastra-scorer) を参照してください。
+
+
+
+## .run() 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "実行のID（オプション）。",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description: "トーンメトリクスを含むオブジェクト：{ responseSentiment: number, referenceSentiment: number, difference: number }（比較モード）または { avgSentiment: number, sentimentVariance: number }（安定性モード）",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "トーンの一貫性/安定性スコア（0-1）。",
+    },
+  ]}
+/>
+
+
+
+## スコアリング詳細
+
+スコアラーは、トーンパターン分析とモード固有のスコアリングを通じて感情の一貫性を評価します。
+
+### スコアリングプロセス
+
+1. トーンパターンを分析：
+   - 感情特徴を抽出
+   - 感情スコアを計算
+   - トーンの変動を測定
+2. モード固有のスコアを計算：
+   **Tone Consistency**（入力と出力）：
+   - テキスト間の感情を比較
+   - 感情の差を計算
+   - スコア = 1 - (sentiment_difference / max_difference)
+   **Tone Stability**（単一入力）：
+   - 文章全体の感情を分析
+   - 感情の分散を計算
+   - スコア = 1 - (sentiment_variance / max_variance)
+
+最終スコア：`mode_specific_score * scale`
+
+### スコアの解釈
+
+（0からscale、デフォルト0-1）
+
+- 1.0：完璧なトーンの一貫性/安定性
+- 0.7-0.9：わずかな変動はあるが強い一貫性
+- 0.4-0.6：目立つ変化はあるが中程度の一貫性
+- 0.1-0.3：大きなトーンの変化があり一貫性が低い
+- 0.0：一貫性なし - 完全に異なるトーン
+
+
+
+## 関連
+
+- [Content Similarity Scorer](./content-similarity)
+- [Toxicity Scorer](./toxicity)

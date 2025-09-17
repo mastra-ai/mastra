@@ -1,11 +1,15 @@
 ---
-title: "リファレンス: Dash0 統合 | Mastra Observability ドキュメント"
-description: Mastra を Open Telemetry ネイティブのオブザーバビリティソリューションである Dash0 と統合するためのドキュメント。
+title: "リファレンス: Dash0統合 | Mastra可観測性ドキュメント"
+description: MastraとOpen Telemetryネイティブな可観測性ソリューションであるDash0の統合に関するドキュメント。
 ---
+
+
 
 # Dash0
 
-Dash0は、Open Telemetryネイティブのオブザーバビリティソリューションであり、フルスタックのモニタリング機能に加え、PersesやPrometheusなど他のCNCFプロジェクトとの統合も提供します。
+Dash0は、フルスタック監視機能を提供し、PersesやPrometheusなどの他のCNCFプロジェクトとの統合も可能なOpen Telemetryネイティブなオブザーバビリティソリューションです。
+
+
 
 ## 設定
 
@@ -15,6 +19,8 @@ Dash0 を Mastra で使用するには、以下の環境変数を設定してく
 OTEL_EXPORTER_OTLP_ENDPOINT=https://ingress.<region>.dash0.com
 OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer <your-auth-token>, Dash0-Dataset=<optional-dataset>
 ```
+
+
 
 ## 実装
 
@@ -34,6 +40,8 @@ export const mastra = new Mastra({
   },
 });
 ```
+
+
 
 ## ダッシュボード
 

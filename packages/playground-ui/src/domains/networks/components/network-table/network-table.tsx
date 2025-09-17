@@ -2,7 +2,7 @@ import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { AgentNetworkCoinIcon } from '@/ds/icons/AgentNetworkCoinIcon';
 import { Icon } from '@/ds/icons/Icon';
-import { GetNetworkResponse, GetVNextNetworkResponse } from '@mastra/client-js';
+import { GetVNextNetworkResponse } from '@mastra/client-js';
 import { NetworkIcon } from 'lucide-react';
 import { NetworkTableColumn } from './types';
 import { useMemo } from 'react';
@@ -15,33 +15,24 @@ import React from 'react';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface NetworkTableProps {
-  legacyNetworks: GetNetworkResponse[];
   networks: GetVNextNetworkResponse[];
   isLoading: boolean;
-  computeLink: (networkId: string, isVNext: boolean) => string;
+  computeLink: (networkId: string) => string;
 }
 
-export const NetworkTable = ({ legacyNetworks, networks, isLoading, computeLink }: NetworkTableProps) => {
+export const NetworkTable = ({ networks, isLoading, computeLink }: NetworkTableProps) => {
   const { navigate } = useLinkComponent();
   const allNetworks: NetworkTableColumn[] = useMemo(
     () => [
-      ...(legacyNetworks?.map(network => ({
-        ...network,
-        routingModel: network.routingModel.modelId,
-        agentsSize: network.agents.length,
-        isVNext: false,
-      })) ?? []),
-
       ...(networks?.map(network => ({
         ...network,
         routingModel: network.routingModel.modelId,
         agentsSize: network.agents.length,
         workflowsSize: network.workflows.length,
         toolsSize: network.tools.length,
-        isVNext: true,
       })) ?? []),
     ],
-    [networks, legacyNetworks],
+    [networks],
   );
 
   const table = useReactTable({
@@ -71,11 +62,7 @@ export const NetworkTable = ({ legacyNetworks, networks, isLoading, computeLink 
         </Thead>
         <Tbody>
           {rows.map(row => (
-            <Row
-              key={row.id}
-              onClick={() => navigate(computeLink(row.original.id, row.original.isVNext || false))}
-              className="cursor-pointer"
-            >
+            <Row key={row.id} onClick={() => navigate(computeLink(row.original.id))} className="cursor-pointer">
               {row.getVisibleCells().map(cell => (
                 <React.Fragment key={cell.id}>
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}

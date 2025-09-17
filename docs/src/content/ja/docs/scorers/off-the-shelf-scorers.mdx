@@ -1,0 +1,50 @@
+---
+title: "内蔵スコアラー"
+description: "品質・安全性・性能の観点からAI出力を評価するための、Mastraの即時利用可能なスコアラーの概要。"
+---
+
+# 組み込みスコアラー
+
+Mastra は、AI の出力を評価するための充実した組み込みスコアラー一式を提供します。これらのスコアラーは一般的な評価シナリオに最適化されており、エージェントやワークフローでそのまま利用できます。
+
+## 利用可能なスコアリング手法
+
+### 正確性と信頼性
+
+これらのスコアラーは、エージェントの回答がどれだけ正確・真実・完全かを評価します:
+
+- [`answer-relevancy`](/reference/scorers/answer-relevancy): 応答が入力クエリにどれほど適切に対応しているかを評価 (`0-1`、高いほど良い)
+- [`answer-similarity`](/reference/scorers/answer-similarity): セマンティック解析を用い、CI/CD テスト向けにエージェント出力を正解と比較 (`0-1`、高いほど良い)
+- [`faithfulness`](/reference/scorers/faithfulness): 応答が与えられたコンテキストをどれほど正確に反映しているかを測定 (`0-1`、高いほど良い)
+- [`hallucination`](/reference/scorers/hallucination): 事実の矛盾や根拠のない主張を検出 (`0-1`、低いほど良い)
+- [`completeness`](/reference/scorers/completeness): 応答に必要な情報がすべて含まれているかを確認 (`0-1`、高いほど良い)
+- [`content-similarity`](/reference/scorers/content-similarity): 文字レベルのマッチングでテキスト類似度を測定 (`0-1`、高いほど良い)
+- [`textual-difference`](/reference/scorers/textual-difference): 文字列間のテキスト差分を測定 (`0-1`、値が高いほどより類似)
+- [`tool-call-accuracy`](/reference/scorers/tool-call-accuracy): LLM が利用可能な選択肢から正しいツールを選べているかを評価 (`0-1`、高いほど良い)
+- [`prompt-alignment`](/reference/scorers/prompt-alignment): エージェントの応答がユーザープロンプトの意図・要件・網羅性・形式にどれほど沿っているかを測定 (`0-1`、高いほど良い)
+
+### コンテキスト品質
+
+これらのスコアラーは、応答生成に用いられるコンテキストの品質と妥当性を評価します:
+
+- [`context-precision`](/reference/scorers/context-precision): 平均適合率（MAP）でコンテキストの関連性とランキングを評価し、関連コンテキストが早く上位に来るほど高く評価します（`0-1`、高いほど良い）
+- [`context-relevance`](/reference/scorers/context-relevance): きめ細かな関連度レベル、使用状況のトラッキング、欠落コンテキストの検出により、コンテキストの有用性を測定します（`0-1`、高いほど良い）
+
+> tip コンテキストスコアラーの選択
+
+- コンテキストの並び順が重要で、標準的なIR指標が必要な場合は **Context Precision** を使用（RAGのランキング評価に最適）
+- 詳細な関連性評価が必要で、コンテキストの使用状況を追跡しギャップを特定したい場合は **Context Relevance** を使用
+
+両方のコンテキストスコアラーは次をサポートします:
+
+- **静的コンテキスト**: あらかじめ定義したコンテキスト配列
+- **動的コンテキスト抽出**: カスタム関数で実行からコンテキストを抽出（RAGシステム、ベクターデータベースなどに最適）
+
+### 出力品質
+
+これらのスコアは、形式、文体、安全性要件への適合を評価します:
+
+- [`tone-consistency`](/reference/scorers/tone-consistency): 敬体・難易度・文体の一貫性を測定します（`0-1`、高いほど良い）
+- [`toxicity`](/reference/scorers/toxicity): 有害または不適切な内容を検出します（`0-1`、低いほど良い）
+- [`bias`](/reference/scorers/bias): 出力に潜在する偏りを検出します（`0-1`、低いほど良い）
+- [`keyword-coverage`](/reference/scorers/keyword-coverage): 技術用語の網羅状況を評価します（`0-1`、高いほど良い）

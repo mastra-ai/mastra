@@ -3316,6 +3316,176 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     }, 500000);
   });
 
+  describe(`${version} - context parameter handling`, () => {
+    it('should handle system messages in context parameter', async () => {
+      const agent = new Agent({
+        id: 'test-system-context',
+        name: 'Test System Context',
+        model: openaiModel,
+        instructions: 'You are a helpful assistant.',
+      });
+
+      const systemMessage = {
+        role: 'system' as const,
+        content: 'Additional system instructions from context',
+      };
+
+      const userMessage = {
+        role: 'user' as const,
+        content: 'What are your instructions?',
+      };
+
+      // Test with complex system message content (only for v2 as v1 doesn't support array content)
+      const complexSystemMessage =
+        version === 'v2'
+          ? {
+              role: 'system' as const,
+              content: [{ type: 'text' as const, text: 'Complex system message from context' }],
+            }
+          : {
+              role: 'system' as const,
+              content: 'Complex system message from context',
+            };
+
+      let result;
+      if (version === 'v1') {
+        result = await agent.stream('Tell me about yourself', {
+          context: [systemMessage, userMessage, complexSystemMessage],
+        });
+      } else {
+        result = await agent.streamVNext('Tell me about yourself', {
+          context: [systemMessage, userMessage, complexSystemMessage],
+        });
+      }
+
+      // Consume the stream
+      const parts: any[] = [];
+      for await (const part of result.fullStream) {
+        parts.push(part);
+      }
+
+      // Check the request format based on version
+      let messages: any[];
+      if (version === 'v1') {
+        const requestData = await result.request;
+        // v1 might not have body in test mocks
+        if (!requestData?.body) {
+          // We can't validate the exact request format in v1 mock
+          // but the test passes if no errors are thrown
+          return;
+        }
+        messages = JSON.parse(requestData.body).messages;
+      } else {
+        messages = (await result.request).body.input;
+      }
+
+      // Count system messages
+      const systemMessages = messages.filter((m: any) => m.role === 'system');
+
+      // Should have exactly 3 system messages (default + 2 from context)
+      expect(systemMessages.length).toBe(3);
+
+      // Should have the agent's default instructions as first system message
+      expect(messages[0].role).toBe('system');
+      expect(messages[0].content).toBe('You are a helpful assistant.');
+
+      // Should have the context system messages
+      expect(
+        systemMessages.find((m: any) => m.content === 'Additional system instructions from context'),
+      ).toBeDefined();
+
+      expect(
+        systemMessages.find(
+          (m: any) =>
+            m.content === 'Complex system message from context' ||
+            m.content?.[0]?.text === 'Complex system message from context',
+        ),
+      ).toBeDefined();
+
+      // Should have the context user message
+      const userMessages = messages.filter((m: any) => m.role === 'user');
+      expect(userMessages.length).toBe(2);
+
+      // Check for context user message
+      if (version === 'v1') {
+        expect(
+          userMessages.find(
+            (m: any) =>
+              m.content?.[0]?.text === 'What are your instructions?' || m.content === 'What are your instructions?',
+          ),
+        ).toBeDefined();
+      } else {
+        expect(userMessages.find((m: any) => m.content?.[0]?.text === 'What are your instructions?')).toBeDefined();
+      }
+    });
+
+    it('should handle mixed message types in context parameter', async () => {
+      const agent = new Agent({
+        id: 'test-mixed-context',
+        name: 'Test Mixed Context',
+        model: openaiModel,
+        instructions: 'You are a helpful assistant.',
+      });
+
+      const contextMessages = [
+        {
+          role: 'user' as const,
+          content: 'Previous user question',
+        },
+        {
+          role: 'assistant' as const,
+          content: 'Previous assistant response',
+        },
+        {
+          role: 'system' as const,
+          content: 'Additional context instructions',
+        },
+      ];
+
+      let result;
+      if (version === 'v1') {
+        result = await agent.stream('Current question', {
+          context: contextMessages,
+        });
+      } else {
+        result = await agent.streamVNext('Current question', {
+          context: contextMessages,
+        });
+      }
+
+      // Consume the stream
+      for await (const _part of result.fullStream) {
+        // Just consume the stream
+      }
+
+      // Check the request format based on version
+      let messages: any[];
+      if (version === 'v1') {
+        const requestData = await result.request;
+        if (!requestData?.body) {
+          return; // Can't validate in mock
+        }
+        messages = JSON.parse(requestData.body).messages;
+      } else {
+        messages = (await result.request).body.input;
+      }
+
+      // Verify message order and content
+      const systemMessages = messages.filter((m: any) => m.role === 'system');
+      const userMessages = messages.filter((m: any) => m.role === 'user');
+      const assistantMessages = messages.filter((m: any) => m.role === 'assistant');
+
+      // Should have 2 system messages (default + context)
+      expect(systemMessages.length).toBe(2);
+
+      // Should have 2 user messages (context + current)
+      expect(userMessages.length).toBe(2);
+
+      // Should have 1 assistant message (from context)
+      expect(assistantMessages.length).toBe(1);
+    });
+  });
+
   describe(`${version} - agent memory with metadata`, () => {
     let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
     beforeEach(() => {
@@ -5390,6 +5560,51 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(abortEvent).toBeDefined();
       });
     });
+    describe(`${version} - streamVNext destructuring support`, () => {
+      it('should support destructuring of stream properties and methods', async () => {
+        const agent = new Agent({
+          id: 'test-destructuring',
+          name: 'Test Destructuring',
+          model: openaiModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        const result = await agent.streamVNext('Say hello');
+
+        // Test destructuring of various properties
+        const { fullStream, textStream, text, usage, consumeStream, toolCalls, finishReason, request } = result;
+
+        // These should all work without throwing errors
+        try {
+          // Test async method
+          await consumeStream();
+
+          // Test promise getters
+          const textResult = await text;
+          expect(typeof textResult).toBe('string');
+
+          const usageResult = await usage;
+          expect(usageResult).toBeDefined();
+
+          const toolCallsResult = await toolCalls;
+          expect(Array.isArray(toolCallsResult)).toBe(true);
+
+          const finishReasonResult = await finishReason;
+          expect(finishReasonResult).toBeDefined();
+
+          const requestResult = await request;
+          expect(requestResult).toBeDefined();
+
+          // Test stream getters (just check they exist without consuming)
+          expect(fullStream).toBeDefined();
+          expect(textStream).toBeDefined();
+        } catch (error) {
+          // If this fails before the fix, we expect it to throw
+          console.error('Destructuring test failed:', error);
+          throw error;
+        }
+      });
+    });
   }
 
   describe(`${version} - dynamic memory configuration`, () => {
@@ -7029,6 +7244,811 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     }
   }, 10000);
 
+  describe(
+    'model list',
+    {
+      skip: version === 'v1',
+    },
+    () => {
+      it('should take and return model list', async () => {
+        const agent = new Agent({
+          name: 'test',
+          instructions: 'test agent instructions',
+          model: [
+            {
+              model: openai_v5('gpt-4o'),
+            },
+            {
+              model: openai_v5('gpt-4o-mini'),
+            },
+            {
+              model: openai_v5('gpt-4.1'),
+            },
+          ],
+        });
+
+        const modelList = await agent.getModelList();
+        expect(modelList?.length).toBe(3);
+        const model0 = modelList?.[0].model as LanguageModelV2;
+        expect(model0.modelId).toBe('gpt-4o');
+        const model1 = modelList?.[1].model as LanguageModelV2;
+        expect(model1.modelId).toBe('gpt-4o-mini');
+        const model2 = modelList?.[2].model as LanguageModelV2;
+        expect(model2.modelId).toBe('gpt-4.1');
+      });
+
+      it('should reorder model list', async () => {
+        const agent = new Agent({
+          name: 'test',
+          instructions: 'test agent instructions',
+          model: [
+            {
+              model: openai_v5('gpt-4o'),
+            },
+            {
+              model: openai_v5('gpt-4o-mini'),
+            },
+            {
+              model: openai_v5('gpt-4.1'),
+            },
+          ],
+        });
+
+        const modelList = await agent.getModelList();
+
+        const modelIds = modelList?.map(m => m.id) || [];
+        const reversedModelIds = [...modelIds].reverse();
+
+        agent.reorderModels(reversedModelIds);
+
+        const reorderedModelList = await agent.getModelList();
+
+        expect(reorderedModelList).toBeDefined();
+        expect(reorderedModelList?.length).toBe(3);
+        expect(reorderedModelList?.[0].id).toBe(reversedModelIds[0]);
+        expect(reorderedModelList?.[1].id).toBe(reversedModelIds[1]);
+
+        const model0 = reorderedModelList?.[0].model as LanguageModelV2;
+        expect(model0.modelId).toBe('gpt-4.1');
+        const model1 = reorderedModelList?.[1].model as LanguageModelV2;
+        expect(model1.modelId).toBe('gpt-4o-mini');
+      });
+
+      it(`should update model list`, async () => {
+        const agent = new Agent({
+          name: 'test',
+          instructions: 'test agent instructions',
+          model: [
+            {
+              model: openai_v5('gpt-4o'),
+            },
+            {
+              model: openai_v5('gpt-4o-mini'),
+            },
+            {
+              model: openai_v5('gpt-4.1'),
+            },
+          ],
+        });
+
+        const modelList = await agent.getModelList();
+        const model1Id = modelList?.[1].id || '';
+
+        agent.updateModelInModelList({
+          id: model1Id,
+          model: openai_v5('gpt-4'),
+          maxRetries: 5,
+        });
+        const updatedModelList = await agent.getModelList();
+
+        expect(updatedModelList).toBeDefined();
+        expect(updatedModelList?.length).toBe(3);
+        const updatedModel1 = updatedModelList?.[1].model as LanguageModelV2;
+        expect(updatedModel1.modelId).toBe('gpt-4');
+        expect(updatedModelList?.[1]?.maxRetries).toBe(5);
+        const updatedModel2 = updatedModelList?.[2].model as LanguageModelV2;
+        expect(updatedModel2.modelId).toBe('gpt-4.1');
+      });
+
+      it('should use model list', async () => {
+        let usedModelName = '';
+
+        // Create two different models
+        let premiumModel: MockLanguageModelV2;
+        let standardModel: MockLanguageModelV2;
+
+        premiumModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            usedModelName = 'premium';
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: `Premium Title`,
+              content: [
+                {
+                  type: 'text',
+                  text: `Premium Title`,
+                },
+              ],
+              warnings: [],
+            };
+          },
+          doStream: async () => {
+            usedModelName = 'premium';
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'stream-start',
+                  warnings: [],
+                },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Hello' },
+                { type: 'text-delta', id: '1', delta: ', ' },
+                { type: 'text-delta', id: '1', delta: 'Premium Title' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                },
+              ]),
+            };
+          },
+        });
+
+        standardModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            usedModelName = 'standard';
+            throw new Error('Simulated generate error');
+          },
+          doStream: async () => {
+            usedModelName = 'standard';
+            const stream = new ReadableStream({
+              pull() {
+                throw new Error('Simulated stream error');
+              },
+            });
+            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
+          },
+        });
+
+        const agent = new Agent({
+          name: 'update-model-agent',
+          instructions: 'test agent',
+          model: [
+            {
+              model: standardModel,
+            },
+            {
+              model: premiumModel,
+            },
+          ],
+        });
+
+        const streamResult = await agent.streamVNext('Test message');
+
+        const fullText = await streamResult.text;
+        expect(fullText).toBe('Hello, Premium Title');
+
+        expect(usedModelName).toBe('premium');
+      });
+
+      it('should use maxRetries in model list', async () => {
+        let usedModelName = '';
+
+        // Create two different models
+        let premiumModel: MockLanguageModelV2;
+        let standardModel: MockLanguageModelV2;
+
+        const streamErrorFn = vi.fn(() => {
+          throw new Error('Simulated stream error');
+        });
+
+        premiumModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            usedModelName = 'premium';
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: `Premium Title`,
+              content: [
+                {
+                  type: 'text',
+                  text: `Premium Title`,
+                },
+              ],
+              warnings: [],
+            };
+          },
+          doStream: async () => {
+            usedModelName = 'premium';
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'stream-start',
+                  warnings: [],
+                },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Hello' },
+                { type: 'text-delta', id: '1', delta: ', ' },
+                { type: 'text-delta', id: '1', delta: 'Premium Title' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                },
+              ]),
+            };
+          },
+        });
+
+        standardModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            usedModelName = 'standard';
+            throw new Error('Simulated generate error');
+          },
+          doStream: async () => {
+            usedModelName = 'standard';
+            const stream = new ReadableStream({
+              pull() {
+                streamErrorFn();
+              },
+            });
+            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
+          },
+        });
+
+        const agent = new Agent({
+          name: 'update-model-agent',
+          instructions: 'test agent',
+          model: [
+            {
+              model: standardModel,
+              maxRetries: 3,
+            },
+            {
+              model: premiumModel,
+            },
+          ],
+        });
+
+        const streamResult = await agent.streamVNext('Test message');
+
+        const fullText = await streamResult.text;
+        expect(fullText).toBe('Hello, Premium Title');
+        expect(streamErrorFn).toHaveBeenCalledTimes(4);
+        expect(usedModelName).toBe('premium');
+      });
+
+      it('should default to agent maxRetries when not provided in model list', async () => {
+        let usedModelName = '';
+
+        // Create two different models
+        let premiumModel: MockLanguageModelV2;
+        let standardModel: MockLanguageModelV2;
+        let standardModel2: MockLanguageModelV2;
+
+        const streamErrorFn = vi.fn(() => {
+          throw new Error('Simulated stream error');
+        });
+        const streamErrorFn2 = vi.fn(() => {
+          throw new Error('Simulated stream error');
+        });
+
+        premiumModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            usedModelName = 'premium';
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: `Premium Title`,
+              content: [
+                {
+                  type: 'text',
+                  text: `Premium Title`,
+                },
+              ],
+              warnings: [],
+            };
+          },
+          doStream: async () => {
+            usedModelName = 'premium';
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'stream-start',
+                  warnings: [],
+                },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Hello' },
+                { type: 'text-delta', id: '1', delta: ', ' },
+                { type: 'text-delta', id: '1', delta: 'Premium Title' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                },
+              ]),
+            };
+          },
+        });
+
+        standardModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            usedModelName = 'standard';
+            throw new Error('Simulated generate error');
+          },
+          doStream: async () => {
+            usedModelName = 'standard';
+            const stream = new ReadableStream({
+              pull() {
+                streamErrorFn();
+              },
+            });
+            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
+          },
+        });
+
+        standardModel2 = new MockLanguageModelV2({
+          doGenerate: async () => {
+            usedModelName = 'standard2';
+            throw new Error('Simulated generate error');
+          },
+          doStream: async () => {
+            usedModelName = 'standard';
+            const stream = new ReadableStream({
+              pull() {
+                streamErrorFn2();
+              },
+            });
+            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
+          },
+        });
+
+        const agent = new Agent({
+          name: 'update-model-agent',
+          instructions: 'test agent',
+          model: [
+            {
+              model: standardModel,
+              maxRetries: 3,
+            },
+            {
+              model: standardModel2,
+            },
+            {
+              model: premiumModel,
+            },
+          ],
+          maxRetries: 2,
+        });
+
+        const streamResult = await agent.streamVNext('Test message');
+
+        const fullText = await streamResult.text;
+        expect(fullText).toBe('Hello, Premium Title');
+        expect(streamErrorFn).toHaveBeenCalledTimes(4);
+        expect(streamErrorFn2).toHaveBeenCalledTimes(3);
+        expect(usedModelName).toBe('premium');
+      });
+
+      it('should skip models with enabled:false in model list', async () => {
+        let usedModelName = '';
+
+        // Create two different models
+        let premiumModel: MockLanguageModelV2;
+        let standardModel: MockLanguageModelV2;
+        let standardModel2: MockLanguageModelV2;
+
+        const streamErrorFn = vi.fn(() => {
+          throw new Error('Simulated stream error');
+        });
+        const streamErrorFn2 = vi.fn(() => {
+          throw new Error('Simulated stream error');
+        });
+
+        premiumModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            usedModelName = 'premium';
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: `Premium Title`,
+              content: [
+                {
+                  type: 'text',
+                  text: `Premium Title`,
+                },
+              ],
+              warnings: [],
+            };
+          },
+          doStream: async () => {
+            usedModelName = 'premium';
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'stream-start',
+                  warnings: [],
+                },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Hello' },
+                { type: 'text-delta', id: '1', delta: ', ' },
+                { type: 'text-delta', id: '1', delta: 'Premium Title' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                },
+              ]),
+            };
+          },
+        });
+
+        standardModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            usedModelName = 'standard';
+            throw new Error('Simulated generate error');
+          },
+          doStream: async () => {
+            usedModelName = 'standard';
+            const stream = new ReadableStream({
+              pull() {
+                streamErrorFn();
+              },
+            });
+            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
+          },
+        });
+
+        standardModel2 = new MockLanguageModelV2({
+          doGenerate: async () => {
+            usedModelName = 'standard2';
+            throw new Error('Simulated generate error');
+          },
+          doStream: async () => {
+            usedModelName = 'standard';
+            const stream = new ReadableStream({
+              pull() {
+                streamErrorFn2();
+              },
+            });
+            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
+          },
+        });
+
+        const agent = new Agent({
+          name: 'update-model-agent',
+          instructions: 'test agent',
+          model: [
+            {
+              model: standardModel,
+              maxRetries: 3,
+            },
+            {
+              model: standardModel2,
+              enabled: false,
+            },
+            {
+              model: premiumModel,
+            },
+          ],
+          maxRetries: 2,
+        });
+
+        const streamResult = await agent.streamVNext('Test message');
+
+        const fullText = await streamResult.text;
+        expect(fullText).toBe('Hello, Premium Title');
+        expect(streamErrorFn).toHaveBeenCalledTimes(4);
+        expect(streamErrorFn2).toHaveBeenCalledTimes(0);
+        expect(usedModelName).toBe('premium');
+      });
+
+      it('should skip rest of the models in the list after getting a successful stream', async () => {
+        let usedModelName = '';
+
+        // Create two different models
+        let premiumModel: MockLanguageModelV2;
+        let premiumModel2: MockLanguageModelV2;
+        let standardModel: MockLanguageModelV2;
+
+        const streamErrorFn = vi.fn(() => {
+          throw new Error('Simulated stream error');
+        });
+
+        const premiumModel2Fn = vi.fn(() => {
+          console.log('premium model 2 called');
+        });
+
+        premiumModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            usedModelName = 'premium';
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: `Hello, Premium Title`,
+              content: [
+                {
+                  type: 'text',
+                  text: `Hello, Premium Title`,
+                },
+              ],
+              warnings: [],
+            };
+          },
+          doStream: async () => {
+            usedModelName = 'premium';
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'stream-start',
+                  warnings: [],
+                },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Hello' },
+                { type: 'text-delta', id: '1', delta: ', ' },
+                { type: 'text-delta', id: '1', delta: 'Premium Title' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                },
+              ]),
+            };
+          },
+        });
+
+        premiumModel2 = new MockLanguageModelV2({
+          doGenerate: async () => {
+            usedModelName = 'premium';
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: `Second Premium Title`,
+              content: [
+                {
+                  type: 'text',
+                  text: `Second Premium Title`,
+                },
+              ],
+              warnings: [],
+            };
+          },
+          doStream: async () => {
+            usedModelName = 'premium2';
+            premiumModel2Fn();
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'stream-start',
+                  warnings: [],
+                },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Hello' },
+                { type: 'text-delta', id: '1', delta: ', Second' },
+                { type: 'text-delta', id: '1', delta: 'Premium Title' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                },
+              ]),
+            };
+          },
+        });
+
+        standardModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            usedModelName = 'standard';
+            throw new Error('Simulated generate error');
+          },
+          doStream: async () => {
+            usedModelName = 'standard';
+            const stream = new ReadableStream({
+              pull() {
+                streamErrorFn();
+              },
+            });
+            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
+          },
+        });
+
+        const agent = new Agent({
+          name: 'update-model-agent',
+          instructions: 'test agent',
+          model: [
+            {
+              model: standardModel,
+              maxRetries: 3,
+            },
+            {
+              model: premiumModel,
+            },
+            {
+              model: premiumModel2,
+            },
+          ],
+          maxRetries: 2,
+        });
+
+        const streamResult = await agent.streamVNext('Test message');
+
+        const fullText = await streamResult.text;
+        expect(fullText).toBe('Hello, Premium Title');
+        expect(streamErrorFn).toHaveBeenCalledTimes(4);
+        expect(premiumModel2Fn).toHaveBeenCalledTimes(0);
+        expect(usedModelName).toBe('premium');
+      });
+
+      it('should throw an error if a v1 model is provided in an array of models', async () => {
+        const v1Model = new MockLanguageModelV1({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              initialDelayInMs: 0,
+              chunkDelayInMs: 1,
+              chunks: [
+                { type: 'text-delta', textDelta: 'Hello! ' },
+                { type: 'text-delta', textDelta: 'I am ' },
+                { type: 'text-delta', textDelta: 'a helpful assistant.' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { promptTokens: 10, completionTokens: 20 },
+                },
+              ],
+            }),
+            rawCall: { rawPrompt: [], rawSettings: {} },
+          }),
+        });
+        const v2Model = new MockLanguageModelV2({
+          doGenerate: async () => {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: `Hello, Premium Title`,
+              content: [
+                {
+                  type: 'text',
+                  text: `Hello, Premium Title`,
+                },
+              ],
+              warnings: [],
+            };
+          },
+          doStream: async () => {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'stream-start',
+                  warnings: [],
+                },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Hello' },
+                { type: 'text-delta', id: '1', delta: ', ' },
+                { type: 'text-delta', id: '1', delta: 'Premium Title' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                },
+              ]),
+            };
+          },
+        });
+        const agent = new Agent({
+          name: 'update-model-agent',
+          instructions: 'test agent',
+          model: [{ model: v2Model }, { model: v1Model }],
+        });
+
+        try {
+          await agent.getLLM();
+          expect.fail('Expected getLLM() to throw an error');
+        } catch (err) {
+          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+        }
+
+        try {
+          await agent.generate('Hello');
+          expect.fail('Expected getLLM() to throw an error');
+        } catch (err) {
+          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+        }
+
+        try {
+          await agent.stream('Hello');
+          expect.fail('Expected getLLM() to throw an error');
+        } catch (err) {
+          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+        }
+
+        try {
+          await agent.generateVNext('Hello');
+          expect.fail('Expected getLLM() to throw an error');
+        } catch (err) {
+          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+        }
+
+        try {
+          await agent.streamVNext('Hello');
+          expect.fail('Expected getLLM() to throw an error');
+        } catch (err) {
+          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+        }
+      });
+    },
+  );
+
   describe('scorer output data', () => {
     it(`${version} - should return scoring data from generate when returnScorerData is true`, async () => {
       const agent = new Agent({
@@ -7728,6 +8748,202 @@ describe('Agent Tests', () => {
 
   agentTests({ version: 'v1' });
   agentTests({ version: 'v2' });
+
+  describe('agent.stopWhen', () => {
+    const weatherTool = createTool({
+      id: 'weather-tool',
+      description: 'Get weather for a location',
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      execute: async context => {
+        const { location } = context;
+        return {
+          temperature: 70,
+          feelsLike: 65,
+          humidity: 50,
+          windSpeed: 10,
+          windGust: 15,
+          conditions: 'sunny',
+          location,
+        };
+      },
+    });
+
+    const planActivities = createTool({
+      id: 'plan-activities',
+      description: 'Plan activities based on the weather',
+      inputSchema: z.object({
+        temperature: z.string(),
+      }),
+      execute: async () => {
+        return { activities: 'Plan activities based on the weather' };
+      },
+    });
+
+    const agent = new Agent({
+      name: 'test-step-boundaries',
+      instructions:
+        'You are a helpful assistant. Figure out the weather and then using that weather plan some activities. Always use the weather tool first, and then the plan activities tool with the result of the weather tool',
+      model: openai_v5('gpt-4o-mini'),
+      tools: {
+        weatherTool,
+        planActivities,
+      },
+    });
+
+    it('should demonstrate that stopWhen gets the proper step results in the first step', async () => {
+      let stopWhenCallCount = 0;
+      const stopWhenCalls: { callNumber: number; steps: any[] }[] = [];
+
+      const stream = await agent.streamVNext('What should i be doing in Toronto today?', {
+        stopWhen: ({ steps }) => {
+          stopWhenCallCount++;
+          // Store the call details
+          stopWhenCalls.push({
+            callNumber: stopWhenCallCount,
+            steps: JSON.parse(JSON.stringify(steps)), // Deep copy to preserve state
+          });
+
+          // Check if any step has tool calls
+          const hasToolCalls = steps.some(step => {
+            return step.content && step.content.some(item => item.type === 'tool-call' || item.type === 'tool-result');
+          });
+
+          if (hasToolCalls) {
+            console.log(`Found tool calls in steps, attempting to stop...`);
+            // Try to stop immediately after finding tool calls
+            return true;
+          }
+
+          return false;
+        },
+      });
+
+      const chunks: ChunkType[] = [];
+      let stepStartCount = 0;
+      let foundToolCallChunk = false;
+      let foundTextChunk = false;
+      for await (const chunk of stream.fullStream) {
+        chunks.push(chunk);
+
+        if (chunk.type === 'step-start') {
+          stepStartCount++;
+        } else if (chunk.type === 'tool-call') {
+          foundToolCallChunk = true;
+        } else if (chunk.type === 'text-delta' && chunk.payload.text.trim()) {
+          foundTextChunk = true;
+        }
+      }
+
+      expect(foundToolCallChunk).toBe(true);
+
+      expect(stepStartCount).toBe(1);
+      expect(foundTextChunk).toBe(false);
+
+      expect(stopWhenCallCount).toBe(1);
+    }, 10000);
+
+    it('should not call stopWhen on the final step', async () => {
+      let stopWhenCallCount = 0;
+      const stopWhenCalls: { callNumber: number; stepCount: number }[] = [];
+
+      const trackStopWhenCalls = ({ steps }: { steps: any[] }) => {
+        stopWhenCallCount++;
+        stopWhenCalls.push({
+          callNumber: stopWhenCallCount,
+          stepCount: steps.length,
+        });
+
+        return false;
+      };
+
+      const stream = await agent.streamVNext('What should i be doing in Toronto today?', {
+        stopWhen: trackStopWhenCalls,
+      });
+
+      let stepStartCount = 0;
+      let stepFinishCount = 0;
+
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'step-start') {
+          stepStartCount++;
+          console.log(`Step ${stepStartCount} started`);
+        } else if (chunk.type === 'step-finish') {
+          stepFinishCount++;
+          console.log(`Step ${stepFinishCount} finished`);
+        }
+      }
+
+      await stream.consumeStream();
+
+      // Verify that stopWhen is called n-1 times for n steps
+      expect(stepStartCount).toBe(stepFinishCount);
+      expect(stepStartCount).toBeGreaterThanOrEqual(2);
+
+      expect(stopWhenCallCount).toBe(stepStartCount - 1);
+
+      stopWhenCalls.forEach((call, index) => {
+        expect(call.stepCount).toBe(index + 1);
+      });
+    }, 10000);
+
+    it('should contain the correct content in the step results for both stopWhen and stream.steps', async () => {
+      const stopWhenContent: any[] = [];
+      const stream = await agent.streamVNext('What should i be doing in Toronto today?', {
+        stopWhen: ({ steps }) => {
+          stopWhenContent.push(steps.at(-1)?.content);
+          return false;
+        },
+      });
+
+      await stream.consumeStream();
+
+      const steps = await stream.steps;
+
+      expect(stopWhenContent[0].length).toBe(2);
+      expect(stopWhenContent[1].length).toBe(2);
+
+      expect(steps[0].content.length).toBe(2);
+      expect(steps[1].content.length).toBe(2);
+      expect(steps[2].content.length).toBe(1);
+
+      expect(stopWhenContent[1]).not.toEqual(stopWhenContent[0]);
+    }, 10000);
+
+    it('should contain the correct content in the step results for both stopWhen and stream.steps with text and tool calls in the same step', async () => {
+      const agent = new Agent({
+        name: 'test-step-boundaries',
+        instructions:
+          'You are a helpful assistant. Figure out the weather and then using that weather plan some activities. Always use the weather tool first, and then the plan activities tool with the result of the weather tool. Every tool call you make IMMEDIATELY explain the tool results after executing the tool, before moving on to other steps or tool calls',
+        model: openai_v5('gpt-4o-mini'),
+        tools: {
+          weatherTool,
+          planActivities,
+        },
+      });
+
+      const stopWhenContent: any[] = [];
+      const stream = await agent.streamVNext('What should i be doing in Toronto today?', {
+        stopWhen: ({ steps }) => {
+          stopWhenContent.push(steps.at(-1)?.content);
+          return false;
+        },
+      });
+
+      await stream.consumeStream();
+      const steps = await stream.steps;
+
+      expect(stopWhenContent[0].length).toBe(2);
+      expect(stopWhenContent[1].length).toBe(3); // text explaining the previous tool-call-results, tool-call, tool-result
+
+      expect(steps[0].content.length).toBe(2);
+      expect(steps[1].content.length).toBe(3); // text explaining the previous tool-call-results, tool-call, tool-result
+      expect(steps[2].content.length).toBe(1);
+
+      expect(stopWhenContent[1]).not.toEqual(stopWhenContent[0]);
+    }, 10000);
+  });
 });
 
 //     it('should accept and execute both Mastra and Vercel tools in Agent constructor', async () => {
@@ -8043,7 +9259,7 @@ describe('Stream ID Consistency', () => {
     expect(customIdGenerator).toHaveBeenCalled();
   });
 
-  describe('onFinish callback with structured output (Issue #7722)', () => {
+  describe('onFinish callback with structured output', () => {
     it('should include object field in onFinish callback when using structured output', async () => {
       const mockModel = new MockLanguageModelV2({
         doStream: async () => ({
