@@ -146,11 +146,6 @@ export const redirectList = [
     permanent: true,
   },
   {
-    source: "/:locale/docs/workflows/00-overview",
-    destination: "/:locale/docs/workflows/overview",
-    permanent: true,
-  },
-  {
     source: "/:locale/docs/workflows/index",
     destination: "/:locale/docs/workflows/overview",
     permanent: true,
@@ -214,16 +209,6 @@ export const redirectList = [
   {
     source: "/:locale/examples/rag/filter-rag",
     destination: "/:locale/examples/rag/usage/filter-rag",
-    permanent: true,
-  },
-  {
-    source: "/:locale/workflows",
-    destination: "/:locale/docs/workflows/overview",
-    permanent: true,
-  },
-  {
-    source: "/:locale/workflows/:path*",
-    destination: "/:locale/docs/workflows/:path*",
     permanent: true,
   },
   {
