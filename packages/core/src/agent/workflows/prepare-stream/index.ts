@@ -107,7 +107,7 @@ export function createPrepareStreamWorkflow<
     id: 'execution-workflow',
     inputSchema: z.any(),
     outputSchema: z.any(),
-    steps: [prepareToolsStep, prepareMemoryStep, streamStep],
+    steps: [prepareToolsStep, prepareMemoryStep],
     options: {
       tracingPolicy: {
         internal: InternalSpans.WORKFLOW,
