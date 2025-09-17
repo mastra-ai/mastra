@@ -102,7 +102,7 @@ function App() {
                   <Route
                     path="/networks/v-next/:networkId"
                     element={
-                      <NetworkLayout isVNext>
+                      <NetworkLayout>
                         <Outlet />
                       </NetworkLayout>
                     }
