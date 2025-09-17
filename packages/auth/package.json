@@ -39,7 +39,7 @@
     "@mastra/core": "workspace:*",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.19.0",
-    "eslint": "^9.30.1",
+    "eslint": "^9.35.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
