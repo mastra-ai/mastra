@@ -37,7 +37,7 @@
     "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.19.2",
+    "@hono/node-server": "^1.19.3",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:^",
@@ -53,7 +53,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.15.3-0 <0.18.0-0"
+    "@mastra/core": ">=0.17.0-0 <0.18.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {
