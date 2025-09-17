@@ -43,10 +43,10 @@ export async function getInputOptions(
   }
 
   // In `analyzeBundle` we output this file and we want to use that instead of the original entry file
-  const analyzedEntryFile = join(path.join(process.cwd(), '.mastra/.build'), 'entry-0.mjs');
+  // const analyzedEntryFile = join(path.join(projectRoot, '.mastra/.build'), 'entry-0.mjs');
 
   const inputOptions = await getBundlerInputOptions(
-    analyzedEntryFile,
+    entryFile,
     {
       dependencies: deps,
       externalDependencies: new Set(),

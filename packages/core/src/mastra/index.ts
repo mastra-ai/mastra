@@ -901,6 +901,10 @@ do:
     return this.#serverMiddleware;
   }
 
+  public getServerCache() {
+    return this.#serverCache;
+  }
+
   public setServerMiddleware(serverMiddleware: Middleware | Middleware[]) {
     if (typeof serverMiddleware === 'function') {
       this.#serverMiddleware = [
@@ -1178,7 +1182,7 @@ do:
   }
 
   // This method is only used internally for server hnadlers that require temporary persistence
-  public getServerCache() {
+  public get serverCache() {
     return this.#serverCache;
   }
 }
