@@ -1612,8 +1612,8 @@ export class Run<
     tracingContext?: TracingContext;
     format?: 'aisdk' | 'mastra' | undefined;
   } = {}): MastraWorkflowStream<TOutput, TSteps> {
-    if (this.closeStreamAction) {
-      this.activeStream;
+    if (this.closeStreamAction && this.activeStream) {
+      return this.activeStream;
     }
 
     this.closeStreamAction = async () => {};
@@ -1718,8 +1718,8 @@ export class Run<
     tracingContext?: TracingContext;
     format?: 'aisdk' | 'mastra' | undefined;
   } = {}) {
-    if (this.closeStreamAction) {
-      this.activeStream;
+    if (this.closeStreamAction && this.activeStream) {
+      return this.activeStream;
     }
 
     this.closeStreamAction = async () => {};
