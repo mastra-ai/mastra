@@ -102,7 +102,7 @@ describe('processMastraStream', () => {
     const sseData = `data: ${JSON.stringify(testChunk)}\n\ndata: [DONE]\n\n`;
     const stream = createMockStream(sseData);
 
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     await processMastraStream({
       stream,
@@ -307,7 +307,7 @@ describe('processMastraStream', () => {
 
     const stream = createMockStream(sseData);
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     await processMastraStream({
       stream,
