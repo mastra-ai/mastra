@@ -1,7 +1,6 @@
 const meta = {
-  stream: ".stream()",
-  streamVNext: ".streamVNext()",
-  MastraModelOutput: "MastraModelOutput",
+  agents: { title: "Agents", theme: { collapsed: false } },
+  workflows: { title: "Workflows", theme: { collapsed: false } },
   ChunkType: "ChunkType",
 };
 
