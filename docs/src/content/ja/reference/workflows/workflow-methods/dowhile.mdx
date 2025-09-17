@@ -1,0 +1,50 @@
+---
+title: "リファレンス: Workflow.dowhile() | Workflows | Mastra Docs"
+description: ワークフローで使用する `Workflow.dowhile()` メソッドのドキュメント。条件が満たされている間、ステップを実行し続けるループを作成します。
+---
+
+# Workflow.dowhile()
+
+`.dowhile()` メソッドは、条件が満たされているあいだステップを実行するループを作成します。
+
+## 使用例
+
+```typescript copy
+workflow.dowhile(step1, async ({ inputData }) => true);
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "step",
+      type: "Step",
+      description: "ループで実行する Step インスタンス",
+      isOptional: false,
+    },
+    {
+      name: "condition",
+      type: "(params : { inputData: any}) => Promise<boolean>",
+      description:
+        "ループを継続するかどうかを示す boolean を返す関数",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "メソッドチェーンに使用する Workflow インスタンス",
+    },
+  ]}
+/>
+
+## 関連項目
+
+- [制御フロー](../../docs/workflows/control-flow.mdx)

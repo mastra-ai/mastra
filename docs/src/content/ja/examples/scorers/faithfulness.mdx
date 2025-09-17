@@ -1,0 +1,213 @@
+---
+title: "例: Faithfulness | Scorers | Mastra Docs"
+description: Faithfulnessスコアラーを使用して、コンテキストと比較した応答の事実的正確性を評価する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+
+
+# Faithfulness Scorer
+
+`createFaithfulnessScorer`を使用して、レスポンスが提供されたコンテキストによってサポートされる主張を行っているかどうかを評価します。このスコアラーは`query`と`response`を受け取り、スコアと理由を含む`info`オブジェクトを返します。
+
+
+
+## インストール
+
+```bash copy
+npm install @mastra/evals
+```
+
+> 完全なAPIドキュメントと設定オプションについては、[`createFaithfulnessScorer`](/reference/scorers/faithfulness)を参照してください。
+
+
+
+## 高い忠実性の例
+
+この例では、レスポンスがコンテキストと密接に一致しています。出力の各ステートメントは検証可能で、提供されたコンテキストエントリによってサポートされており、高いスコアを獲得しています。
+
+```typescript filename="src/example-high-faithfulness.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createFaithfulnessScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createFaithfulnessScorer({ model: openai("gpt-4o-mini"), options: {
+  context: [
+    "The Tesla Model 3 was launched in 2017.",
+    "It has a range of up to 358 miles.",
+    "The base model accelerates 0-60 mph in 5.8 seconds."
+  ]
+});
+
+const query = "Tell me about the Tesla Model 3.";
+const response = "The Tesla Model 3 was introduced in 2017. It can travel up to 358 miles on a single charge and the base version goes from 0 to 60 mph in 5.8 seconds.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+### 高い忠実性の出力
+
+出力は1のスコアを受け取ります。これは、提供する全ての情報がコンテキストに直接遡ることができるためです。欠落している事実や矛盾する事実はありません。
+
+```typescript
+{
+  score: 1,
+  reason: 'The score is 1 because all claims made in the output are supported by the provided context.'
+}
+```
+
+
+
+## 混合忠実性の例
+
+この例では、サポートされている主張とサポートされていない主張が混在しています。レスポンスの一部はコンテキストに裏付けられていますが、他の部分はソース資料にない新しい情報を導入しています。
+
+```typescript filename="src/example-mixed-faithfulness.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createFaithfulnessScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createFaithfulnessScorer({ model: openai("gpt-4o-mini"), options: {
+  context: [
+    "Python was created by Guido van Rossum.",
+    "The first version was released in 1991.",
+    "Python emphasizes code readability."
+  ]
+});
+
+const query = "What can you tell me about Python?";
+const response = "Python was created by Guido van Rossum and released in 1991. It is the most popular programming language today and is used by millions of developers worldwide.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+### 混合忠実性の出力
+
+レスポンスの一部のみが検証可能であるため、スコアは低くなります。一部の主張はコンテキストと一致しますが、他の主張は未確認または範囲外であり、全体的な忠実性が低下します。
+
+```typescript
+{
+  score: 0.5,
+  reason: "The score is 0.5 because while two claims are supported by the context (Python was created by Guido van Rossum and Python was released in 1991), the other two claims regarding Python's popularity and usage cannot be verified as they are not mentioned in the context."
+}
+```
+
+
+
+## 低い忠実性の例
+
+この例では、レスポンスがコンテキストと直接矛盾しています。どの主張もサポートされておらず、提供された事実と複数の点で対立しています。
+
+```typescript filename="src/example-low-faithfulness.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createFaithfulnessScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createFaithfulnessScorer({ model: openai("gpt-4o-mini"), options: {
+  context: [
+    "Mars is the fourth planet from the Sun.",
+    "It has a thin atmosphere of mostly carbon dioxide.",
+    "Two small moons orbit Mars: Phobos and Deimos."
+  ]
+});
+
+const query = "What do we know about Mars?";
+const response = "Mars is the third planet from the Sun. It has a thick atmosphere rich in oxygen and nitrogen, and is orbited by three large moons.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+### 低い忠実性の出力
+
+各主張は不正確であるか、コンテキストと対立しており、結果として0のスコアとなります。
+
+```typescript
+{
+  score: 0,
+  reason: "The score is 0 because all claims made in the output contradict the provided context. The output states that Mars is the third planet from the Sun, while the context clearly states it is the fourth. Additionally, it claims that Mars has a thick atmosphere rich in oxygen and nitrogen, contradicting the context's description of a thin atmosphere mostly composed of carbon dioxide. Finally, the output mentions that Mars is orbited by three large moons, while the context specifies that it has only two small moons, Phobos and Deimos. Therefore, there are no supported claims, leading to a score of 0."
+}
+```
+
+
+
+## configuration
+
+オプションパラメータを設定することで、`FaithfulnessScorer`がレスポンスをスコアリングする方法を調整できます。例えば、`scale`はスコアラーが返す最大可能スコアを設定します。
+
+```typescript showLineNumbers copy
+const scorer = createFaithfulnessScorer({ model: openai("gpt-4o-mini"), options: {
+  context: [""],
+  scale: 1
+});
+```
+> 設定オプションの完全なリストについては、[FaithfulnessScorer](/reference/scorers/faithfulness.mdx)を参照してください。
+
+
+
+## 結果の理解
+
+`.run()` は以下の形式で結果を返します：
+
+```typescript
+{
+  runId: string,
+  extractStepResult: string[],
+  extractPrompt: string,
+  analyzeStepResult: {
+    verdicts: Array<{ verdict: 'yes' | 'no' | 'unsure', reason: string }>
+  },
+  analyzePrompt: string,
+  score: number,
+  reason: string,
+  reasonPrompt: string
+}
+```
+
+### score
+0から1の間の忠実度スコア：
+
+- **1.0**: すべての主張が正確で、コンテキストによって直接サポートされています。
+- **0.7–0.9**: ほとんどの主張が正しく、軽微な追加や省略があります。
+- **0.4–0.6**: 一部の主張はサポートされていますが、他は検証できません。
+- **0.1–0.3**: コンテンツの大部分が不正確またはサポートされていません。
+- **0.0**: すべての主張が偽であるか、コンテキストと矛盾しています。
+
+### runId
+このスコアラー実行の一意の識別子。
+
+### extractStepResult
+出力から抽出された主張の配列。
+
+### extractPrompt
+抽出ステップでLLMに送信されたプロンプト。
+
+### analyzeStepResult
+各主張の判定を含むオブジェクト：
+- **verdicts**: 各主張に対する`verdict`（'yes'、'no'、または'unsure'）と`reason`を含むオブジェクトの配列。
+
+### analyzePrompt
+分析ステップでLLMに送信されたプロンプト。
+
+### reasonPrompt
+理由ステップでLLMに送信されたプロンプト。
+
+### reason
+どの主張がサポートされ、矛盾し、または不確実とマークされたかを含む、スコアの詳細な説明。
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/scorers/faithfulness"
+/>

@@ -1,0 +1,119 @@
+---
+title: "ワークフローを使った入力データマッピング | Mastra ドキュメント"
+description: "Mastraワークフローでより動的なデータフローを作成するためのワークフロー入力マッピングの使用方法を学びましょう。"
+---
+
+
+
+# 入力データマッピング
+
+入力データマッピングは、次のステップの入力に対する値の明示的なマッピングを可能にします。これらの値は、以下のような複数のソースから取得できます：
+
+- 前のステップの出力
+- ランタイムコンテキスト
+- 定数値
+- ワークフローの初期入力
+
+
+
+## `.map()`を使用したマッピング
+
+この例では、`step1`からの`output`が`step2`に必要な`inputSchema`に合うように変換されます。`step1`からの値は、`.map`関数の`inputData`パラメータを使用してアクセスできます。
+
+![Mapping with .map()](/image/workflows/workflows-data-mapping-map.jpg)
+
+```typescript {9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .map(async ({ inputData }) => {
+    const { value } = inputData;
+    return {
+      output: `new ${value}`
+    };
+  })
+  .then(step2)
+  .commit();
+```
+
+
+
+## `inputData`の使用
+
+`inputData`を使用して前のステップの完全な出力にアクセスします：
+
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
+  .map(({ inputData }) => {
+    console.log(inputData);
+  })
+```
+
+
+
+## `getStepResult()`の使用
+
+`getStepResult`を使用して、ステップのインスタンスを参照することで特定のステップの完全な出力にアクセスします：
+
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
+  .map(async ({ getStepResult }) => {
+    console.log(getStepResult(step1));
+  })
+```
+
+
+
+## `getInitData()`の使用
+
+`getInitData`を使用して、ワークフローに提供された初期入力データにアクセスします：
+
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
+  .map(async ({ getInitData }) => {
+      console.log(getInitData());
+  })
+```
+
+
+
+## `mapVariable()`の使用
+
+`mapVariable`を使用するには、workflowsモジュールから必要な関数をインポートします：
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { mapVariable } from "@mastra/core/workflows";
+```
+
+### `mapVariable()`を使用したステップの名前変更
+
+`.map()`でオブジェクト構文を使用してステップの出力の名前を変更できます。以下の例では、`step1`からの`value`出力が`details`に名前変更されています：
+
+```typescript {3-6} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
+  .map({
+    details: mapVariable({
+      step: step,
+      path: "value"
+    })
+  })
+```
+
+### `mapVariable()`を使用したワークフローの名前変更
+
+**参照合成**を使用してワークフローの出力の名前を変更できます。これは、ワークフローインスタンスを`initData`として渡すことを含みます。
+
+```typescript {6-9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+export const testWorkflow = createWorkflow({...});
+
+testWorkflow
+  .then(step1)
+  .map({
+    details: mapVariable({
+      initData: testWorkflow,
+      path: "value"
+    })
+  })
+```

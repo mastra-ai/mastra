@@ -1,0 +1,58 @@
+---
+title: 'mastra start'
+description: 'ビルド済みの Mastra アプリケーションを起動する'
+---
+
+
+
+# mastra start
+
+ビルド済みの Mastra アプリケーションを起動します。このコマンドは、本番モードでビルド済みの Mastra アプリケーションを実行するために使用します。
+テレメトリは既定で有効です。
+
+
+
+## 使い方
+`mastra build` でプロジェクトをビルドした後、以下を実行します:
+
+```bash
+mastra start [options]
+```
+
+
+
+## オプション
+
+| オプション | 説明 |
+|--------|-------------|
+| `-d, --dir <path>` | ビルド済みの Mastra の出力ディレクトリへのパス（既定: .mastra/output） |
+| `-e, --env <env>` | 起動時に読み込むカスタム env ファイル（既定: .env.production, .env） |
+| `-nt, --no-telemetry` | 起動時のテレメトリーを無効化 |
+
+
+
+## 例
+
+アプリケーションをデフォルト設定で起動する:
+
+```bash
+mastra start
+```
+
+カスタムの出力ディレクトリから起動する:
+
+```bash
+mastra start --dir ./my-output
+```
+
+カスタムの環境ファイルで起動する:
+
+```bash
+mastra start --env .env.staging
+```
+
+テレメトリーを無効化して起動する:
+
+```bash
+mastra start -nt
+```

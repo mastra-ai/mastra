@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-docs-server",
-  "version": "0.13.22-alpha.2",
+  "version": "0.13.22-alpha.5",
   "description": "MCP server for accessing Mastra.ai documentation, changelogs, and news.",
   "type": "module",
   "main": "dist/index.js",
@@ -38,7 +38,7 @@
     "date-fns": "^4.1.0",
     "exit-hook": "^4.0.0",
     "jsdom": "^26.1.0",
-    "turndown": "^7.2.0",
+    "turndown": "^7.2.1",
     "uuid": "^11.1.0",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.24.6"
@@ -53,7 +53,7 @@
     "@wong2/mcp-cli": "^1.10.0",
     "cross-env": "^7.0.3",
     "eslint": "^9.30.1",
-    "hono": "^4.9.6",
+    "hono": "^4.9.7",
     "tsup": "^8.5.0",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",

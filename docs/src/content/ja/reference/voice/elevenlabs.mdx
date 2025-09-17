@@ -3,9 +3,13 @@ title: "リファレンス: ElevenLabs Voice | Voice Providers | Mastra ドキ�
 description: "ElevenLabsの音声実装に関するドキュメント。複数の音声モデルと自然な音声合成による高品質なテキスト読み上げ機能を提供します。"
 ---
 
+
+
 # ElevenLabs
 
 MastraにおけるElevenLabsの音声実装は、ElevenLabs APIを利用して高品質なテキスト読み上げ（TTS）および音声認識（STT）機能を提供します。
+
+
 
 ## 使用例
 
@@ -30,6 +34,8 @@ const audioStream = await voice.speak("Hello, world!");
 // 利用可能なスピーカーを取得
 const speakers = await voice.getSpeakers();
 ```
+
+
 
 ## コンストラクタのパラメーター
 
@@ -72,6 +78,8 @@ const speakers = await voice.getSpeakers();
     },
   ]}
 />
+
+
 
 ## メソッド
 
@@ -172,8 +180,7 @@ options オブジェクトは以下のプロパティをサポートします:
     {
       name: "tag_audio_events",
       type: "boolean",
-      description:
-        "[MUSIC]、[LAUGHTER] などの音声イベントをタグ付けするかどうか",
+      description: "[MUSIC]、[LAUGHTER] などの音声イベントをタグ付けするかどうか",
       isOptional: true,
     },
     {
@@ -210,6 +217,8 @@ options オブジェクトは以下のプロパティをサポートします:
 />
 
 戻り値: `Promise<string>` - 書き起こされたテキストを解決する Promise
+
+
 
 ## 重要な注意事項
 

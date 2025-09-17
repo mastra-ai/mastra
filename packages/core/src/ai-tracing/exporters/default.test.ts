@@ -599,6 +599,165 @@ describe('DefaultExporter', () => {
       });
     });
 
+    describe('Memory management', () => {
+      it('should clean up completed spans from allCreatedSpans after successful flush', async () => {
+        const exporter = new DefaultExporter(
+          {
+            strategy: 'batch-with-updates',
+            maxBatchWaitMs: 100,
+            maxBatchSize: 10,
+          },
+          mockLogger,
+        );
+        exporter.__registerMastra(mockMastra);
+        exporter.init();
+
+        // Send span start and end events
+        const span1Start = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
+        const span1End = createMockEvent(AITracingEventType.SPAN_ENDED, 'trace-1', 'span-1');
+        const span2Start = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-2');
+
+        await exporter.exportEvent(span1Start);
+        await exporter.exportEvent(span1End);
+        await exporter.exportEvent(span2Start);
+
+        // Check that spans are tracked in allCreatedSpans
+        expect((exporter as any).allCreatedSpans.has('trace-1:span-1')).toBe(true);
+        expect((exporter as any).allCreatedSpans.has('trace-1:span-2')).toBe(true);
+
+        // Manually flush - span-1 is completed, span-2 is not
+        await (exporter as any).flush();
+
+        // After flush, completed span-1 should be cleaned up, but span-2 should remain
+        expect((exporter as any).allCreatedSpans.has('trace-1:span-1')).toBe(false);
+        expect((exporter as any).allCreatedSpans.has('trace-1:span-2')).toBe(true);
+
+        // Now complete span-2
+        const span2End = createMockEvent(AITracingEventType.SPAN_ENDED, 'trace-1', 'span-2');
+        await exporter.exportEvent(span2End);
+
+        // Flush again
+        await (exporter as any).flush();
+
+        // Now span-2 should also be cleaned up
+        expect((exporter as any).allCreatedSpans.has('trace-1:span-2')).toBe(false);
+
+        // allCreatedSpans should be empty
+        expect((exporter as any).allCreatedSpans.size).toBe(0);
+
+        await exporter.shutdown();
+      });
+    });
+
+    describe('Out-of-order span handling with delayed ends', () => {
+      it('should handle spans that end after buffer has been flushed', async () => {
+        const exporter = new DefaultExporter(
+          {
+            strategy: 'batch-with-updates',
+            maxBatchWaitMs: 100, // Short wait time for faster test
+            maxBatchSize: 10, // High enough to not trigger size-based flush
+          },
+          mockLogger,
+        );
+        exporter.__registerMastra(mockMastra);
+        exporter.init();
+
+        // Simulate workflow with nested spans like the example
+        const workflowStartEvent = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'workflow-1');
+        const step1StartEvent = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'step-1');
+
+        // Send start events
+        await exporter.exportEvent(workflowStartEvent);
+        await exporter.exportEvent(step1StartEvent);
+
+        // Manually execute the flush timer
+        const flushTimer = timers.find(t => t.delay === 100);
+        expect(flushTimer).toBeDefined();
+
+        // Execute the flush
+        await flushTimer.fn();
+
+        // Verify the creates were flushed
+        expect(mockStorage.batchCreateAISpans).toHaveBeenCalledWith({
+          records: expect.arrayContaining([
+            expect.objectContaining({ spanId: 'workflow-1' }),
+            expect.objectContaining({ spanId: 'step-1' }),
+          ]),
+        });
+
+        // Clear the mock calls to make assertions clearer
+        mockStorage.batchCreateAISpans.mockClear();
+        mockStorage.batchUpdateAISpans.mockClear();
+        mockLogger.warn.mockClear();
+
+        // Now send update and end events after the buffer has been cleared
+        const step1UpdateEvent = createMockEvent(AITracingEventType.SPAN_UPDATED, 'trace-1', 'step-1');
+        const step1EndEvent = createMockEvent(AITracingEventType.SPAN_ENDED, 'trace-1', 'step-1');
+        const step2StartEvent = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'step-2');
+
+        await exporter.exportEvent(step1UpdateEvent);
+        await exporter.exportEvent(step1EndEvent);
+        await exporter.exportEvent(step2StartEvent);
+
+        // Execute any new flush timer
+        const newFlushTimer = timers.find(t => t.delay === 100 && t.fn !== flushTimer.fn);
+        if (newFlushTimer) {
+          await newFlushTimer.fn();
+        }
+
+        // Now send more update and end events
+        const step2EndEvent = createMockEvent(AITracingEventType.SPAN_ENDED, 'trace-1', 'step-2');
+        const workflowUpdateEvent = createMockEvent(AITracingEventType.SPAN_UPDATED, 'trace-1', 'workflow-1');
+        const workflowEndEvent = createMockEvent(AITracingEventType.SPAN_ENDED, 'trace-1', 'workflow-1');
+
+        await exporter.exportEvent(step2EndEvent);
+        await exporter.exportEvent(workflowUpdateEvent);
+        await exporter.exportEvent(workflowEndEvent);
+
+        // Flush any remaining events
+        await (exporter as any).flush();
+
+        // We should NOT have any errors or warnings logged
+        expect(mockLogger.warn).not.toHaveBeenCalled();
+        expect(mockLogger.error).not.toHaveBeenCalled();
+
+        // All update and end events should be properly stored
+        expect(mockStorage.batchUpdateAISpans).toHaveBeenCalled();
+        const updateCalls = mockStorage.batchUpdateAISpans.mock.calls;
+        const allUpdates = updateCalls.flatMap((call: any) => call[0].records);
+
+        // Find all updates for each span (there can be multiple per span)
+        const step1Updates = allUpdates.filter((u: any) => u.spanId === 'step-1');
+        const workflowUpdates = allUpdates.filter((u: any) => u.spanId === 'workflow-1');
+        const step2Updates = allUpdates.filter((u: any) => u.spanId === 'step-2');
+
+        // Verify step-1 has both an update and an end event
+        expect(step1Updates.length).toBe(2); // One SPAN_UPDATED, one SPAN_ENDED
+        const step1EndUpdate = step1Updates.find((u: any) => u.updates.endedAt);
+        expect(step1EndUpdate).toBeDefined();
+        expect(step1EndUpdate.updates.endedAt).toBeInstanceOf(Date);
+
+        // Verify workflow has both an update and an end event
+        expect(workflowUpdates.length).toBe(2); // One SPAN_UPDATED, one SPAN_ENDED
+        const workflowEndUpdate = workflowUpdates.find((u: any) => u.updates.endedAt);
+        expect(workflowEndUpdate).toBeDefined();
+        expect(workflowEndUpdate.updates.endedAt).toBeInstanceOf(Date);
+
+        // Verify step-2 has an end event
+        expect(step2Updates.length).toBe(1); // Only SPAN_ENDED (no update sent)
+        expect(step2Updates[0].updates.endedAt).toBeInstanceOf(Date);
+
+        // Verify sequence numbers are correct (updates should be in order)
+        expect(step1Updates[0].sequenceNumber).toBe(1);
+        expect(step1Updates[1].sequenceNumber).toBe(2);
+        expect(workflowUpdates[0].sequenceNumber).toBe(1);
+        expect(workflowUpdates[1].sequenceNumber).toBe(2);
+
+        // Clean up any remaining timers
+        await exporter.shutdown();
+      });
+    });
+
     function createMockEvent(
       type: AITracingEventType,
       traceId = 'trace-1',

@@ -1,5 +1,36 @@
 # @mastra/inngest
 
+## 0.14.0-alpha.2
+
+### Minor Changes
+
+- Fully deprecated createRun (now throws an error) in favour of createRunAsync ([#7897](https://github.com/mastra-ai/mastra/pull/7897))
+
+### Patch Changes
+
+- refactored handling of internal ai spans to be more intelligent ([#7876](https://github.com/mastra-ai/mastra/pull/7876))
+
+- feat(inngest): add support for user-supplied functions in `serve` / `inngestServe` ([#7900](https://github.com/mastra-ai/mastra/pull/7900))
+
+- Updated dependencies [[`fb84c21`](https://github.com/mastra-ai/mastra/commit/fb84c21859d09bdc8f158bd5412bdc4b5835a61c), [`9d4fc09`](https://github.com/mastra-ai/mastra/commit/9d4fc09b2ad55caa7738c7ceb3a905e454f74cdd), [`d75ccf0`](https://github.com/mastra-ai/mastra/commit/d75ccf06dfd2582b916aa12624e3cd61b279edf1), [`0fed8f2`](https://github.com/mastra-ai/mastra/commit/0fed8f2aa84b167b3415ea6f8f70755775132c8d), [`87fd07f`](https://github.com/mastra-ai/mastra/commit/87fd07ff35387a38728967163460231b5d33ae3b)]:
+  - @mastra/core@0.17.0-alpha.4
+
+## 0.13.3-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#7865](https://github.com/mastra-ai/mastra/pull/7865))
+  - Updated dependency [`inngest@^3.40.3` ↗︎](https://www.npmjs.com/package/inngest/v/3.40.3) (from `^3.40.2`, in `dependencies`)
+
+- Update peerdep of @mastra/core ([#7619](https://github.com/mastra-ai/mastra/pull/7619))
+
+- fix(workflows/inngest): handle Date serialization in sleepUntil execution ([#7863](https://github.com/mastra-ai/mastra/pull/7863))
+
+- add resourceId support to inngest workflow execution engine for workflow snapshot persistance ([#7792](https://github.com/mastra-ai/mastra/pull/7792))
+
+- Updated dependencies [[`a1bb887`](https://github.com/mastra-ai/mastra/commit/a1bb887e8bfae44230f487648da72e96ef824561), [`a0f5f1c`](https://github.com/mastra-ai/mastra/commit/a0f5f1ca39c3c5c6d26202e9fcab986b4fe14568), [`b356f5f`](https://github.com/mastra-ai/mastra/commit/b356f5f7566cb3edb755d91f00b72fc1420b2a37), [`f5ce05f`](https://github.com/mastra-ai/mastra/commit/f5ce05f831d42c69559bf4c0fdb46ccb920fc3a3), [`9f6f30f`](https://github.com/mastra-ai/mastra/commit/9f6f30f04ec6648bbca798ea8aad59317c40d8db), [`d706fad`](https://github.com/mastra-ai/mastra/commit/d706fad6e6e4b72357b18d229ba38e6c913c0e70), [`5c3768f`](https://github.com/mastra-ai/mastra/commit/5c3768fa959454232ad76715c381f4aac00c6881), [`8a3f5e4`](https://github.com/mastra-ai/mastra/commit/8a3f5e4212ec36b302957deb4bd47005ab598382)]:
+  - @mastra/core@0.17.0-alpha.3
+
 ## 0.13.3-alpha.0
 
 ### Patch Changes

@@ -1,5 +1,66 @@
 # @mastra/core
 
+## 0.17.0-alpha.5
+
+### Patch Changes
+
+- Only log stream/generate deprecation warning once ([#7905](https://github.com/mastra-ai/mastra/pull/7905))
+
+## 0.17.0-alpha.4
+
+### Minor Changes
+
+- Fully deprecated createRun (now throws an error) in favour of createRunAsync ([#7897](https://github.com/mastra-ai/mastra/pull/7897))
+
+### Patch Changes
+
+- Update dependencies ai-v5 and @ai-sdk/provider-utils-v5 to latest ([#7884](https://github.com/mastra-ai/mastra/pull/7884))
+
+- refactored handling of internal ai spans to be more intelligent ([#7876](https://github.com/mastra-ai/mastra/pull/7876))
+
+- prevent out-of-order span errors in ai-tracing DefaultExporter ([#7895](https://github.com/mastra-ai/mastra/pull/7895))
+
+- Fixes multiple issues with stopWhen and step results. ([#7862](https://github.com/mastra-ai/mastra/pull/7862))
+
+## 0.17.0-alpha.3
+
+### Minor Changes
+
+- Improved workspace dependency resolution during development and builds. This makes the build process more reliable when working with monorepos and workspace packages, reducing potential bundling errors and improving development experience. ([#7619](https://github.com/mastra-ai/mastra/pull/7619))
+
+### Patch Changes
+
+- Updated SensitiveDataFilter to be less greedy in its redacting ([#7840](https://github.com/mastra-ai/mastra/pull/7840))
+
+- Add support for running the Mastra dev server over HTTPS for local development. ([#7871](https://github.com/mastra-ai/mastra/pull/7871))
+  - Add `--https` flag for `mastra dev`. This automatically creates a local key and certificate for you.
+  - Alternatively, you can provide your own key and cert through `server.https`:
+
+    ```ts
+    // src/mastra/index.ts
+    import { Mastra } from '@mastra/core/mastra';
+    import fs from 'node:fs';
+
+    export const mastra = new Mastra({
+      server: {
+        https: {
+          key: fs.readFileSync('path/to/key.pem'),
+          cert: fs.readFileSync('path/to/cert.pem'),
+        },
+      },
+    });
+    ```
+
+- avoid refetching on error when resolving a workflow in cloud ([#7842](https://github.com/mastra-ai/mastra/pull/7842))
+
+- fix(core): handle JSON code blocks in structured output streaming ([#7864](https://github.com/mastra-ai/mastra/pull/7864))
+
+- Add model fallbacks ([#7126](https://github.com/mastra-ai/mastra/pull/7126))
+
+- fix workflows runs fetching and displaying ([#7852](https://github.com/mastra-ai/mastra/pull/7852))
+
+- fix empty state for scorers on agent page ([#7846](https://github.com/mastra-ai/mastra/pull/7846))
+
 ## 0.16.4-alpha.2
 
 ### Patch Changes
