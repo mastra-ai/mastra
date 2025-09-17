@@ -163,7 +163,7 @@ describe('processMastraStream', () => {
     // Split the SSE message across multiple chunks
     const chunks = [
       'data: {"type":"message","runId":"run-123"',
-      ',"from":"agent","payload":{"text":"complete message"}}\n\n',
+      ',"from":"AGENT","payload":{"text":"complete message"}}\n\n',
     ];
 
     const stream = createChunkedMockStream(chunks);
