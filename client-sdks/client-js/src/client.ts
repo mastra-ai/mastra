@@ -123,8 +123,18 @@ export class MastraClient extends BaseResource {
     return new MemoryThread(this.options, threadId, agentId);
   }
 
-  public getThreadMessages(threadId: string, agentId: string): Promise<GetMemoryThreadMessagesResponse> {
-    return this.request(`/api/memory/threads/${threadId}/messages?agentId=${agentId}`);
+  public getThreadMessages(
+    threadId: string,
+    opts: { agentId?: string; networkId?: string } = {},
+  ): Promise<GetMemoryThreadMessagesResponse> {
+    const searchParams = new URLSearchParams();
+    if (opts.agentId) {
+      searchParams.set('agentId', opts.agentId);
+    }
+    if (opts.networkId) {
+      searchParams.set('networkId', opts.networkId);
+    }
+    return this.request(`/api/memory/threads/${threadId}/messages?${searchParams.toString()}`);
   }
 
   /**

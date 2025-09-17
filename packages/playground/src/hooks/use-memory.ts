@@ -58,7 +58,7 @@ export const useMessages = ({ threadId, memory, agentId }: { threadId: string; m
 
   return useQuery({
     queryKey: ['memory', 'messages', threadId, agentId],
-    queryFn: () => (memory ? client.getThreadMessages(threadId, agentId) : null),
+    queryFn: () => (memory ? client.getThreadMessages(threadId, { agentId }) : null),
     enabled: Boolean(memory),
     staleTime: 0,
     gcTime: 0,
