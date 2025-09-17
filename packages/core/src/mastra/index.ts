@@ -14,6 +14,7 @@ import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';
 import type { NewAgentNetwork } from '../network/vNext';
+import { processTraceScoringWorkflow } from '../scores';
 import type { MastraScorer } from '../scores';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
@@ -121,6 +122,7 @@ export class Mastra<
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
+  #intenalMastraWorkflows: Record<string, Workflow> = {};
 
   /**
    * @deprecated use getTelemetry() instead
@@ -491,6 +493,24 @@ do:
       });
     }
 
+    // These workflows are used internally by Mastra and are not part of the user's workflows
+    const internalWorkflows = {
+      processTraceScoringWorkflow,
+    };
+    Object.entries(internalWorkflows).forEach(([key, workflow]) => {
+      workflow.__registerMastra(this);
+      workflow.__registerPrimitives({
+        logger: this.getLogger(),
+        telemetry: this.#telemetry,
+        storage: this.storage,
+        memory: this.memory,
+        agents: agents,
+        tts: this.#tts,
+        vectors: this.#vectors,
+      });
+      this.#intenalMastraWorkflows[key] = workflow;
+    });
+
     if (config?.server) {
       this.#server = config.server;
     }
@@ -681,6 +701,25 @@ do:
 
     if (serialized) {
       return { name: workflow.name } as TWorkflows[TWorkflowId];
+    }
+
+    return workflow;
+  }
+
+  __getInternalWorkflow(id: string): Workflow {
+    const workflow = Object.values(this.#intenalMastraWorkflows).find(a => a.id === id);
+    if (!workflow) {
+      throw new MastraError({
+        id: 'MASTRA_GET_INTERNAL_WORKFLOW_BY_ID_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.SYSTEM,
+        text: `Workflow with id ${String(id)} not found`,
+        details: {
+          status: 404,
+          workflowId: String(id),
+          workflows: Object.keys(this.#intenalMastraWorkflows ?? {}).join(', '),
+        },
+      });
     }
 
     return workflow;

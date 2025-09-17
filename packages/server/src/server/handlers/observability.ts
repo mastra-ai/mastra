@@ -125,17 +125,8 @@ export async function scoreTracesHandler({ mastra, body }: ScoreTracesContext) {
     }
 
     const logger = mastra.getLogger();
-
-    // const processTrace = createStep({
-    // })
-
-    // createWorkflow({
-    //   id: 'process-trace-scoring',
-    // })
-
-    // Fire-and-forget: start processing in background
     processTraceScoring({
-      scorer,
+      scorerName,
       targets,
       mastra,
     }).catch(error => {
