@@ -1,5 +1,15 @@
 # mastra
 
+## 0.13.0-alpha.3
+
+### Patch Changes
+
+- update playground workflows to use createRunAsync instead of createRun ([#7903](https://github.com/mastra-ai/mastra/pull/7903))
+
+- Updated dependencies [[`6047778`](https://github.com/mastra-ai/mastra/commit/6047778e501df460648f31decddf8e443f36e373)]:
+  - @mastra/core@0.17.0-alpha.5
+  - @mastra/deployer@0.17.0-alpha.5
+
 ## 0.13.0-alpha.2
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.17.0-alpha.5
+
+### Patch Changes
+
+- Only log stream/generate deprecation warning once ([#7905](https://github.com/mastra-ai/mastra/pull/7905))
+
 ## 0.17.0-alpha.4
 
 ### Minor Changes
