@@ -5,9 +5,13 @@ description: "音声プロバイダーで利用可能なgetSpeakers()メソッ�
 
 import { Tabs } from "nextra/components";
 
+
+
 # voice.getSpeakers()
 
 `getSpeakers()` メソッドは、音声プロバイダーから利用可能な音声オプション（スピーカー）のリストを取得します。これにより、アプリケーションはユーザーに音声の選択肢を提示したり、異なるコンテキストに最も適した音声をプログラムで選択したりすることができます。
+
+
 
 ## 使用例
 
@@ -37,9 +41,13 @@ await openaiVoice.speak(text, { speaker: openaiSpeakers[2].voiceId });
 await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
 ```
 
+
+
 ## パラメータ
 
 このメソッドはパラメータを受け付けません。
+
+
 
 ## 戻り値
 
@@ -54,9 +62,21 @@ await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
   ]}
 />
 
+
+
 ## プロバイダー固有のメタデータ
 
 異なる音声プロバイダーは、それぞれの音声に対して異なるメタデータを返します：
+
+{/*
+LLM CONTEXT: This Tabs component shows the different metadata structures returned by various voice providers' getSpeakers() method.
+Each tab displays the specific properties and data types returned by that voice provider when listing available speakers/voices.
+The tabs help users understand what information is available for each provider and how to access voice-specific metadata.
+Each tab includes property tables showing voiceId and provider-specific metadata like name, language, gender, accent, etc.
+The providers include OpenAI, OpenAI Realtime, Deepgram, ElevenLabs, Google, Murf, PlayAI, Sarvam, Speechify, and Azure.
+*/}
+
+
 
 <Tabs items={["OpenAI", "OpenAI Realtime", "Deepgram", "ElevenLabs", "Google", "Murf", "PlayAI", "Sarvam", "Speechify", "Azure"]}>
   <Tabs.Tab label="OpenAI">
@@ -71,183 +91,187 @@ await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
     />
   </Tabs.Tab>
 
-<Tabs.Tab label="OpenAI Realtime">
-  <PropertiesTable
-    content={[
-      {
-        name: "voiceId",
-        type: "string",
-        description:
-          "音声の一意識別子（例：'alloy'、'echo'、'fable'、'onyx'、'nova'、'shimmer'）",
-      },
-    ]}
-  />
-</Tabs.Tab>
+  <Tabs.Tab label="OpenAI Realtime">
+    <PropertiesTable
+      content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description:
+        "音声の一意識別子（例：'alloy'、'echo'、'fable'、'onyx'、'nova'、'shimmer'）",
+    },
+  ]}
+    />
+  </Tabs.Tab>
 
-<Tabs.Tab label="Deepgram">
-  <PropertiesTable
-    content={[
-      {
-        name: "voiceId",
-        type: "string",
-        description: "音声の一意識別子",
-      },
-      {
-        name: "language",
-        type: "string",
-        description: "音声IDに埋め込まれた言語コード（例：'en'）",
-      },
-    ]}
-  />
-</Tabs.Tab>
+  <Tabs.Tab label="Deepgram">
+    <PropertiesTable
+      content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "音声の一意識別子",
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "音声IDに埋め込まれた言語コード（例：'en'）",
+    },
+  ]}
+    />
+  </Tabs.Tab>
 
-<Tabs.Tab label="ElevenLabs">
-  <PropertiesTable
-    content={[
-      {
-        name: "voiceId",
-        type: "string",
-        description: "音声の一意識別子",
-      },
-      {
-        name: "name",
-        type: "string",
-        description: "音声の人間が読める名前",
-      },
-      {
-        name: "category",
-        type: "string",
-        description: "音声のカテゴリ（例：'premade'、'cloned'）",
-      },
-    ]}
-  />
-</Tabs.Tab>
+  <Tabs.Tab label="ElevenLabs">
+    <PropertiesTable
+      content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "音声の一意識別子",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "音声の人間が読める名前",
+    },
+    {
+      name: "category",
+      type: "string",
+      description: "音声のカテゴリ（例：'premade'、'cloned'）",
+    },
+  ]}
+    />
+  </Tabs.Tab>
 
-<Tabs.Tab label="Google">
-  <PropertiesTable
-    content={[
-      {
-        name: "voiceId",
-        type: "string",
-        description: "音声の一意識別子",
-      },
-      {
-        name: "languageCodes",
-        type: "string[]",
-        description: "音声がサポートする言語コードの配列（例：['en-US']）",
-      },
-    ]}
-  />
-</Tabs.Tab>
+  <Tabs.Tab label="Google">
+    <PropertiesTable
+      content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "音声の一意識別子",
+    },
+    {
+      name: "languageCodes",
+      type: "string[]",
+      description:
+        "音声がサポートする言語コードの配列（例：['en-US']）",
+    },
+  ]}
+    />
+  </Tabs.Tab>
 
-<Tabs.Tab label="Azure">
-  <PropertiesTable
-    content={[
-      {
-        name: "voiceId",
-        type: "string",
-        description: "音声の一意識別子",
-      },
-      {
-        name: "language",
-        type: "string",
-        description: "音声IDから抽出された言語コード（例：'en'）",
-      },
-      {
-        name: "region",
-        type: "string",
-        description: "音声IDから抽出された地域コード（例：'US'）",
-      },
-    ]}
-  />
-</Tabs.Tab>
+  <Tabs.Tab label="Azure">
+    <PropertiesTable
+      content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "音声の一意識別子",
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "音声IDから抽出された言語コード（例：'en'）",
+    },
+    {
+      name: "region",
+      type: "string",
+      description: "音声IDから抽出された地域コード（例：'US'）",
+    },
+  ]}
+    />
+  </Tabs.Tab>
 
-<Tabs.Tab label="Murf">
-  <PropertiesTable
-    content={[
-      {
-        name: "voiceId",
-        type: "string",
-        description: "音声の一意識別子",
-      },
-      {
-        name: "name",
-        type: "string",
-        description: "音声の名前（voiceIdと同じ）",
-      },
-      {
-        name: "language",
-        type: "string",
-        description: "音声IDから抽出された言語コード（例：'en'）",
-      },
-      {
-        name: "gender",
-        type: "string",
-        description: "音声の性別（現在の実装では常に'neutral'）",
-      },
-    ]}
-  />
-</Tabs.Tab>
+  <Tabs.Tab label="Murf">
+    <PropertiesTable
+      content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "音声の一意識別子",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "音声の名前（voiceIdと同じ）",
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "音声IDから抽出された言語コード（例：'en'）",
+    },
+    {
+      name: "gender",
+      type: "string",
+      description:
+        "音声の性別（現在の実装では常に'neutral'）",
+    },
+  ]}
+    />
+  </Tabs.Tab>
 
-<Tabs.Tab label="PlayAI">
-  <PropertiesTable
-    content={[
-      {
-        name: "voiceId",
-        type: "string",
-        description: "音声の一意識別子（manifest.jsonへのS3 URL）",
-      },
-      {
-        name: "name",
-        type: "string",
-        description: "音声の人間が読める名前（例：'Angelo'、'Arsenio'）",
-      },
-      {
-        name: "accent",
-        type: "string",
-        description:
-          "音声のアクセント（例：'US'、'Irish'、'US African American'）",
-      },
-      {
-        name: "gender",
-        type: "string",
-        description: "音声の性別（'M'または'F'）",
-      },
-      {
-        name: "age",
-        type: "string",
-        description: "音声の年齢カテゴリ（例：'Young'、'Middle'）",
-      },
-      {
-        name: "style",
-        type: "string",
-        description: "音声の話し方のスタイル（例：'Conversational'）",
-      },
-    ]}
-  />
-</Tabs.Tab>
+  <Tabs.Tab label="PlayAI">
+    <PropertiesTable
+      content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description:
+        "音声の一意識別子（manifest.jsonへのS3 URL）",
+    },
+    {
+      name: "name",
+      type: "string",
+      description:
+        "音声の人間が読める名前（例：'Angelo'、'Arsenio'）",
+    },
+    {
+      name: "accent",
+      type: "string",
+      description:
+        "音声のアクセント（例：'US'、'Irish'、'US African American'）",
+    },
+    {
+      name: "gender",
+      type: "string",
+      description: "音声の性別（'M'または'F'）",
+    },
+    {
+      name: "age",
+      type: "string",
+      description: "音声の年齢カテゴリ（例：'Young'、'Middle'）",
+    },
+    {
+      name: "style",
+      type: "string",
+      description: "音声の話し方のスタイル（例：'Conversational'）",
+    },
+  ]}
+    />
+  </Tabs.Tab>
 
-<Tabs.Tab label="Speechify">
-  <PropertiesTable
-    content={[
-      {
-        name: "voiceId",
-        type: "string",
-        description: "音声の一意識別子",
-      },
-      {
-        name: "name",
-        type: "string",
-        description: "音声の人間が読める名前",
-      },
-      {
-        name: "language",
-        type: "string",
-        description: "音声の言語コード（例：'en-US'）",
-      },
-    ]}
-  />
-</Tabs.Tab>
+  <Tabs.Tab label="Speechify">
+    <PropertiesTable
+      content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "音声の一意識別子",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "音声の人間が読める名前",
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "音声の言語コード（例：'en-US'）",
+    },
+  ]}
+    />
+  </Tabs.Tab>
 
   <Tabs.Tab label="Sarvam">
     <PropertiesTable
@@ -276,6 +300,13 @@ await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
     />
   </Tabs.Tab>
 </Tabs>
+
+
+
+
+
+
+
 
 ## 注意事項
 

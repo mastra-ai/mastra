@@ -54,7 +54,7 @@ describe('changesTool', () => {
       expect(versionMatches.length).toBeGreaterThan(1); // Should have multiple versions
 
       // Extract version numbers and compare
-      const versions = versionMatches.map(v => v.match(/\d+\.\d+\.\d+/)?.[0] || '');
+      const versions = versionMatches.map((v: string) => v.match(/\d+\.\d+\.\d+/)?.[0] || '');
       const sortedVersions = [...versions].sort((a, b) => {
         const [aMajor, aMinor, aPatch] = a.split('.').map(Number);
         const [bMajor, bMinor, bPatch] = b.split('.').map(Number);
@@ -72,7 +72,7 @@ describe('changesTool', () => {
 
       // Each version should have some content
       const sections = result.split(/##\s+v?\d+\.\d+\.\d+/);
-      sections.slice(1).forEach(section => {
+      sections.slice(1).forEach((section: string) => {
         expect(section.trim()).not.toBe('');
       });
     });
@@ -94,7 +94,7 @@ describe('changesTool', () => {
       expect(result).toMatch(/^#\s+@mastra\/core/m); // Package header
       expect(result).toMatch(/^##\s+\d+\.\d+\.\d+/m); // Version headers
       expect(result).toMatch(/^###\s+[A-Za-z\s]+/m); // Change type headers
-      expect(result).toMatch(/^-\s+[a-f0-9]+:/m); // List items with commit hashes
+      expect(result).toMatch(/^-\s+.+/m); // List items (may have PR links or descriptions)
     });
 
     it('should handle alpha and beta versions correctly', async () => {
@@ -110,17 +110,18 @@ describe('changesTool', () => {
 
       // Split into version sections
       const sections = result.split(/##\s+v?\d+\.\d+\.\d+\n/);
-      sections.slice(1).forEach(section => {
+      sections.slice(1).forEach((section: string) => {
         if (!section.includes('more lines hidden')) {
           // Each section should have at least one category and entry
           expect(section).toMatch(/###\s+.+/); // Category header
           expect(section).toMatch(/- .+/); // Entry
 
           // Entries should be properly formatted
-          const entries = section.match(/^- .+/g) || [];
-          entries.forEach(entry => {
+          const entries = section.match(/^- .+/gm) || [];
+          entries.forEach((entry: string) => {
             // Skip the truncation message if it exists
-            expect(entry).toMatch(/- [a-f0-9]+: .+/i); // Should match commit hash format
+            // Entries should start with a dash and have content (PR links or descriptions)
+            expect(entry).toMatch(/^- .+/);
           });
         }
       });

@@ -1,0 +1,122 @@
+---
+title: "リファレンス: Workflow.if() | 条件分岐 | Mastra ドキュメント"
+description: "Mastra ワークフローにおける `.if()` メソッドのドキュメント。指定した条件に基づいて条件分岐を作成します。"
+---
+
+
+
+# Workflow.if()
+
+> 実験的
+
+`.if()` メソッドはワークフロー内で条件分岐を作成し、指定した条件が真の場合にのみステップを実行できるようにします。これにより、前のステップの結果に基づいて動的なワークフローパスを実現できます。
+
+
+
+## 使用方法
+
+```typescript copy showLineNumbers
+workflow
+  .step(startStep)
+  .if(async ({ context }) => {
+    const value = context.getStepResult<{ value: number }>("start")?.value;
+    return value < 10; // If true, execute the "if" branch
+  })
+  .then(ifBranchStep)
+  .else()
+  .then(elseBranchStep)
+  .commit();
+```
+
+
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "condition",
+      type: "Function | ReferenceCondition",
+      description:
+        "「if」ブランチを実行するかどうかを判定する関数または参照条件",
+      isOptional: false,
+    },
+  ]}
+/>
+
+
+
+## 条件タイプ
+
+### 関数条件
+
+真偽値を返す関数を使用できます：
+
+```typescript
+workflow
+  .step(startStep)
+  .if(async ({ context }) => {
+    const result = context.getStepResult<{ status: string }>("start");
+    return result?.status === "success"; // statusが"success"のときに"if"ブランチを実行
+  })
+  .then(successStep)
+  .else()
+  .then(failureStep);
+```
+
+### 参照条件
+
+比較演算子を使った参照ベースの条件を使用できます：
+
+```typescript
+workflow
+  .step(startStep)
+  .if({
+    ref: { step: startStep, path: "value" },
+    query: { $lt: 10 }, // valueが10未満のときに"if"ブランチを実行
+  })
+  .then(ifBranchStep)
+  .else()
+  .then(elseBranchStep);
+```
+
+
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "LegacyWorkflow",
+      description: "メソッドチェーン用のワークフローインスタンス",
+    },
+  ]}
+/>
+
+
+
+## エラー処理
+
+`if` メソッドは、前のステップが定義されている必要があります。前のステップなしで使用しようとすると、エラーが発生します。
+
+```typescript
+try {
+  // This will throw an error
+  workflow
+    .if(async ({ context }) => true)
+    .then(someStep)
+    .commit();
+} catch (error) {
+  console.error(error); // "Condition requires a step to be executed after"
+}
+```
+
+
+
+## 関連
+
+- [else リファレンス](./else.mdx)
+- [then リファレンス](./then.mdx)
+- [制御フローガイド](../../docs/workflows-legacy/control-flow.mdx)
+- [ステップ条件リファレンス](./step-condition.mdx)

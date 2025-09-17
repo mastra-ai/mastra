@@ -1,0 +1,76 @@
+---
+title: "テンプレート | はじめに | Mastra Docs"
+description: 一般的なMastraのユースケースやパターンを示す、あらかじめ構築されたプロジェクト構成
+---
+
+import { Callout } from "nextra/components";
+import { Tabs, Tab } from "@/components/tabs";
+
+
+
+# テンプレート
+
+テンプレートは、特定のユースケースやパターンを示す、あらかじめ用意された Mastra のプロジェクトです。利用可能なテンプレートは[templates ディレクトリ](https://mastra.ai/templates)で確認できます。
+
+
+
+## テンプレートの使用
+
+`create-mastra` コマンドでテンプレートをインストールします:
+
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+  <Tab>
+    ```bash copy
+    npx create-mastra@latest --template template-name
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    yarn dlx create-mastra@latest --template template-name
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    pnpm create mastra@latest --template template-name
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    bun create mastra@latest --template template-name
+    ```
+  </Tab>
+</Tabs>
+
+例えば、text-to-SQL アプリを作成する場合:
+
+```bash copy
+npx create-mastra@latest --template text-to-sql
+```
+
+
+
+## テンプレートのセットアップ
+
+インストール後:
+
+1. **プロジェクトに移動**:
+   ```bash copy
+   cd your-project-name
+   ```
+
+2. **環境変数を設定**:
+   ```bash copy
+   cp .env.example .env
+   ```
+   テンプレートの README に従って、API キーを `.env` に設定してください。
+
+3. **開発を開始**:
+   ```bash copy
+   npm run dev
+   ```
+
+<Callout type="info">
+  各テンプレートには、具体的なセットアップ手順と使用例を網羅した README が含まれています。
+</Callout>
+
+テンプレートの作成に関する詳細は、[Templates Reference](/reference/templates) を参照してください。

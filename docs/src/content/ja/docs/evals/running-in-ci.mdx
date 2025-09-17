@@ -1,11 +1,19 @@
 ---
 title: "CIでの実行"
-description: "時間の経過とともにエージェントの品質を監視するために、CI/CDパイプラインでMastraの評価を実行する方法を学びましょう。"
+description: "CI/CDパイプラインでMastra evalsを実行し、エージェントの品質を継続的に監視する方法を学びます。"
 ---
 
-# CIでのEvalsの実行
+import { ScorerCallout } from '@/components/scorer-callout'
 
-CIパイプラインでevalsを実行することで、時間の経過とともにエージェントの品質を測定するための定量的な指標を提供し、このギャップを埋めるのに役立ちます。
+
+
+# CIでのEvals実行
+
+<ScorerCallout />
+
+CIパイプラインでevalsを実行することで、時間の経過とともにエージェントの品質を測定するための定量化可能なメトリクスを提供し、このギャップを埋めることができます。
+
+
 
 ## CI統合のセットアップ
 
@@ -28,6 +36,8 @@ describe("My Agent", () => {
 ```
 
 テストフレームワーク用のtestSetupとglobalSetupスクリプトを設定して、eval結果をキャプチャする必要があります。これにより、mastraダッシュボードでこれらの結果を表示することができます。
+
+
 
 ## フレームワーク設定
 
@@ -62,6 +72,8 @@ export default defineConfig({
   },
 });
 ```
+
+
 
 ## ストレージ設定
 

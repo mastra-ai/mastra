@@ -1,0 +1,51 @@
+---
+title: "リファレンス: Workflow.sleepUntil() | Workflows | Mastra Docs"
+description: ワークフローにおける `Workflow.sleepUntil()` メソッドのドキュメント。指定した日時まで実行を停止します。
+---
+
+# Workflow.sleepUntil()
+
+`.sleepUntil()` メソッドは、指定した日時まで処理を一時停止します。
+
+## 使用例
+
+```typescript copy
+workflow.sleepUntil(new Date(Date.now() + 5000));
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "dateOrCallback",
+      type: "Date | ((params: ExecuteFunctionParams) => Promise<Date>)",
+      description: "Date オブジェクト、または Date を返すコールバック関数。コールバックは実行コンテキストを受け取り、入力データに基づいて目標時刻を動的に算出できます。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "メソッドチェーンに使用する Workflow インスタンス",
+    },
+  ]}
+/>
+
+## 拡張された使用例
+
+```typescript showLineNumbers copy
+workflow.sleepUntil(async ({ inputData }) => {
+  return new Date(Date.now() + inputData.value);
+});
+```
+
+## 関連項目
+
+- [スリープとイベント](../../docs/workflows/pausing-execution.mdx)

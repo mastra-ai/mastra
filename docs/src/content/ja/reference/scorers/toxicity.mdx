@@ -1,0 +1,119 @@
+---
+title: "リファレンス: Toxicity | Scorers | Mastra Docs"
+description: Mastraの毒性スコアラーのドキュメント。LLM出力における人種差別的、偏見的、または有害な要素を評価します。
+---
+
+
+
+# Toxicity Scorer
+
+`createToxicityScorer()`関数は、LLMの出力に人種差別的、偏見的、または有害な要素が含まれているかどうかを評価します。この関数は、個人攻撃、嘲笑、ヘイトスピーチ、軽蔑的な発言、脅迫など、さまざまな形態の有害性について応答を分析するジャッジベースのシステムを使用します。
+
+使用例については、[Toxicity Examples](/examples/scorers/toxicity)を参照してください。
+
+
+
+## Parameters
+
+`createToxicityScorer()`関数は、以下のプロパティを持つ単一のオプションオブジェクトを受け取ります：
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      required: true,
+      description: "毒性を評価するために使用されるモデルの設定。",
+    },
+    {
+      name: "scale",
+      type: "number",
+      required: false,
+      defaultValue: "1",
+      description: "最大スコア値（デフォルトは1）。",
+    },
+  ]}
+/>
+
+この関数はMastraScorerクラスのインスタンスを返します。`.run()`メソッドは他のスコアラーと同じ入力を受け取りますが（[MastraScorerリファレンス](./mastra-scorer)を参照）、戻り値には以下に記載されているLLM固有のフィールドが含まれます。
+
+
+
+## .run() の戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "実行のID（任意）。",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description: "判定結果を含むオブジェクト: { verdicts: Array<{ verdict: 'yes' | 'no', reason: string }> }",
+    },
+    {
+      name: "analyzePrompt",
+      type: "string",
+      description: "分析ステップでLLMに送信されたプロンプト（任意）。",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "毒性スコア（0からスケール値まで、デフォルトは0-1）。",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "毒性評価の詳細な説明。",
+    },
+    {
+      name: "generateReasonPrompt",
+      type: "string",
+      description: "理由生成ステップでLLMに送信されたプロンプト（任意）。",
+    },
+  ]}
+/>
+
+
+
+## スコアリング詳細
+
+スコアラーは複数の側面を通じて毒性を評価します：
+
+- 個人攻撃
+- 嘲笑や皮肉
+- ヘイトスピーチ
+- 軽蔑的な発言
+- 脅迫や威嚇
+
+### スコアリングプロセス
+
+1. 毒性要素を分析：
+   - 個人攻撃と嘲笑を特定
+   - ヘイトスピーチと脅迫を検出
+   - 軽蔑的な発言を評価
+   - 深刻度レベルを評価
+2. 毒性スコアを計算：
+   - 検出された要素を重み付け
+   - 深刻度評価を組み合わせ
+   - スケールに正規化
+
+最終スコア：`(toxicity_weighted_sum / max_toxicity) * scale`
+
+### スコア解釈
+
+（0からスケール、デフォルト0-1）
+
+- 0.8-1.0：重度の毒性
+- 0.4-0.7：中程度の毒性
+- 0.1-0.3：軽度の毒性
+- 0.0：毒性要素は検出されず
+
+
+
+## 関連
+
+- [Tone Consistency Scorer](./tone-consistency)
+- [Bias Scorer](./bias)

@@ -1,11 +1,19 @@
 ---
-title: "リファレンス: ハルシネーション | メトリクス | Evals | Mastra ドキュメント"
-description: Mastra におけるハルシネーションメトリクスのドキュメント。提供されたコンテキストと矛盾する箇所を特定することで、LLM出力の事実的正確性を評価します。
+title: "リファレンス: Hallucination | Metrics | Evals | Mastra Docs"
+description: Mastraにおけるハルシネーション（幻覚）メトリックのドキュメント。提供されたコンテキストとの矛盾を特定することで、LLM出力の事実的正確性を評価します。
 ---
+
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
 
 # HallucinationMetric
 
-`HallucinationMetric`は、LLMが生成した情報が事実に基づいているかどうかを、与えられたコンテキストと出力を比較することで評価します。このメトリクスは、コンテキストと出力の間に直接的な矛盾があるかどうかを特定することで、ハルシネーションを測定します。
+<ScorerCallout />
+
+`HallucinationMetric`は、LLMの出力を提供されたコンテキストと比較することで、LLMが事実的に正しい情報を生成するかどうかを評価します。このメトリクスは、コンテキストと出力の間の直接的な矛盾を特定することで幻覚を測定します。
+
+
 
 ## 基本的な使い方
 
@@ -40,6 +48,8 @@ console.log(result.info.reason); // Explanation of the score
 //   }
 // }
 ```
+
+
 
 ## コンストラクタのパラメータ
 
@@ -80,6 +90,8 @@ console.log(result.info.reason); // Explanation of the score
   ]}
 />
 
+
+
 ## measure() のパラメータ
 
 <PropertiesTable
@@ -98,6 +110,8 @@ console.log(result.info.reason); // Explanation of the score
     },
   ]}
 />
+
+
 
 ## 戻り値
 
@@ -119,7 +133,8 @@ console.log(result.info.reason); // Explanation of the score
             {
               name: "reason",
               type: "string",
-              description: "スコアの詳細な説明と特定された矛盾点",
+              description:
+                "スコアの詳細な説明と特定された矛盾点",
             },
           ],
         },
@@ -127,6 +142,8 @@ console.log(result.info.reason); // Explanation of the score
     },
   ]}
 />
+
+
 
 ## スコアリングの詳細
 
@@ -179,6 +196,8 @@ console.log(result.info.reason); // Explanation of the score
 
 **注:** このスコアはハルシネーションの度合いを示します。スコアが低いほど、提供されたコンテキストとの事実整合性が高いことを意味します。
 
+
+
 ## 分析付きの例
 
 ```typescript
@@ -213,6 +232,8 @@ const result = await metric.measure({
 //   }
 // }
 ```
+
+
 
 ## 関連
 

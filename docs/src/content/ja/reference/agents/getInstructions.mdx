@@ -1,99 +1,67 @@
 ---
-title: "リファレンス: Agent.getInstructions() | エージェント | Mastra ドキュメント"
-description: "Mastraエージェントの`.getInstructions()`メソッドに関するドキュメント。エージェントの動作を導く指示を取得します。"
+title: "リファレンス: Agent.getInstructions() | Agents | Mastra ドキュメント"
+description: "Mastra のエージェントにおける `Agent.getInstructions()` メソッドのリファレンス。エージェントの振る舞いを規定する指示を取得します。"
 ---
 
 # Agent.getInstructions()
 
-`getInstructions()`メソッドは、エージェントに設定された指示を取得し、それが関数である場合は解決します。これらの指示はエージェントの動作を導き、その能力と制約を定義します。
+`.getInstructions()` メソッドは、エージェントに設定された指示を取得し、それらが関数である場合は評価して解決します。これらの指示はエージェントの挙動を導き、能力と制約を定義します。
 
-## 構文
+## 使い方の例
 
-```typescript
-getInstructions({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}): string | Promise<string>
+```typescript copy
+await agent.getInstructions();
 ```
 
-## パラメーター
+## パラメータ
 
-<br />
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "options",
+      type: "{ runtimeContext?: RuntimeContext }",
       isOptional: true,
-      description:
-        "依存性注入やコンテキスト情報のためのランタイムコンテキスト。",
+      defaultValue: "{}",
+      description: "実行時コンテキストを含むオプションの設定オブジェクト。",
     },
   ]}
 />
 
 ## 戻り値
 
-エージェントの指示を含む文字列、または文字列に解決されるPromiseを返します。
+<PropertiesTable
+  content={[
+    {
+      name: "instructions",
+      type: "string | Promise<string>",
+      description: "エージェントに設定された指示。文字列として直接指定するか、その指示へと解決される Promise として指定できます。",
+    },
+  ]}
+/>
 
-## 説明
+## 拡張された使用例
 
-`getInstructions()` メソッドは、エージェントの行動を導く指示にアクセスするために使用されます。このメソッドは、指示が文字列として直接提供される場合や、関数から返される場合のいずれにも対応して指示を解決します。
-
-指示はエージェントの設定において重要な要素であり、以下を定義します：
-
-- エージェントの役割と性格
-- タスク固有のガイダンス
-- エージェントの行動に対する制約
-- ユーザーリクエストを処理するためのコンテキスト
-
-## 例
-
-### 基本的な使い方
-
-```typescript
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-
-// Create an agent with static instructions
-const agent = new Agent({
-  name: "assistant",
-  instructions:
-    "You are a helpful assistant that provides concise and accurate information.",
-  model: openai("gpt-4o"),
+```typescript copy
+await agent.getInstructions({
+  runtimeContext: new RuntimeContext()
 });
-
-// Get the instructions
-const instructions = await agent.getInstructions();
-console.log(instructions); // "You are a helpful assistant that provides concise and accurate information."
 ```
 
-### RuntimeContextとの併用
+### オプションのパラメータ
 
-```typescript
-import { Agent } from "@mastra/core/agent";
-import { RuntimeContext } from "@mastra/core/runtime-context";
-import { openai } from "@ai-sdk/openai";
+<PropertiesTable
+  content={[
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      defaultValue: "undefined",
+      description: "依存性注入とコンテキスト情報のためのランタイムコンテキスト。",
+    },
+  ]}
+/>
 
-// Create an agent with dynamic instructions
-const agent = new Agent({
-  name: "contextual-assistant",
-  instructions: ({ runtimeContext }) => {
-    // Dynamic instructions based on runtime context
-    const userPreference = runtimeContext.get("userPreference");
-    const expertise = runtimeContext.get("expertise") || "general";
+## 関連
 
-    if (userPreference === "technical") {
-      return `You are a technical assistant specializing in ${expertise}. Provide detailed technical explanations.`;
-    }
-
-    return `You are a helpful assistant providing easy-to-understand information about ${expertise}.`;
-  },
-  model: openai("gpt-4o"),
-});
-
-// Create a runtime context with user preferences
-const context = new RuntimeContext();
-context.set("userPreference", "technical");
-context.set("expertise", "machine learning");
-
-// Get the instructions using the runtime context
-const instructions = await agent.getInstructions({ runtimeContext: context });
-console.log(instructions); // "You are a technical assistant specializing in machine learning. Provide detailed technical explanations."
-```
+- [エージェントの概要](../../docs/agents/overview.mdx)
+- [エージェントのランタイム コンテキスト](../../docs/agents/runtime-context.mdx)

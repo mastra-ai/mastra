@@ -67,10 +67,10 @@
     "shiki": "^1.29.2",
     "sonner": "^1.7.4",
     "superjson": "^2.2.2",
-    "swr": "^2.3.4",
+    "swr": "^2.3.6",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
-    "use-debounce": "^10.0.5",
+    "use-debounce": "^10.0.6",
     "zod": "^4.1.5"
   },
   "devDependencies": {
@@ -87,6 +87,6 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
-    "vite": "^6.3.5"
+    "vite": "^6.3.6"
   }
 }

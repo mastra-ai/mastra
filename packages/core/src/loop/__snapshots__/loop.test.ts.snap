@@ -64,6 +64,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "usage": {
@@ -133,6 +135,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:10.000Z,
     },
     "usage": {
@@ -255,6 +259,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "usage": {
@@ -324,6 +330,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:10.000Z,
     },
     "usage": {
@@ -402,6 +410,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "usage": {
@@ -471,6 +481,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:10.000Z,
     },
     "usage": {
@@ -593,6 +605,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "usage": {
@@ -662,6 +676,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:10.000Z,
     },
     "usage": {
@@ -695,6 +711,8 @@ exports[`Loop Tests > AISDK v5 > generateText > result.response > should contain
     },
   ],
   "modelId": "test-response-model-id",
+  "modelProvider": "mock-provider",
+  "modelVersion": "v2",
   "timestamp": 1970-01-01T00:00:10.000Z,
 }
 `;
@@ -718,6 +736,8 @@ exports[`Loop Tests > AISDK v5 > generateText > result.response > should contain
     },
   ],
   "modelId": "test-response-model-id",
+  "modelProvider": "mock-provider",
+  "modelVersion": "v2",
   "timestamp": 1970-01-01T00:00:10.000Z,
   "uiMessages": [
     {
