@@ -1,6 +1,5 @@
 import { toast } from 'sonner';
-import { useSWRConfig } from 'swr';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { MemorySearchResponse, MemorySearchParams } from '@/types/memory';
 import { useMastraClient } from '@mastra/playground-ui';
@@ -67,36 +66,26 @@ export const useMessages = ({ threadId, memory, agentId }: { threadId: string; m
 };
 
 export const useDeleteThread = () => {
-  const { mutate } = useSWRConfig();
+  const client = useMastraClient();
+  const queryClient = useQueryClient();
 
-  const deleteThread = async ({
-    threadId,
-    resourceId,
-    agentId,
-  }: {
-    threadId: string;
-    agentId: string;
-    resourceId: string;
-  }) => {
-    const deletePromise = fetch(`/api/memory/threads/${threadId}?agentId=${agentId}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-mastra-dev-playground': 'true',
-      },
-    });
-
-    toast.promise(deletePromise, {
-      loading: 'Deleting chat...',
-      success: () => {
-        mutate(`/api/memory/threads?resourceid=${resourceId}&agentId=${agentId}`);
-        return 'Chat deleted successfully';
-      },
-      error: 'Failed to delete chat',
-    });
-  };
-
-  return { deleteThread };
+  return useMutation({
+    mutationFn: ({ threadId, agentId, networkId }: { threadId: string; agentId?: string; networkId?: string }) =>
+      client.deleteThread(threadId, { agentId, networkId }),
+    onSuccess: (_, variables) => {
+      const { agentId, networkId } = variables;
+      if (agentId) {
+        queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
+      }
+      if (networkId) {
+        queryClient.invalidateQueries({ queryKey: ['network', 'threads', networkId, networkId] });
+      }
+      toast.success('Chat deleted successfully');
+    },
+    onError: () => {
+      toast.error('Failed to delete chat');
+    },
+  });
 };
 
 export const useMemorySearch = ({

@@ -137,6 +137,20 @@ export class MastraClient extends BaseResource {
     return this.request(`/api/memory/threads/${threadId}/messages?${searchParams.toString()}`);
   }
 
+  public deleteThread(
+    threadId: string,
+    opts: { agentId?: string; networkId?: string } = {},
+  ): Promise<{ success: boolean; message: string }> {
+    let url = '';
+
+    if (opts.agentId) {
+      url = `/api/memory/threads/${threadId}?agentId=${opts.agentId}`;
+    } else if (opts.networkId) {
+      url = `/api/memory/network/threads/${threadId}?networkId=${opts.networkId}`;
+    }
+    return this.request(url, { method: 'DELETE' });
+  }
+
   /**
    * Saves messages to memory
    * @param params - Parameters containing messages to save

@@ -1,6 +1,3 @@
-import { toast } from 'sonner';
-import { useSWRConfig } from 'swr';
-
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/playground-ui';
 
@@ -55,37 +52,4 @@ export const useNetworkMessages = ({
     gcTime: 0,
     retry: false,
   });
-};
-
-export const useDeleteNetworkThread = () => {
-  const { mutate } = useSWRConfig();
-
-  const deleteThread = async ({
-    threadId,
-    resourceid,
-    networkId,
-  }: {
-    threadId: string;
-    networkId: string;
-    resourceid: string;
-  }) => {
-    const deletePromise = fetch(`/api/memory/network/threads/${threadId}?networkId=${networkId}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-mastra-dev-playground': 'true',
-      },
-    });
-
-    toast.promise(deletePromise, {
-      loading: 'Deleting chat...',
-      success: () => {
-        mutate(`/api/memory/network/threads?resourceid=${resourceid}&networkId=${networkId}`);
-        return 'Chat deleted successfully';
-      },
-      error: 'Failed to delete chat',
-    });
-  };
-
-  return { deleteThread };
 };
