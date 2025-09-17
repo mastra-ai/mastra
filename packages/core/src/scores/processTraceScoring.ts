@@ -120,11 +120,14 @@ const createScoringWorkflow = ({ scorer, mastra }: { scorer: MastraScorer; mastr
 
       if (span) {
         const existingLinks = span.links || [];
-        span.links = [...existingLinks, { type: 'score', id: savedScore.score.id }];
+        span.links = [...existingLinks, { type: 'score', id: savedScore.score.id, name: savedScore.score.scorer.name }];
         await storage.updateAISpan({ spanId: span.spanId, traceId: span.traceId, updates: { links: span.links } });
       } else {
         const existingLinks = parentSpan.links || [];
-        parentSpan.links = [...existingLinks, { type: 'score', id: savedScore.score.id }];
+        parentSpan.links = [
+          ...existingLinks,
+          { type: 'score', id: savedScore.score.id, name: savedScore.score.scorer.name },
+        ];
         await storage.updateAISpan({
           spanId: parentSpan.spanId,
           traceId: parentSpan.traceId,
