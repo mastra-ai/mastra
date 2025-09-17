@@ -1718,8 +1718,8 @@ importers:
         specifier: ^26.1.0
         version: 26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
       turndown:
-        specifier: ^7.2.0
-        version: 7.2.0
+        specifier: ^7.2.1
+        version: 7.2.1
       uuid:
         specifier: ^11.1.0
         version: 11.1.0
@@ -15808,8 +15808,8 @@ packages:
     resolution: {integrity: sha512-gxToHmi9oTBNB05UjUsrWf0OyN5ZXtD0apOarC1KIx232Vp3WimRNy3810QzeNSgyD5rsaIDXlxlbnOzlouo+w==}
     hasBin: true
 
-  turndown@7.2.0:
-    resolution: {integrity: sha512-eCZGBN4nNNqM9Owkv9HAtWRYfLA4h909E/WGAWWBpmB275ehNhZyk87/Tpvjbp0jjNl9XwCsbe6bm6CqFsgD+A==}
+  turndown@7.2.1:
+    resolution: {integrity: sha512-7YiPJw6rLClQL3oUKN3KgMaXeJJ2lAyZItclgKDurqnH61so4k4IH/qwmMva0zpuJc/FhRExBBnk7EbeFANlgQ==}
 
   type-check@0.4.0:
     resolution: {integrity: sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew==}
@@ -31208,7 +31208,7 @@ snapshots:
       turbo-windows-64: 2.5.6
       turbo-windows-arm64: 2.5.6
 
-  turndown@7.2.0:
+  turndown@7.2.1:
     dependencies:
       '@mixmark-io/domino': 2.2.0
 

@@ -38,7 +38,7 @@
     "date-fns": "^4.1.0",
     "exit-hook": "^4.0.0",
     "jsdom": "^26.1.0",
-    "turndown": "^7.2.0",
+    "turndown": "^7.2.1",
     "uuid": "^11.1.0",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.24.6"
