@@ -578,7 +578,7 @@ export class InngestWorkflow<
         };
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt);
-        const result = await engine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
+        const result = await engine.execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
           workflowId: this.id,
           runId,
           resourceId,
