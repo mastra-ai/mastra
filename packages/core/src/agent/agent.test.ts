@@ -6774,6 +6774,82 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       );
       expect(customSystemMessage).toBeDefined();
     });
+
+    it('should support arrays of system messages', async () => {
+      // Skip this test for v1 as it only applies to VNext methods
+      if (version === 'v1') {
+        return;
+      }
+
+      let capturedMessages: any[] = [];
+      const testModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          capturedMessages = prompt;
+          return {
+            content: [{ type: 'text', text: 'Test response' }],
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            finishReason: 'stop',
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        },
+        doStream: async ({ prompt }) => {
+          capturedMessages = prompt;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'response-metadata',
+                id: 'mock-response-id',
+                modelId: 'mock-model-v2',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: 'Test response' },
+              { type: 'text-end', id: '1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+          };
+        },
+      });
+
+      const agent = new Agent({
+        name: 'array-system-test',
+        instructions: 'Default instructions',
+        model: testModel,
+      });
+
+      // Test with array of CoreSystemMessage objects
+      await agent.generateVNext('Test array', {
+        system: [
+          { role: 'system', content: 'First system message' },
+          { role: 'system', content: 'Second system message' },
+          { role: 'system', content: 'Third system message' },
+        ],
+      });
+
+      // Check if all system messages were added
+      const systemMessages = capturedMessages.filter(m => m.role === 'system');
+      const hasFirst = systemMessages.some(
+        m => typeof m.content === 'string' && m.content.includes('First system message'),
+      );
+      const hasSecond = systemMessages.some(
+        m => typeof m.content === 'string' && m.content.includes('Second system message'),
+      );
+      const hasThird = systemMessages.some(
+        m => typeof m.content === 'string' && m.content.includes('Third system message'),
+      );
+
+      expect(hasFirst).toBe(true);
+      expect(hasSecond).toBe(true);
+      expect(hasThird).toBe(true);
+    });
   });
 
   describe(`${version} - Input Processors`, () => {

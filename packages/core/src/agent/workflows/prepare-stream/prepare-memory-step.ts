@@ -14,18 +14,27 @@ import type { AgentCapabilities } from './types';
 import type { SystemModelMessage } from 'ai-v5';
 
 /**
- * Helper function to add user-provided system message to a MessageList
- * Handles string, CoreSystemMessage, and SystemModelMessage formats
+ * Helper function to add user-provided system message(s) to a MessageList
+ * Handles string, CoreSystemMessage, SystemModelMessage, and arrays of these message formats
  */
 function addUserSystemMessage(
   messageList: MessageList,
-  system: string | CoreSystemMessage | SystemModelMessage | undefined,
+  system: string | CoreSystemMessage | SystemModelMessage | CoreSystemMessage[] | SystemModelMessage[] | undefined,
 ): void {
   if (!system) return;
 
   if (typeof system === 'string') {
+    // Handle string system message
     messageList.addSystem(system, 'user-provided');
+  } else if (Array.isArray(system)) {
+    // Handle array of system messages
+    for (const msg of system) {
+      if ('content' in msg && msg.content) {
+        messageList.addSystem(msg.content, 'user-provided');
+      }
+    }
   } else if ('content' in system && system.content) {
+    // Handle single CoreSystemMessage or SystemModelMessage
     messageList.addSystem(system.content, 'user-provided');
   }
 }

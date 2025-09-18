@@ -53,7 +53,7 @@ export type AgentExecutionOptions<
   instructions?: string;
 
   /** Custom system message to include in the prompt */
-  system?: string | CoreSystemMessage | SystemModelMessage;
+  system?: string | CoreSystemMessage | SystemModelMessage | CoreSystemMessage[] | SystemModelMessage[];
 
   /** Additional context messages to provide to the agent */
   context?: ModelMessage[];
