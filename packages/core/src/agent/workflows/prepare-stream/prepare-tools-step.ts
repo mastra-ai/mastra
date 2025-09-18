@@ -6,7 +6,8 @@ import type { RuntimeContext } from '../../../runtime-context';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
-import type { AgentCapabilities } from './types';
+import type { AgentCapabilities } from './schema';
+import { prepareToolsStepOutputSchema } from './schema';
 
 interface PrepareToolsStepOptions<
   OUTPUT extends OutputSchema | undefined = undefined,
@@ -41,10 +42,8 @@ export function createPrepareToolsStep<
 }: PrepareToolsStepOptions<OUTPUT, FORMAT>) {
   return createStep({
     id: 'prepare-tools-step',
-    inputSchema: z.any(),
-    outputSchema: z.object({
-      convertedTools: z.record(z.string(), z.any()),
-    }),
+    inputSchema: z.object({}),
+    outputSchema: prepareToolsStepOutputSchema,
     execute: async () => {
       const toolEnhancements = [
         options?.toolsets && Object.keys(options?.toolsets || {}).length > 0
