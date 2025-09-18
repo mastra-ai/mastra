@@ -23,6 +23,7 @@ import type { Run } from '../run/types';
 import type { RuntimeContext } from '../runtime-context';
 import type { CoreTool } from '../tools/types';
 import type { MastraLanguageModel } from './model/shared.types';
+import type { SystemModelMessage } from 'ai-v5';
 
 export type LanguageModel = MastraLanguageModel;
 
@@ -79,6 +80,14 @@ export type {
 export type { TripwireProperties } from './model/shared.types';
 
 export type OutputType = StructuredOutput | ZodSchema | JSONSchema7 | undefined;
+
+export type SystemMessage =
+  | string
+  | string[]
+  | CoreSystemMessage
+  | SystemModelMessage
+  | CoreSystemMessage[]
+  | SystemModelMessage[];
 
 type GenerateTextOptions = Parameters<typeof generateText>[0];
 type StreamTextOptions = Parameters<typeof streamText>[0];

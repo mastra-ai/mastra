@@ -2,7 +2,7 @@ import deepEqual from 'fast-deep-equal';
 import { z } from 'zod';
 import type { AISpan, AISpanType } from '../../../ai-tracing';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
-import type { CoreSystemMessage } from '../../../llm';
+import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
 import type { RuntimeContext } from '../../../runtime-context';
@@ -11,25 +11,23 @@ import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { MessageList } from '../../message-list';
 import type { AgentCapabilities } from './types';
-import type { SystemModelMessage } from 'ai-v5';
 
 /**
  * Helper function to add user-provided system message(s) to a MessageList
  * Handles string, CoreSystemMessage, SystemModelMessage, and arrays of these message formats
  */
-function addUserSystemMessage(
-  messageList: MessageList,
-  system: string | CoreSystemMessage | SystemModelMessage | CoreSystemMessage[] | SystemModelMessage[] | undefined,
-): void {
+function addUserSystemMessage(messageList: MessageList, system: SystemMessage | undefined): void {
   if (!system) return;
 
   if (typeof system === 'string') {
     // Handle string system message
     messageList.addSystem(system, 'user-provided');
   } else if (Array.isArray(system)) {
-    // Handle array of system messages
+    // Handle array of system messages (strings or message objects)
     for (const msg of system) {
-      if ('content' in msg && msg.content) {
+      if (typeof msg === 'string') {
+        messageList.addSystem(msg, 'user-provided');
+      } else if ('content' in msg && msg.content) {
         messageList.addSystem(msg.content, 'user-provided');
       }
     }

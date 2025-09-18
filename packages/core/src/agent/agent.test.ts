@@ -6825,8 +6825,30 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         model: testModel,
       });
 
-      // Test with array of CoreSystemMessage objects
-      await agent.generateVNext('Test array', {
+      // Test 1: Array of strings
+      capturedMessages = [];
+      await agent.generateVNext('Test string array', {
+        system: ['First string message', 'Second string message', 'Third string message'],
+      });
+
+      let systemMessages = capturedMessages.filter(m => m.role === 'system');
+      let hasFirst = systemMessages.some(
+        m => typeof m.content === 'string' && m.content.includes('First string message'),
+      );
+      let hasSecond = systemMessages.some(
+        m => typeof m.content === 'string' && m.content.includes('Second string message'),
+      );
+      let hasThird = systemMessages.some(
+        m => typeof m.content === 'string' && m.content.includes('Third string message'),
+      );
+
+      expect(hasFirst).toBe(true);
+      expect(hasSecond).toBe(true);
+      expect(hasThird).toBe(true);
+
+      // Test 2: Array of CoreSystemMessage objects
+      capturedMessages = [];
+      await agent.generateVNext('Test object array', {
         system: [
           { role: 'system', content: 'First system message' },
           { role: 'system', content: 'Second system message' },
@@ -6834,17 +6856,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         ],
       });
 
-      // Check if all system messages were added
-      const systemMessages = capturedMessages.filter(m => m.role === 'system');
-      const hasFirst = systemMessages.some(
-        m => typeof m.content === 'string' && m.content.includes('First system message'),
-      );
-      const hasSecond = systemMessages.some(
+      systemMessages = capturedMessages.filter(m => m.role === 'system');
+      hasFirst = systemMessages.some(m => typeof m.content === 'string' && m.content.includes('First system message'));
+      hasSecond = systemMessages.some(
         m => typeof m.content === 'string' && m.content.includes('Second system message'),
       );
-      const hasThird = systemMessages.some(
-        m => typeof m.content === 'string' && m.content.includes('Third system message'),
-      );
+      hasThird = systemMessages.some(m => typeof m.content === 'string' && m.content.includes('Third system message'));
 
       expect(hasFirst).toBe(true);
       expect(hasSecond).toBe(true);
