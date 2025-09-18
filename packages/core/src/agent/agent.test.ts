@@ -890,7 +890,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             console.log('second text', secondText);
             console.log('final text', finalText);
 
+            const steps = await resumeStream.steps;
+            const textBySteps = steps.map(step => step.text);
+            console.log('text by steps', textBySteps);
+
             expect(finalText).toBe(firstText + secondText);
+            expect(steps.length).toBe(2);
+            expect(textBySteps.join('')).toBe(firstText + secondText);
             toolCall = (await resumeStream.toolResults).find(
               (result: any) => result.payload.toolName === 'findUserTool',
             ).payload;
