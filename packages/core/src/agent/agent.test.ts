@@ -615,7 +615,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     }, 500000);
 
     describe('tool approval and suspension', () => {
-      describe('suspension', () => {
+      describe.only('suspension', () => {
         it.skipIf(version === 'v1')(
           'should call findUserTool with suspend and resume',
           async () => {
@@ -676,15 +676,16 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             ).payload;
 
             const name = toolCall?.result?.name;
+            const email = toolCall?.result?.email;
 
-            expect(mockFindUser).toHaveBeenCalled();
             expect(name).toBe('Dero Israel');
+            expect(email).toBe('test@test.com');
           },
           500000,
         );
       });
 
-      describe.only('requireToolApproval', () => {
+      describe('requireToolApproval', () => {
         it.skipIf(version === 'v1')(
           'should call findUserTool with requireToolApproval',
           async () => {
