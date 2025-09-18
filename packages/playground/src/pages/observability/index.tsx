@@ -56,6 +56,7 @@ export default function Observability() {
   const { data: aiTrace, isLoading: isLoadingAiTrace } = useAITrace(selectedTraceId, { enabled: !!selectedTraceId });
 
   const traceId = searchParams.get('traceId');
+  const spanId = searchParams.get('spanId');
 
   const {
     data: aiTraces = [],
@@ -234,6 +235,7 @@ export default function Observability() {
       <TraceDialog
         traceSpans={aiTrace?.spans}
         traceId={selectedTraceId}
+        initialSpanId={spanId || undefined}
         traceDetails={aiTraces.find(t => t.traceId === selectedTraceId)}
         isOpen={dialogIsOpen}
         onClose={() => setDialogIsOpen(false)}

@@ -34,6 +34,7 @@ type TraceDialogProps = {
   computeAgentsLink?: () => string;
   computeWorkflowsLink?: () => string;
   onScorerTriggered: (scorerName: string, traceId: string, spanId?: string) => void;
+  initialSpanId?: string;
 };
 
 export function TraceDialog({
@@ -48,10 +49,11 @@ export function TraceDialog({
   computeAgentsLink,
   computeWorkflowsLink,
   onScorerTriggered,
+  initialSpanId,
 }: TraceDialogProps) {
   const { Link } = useLinkComponent();
-  const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
-  const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(undefined);
+  const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(Boolean(initialSpanId));
+  const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(initialSpanId);
   const [combinedView, setCombinedView] = useState<boolean>(false);
   const selectedSpan = traceSpans.find(span => span.spanId === selectedSpanId);
 

@@ -13,7 +13,7 @@ type ScoreDialogProps = {
   onClose: () => void;
   onNext?: () => void;
   onPrevious?: () => void;
-  computeTraceLink: (traceId: string) => string;
+  computeTraceLink: (traceId: string, spanId?: string) => string;
 };
 
 export function ScoreDialog({
@@ -57,6 +57,11 @@ export function ScoreDialog({
                   label: 'Trace ID',
                   value: <Link href={computeTraceLink(score?.traceId)}>{score?.traceId}</Link>,
                   key: 'traceId',
+                },
+                {
+                  label: 'Span ID',
+                  value: <Link href={computeTraceLink(score?.traceId, score?.spanId)}>{score?.spanId}</Link>,
+                  key: 'spanId',
                 },
               ]}
               LinkComponent={Link}

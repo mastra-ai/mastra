@@ -37,6 +37,7 @@ export type ScoringHookInput = {
   tracingContext?: TracingContext;
   structuredOutput?: boolean;
   traceId?: string;
+  spanId?: string;
   resourceId?: string;
   threadId?: string;
 };
