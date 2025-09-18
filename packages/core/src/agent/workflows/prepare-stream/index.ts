@@ -4,7 +4,7 @@ import type { AISpan, AISpanType } from '../../../ai-tracing';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
 import type { RuntimeContext } from '../../../runtime-context';
-import { MastraModelOutput } from '../../../stream';
+import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createWorkflow } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
@@ -54,7 +54,6 @@ export function createPrepareStreamWorkflow<
   saveQueueManager,
   returnScorerData,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>) {
-
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
     options,
@@ -106,7 +105,10 @@ export function createPrepareStreamWorkflow<
   return createWorkflow({
     id: 'execution-workflow',
     inputSchema: z.object({}),
-    outputSchema: z.instanceof(MastraModelOutput),
+    outputSchema: z.union([
+      z.instanceof(MastraModelOutput<OUTPUT | undefined>),
+      z.instanceof(AISDKV5OutputStream<OUTPUT | undefined>),
+    ]),
     steps: [prepareToolsStep, prepareMemoryStep, streamStep],
     options: {
       tracingPolicy: {

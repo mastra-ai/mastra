@@ -1,4 +1,4 @@
-import type { GenerateTextOnStepFinishCallback, TelemetrySettings } from 'ai';
+import type { GenerateTextOnStepFinishCallback, TelemetrySettings, ToolSet } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema, ZodTypeAny } from 'zod';
 import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
