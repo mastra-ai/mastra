@@ -2479,7 +2479,7 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        inputSchema: z.object({}),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({
           result: z.string(),
         }),
@@ -4002,7 +4002,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result: z.string(),
         }),
-        steps: [step1],
+        steps: [step1, step2],
       });
 
       workflow
@@ -4059,7 +4059,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result: z.string(),
         }),
-        steps: [step1],
+        steps: [step1, step2],
       });
 
       workflow
@@ -4120,7 +4120,7 @@ describe('Workflow', () => {
           result: z.string(),
           resumed: z.any(),
         }),
-        steps: [step1],
+        steps: [step1, step2],
       });
 
       workflow.then(step1).waitForEvent('hello-event', step2).commit();
@@ -4181,7 +4181,7 @@ describe('Workflow', () => {
           result: z.string(),
           resumed: z.any(),
         }),
-        steps: [step1],
+        steps: [step1, step2],
       });
 
       workflow.then(step1).waitForEvent('hello-event', step2, { timeout: 1000 }).commit();
@@ -4398,7 +4398,7 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        inputSchema: z.object({}),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({
           result: z.string(),
         }),
@@ -4448,7 +4448,7 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        inputSchema: z.object({}),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({
           result: z.string(),
         }),
@@ -4511,7 +4511,7 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        inputSchema: z.object({}),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({
           result: z.string(),
         }),
