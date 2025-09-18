@@ -128,7 +128,7 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
 
   const [scoresPage, setScoresPage] = useState<number>(0);
 
-  const { scores: scoresData, isLoading: isScoresLoading } = useScoresByScorerId({
+  const { data: scoresData, isLoading: isScoresLoading } = useScoresByScorerId({
     scorerId,
     page: scoresPage,
     entityId: selectedEntityOption?.value === 'all' ? undefined : selectedEntityOption?.value,
@@ -148,7 +148,7 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
       id: score.id,
       date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
       time: format(createdAtDate, 'h:mm:ss aaa'),
-      input: score?.input?.inputMessages?.[0]?.content || '',
+      input: JSON.stringify(score?.input),
       entityId: score.entityId,
       score: score.score,
     };
