@@ -90,6 +90,7 @@ const startServer = async (
       },
       stdio: ['inherit', 'pipe', 'pipe', 'ipc'],
       reject: false,
+      shell: true,
     }) as any as ChildProcess;
 
     if (currentServerProcess?.exitCode && currentServerProcess?.exitCode !== 0) {
