@@ -475,7 +475,7 @@ export interface McpServerToolListResponse {
 export type ClientScoreRowData = Omit<ScoreRowData, 'createdAt' | 'updatedAt'> & {
   createdAt: string;
   updatedAt: string;
-};
+} & { spanId?: string };
 
 // Scores-related types
 export interface GetScoresByRunIdParams {
