@@ -119,7 +119,18 @@ export async function getInputOptions(
             };
           }
         },
-      } satisfies Plugin,
+      },
+      {
+        name: 'telemetry-rewriter',
+        resolveId(id: string) {
+          if (id === '#telemetry-config') {
+            return {
+              id: './telemetry-config.mjs',
+              external: true,
+            };
+          }
+        },
+      },
       esbuild({
         platform,
         define: env,
