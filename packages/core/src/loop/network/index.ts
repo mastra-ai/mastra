@@ -1,6 +1,4 @@
-import type { JSONSchema7 } from 'json-schema';
 import z from 'zod';
-import type { ZodSchema } from 'zod';
 import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
 import { Agent } from '../../agent/index';
@@ -221,9 +219,6 @@ export async function createNetworkLoop({
       });
 
       if (inputData.resourceType !== 'none' && inputData?.result) {
-        // Check if the task is complete
-        console.log('Input Data for decision making', inputData);
-
         const completionPrompt = `
                           The ${inputData.resourceType} ${inputData.resourceId} has contributed to the task.
                           This is the result from the agent: ${inputData.result}
@@ -254,8 +249,6 @@ export async function createNetworkLoop({
           ...routingAgentOptions,
         });
 
-        console.log('Completion Result', completionResult);
-
         if (completionResult?.object?.isComplete) {
           const endPayload = {
             task: inputData.task,
@@ -272,8 +265,6 @@ export async function createNetworkLoop({
             type: 'routing-agent-end',
             payload: endPayload,
           });
-
-          console.log('Routing Complete', endPayload);
 
           const memory = await agent.getMemory({ runtimeContext: runtimeContext });
           await memory?.saveMessages({
@@ -302,8 +293,6 @@ export async function createNetworkLoop({
           return endPayload;
         }
       }
-
-      console.log('Final Result', completionResult?.object);
 
       const prompt: MessageListInput = [
         {
@@ -523,7 +512,7 @@ export async function createNetworkLoop({
         throw new Error(`Invalid task input: ${inputData.task}`);
       }
 
-      const run = wf.createRun();
+      const run = await wf.createRunAsync();
       const toolData = {
         name: wf.name,
         args: inputData,
@@ -854,8 +843,7 @@ export async function createNetworkLoop({
 }
 
 export async function networkLoop<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  OUTPUT extends OutputSchema = undefined,
   FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
 >({
   networkName,
@@ -873,7 +861,7 @@ export async function networkLoop<
   runtimeContext: RuntimeContext;
   runId: string;
   routingAgent: Agent;
-  routingAgentOptions?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>;
+  routingAgentOptions?: AgentExecutionOptions<OUTPUT, FORMAT>;
   generateId: () => string;
   maxIterations: number;
   threadId?: string;

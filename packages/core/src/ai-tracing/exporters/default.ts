@@ -31,6 +31,9 @@ interface BatchBuffer {
   seenSpans: Set<string>; // "traceId:spanId" combinations we've seen creates for
   spanSequences: Map<string, number>; // "traceId:spanId" -> next sequence number
 
+  // Track completed spans for cleanup
+  completedSpans: Set<string>; // Spans that have received SPAN_ENDED
+
   // Metrics
   outOfOrderCount: number;
 
@@ -75,6 +78,9 @@ export class DefaultExporter implements AITracingExporter {
   private buffer: BatchBuffer;
   private flushTimer: NodeJS.Timeout | null = null;
 
+  // Track all spans that have been created, persists across flushes
+  private allCreatedSpans: Set<string> = new Set();
+
   constructor(config: BatchingConfig = {}, logger?: IMastraLogger) {
     if (logger) {
       this.logger = logger;
@@ -100,6 +106,7 @@ export class DefaultExporter implements AITracingExporter {
       insertOnly: [],
       seenSpans: new Set(),
       spanSequences: new Map(),
+      completedSpans: new Set(),
       outOfOrderCount: 0,
       totalSize: 0,
     };
@@ -176,6 +183,7 @@ export class DefaultExporter implements AITracingExporter {
     this.logger.warn('Out-of-order span update detected - skipping event', {
       spanId: event.exportedSpan.id,
       traceId: event.exportedSpan.traceId,
+      spanName: event.exportedSpan.name,
       eventType: event.type,
     });
   }
@@ -203,14 +211,16 @@ export class DefaultExporter implements AITracingExporter {
           };
           this.buffer.creates.push(createRecord);
           this.buffer.seenSpans.add(spanKey);
+          // Track this span as created persistently
+          this.allCreatedSpans.add(spanKey);
         }
         // insert-only ignores SPAN_STARTED
         break;
 
       case AITracingEventType.SPAN_UPDATED:
         if (this.resolvedStrategy === 'batch-with-updates') {
-          if (this.buffer.seenSpans.has(spanKey)) {
-            // Normal case: create already in buffer
+          if (this.allCreatedSpans.has(spanKey)) {
+            // Span was created previously (possibly in a prior batch)
             this.buffer.updates.push({
               traceId: event.exportedSpan.traceId,
               spanId: event.exportedSpan.id,
@@ -231,8 +241,8 @@ export class DefaultExporter implements AITracingExporter {
 
       case AITracingEventType.SPAN_ENDED:
         if (this.resolvedStrategy === 'batch-with-updates') {
-          if (this.buffer.seenSpans.has(spanKey)) {
-            // Normal case: create already in buffer
+          if (this.allCreatedSpans.has(spanKey)) {
+            // Span was created previously (possibly in a prior batch)
             this.buffer.updates.push({
               traceId: event.exportedSpan.traceId,
               spanId: event.exportedSpan.id,
@@ -242,6 +252,8 @@ export class DefaultExporter implements AITracingExporter {
               },
               sequenceNumber: this.getNextSequence(spanKey),
             });
+            // Mark this span as completed
+            this.buffer.completedSpans.add(spanKey);
           } else if (event.exportedSpan.isEvent) {
             // Event-type spans only emit SPAN_ENDED (no prior SPAN_STARTED)
             const createRecord = {
@@ -253,6 +265,10 @@ export class DefaultExporter implements AITracingExporter {
             };
             this.buffer.creates.push(createRecord);
             this.buffer.seenSpans.add(spanKey);
+            // Track this span as created persistently
+            this.allCreatedSpans.add(spanKey);
+            // Event spans are immediately complete
+            this.buffer.completedSpans.add(spanKey);
           } else {
             // Out-of-order case: log and skip
             this.handleOutOfOrderUpdate(event);
@@ -268,6 +284,9 @@ export class DefaultExporter implements AITracingExporter {
             updatedAt: null,
           };
           this.buffer.insertOnly.push(createRecord);
+          // Mark as completed for insert-only strategy
+          this.buffer.completedSpans.add(spanKey);
+          this.allCreatedSpans.add(spanKey);
         }
         break;
     }
@@ -304,15 +323,21 @@ export class DefaultExporter implements AITracingExporter {
   /**
    * Resets the buffer after successful flush
    */
-  private resetBuffer(): void {
+  private resetBuffer(completedSpansToCleanup: Set<string> = new Set()): void {
     this.buffer.creates = [];
     this.buffer.updates = [];
     this.buffer.insertOnly = [];
     this.buffer.seenSpans.clear();
     this.buffer.spanSequences.clear();
+    this.buffer.completedSpans.clear();
     this.buffer.outOfOrderCount = 0;
     this.buffer.firstEventTime = undefined;
     this.buffer.totalSize = 0;
+
+    // Clean up completed spans from persistent tracking
+    for (const spanKey of completedSpansToCleanup) {
+      this.allCreatedSpans.delete(spanKey);
+    }
   }
 
   /**
@@ -405,6 +430,7 @@ export class DefaultExporter implements AITracingExporter {
    */
   private async handleRealtimeEvent(event: AITracingEvent, storage: MastraStorage): Promise<void> {
     const span = event.exportedSpan;
+    const spanKey = this.buildSpanKey(span.traceId, span.id);
 
     // Event spans only have an end event
     if (span.isEvent) {
@@ -416,6 +442,7 @@ export class DefaultExporter implements AITracingExporter {
           createdAt: new Date(),
           updatedAt: null,
         });
+        // For event spans in realtime, we don't need to track them since they're immediately complete
       } else {
         this.logger.warn(`Tracing event type not implemented for event spans: ${event.type}`);
       }
@@ -429,8 +456,19 @@ export class DefaultExporter implements AITracingExporter {
             createdAt: new Date(),
             updatedAt: null,
           });
+          // Track this span as created persistently
+          this.allCreatedSpans.add(spanKey);
           break;
         case AITracingEventType.SPAN_UPDATED:
+          await storage.updateAISpan({
+            traceId: span.traceId,
+            spanId: span.id,
+            updates: {
+              ...this.buildUpdateRecord(span),
+              updatedAt: new Date(),
+            },
+          });
+          break;
         case AITracingEventType.SPAN_ENDED:
           await storage.updateAISpan({
             traceId: span.traceId,
@@ -440,6 +478,8 @@ export class DefaultExporter implements AITracingExporter {
               updatedAt: new Date(),
             },
           });
+          // Clean up immediately for realtime strategy
+          this.allCreatedSpans.delete(spanKey);
           break;
         default:
           this.logger.warn(`Tracing event type not implemented for span spans: ${(event as any).type}`);
@@ -536,12 +576,14 @@ export class DefaultExporter implements AITracingExporter {
       insertOnly: [...this.buffer.insertOnly],
       seenSpans: new Set(this.buffer.seenSpans),
       spanSequences: new Map(this.buffer.spanSequences),
+      completedSpans: new Set(this.buffer.completedSpans),
       outOfOrderCount: this.buffer.outOfOrderCount,
       firstEventTime: this.buffer.firstEventTime,
       totalSize: this.buffer.totalSize,
     };
 
     // Reset buffer immediately to prevent blocking new events
+    // Note: We don't clean up completed spans yet - we'll do that after successful flush
     this.resetBuffer();
 
     // Attempt to flush with retry logic
@@ -586,6 +628,11 @@ export class DefaultExporter implements AITracingExporter {
           await storage.batchCreateAISpans({ records: buffer.insertOnly });
         }
       }
+
+      // Success! Clean up completed spans from persistent tracking
+      for (const spanKey of buffer.completedSpans) {
+        this.allCreatedSpans.delete(spanKey);
+      }
     } catch (error) {
       if (attempt < this.config.maxRetries) {
         const retryDelay = this.calculateRetryDelay(attempt);
@@ -605,6 +652,11 @@ export class DefaultExporter implements AITracingExporter {
           droppedBatchSize: buffer.totalSize,
           error: error instanceof Error ? error.message : String(error),
         });
+        // Even on failure, we should clean up completed spans to avoid memory leak
+        // These spans will be lost but at least we prevent memory issues
+        for (const spanKey of buffer.completedSpans) {
+          this.allCreatedSpans.delete(spanKey);
+        }
       }
     }
   }

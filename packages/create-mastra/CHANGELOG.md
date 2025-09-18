@@ -1,5 +1,41 @@
 # create-mastra
 
+## 0.13.1
+
+## 0.13.1-alpha.0
+
+## 0.13.0
+
+### Patch Changes
+
+- clean up console logs in monorepo ([#7926](https://github.com/mastra-ai/mastra/pull/7926))
+
+- Update peerdep of @mastra/core ([#7619](https://github.com/mastra-ai/mastra/pull/7619))
+
+- fix minor playground stuff for observability ([#7765](https://github.com/mastra-ai/mastra/pull/7765))
+
+- Handle zod intersections in dynamic form ([#7768](https://github.com/mastra-ai/mastra/pull/7768))
+
+- Playground ui -pass runtimeContext to client SDK get methods ([#7767](https://github.com/mastra-ai/mastra/pull/7767))
+
+## 0.13.0-alpha.5
+
+## 0.13.0-alpha.4
+
+### Patch Changes
+
+- clean up console logs in monorepo ([#7926](https://github.com/mastra-ai/mastra/pull/7926))
+
+## 0.13.0-alpha.3
+
+## 0.13.0-alpha.2
+
+## 0.13.0-alpha.1
+
+### Patch Changes
+
+- Update peerdep of @mastra/core ([#7619](https://github.com/mastra-ai/mastra/pull/7619))
+
 ## 0.12.4-alpha.0
 
 ### Patch Changes

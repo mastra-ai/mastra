@@ -1,22 +1,32 @@
 ---
-title: "独自のEvalを作成する"
-description: "Mastraを使用すると、独自のevalを作成できます。方法はこちらです。"
+title: "カスタムevalを作成する"
+description: "Mastraでは独自のevalを作成することができます。その方法をご紹介します。"
 ---
 
-# 独自のEvalを作成する
+import { ScorerCallout } from '@/components/scorer-callout'
 
-独自のevalを作成することは、新しい関数を作成するのと同じくらい簡単です。単に`Metric`クラスを拡張するクラスを作成し、`measure`メソッドを実装します。
 
-## 基本的な例
 
-出力に特定の単語が含まれているかを確認するカスタムメトリックを作成する簡単な例については、[Word Inclusion example](/examples/evals/word-inclusion)をご覧ください。
+# カスタム評価の作成
 
-## カスタム LLM-Judge の作成
+<ScorerCallout />
 
-カスタム LLM ジャッジは、AI の応答の特定の側面を評価するのに役立ちます。特定のユースケースに対する専門家のレビュアーがいるようなものです：
+`Metric`クラスを拡張し、`measure`メソッドを実装することで、カスタム評価を作成できます。これにより、スコアの計算方法と返される情報を完全に制御できます。LLMベースの評価の場合は、`MastraAgentJudge`クラスを拡張して、モデルがどのように推論し、出力をスコア化するかを定義します。
 
-- 医療 Q&A → ジャッジは医療の正確性と安全性をチェック
-- カスタマーサービス → ジャッジはトーンと有用性を評価
-- コード生成 → ジャッジはコードの正確性とスタイルを確認
 
-実用的な例として、[Chef Michel's](/docs/guides/chef-michel) のレシピを [Gluten Checker example](/examples/evals/custom-eval) でグルテン含有量を評価する方法をご覧ください。
+
+## ネイティブJavaScript評価
+
+プレーンなJavaScript/TypeScriptを使用して軽量なカスタムメトリクスを作成できます。これらは、シンプルな文字列比較、パターンチェック、またはその他のルールベースのロジックに最適です。
+
+出力内で見つかった参照単語の数に基づいて応答をスコア化する[Word Inclusionの例](/examples/evals/custom-native-javascript-eval.mdx)をご覧ください。
+
+
+
+## LLMによる判定評価
+
+より複雑な評価については、LLMを活用した判定システムを構築できます。これにより、事実の正確性、トーン、推論など、より微妙な基準を捉えることができます。
+
+実世界の事実の正確性を評価するカスタム判定システムとメトリクスの構築の完全なウォークスルーについては、[Real World Countries example](/examples/evals/custom-llm-judge-eval.mdx)をご覧ください。
+
+

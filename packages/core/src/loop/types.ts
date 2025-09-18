@@ -16,7 +16,7 @@ import type { AISpan, AISpanType } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
 import type { OutputProcessor } from '../processors';
 import type { OutputSchema } from '../stream/base/schema';
-import type { ChunkType } from '../stream/types';
+import type { ChunkType, ModelManagerModelConfig } from '../stream/types';
 import type { MastraIdGenerator } from '../types';
 
 export type StreamInternal = {
@@ -52,8 +52,8 @@ export type LoopConfig = {
   prepareStep?: PrepareStepFunction<any>;
 };
 
-export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
-  model: LanguageModelV2;
+export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = {
+  models: ModelManagerModelConfig[];
   logger?: IMastraLogger;
   mode?: 'generate' | 'stream';
   runId?: string;
@@ -80,7 +80,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   llmAISpan?: AISpan<AISpanType.LLM_GENERATION>;
 };
 
-export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = LoopOptions<
+export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = LoopOptions<
   Tools,
   OUTPUT
 > & {
@@ -91,7 +91,7 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema
   _internal: StreamInternal;
 };
 
-export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
+export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = {
   messageId: string;
   controller: ReadableStreamDefaultController<ChunkType>;
   writer: WritableStream<ChunkType>;

@@ -63,6 +63,8 @@ An agent stream provides access to various response properties:
 
 ### AI SDK v5 Compatibility
 
+AI SDK v5 uses `LanguageModelV2` for the model providers. If you are getting an error that you are using an AI SDK v4 model you will need to upgrade your model package to the next major version.
+
 For integration with AI SDK v5, use `format` 'aisdk' to get an `AISDKV5OutputStream`:
 
 ```typescript {5} showLineNumbers copy
