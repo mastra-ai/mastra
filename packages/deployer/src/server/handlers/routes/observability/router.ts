@@ -112,7 +112,7 @@ export function observabilityRouter() {
                   description: 'Name of the scorer to use for evaluation',
                   example: 'relevance-scorer',
                 },
-                scorerPayloadFormat: {
+                scorerRunFormat: {
                   type: 'string',
                   description: 'Format of the scorer payload',
                   enum: ['span', 'agent'],

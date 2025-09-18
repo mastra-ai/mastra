@@ -1,8 +1,9 @@
+// @ts-nocheck
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { processTraceScoring } from './processTraceScoring';
-import type { MastraScorer } from './base';
-import type { MastraStorage, AITraceRecord } from '../storage';
-import type { IMastraLogger } from '../logger';
+import type { MastraScorer } from '../base';
+import type { MastraStorage, AITraceRecord } from '../../storage';
+import type { IMastraLogger } from '../../logger';
 
 describe('processTraceScoring', () => {
   let mockScorer: MastraScorer;

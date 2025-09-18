@@ -1,7 +1,7 @@
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from './types';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../types';
 
 // Use the actual UIMessageWithMetadata type instead of our own
-import type { UIMessageWithMetadata } from '../agent';
+import type { UIMessageWithMetadata } from '../../agent';
 
 interface MessagePart {
   type: 'text' | 'tool-invocation';
@@ -393,6 +393,7 @@ function transformTraceToScorerOutput(trace: Trace): ScorerRunOutputForAgent {
       // @ts-ignore
       parts: createMessageParts(toolInvocations, responseText),
       experimental_attachments: [],
+      toolInvocations,
     };
 
     return [responseMessage];

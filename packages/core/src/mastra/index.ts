@@ -14,8 +14,8 @@ import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';
 import type { NewAgentNetwork } from '../network/vNext';
-import { processTraceScoringWorkflow } from '../scores';
 import type { MastraScorer } from '../scores';
+import { scoreBatchTracesWorkflow } from '../scores/scoreBatchTraces/scoreBatchTracesWorkflow';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -495,7 +495,7 @@ do:
 
     // These workflows are used internally by Mastra and are not part of the user's workflows
     const internalWorkflows = {
-      processTraceScoringWorkflow,
+      scoreBatchTracesWorkflow,
     };
     Object.entries(internalWorkflows).forEach(([key, workflow]) => {
       workflow.__registerMastra(this);

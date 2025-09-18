@@ -86,11 +86,11 @@ export async function getAITracesPaginatedHandler(c: Context) {
 export async function processTraceScoringHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const { scorerName, targets, scorerPayloadFormat = 'span' } = await c.req.json();
+    const { scorerName, targets, scorerRunFormat = 'span' } = await c.req.json();
 
     const result = await getOriginalScoreTracesHandler({
       mastra,
-      body: { scorerName, targets, scorerPayloadFormat },
+      body: { scorerName, targets, scorerRunFormat },
     });
 
     return c.json(result);
