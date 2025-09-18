@@ -200,7 +200,7 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
             isOptional: true,
             description: "Custom instructions for the structuring agent."
           }]
-        },
+        }
       ]
     },
     {
@@ -219,15 +219,13 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
       name: "instructions",
       type: "string",
       isOptional: true,
-      description:
-        "Custom instructions that override the agent's default instructions for this specific generation. Useful for dynamically modifying agent behavior without creating a new agent instance.",
+      description: "Custom instructions that override the agent's default instructions for this specific generation. Useful for dynamically modifying agent behavior without creating a new agent instance.",
     },
     {
       name: "output",
       type: "Zod schema | JsonSchema7",
       isOptional: true,
-      description:
-        "**Deprecated.** Use structuredOutput with maxSteps:1 to achieve the same thing. Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
+      description: "**Deprecated.** Use structuredOutput with maxSteps:1 to achieve the same thing. Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
     },
     {
       name: "memory",
@@ -265,29 +263,25 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
       name: "onFinish",
       type: "StreamTextOnFinishCallback<any> | StreamObjectOnFinishCallback<OUTPUT>",
       isOptional: true,
-      description:
-        "Callback function called when streaming completes. Receives the final result.",
+      description: "Callback function called when streaming completes. Receives the final result.",
     },
     {
       name: "onStepFinish",
       type: "StreamTextOnStepFinishCallback<any> | never",
       isOptional: true,
-      description:
-        "Callback function called after each execution step. Receives step details as a JSON string. Unavailable for structured output",
+      description: "Callback function called after each execution step. Receives step details as a JSON string. Unavailable for structured output",
     },
     {
       name: "resourceId",
       type: "string",
       isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.resource` instead. Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
+      description: "**Deprecated.** Use `memory.resource` instead. Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided."
     },
     {
       name: "telemetry",
       type: "TelemetrySettings",
       isOptional: true,
-      description:
-        "Settings for telemetry collection during streaming.",
+      description: "Settings for telemetry collection during streaming.",
       properties: [
         {
           parameters: [{
@@ -327,8 +321,7 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
       name: "modelSettings",
       type: "CallSettings",
       isOptional: true,
-      description:
-        "Model-specific settings like temperature, maxTokens, topP, etc. These are passed to the underlying language model.",
+      description: "Model-specific settings like temperature, maxTokens, topP, etc. These are passed to the underlying language model.",
       properties: [
         {
           parameters: [{
@@ -392,8 +385,7 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
       name: "threadId",
       type: "string",
       isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.thread` instead. Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
+      description: "**Deprecated.** Use `memory.thread` instead. Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
     },
     {
       name: "toolChoice",
@@ -436,15 +428,13 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
       name: "toolsets",
       type: "ToolsetsInput",
       isOptional: true,
-      description:
-        "Additional toolsets to make available to the agent during streaming.",
+      description: "Additional toolsets to make available to the agent during streaming.",
     },
     {
       name: "clientTools",
       type: "ToolsInput",
       isOptional: true,
-      description:
-        "Tools that are executed on the 'client' side of the request. These tools do not have execute functions in the definition.",
+      description: "Tools that are executed on the 'client' side of the request. These tools do not have execute functions in the definition."
     },
     {
       name: "savePerStep",
