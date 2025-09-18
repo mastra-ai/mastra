@@ -36,7 +36,7 @@ export function EntryList({
   perPage?: number;
   columns?: Column[];
   searchTerm?: string;
-  setEndOfListElement: (element: HTMLDivElement | null) => void;
+  setEndOfListElement?: (element: HTMLDivElement | null) => void;
   errorMsg?: string;
 }) {
   const loadingItems: Record<string, any>[] = Array.from({ length: 3 }).map((_, index) => {
@@ -131,7 +131,7 @@ export function EntryList({
           )}
 
           {typeof page === 'number' && typeof perPage === 'number' && typeof total === 'number' && (
-            <div className={cn('flex items-center justify-center text-icon3 text-[0.875rem] gap-[2rem]')}>
+            <div className={cn('flex pt-[1.5rem] items-center justify-center text-icon3 text-[0.875rem] gap-[2rem]')}>
               <span>Page {page ? page + 1 : '1'}</span>
               <div
                 className={cn(

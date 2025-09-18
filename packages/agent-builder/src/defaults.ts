@@ -1115,7 +1115,7 @@ export const mastra = new Mastra({
         error: stderr,
       };
     } catch (error) {
-      console.log(error);
+      console.error(error);
       return {
         success: false,
         message: `Failed to create project: ${error instanceof Error ? error.message : String(error)}`,
@@ -1134,7 +1134,7 @@ export const mastra = new Mastra({
     projectPath?: string;
   }) {
     try {
-      console.log('Installing packages:', JSON.stringify(packages, null, 2));
+      console.info('Installing packages:', JSON.stringify(packages, null, 2));
 
       const packageStrings = packages.map(p => `${p.name}`);
 
@@ -1165,7 +1165,7 @@ export const mastra = new Mastra({
     projectPath?: string;
   }) {
     try {
-      console.log('Upgrading specific packages:', JSON.stringify(packages, null, 2));
+      console.info('Upgrading specific packages:', JSON.stringify(packages, null, 2));
 
       let packageNames: string[] = [];
 

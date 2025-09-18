@@ -1,0 +1,47 @@
+---
+title: "リファレンス: Mastra.setLogger() | Core | Mastra ドキュメント"
+description: "Mastra の `Mastra.setLogger()` メソッドのドキュメント。すべてのコンポーネント（エージェント、ワークフローなど）のロガーを設定します。"
+---
+
+# Mastra.setLogger()
+
+`.setLogger()` メソッドは、Mastra インスタンス内のすべてのコンポーネント（エージェント、ワークフローなど）のロガーを設定するために使用します。このメソッドは、logger プロパティを持つ1つのオブジェクトを引数として受け取ります。
+
+## 使用例
+
+```typescript copy
+mastra.setLogger({ logger: new PinoLogger({ name: "testLogger" }) });
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ logger: TLogger }",
+      description: "すべてのコンポーネントに適用する logger インスタンスを含むオブジェクト。",
+    },
+  ]}
+/>
+
+### オプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "logger",
+      type: "TLogger",
+      description: "すべてのコンポーネント（エージェント、ワークフローなど）に適用するロガーインスタンス。",
+    },
+  ]}
+/>
+
+## 戻り値
+
+このメソッドは値を返しません。
+
+## 関連項目
+
+- [ログ記録の概要](../../docs/observability/logging.mdx)
+- [ロガー リファレンス](../../reference/observability/logger.mdx)

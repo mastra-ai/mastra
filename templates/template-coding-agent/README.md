@@ -175,7 +175,3 @@ src/mastra/
         e2b.ts                      # Complete E2B sandbox interaction toolkit
       index.ts                        # Mastra configuration with storage and logging
 ```
-
-## License
-
-This project is part of the Mastra ecosystem and follows the same licensing terms.

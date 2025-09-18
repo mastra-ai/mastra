@@ -26,10 +26,11 @@ import type {
   WatchEvent,
   StreamEvent,
   ChunkType,
+  ExecutionEngineOptions,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
-import type { Inngest, BaseContext } from 'inngest';
+import type { Inngest, BaseContext, InngestFunction } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
 import { z } from 'zod';
 
@@ -61,9 +62,20 @@ export type InngestEngineType = {
   step: any;
 };
 
-export function serve({ mastra, inngest }: { mastra: Mastra; inngest: Inngest }): ReturnType<typeof inngestServe> {
+export function serve({
+  mastra,
+  inngest,
+  functions: userFunctions = [],
+}: {
+  mastra: Mastra;
+  inngest: Inngest;
+  /**
+   * Optional array of additional functions to serve and register with Inngest.
+   */
+  functions?: InngestFunction.Like[];
+}): ReturnType<typeof inngestServe> {
   const wfs = mastra.getWorkflows();
-  const functions = Array.from(
+  const workflowFunctions = Array.from(
     new Set(
       Object.values(wfs).flatMap(wf => {
         if (wf instanceof InngestWorkflow) {
@@ -74,9 +86,10 @@ export function serve({ mastra, inngest }: { mastra: Mastra; inngest: Inngest })
       }),
     ),
   );
+
   return inngestServe({
     client: inngest,
-    functions,
+    functions: [...workflowFunctions, ...userFunctions],
   });
 }
 
@@ -179,7 +192,7 @@ export class InngestRun<
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
-  }): Promise<WorkflowResult<TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     await this.#mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
@@ -230,7 +243,7 @@ export class InngestRun<
       | string
       | string[];
     runtimeContext?: RuntimeContext;
-  }): Promise<WorkflowResult<TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     const p = this._resume(params).then(result => {
       if (result.status !== 'suspended') {
         this.closeStreamAction?.().catch(() => {});
@@ -251,7 +264,7 @@ export class InngestRun<
       | string
       | string[];
     runtimeContext?: RuntimeContext;
-  }): Promise<WorkflowResult<TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
     );
@@ -318,7 +331,7 @@ export class InngestRun<
 
   stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
     stream: ReadableStream<StreamEvent>;
-    getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
+    getWorkflowState: () => Promise<WorkflowResult<TInput, TOutput, TSteps>>;
   } {
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
@@ -446,28 +459,19 @@ export class InngestWorkflow<
     }
   }
 
-  createRun(options?: { runId?: string }): Run<TEngineType, TSteps, TInput, TOutput> {
-    const runIdToUse = options?.runId || randomUUID();
-
-    // Return a new Run instance with object parameters
-    const run: Run<TEngineType, TSteps, TInput, TOutput> =
-      this.runs.get(runIdToUse) ??
-      new InngestRun(
-        {
-          workflowId: this.id,
-          runId: runIdToUse,
-          executionEngine: this.executionEngine,
-          executionGraph: this.executionGraph,
-          serializedStepGraph: this.serializedStepGraph,
-          mastra: this.#mastra,
-          retryConfig: this.retryConfig,
-          cleanup: () => this.runs.delete(runIdToUse),
-        },
-        this.inngest,
-      );
-
-    this.runs.set(runIdToUse, run);
-    return run;
+  /**
+   * @deprecated Use createRunAsync() instead.
+   * @throws {Error} Always throws an error directing users to use createRunAsync()
+   */
+  createRun(_options?: { runId?: string }): Run<TEngineType, TSteps, TInput, TOutput> {
+    throw new Error(
+      'createRun() has been deprecated. ' +
+        'Please use createRunAsync() instead.\n\n' +
+        'Migration guide:\n' +
+        '  Before: const run = workflow.createRun();\n' +
+        '  After:  const run = await workflow.createRunAsync();\n\n' +
+        'Note: createRunAsync() is an async method, so make sure your calling function is async.',
+    );
   }
 
   async createRunAsync(options?: {
@@ -574,7 +578,7 @@ export class InngestWorkflow<
         };
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt);
-        const result = await engine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
+        const result = await engine.execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
           workflowId: this.id,
           runId,
           resourceId,
@@ -862,8 +866,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   private inngestStep: BaseContext<Inngest>['step'];
   private inngestAttempts: number;
 
-  constructor(mastra: Mastra, inngestStep: BaseContext<Inngest>['step'], inngestAttempts: number = 0) {
-    super({ mastra });
+  constructor(
+    mastra: Mastra,
+    inngestStep: BaseContext<Inngest>['step'],
+    inngestAttempts: number = 0,
+    options?: ExecutionEngineOptions,
+  ) {
+    super({ mastra, options });
     this.inngestStep = inngestStep;
     this.inngestAttempts = inngestAttempts;
   }
@@ -1031,7 +1040,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         durationMs: duration,
         sleepType: fn ? 'dynamic' : 'fixed',
       },
-      isInternal: tracingContext?.isInternal,
+      tracingPolicy: this.options?.tracingPolicy,
     });
 
     if (fn) {
@@ -1046,7 +1055,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           runCount: -1,
           tracingContext: {
             currentSpan: sleepSpan,
-            isInternal: sleepSpan?.isInternal,
           },
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
@@ -1150,7 +1158,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         durationMs: date ? Math.max(0, date.getTime() - Date.now()) : undefined,
         sleepType: fn ? 'dynamic' : 'fixed',
       },
-      isInternal: tracingContext?.isInternal,
+      tracingPolicy: this.options?.tracingPolicy,
     });
 
     if (fn) {
@@ -1165,7 +1173,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           runCount: -1,
           tracingContext: {
             currentSpan: sleepUntilSpan,
-            isInternal: sleepUntilSpan?.isInternal,
           },
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
@@ -1204,6 +1211,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       });
 
       // Update sleep until span with dynamic duration
+      // Ensure date is a Date object before calling getTime()
+      if (date && !(date instanceof Date)) {
+        date = new Date(date);
+      }
       const time = !date ? 0 : date.getTime() - Date.now();
       sleepUntilSpan?.update({
         attributes: {
@@ -1275,7 +1286,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       attributes: {
         stepId: step.id,
       },
-      isInternal: tracingContext?.isInternal,
+      tracingPolicy: this.options?.tracingPolicy,
     });
 
     const startedAt = await this.inngestStep.run(
@@ -1320,7 +1331,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
     if (step instanceof InngestWorkflow) {
       const isResume = !!resume?.steps?.length;
-      let result: WorkflowResult<any, any>;
+      let result: WorkflowResult<any, any, any>;
       let runId: string;
       if (isResume) {
         // @ts-ignore
@@ -1536,7 +1547,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           tracingContext: {
             currentSpan: stepAISpan,
-            isInternal: stepAISpan?.isInternal,
           },
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
@@ -1671,7 +1681,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             stepId: step.id,
             runtimeContext,
             disableScorers,
-            tracingContext: { currentSpan: stepAISpan, isInternal: true },
+            tracingContext: { currentSpan: stepAISpan },
           });
         }
       });
@@ -1783,7 +1793,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       attributes: {
         conditionCount: entry.conditions.length,
       },
-      isInternal: tracingContext?.isInternal,
+      tracingPolicy: this.options?.tracingPolicy,
     });
 
     let execResults: any;
@@ -1798,7 +1808,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               attributes: {
                 conditionIndex: index,
               },
-              isInternal: tracingContext?.isInternal,
+              tracingPolicy: this.options?.tracingPolicy,
             });
 
             try {
@@ -1811,7 +1821,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 inputData: prevOutput,
                 tracingContext: {
                   currentSpan: evalSpan,
-                  isInternal: evalSpan?.isInternal,
                 },
                 getInitData: () => stepResults?.input as any,
                 getStepResult: (step: any) => {
@@ -1908,7 +1917,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           disableScorers,
           tracingContext: {
             currentSpan: conditionalSpan,
-            isInternal: conditionalSpan?.isInternal,
           },
         }),
       ),

@@ -3,60 +3,70 @@ title: "Cloudflare Deployer"
 description: "CloudflareDeployerクラスのドキュメント。MastraアプリケーションをCloudflare Workersにデプロイします。"
 ---
 
+
+
 # CloudflareDeployer
 
-CloudflareDeployerは、MastraアプリケーションをCloudflare Workersにデプロイし、設定、環境変数、ルート管理を処理します。抽象Deployerクラスを拡張して、Cloudflare固有のデプロイ機能を提供します。
+`CloudflareDeployer`クラスは、スタンドアロンのMastraアプリケーションをCloudflare Workersにデプロイすることを処理します。設定とデプロイメントを管理し、Cloudflare固有の機能でベースの[Deployer](/reference/deployer/deployer)クラスを拡張します。
+
+
 
 ## 使用例
 
-```typescript
-import { Mastra } from "@mastra/core";
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
 import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
-const mastra = new Mastra({
+export const mastra = new Mastra({
+  // ...
   deployer: new CloudflareDeployer({
-    scope: "your-account-id",
-    projectName: "your-project-name",
+    projectName: "hello-mastra",
     routes: [
       {
         pattern: "example.com/*",
         zone_name: "example.com",
-        custom_domain: true,
-      },
+        custom_domain: true
+      }
     ],
-    workerNamespace: "your-namespace",
-    auth: {
-      apiToken: "your-api-token",
-      apiEmail: "your-email",
+    workerNamespace: "my-namespace",
+    env: {
+      NODE_ENV: "production",
+      API_KEY: "<api-key>"
     },
-  }),
-  // ... other Mastra configuration options
+    d1Databases: [
+      {
+        binding: "DB",
+        database_name: "my-database",
+        database_id: "d1-database-id",
+        preview_database_id: "your-preview-database-id"
+      }
+    ],
+    kvNamespaces: [
+      {
+        binding: "CACHE",
+        id: "kv-namespace-id"
+      }
+    ]
 });
 ```
 
-## パラメーター
 
-### コンストラクタのパラメーター
+
+## パラメーター
 
 <PropertiesTable
   content={[
     {
-      name: "scope",
-      type: "string",
-      description: "あなたのCloudflareアカウントID。",
-      isOptional: false,
-    },
-    {
       name: "projectName",
       type: "string",
-      description: "ワーカープロジェクトの名前。",
+      description: "ワーカー プロジェクトの名前。",
       isOptional: true,
       defaultValue: "'mastra'",
     },
     {
       name: "routes",
       type: "CFRoute[]",
-      description: "ワーカー用のルート設定の配列。",
+      description: "ワーカーのルート設定の配列。各ルートには次が必要です: pattern (string)、zone_name (string)、custom_domain (boolean、任意)。",
       isOptional: true,
     },
     {
@@ -68,154 +78,20 @@ const mastra = new Mastra({
     {
       name: "env",
       type: "Record<string, any>",
-      description: "ワーカーの設定に含める環境変数。",
+      description: "ワーカー設定に含める環境変数。",
       isOptional: true,
     },
     {
-      name: "auth",
-      type: "object",
-      description: "Cloudflare認証情報。",
-      isOptional: false,
-    },
-  ]}
-/>
-
-### auth オブジェクト
-
-<PropertiesTable
-  content={[
-    {
-      name: "apiToken",
-      type: "string",
-      description: "あなたのCloudflare APIトークン。",
-      isOptional: false,
+      name: "d1Databases",
+      type: "D1DatabaseBinding[]",
+      description: "D1 データベース バインディングの配列。各バインディングには次が必要です: binding (string)、database_name (string)、database_id (string)、preview_database_id (string、任意)。",
+      isOptional: true,
     },
     {
-      name: "apiEmail",
-      type: "string",
-      description: "あなたのCloudflareアカウントのメールアドレス。",
+      name: "kvNamespaces",
+      type: "KVNamespaceBinding[]",
+      description: "KV 名前空間バインディングの配列。各バインディングには次が必要です: binding (string)、id (string)。",
       isOptional: true,
     },
   ]}
 />
-
-### CFRoute オブジェクト
-
-<PropertiesTable
-  content={[
-    {
-      name: "pattern",
-      type: "string",
-      description: "マッチさせるURLパターン（例: 'example.com/*'）。",
-      isOptional: false,
-    },
-    {
-      name: "zone_name",
-      type: "string",
-      description: "ドメインゾーン名。",
-      isOptional: false,
-    },
-    {
-      name: "custom_domain",
-      type: "boolean",
-      description: "カスタムドメインを使用するかどうか。",
-      isOptional: true,
-      defaultValue: "false",
-    },
-  ]}
-/>
-
-### 環境変数
-
-CloudflareDeployerは複数のソースから環境変数を扱います：
-
-1. **環境ファイル**: `.env.production` および `.env` ファイルからの変数。
-2. **設定**: `env` パラメーターを通じて渡された変数。
-
-## Mastraプロジェクトのリント
-
-Mastraプロジェクトをリントして、ビルドに問題がないことを確認します
-
-```bash
-npx mastra lint
-```
-
-## Mastraプロジェクトのビルド
-
-Cloudflareへのデプロイ用にMastraプロジェクトをビルドするには、以下の手順を実行します。
-
-```bash
-npx mastra build
-
-ビルドプロセスは、`.mastra/output` ディレクトリに次のような出力構造を生成します。
-
-```
-
-.mastra/output/
-├── index.mjs # メインワーカーのエントリーポイント
-├── wrangler.json # Cloudflare Workerの設定ファイル
-└── assets/ # 静的アセットおよび依存ファイル
-
-````
-
-### Wranglerの設定
-
-CloudflareDeployerは、以下の設定を含む `wrangler.json` 設定ファイルを自動的に生成します。
-
-```json
-{
-  "name": "your-project-name",
-  "main": "./output/index.mjs",
-  "compatibility_date": "2024-12-02",
-  "compatibility_flags": ["nodejs_compat"],
-  "observability": {
-    "logs": {
-      "enabled": true
-    }
-  },
-  "vars": {
-    // .envファイルや設定からの環境変数
-  },
-  "routes": [
-    // 指定されていればルート設定
-  ]
-}
-````
-
-### ルート設定
-
-ルートは、URLパターンやドメインに基づいてトラフィックをワーカーに振り分けるよう設定できます。
-
-```typescript
-const routes = [
-  {
-    pattern: "api.example.com/*",
-    zone_name: "example.com",
-    custom_domain: true,
-  },
-  {
-    pattern: "example.com/api/*",
-    zone_name: "example.com",
-  },
-];
-```
-
-## デプロイメントオプション
-
-ビルド後、Mastraアプリケーションの `.mastra/output` をCloudflare Workersに以下のいずれかの方法でデプロイできます：
-
-1. **Wrangler CLI**: Cloudflare公式のCLIツールを使って直接デプロイ
-
-   - CLIをインストール: `npm install -g wrangler`
-   - 出力ディレクトリに移動: `cd .mastra/output`
-   - Cloudflareアカウントにログイン: `wrangler login`
-   - プレビュー環境にデプロイ: `wrangler deploy`
-   - 本番環境へのデプロイ: `wrangler deploy --env production`
-
-2. **Cloudflareダッシュボード**: Cloudflareダッシュボードからビルド出力を手動でアップロード
-
-> 出力ディレクトリ `.mastra/output` で `wrangler dev` を実行することで、Mastraアプリケーションをローカルでテストすることもできます。
-
-## プラットフォームドキュメント
-
-- [Cloudflare Workers](https://developers.cloudflare.com/workers/)

@@ -735,7 +735,7 @@ export class MCPServer extends MCPServerBase {
           }
 
           try {
-            const run = workflow.createRun({ runId: effectiveRuntimeContext?.get('runId') });
+            const run = await workflow.createRunAsync({ runId: effectiveRuntimeContext?.get('runId') });
 
             const response = await run.start({
               inputData: context,

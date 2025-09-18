@@ -3,9 +3,13 @@ title: "リファレンス: Cloudflare Voice | 音声プロバイダー | Mastra
 description: "CloudflareVoice クラスのドキュメント。Cloudflare Workers AI を使用したテキスト読み上げ機能を提供します。"
 ---
 
+
+
 # Cloudflare
 
 MastraのCloudflareVoiceクラスは、Cloudflare Workers AIを利用したテキスト読み上げ機能を提供します。このプロバイダーは、エッジコンピューティング環境に適した効率的で低遅延な音声合成を専門としています。
+
+
 
 ## 使用例
 
@@ -31,6 +35,8 @@ const audioStream = await voice.speak("Hello, how can I help you?", {
 const speakers = await voice.getSpeakers();
 console.log(speakers);
 ```
+
+
 
 ## 設定
 
@@ -81,6 +87,8 @@ console.log(speakers);
     },
   ]}
 />
+
+
 
 ## メソッド
 
@@ -136,6 +144,8 @@ Cloudflare のテキスト読み上げサービスを使用して、テキスト
   ]}
 />
 
+
+
 ## 注意事項
 
 - APIトークンはコンストラクタのオプションまたは環境変数（CLOUDFLARE_API_TOKEN と CLOUDFLARE_ACCOUNT_ID）で指定できます
@@ -144,6 +154,8 @@ Cloudflare のテキスト読み上げサービスを使用して、テキスト
 - このサービスは他の Cloudflare Workers 製品と高い互換性があります
 - 本番環境で利用する場合は、ご自身の Cloudflare アカウントに適切な Workers AI サブスクリプションがあることを確認してください
 - 音声の選択肢は他の一部プロバイダーと比べて制限がありますが、エッジでのパフォーマンスは非常に優れています
+
+
 
 ## 関連プロバイダー
 

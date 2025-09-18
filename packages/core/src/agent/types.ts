@@ -1,7 +1,7 @@
 import type { GenerateTextOnStepFinishCallback, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema, ZodTypeAny } from 'zod';
-import type { TracingContext, TracingOptions } from '../ai-tracing';
+import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
@@ -23,12 +23,15 @@ import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import type { RuntimeContext } from '../runtime-context';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
+import type { ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
+import type { MessageList } from './message-list/index';
+import type { SaveQueueManager } from './save-queue';
 
 export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
 export type { Message as AiMessageType } from 'ai';
@@ -55,6 +58,10 @@ export type StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny> = {
   instructions?: string;
 } & FallbackFields<S>;
 
+export interface AgentCreateOptions {
+  tracingPolicy?: TracingPolicy;
+}
+
 export interface AgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
@@ -64,7 +71,14 @@ export interface AgentConfig<
   name: TAgentId;
   description?: string;
   instructions: DynamicArgument<string>;
-  model: DynamicArgument<MastraLanguageModel>;
+  model:
+    | DynamicArgument<MastraLanguageModel>
+    | {
+        model: DynamicArgument<MastraLanguageModel>;
+        maxRetries?: number; //defaults to 0
+        enabled?: boolean; //defaults to true
+      }[];
+  maxRetries?: number; //defaults to 0
   tools?: DynamicArgument<TTools>;
   workflows?: DynamicArgument<Record<string, Workflow>>;
   defaultGenerateOptions?: DynamicArgument<AgentGenerateOptions>;
@@ -78,6 +92,7 @@ export interface AgentConfig<
   voice?: CompositeVoice;
   inputProcessors?: DynamicArgument<InputProcessor[]>;
   outputProcessors?: DynamicArgument<OutputProcessor[]>;
+  options?: AgentCreateOptions;
 }
 
 export type AgentMemoryOption = {
@@ -249,3 +264,24 @@ export type AgentStreamOptions<
     }
 ) &
   (OUTPUT extends undefined ? DefaultLLMStreamOptions : DefaultLLMStreamObjectOptions);
+
+export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };
+
+export type AgentExecuteOnFinishOptions = {
+  instructions: string;
+  runId: string;
+  result: Record<string, any>;
+  thread: StorageThreadType | null | undefined;
+  readOnlyMemory?: boolean;
+  threadId?: string;
+  resourceId?: string;
+  runtimeContext: RuntimeContext;
+  agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
+  memoryConfig: MemoryConfig | undefined;
+  outputText: string;
+  messageList: MessageList;
+  threadExists: boolean;
+  structuredOutput?: boolean;
+  saveQueueManager: SaveQueueManager;
+  overrideScorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+};

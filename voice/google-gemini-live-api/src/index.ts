@@ -1959,7 +1959,7 @@ export class GeminiLiveVoice extends MastraVoice<
 
   private log(message: string, ...args: unknown[]): void {
     if (this.debug) {
-      console.log(`[GeminiLiveVoice] ${message}`, ...args);
+      console.info(`[GeminiLiveVoice] ${message}`, ...args);
     }
   }
 
