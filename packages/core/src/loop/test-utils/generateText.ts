@@ -2098,7 +2098,6 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         },
       });
 
-      console.log(JSON.stringify(tracer.jsonSpans, null, 2));
       expect(tracer.jsonSpans).toMatchInlineSnapshot(`
         [
           {

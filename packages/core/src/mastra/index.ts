@@ -2,6 +2,8 @@ import type { Agent } from '../agent';
 import { getAllAITracing, setupAITracing, shutdownAITracingRegistry } from '../ai-tracing';
 import type { ObservabilityRegistryConfig } from '../ai-tracing';
 import type { BundlerConfig } from '../bundler/types';
+import { InMemoryServerCache } from '../cache';
+import type { MastraServerCache } from '../cache';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import { EventEmitterPubSub } from '../events/event-emitter';
@@ -12,7 +14,6 @@ import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
-import type { AgentNetwork } from '../network';
 import type { NewAgentNetwork } from '../network/vNext';
 import type { MastraScorer } from '../scores';
 import { scoreBatchTracesWorkflow } from '../scores/scoreBatchTraces/scoreBatchTracesWorkflow';
@@ -32,17 +33,18 @@ import { createOnScorerHook } from './hooks';
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
-  TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
+  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any>> = Record<
+    string,
+    Workflow<any, any, any, any, any, any>
+  >,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
-  TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
   TVNextNetworks extends Record<string, NewAgentNetwork> = Record<string, NewAgentNetwork>,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
   TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
 > {
   agents?: TAgents;
-  networks?: TNetworks;
   vnext_networks?: TVNextNetworks;
   storage?: MastraStorage;
   vectors?: TVectors;
@@ -88,11 +90,13 @@ export interface Config<
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
-  TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
+  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any>> = Record<
+    string,
+    Workflow<any, any, any, any, any, any>
+  >,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
-  TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
   TVNextNetworks extends Record<string, NewAgentNetwork> = Record<string, NewAgentNetwork>,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
   TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
@@ -111,7 +115,6 @@ export class Mastra<
   #telemetry?: Telemetry;
   #storage?: MastraStorage;
   #memory?: MastraMemory;
-  #networks?: TNetworks;
   #vnext_networks?: TVNextNetworks;
   #scorers?: TScorers;
   #server?: ServerConfig;
@@ -123,6 +126,8 @@ export class Mastra<
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
   #intenalMastraWorkflows: Record<string, Workflow> = {};
+  // This is only used internally for server handlers that require temporary persistence
+  #serverCache: MastraServerCache;
 
   /**
    * @deprecated use getTelemetry() instead
@@ -187,7 +192,6 @@ export class Mastra<
       TVectors,
       TTTS,
       TLogger,
-      TNetworks,
       TVNextNetworks,
       TMCPServers,
       TScorers
@@ -200,6 +204,13 @@ export class Mastra<
         path: m.path || '/api/*',
       }));
     }
+
+    /*
+    Server Cache
+    */
+
+    // This is only used internally for server handlers that require temporary persistence
+    this.#serverCache = new InMemoryServerCache();
 
     /*
     Events
@@ -317,10 +328,6 @@ export class Mastra<
       this.#vectors = vectors as TVectors;
     }
 
-    if (config?.networks) {
-      this.#networks = config.networks;
-    }
-
     if (config?.vnext_networks) {
       this.#vnext_networks = config.vnext_networks;
     }
@@ -414,16 +421,7 @@ do:
     /*
     Networks
     */
-    this.#networks = {} as TNetworks;
     this.#vnext_networks = {} as TVNextNetworks;
-
-    if (config?.networks) {
-      Object.entries(config.networks).forEach(([key, network]) => {
-        network.__registerMastra(this);
-        // @ts-ignore
-        this.#networks[key] = network;
-      });
-    }
 
     if (config?.vnext_networks) {
       Object.entries(config.vnext_networks).forEach(([key, network]) => {
@@ -948,6 +946,10 @@ do:
     return this.#serverMiddleware;
   }
 
+  public getServerCache() {
+    return this.#serverCache;
+  }
+
   public setServerMiddleware(serverMiddleware: Middleware | Middleware[]) {
     if (typeof serverMiddleware === 'function') {
       this.#serverMiddleware = [
@@ -984,10 +986,6 @@ do:
     });
   }
 
-  public getNetworks() {
-    return Object.values(this.#networks || {});
-  }
-
   public vnext_getNetworks() {
     return Object.values(this.#vnext_networks || {});
   }
@@ -998,19 +996,6 @@ do:
 
   public getBundlerConfig() {
     return this.#bundler;
-  }
-
-  /**
-   * Get a specific network by ID
-   * @param networkId - The ID of the network to retrieve
-   * @returns The network with the specified ID, or undefined if not found
-   */
-  public getNetwork(networkId: string): AgentNetwork | undefined {
-    const networks = this.getNetworks();
-    return networks.find(network => {
-      const routingAgent = network.getRoutingAgent();
-      return network.formatAgentId(routingAgent.name) === networkId;
-    });
   }
 
   public vnext_getNetwork(networkId: string): NewAgentNetwork | undefined {
@@ -1239,5 +1224,10 @@ do:
     await this.stopEventEngine();
 
     this.#logger?.info('Mastra shutdown completed');
+  }
+
+  // This method is only used internally for server hnadlers that require temporary persistence
+  public get serverCache() {
+    return this.#serverCache;
   }
 }

@@ -107,7 +107,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const base: any = {
       status: lastOutput.status,
       steps: stepResults,
+      input: stepResults.input,
     };
+
     if (lastOutput.status === 'success') {
       await emitter.emit('watch', {
         type: 'watch',

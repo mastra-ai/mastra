@@ -10,6 +10,7 @@ import {
   EntryListStatusCell,
   TracesTools,
   TraceDialog,
+  parseError,
 } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
@@ -181,6 +182,8 @@ export default function Observability() {
     return currentIndex > 0;
   };
 
+  const error = isAiTracesError ? parseError(aiTracesError) : undefined;
+
   return (
     <>
       <MainContentLayout>
@@ -214,7 +217,7 @@ export default function Observability() {
               isLoadingNextPage={isFetchingNextPage}
               hasMore={!!hasNextPage}
               setEndOfListElement={setEndOfListElement}
-              errorMsg={isAiTracesError ? aiTracesError.message : undefined}
+              errorMsg={error?.error}
             />
           </div>
         </div>

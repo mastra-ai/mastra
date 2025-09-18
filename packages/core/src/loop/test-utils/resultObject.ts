@@ -71,14 +71,12 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       await result.aisdk.v5.consumeStream();
 
       expect(await result.usage).toMatchInlineSnapshot(`
-            {
-              "cachedInputTokens": undefined,
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "reasoningTokens": undefined,
-              "totalTokens": 13,
-            }
-          `);
+        {
+          "inputTokens": 3,
+          "outputTokens": 10,
+          "totalTokens": 13,
+        }
+      `);
     });
   });
 
@@ -722,10 +720,8 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "timestamp": 1970-01-01T00:00:00.000Z,
             },
             "usage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
             "warnings": [],

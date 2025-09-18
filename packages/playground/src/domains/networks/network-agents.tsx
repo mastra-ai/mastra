@@ -1,8 +1,8 @@
 import { Badge } from '@/components/ui/badge';
 import { Brain } from 'lucide-react';
-import { GetNetworkResponse } from '@mastra/client-js';
+import { GetVNextNetworkResponse } from '@mastra/client-js';
 
-export function NetworkAgents({ network }: { network: GetNetworkResponse }) {
+export function NetworkAgents({ network }: { network: GetVNextNetworkResponse }) {
   if (!network.agents || network.agents.length === 0) {
     return (
       <div className="p-4">
