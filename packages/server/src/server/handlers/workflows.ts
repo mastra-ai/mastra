@@ -454,6 +454,42 @@ export async function streamVNextWorkflowHandler({
   }
 }
 
+export async function streamVNextFullWorkflowHandler({
+  mastra,
+  runtimeContext,
+  workflowId,
+  runId,
+  inputData,
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
+  inputData?: unknown;
+  runtimeContext?: RuntimeContext;
+}) {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to stream workflow' });
+    }
+
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
+
+    if (!workflow) {
+      throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    const run = await workflow.createRunAsync({ runId });
+    const result = run.streamFullVNext({
+      inputData,
+      runtimeContext,
+    });
+    return result;
+  } catch (error) {
+    return handleError(error, 'Error streaming workflow');
+  }
+}
+
 export async function resumeAsyncWorkflowHandler({
   mastra,
   workflowId,
@@ -546,6 +582,55 @@ export async function resumeWorkflowHandler({
     });
 
     return { message: 'Workflow run resumed' };
+  } catch (error) {
+    return handleError(error, 'Error resuming workflow');
+  }
+}
+
+export async function resumeStreamWorkflowHandler({
+  mastra,
+  workflowId,
+  runId,
+  body,
+  runtimeContext,
+}: WorkflowContext & {
+  body: { step: string | string[]; resumeData?: unknown };
+  runtimeContext?: RuntimeContext;
+}) {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to resume workflow' });
+    }
+
+    if (!body.step) {
+      throw new HTTPException(400, { message: 'step required to resume workflow' });
+    }
+
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
+
+    if (!workflow) {
+      throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    const run = await workflow.getWorkflowRunById(runId);
+
+    if (!run) {
+      throw new HTTPException(404, { message: 'Workflow run not found' });
+    }
+
+    const _run = await workflow.createRunAsync({ runId });
+
+    const stream = await _run.resumeStreamVNext({
+      step: body.step,
+      resumeData: body.resumeData,
+      runtimeContext,
+    });
+
+    return stream;
   } catch (error) {
     return handleError(error, 'Error resuming workflow');
   }

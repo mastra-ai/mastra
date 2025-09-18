@@ -19,6 +19,8 @@ import {
   observeStreamWorkflowHandler,
   streamVNextWorkflowHandler,
   watchWorkflowHandler,
+  resumeStreamWorkflowHandler,
+  streamVNextFullWorkflowHandler,
 } from './handlers';
 import {
   createLegacyWorkflowRunHandler,
@@ -495,6 +497,50 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
   );
 
   router.post(
+    '/:workflowId/resume-stream',
+    describeRoute({
+      description: 'Resume a suspended workflow that uses streamVNext',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                step: {
+                  oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+                },
+                resumeData: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
+              },
+              required: ['step'],
+            },
+          },
+        },
+      },
+    }),
+    resumeStreamWorkflowHandler,
+  );
+
+  router.post(
     '/:workflowId/resume-async',
     bodyLimit(bodyLimitOptions),
     describeRoute({
@@ -664,6 +710,54 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
       tags: ['workflows'],
     }),
     streamVNextWorkflowHandler,
+  );
+
+  router.post(
+    '/:workflowId/streamFullVNext',
+    describeRoute({
+      description: 'Stream workflow in real-time using the VNext streaming API',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                inputData: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'workflow run started',
+        },
+        404: {
+          description: 'workflow not found',
+        },
+      },
+      tags: ['workflows'],
+    }),
+    streamVNextFullWorkflowHandler,
   );
 
   router.post(

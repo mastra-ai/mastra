@@ -16,6 +16,8 @@ import {
   cancelWorkflowRunHandler as getOriginalCancelWorkflowRunHandler,
   sendWorkflowRunEventHandler as getOriginalSendWorkflowRunEventHandler,
   observeStreamWorkflowHandler as getOriginalObserveStreamWorkflowHandler,
+  resumeStreamWorkflowHandler as getOriginalResumeStreamWorkflowHandler,
+  streamVNextFullWorkflowHandler as getOriginalStreamVNextFullWorkflowHandler,
 } from '@mastra/server/handlers/workflows';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -275,6 +277,98 @@ export async function streamVNextWorkflowHandler(c: Context) {
             workflowId,
             runId,
             inputData,
+            runtimeContext,
+          });
+
+          const reader = result.getReader();
+
+          stream.onAbort(() => {
+            void reader.cancel('request aborted');
+          });
+
+          let chunkResult;
+          while ((chunkResult = await reader.read()) && !chunkResult.done) {
+            await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
+          }
+        } catch (err) {
+          logger.error('Error in workflow VNext stream: ' + ((err as Error)?.message ?? 'Unknown error'));
+        }
+      },
+      async err => {
+        logger.error('Error in workflow VNext stream: ' + err?.message);
+      },
+    );
+  } catch (error) {
+    return handleError(error, 'Error streaming workflow');
+  }
+}
+
+export async function streamVNextFullWorkflowHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const runtimeContext = c.get('runtimeContext');
+    const logger = mastra.getLogger();
+    const workflowId = c.req.param('workflowId');
+    const { inputData } = await c.req.json();
+    const runId = c.req.query('runId');
+
+    c.header('Transfer-Encoding', 'chunked');
+
+    return stream(
+      c,
+      async stream => {
+        try {
+          const result = await getOriginalStreamVNextFullWorkflowHandler({
+            mastra,
+            workflowId,
+            runId,
+            inputData,
+            runtimeContext,
+          });
+
+          const reader = result.getReader();
+
+          stream.onAbort(() => {
+            void reader.cancel('request aborted');
+          });
+
+          let chunkResult;
+          while ((chunkResult = await reader.read()) && !chunkResult.done) {
+            await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
+          }
+        } catch (err) {
+          logger.error('Error in workflow VNext stream: ' + ((err as Error)?.message ?? 'Unknown error'));
+        }
+      },
+      async err => {
+        logger.error('Error in workflow VNext stream: ' + err?.message);
+      },
+    );
+  } catch (error) {
+    return handleError(error, 'Error streaming workflow');
+  }
+}
+
+export async function resumeStreamWorkflowHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const runtimeContext = c.get('runtimeContext');
+    const logger = mastra.getLogger();
+    const workflowId = c.req.param('workflowId');
+    const { step, resumeData } = await c.req.json();
+    const runId = c.req.query('runId');
+
+    c.header('Transfer-Encoding', 'chunked');
+
+    return stream(
+      c,
+      async stream => {
+        try {
+          const result = await getOriginalResumeStreamWorkflowHandler({
+            mastra,
+            workflowId,
+            runId,
+            body: { step, resumeData },
             runtimeContext,
           });
 
