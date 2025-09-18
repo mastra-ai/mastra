@@ -32,7 +32,10 @@ import { createOnScorerHook } from './hooks';
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
-  TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
+  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any>> = Record<
+    string,
+    Workflow<any, any, any, any, any, any>
+  >,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
@@ -86,7 +89,10 @@ export interface Config<
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
-  TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
+  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any>> = Record<
+    string,
+    Workflow<any, any, any, any, any, any>
+  >,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
