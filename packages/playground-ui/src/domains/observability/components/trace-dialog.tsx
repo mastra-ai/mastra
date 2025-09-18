@@ -149,7 +149,18 @@ export function TraceDialog({
           <div className={cn('overflow-y-auto pb-[2.5rem]')}>
             {traceDetails && (
               <div>
-                <ScorersDropdown trace={traceDetails} spanId={selectedSpanId} onScorerTriggered={onScorerTriggered} />
+                <ScorersDropdown
+                  trace={traceDetails}
+                  spanId={selectedSpanId}
+                  onScorerTriggered={onScorerTriggered}
+                  entityType={
+                    traceDetails?.attributes?.agentId
+                      ? 'Agent'
+                      : traceDetails?.attributes?.workflowId
+                        ? 'Workflow'
+                        : '-'
+                  }
+                />
               </div>
             )}
 
@@ -243,7 +254,10 @@ export function TraceDialog({
           trace={traceDetails}
           span={selectedSpan}
           isOpen={Boolean(dialogIsOpen && selectedSpanId && !combinedView)}
-          onClose={() => setDialogIsOpen(false)}
+          onClose={() => {
+            setDialogIsOpen(false);
+            setSelectedSpanId(undefined);
+          }}
           onNext={thereIsNextSpan() ? toNextSpan : undefined}
           onPrevious={thereIsPreviousSpan() ? toPreviousSpan : undefined}
           onViewToggle={() => setCombinedView(!combinedView)}
