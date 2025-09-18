@@ -9,16 +9,15 @@ import { createAgenticExecutionWorkflow } from '../agentic-execution';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
 
-interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined>
+interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>
   extends LoopRun<Tools, OUTPUT> {
   controller: ReadableStreamDefaultController<ChunkType>;
   writer: WritableStream<ChunkType>;
 }
 
-export function createAgenticLoopWorkflow<
-  Tools extends ToolSet = ToolSet,
-  OUTPUT extends OutputSchema | undefined = undefined,
->(params: AgenticLoopParams<Tools, OUTPUT>) {
+export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>(
+  params: AgenticLoopParams<Tools, OUTPUT>,
+) {
   const {
     models,
     _internal,
