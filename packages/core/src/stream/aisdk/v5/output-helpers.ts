@@ -1,4 +1,12 @@
-import type { ReasoningUIPart, StepResult, ToolSet } from 'ai-v5';
+import type {
+  ReasoningUIPart,
+  StepResult,
+  ToolSet,
+  StaticToolCall,
+  StaticToolResult,
+  DynamicToolCall,
+  DynamicToolResult
+} from 'ai-v5';
 import type { MastraMessageV2 } from '../../../memory';
 import type { StepBufferItem } from '../../types';
 
@@ -107,7 +115,7 @@ export function reasoningDetailsFromMessages(messages: MastraMessageV2[]): Reaso
     });
 }
 
-export function transformSteps({ steps }: { steps: StepBufferItem[] }): DefaultStepResult<any>[] {
+export function transformSteps<TOOLS extends ToolSet = ToolSet>({ steps }: { steps: StepBufferItem[] }): DefaultStepResult<TOOLS>[] {
   return steps.map(step => {
     if (!step.response) throw new Error(`No step response found while transforming steps but one was expected.`);
     if (!step.request) throw new Error(`No step request found while transforming steps but one was expected.`);

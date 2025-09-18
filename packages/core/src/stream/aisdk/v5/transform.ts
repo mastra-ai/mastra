@@ -343,7 +343,7 @@ export function convertMastraChunkToAISDKv5({
         type: 'finish',
         finishReason: chunk.payload.stepResult.reason,
         totalUsage: chunk.payload.output.usage,
-      } as any;
+      };
     }
     case 'reasoning-start':
       return {
@@ -379,16 +379,26 @@ export function convertMastraChunkToAISDKv5({
         providerMetadata: chunk.payload.providerMetadata,
       };
     case 'source':
-      return {
-        type: 'source',
-        id: chunk.payload.id,
-        sourceType: chunk.payload.sourceType,
-        filename: chunk.payload.filename,
-        mediaType: chunk.payload.mimeType,
-        title: chunk.payload.title,
-        url: chunk.payload.url,
-        providerMetadata: chunk.payload.providerMetadata,
-      } as any;
+      if (chunk.payload.sourceType === 'url') {
+        return {
+          type: 'source',
+          sourceType: 'url',
+          id: chunk.payload.id,
+          url: chunk.payload.url!,
+          title: chunk.payload.title,
+          providerMetadata: chunk.payload.providerMetadata,
+        };
+      } else {
+        return {
+          type: 'source',
+          sourceType: 'document',
+          id: chunk.payload.id,
+          mediaType: chunk.payload.mimeType!,
+          title: chunk.payload.title,
+          filename: chunk.payload.filename,
+          providerMetadata: chunk.payload.providerMetadata,
+        };
+      }
     case 'file':
       if (mode === 'generate') {
         return {
@@ -442,8 +452,13 @@ export function convertMastraChunkToAISDKv5({
       const { request: _request, providerMetadata, ...rest } = chunk.payload.metadata;
       return {
         type: 'finish-step',
-        response: rest as any,
-        usage: chunk.payload.output.usage, // ?
+        response: {
+          id: chunk.payload.id || '',
+          timestamp: new Date(),
+          modelId: (rest.modelId as string) || (rest.model as string) || '',
+          ...rest
+        },
+        usage: chunk.payload.output.usage,
         finishReason: chunk.payload.stepResult.reason,
         providerMetadata,
       };
@@ -508,9 +523,9 @@ export function convertMastraChunkToAISDKv5({
     default:
       if (chunk.type && chunk.payload) {
         return {
-          type: chunk.type,
+          type: chunk.type as string,
           ...(chunk.payload || {}),
-        } as any;
+        } as OutputChunkType;
       }
       return;
   }

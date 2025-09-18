@@ -1,9 +1,9 @@
 import type { ReadableStream } from 'stream/web';
 import { TransformStream } from 'stream/web';
-import type { SharedV2ProviderMetadata, LanguageModelV2CallWarning } from '@ai-sdk/provider-v5';
+import type { SharedV2ProviderMetadata, LanguageModelV2CallWarning, LanguageModelV2Source } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
 import { consumeStream } from 'ai-v5';
-import type { FinishReason, TelemetrySettings } from 'ai-v5';
+import type { FinishReason, TelemetrySettings, ToolSet, TypedToolCall, TypedToolResult, GeneratedFile } from 'ai-v5';
 import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
 import type { AIV5Type } from '../../agent/message-list/types';
@@ -49,8 +49,8 @@ type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   rootSpan?: Span;
   telemetry_settings?: TelemetrySettings;
   toolCallStreaming?: boolean;
-  onFinish?: (event: Record<string, any>) => Promise<void> | void;
-  onStepFinish?: (event: Record<string, any>) => Promise<void> | void;
+  onFinish?: (event: Record<string, unknown>) => Promise<void> | void;
+  onStepFinish?: (event: Record<string, unknown>) => Promise<void> | void;
   includeRawChunks?: boolean;
   output?: OUTPUT;
   outputProcessors?: OutputProcessor[];
@@ -82,16 +82,16 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   };
   #bufferedText: string[] = [];
   #bufferedTextChunks: Record<string, string[]> = {};
-  #bufferedSources: any[] = [];
+  #bufferedSources: ChunkType<OUTPUT>[] = [];
   #bufferedReasoning: string[] = [];
-  #bufferedFiles: any[] = [];
+  #bufferedFiles: ChunkType<OUTPUT>[] = [];
   #toolCallArgsDeltas: Record<string, string[]> = {};
   #toolCallDeltaIdNameMap: Record<string, string> = {};
-  #toolCalls: any[] = []; // TODO: add type
-  #toolResults: any[] = []; // TODO: add type
+  #toolCalls: ChunkType<OUTPUT>[] = [];
+  #toolResults: ChunkType<OUTPUT>[] = [];
   #warnings: LanguageModelV2CallWarning[] = [];
   #finishReason: FinishReason | string | undefined;
-  #request: Record<string, any> | undefined;
+  #request: Record<string, unknown> | undefined;
   #usageCount: LanguageModelUsage = {};
   #tripwire = false;
   #tripwireReason = '';
@@ -101,19 +101,19 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     finishReason: new DelayedPromise<FinishReason | string | undefined>(),
     usage: new DelayedPromise<LanguageModelUsage>(),
     warnings: new DelayedPromise<LanguageModelV2CallWarning[]>(),
-    providerMetadata: new DelayedPromise<Record<string, any> | undefined>(),
-    response: new DelayedPromise<Record<string, any>>(), // TODO: add type
-    request: new DelayedPromise<Record<string, any>>(), // TODO: add type
+    providerMetadata: new DelayedPromise<Record<string, unknown> | undefined>(),
+    response: new DelayedPromise<Record<string, unknown>>(),
+    request: new DelayedPromise<Record<string, unknown>>(),
     text: new DelayedPromise<string>(),
     reasoning: new DelayedPromise<string>(),
     reasoningText: new DelayedPromise<string | undefined>(),
-    sources: new DelayedPromise<any[]>(), // TODO: add type
-    files: new DelayedPromise<any[]>(), // TODO: add type
-    toolCalls: new DelayedPromise<any[]>(), // TODO: add type
-    toolResults: new DelayedPromise<any[]>(), // TODO: add type
+    sources: new DelayedPromise<ChunkType<OUTPUT>[]>(),
+    files: new DelayedPromise<ChunkType<OUTPUT>[]>(),
+    toolCalls: new DelayedPromise<ChunkType<OUTPUT>[]>(),
+    toolResults: new DelayedPromise<ChunkType<OUTPUT>[]>(),
     steps: new DelayedPromise<StepBufferItem[]>(),
     totalUsage: new DelayedPromise<LanguageModelUsage>(),
-    content: new DelayedPromise<AIV5Type.StepResult<any>['content']>(),
+    content: new DelayedPromise<AIV5Type.StepResult<ToolSet>['content']>(),
     reasoningDetails: new DelayedPromise<
       {
         type: string;
@@ -208,7 +208,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               part: processed,
               blocked,
               reason,
-            } = await processorRunner.processPart(chunk as any, processorStates);
+            } = await processorRunner.processPart(chunk, processorStates);
             if (blocked) {
               // Emit a tripwire chunk so downstream knows about the abort
               controller.enqueue({
@@ -329,7 +329,13 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 isContinued: chunk.payload.stepResult.isContinued,
                 logprobs: chunk.payload.stepResult.logprobs,
                 finishReason: chunk.payload.stepResult.reason,
-                response: { ...otherMetadata, messages: chunk.payload.messages.nonUser } as any,
+                response: {
+                  id: chunk.payload.id || '',
+                  timestamp: (chunk.payload.metadata?.timestamp as Date) || new Date(),
+                  modelId: (chunk.payload.metadata?.modelId as string) || (chunk.payload.metadata?.model as string) || '',
+                  ...otherMetadata,
+                  messages: (chunk.payload as any).messages?.nonUser || []
+                },
                 request: request,
                 usage: chunk.payload.output.usage,
                 content: messageList.get.response.aiV5.modelContent(-1),
@@ -403,7 +409,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               this.populateUsageCount(chunk.payload.output.usage as Record<string, number>);
 
-              chunk.payload.output.usage = self.#usageCount as any;
+              chunk.payload.output.usage = self.#usageCount;
 
               try {
                 if (self.processorRunner && self.outputProcessorRunnerMode === `result`) {
@@ -415,7 +421,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
                   const messages = self.messageList.get.response.v2();
                   const messagesWithStructuredData = messages.filter(
-                    msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
+                    msg => msg.content.metadata && 'structuredOutput' in msg.content.metadata && msg.content.metadata.structuredOutput,
                   );
 
                   if (
@@ -448,7 +454,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   // Check for structuredOutput in metadata (from output processors in stream mode)
                   const messages = self.messageList.get.response.v2();
                   const messagesWithStructuredData = messages.filter(
-                    msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
+                    msg => msg.content.metadata && 'structuredOutput' in msg.content.metadata && msg.content.metadata.structuredOutput,
                   );
 
                   if (
@@ -612,7 +618,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               break;
 
             case 'error':
-              self.#error = chunk.payload.error as any;
+              self.#error = chunk.payload.error as Error | string | { message: string; stack: string };
 
               // Reject all delayed promises on error
               const error =

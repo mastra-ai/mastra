@@ -51,7 +51,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
 
   toTextStreamResponse(init?: ResponseInit): Response {
     return createTextStreamResponse({
-      textStream: this.#modelOutput.textStream as any,
+      textStream: this.#modelOutput.textStream as ReadableStream<string>,
       ...init,
     });
   }
@@ -127,7 +127,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
           });
 
           if (transformedChunk) {
-            writer.write(transformedChunk as any);
+            writer.write(transformedChunk);
           }
 
           // start and finish events already have metadata
@@ -146,13 +146,8 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   async consumeStream(options?: ConsumeStreamOptions): Promise<void> {
     try {
       await consumeStream({
-        stream: (this.fullStream as any).pipeThrough(
-          new TransformStream({
-            transform(chunk, controller) {
-              controller.enqueue(chunk);
-            },
-          }),
-        ) as any,
+        // Type coercion needed due to ReadableStream type mismatch between Node and DOM types
+        stream: this.fullStream as unknown as Parameters<typeof consumeStream>[0]['stream'],
         onError: options?.onError,
       });
     } catch (error) {
@@ -176,11 +171,10 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
       files
         .map(file => {
           if (file.type === 'file') {
-            return (
-              convertMastraChunkToAISDKv5({
-                chunk: file,
-              }) as any
-            )?.file;
+            const result = convertMastraChunkToAISDKv5({
+              chunk: file,
+            });
+            return result && 'file' in result ? result.file : undefined;
           }
           return;
         })
@@ -204,12 +198,11 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
       files
         .map(file => {
           if (file.type === 'file') {
-            return (
-              convertMastraChunkToAISDKv5({
-                chunk: file,
-                mode: 'generate',
-              }) as any
-            )?.file;
+            const result = convertMastraChunkToAISDKv5({
+              chunk: file,
+              mode: 'generate',
+            });
+            return result && 'file' in result ? result.file : undefined;
           }
           return;
         })
@@ -335,7 +328,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
       ),
     );
 
-    return transformedStream as any as AIV5FullStreamType<OUTPUT>;
+    return transformedStream as AIV5FullStreamType<OUTPUT>;
   }
 
   async getFullOutput() {

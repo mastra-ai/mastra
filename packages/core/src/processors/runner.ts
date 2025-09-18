@@ -2,7 +2,7 @@ import type { MastraMessageV2, MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import type { TracingContext } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
-import type { ChunkType } from '../stream';
+import type { ChunkType, OutputSchema } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Processor } from './index';
 
@@ -116,12 +116,12 @@ export class ProcessorRunner {
   /**
    * Process a stream part through all output processors with state management
    */
-  async processPart(
-    part: ChunkType,
+  async processPart<OUTPUT extends OutputSchema>(
+    part: ChunkType<OUTPUT>,
     processorStates: Map<string, ProcessorState>,
     tracingContext?: TracingContext,
   ): Promise<{
-    part: ChunkType | null | undefined;
+    part: ChunkType<OUTPUT> | null | undefined;
     blocked: boolean;
     reason?: string;
   }> {
@@ -130,7 +130,7 @@ export class ProcessorRunner {
     }
 
     try {
-      let processedPart: ChunkType | null | undefined = part;
+      let processedPart: ChunkType<OUTPUT> | null | undefined = part;
 
       for (const processor of this.outputProcessors) {
         try {

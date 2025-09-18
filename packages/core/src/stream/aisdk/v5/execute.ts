@@ -24,7 +24,7 @@ type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   telemetry_settings?: TelemetrySettings;
   includeRawChunks?: boolean;
   modelSettings?: CallSettings;
-  onResult: (result: { warnings: any; request: any; rawResponse: any }) => void;
+  onResult: (result: { warnings: Record<string, unknown>; request: Record<string, unknown>; rawResponse: Record<string, unknown> }) => void;
   output?: OUTPUT;
   /**
   Additional HTTP headers to be sent with the request.
@@ -85,7 +85,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
     onResult,
     createStream: async () => {
       try {
-        const stream = await model.doStream({
+        const streamResult = await model.doStream({
           ...toolsAndToolChoice,
           prompt,
           providerOptions,
@@ -95,7 +95,13 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
           ...(modelSettings ?? {}),
           headers,
         });
-        return stream as any;
+        return {
+          stream: streamResult.stream,
+          warnings: {},
+          request: streamResult.request || {},
+          rawResponse: streamResult.response || {},
+          response: streamResult.response || {},
+        };
       } catch (error) {
         console.error('Error creating stream', error);
         if (isAbortError(error) && options?.abortSignal?.aborted) {
@@ -119,7 +125,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
               controller.close();
             },
           }),
-          warnings: [],
+          warnings: {},
           request: {},
           rawResponse: {},
         };
