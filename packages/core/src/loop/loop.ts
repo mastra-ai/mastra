@@ -92,6 +92,13 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
 
   const messageId = rest.experimental_generateMessageId?.() || internalToUse.generateId?.();
 
+  let modelOutput: MastraModelOutput<OUTPUT> | undefined;
+  const serializeStreamState = () => {
+    return modelOutput?.serializeState();
+  };
+  const deserializeStreamState = (state: any) => {
+    modelOutput?.deserializeState(state);
+  };
   const workflowLoopProps: LoopRun<Tools, OUTPUT> = {
     resumeContext,
     models,
@@ -109,12 +116,16 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     llmAISpan,
     messageId: messageId!,
     requireToolApproval,
+    streamState: {
+      serialize: serializeStreamState,
+      deserialize: deserializeStreamState,
+    },
     ...rest,
   };
 
   const stream = workflowLoopStream(workflowLoopProps);
 
-  return new MastraModelOutput({
+  modelOutput = new MastraModelOutput({
     model: {
       modelId: firstModel.model.modelId,
       provider: firstModel.model.provider,
@@ -137,5 +148,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       returnScorerData,
       tracingContext: { currentSpan: llmAISpan },
     },
-  });
+  }) as MastraModelOutput<OUTPUT>;
+
+  return modelOutput;
 }

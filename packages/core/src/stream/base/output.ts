@@ -173,6 +173,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.#model = _model;
 
     this.messageId = messageId;
+
     // Create processor runner if outputProcessors are provided
     if (options.outputProcessors?.length) {
       this.processorRunner = new ProcessorRunner({
@@ -1096,5 +1097,51 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
   get status() {
     return this.#status;
+  }
+
+  serializeState() {
+    return {
+      status: this.#status,
+      bufferedSteps: this.#bufferedSteps,
+      bufferedReasoningDetails: this.#bufferedReasoningDetails,
+      bufferedByStep: this.#bufferedByStep,
+      bufferedText: this.#bufferedText,
+      bufferedTextChunks: this.#bufferedTextChunks,
+      bufferedSources: this.#bufferedSources,
+      bufferedReasoning: this.#bufferedReasoning,
+      bufferedFiles: this.#bufferedFiles,
+      toolCallArgsDeltas: this.#toolCallArgsDeltas,
+      toolCallDeltaIdNameMap: this.#toolCallDeltaIdNameMap,
+      toolCalls: this.#toolCalls,
+      toolResults: this.#toolResults,
+      warnings: this.#warnings,
+      finishReason: this.#finishReason,
+      request: this.#request,
+      usageCount: this.#usageCount,
+      tripwire: this.#tripwire,
+      tripwireReason: this.#tripwireReason,
+    };
+  }
+
+  deserializeState(state: any) {
+    this.#status = state.status;
+    this.#bufferedSteps = state.bufferedSteps;
+    this.#bufferedReasoningDetails = state.bufferedReasoningDetails;
+    this.#bufferedByStep = state.bufferedByStep;
+    this.#bufferedText = state.bufferedText;
+    this.#bufferedTextChunks = state.bufferedTextChunks;
+    this.#bufferedSources = state.bufferedSources;
+    this.#bufferedReasoning = state.bufferedReasoning;
+    this.#bufferedFiles = state.bufferedFiles;
+    this.#toolCallArgsDeltas = state.toolCallArgsDeltas;
+    this.#toolCallDeltaIdNameMap = state.toolCallDeltaIdNameMap;
+    this.#toolCalls = state.toolCalls;
+    this.#toolResults = state.toolResults;
+    this.#warnings = state.warnings;
+    this.#finishReason = state.finishReason;
+    this.#request = state.request;
+    this.#usageCount = state.usageCount;
+    this.#tripwire = state.tripwire;
+    this.#tripwireReason = state.tripwireReason;
   }
 }

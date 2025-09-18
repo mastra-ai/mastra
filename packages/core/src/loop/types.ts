@@ -93,6 +93,10 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema
   startTimestamp: number;
   modelStreamSpan: Span;
   _internal: StreamInternal;
+  streamState: {
+    serialize: () => any;
+    deserialize: (state: any) => void;
+  };
 };
 
 export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {

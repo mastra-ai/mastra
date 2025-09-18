@@ -614,7 +614,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(name).toBe('Dero Israel');
     }, 500000);
 
-    describe('tool approval and suspension', () => {
+    describe.only('tool approval and suspension', () => {
       describe.skipIf(version === 'v1')('suspension', () => {
         it('should call findUserTool with suspend and resume', async () => {
           const findUserTool = createTool({
@@ -817,7 +817,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       describe.skipIf(version === 'v1')('persist model output stream state', () => {
-        it.only('should persist text stream state', async () => {
+        it('should persist text stream state', async () => {
           const findUserTool = createTool({
             id: 'Find user tool',
             description: 'This is a test tool that returns the name and email',
@@ -870,6 +870,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             // response = await stream.response;
             // console.log('response', JSON.stringify(response.toolResults, null, 2));
             console.log('status', stream.status);
+            console.log('suspendPayload', await stream.suspendPayload);
             await new Promise(resolve => setTimeout(resolve, 1000));
             const resumeStream = await agentOne.resumeStreamVNext({ hello: 'world' }, { runId: stream.runId });
             let secondText = '';

@@ -18,6 +18,7 @@ export function createToolCallStep<
   requireToolApproval,
   controller,
   runId,
+  streamState,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
@@ -98,7 +99,6 @@ export function createToolCallStep<
         'stream.toolCall.args': JSON.stringify(inputData.args),
       });
 
-      console.log('calling tool', requireToolApproval, (tool as any).requireApproval, resumeData);
       try {
         if ((requireToolApproval || (tool as any).requireApproval) && !resumeData) {
           controller.enqueue({
@@ -117,6 +117,7 @@ export function createToolCallStep<
               toolName: inputData.toolName,
               args: inputData.args,
             },
+            __streamState: streamState.serialize(),
           });
         }
 
@@ -133,7 +134,10 @@ export function createToolCallStep<
               payload: { toolCallId: inputData.toolCallId, toolName: inputData.toolName, suspendPayload },
             });
 
-            return await suspend({ toolCallSuspended: suspendPayload });
+            return await suspend({
+              toolCallSuspended: suspendPayload,
+              __streamState: streamState.serialize(),
+            });
           },
           resumeData,
         } as ToolCallOptions);
