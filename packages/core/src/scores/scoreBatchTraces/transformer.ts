@@ -200,6 +200,13 @@ function extractInputMessages(agentSpan: AgentRunSpan): UIMessageWithMetadata[] 
     );
   }
 
+  // @ts-ignore
+  if (input && typeof input === 'object' && Array.isArray(input.messages)) {
+    // @ts-ignore
+    return input.messages.map((msg, index) =>
+      convertToUIMessage(msg, generateSyntheticId('input', index + 1), agentSpan.startedAt),
+    );
+  }
   return [];
 }
 
