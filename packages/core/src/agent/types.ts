@@ -1,4 +1,5 @@
-import type { GenerateTextOnStepFinishCallback, TelemetrySettings } from 'ai';
+import type { CoreSystemMessage, GenerateTextOnStepFinishCallback, TelemetrySettings } from 'ai';
+import type { SystemModelMessage } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema, ZodTypeAny } from 'zod';
 import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
@@ -38,6 +39,9 @@ export type { Message as AiMessageType } from 'ai';
 
 export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5>;
 
+export type AgentInstructions = string | CoreSystemMessage | SystemModelMessage
+export type DynamicAgentInstructions = DynamicArgument<AgentInstructions>
+
 export type ToolsetsInput = Record<string, ToolsInput>;
 
 type FallbackFields<S extends ZodTypeAny> =
@@ -70,14 +74,14 @@ export interface AgentConfig<
   id?: TAgentId;
   name: TAgentId;
   description?: string;
-  instructions: DynamicArgument<string>;
+  instructions: DynamicAgentInstructions;
   model:
-    | DynamicArgument<MastraLanguageModel>
-    | {
-        model: DynamicArgument<MastraLanguageModel>;
-        maxRetries?: number; //defaults to 0
-        enabled?: boolean; //defaults to true
-      }[];
+  | DynamicArgument<MastraLanguageModel>
+  | {
+    model: DynamicArgument<MastraLanguageModel>;
+    maxRetries?: number; //defaults to 0
+    enabled?: boolean; //defaults to true
+  }[];
   maxRetries?: number; //defaults to 0
   tools?: DynamicArgument<TTools>;
   workflows?: DynamicArgument<Record<string, Workflow>>;
@@ -163,7 +167,7 @@ export type AgentGenerateOptions<
   /** AI tracing options for starting new traces */
   tracingOptions?: TracingOptions;
 } & (
-  | {
+    | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
        */
@@ -173,7 +177,7 @@ export type AgentGenerateOptions<
        */
       threadId?: undefined;
     }
-  | {
+    | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
        */
@@ -183,7 +187,7 @@ export type AgentGenerateOptions<
        */
       threadId: string;
     }
-) &
+  ) &
   (OUTPUT extends undefined ? DefaultLLMTextOptions : DefaultLLMTextObjectOptions);
 
 /**
@@ -242,7 +246,7 @@ export type AgentStreamOptions<
   /** Scorers to use for this generation */
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
 } & (
-  | {
+    | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
        */
@@ -252,7 +256,7 @@ export type AgentStreamOptions<
        */
       threadId?: undefined;
     }
-  | {
+    | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
        */
@@ -262,7 +266,7 @@ export type AgentStreamOptions<
        */
       threadId: string;
     }
-) &
+  ) &
   (OUTPUT extends undefined ? DefaultLLMStreamOptions : DefaultLLMStreamObjectOptions);
 
 export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };
