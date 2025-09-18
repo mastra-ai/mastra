@@ -559,7 +559,7 @@ describe('Workflow', () => {
       const run = await workflow.createRunAsync({
         runId: 'test-run-id',
       });
-      const { stream } = await run.stream({
+      const { stream } = run.stream({
         inputData: {
           prompt1: 'Capital of France, just the name',
           prompt2: 'Capital of UK, just the name',
@@ -1167,7 +1167,7 @@ describe('Workflow', () => {
       expect.assertions(3);
       // Verify that the input property is preserved from the original snapshot context
       // This is the key test: input should come from snapshot.context.input, not from resumeData
-      expect(result.steps.input).toEqual(originalInput);
+      expect(result.input).toEqual(originalInput);
 
       // Also verify that the step received the original input as payload, not the resume data
       expect(result.steps.step1.payload).toEqual(originalInput);
@@ -1427,8 +1427,8 @@ describe('Workflow', () => {
             metadata: {},
             output: {
               usage: {
-                completionTokens: 0,
-                promptTokens: 0,
+                inputTokens: 0,
+                outputTokens: 0,
                 totalTokens: 0,
               },
             },
@@ -1897,8 +1897,8 @@ describe('Workflow', () => {
           payload: {
             output: {
               usage: {
-                promptTokens: 0,
-                completionTokens: 0,
+                inputTokens: 0,
+                outputTokens: 0,
                 totalTokens: 0,
               },
             },
@@ -2042,8 +2042,8 @@ describe('Workflow', () => {
             metadata: {},
             output: {
               usage: {
-                completionTokens: 0,
-                promptTokens: 0,
+                inputTokens: 0,
+                outputTokens: 0,
                 totalTokens: 0,
               },
             },
@@ -2212,8 +2212,8 @@ describe('Workflow', () => {
             metadata: {},
             output: {
               usage: {
-                completionTokens: 0,
-                promptTokens: 0,
+                inputTokens: 0,
+                outputTokens: 0,
                 totalTokens: 0,
               },
             },
@@ -2419,8 +2419,8 @@ describe('Workflow', () => {
             metadata: {},
             output: {
               usage: {
-                completionTokens: 0,
-                promptTokens: 0,
+                inputTokens: 0,
+                outputTokens: 0,
                 totalTokens: 0,
               },
             },
@@ -2479,7 +2479,7 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        inputSchema: z.object({}),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({
           result: z.string(),
         }),
@@ -3890,7 +3890,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result: z.string(),
         }),
-        steps: [step1],
+        steps: [step1, step2],
       });
 
       workflow.then(step1).sleep(1000).then(step2).commit();
@@ -3943,7 +3943,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result: z.string(),
         }),
-        steps: [step1],
+        steps: [step1, step2],
       });
 
       workflow
@@ -4002,7 +4002,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result: z.string(),
         }),
-        steps: [step1],
+        steps: [step1, step2],
       });
 
       workflow
@@ -4059,7 +4059,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result: z.string(),
         }),
-        steps: [step1],
+        steps: [step1, step2],
       });
 
       workflow
@@ -4120,7 +4120,7 @@ describe('Workflow', () => {
           result: z.string(),
           resumed: z.any(),
         }),
-        steps: [step1],
+        steps: [step1, step2],
       });
 
       workflow.then(step1).waitForEvent('hello-event', step2).commit();
@@ -4181,7 +4181,7 @@ describe('Workflow', () => {
           result: z.string(),
           resumed: z.any(),
         }),
-        steps: [step1],
+        steps: [step1, step2],
       });
 
       workflow.then(step1).waitForEvent('hello-event', step2, { timeout: 1000 }).commit();
@@ -4398,7 +4398,7 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        inputSchema: z.object({}),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({
           result: z.string(),
         }),
@@ -4448,7 +4448,7 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        inputSchema: z.object({}),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({
           result: z.string(),
         }),
@@ -4511,7 +4511,7 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        inputSchema: z.object({}),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({
           result: z.string(),
         }),
@@ -8502,7 +8502,7 @@ describe('Workflow', () => {
       const otherStep = createStep({
         id: 'other',
         inputSchema: z.object({ newValue: z.number() }),
-        outputSchema: z.object({ other: z.number() }),
+        outputSchema: z.object({ newValue: z.number(), other: z.number() }),
         execute: other,
       });
 
@@ -8544,6 +8544,16 @@ describe('Workflow', () => {
         outputSchema: z.object({ success: z.boolean() }),
       })
         .then(startStep)
+        .map({
+          finalValue: mapVariable({
+            step: startStep,
+            path: 'newValue',
+          }),
+          newValue: mapVariable({
+            step: startStep,
+            path: 'newValue',
+          }),
+        })
         .then(finalStep)
         .commit();
       counterWorkflow
@@ -8739,7 +8749,7 @@ describe('Workflow', () => {
       const otherStep = createStep({
         id: 'other',
         inputSchema: z.object({ newValue: z.number() }),
-        outputSchema: z.object({ other: z.number() }),
+        outputSchema: z.object({ newValue: z.number(), other: z.number() }),
         execute: other,
       });
 
@@ -8867,7 +8877,7 @@ describe('Workflow', () => {
         const otherStep = createStep({
           id: 'other',
           inputSchema: z.object({ newValue: z.number() }),
-          outputSchema: z.object({ other: z.number() }),
+          outputSchema: z.object({ newValue: z.number(), other: z.number() }),
           execute: other,
         });
 
@@ -8912,6 +8922,16 @@ describe('Workflow', () => {
           outputSchema: finalStep.outputSchema,
         })
           .then(startStep)
+          .map({
+            finalValue: mapVariable({
+              step: finalStep,
+              path: 'finalValue',
+            }),
+            newValue: mapVariable({
+              step: startStep,
+              path: 'newValue',
+            }),
+          })
           .then(finalStep)
           .commit();
         counterWorkflow
@@ -9002,7 +9022,7 @@ describe('Workflow', () => {
         const otherStep = createStep({
           id: 'other',
           inputSchema: z.object({ newValue: z.number() }),
-          outputSchema: z.object({ other: z.number() }),
+          outputSchema: z.object({ newValue: z.number(), other: z.number() }),
           execute: other,
         });
 
@@ -9047,6 +9067,12 @@ describe('Workflow', () => {
           outputSchema: finalStep.outputSchema,
         })
           .then(startStep)
+          .map(async ({ inputData }) => {
+            return {
+              finalValue: inputData.newValue + 1,
+              newValue: inputData.newValue,
+            };
+          })
           .then(finalStep)
           .commit();
         counterWorkflow
@@ -9138,7 +9164,7 @@ describe('Workflow', () => {
         const otherStep = createStep({
           id: 'other',
           inputSchema: z.object({ newValue: z.number() }),
-          outputSchema: z.object({ other: z.number() }),
+          outputSchema: z.object({ newValue: z.number(), other: z.number() }),
           execute: other,
         });
 
@@ -9215,7 +9241,10 @@ describe('Workflow', () => {
               }),
               outputSchema: otherStep.outputSchema,
               execute: async ({ inputData }) => {
-                return { other: inputData['nested-workflow-c']?.other ?? inputData['nested-workflow-d']?.other };
+                return {
+                  newValue: inputData['nested-workflow-c']?.newValue ?? inputData['nested-workflow-d']?.newValue,
+                  other: inputData['nested-workflow-c']?.other ?? inputData['nested-workflow-d']?.other,
+                };
               },
             }),
           )
@@ -9316,7 +9345,7 @@ describe('Workflow', () => {
         const otherStep = createStep({
           id: 'other',
           inputSchema: z.object({ newValue: z.number() }),
-          outputSchema: z.object({ other: z.number() }),
+          outputSchema: z.object({ newValue: z.number(), other: z.number() }),
           execute: other,
         });
 
@@ -9666,7 +9695,7 @@ describe('Workflow', () => {
         const otherStep = createStep({
           id: 'other',
           inputSchema: z.object({ newValue: z.number() }),
-          outputSchema: z.object({ other: z.number() }),
+          outputSchema: z.object({ newValue: z.number(), other: z.number() }),
           execute: other,
         });
 
@@ -9781,7 +9810,7 @@ describe('Workflow', () => {
       const otherStep = createStep({
         id: 'other',
         inputSchema: z.object({ newValue: z.number() }),
-        outputSchema: z.object({ other: z.number() }),
+        outputSchema: z.object({ newValue: z.number(), other: z.number() }),
         execute: other,
       });
 
@@ -10246,7 +10275,7 @@ describe('Workflow', () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         mastra,
-        inputSchema: z.object({}),
+        inputSchema: z.object({ human: z.boolean() }),
         outputSchema: z.object({}),
       });
       workflow.then(step).commit();

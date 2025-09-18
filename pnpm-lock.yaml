@@ -2073,7 +2073,7 @@ importers:
         version: 4.1.5
     devDependencies:
       '@eslint/js':
-        specifier: ^9.34.0
+        specifier: ^9.35.0
         version: 9.35.0
       '@microsoft/api-extractor':
         specifier: ^7.52.8
@@ -2843,7 +2843,7 @@ importers:
         specifier: 3.2.3
         version: 3.2.3(vitest@3.2.4)
       axios:
-        specifier: ^1.12.1
+        specifier: ^1.12.2
         version: 1.12.2(debug@4.4.1)
       eslint:
         specifier: ^9.35.0
@@ -2895,7 +2895,7 @@ importers:
         specifier: 3.2.3
         version: 3.2.3(vitest@3.2.4)
       axios:
-        specifier: ^1.12.1
+        specifier: ^1.12.2
         version: 1.12.2(debug@4.4.1)
       eslint:
         specifier: ^9.35.0

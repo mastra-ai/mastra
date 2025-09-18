@@ -7,8 +7,15 @@ import { hasActiveTelemetry, getBaggageValues } from './utility';
 interface StreamFinishData {
   text?: string;
   usage?: {
+    // AI SDK v5 format (VNext paths)
+    inputTokens?: number;
+    outputTokens?: number;
+    reasoningTokens?: number;
+    cachedInputTokens?: number;
+    // Legacy format (backward compatibility)
     promptTokens?: number;
     completionTokens?: number;
+    // Common fields
     totalTokens?: number;
   };
   finishReason?: string;
