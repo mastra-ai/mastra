@@ -65,6 +65,6 @@ export async function generateTypes(rootDir) {
   } catch (err) {
     // TypeScript errors are already printed to console via stdio: 'inherit'
     // Just exit with the same code as tsc
-    process.exit(err.code || 1);
+    process.exit(typeof err.code === 'number' ? err.code : 1);
   }
 }
