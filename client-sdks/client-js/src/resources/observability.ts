@@ -59,11 +59,10 @@ export class Observability extends BaseResource {
   score(params: {
     scorerName: string;
     targets: Array<{ traceId: string; spanId?: string }>;
-    scorerRunFormat?: 'span' | 'agent';
   }): Promise<{ status: string; message: string }> {
     return this.request(`/api/observability/traces/score`, {
       method: 'POST',
-      body: { ...params, scorerRunFormat: params.scorerRunFormat || 'span' },
+      body: { ...params },
     });
   }
 }

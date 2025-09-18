@@ -4,7 +4,6 @@ import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 
 import { handleError } from './error';
-import { createStep, createWorkflow } from '@mastra/core/workflows/evented';
 
 interface ObservabilityContext extends Context {
   traceId?: string;
@@ -14,7 +13,6 @@ interface ObservabilityContext extends Context {
 interface ScoreTracesContext extends Context {
   body?: {
     scorerName: string;
-    scorerRunFormat?: 'span' | 'agent';
     targets: Array<{
       traceId: string;
       spanId?: string;
@@ -105,7 +103,7 @@ export async function scoreTracesHandler({ mastra, body }: ScoreTracesContext) {
       throw new HTTPException(400, { message: 'Request body is required' });
     }
 
-    const { scorerName, targets, scorerRunFormat = 'span' } = body;
+    const { scorerName, targets } = body;
 
     if (!scorerName) {
       throw new HTTPException(400, { message: 'Scorer ID is required' });
@@ -130,7 +128,6 @@ export async function scoreTracesHandler({ mastra, body }: ScoreTracesContext) {
       scorerName,
       targets,
       mastra,
-      scorerRunFormat,
     }).catch(error => {
       logger?.error(`Background trace scoring failed: ${error.message}`, error);
     });

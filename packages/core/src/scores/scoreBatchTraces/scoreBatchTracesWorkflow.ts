@@ -18,7 +18,6 @@ const getTraceStep = createStep({
       }),
     ),
     scorerName: z.string(),
-    scorerRunFormat: z.enum(['span', 'agent']).optional(),
   }),
   outputSchema: z.any(),
   execute: async ({ inputData, tracingContext, mastra }) => {
@@ -65,7 +64,7 @@ const getTraceStep = createStep({
           return;
         }
         const scorerRun = buildScorerRun({
-          scorerRunFormat: inputData.scorerRunFormat,
+          scorerType: scorer.type === 'agent' ? 'agent' : undefined,
           tracingContext,
           trace,
           targetSpan: span,
@@ -78,7 +77,7 @@ const getTraceStep = createStep({
           throw new Error(`Failed to run scorer ${scorer.name} for span ${parentSpan?.spanId}: ${error}`);
         }
 
-        const traceId = `${target.traceId}-${target.spanId ?? parentSpan?.spanId}`;
+        const traceId = `${target.traceId}${target.spanId ? `-${target.spanId}` : ''}`;
         const scorerResult = {
           ...result,
           scorer: {
@@ -125,18 +124,19 @@ async function validateAndSaveScore({ storage, scorerResult }: { storage: Mastra
 }
 
 function buildScorerRun({
-  scorerRunFormat,
+  scorerType,
   tracingContext,
   trace,
   targetSpan,
 }: {
-  scorerRunFormat?: 'span' | 'agent';
+  scorerType?: string;
   tracingContext: TracingContext;
   trace: AITraceRecord;
   targetSpan: AISpanRecord;
 }) {
   let runPayload: ScorerRun;
-  if (scorerRunFormat === 'agent') {
+
+  if (scorerType === 'agent') {
     runPayload = {
       input: transformTraceToScorerInput(trace as any),
       output: transformTraceToScorerOutput(trace as any),
@@ -184,7 +184,6 @@ export const scoreBatchTracesWorkflow = createWorkflow({
       }),
     ),
     scorerName: z.string(),
-    scorerRunFormat: z.enum(['span', 'agent']).optional(),
   }),
   outputSchema: z.any(),
   steps: [getTraceStep],

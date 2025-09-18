@@ -5,17 +5,15 @@ export async function scoreBatchTraces({
   scorerName,
   targets,
   mastra,
-  scorerRunFormat = 'span',
 }: {
   scorerName: string;
   targets: { traceId: string; spanId?: string }[];
   mastra: Mastra;
-  scorerRunFormat?: 'span' | 'agent';
 }) {
   const workflow = mastra.__getInternalWorkflow('__batch-scoring-traces');
   try {
     const run = await workflow.createRunAsync();
-    await run.start({ inputData: { targets, scorerName, scorerRunFormat } });
+    await run.start({ inputData: { targets, scorerName } });
   } catch (error) {
     const mastraError = new MastraError(
       {
@@ -24,7 +22,6 @@ export async function scoreBatchTraces({
         id: 'MASTRA_SCORER_FAILED_TO_RUN_TRACE_SCORING',
         details: {
           scorerName,
-          scorerRunFormat,
           targets: JSON.stringify(targets),
         },
       },
