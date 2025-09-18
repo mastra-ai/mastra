@@ -50,7 +50,7 @@ export type AgentExecutionOptions<
   format?: FORMAT;
 
   /** Custom instructions that override the agent's default instructions for this execution */
-  instructions?: string;
+  instructions?: SystemMessage;
 
   /** Custom system message to include in the prompt */
   system?: SystemMessage;

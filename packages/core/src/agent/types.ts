@@ -11,6 +11,7 @@ import type {
   DefaultLLMTextObjectOptions,
   DefaultLLMTextOptions,
   OutputType,
+  SystemMessage,
 } from '../llm';
 import type {
   StreamTextOnFinishCallback,
@@ -39,8 +40,8 @@ export type { Message as AiMessageType } from 'ai';
 
 export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5>;
 
-export type AgentInstructions = string | CoreSystemMessage | SystemModelMessage
-export type DynamicAgentInstructions = DynamicArgument<AgentInstructions>
+export type AgentInstructions = SystemMessage;
+export type DynamicAgentInstructions = DynamicArgument<AgentInstructions>;
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
@@ -76,12 +77,12 @@ export interface AgentConfig<
   description?: string;
   instructions: DynamicAgentInstructions;
   model:
-  | DynamicArgument<MastraLanguageModel>
-  | {
-    model: DynamicArgument<MastraLanguageModel>;
-    maxRetries?: number; //defaults to 0
-    enabled?: boolean; //defaults to true
-  }[];
+    | DynamicArgument<MastraLanguageModel>
+    | {
+        model: DynamicArgument<MastraLanguageModel>;
+        maxRetries?: number; //defaults to 0
+        enabled?: boolean; //defaults to true
+      }[];
   maxRetries?: number; //defaults to 0
   tools?: DynamicArgument<TTools>;
   workflows?: DynamicArgument<Record<string, Workflow>>;
@@ -167,7 +168,7 @@ export type AgentGenerateOptions<
   /** AI tracing options for starting new traces */
   tracingOptions?: TracingOptions;
 } & (
-    | {
+  | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
        */
@@ -177,7 +178,7 @@ export type AgentGenerateOptions<
        */
       threadId?: undefined;
     }
-    | {
+  | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
        */
@@ -187,7 +188,7 @@ export type AgentGenerateOptions<
        */
       threadId: string;
     }
-  ) &
+) &
   (OUTPUT extends undefined ? DefaultLLMTextOptions : DefaultLLMTextObjectOptions);
 
 /**
@@ -246,7 +247,7 @@ export type AgentStreamOptions<
   /** Scorers to use for this generation */
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
 } & (
-    | {
+  | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
        */
@@ -256,7 +257,7 @@ export type AgentStreamOptions<
        */
       threadId?: undefined;
     }
-    | {
+  | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
        */
@@ -266,13 +267,13 @@ export type AgentStreamOptions<
        */
       threadId: string;
     }
-  ) &
+) &
   (OUTPUT extends undefined ? DefaultLLMStreamOptions : DefaultLLMStreamObjectOptions);
 
 export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };
 
 export type AgentExecuteOnFinishOptions = {
-  instructions: string;
+  instructions: SystemMessage;
   runId: string;
   result: Record<string, any>;
   thread: StorageThreadType | null | undefined;

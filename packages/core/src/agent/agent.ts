@@ -31,6 +31,7 @@ import type { TripwireProperties, MastraLanguageModel, MastraLanguageModelV2 } f
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
+import type { SystemMessage } from '../llm';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
@@ -81,6 +82,20 @@ import type {
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
+
+/**
+ * Helper function to convert SystemMessage to string for backward compatibility
+ * Used for legacy methods that expect string instructions (e.g., voice, telemetry)
+ */
+function systemMessageToString(message: SystemMessage): string {
+  if (typeof message === 'string') {
+    return message;
+  } else if (Array.isArray(message)) {
+    return message.map(m => (typeof m === 'string' ? m : m.content)).join('\n');
+  } else {
+    return message.content;
+  }
+}
 
 function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
   if (value instanceof Promise) {
@@ -143,16 +158,16 @@ export class Agent<
 > extends MastraBase {
   public id: TAgentId;
   public name: TAgentId;
-  #instructions: DynamicAgentInstructions
+  #instructions: DynamicAgentInstructions;
   readonly #description?: string;
   model:
     | DynamicArgument<MastraLanguageModel>
     | {
-      id: string;
-      model: DynamicArgument<MastraLanguageModel>;
-      maxRetries: number;
-      enabled: boolean;
-    }[];
+        id: string;
+        model: DynamicArgument<MastraLanguageModel>;
+        maxRetries: number;
+        enabled: boolean;
+      }[];
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
@@ -478,7 +493,8 @@ export class Agent<
     if (this.#voice) {
       const voice = this.#voice;
       voice?.addTools(await this.getTools({ runtimeContext }));
-      voice?.addInstructions(await this.getInstructions({ runtimeContext }));
+      const instructions = await this.getInstructions({ runtimeContext });
+      voice?.addInstructions(systemMessageToString(instructions));
       return voice;
     } else {
       return new DefaultVoice();
@@ -497,6 +513,23 @@ export class Agent<
           agentName: this.name,
         },
         text: 'Instructions are not compatible when instructions are a function. Please use getInstructions() instead.',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
+    }
+
+    // Throw error for non-string instructions to force migration
+    if (typeof this.#instructions !== 'string') {
+      const mastraError = new MastraError({
+        id: 'AGENT_INSTRUCTIONS_MUST_BE_STRING_FOR_DEPRECATED_GETTER',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+          instructionsType: Array.isArray(this.#instructions) ? 'array' : 'object',
+        },
+        text: 'The instructions getter is deprecated and only supports string instructions. For non-string instructions, please use getInstructions() instead.',
       });
       this.logger.trackException(mastraError);
       this.logger.error(mastraError.toString());
@@ -1143,16 +1176,16 @@ export class Agent<
       const [memoryMessages, memorySystemMessage] =
         threadId && memory
           ? await Promise.all([
-            memory
-              .rememberMessages({
-                threadId,
-                resourceId,
-                config: memoryConfig,
-                vectorMessageSearch: messageList.getLatestUserContent() || '',
-              })
-              .then((r: any) => r.messagesV2),
-            memory.getSystemMessage({ threadId, memoryConfig }),
-          ])
+              memory
+                .rememberMessages({
+                  threadId,
+                  resourceId,
+                  config: memoryConfig,
+                  vectorMessageSearch: messageList.getLatestUserContent() || '',
+                })
+                .then((r: any) => r.messagesV2),
+              memory.getSystemMessage({ threadId, memoryConfig }),
+            ])
           : [[], null];
 
       this.logger.debug('Fetched messages from memory', {
@@ -2064,12 +2097,12 @@ export class Agent<
         let [memoryMessages, memorySystemMessage] = await Promise.all([
           existingThread || hasResourceScopeSemanticRecall
             ? this.getMemoryMessages({
-              resourceId,
-              threadId: threadObject.id,
-              vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
-              memoryConfig,
-              runtimeContext,
-            })
+                resourceId,
+                threadId: threadObject.id,
+                vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
+                memoryConfig,
+                runtimeContext,
+              })
             : [],
           memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
         ]);
@@ -2419,12 +2452,12 @@ export class Agent<
     messageList: MessageList;
     runId: string;
     outputText: string;
-    instructions: string;
+    instructions: SystemMessage;
     runtimeContext: RuntimeContext;
     structuredOutput?: boolean;
     overrideScorers?:
-    | MastraScorers
-    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+      | MastraScorers
+      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
     threadId?: string;
     resourceId?: string;
     tracingContext: TracingContext;
@@ -2444,7 +2477,7 @@ export class Agent<
           runId: runIdToUse,
           metric,
           agentName,
-          instructions: instructions,
+          instructions: systemMessageToString(instructions),
         });
       }
     }
@@ -2543,11 +2576,11 @@ export class Agent<
     before: () => Promise<
       Omit<
         Output extends undefined
-        ? GenerateTextWithMessagesArgs<Tools, ExperimentalOutput>
-        : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
-          output?: Output;
-          experimental_output?: never;
-        },
+          ? GenerateTextWithMessagesArgs<Tools, ExperimentalOutput>
+          : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
+              output?: Output;
+              experimental_output?: never;
+            },
         'runId'
       > & { runId: string } & TripwireProperties & { agentAISpan?: AISpan<AISpanType.AGENT_RUN> }
     >;
@@ -2557,8 +2590,8 @@ export class Agent<
       structuredOutput?: boolean;
       agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
       overrideScorers?:
-      | MastraScorers
-      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+        | MastraScorers
+        | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
     }) => Promise<{
       scoringData: {
         input: Omit<ScorerRunInputForAgent, 'runId'>;
@@ -2579,11 +2612,11 @@ export class Agent<
     before: () => Promise<
       Omit<
         Output extends undefined
-        ? StreamTextWithMessagesArgs<Tools, ExperimentalOutput>
-        : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
-          output?: Output;
-          experimental_output?: never;
-        },
+          ? StreamTextWithMessagesArgs<Tools, ExperimentalOutput>
+          : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
+              output?: Output;
+              experimental_output?: never;
+            },
         'runId'
       > & { runId: string } & TripwireProperties & { agentAISpan?: AISpan<AISpanType.AGENT_RUN> }
     >;
@@ -2593,8 +2626,8 @@ export class Agent<
       structuredOutput?: boolean;
       agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
       overrideScorers?:
-      | MastraScorers
-      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+        | MastraScorers
+        | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
     }) => Promise<{
       scoringData: {
         input: Omit<ScorerRunInputForAgent, 'runId'>;
@@ -2615,52 +2648,52 @@ export class Agent<
     methodType: 'generate' | 'stream',
   ): Promise<{
     before:
-    | (() => Promise<
-      Omit<
-        Output extends undefined
-        ? StreamTextWithMessagesArgs<Tools, ExperimentalOutput>
-        : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
-          output?: Output;
-          experimental_output?: never;
-        },
-        'runId'
-      > & { runId: string } & TripwireProperties & { agentAISpan?: AISpan<AISpanType.AGENT_RUN> }
-    >)
-    | (() => Promise<
-      Omit<
-        Output extends undefined
-        ? GenerateTextWithMessagesArgs<Tools, ExperimentalOutput>
-        : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
-          output?: Output;
-          experimental_output?: never;
-        },
-        'runId'
-      > & { runId: string } & TripwireProperties & { agentAISpan?: AISpan<AISpanType.AGENT_RUN> }
-    >);
+      | (() => Promise<
+          Omit<
+            Output extends undefined
+              ? StreamTextWithMessagesArgs<Tools, ExperimentalOutput>
+              : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
+                  output?: Output;
+                  experimental_output?: never;
+                },
+            'runId'
+          > & { runId: string } & TripwireProperties & { agentAISpan?: AISpan<AISpanType.AGENT_RUN> }
+        >)
+      | (() => Promise<
+          Omit<
+            Output extends undefined
+              ? GenerateTextWithMessagesArgs<Tools, ExperimentalOutput>
+              : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
+                  output?: Output;
+                  experimental_output?: never;
+                },
+            'runId'
+          > & { runId: string } & TripwireProperties & { agentAISpan?: AISpan<AISpanType.AGENT_RUN> }
+        >);
     after:
-    | ((args: {
-      result: GenerateReturn<any, Output, ExperimentalOutput>;
-      outputText: string;
-      agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
-      overrideScorers?: MastraScorers;
-    }) => Promise<{
-      scoringData: {
-        input: Omit<ScorerRunInputForAgent, 'runId'>;
-        output: ScorerRunOutputForAgent;
-      };
-    }>)
-    | ((args: {
-      agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
-      result: OriginalStreamTextOnFinishEventArg<any> | OriginalStreamObjectOnFinishEventArg<ExperimentalOutput>;
-      outputText: string;
-      structuredOutput?: boolean;
-      overrideScorers?: MastraScorers;
-    }) => Promise<{
-      scoringData: {
-        input: Omit<ScorerRunInputForAgent, 'runId'>;
-        output: ScorerRunOutputForAgent;
-      };
-    }>);
+      | ((args: {
+          result: GenerateReturn<any, Output, ExperimentalOutput>;
+          outputText: string;
+          agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
+          overrideScorers?: MastraScorers;
+        }) => Promise<{
+          scoringData: {
+            input: Omit<ScorerRunInputForAgent, 'runId'>;
+            output: ScorerRunOutputForAgent;
+          };
+        }>)
+      | ((args: {
+          agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
+          result: OriginalStreamTextOnFinishEventArg<any> | OriginalStreamObjectOnFinishEventArg<ExperimentalOutput>;
+          outputText: string;
+          structuredOutput?: boolean;
+          overrideScorers?: MastraScorers;
+        }) => Promise<{
+          scoringData: {
+            input: Omit<ScorerRunInputForAgent, 'runId'>;
+            output: ScorerRunOutputForAgent;
+          };
+        }>);
     llm: MastraLLM;
   }> {
     const {
@@ -2730,7 +2763,7 @@ export class Agent<
 
     const { before, after } = this.__primitive({
       messages,
-      instructions,
+      instructions: systemMessageToString(instructions),
       context,
       thread: threadFromArgs,
       memoryConfig,
@@ -2815,19 +2848,19 @@ export class Agent<
         overrideScorers,
       }:
         | {
-          result: GenerateReturn<any, Output, ExperimentalOutput>;
-          outputText: string;
-          structuredOutput?: boolean;
-          agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
-          overrideScorers?: MastraScorers;
-        }
+            result: GenerateReturn<any, Output, ExperimentalOutput>;
+            outputText: string;
+            structuredOutput?: boolean;
+            agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
+            overrideScorers?: MastraScorers;
+          }
         | {
-          result: StreamReturn<any, Output, ExperimentalOutput>;
-          outputText: string;
-          structuredOutput?: boolean;
-          agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
-          overrideScorers?: MastraScorers;
-        }) => {
+            result: StreamReturn<any, Output, ExperimentalOutput>;
+            outputText: string;
+            structuredOutput?: boolean;
+            agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
+            overrideScorers?: MastraScorers;
+          }) => {
         const afterResult = await after({
           result,
           outputText,
@@ -2967,7 +3000,7 @@ export class Agent<
       input: options.messages,
       attributes: {
         agentId: this.id,
-        instructions,
+        instructions: systemMessageToString(instructions),
       },
       metadata: {
         runId,
@@ -3274,8 +3307,8 @@ export class Agent<
     options?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
   ): Promise<
     FORMAT extends 'aisdk'
-    ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
-    : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
+      ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
+      : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
   > {
     const result = await this.streamVNext(messages, options);
 
@@ -3761,10 +3794,10 @@ export class Agent<
       partialObjectStream: StreamTextResult<
         any,
         OUTPUT extends ZodSchema
-        ? z.infer<OUTPUT>
-        : EXPERIMENTAL_OUTPUT extends ZodSchema
-        ? z.infer<EXPERIMENTAL_OUTPUT>
-        : unknown
+          ? z.infer<OUTPUT>
+          : EXPERIMENTAL_OUTPUT extends ZodSchema
+            ? z.infer<EXPERIMENTAL_OUTPUT>
+            : unknown
       >['experimental_partialOutputStream'];
     }
   >;
@@ -3816,10 +3849,10 @@ export class Agent<
       partialObjectStream: StreamTextResult<
         any,
         OUTPUT extends ZodSchema
-        ? z.infer<OUTPUT>
-        : EXPERIMENTAL_OUTPUT extends ZodSchema
-        ? z.infer<EXPERIMENTAL_OUTPUT>
-        : unknown
+          ? z.infer<OUTPUT>
+          : EXPERIMENTAL_OUTPUT extends ZodSchema
+            ? z.infer<EXPERIMENTAL_OUTPUT>
+            : unknown
       >['experimental_partialOutputStream'];
     }
   >;
