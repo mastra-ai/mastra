@@ -424,9 +424,11 @@ export async function streamVNextWorkflowHandler({
   workflowId,
   runId,
   inputData,
+  closeOnSuspend,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
   runtimeContext?: RuntimeContext;
+  closeOnSuspend?: boolean;
 }) {
   try {
     if (!workflowId) {
@@ -447,42 +449,7 @@ export async function streamVNextWorkflowHandler({
     const result = run.streamVNext({
       inputData,
       runtimeContext,
-    });
-    return result;
-  } catch (error) {
-    return handleError(error, 'Error streaming workflow');
-  }
-}
-
-export async function streamVNextFullWorkflowHandler({
-  mastra,
-  runtimeContext,
-  workflowId,
-  runId,
-  inputData,
-}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
-  inputData?: unknown;
-  runtimeContext?: RuntimeContext;
-}) {
-  try {
-    if (!workflowId) {
-      throw new HTTPException(400, { message: 'Workflow ID is required' });
-    }
-
-    if (!runId) {
-      throw new HTTPException(400, { message: 'runId required to stream workflow' });
-    }
-
-    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
-
-    if (!workflow) {
-      throw new HTTPException(404, { message: 'Workflow not found' });
-    }
-
-    const run = await workflow.createRunAsync({ runId });
-    const result = run.streamFullVNext({
-      inputData,
-      runtimeContext,
+      closeOnSuspend,
     });
     return result;
   } catch (error) {

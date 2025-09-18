@@ -20,7 +20,6 @@ import {
   streamVNextWorkflowHandler,
   watchWorkflowHandler,
   resumeStreamWorkflowHandler,
-  streamVNextFullWorkflowHandler,
 } from './handlers';
 import {
   createLegacyWorkflowRunHandler,
@@ -694,53 +693,9 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
                   type: 'object',
                   description: 'Runtime context for the workflow execution',
                 },
-              },
-            },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'workflow run started',
-        },
-        404: {
-          description: 'workflow not found',
-        },
-      },
-      tags: ['workflows'],
-    }),
-    streamVNextWorkflowHandler,
-  );
-
-  router.post(
-    '/:workflowId/streamFullVNext',
-    describeRoute({
-      description: 'Stream workflow in real-time using the VNext streaming API',
-      parameters: [
-        {
-          name: 'workflowId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'runId',
-          in: 'query',
-          required: false,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                inputData: { type: 'object' },
-                runtimeContext: {
-                  type: 'object',
-                  description: 'Runtime context for the workflow execution',
+                closeOnSuspend: {
+                  type: 'boolean',
+                  description: 'Close the stream on suspend',
                 },
               },
             },
@@ -757,7 +712,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
       tags: ['workflows'],
     }),
-    streamVNextFullWorkflowHandler,
+    streamVNextWorkflowHandler,
   );
 
   router.post(
