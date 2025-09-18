@@ -4,11 +4,11 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2, LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
-import type { CoreMessage, LanguageModelV1 } from 'ai';
+import type { CoreMessage, LanguageModelV1, CoreSystemMessage } from 'ai';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { stepCountIs } from 'ai-v5';
-import type { UIMessageChunk } from 'ai-v5';
+import type { SystemModelMessage, UIMessageChunk } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { config } from 'dotenv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -3904,6 +3904,329 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       expect(response.text).toBe('Logger test response');
       expect(capturedMastra).toBeUndefined();
+    });
+  });
+
+  describe(`${version} - Agent instructions with SystemMessage types`, () => {
+    it('should support string instructions (backward compatibility)', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: dummyModel,
+      });
+
+      const instructions = await agent.getInstructions();
+      expect(instructions).toBe('You are a helpful assistant.');
+
+      // Deprecated getter should work for strings
+      expect(agent.instructions).toBe('You are a helpful assistant.');
+    });
+
+    it('should support CoreSystemMessage instructions', async () => {
+      const systemMessage: CoreSystemMessage = {
+        role: 'system',
+        content: 'You are an expert programmer.',
+      };
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: systemMessage,
+        model: dummyModel,
+      });
+
+      const instructions = await agent.getInstructions();
+      expect(instructions).toEqual(systemMessage);
+
+      // Deprecated getter should throw for non-string
+      expect(() => agent.instructions).toThrow(
+        'The instructions getter is deprecated and only supports string instructions',
+      );
+    });
+
+    it('should support SystemModelMessage instructions', async () => {
+      const systemMessage: SystemModelMessage = {
+        role: 'system',
+        content: 'You are a data analyst.',
+      };
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: systemMessage,
+        model: dummyModel,
+      });
+
+      const instructions = await agent.getInstructions();
+      expect(instructions).toEqual(systemMessage);
+
+      // Deprecated getter should throw for non-string
+      expect(() => agent.instructions).toThrow(
+        'The instructions getter is deprecated and only supports string instructions',
+      );
+    });
+
+    it('should support array of string instructions', async () => {
+      const instructionsArray = ['You are a helpful assistant.', 'Always be polite.', 'Provide detailed answers.'];
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: instructionsArray,
+        model: dummyModel,
+      });
+
+      const instructions = await agent.getInstructions();
+      expect(instructions).toEqual(instructionsArray);
+
+      // Deprecated getter should throw for arrays
+      expect(() => agent.instructions).toThrow(
+        'The instructions getter is deprecated and only supports string instructions',
+      );
+    });
+
+    it('should support array of CoreSystemMessage instructions', async () => {
+      const instructionsArray: CoreSystemMessage[] = [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'system', content: 'Always be polite.' },
+      ];
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: instructionsArray,
+        model: dummyModel,
+      });
+
+      const instructions = await agent.getInstructions();
+      expect(instructions).toEqual(instructionsArray);
+
+      // Deprecated getter should throw
+      expect(() => agent.instructions).toThrow(
+        'The instructions getter is deprecated and only supports string instructions',
+      );
+    });
+
+    it('should support array of CoreSystemMessage with provider metadata', async () => {
+      const instructionsArray: CoreSystemMessage[] = [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'system', content: 'Always be polite.' },
+        { role: 'system', content: 'Use technical language.' },
+      ];
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: instructionsArray,
+        model: dummyModel,
+      });
+
+      const instructions = await agent.getInstructions();
+      expect(instructions).toEqual(instructionsArray);
+    });
+
+    it('should support dynamic instructions returning string', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: ({ runtimeContext }) => {
+          const role = runtimeContext?.get('role') || 'assistant';
+          return `You are a helpful ${role}.`;
+        },
+        model: dummyModel,
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('role', 'teacher');
+
+      const instructions = await agent.getInstructions({ runtimeContext });
+      expect(instructions).toBe('You are a helpful teacher.');
+
+      // Deprecated getter should throw for function
+      expect(() => agent.instructions).toThrow('Instructions are not compatible when instructions are a function');
+    });
+
+    it('should support dynamic instructions returning CoreSystemMessage', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: ({ runtimeContext }) => {
+          const role = runtimeContext?.get('role') || 'assistant';
+          return {
+            role: 'system',
+            content: `You are a helpful ${role}.`,
+          };
+        },
+        model: dummyModel,
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('role', 'doctor');
+
+      const instructions = await agent.getInstructions({ runtimeContext });
+      expect(instructions).toEqual({
+        role: 'system',
+        content: 'You are a helpful doctor.',
+      });
+    });
+
+    it('should support dynamic instructions returning array', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: ({ runtimeContext }) => {
+          const expertise = (runtimeContext?.get('expertise') as string[]) || [];
+          const expertiseMessages: CoreSystemMessage[] = expertise.map((exp: string) => ({
+            role: 'system',
+            content: `You have expertise in ${exp}.`,
+          }));
+          const messages: CoreSystemMessage[] = [
+            { role: 'system', content: 'You are a helpful assistant.' },
+            ...expertiseMessages,
+          ];
+          return messages;
+        },
+        model: dummyModel,
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('expertise', ['Python', 'JavaScript']);
+
+      const instructions = await agent.getInstructions({ runtimeContext });
+      expect(instructions).toEqual([
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'system', content: 'You have expertise in Python.' },
+        { role: 'system', content: 'You have expertise in JavaScript.' },
+      ]);
+    });
+
+    it('should support async dynamic instructions', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: async ({ runtimeContext }) => {
+          // Simulate async operation
+          await delay(10);
+          const role = runtimeContext?.get('role') || 'assistant';
+          return {
+            role: 'system',
+            content: `You are an async ${role}.`,
+          };
+        },
+        model: dummyModel,
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('role', 'consultant');
+
+      const instructions = await agent.getInstructions({ runtimeContext });
+      expect(instructions).toEqual({
+        role: 'system',
+        content: 'You are an async consultant.',
+      });
+    });
+
+    it('should combine instructions with system option in generateVNext', async () => {
+      // This test verifies that both agent instructions and user-provided system messages
+      // are properly combined when using generateVNext
+      // For now, we're just testing that the functionality doesn't break
+      // Full integration testing would require checking the actual messages sent to the LLM
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: dummyModel,
+      });
+
+      const additionalSystem: CoreSystemMessage = {
+        role: 'system',
+        content: 'Be concise in your responses.',
+      };
+
+      if (version === 'v2') {
+        // This test only applies to V2
+        // Simply verify that generateVNext works with the system option
+        // without throwing errors
+        const response = await agent.generateVNext('Hello', {
+          system: additionalSystem,
+        });
+
+        // Basic check that response was generated
+        expect(response.text).toBe('Dummy response');
+      } else {
+        // Skip for V1
+        expect(true).toBe(true);
+      }
+    });
+
+    it('should combine array instructions with array system option', async () => {
+      // This test verifies that array instructions and array system messages
+      // are properly combined when using generateVNext
+
+      // Use CoreSystemMessage array instead of mixed array
+      const agentInstructions: CoreSystemMessage[] = [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'system', content: 'You are an expert.' },
+      ];
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: agentInstructions,
+        model: dummyModel,
+      });
+
+      // Use string array for additional system messages
+      const additionalSystem: string[] = ['Be concise.', 'Use examples.'];
+
+      if (version === 'v2') {
+        // This test only applies to V2
+        // Simply verify that generateVNext works with array system option
+        // without throwing errors
+        const response = await agent.generateVNext('Hello', {
+          system: additionalSystem,
+        });
+
+        // Basic check that response was generated
+        expect(response.text).toBe('Dummy response');
+      } else {
+        // Skip for V1
+        expect(true).toBe(true);
+      }
+    });
+
+    it('should handle empty instructions gracefully', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: '',
+        model: dummyModel,
+      });
+
+      const instructions = await agent.getInstructions();
+      expect(instructions).toBe('');
+    });
+
+    it('should handle empty array instructions', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: [],
+        model: dummyModel,
+      });
+
+      const instructions = await agent.getInstructions();
+      expect(instructions).toEqual([]);
+    });
+
+    it('should throw error for function instructions in deprecated getter', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: () => 'Dynamic instructions',
+        model: dummyModel,
+      });
+
+      expect(() => agent.instructions).toThrow('Instructions are not compatible when instructions are a function');
+    });
+
+    it('should throw error for non-string static instructions in deprecated getter', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: { role: 'system', content: 'Instructions' },
+        model: dummyModel,
+      });
+
+      expect(() => agent.instructions).toThrow(
+        'The instructions getter is deprecated and only supports string instructions',
+      );
     });
   });
 

@@ -1,3 +1,4 @@
+import type { SystemMessage } from '@mastra/core';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import type { StepWithComponent, Workflow, WorkflowInfo } from '@mastra/core/workflows';
 import { stringify } from 'superjson';
@@ -122,5 +123,15 @@ export class WorkflowRegistry {
    */
   static getRegisteredWorkflowIds(): string[] {
     return Object.keys(this.additionalWorkflows);
+  }
+}
+
+export function systemMessageToString(message: SystemMessage): string {
+  if (typeof message === 'string') {
+    return message;
+  } else if (Array.isArray(message)) {
+    return message.map(m => (typeof m === 'string' ? m : m.content)).join('\n');
+  } else {
+    return message.content;
   }
 }
