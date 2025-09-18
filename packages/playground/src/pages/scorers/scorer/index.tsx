@@ -256,6 +256,7 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
         onClose={() => setDialogIsOpen(false)}
         onNext={thereIsNextItem() ? toNextItem : undefined}
         onPrevious={thereIsPreviousItem() ? toPreviousItem : undefined}
+        computeTraceLink={traceId => `/observability?traceId=${traceId}`}
       />
     </>
   );

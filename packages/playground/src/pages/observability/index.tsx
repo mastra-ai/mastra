@@ -55,6 +55,8 @@ export default function Observability() {
 
   const { data: aiTrace, isLoading: isLoadingAiTrace } = useAITrace(selectedTraceId, { enabled: !!selectedTraceId });
 
+  const traceId = searchParams.get('traceId');
+
   const {
     data: aiTraces = [],
     isLoading: isLoadingAiTraces,
@@ -79,6 +81,13 @@ export default function Observability() {
           }
         : undefined,
   });
+
+  useEffect(() => {
+    if (traceId) {
+      setSelectedTraceId(traceId);
+      setDialogIsOpen(true);
+    }
+  }, [traceId]);
 
   const agentOptions: EntityOptions[] = (Object.entries(agents) || []).map(([, value]) => ({
     value: value.name,
@@ -112,7 +121,7 @@ export default function Observability() {
 
   const handleReset = () => {
     setSelectedTraceId(undefined);
-    setSearchParams({ entity: 'all' });
+    setSearchParams({ entity: 'all', traceId: '' });
     setDialogIsOpen(false);
     setSelectedDateFrom(undefined);
     setSelectedDateTo(undefined);
