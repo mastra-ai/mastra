@@ -3,7 +3,16 @@ import { TransformStream } from 'stream/web';
 import type { SharedV2ProviderMetadata, LanguageModelV2CallWarning } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
 import { consumeStream } from 'ai-v5';
-import type { FinishReason, TelemetrySettings, ToolSet, LanguageModelRequestMetadata } from 'ai-v5';
+import type {
+  FinishReason,
+  TelemetrySettings,
+  ToolSet,
+  LanguageModelRequestMetadata,
+  StaticToolCall,
+  DynamicToolCall,
+  StaticToolResult,
+  DynamicToolResult,
+} from 'ai-v5';
 import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
 import type { AIV5Type } from '../../agent/message-list/types';
@@ -127,9 +136,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     finishReason: new DelayedPromise<FinishReason | string | undefined>(),
     usage: new DelayedPromise<LanguageModelUsage>(),
     warnings: new DelayedPromise<LanguageModelV2CallWarning[]>(),
-    providerMetadata: new DelayedPromise<Record<string, unknown> | undefined>(),
-    response: new DelayedPromise<Record<string, unknown>>(),
-    request: new DelayedPromise<Record<string, unknown>>(),
+    providerMetadata: new DelayedPromise<SharedV2ProviderMetadata | undefined>(),
+    response: new DelayedPromise<{ headers?: Record<string, string> } & Record<string, unknown>>(),
+    request: new DelayedPromise<{ body?: unknown } | LanguageModelRequestMetadata>(),
     text: new DelayedPromise<string>(),
     reasoning: new DelayedPromise<
       {
@@ -252,12 +261,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
         transform: async (chunk, controller) => {
           switch (chunk.type) {
-            case 'step-start':
-              // Capture warnings from step-start event (e.g., from stream-start)
-              if (chunk.payload?.warnings) {
-                self.#warnings = chunk.payload.warnings;
-              }
-              break;
             case 'source':
               self.#bufferedSources.push(chunk);
               self.#bufferedByStep.sources.push(chunk);
@@ -365,10 +368,27 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 text: self.#bufferedByStep.text,
                 reasoning: self.#bufferedReasoning.map(text => ({ type: 'reasoning' as const, text })), // Convert string array to ReasoningPart array
                 reasoningText: self.#bufferedByStep.reasoning || undefined,
-                staticToolCalls: [], // These would need conversion which we're avoiding
-                dynamicToolCalls: [],
-                staticToolResults: [],
-                dynamicToolResults: [],
+                // Compute these from the content array like DefaultStepResult does
+                get staticToolCalls() {
+                  return this.content.filter(
+                    (part): part is StaticToolCall<ToolSet> => part.type === 'tool-call' && part.dynamic === false,
+                  );
+                },
+                get dynamicToolCalls() {
+                  return this.content.filter(
+                    (part): part is DynamicToolCall => part.type === 'tool-call' && part.dynamic === true,
+                  );
+                },
+                get staticToolResults() {
+                  return this.content.filter(
+                    (part): part is StaticToolResult<ToolSet> => part.type === 'tool-result' && part.dynamic === false,
+                  );
+                },
+                get dynamicToolResults() {
+                  return this.content.filter(
+                    (part): part is DynamicToolResult => part.type === 'tool-result' && part.dynamic === true,
+                  );
+                },
                 finishReason: chunk.payload.stepResult.reason,
                 usage: chunk.payload.output.usage,
                 warnings: self.#warnings,

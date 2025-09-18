@@ -1045,7 +1045,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           `);
         });
 
-        it.only("should be called when object doesn't match the schema", async () => {
+        it("should be called when object doesn't match the schema", async () => {
           let result: any;
           const { objectStream, object } = loopFn({
             models: [
