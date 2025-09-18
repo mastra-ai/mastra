@@ -1,7 +1,7 @@
 import type { GenerateTextOnStepFinishCallback, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema, ZodTypeAny } from 'zod';
-import type { TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
+import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
@@ -30,6 +30,8 @@ import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
+import type { MessageList } from './message-list/index';
+import type { SaveQueueManager } from './save-queue';
 
 export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
 export type { Message as AiMessageType } from 'ai';
@@ -264,3 +266,22 @@ export type AgentStreamOptions<
   (OUTPUT extends undefined ? DefaultLLMStreamOptions : DefaultLLMStreamObjectOptions);
 
 export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };
+
+export type AgentExecuteOnFinishOptions = {
+  instructions: string;
+  runId: string;
+  result: Record<string, any>;
+  thread: StorageThreadType | null | undefined;
+  readOnlyMemory?: boolean;
+  threadId?: string;
+  resourceId?: string;
+  runtimeContext: RuntimeContext;
+  agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
+  memoryConfig: MemoryConfig | undefined;
+  outputText: string;
+  messageList: MessageList;
+  threadExists: boolean;
+  structuredOutput?: boolean;
+  saveQueueManager: SaveQueueManager;
+  overrideScorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+};
