@@ -206,7 +206,7 @@ export function createStep<
             onFinish: result => {
               streamPromise.resolve(result.text);
             },
-            // abortSignal,
+            abortSignal,
           });
 
           stream = modelOutput.fullStream;
