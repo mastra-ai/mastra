@@ -1,13 +1,12 @@
 import { z } from 'zod';
+import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
 import { RuntimeContext } from '../../../runtime-context';
+import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
-import type { AgentCapabilities } from './types';
+import type { AgentCapabilities } from './schema';
 
-interface StreamStepOptions<
-  _OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> {
+interface StreamStepOptions<FORMAT extends 'aisdk' | 'mastra' | undefined = undefined> {
   capabilities: AgentCapabilities;
   runId: string;
   returnScorerData?: boolean;
@@ -17,28 +16,34 @@ interface StreamStepOptions<
 export function createStreamStep<
   OUTPUT extends OutputSchema | undefined = undefined,
   FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({ capabilities, runId, returnScorerData, format = 'mastra' as FORMAT }: StreamStepOptions<OUTPUT, FORMAT>) {
+>({ capabilities, runId, returnScorerData, format = 'mastra' as FORMAT }: StreamStepOptions<FORMAT>) {
   return createStep({
     id: 'stream-text-step',
-    inputSchema: z.any(),
-    outputSchema: z.any(),
+    inputSchema: z.any(), // tried to type this in various ways but it's too complex
+    outputSchema: z.union([
+      z.instanceof(MastraModelOutput<OUTPUT | undefined>),
+      z.instanceof(AISDKV5OutputStream<OUTPUT | undefined>),
+    ]),
     execute: async ({ inputData, tracingContext }) => {
+      // Instead of validating inputData with zod, we just cast it to the type we know it should be
+      const validatedInputData = inputData as ModelLoopStreamArgs<any, OUTPUT>;
+
       capabilities.logger.debug(`Starting agent ${capabilities.agentName} llm stream call`, {
         runId,
       });
 
       const processors =
-        inputData.outputProcessors ||
+        validatedInputData.outputProcessors ||
         (capabilities.outputProcessors
           ? typeof capabilities.outputProcessors === 'function'
             ? await capabilities.outputProcessors({
-                runtimeContext: inputData.runtimeContext || new RuntimeContext(),
+                runtimeContext: validatedInputData.runtimeContext || new RuntimeContext(),
               })
             : capabilities.outputProcessors
           : []);
 
       const streamResult = capabilities.llm.stream({
-        ...inputData,
+        ...validatedInputData,
         outputProcessors: processors,
         returnScorerData,
         tracingContext,
