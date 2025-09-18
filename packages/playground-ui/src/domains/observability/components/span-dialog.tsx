@@ -88,7 +88,7 @@ export function SpanDialog({
 
         {span?.attributes?.usage && <TraceSpanUsage spanUsage={span.attributes.usage} className="mt-[1.5rem]" />}
         <KeyValueList data={spanInfo} LinkComponent={Link} className="mt-[1.5rem]" />
-        <SpanDetails span={span} />
+        <SpanDetails span={span} onScorerTriggered={onScorerTriggered} />
       </div>
     </SideDialog>
   );

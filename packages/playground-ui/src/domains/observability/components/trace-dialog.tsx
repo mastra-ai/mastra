@@ -8,7 +8,7 @@ import {
   SideDialogHeader,
   SideDialogHeading,
 } from '@/components/ui/elements';
-import { PanelLeftIcon, HashIcon, EyeIcon, ChevronsLeftRightEllipsisIcon } from 'lucide-react';
+import { PanelLeftIcon, HashIcon, EyeIcon, ChevronsLeftRightEllipsisIcon, GaugeIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { TraceTimeline } from './trace-timeline';
 import { TraceSpanUsage } from './trace-span-usage';
@@ -20,6 +20,7 @@ import { SpanDetails } from './span-details';
 import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
 import { UISpan } from '../types';
 import { ScorersDropdown } from '@/domains/scores/components/scorers-dropdown';
+import { ScoreTable } from '@/domains/scores/components/score-table';
 
 type TraceDialogProps = {
   traceSpans?: AISpanRecord[];
@@ -158,6 +159,7 @@ export function TraceDialog({
               />
             )}
             <KeyValueList data={traceInfo} LinkComponent={Link} className="mt-[2rem]" />
+
             <TraceTimeline
               hierarchicalSpans={hierarchicalSpans}
               spans={traceSpans}
@@ -166,6 +168,21 @@ export function TraceDialog({
               isLoading={isLoadingSpans}
               className="pr-[2.5rem] pt-[2.5rem]"
             />
+
+            {traceDetails?.links?.length > 0 && (
+              <div className="pt-[2.5rem] pr-[2.5rem]">
+                <SideDialogHeading as="h2" className="pb-[1rem]">
+                  <GaugeIcon /> Scores
+                </SideDialogHeading>
+
+                <div className="bg-surface2 rounded-lg overflow-hidden border-sm border-border1">
+                  <ScoreTable
+                    scores={traceDetails?.links}
+                    onItemClick={scorerName => onScorerTriggered(scorerName, traceDetails!.traceId, selectedSpanId)}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {selectedSpan && combinedView && (
@@ -211,7 +228,7 @@ export function TraceDialog({
                   <KeyValueList data={selectedSpanInfo} LinkComponent={Link} />
                 </div>
                 <div className="overflow-y-auto pr-[2.5rem] pt-[2rem]">
-                  <SpanDetails span={selectedSpan} />
+                  <SpanDetails span={selectedSpan} onScorerTriggered={onScorerTriggered} />
                 </div>
               </div>
             </div>
