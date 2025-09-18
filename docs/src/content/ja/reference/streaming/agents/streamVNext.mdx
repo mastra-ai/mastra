@@ -12,10 +12,10 @@ import { StreamVNextCallout } from "@/components/streamVNext-callout.tsx"
 
 `.streamVNext()` メソッドは、強化された機能と柔軟なフォーマットにより、エージェントからの応答をリアルタイムでストリーミングできます。このメソッドはメッセージと任意のストリーミングオプションを受け取り、Mastra のネイティブ形式と AI SDK v5 との互換性を両立した次世代のストリーミング体験を提供します。
 
-## 使用例
+## 使い方の例
 
-```typescript copy
-// Mastra のデフォルト形式
+```ts filename="index.ts" copy
+// デフォルトの Mastra 形式
 const mastraStream = await agent.streamVNext("message for agent");
 
 // AI SDK v5 と互換の形式
@@ -23,6 +23,7 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
   format: 'aisdk'
 });
 ```
+
 
 ## パラメーター
 
@@ -632,17 +633,17 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
 
 ### Mastra フォーマット（デフォルト）
 
-```typescript showLineNumbers copy
+```ts filename="index.ts" showLineNumbers copy
 import { stepCountIs } from 'ai-v5';
 
-const stream = await agent.streamVNext("Tell me a story", {
+const stream = await agent.streamVNext("物語を聞かせて", {
   stopWhen: stepCountIs(3), // 3ステップで停止
   modelSettings: {
     temperature: 0.7,
   },
 });
 
-// テキストストリームにアクセス
+// テキストのストリームにアクセス
 for await (const chunk of stream.textStream) {
   console.log(chunk);
 }
@@ -651,14 +652,15 @@ for await (const chunk of stream.textStream) {
 const fullText = await stream.text;
 ```
 
+
 ### AI SDK v5 の形式
 
-```typescript showLineNumbers copy
+```ts filename="index.ts" showLineNumbers copy
 import { stepCountIs } from 'ai-v5';
 
 const stream = await agent.streamVNext("物語を聞かせて", {
   format: 'aisdk',
-  stopWhen: stepCountIs(3), // 3ステップで停止
+  stopWhen: stepCountIs(3), // 3ステップ後に停止
   modelSettings: {
     temperature: 0.7,
   },
@@ -675,26 +677,27 @@ for await (const part of stream.fullStream) {
 return stream.toUIMessageStreamResponse();
 ```
 
+
 ### コールバックの使用
 
-すべてのコールバック関数がトップレベルのプロパティとして利用できるようになり、よりシンプルで使いやすいAPIになりました。
+すべてのコールバック関数がトップレベルのプロパティとして利用できるようになり、より洗練された API 体験を提供します。
 
-```typescript showLineNumbers copy
-const stream = await agent.streamVNext("Tell me a story", {
+```ts filename="index.ts" showLineNumbers copy
+const stream = await agent.streamVNext("物語を聞かせて", {
   onFinish: (result) => {
-    console.log('Streaming finished:', result);
+    console.log('ストリーミングが完了:', result);
   },
   onStepFinish: (step) => {
-    console.log('Step completed:', step);
+    console.log('ステップが完了:', step);
   },
   onChunk: (chunk) => {
-    console.log('Received chunk:', chunk);
+    console.log('チャンクを受信:', chunk);
   },
   onError: ({ error }) => {
-    console.error('Streaming error:', error);
+    console.error('ストリーミングのエラー:', error);
   },
   onAbort: (event) => {
-    console.log('Stream aborted:', event);
+    console.log('ストリームが中断されました:', event);
   },
 });
 
@@ -704,14 +707,15 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-### オプションを使用した高度な例
 
-```typescript 行番号を表示
+### オプションを使った高度な例
+
+```typescript showLineNumbers copy
 import { z } from "zod";
 import { stepCountIs } from 'ai-v5';
 
 await agent.streamVNext("エージェントへのメッセージ", {
-  format: 'aisdk', // AI SDK v5 との互換性を有効化
+  format: 'aisdk', // AI SDK v5 互換モードを有効化
   stopWhen: stepCountIs(3), // 3ステップで停止
   modelSettings: {
     temperature: 0.7,
@@ -730,7 +734,7 @@ await agent.streamVNext("エージェントへのメッセージ", {
     model: openai("gpt-4o-mini"),
     errorStrategy: 'warn',
   },
-  // ストリーミング応答検証用の出力プロセッサ
+  // ストリーミング応答の検証用の出力プロセッサ
   outputProcessors: [
     new ModerationProcessor({ model: openai("gpt-4.1-nano") }),
     new BatchPartsProcessor({ maxBatchSize: 3, maxWaitTime: 100 }),

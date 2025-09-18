@@ -13,7 +13,7 @@ The `.streamVNext()` method enables real-time streaming of responses from an age
 
 ## Usage example
 
-```typescript copy
+```ts filename="index.ts" copy
 // Default Mastra format
 const mastraStream = await agent.streamVNext("message for agent");
 
@@ -534,7 +534,7 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
 
 ### Mastra Format (Default)
 
-```typescript showLineNumbers copy
+```ts filename="index.ts" showLineNumbers copy
 import { stepCountIs } from 'ai-v5';
 
 const stream = await agent.streamVNext("Tell me a story", {
@@ -555,7 +555,7 @@ const fullText = await stream.text;
 
 ### AI SDK v5 Format
 
-```typescript showLineNumbers copy
+```ts filename="index.ts" showLineNumbers copy
 import { stepCountIs } from 'ai-v5';
 
 const stream = await agent.streamVNext("Tell me a story", {
@@ -581,7 +581,7 @@ return stream.toUIMessageStreamResponse();
 
 All callback functions are now available as top-level properties for a cleaner API experience.
 
-```typescript showLineNumbers copy
+```ts filename="index.ts" showLineNumbers copy
 const stream = await agent.streamVNext("Tell me a story", {
   onFinish: (result) => {
     console.log('Streaming finished:', result);
@@ -608,7 +608,7 @@ for await (const chunk of stream.textStream) {
 
 ### Advanced Example with Options
 
-```typescript showLineNumbers
+```typescript showLineNumbers copy
 import { z } from "zod";
 import { stepCountIs } from 'ai-v5';
 
