@@ -104,7 +104,7 @@
   "dependencies": {
     "compromise": "^14.14.4",
     "difflib": "^0.2.4",
-    "fs-extra": "^11.3.1",
+    "fs-extra": "^11.3.2",
     "keyword-extractor": "^0.0.28",
     "sentiment": "^5.0.2",
     "string-similarity": "^4.0.4"
