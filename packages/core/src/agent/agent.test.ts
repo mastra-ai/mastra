@@ -614,7 +614,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(name).toBe('Dero Israel');
     }, 500000);
 
-    describe.only('tool approval and suspension', () => {
+    describe('tool approval and suspension', () => {
       describe.skipIf(version === 'v1')('suspension', () => {
         it('should call findUserTool with suspend and resume', async () => {
           const findUserTool = createTool({
@@ -682,7 +682,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       describe.skipIf(version === 'v1')('requireToolApproval', () => {
-        it('should call findUserTool with requireToolApproval', async () => {
+        it('should call findUserTool with requireToolApproval on agent', async () => {
           const findUserTool = createTool({
             id: 'Find user tool',
             description: 'This is a test tool that returns the name and email',
@@ -749,7 +749,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           expect(name).toBe('Dero Israel');
         }, 500000);
 
-        it('should call findUserTool with requireToolApproval', async () => {
+        it('should call findUserTool with requireToolApproval on tool', async () => {
           const findUserTool = createTool({
             id: 'Find user tool',
             description: 'This is a test tool that returns the name and email',
@@ -815,6 +815,90 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           expect(name).toBe('Dero Israel');
         }, 500000);
       });
+
+      it.only('should persist model output stream state', async () => {
+        const findUserTool = createTool({
+          id: 'Find user tool',
+          description: 'This is a test tool that returns the name and email',
+          inputSchema: z.object({
+            name: z.string(),
+          }),
+          execute: async ({ context }) => {
+            return mockFindUser(context) as Promise<Record<string, any>>;
+          },
+        });
+
+        const userAgent = new Agent({
+          name: 'User agent',
+          instructions: 'You are an agent that can get list of users using findUserTool.',
+          model: openaiModel,
+          tools: { findUserTool },
+        });
+
+        const mastra = new Mastra({
+          agents: { userAgent },
+          logger: false,
+          storage: mockStorage,
+        });
+
+        const agentOne = mastra.getAgent('userAgent');
+
+        let toolCall;
+        let response;
+        if (version === 'v1') {
+          response = await agentOne.generate('Find the user with name - Dero Israel', {
+            maxSteps: 2,
+            toolChoice: 'required',
+          });
+          toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
+        } else {
+          const stream = await agentOne.streamVNext(
+            'First tell me about what tools you have. Then call the user tool to find the user with name - Dero Israel. Then tell me about what format you received the data and tell me what it would look like in human readable form.',
+            {
+              requireToolApproval: true,
+            },
+          );
+          let firstText = '';
+          for await (const chunk of stream.fullStream) {
+            if (chunk.type === 'tool-call-approval') {
+              console.log('tool-call-approval chunk', chunk);
+            } else if (chunk.type === 'text-delta') {
+              firstText += chunk.payload.text;
+            }
+          }
+          // response = await stream.response;
+          // console.log('response', JSON.stringify(response.toolResults, null, 2));
+          console.log('status', stream.status);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          const resumeStream = await agentOne.resumeStreamVNext({ hello: 'world' }, { runId: stream.runId });
+          let secondText = '';
+          for await (const chunk of resumeStream.fullStream) {
+            console.log('resume stream chunk', chunk);
+            if (chunk.type === 'text-delta') {
+              secondText += chunk.payload.text;
+            }
+          }
+
+          console.log('resume status', resumeStream.status);
+          console.log('resume tool results', await resumeStream.toolResults);
+
+          const finalText = await resumeStream.text;
+
+          console.log('first text', firstText);
+          console.log('second text', secondText);
+          console.log('final text', finalText);
+
+          expect(finalText).toBe(firstText + secondText);
+          toolCall = (await resumeStream.toolResults).find(
+            (result: any) => result.payload.toolName === 'findUserTool',
+          ).payload;
+        }
+
+        const name = toolCall?.result?.name;
+
+        expect(mockFindUser).toHaveBeenCalled();
+        expect(name).toBe('Dero Israel');
+      }, 500000);
     });
 
     it('generate - should pass and call client side tools', async () => {
