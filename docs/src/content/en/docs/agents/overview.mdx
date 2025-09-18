@@ -64,6 +64,34 @@ export const testAgent = new Agent({
 });
 ```
 
+#### Instruction formats
+
+Instructions can be provided in multiple formats for greater flexibility:
+
+```typescript showLineNumbers copy
+// String (most common)
+instructions: "You are a helpful assistant."
+
+// System message object
+instructions: { 
+  role: "system", 
+  content: "You are an expert programmer." 
+}
+
+// Array of strings
+instructions: [
+  "You are a helpful assistant.",
+  "Always be polite.",
+  "Provide detailed answers."
+]
+
+// Array of system messages
+instructions: [
+  { role: "system", content: "You are a helpful assistant." },
+  { role: "system", content: "You have expertise in TypeScript." }
+]
+```
+
 > See [Agent](../../reference/agents/agent.mdx) for more information.
 
 
