@@ -614,8 +614,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(name).toBe('Dero Israel');
     }, 500000);
 
-    describe('tool approval and suspension', () => {
-      describe.only('suspension', () => {
+    describe.only('tool approval and suspension', () => {
+      describe('suspension', () => {
         it.skipIf(version === 'v1')(
           'should call findUserTool with suspend and resume',
           async () => {
