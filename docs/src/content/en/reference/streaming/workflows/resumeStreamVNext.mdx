@@ -1,5 +1,5 @@
 ---
-title: "Reference: Run.streamVNext() | Workflows | Mastra Docs"
+title: "Reference: Run.resumeStreamVNext() | Workflows | Mastra Docs"
 description: Documentation for the `Run.streamVNext()` method in workflows, which enables real-time streaming of responses.
 ---
 
@@ -9,7 +9,7 @@ import { StreamVNextCallout } from "@/components/streamVNext-callout.tsx"
 
 <StreamVNextCallout />
 
-The `.streamVNext()` method enables real-time streaming of responses from a workflow. This enhanced streaming capability will eventually replace the current `stream()` method.
+The `.resumeStreamVNext()` method resumes a suspended workflow run with new data, allowing you to continue execution from a specific step and to observe the stream of events.
 
 ## Usage example
 
@@ -21,6 +21,14 @@ const stream = run.streamVNext({
     value: "initial data",
   },
 });
+
+
+const result = await stream.result;
+if (result.status === "suspended") {
+  const resumedStream = await run.resumeStreamVNext({
+    resumeData: { value: "resume data" }
+  });
+}
 ```
 
 ## Parameters
@@ -28,7 +36,7 @@ const stream = run.streamVNext({
 <PropertiesTable
   content={[
     {
-      name: "inputData",
+      name: "resumeData",
       type: "z.infer<TInput>",
       description: "Input data that matches the workflow's input schema",
       isOptional: true,
@@ -37,6 +45,12 @@ const stream = run.streamVNext({
       name: "runtimeContext",
       type: "RuntimeContext",
       description: "Runtime context data to use during workflow execution",
+      isOptional: true,
+    },
+    {
+      name: "step",
+      type: "Step<string, any, any, any, any, TEngineType>",
+      description: "The step to resume execution from",
       isOptional: true,
     },
   ]}
@@ -69,20 +83,6 @@ const stream = run.streamVNext({
   ]}
 />
 
-## Extended usage example
-
-```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
-
-const stream = run.streamVNext({
-  inputData: {
-    value: "initial data",
-  },
-});
-
-const result = await stream.result;
-```
-
 ## Stream Events
 
 The stream emits various event types during workflow execution. Each event has a `type` field and a `payload` containing relevant data:
@@ -97,4 +97,4 @@ The stream emits various event types during workflow execution. Each event has a
 
 - [Workflows overview](../../../docs/workflows/overview.mdx#run-workflow)
 - [Workflow.createRunAsync()](../create-run.mdx)
-- [Run.resumeStreamVNext()](./resumeStreamVNext.mdx)
+- [Run.streamVNext()](./streamVNext.mdx)
