@@ -1,0 +1,487 @@
+---
+title: "Migration from OTLP | Examples | Observability | Mastra Docs"
+description: Step-by-step guide to migrate from OTLP tracing to AI Tracing
+---
+
+import { Callout } from "nextra/components";
+
+# Migration from OTLP to AI Tracing
+
+This guide helps you migrate from Mastra's OTLP-based tracing (configured via `telemetry`) to the new AI Tracing system (configured via `observability`).
+
+<Callout type="info">
+  OTLP tracing is being deprecated but will continue to work for existing applications. We recommend migrating to AI Tracing for better AI-specific insights and native provider support.
+</Callout>
+
+## Key Differences
+
+| Aspect | OTLP Tracing | AI Tracing |
+|--------|--------------|------------|
+| **Configuration** | `telemetry` property | `observability` property |
+| **Focus** | General distributed tracing | AI-specific operations |
+| **Data Format** | OpenTelemetry standard | Provider-native + OTLP |
+| **Providers** | Any OTLP collector | Langfuse, Braintrust, Mastra Cloud |
+| **Storage** | External collectors only | Built-in storage option |
+| **Metadata** | Generic span attributes | AI-specific (tokens, models) |
+
+## Migration Steps
+
+### Step 1: Assess Current Setup
+
+First, identify your current OTLP configuration:
+
+```typescript filename="Current OTLP Setup"
+// Old configuration (OTLP)
+export const mastra = new Mastra({
+  telemetry: {
+    serviceName: 'my-service',
+    sampling: {
+      type: 'ratio',
+      probability: 0.1
+    },
+    exporter: {
+      type: 'otlp',
+      endpoint: 'http://localhost:4318',
+      headers: {
+        'api-key': process.env.OTLP_API_KEY
+      }
+    }
+  }
+});
+```
+
+### Step 2: Choose Your Migration Path
+
+#### Option A: Direct Replacement
+
+Replace OTLP with AI Tracing using similar providers:
+
+```typescript filename="Direct Migration"
+// New configuration (AI Tracing)
+export const mastra = new Mastra({
+  observability: {
+    default: { enabled: true }, // Includes DefaultExporter + CloudExporter
+    configs: {
+      production: {
+        serviceName: 'my-service',
+        sampling: {
+          type: 'ratio',
+          probability: 0.1
+        }
+        // Exporters are included via default configuration
+      }
+    }
+  }
+});
+```
+
+#### Option B: Gradual Migration
+
+Run both systems in parallel during transition:
+
+```typescript filename="Parallel Configuration"
+export const mastra = new Mastra({
+  // Keep existing OTLP (will be removed later)
+  telemetry: {
+    serviceName: 'my-service',
+    exporter: {
+      type: 'otlp',
+      endpoint: process.env.OTLP_ENDPOINT
+    }
+  },
+
+  // Add new AI Tracing
+  observability: {
+    default: { enabled: true },
+    configs: {
+      migration: {
+        serviceName: 'my-service-ai',
+        sampling: { type: 'ratio', probability: 0.1 }
+      }
+    }
+  }
+});
+```
+
+<Callout type="tip">
+  Running both systems temporarily allows you to compare traces and ensure nothing is missed during migration.
+</Callout>
+
+### Step 3: Map Provider Configurations
+
+#### From Jaeger
+
+```typescript filename="Before: Jaeger OTLP"
+telemetry: {
+  serviceName: 'my-service',
+  exporter: {
+    type: 'otlp',
+    endpoint: 'http://jaeger:4318'
+  }
+}
+```
+
+```typescript filename="After: AI Tracing with Cloud"
+observability: {
+  default: { enabled: true }, // Sends to Mastra Cloud
+  configs: {
+    production: {
+      serviceName: 'my-service',
+      exporters: [
+        // Optional: Add Langfuse for LLM-specific insights
+        new LangfuseExporter({
+          publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+          secretKey: process.env.LANGFUSE_SECRET_KEY
+        })
+      ]
+    }
+  }
+}
+```
+
+#### From Datadog
+
+```typescript filename="Before: Datadog OTLP"
+telemetry: {
+  serviceName: 'my-service',
+  exporter: {
+    type: 'otlp',
+    endpoint: 'https://trace.agent.datadoghq.com',
+    headers: {
+      'DD-API-KEY': process.env.DD_API_KEY
+    }
+  }
+}
+```
+
+```typescript filename="After: AI Tracing"
+observability: {
+  default: { enabled: true },
+  // OpenTelemetry exporter for Datadog coming soon
+  // For now, use Mastra Cloud or Langfuse
+}
+```
+
+#### From New Relic
+
+```typescript filename="Before: New Relic OTLP"
+telemetry: {
+  serviceName: 'my-service',
+  exporter: {
+    type: 'otlp',
+    endpoint: 'https://otlp.nr-data.net',
+    headers: {
+      'api-key': process.env.NEW_RELIC_API_KEY
+    }
+  }
+}
+```
+
+```typescript filename="After: AI Tracing"
+observability: {
+  default: { enabled: true },
+  configs: {
+    production: {
+      serviceName: 'my-service',
+      // Use Mastra Cloud for now
+      // OpenTelemetry exporter coming soon
+    }
+  }
+}
+```
+
+### Step 4: Update Environment Variables
+
+Update your environment variables for the new system:
+
+```bash filename=".env"
+# Remove old OTLP variables
+# OTLP_ENDPOINT=http://localhost:4318
+# OTLP_API_KEY=xxx
+
+# Add new AI Tracing variables
+MASTRA_CLOUD_ACCESS_TOKEN=your_token_here
+
+# Optional: Add provider-specific vars
+LANGFUSE_PUBLIC_KEY=pk-lf-xxx
+LANGFUSE_SECRET_KEY=sk-lf-xxx
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
+```
+
+### Step 5: Configure Storage
+
+AI Tracing requires storage for the DefaultExporter:
+
+```typescript filename="Add Storage Configuration"
+import { LibSQLStorage } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  // Add storage configuration
+  storage: new LibSQLStorage({
+    url: process.env.DATABASE_URL || 'file:local.db'
+  }),
+
+  observability: {
+    default: { enabled: true }
+  }
+});
+```
+
+### Step 6: Update Instrumentation
+
+#### Custom Spans
+
+OTLP custom spans need to be updated:
+
+```typescript filename="Before: OTLP Custom Spans"
+// Old OTLP approach
+import { trace } from '@opentelemetry/api';
+
+const tracer = trace.getTracer('my-service');
+const span = tracer.startSpan('custom-operation');
+span.setAttribute('user.id', userId);
+span.end();
+```
+
+```typescript filename="After: AI Tracing Custom Spans"
+// New AI Tracing approach
+execute: async ({ inputData, tracingContext }) => {
+  // Create child span
+  const customSpan = tracingContext.currentSpan?.createChildSpan({
+    type: 'generic',
+    name: 'custom-operation',
+    input: inputData
+  });
+
+  try {
+    const result = await performOperation();
+    customSpan?.end({
+      output: result,
+      metadata: { userId }
+    });
+    return result;
+  } catch (error) {
+    customSpan?.error({ error });
+    throw error;
+  }
+}
+```
+
+#### Metadata and Attributes
+
+Map OTLP attributes to AI Tracing metadata:
+
+```typescript filename="Metadata Mapping"
+// OTLP attributes
+span.setAttribute('http.method', 'POST');
+span.setAttribute('http.url', '/api/chat');
+span.setAttribute('user.id', '123');
+
+// AI Tracing metadata
+tracingContext.currentSpan?.update({
+  metadata: {
+    httpMethod: 'POST',
+    endpoint: '/api/chat',
+    userId: '123'
+  }
+});
+```
+
+### Step 7: Verify Migration
+
+#### Testing Checklist
+
+1. **Traces are being created**:
+   ```typescript
+   const agent = mastra.getAgent('my-agent');
+   const result = await agent.generate('test');
+   // Check Mastra Playground or Cloud for traces
+   ```
+
+2. **Storage is working**:
+   ```bash
+   # Check database for traces
+   sqlite3 local.db "SELECT COUNT(*) FROM ai_spans;"
+   ```
+
+3. **Exporters are sending data**:
+   - Check Mastra Cloud dashboard
+   - Check Langfuse dashboard if configured
+   - Monitor console logs for errors
+
+4. **Performance is acceptable**:
+   - Monitor application latency
+   - Check memory usage
+   - Verify sampling is working
+
+#### Comparison Testing
+
+Run a test to compare both systems:
+
+```typescript filename="comparison-test.ts"
+async function compareTracing() {
+  // Execute same operation
+  const agent = mastra.getAgent('test-agent');
+  const result = await agent.generate('Hello world');
+
+  // Check both systems
+  console.log('Check OTLP collector for traces');
+  console.log('Check Mastra Cloud for AI traces');
+
+  // Verify key metrics match:
+  // - Operation count
+  // - Error rates
+  // - Latency measurements
+}
+```
+
+### Step 8: Complete Migration
+
+Once verified, remove OTLP configuration:
+
+```typescript filename="Final Configuration"
+export const mastra = new Mastra({
+  // Remove telemetry property completely
+  // telemetry: { ... } // REMOVED
+
+  // Keep only observability
+  observability: {
+    default: { enabled: true },
+    configs: {
+      production: {
+        serviceName: 'my-service',
+        sampling: { type: 'ratio', probability: 0.1 },
+        exporters: [
+          new LangfuseExporter({ /* ... */ })
+        ]
+      }
+    }
+  },
+
+  // Required storage
+  storage: new LibSQLStorage({
+    url: process.env.DATABASE_URL
+  })
+});
+```
+
+## Common Migration Issues
+
+### Issue: Missing Traces
+
+**Problem**: Traces not appearing after migration.
+
+**Solution**:
+```typescript
+// Ensure storage is configured
+storage: new LibSQLStorage({ url: 'file:local.db' })
+
+// Verify observability is enabled
+observability: { default: { enabled: true } }
+
+// Check for errors in console
+```
+
+### Issue: Performance Degradation
+
+**Problem**: Application slower after migration.
+
+**Solution**:
+```typescript
+// Reduce sampling rate
+sampling: { type: 'ratio', probability: 0.01 }
+
+// Use batch mode for exporters
+new LangfuseExporter({ realtime: false })
+
+// Filter unnecessary traces
+processors: [new TraceFilterProcessor({ /* ... */ })]
+```
+
+### Issue: Different Span Structure
+
+**Problem**: Span hierarchy looks different.
+
+**Solution**:
+AI Tracing creates more granular spans for AI operations. This is expected and provides better insights. Map your dashboards to use the new span types:
+- `AGENT_RUN` instead of generic spans
+- `LLM_GENERATION` for model calls
+- `TOOL_CALL` for function executions
+
+### Issue: Missing OpenTelemetry Features
+
+**Problem**: Need OTLP collector features not in AI Tracing.
+
+**Solution**:
+The OpenTelemetry exporter for AI Tracing is coming soon. In the meantime:
+1. Use Mastra Cloud for centralized monitoring
+2. Use Langfuse for LLM-specific analytics
+3. Keep OTLP running in parallel if critical
+
+## Migration Timeline
+
+### Phase 1: Preparation (Week 1)
+- Audit current OTLP setup
+- Set up AI Tracing configuration
+- Configure storage backend
+- Set up Mastra Cloud account
+
+### Phase 2: Parallel Running (Week 2-3)
+- Deploy with both systems
+- Compare trace data
+- Adjust sampling and filtering
+- Train team on new system
+
+### Phase 3: Switchover (Week 4)
+- Remove OTLP configuration
+- Update documentation
+- Update monitoring dashboards
+- Archive OTLP data if needed
+
+### Phase 4: Optimization (Ongoing)
+- Fine-tune sampling rates
+- Implement trace filtering
+- Set up cleanup policies
+- Monitor costs and performance
+
+## Benefits After Migration
+
+1. **Better AI Insights**
+   - Token usage tracking
+   - Model performance metrics
+   - Tool execution patterns
+
+2. **Lower Operational Overhead**
+   - Built-in storage option
+   - Automatic instrumentation
+   - No collector infrastructure
+
+3. **Provider Flexibility**
+   - Native Langfuse integration
+   - Braintrust for evaluations
+   - Mastra Cloud for team collaboration
+
+4. **Cost Optimization**
+   - Efficient sampling strategies
+   - Built-in data filtering
+   - Storage cleanup options
+
+<Callout type="success">
+  After migration, you'll have better visibility into AI operations with less infrastructure overhead. The AI-specific metadata and native provider integrations provide insights that weren't possible with generic OTLP tracing.
+</Callout>
+
+## Next Steps
+
+- [Configure Langfuse](/examples/observability/langfuse-integration.mdx) for LLM observability
+- [Set up trace filtering](/examples/observability/trace-filtering.mdx) to reduce noise
+- [Implement cleanup strategies](/examples/observability/cleanup-strategies.mdx) for storage management
+- [Review best practices](/examples/observability/best-practices.mdx) for production
+
+## Getting Help
+
+If you encounter issues during migration:
+
+1. Check the [troubleshooting guide](/examples/observability/troubleshooting.mdx)
+2. Review [GitHub issues](https://github.com/mastra-ai/mastra/issues)
+3. Ask in the community Discord
+4. File a bug report with migration details

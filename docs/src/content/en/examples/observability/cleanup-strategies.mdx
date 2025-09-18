@@ -1,0 +1,656 @@
+---
+title: "Cleanup Strategies | Examples | Observability | Mastra Docs"
+description: Manage trace storage growth with retention policies and cleanup strategies
+---
+
+import { Callout } from "nextra/components";
+
+# Cleanup Strategies Example
+
+This example addresses the common issue of trace storage growing too large over time (GitHub issue #7479). Learn how to implement retention policies, archival strategies, and database maintenance.
+
+## The Problem
+
+AI tracing can generate massive amounts of data:
+- Each agent run creates multiple spans
+- LLM operations include large prompts and responses
+- High-traffic applications generate thousands of traces per hour
+- Storage tables can grow to gigabytes or terabytes
+
+Without cleanup strategies, you'll face:
+- Increased storage costs
+- Slower query performance
+- Database maintenance issues
+- Compliance violations (data retention policies)
+
+## Solution Overview
+
+1. **Retention Policies** - Automatically delete old traces
+2. **Archival Strategies** - Move old data to cold storage
+3. **Data Sampling** - Reduce data volume at source
+4. **Compression** - Reduce storage footprint
+5. **Partitioning** - Improve query performance
+
+## Retention Policies
+
+### Time-Based Retention
+
+Delete traces older than a specified age:
+
+```typescript filename="src/cleanup/retention-policy.ts" showLineNumbers copy
+import { LibSQLStorage } from "@mastra/libsql";
+import { CronJob } from "cron";
+
+class RetentionPolicy {
+  constructor(
+    private storage: LibSQLStorage,
+    private retentionDays: number = 30
+  ) {}
+
+  async cleanupOldTraces(): Promise<void> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - this.retentionDays);
+
+    try {
+      // Delete spans older than retention period
+      const result = await this.storage.execute(`
+        DELETE FROM ai_spans
+        WHERE created_at < ?
+      `, [cutoffDate.toISOString()]);
+
+      console.log(`Deleted ${result.rowsAffected} old spans`);
+
+      // Clean up orphaned trace metadata
+      await this.storage.execute(`
+        DELETE FROM trace_metadata
+        WHERE trace_id NOT IN (
+          SELECT DISTINCT trace_id FROM ai_spans
+        )
+      `);
+
+      // Vacuum database to reclaim space
+      await this.storage.execute(`VACUUM`);
+
+    } catch (error) {
+      console.error('Retention cleanup failed:', error);
+    }
+  }
+
+  startScheduledCleanup(): void {
+    // Run cleanup daily at 2 AM
+    const job = new CronJob(
+      '0 2 * * *',
+      async () => {
+        console.log('Starting scheduled trace cleanup...');
+        await this.cleanupOldTraces();
+      },
+      null,
+      true,
+      'America/New_York'
+    );
+
+    job.start();
+    console.log('Retention policy scheduled');
+  }
+}
+
+// Usage
+const retentionPolicy = new RetentionPolicy(storage, 30);
+retentionPolicy.startScheduledCleanup();
+```
+
+### Tiered Retention
+
+Different retention periods for different data types:
+
+```typescript filename="src/cleanup/tiered-retention.ts" showLineNumbers copy
+class TieredRetentionPolicy {
+  private policies = [
+    { type: 'ERROR', retentionDays: 90 },      // Keep errors longer
+    { type: 'AGENT_RUN', retentionDays: 30 },  // Keep agent runs for a month
+    { type: 'LLM_GENERATION', retentionDays: 14 }, // LLM calls for 2 weeks
+    { type: 'TOOL_CALL', retentionDays: 7 },   // Tool calls for a week
+    { type: 'DEFAULT', retentionDays: 3 },     // Everything else for 3 days
+  ];
+
+  async applyRetention(): Promise<void> {
+    for (const policy of this.policies) {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - policy.retentionDays);
+
+      if (policy.type === 'DEFAULT') {
+        // Delete all other types
+        await this.storage.execute(`
+          DELETE FROM ai_spans
+          WHERE created_at < ?
+          AND type NOT IN (?)
+        `, [
+          cutoffDate.toISOString(),
+          this.policies.filter(p => p.type !== 'DEFAULT').map(p => p.type)
+        ]);
+      } else if (policy.type === 'ERROR') {
+        // Keep error spans longer
+        await this.storage.execute(`
+          DELETE FROM ai_spans
+          WHERE created_at < ?
+          AND status = 'ERROR'
+        `, [cutoffDate.toISOString()]);
+      } else {
+        // Type-specific retention
+        await this.storage.execute(`
+          DELETE FROM ai_spans
+          WHERE created_at < ?
+          AND type = ?
+        `, [cutoffDate.toISOString(), policy.type]);
+      }
+    }
+  }
+}
+```
+
+### Size-Based Retention
+
+Keep storage under a specific size limit:
+
+```typescript filename="src/cleanup/size-based-retention.ts" showLineNumbers copy
+class SizeBasedRetention {
+  constructor(
+    private storage: LibSQLStorage,
+    private maxSizeGB: number = 10
+  ) {}
+
+  async getCurrentSize(): Promise<number> {
+    const result = await this.storage.execute(`
+      SELECT
+        page_count * page_size as size_bytes
+      FROM pragma_page_count(), pragma_page_size()
+    `);
+
+    return result.rows[0].size_bytes / (1024 ** 3); // Convert to GB
+  }
+
+  async cleanupBySize(): Promise<void> {
+    const currentSizeGB = await this.getCurrentSize();
+
+    if (currentSizeGB > this.maxSizeGB) {
+      const percentToDelete = ((currentSizeGB - this.maxSizeGB) / currentSizeGB) * 100;
+
+      // Delete oldest spans to reduce size
+      await this.storage.execute(`
+        DELETE FROM ai_spans
+        WHERE id IN (
+          SELECT id FROM ai_spans
+          ORDER BY created_at ASC
+          LIMIT (
+            SELECT COUNT(*) * ? / 100 FROM ai_spans
+          )
+        )
+      `, [percentToDelete]);
+
+      await this.storage.execute(`VACUUM`);
+
+      const newSize = await this.getCurrentSize();
+      console.log(`Reduced storage from ${currentSizeGB.toFixed(2)}GB to ${newSize.toFixed(2)}GB`);
+    }
+  }
+}
+```
+
+## Archival Strategies
+
+### Archive to S3
+
+Move old traces to S3 for long-term storage:
+
+```typescript filename="src/cleanup/s3-archival.ts" showLineNumbers copy
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { LibSQLStorage } from "@mastra/libsql";
+
+class S3Archival {
+  private s3: S3Client;
+
+  constructor(
+    private storage: LibSQLStorage,
+    private bucket: string,
+    private archiveAfterDays: number = 7
+  ) {
+    this.s3 = new S3Client({ region: process.env.AWS_REGION });
+  }
+
+  async archiveOldTraces(): Promise<void> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - this.archiveAfterDays);
+
+    // Get traces to archive
+    const traces = await this.storage.execute(`
+      SELECT
+        trace_id,
+        JSON_GROUP_ARRAY(
+          JSON_OBJECT(
+            'id', id,
+            'type', type,
+            'name', name,
+            'start_time', start_time,
+            'end_time', end_time,
+            'attributes', attributes,
+            'metadata', metadata,
+            'input', input,
+            'output', output,
+            'status', status
+          )
+        ) as spans
+      FROM ai_spans
+      WHERE created_at < ?
+      GROUP BY trace_id
+      LIMIT 1000
+    `, [cutoffDate.toISOString()]);
+
+    for (const trace of traces.rows) {
+      // Upload to S3
+      const key = `traces/${new Date().getFullYear()}/${trace.trace_id}.json`;
+
+      await this.s3.send(new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: JSON.stringify({
+          traceId: trace.trace_id,
+          spans: JSON.parse(trace.spans),
+          archivedAt: new Date().toISOString()
+        }),
+        ContentType: 'application/json',
+        StorageClass: 'GLACIER_IR', // Use cheaper storage class
+        Metadata: {
+          'trace-id': trace.trace_id,
+          'span-count': JSON.parse(trace.spans).length.toString()
+        }
+      }));
+
+      // Delete from database after successful upload
+      await this.storage.execute(`
+        DELETE FROM ai_spans WHERE trace_id = ?
+      `, [trace.trace_id]);
+
+      console.log(`Archived trace ${trace.trace_id} to S3`);
+    }
+  }
+}
+```
+
+### Compressed Archive Tables
+
+Move old data to compressed tables:
+
+```typescript filename="src/cleanup/compressed-archive.ts" showLineNumbers copy
+class CompressedArchive {
+  async setupArchiveTables(): Promise<void> {
+    // Create archive table with compression
+    await this.storage.execute(`
+      CREATE TABLE IF NOT EXISTS ai_spans_archive (
+        trace_id TEXT,
+        compressed_data BLOB,
+        created_at DATETIME,
+        span_count INTEGER,
+        PRIMARY KEY (trace_id)
+      )
+    `);
+  }
+
+  async archiveAndCompress(): Promise<void> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - 30);
+
+    // Get traces to archive
+    const traces = await this.storage.execute(`
+      SELECT
+        trace_id,
+        JSON_GROUP_ARRAY(
+          JSON_OBJECT(
+            'id', id,
+            'type', type,
+            'name', name,
+            'start_time', start_time,
+            'end_time', end_time,
+            'metadata', metadata
+          )
+        ) as spans,
+        COUNT(*) as span_count
+      FROM ai_spans
+      WHERE created_at < ?
+      GROUP BY trace_id
+      LIMIT 100
+    `, [cutoffDate.toISOString()]);
+
+    for (const trace of traces.rows) {
+      // Compress using zlib
+      const zlib = require('zlib');
+      const compressed = zlib.gzipSync(trace.spans);
+
+      // Insert into archive
+      await this.storage.execute(`
+        INSERT INTO ai_spans_archive (trace_id, compressed_data, created_at, span_count)
+        VALUES (?, ?, ?, ?)
+      `, [
+        trace.trace_id,
+        compressed,
+        new Date().toISOString(),
+        trace.span_count
+      ]);
+
+      // Delete original
+      await this.storage.execute(`
+        DELETE FROM ai_spans WHERE trace_id = ?
+      `, [trace.trace_id]);
+    }
+  }
+
+  async retrieveArchived(traceId: string): Promise<any> {
+    const result = await this.storage.execute(`
+      SELECT compressed_data FROM ai_spans_archive
+      WHERE trace_id = ?
+    `, [traceId]);
+
+    if (result.rows.length > 0) {
+      const zlib = require('zlib');
+      const decompressed = zlib.gunzipSync(result.rows[0].compressed_data);
+      return JSON.parse(decompressed.toString());
+    }
+
+    return null;
+  }
+}
+```
+
+## Data Reduction Strategies
+
+### Summarization
+
+Keep summaries instead of full traces:
+
+```typescript filename="src/cleanup/trace-summarizer.ts" showLineNumbers copy
+class TraceSummarizer {
+  async summarizeOldTraces(): Promise<void> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - 14);
+
+    // Get traces to summarize
+    const traces = await this.storage.execute(`
+      SELECT
+        trace_id,
+        MIN(start_time) as start_time,
+        MAX(end_time) as end_time,
+        COUNT(*) as span_count,
+        SUM(CASE WHEN status = 'ERROR' THEN 1 ELSE 0 END) as error_count,
+        AVG(duration) as avg_duration,
+        SUM(JSON_EXTRACT(metadata, '$.promptTokens')) as total_prompt_tokens,
+        SUM(JSON_EXTRACT(metadata, '$.completionTokens')) as total_completion_tokens
+      FROM ai_spans
+      WHERE created_at < ?
+      GROUP BY trace_id
+    `, [cutoffDate.toISOString()]);
+
+    // Store summaries
+    for (const trace of traces.rows) {
+      await this.storage.execute(`
+        INSERT INTO trace_summaries (
+          trace_id, start_time, end_time, span_count,
+          error_count, avg_duration, total_tokens
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [
+        trace.trace_id,
+        trace.start_time,
+        trace.end_time,
+        trace.span_count,
+        trace.error_count,
+        trace.avg_duration,
+        (trace.total_prompt_tokens || 0) + (trace.total_completion_tokens || 0)
+      ]);
+
+      // Delete detailed spans
+      await this.storage.execute(`
+        DELETE FROM ai_spans WHERE trace_id = ?
+      `, [trace.trace_id]);
+    }
+  }
+}
+```
+
+### Content Truncation
+
+Reduce size by truncating large fields:
+
+```typescript filename="src/cleanup/content-truncator.ts" showLineNumbers copy
+class ContentTruncator {
+  private maxFieldSize = 1000; // characters
+
+  async truncateLargeFields(): Promise<void> {
+    // Truncate large input/output fields
+    await this.storage.execute(`
+      UPDATE ai_spans
+      SET
+        input = CASE
+          WHEN LENGTH(input) > ? THEN
+            JSON_OBJECT(
+              'truncated', true,
+              'originalSize', LENGTH(input),
+              'preview', SUBSTR(input, 1, ?)
+            )
+          ELSE input
+        END,
+        output = CASE
+          WHEN LENGTH(output) > ? THEN
+            JSON_OBJECT(
+              'truncated', true,
+              'originalSize', LENGTH(output),
+              'preview', SUBSTR(output, 1, ?)
+            )
+          ELSE output
+        END
+      WHERE LENGTH(input) > ? OR LENGTH(output) > ?
+    `, [
+      this.maxFieldSize,
+      this.maxFieldSize,
+      this.maxFieldSize,
+      this.maxFieldSize,
+      this.maxFieldSize,
+      this.maxFieldSize
+    ]);
+  }
+}
+```
+
+## Database Maintenance
+
+### PostgreSQL Maintenance
+
+```sql filename="maintenance.sql"
+-- Analyze tables for query optimization
+ANALYZE ai_spans;
+
+-- Rebuild indexes
+REINDEX TABLE ai_spans;
+
+-- Vacuum to reclaim space
+VACUUM FULL ai_spans;
+
+-- Create partitioned tables by month
+CREATE TABLE ai_spans_2024_01 PARTITION OF ai_spans
+FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
+
+-- Drop old partitions
+DROP TABLE ai_spans_2023_01;
+```
+
+### SQLite/LibSQL Maintenance
+
+```typescript filename="src/cleanup/sqlite-maintenance.ts" showLineNumbers copy
+class SQLiteMaintenance {
+  async performMaintenance(): Promise<void> {
+    // Analyze for query optimization
+    await this.storage.execute(`ANALYZE`);
+
+    // Rebuild database to reclaim space
+    await this.storage.execute(`VACUUM`);
+
+    // Check integrity
+    const result = await this.storage.execute(`PRAGMA integrity_check`);
+    console.log('Integrity check:', result.rows);
+
+    // Optimize database
+    await this.storage.execute(`PRAGMA optimize`);
+  }
+
+  async getDatabaseStats(): Promise<void> {
+    const stats = await this.storage.execute(`
+      SELECT
+        (SELECT COUNT(*) FROM ai_spans) as total_spans,
+        (SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()) as db_size,
+        (SELECT COUNT(DISTINCT trace_id) FROM ai_spans) as unique_traces
+    `);
+
+    console.log('Database stats:', stats.rows[0]);
+  }
+}
+```
+
+## Automated Cleanup Pipeline
+
+Complete automated cleanup system:
+
+```typescript filename="src/cleanup/automated-cleanup.ts" showLineNumbers copy
+import { CronJob } from 'cron';
+
+class AutomatedCleanupPipeline {
+  private jobs: CronJob[] = [];
+
+  constructor(
+    private storage: LibSQLStorage,
+    private config: {
+      retentionDays: number;
+      archiveAfterDays: number;
+      maxSizeGB: number;
+      s3Bucket?: string;
+    }
+  ) {}
+
+  start(): void {
+    // Hourly: Truncate large fields
+    this.jobs.push(new CronJob('0 * * * *', async () => {
+      console.log('Running hourly truncation...');
+      const truncator = new ContentTruncator(this.storage);
+      await truncator.truncateLargeFields();
+    }));
+
+    // Daily: Apply retention policy
+    this.jobs.push(new CronJob('0 2 * * *', async () => {
+      console.log('Running daily retention cleanup...');
+      const retention = new TieredRetentionPolicy(this.storage);
+      await retention.applyRetention();
+    }));
+
+    // Weekly: Archive old traces
+    this.jobs.push(new CronJob('0 3 * * 0', async () => {
+      console.log('Running weekly archival...');
+      if (this.config.s3Bucket) {
+        const archival = new S3Archival(
+          this.storage,
+          this.config.s3Bucket,
+          this.config.archiveAfterDays
+        );
+        await archival.archiveOldTraces();
+      }
+    }));
+
+    // Weekly: Database maintenance
+    this.jobs.push(new CronJob('0 4 * * 0', async () => {
+      console.log('Running weekly maintenance...');
+      const maintenance = new SQLiteMaintenance(this.storage);
+      await maintenance.performMaintenance();
+    }));
+
+    // Start all jobs
+    this.jobs.forEach(job => job.start());
+    console.log(`Started ${this.jobs.length} cleanup jobs`);
+  }
+
+  stop(): void {
+    this.jobs.forEach(job => job.stop());
+    this.jobs = [];
+  }
+}
+
+// Usage
+const cleanup = new AutomatedCleanupPipeline(storage, {
+  retentionDays: 30,
+  archiveAfterDays: 7,
+  maxSizeGB: 10,
+  s3Bucket: process.env.ARCHIVE_BUCKET
+});
+
+cleanup.start();
+```
+
+## Monitoring Storage Growth
+
+Track storage metrics:
+
+```typescript filename="src/cleanup/storage-monitor.ts" showLineNumbers copy
+class StorageMonitor {
+  async getMetrics(): Promise<any> {
+    const metrics = await this.storage.execute(`
+      SELECT
+        DATE(created_at) as date,
+        COUNT(*) as span_count,
+        SUM(LENGTH(input) + LENGTH(output)) as data_size,
+        AVG(duration) as avg_duration
+      FROM ai_spans
+      WHERE created_at >= DATE('now', '-7 days')
+      GROUP BY DATE(created_at)
+      ORDER BY date DESC
+    `);
+
+    return {
+      dailyMetrics: metrics.rows,
+      totalSize: await this.getCurrentSize(),
+      growthRate: await this.calculateGrowthRate()
+    };
+  }
+
+  async calculateGrowthRate(): Promise<number> {
+    const result = await this.storage.execute(`
+      SELECT
+        COUNT(*) as count,
+        julianday('now') - julianday(MIN(created_at)) as days
+      FROM ai_spans
+    `);
+
+    const { count, days } = result.rows[0];
+    return count / days; // Spans per day
+  }
+
+  async estimateStorageNeeds(days: number): Promise<number> {
+    const growthRate = await this.calculateGrowthRate();
+    const avgSpanSize = 1024; // bytes
+    return (growthRate * days * avgSpanSize) / (1024 ** 3); // GB
+  }
+}
+```
+
+<Callout type="warning">
+  Always test cleanup scripts in a staging environment first. Data deletion is irreversible, so ensure you have backups before running cleanup operations in production.
+</Callout>
+
+## Best Practices
+
+1. **Start with archival, not deletion** - Archive before deleting
+2. **Implement gradual cleanup** - Don't delete large amounts at once
+3. **Monitor performance impact** - Run during off-peak hours
+4. **Keep audit logs** - Track what was deleted and when
+5. **Test recovery procedures** - Ensure you can restore archived data
+6. **Set up alerts** - Monitor storage growth and cleanup failures
+
+## Related
+
+- [Trace Filtering](/examples/observability/trace-filtering.mdx) - Reduce data at source
+- [Best Practices](/examples/observability/best-practices.mdx) - Production patterns
+- [Troubleshooting](/examples/observability/troubleshooting.mdx) - Common issues
+- [Storage Configuration](/reference/storage/overview.mdx) - Storage backends

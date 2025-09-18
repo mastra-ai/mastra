@@ -1,0 +1,257 @@
+---
+title: "Example: Custom TracingContext | Observability | Mastra Docs"
+description: "Examples of using TracingContext for custom span management in agents and workflows."
+---
+
+# Using TracingContext
+
+TracingContext allows you to create custom child spans and add metadata during agent and workflow execution. This is useful for adding custom instrumentation to your AI operations.
+
+## Agent with Custom TracingContext
+
+This example shows how to use TracingContext with an agent to create custom child spans:
+
+```typescript filename="src/agents/with-tracing.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { TracingContext } from "@mastra/core/ai-tracing";
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  name: "research-agent",
+  instructions: "Research and analyze topics",
+  model: openai("gpt-4o"),
+});
+
+// Execute with custom TracingContext
+async function executeWithCustomTracing() {
+  // Get the current span from your tracing system
+  const currentSpan = mastra.tracing.getCurrentSpan();
+
+  const tracingContext: TracingContext = {
+    currentSpan,
+  };
+
+  // Create a custom child span
+  const customSpan = currentSpan.createSpan({
+    name: "custom-research-operation",
+    type: "CUSTOM",
+    attributes: {
+      researchTopic: "AI observability",
+      priority: "high",
+    },
+  });
+
+  try {
+    // Agent will use this tracing context
+    const result = await agent.generate(
+      "Research AI observability best practices",
+      {
+        tracingContext,
+        // Other options...
+      }
+    );
+
+    // Add custom attributes to the span
+    customSpan.setAttribute("resultLength", result.text.length);
+    customSpan.setAttribute("success", true);
+
+    return result;
+  } finally {
+    // End the custom span
+    customSpan.end();
+  }
+}
+```
+
+## Workflow with TracingContext
+
+This example demonstrates using TracingContext with workflows:
+
+```typescript filename="src/workflows/traced-workflow.ts" showLineNumbers copy
+import { createWorkflow } from "@mastra/core/workflows";
+import { TracingContext } from "@mastra/core/ai-tracing";
+import { z } from "zod";
+
+const workflow = createWorkflow({
+  id: "data-processing",
+  inputSchema: z.object({
+    data: z.array(z.string()),
+  }),
+  outputSchema: z.object({
+    processed: z.number(),
+  }),
+});
+
+// Execute workflow with tracing
+async function runTracedWorkflow(data: string[]) {
+  const currentSpan = mastra.tracing.getCurrentSpan();
+
+  const tracingContext: TracingContext = {
+    currentSpan,
+  };
+
+  // Create workflow run with tracing context
+  const run = await workflow.createRunAsync({
+    tracingContext,
+  });
+
+  // Start with tracing context
+  const result = await run.start({
+    inputData: { data },
+    tracingContext,
+  });
+
+  // The traceId is available in the result
+  console.log("Trace ID:", result.traceId);
+
+  return result;
+}
+```
+
+## Streaming with TracingContext
+
+TracingContext works with streaming operations as well:
+
+```typescript filename="src/streaming-with-tracing.ts" showLineNumbers copy
+import { TracingContext } from "@mastra/core/ai-tracing";
+
+async function streamWithTracing() {
+  const tracingContext: TracingContext = {
+    currentSpan: mastra.tracing.getCurrentSpan(),
+  };
+
+  // Agent streaming with tracing
+  const agentStream = await agent.stream(
+    "Generate a report",
+    {
+      tracingContext,
+      onFinish: (result) => {
+        console.log("Trace ID:", result.traceId);
+      },
+    }
+  );
+
+  // Workflow streaming with tracing
+  const run = await workflow.createRunAsync({ tracingContext });
+  const { stream, traceId } = await run.stream({
+    inputData: { value: "test" },
+    tracingContext,
+  });
+
+  console.log("Stream trace ID:", traceId);
+}
+```
+
+## Adding Custom Metadata
+
+You can add custom metadata to spans during execution:
+
+```typescript filename="src/custom-metadata.ts" showLineNumbers copy
+async function addCustomMetadata() {
+  const tracingContext: TracingContext = {
+    currentSpan: mastra.tracing.getCurrentSpan(),
+  };
+
+  // Add metadata before execution
+  tracingContext.currentSpan.setAttribute("user_id", "user-123");
+  tracingContext.currentSpan.setAttribute("session_id", "sess-456");
+  tracingContext.currentSpan.setAttribute("environment", "production");
+
+  const result = await agent.generate(
+    "Process this request",
+    {
+      tracingContext,
+      temperature: 0.7,
+    }
+  );
+
+  // Add result metadata
+  tracingContext.currentSpan.setAttribute("token_count", result.usage?.totalTokens);
+  tracingContext.currentSpan.setAttribute("finish_reason", result.finishReason);
+
+  return result;
+}
+```
+
+## Nested Span Creation
+
+Create nested spans for detailed tracing:
+
+```typescript filename="src/nested-spans.ts" showLineNumbers copy
+async function nestedSpanExample() {
+  const rootSpan = mastra.tracing.getCurrentSpan();
+
+  // Create parent operation span
+  const parentSpan = rootSpan.createSpan({
+    name: "parent-operation",
+    type: "CUSTOM",
+  });
+
+  try {
+    // First child operation
+    const childSpan1 = parentSpan.createSpan({
+      name: "data-preparation",
+      type: "CUSTOM",
+    });
+
+    // Prepare data...
+    childSpan1.end();
+
+    // Second child operation with agent
+    const childSpan2 = parentSpan.createSpan({
+      name: "ai-processing",
+      type: "AGENT_RUN",
+    });
+
+    const result = await agent.generate(
+      "Process prepared data",
+      {
+        tracingContext: { currentSpan: childSpan2 },
+      }
+    );
+
+    childSpan2.end();
+
+    return result;
+  } finally {
+    parentSpan.end();
+  }
+}
+```
+
+## Error Handling with Tracing
+
+Properly handle errors in traced operations:
+
+```typescript filename="src/error-tracing.ts" showLineNumbers copy
+async function tracedErrorHandling() {
+  const tracingContext: TracingContext = {
+    currentSpan: mastra.tracing.getCurrentSpan(),
+  };
+
+  try {
+    const result = await agent.generate(
+      "Complex operation",
+      { tracingContext }
+    );
+
+    tracingContext.currentSpan.setAttribute("status", "success");
+    return result;
+  } catch (error) {
+    // Record error in span
+    tracingContext.currentSpan.recordException(error as Error);
+    tracingContext.currentSpan.setAttribute("status", "error");
+    tracingContext.currentSpan.setAttribute("error.message", (error as Error).message);
+
+    // Re-throw for application handling
+    throw error;
+  }
+}
+```
+
+## Related
+
+- [AI Tracing overview](../../docs/observability/ai-tracing.mdx)
+- [TracingContext reference](../../reference/observability/ai-tracing/tracing-context.mdx)
+- [Agent.generate() reference](../../reference/agents/generate.mdx)
+- [Workflow execution reference](../../reference/workflows/run-methods/start.mdx)

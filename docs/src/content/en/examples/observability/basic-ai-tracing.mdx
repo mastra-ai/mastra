@@ -1,0 +1,393 @@
+---
+title: "Basic AI Tracing | Examples | Observability | Mastra Docs"
+description: Get started with AI tracing in your Mastra application
+---
+
+import { Callout } from "nextra/components";
+
+# Basic AI Tracing Example
+
+This example demonstrates how to set up basic AI tracing in a Mastra application with automatic instrumentation for agents and workflows.
+
+## Prerequisites
+
+- Mastra v0.14.0 or higher
+- Node.js 18+
+- A configured storage backend (libsql or memory)
+
+## Setup
+
+### 1. Install Dependencies
+
+```bash npm2yarn
+npm install @mastra/core
+```
+
+### 2. Configure Mastra with Default Tracing
+
+Create your Mastra configuration with AI tracing enabled:
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { LibSQLStorage } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  // Configure storage (required for DefaultExporter)
+  storage: new LibSQLStorage({
+    url: 'file:local.db'
+  }),
+
+  // Enable AI tracing with default configuration
+  observability: {
+    default: { enabled: true }
+  }
+});
+```
+
+This default configuration automatically includes:
+- **DefaultExporter** - Persists traces to your storage
+- **CloudExporter** - Sends to Mastra Cloud (if token is set)
+- **SensitiveDataFilter** - Redacts sensitive fields
+- **100% sampling** - All traces are collected
+
+### 3. Create an Agent with Automatic Tracing
+
+```typescript filename="src/mastra/agents/example-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+export const exampleAgent = new Agent({
+  name: "example-agent",
+  instructions: "You are a helpful AI assistant.",
+  model: openai("gpt-4"),
+  tools: {
+    getCurrentTime: {
+      description: "Get the current time",
+      input: {},
+      execute: async () => {
+        // Tool calls are automatically traced
+        return { time: new Date().toISOString() };
+      }
+    }
+  }
+});
+```
+
+### 4. Execute and View Traces
+
+```typescript filename="src/example.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+async function main() {
+  // Get the agent
+  const agent = mastra.getAgent("example-agent");
+
+  // Execute agent - automatically creates traces
+  const result = await agent.generate("What time is it?");
+
+  console.log("Agent response:", result.text);
+  console.log("Traces have been automatically recorded!");
+}
+
+main().catch(console.error);
+```
+
+## What Gets Traced
+
+When you run this example, Mastra automatically creates spans for:
+
+1. **AGENT_RUN** - The complete agent execution
+2. **LLM_GENERATION** - Each LLM API call
+3. **TOOL_CALL** - Tool executions
+
+Example trace hierarchy:
+```
+AGENT_RUN (example-agent)
+├── LLM_GENERATION (gpt-4) - Initial prompt
+├── TOOL_CALL (getCurrentTime) - Tool execution
+└── LLM_GENERATION (gpt-4) - Final response with tool result
+```
+
+## Viewing Traces
+
+### In Mastra Playground (Local Development)
+
+Start the playground to view traces locally:
+
+```bash
+npx mastra playground
+```
+
+Navigate to http://localhost:3000 and click on "Traces" to see your AI operations.
+
+### In Mastra Cloud
+
+Set your access token to send traces to the cloud:
+
+```bash
+export MASTRA_CLOUD_ACCESS_TOKEN=your_token_here
+```
+
+View traces at [mastra.ai](https://mastra.ai) in your project dashboard.
+
+## Adding Custom Metadata
+
+Enhance your traces with custom metadata:
+
+```typescript filename="src/example-with-metadata.ts" showLineNumbers copy
+const result = await agent.generate(
+  "What time is it?",
+  {
+    // Add custom metadata to traces
+    metadata: {
+      userId: "user_123",
+      sessionId: "session_abc",
+      feature: "time-query",
+      environment: "development"
+    }
+  }
+);
+```
+
+## Workflow Tracing
+
+Workflows are also automatically traced:
+
+```typescript filename="src/mastra/workflows/example-workflow.ts" showLineNumbers copy
+import { Workflow } from "@mastra/core/workflow";
+
+export const exampleWorkflow = new Workflow({
+  name: "example-workflow",
+
+  steps: {
+    validateInput: {
+      execute: async ({ inputData }) => {
+        // Step execution is automatically traced
+        return { valid: true, data: inputData };
+      }
+    },
+
+    processData: {
+      execute: async ({ inputData }) => {
+        // Each step creates a WORKFLOW_STEP span
+        return { processed: true, result: "Success" };
+      }
+    }
+  }
+});
+```
+
+Execute the workflow:
+
+```typescript
+const workflow = mastra.getWorkflow("example-workflow");
+const output = await workflow.execute({ input: "test" });
+
+// Traces created:
+// - WORKFLOW_RUN (example-workflow)
+//   ├── WORKFLOW_STEP (validateInput)
+//   └── WORKFLOW_STEP (processData)
+```
+
+## Development vs Production
+
+### Development Configuration
+
+```typescript filename="src/mastra/index.ts"
+import { ConsoleExporter } from "@mastra/core/ai-tracing";
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      development: {
+        serviceName: "dev-service",
+        sampling: { type: "always" }, // 100% sampling
+        exporters: [
+          // Log to console for debugging
+          new ConsoleExporter({ format: "detailed" })
+        ]
+      }
+    }
+  }
+});
+```
+
+### Production Configuration
+
+```typescript filename="src/mastra/index.ts"
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      production: {
+        serviceName: "prod-service",
+        sampling: {
+          type: "ratio",
+          probability: 0.1 // Sample 10% of traces
+        },
+        // Default exporters are used (DefaultExporter + CloudExporter)
+      }
+    },
+    configSelector: (context) => {
+      return process.env.NODE_ENV === "production"
+        ? "production"
+        : "development";
+    }
+  }
+});
+```
+
+## Complete Example
+
+Here's a complete example that demonstrates various tracing features:
+
+```typescript filename="src/complete-example.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { Workflow } from "@mastra/core/workflow";
+import { LibSQLStorage } from "@mastra/libsql";
+import { openai } from "@ai-sdk/openai";
+
+// 1. Configure Mastra
+const mastra = new Mastra({
+  storage: new LibSQLStorage({
+    url: process.env.DATABASE_URL || 'file:local.db'
+  }),
+  observability: {
+    default: { enabled: true }
+  }
+});
+
+// 2. Create an agent
+const agent = new Agent({
+  name: "assistant",
+  instructions: "You are a helpful assistant.",
+  model: openai("gpt-4"),
+  tools: {
+    search: {
+      description: "Search for information",
+      input: { query: { type: "string" } },
+      execute: async ({ query }) => {
+        // Simulate search
+        return {
+          results: [`Result for: ${query}`],
+          count: 1
+        };
+      }
+    }
+  }
+});
+
+// 3. Create a workflow
+const workflow = new Workflow({
+  name: "process-request",
+  steps: {
+    getAgentResponse: {
+      execute: async ({ inputData }) => {
+        const response = await agent.generate(inputData.query);
+        return { response: response.text };
+      }
+    },
+    formatResponse: {
+      execute: async ({ inputData }) => {
+        return {
+          formatted: `Processed: ${inputData.response}`,
+          timestamp: new Date().toISOString()
+        };
+      }
+    }
+  }
+});
+
+// 4. Register with Mastra
+mastra.registerAgent(agent);
+mastra.registerWorkflow(workflow);
+
+// 5. Execute with tracing
+async function main() {
+  // Execute agent
+  const agentResult = await agent.generate(
+    "Search for information about AI tracing",
+    {
+      metadata: {
+        userId: "user_123",
+        requestId: "req_456"
+      }
+    }
+  );
+
+  console.log("Agent result:", agentResult.text);
+
+  // Execute workflow
+  const workflowResult = await workflow.execute(
+    { query: "Process this request" },
+    {
+      metadata: {
+        source: "api",
+        priority: "high"
+      }
+    }
+  );
+
+  console.log("Workflow result:", workflowResult);
+  console.log("\nTraces have been recorded and sent to configured exporters!");
+}
+
+main().catch(console.error);
+```
+
+<Callout type="tip">
+  Run this example and check your traces in the Mastra Playground or Cloud dashboard. You should see detailed traces for both agent and workflow executions, including all LLM calls, tool usage, and step processing.
+</Callout>
+
+## Next Steps
+
+- [Configure Langfuse](/examples/observability/langfuse-integration.mdx) for specialized LLM observability
+- [Add Braintrust](/examples/observability/braintrust-integration.mdx) for AI evaluation
+- [Implement trace filtering](/examples/observability/trace-filtering.mdx) to reduce noise
+- [Set up cleanup strategies](/examples/observability/cleanup-strategies.mdx) for production
+- [Learn best practices](/examples/observability/best-practices.mdx) for production deployments
+
+## Troubleshooting
+
+### No Traces Appearing
+
+1. Check storage is configured:
+   ```typescript
+   storage: new LibSQLStorage({ url: 'file:local.db' })
+   ```
+
+2. Verify tracing is enabled:
+   ```typescript
+   observability: { default: { enabled: true } }
+   ```
+
+3. Check for errors in console output
+
+### Cloud Traces Not Appearing
+
+1. Set access token:
+   ```bash
+   export MASTRA_CLOUD_ACCESS_TOKEN=your_token
+   ```
+
+2. Verify token is valid at [mastra.ai](https://mastra.ai)
+
+3. Check network connectivity
+
+### Performance Issues
+
+1. Reduce sampling in production:
+   ```typescript
+   sampling: { type: "ratio", probability: 0.1 }
+   ```
+
+2. Use batching for high-volume applications
+
+3. Consider filtering unnecessary traces
+
+## Related
+
+- [AI Tracing Documentation](/docs/observability/ai-tracing.mdx)
+- [Configuration Reference](/reference/observability/ai-tracing/configuration.mdx)
+- [Exporters Reference](/reference/observability/ai-tracing/exporters/default-exporter.mdx)
+- [Span Types Reference](/reference/observability/ai-tracing/spans/agent-span.mdx)

@@ -1,4 +1,16 @@
 export const redirectList = [
+  // Observability documentation restructure redirects
+  {
+    source: "/:locale/reference/observability/logger",
+    destination: "/:locale/reference/observability/logging/pino-logger",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/otel-config",
+    destination: "/:locale/reference/observability/tracing/otel-config",
+    permanent: true,
+  },
+  // Existing redirects
   {
     source: "/:locale/docs/agents/runtime-variables",
     destination: "/:locale/docs/agents/runtime-context",

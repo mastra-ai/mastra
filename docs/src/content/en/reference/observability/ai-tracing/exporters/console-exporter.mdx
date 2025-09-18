@@ -1,0 +1,374 @@
+---
+title: "ConsoleExporter | Exporters | AI Tracing | Reference | Mastra Docs"
+description: API reference for the ConsoleExporter class for debugging traces
+---
+
+import { PropertiesTable } from "@/components/properties-table";
+import { Callout } from "nextra/components";
+
+# ConsoleExporter
+
+The `ConsoleExporter` outputs traces to the console for debugging and development. It provides formatted, colored output with configurable detail levels.
+
+## Constructor
+
+```typescript
+constructor(options?: ConsoleExporterOptions)
+```
+
+Creates a new ConsoleExporter instance with the specified options.
+
+### Parameters
+
+<PropertiesTable
+  props={[
+    {
+      name: "options",
+      type: "ConsoleExporterOptions",
+      description: "Configuration options for the exporter",
+      required: false,
+    },
+  ]}
+/>
+
+## Configuration
+
+```typescript
+type ConsoleExporterOptions = {
+  format?: 'simple' | 'detailed' | 'json';
+  colors?: boolean;
+  includeTimestamps?: boolean;
+  includeMetadata?: boolean;
+  filter?: (span: ReadableSpan) => boolean;
+}
+```
+
+### Properties
+
+<PropertiesTable
+  props={[
+    {
+      name: "format",
+      type: "'simple' | 'detailed' | 'json'",
+      description: "Output format for spans (default: 'simple')",
+      required: false,
+    },
+    {
+      name: "colors",
+      type: "boolean",
+      description: "Enable colored output (default: true if TTY)",
+      required: false,
+    },
+    {
+      name: "includeTimestamps",
+      type: "boolean",
+      description: "Include timestamps in output (default: true)",
+      required: false,
+    },
+    {
+      name: "includeMetadata",
+      type: "boolean",
+      description: "Include metadata in output (default: false in simple format)",
+      required: false,
+    },
+    {
+      name: "filter",
+      type: "(span: ReadableSpan) => boolean",
+      description: "Optional function to filter which spans to log",
+      required: false,
+    },
+  ]}
+/>
+
+## Output Formats
+
+### Simple Format (Default)
+
+Concise single-line output for each span:
+
+```
+[2024-01-20 10:30:45] AGENT_RUN chat-agent (125ms) ✓
+[2024-01-20 10:30:45]   └─ LLM_GENERATION openai-gpt-4 (120ms) tokens=150 ✓
+[2024-01-20 10:30:45]   └─ TOOL_CALL search-tool (45ms) ✓
+```
+
+### Detailed Format
+
+Multi-line output with full span details:
+
+```
+================================================================================
+AGENT_RUN: chat-agent
+--------------------------------------------------------------------------------
+Start: 2024-01-20 10:30:45.123
+End:   2024-01-20 10:30:45.248
+Duration: 125ms
+Status: OK
+
+Input:
+  message: "What's the weather?"
+
+Output:
+  response: "The current weather is sunny and 72°F"
+
+Metadata:
+  agentId: "weather-agent"
+  sessionId: "abc123"
+================================================================================
+```
+
+### JSON Format
+
+Machine-readable JSON output:
+
+```json
+{
+  "type": "AGENT_RUN",
+  "name": "chat-agent",
+  "startTime": "2024-01-20T10:30:45.123Z",
+  "endTime": "2024-01-20T10:30:45.248Z",
+  "duration": 125,
+  "status": "OK",
+  "input": {
+    "message": "What's the weather?"
+  },
+  "output": {
+    "response": "The current weather is sunny and 72°F"
+  }
+}
+```
+
+## Usage Examples
+
+### Basic Configuration
+
+```typescript
+import { ConsoleExporter } from '@mastra/core/ai-tracing';
+
+// Simple format with colors
+const exporter = new ConsoleExporter();
+```
+
+### Detailed Debugging
+
+```typescript
+import { ConsoleExporter } from '@mastra/core/ai-tracing';
+
+const exporter = new ConsoleExporter({
+  format: 'detailed',
+  includeMetadata: true,
+  includeTimestamps: true
+});
+```
+
+### JSON Output for Processing
+
+```typescript
+import { ConsoleExporter } from '@mastra/core/ai-tracing';
+
+const exporter = new ConsoleExporter({
+  format: 'json',
+  colors: false // Disable colors for piping
+});
+```
+
+### Filtered Output
+
+```typescript
+import { ConsoleExporter } from '@mastra/core/ai-tracing';
+
+const exporter = new ConsoleExporter({
+  format: 'simple',
+  filter: (span) => {
+    // Only log errors and slow operations
+    return span.status === 'ERROR' || span.duration > 1000;
+  }
+});
+```
+
+### Type-Specific Filtering
+
+```typescript
+import { ConsoleExporter } from '@mastra/core/ai-tracing';
+
+const exporter = new ConsoleExporter({
+  filter: (span) => {
+    // Only log LLM and tool calls
+    return ['LLM_GENERATION', 'TOOL_CALL'].includes(span.type);
+  }
+});
+```
+
+## Color Coding
+
+When colors are enabled, spans are color-coded by type and status:
+
+- **Green**: Successful operations
+- **Red**: Failed operations
+- **Yellow**: Warnings or slow operations
+- **Blue**: LLM operations
+- **Cyan**: Tool calls
+- **Magenta**: Workflow operations
+
+## Integration with Mastra
+
+### Development Configuration
+
+```typescript
+import { ConsoleExporter } from '@mastra/core/ai-tracing';
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      development: {
+        serviceName: 'dev-service',
+        exporters: [
+          new ConsoleExporter({
+            format: 'detailed',
+            includeMetadata: true
+          })
+        ]
+      }
+    }
+  }
+});
+```
+
+### Combined with Other Exporters
+
+```typescript
+import { ConsoleExporter, CloudExporter } from '@mastra/core/ai-tracing';
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      debug: {
+        serviceName: 'debug-service',
+        exporters: [
+          // Log to console for immediate feedback
+          new ConsoleExporter({ format: 'simple' }),
+          // Also send to cloud for persistence
+          new CloudExporter()
+        ]
+      }
+    }
+  }
+});
+```
+
+### Environment-Based Configuration
+
+```typescript
+import { ConsoleExporter } from '@mastra/core/ai-tracing';
+
+const isDevelopment = process.env.NODE_ENV === 'development';
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      default: {
+        serviceName: 'my-service',
+        exporters: isDevelopment
+          ? [new ConsoleExporter({ format: 'detailed' })]
+          : [new CloudExporter()]
+      }
+    }
+  }
+});
+```
+
+## Methods
+
+### export
+
+```typescript
+async export(spans: ReadableSpan[]): Promise<void>
+```
+
+Outputs spans to the console according to configured format.
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Performs cleanup (no-op for ConsoleExporter).
+
+## Performance Considerations
+
+<Callout type="warning">
+  The ConsoleExporter is intended for development and debugging only. In production, use DefaultExporter or CloudExporter to avoid performance overhead from console I/O.
+</Callout>
+
+### Best Practices
+
+1. **Use filtering** to reduce output volume:
+   ```typescript
+   filter: (span) => span.type === 'ERROR'
+   ```
+
+2. **Disable in production** to avoid performance impact:
+   ```typescript
+   exporters: process.env.NODE_ENV === 'production' ? [] : [new ConsoleExporter()]
+   ```
+
+3. **Use simple format** for high-volume debugging:
+   ```typescript
+   format: 'simple' // Less overhead than detailed
+   ```
+
+## Logging Integration
+
+The ConsoleExporter can be integrated with logging frameworks:
+
+```typescript
+import { ConsoleExporter } from '@mastra/core/ai-tracing';
+import pino from 'pino';
+
+const logger = pino();
+
+class CustomConsoleExporter extends ConsoleExporter {
+  protected log(message: string, level: 'info' | 'error' | 'debug') {
+    logger[level](message);
+  }
+}
+```
+
+## Common Use Cases
+
+### Debugging Agent Execution
+
+```typescript
+new ConsoleExporter({
+  format: 'detailed',
+  filter: (span) => span.type === 'AGENT_RUN',
+  includeMetadata: true
+});
+```
+
+### Monitoring Tool Calls
+
+```typescript
+new ConsoleExporter({
+  format: 'simple',
+  filter: (span) => span.type.includes('TOOL'),
+});
+```
+
+### Error Investigation
+
+```typescript
+new ConsoleExporter({
+  format: 'detailed',
+  filter: (span) => span.status === 'ERROR',
+  includeMetadata: true
+});
+```
+
+## Related
+
+- [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter.mdx)
+- [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter.mdx)
+- [AI Tracing Configuration](/reference/observability/ai-tracing/configuration.mdx)
+- [Debugging Guide](/examples/observability/troubleshooting.mdx)

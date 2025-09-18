@@ -1,0 +1,230 @@
+---
+title: "MastraAITracing | AI Tracing | Reference | Mastra Docs"
+description: API reference for the MastraAITracing class
+---
+
+import { PropertiesTable } from "@/components/properties-table";
+
+# MastraAITracing
+
+The `MastraAITracing` class provides the core AI tracing functionality for Mastra applications. It manages span creation, processing, and export to observability platforms.
+
+## Constructor
+
+```typescript
+constructor(config: AITracingInstanceConfig)
+```
+
+Creates a new MastraAITracing instance with the specified configuration.
+
+### Parameters
+
+<PropertiesTable
+  props={[
+    {
+      name: "config",
+      type: "AITracingInstanceConfig",
+      description: "Configuration for the AI tracing instance",
+      required: true,
+    },
+  ]}
+/>
+
+## Configuration
+
+```typescript
+type AITracingInstanceConfig = {
+  serviceName: string;
+  sampling?: SamplingConfig;
+  exporters?: AITracingExporter[];
+  processors?: AISpanProcessor[];
+}
+```
+
+### Properties
+
+<PropertiesTable
+  props={[
+    {
+      name: "serviceName",
+      type: "string",
+      description: "Name to identify your service in traces",
+      required: true,
+    },
+    {
+      name: "sampling",
+      type: "SamplingConfig",
+      description: "Control how many traces are sampled",
+      required: false,
+    },
+    {
+      name: "exporters",
+      type: "AITracingExporter[]",
+      description: "Array of exporters to send trace data to",
+      required: false,
+    },
+    {
+      name: "processors",
+      type: "AISpanProcessor[]",
+      description: "Array of processors to transform spans before export",
+      required: false,
+    },
+  ]}
+/>
+
+## Methods
+
+### startSpan
+
+```typescript
+startSpan(options: SpanOptions): AISpan
+```
+
+Creates and starts a new span.
+
+<PropertiesTable
+  props={[
+    {
+      name: "options",
+      type: "SpanOptions",
+      description: "Options for creating the span",
+      required: true,
+    },
+  ]}
+/>
+
+### createChildSpan
+
+```typescript
+createChildSpan(parentSpan: AISpan, options: SpanOptions): AISpan
+```
+
+Creates a child span under an existing parent span.
+
+<PropertiesTable
+  props={[
+    {
+      name: "parentSpan",
+      type: "AISpan",
+      description: "The parent span",
+      required: true,
+    },
+    {
+      name: "options",
+      type: "SpanOptions",
+      description: "Options for creating the child span",
+      required: true,
+    },
+  ]}
+/>
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Gracefully shuts down the tracer, flushing any pending spans and cleaning up resources.
+
+## Span Types
+
+The following span types are supported:
+
+### Agent Operations
+- `AGENT_RUN` - Agent execution from start to finish
+- `LLM_GENERATION` - Individual model calls
+- `TOOL_CALL` - Function/tool executions
+- `MCP_TOOL_CALL` - Model Context Protocol tool executions
+- `GENERIC` - Custom operations
+
+### Workflow Operations
+- `WORKFLOW_RUN` - Workflow execution
+- `WORKFLOW_STEP` - Individual step processing
+- `WORKFLOW_CONDITIONAL` - Conditional execution blocks
+- `WORKFLOW_CONDITIONAL_EVAL` - Condition evaluations
+- `WORKFLOW_PARALLEL` - Parallel execution blocks
+- `WORKFLOW_LOOP` - Loop execution blocks
+- `WORKFLOW_SLEEP` - Sleep/delay operations
+- `WORKFLOW_WAIT_EVENT` - Event waiting operations
+
+## Example Usage
+
+### Basic Configuration
+
+```typescript
+import { MastraAITracing } from '@mastra/core/ai-tracing';
+import { LangfuseExporter } from '@mastra/langfuse';
+
+const tracer = new MastraAITracing({
+  serviceName: 'my-service',
+  sampling: {
+    type: 'always'
+  },
+  exporters: [
+    new LangfuseExporter({
+      publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+      secretKey: process.env.LANGFUSE_SECRET_KEY,
+    })
+  ],
+  processors: [
+    new SensitiveDataFilter()
+  ]
+});
+```
+
+### Creating Spans
+
+```typescript
+// Start a root span
+const span = tracer.startSpan({
+  type: 'AGENT_RUN',
+  name: 'chat-agent',
+  input: { message: 'Hello' }
+});
+
+// Create a child span
+const llmSpan = tracer.createChildSpan(span, {
+  type: 'LLM_GENERATION',
+  name: 'openai-gpt-4',
+  input: { prompt: 'Respond to: Hello' }
+});
+
+// End spans
+llmSpan.end({
+  output: { response: 'Hi there!' },
+  metadata: { tokens: 15 }
+});
+
+span.end({
+  output: { finalResponse: 'Hi there!' }
+});
+```
+
+### Error Handling
+
+```typescript
+const span = tracer.startSpan({
+  type: 'TOOL_CALL',
+  name: 'database-query'
+});
+
+try {
+  // Operation that might fail
+  const result = await riskyOperation();
+  span.end({ output: result });
+} catch (error) {
+  span.error({
+    error,
+    metadata: {
+      errorType: error.constructor.name
+    }
+  });
+}
+```
+
+## Related
+
+- [Configuration Options](/reference/observability/ai-tracing/configuration.mdx)
+- [Exporters](/reference/observability/ai-tracing/exporters/default-exporter.mdx)
+- [Processors](/reference/observability/ai-tracing/processors/sensitive-data-filter.mdx)
+- [Sampling Strategies](/reference/observability/ai-tracing/sampling/sampling-strategies.mdx)

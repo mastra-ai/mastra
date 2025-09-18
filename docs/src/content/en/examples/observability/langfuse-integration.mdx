@@ -1,0 +1,524 @@
+---
+title: "Langfuse Integration | Examples | Observability | Mastra Docs"
+description: Configure Langfuse for LLM observability with Mastra AI tracing
+---
+
+import { Callout } from "nextra/components";
+
+# Langfuse Integration Example
+
+[Langfuse](https://langfuse.com/) is an open-source LLM observability platform that provides detailed insights into your AI application's performance. This example shows how to integrate Langfuse with Mastra's AI tracing.
+
+## Prerequisites
+
+- Mastra v0.14.0 or higher
+- A Langfuse account (cloud or self-hosted)
+- Langfuse API credentials
+
+## Setup
+
+### 1. Install Dependencies
+
+```bash npm2yarn
+npm install @mastra/core @mastra/langfuse
+```
+
+### 2. Get Langfuse Credentials
+
+#### Langfuse Cloud
+1. Sign up at [cloud.langfuse.com](https://cloud.langfuse.com)
+2. Create a new project
+3. Go to Settings → API Keys
+4. Create a new API key pair
+
+#### Self-Hosted Langfuse
+1. Deploy Langfuse using their [deployment guide](https://langfuse.com/docs/deployment/self-host)
+2. Access your instance and create API keys
+3. Note your instance URL
+
+### 3. Configure Environment Variables
+
+```bash filename=".env" copy
+# Langfuse credentials
+LANGFUSE_PUBLIC_KEY=pk-lf-xxxxxxxxxxxx
+LANGFUSE_SECRET_KEY=sk-lf-xxxxxxxxxxxx
+LANGFUSE_BASE_URL=https://cloud.langfuse.com # Or your self-hosted URL
+
+# Optional: Mastra Cloud token
+MASTRA_CLOUD_ACCESS_TOKEN=your_token_here
+
+# Environment flag (important for Langfuse UI)
+NODE_ENV=development # or production, staging, etc.
+```
+
+## Basic Configuration
+
+### Complete Setup with All Exporters
+
+This configuration uses Default + Cloud + Langfuse exporters together:
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { LangfuseExporter } from "@mastra/langfuse";
+import { LibSQLStorage } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  // Storage for DefaultExporter
+  storage: new LibSQLStorage({
+    url: process.env.DATABASE_URL || 'file:local.db'
+  }),
+
+  observability: {
+    // Enable default exporters (Default + Cloud)
+    default: { enabled: true },
+
+    // Add Langfuse configuration
+    configs: {
+      langfuse: {
+        serviceName: process.env.SERVICE_NAME || 'my-service',
+        sampling: { type: 'always' },
+        exporters: [
+          new LangfuseExporter({
+            publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+            secretKey: process.env.LANGFUSE_SECRET_KEY!,
+            baseUrl: process.env.LANGFUSE_BASE_URL,
+            options: {
+              // IMPORTANT: This shows in Langfuse UI for filtering
+              environment: process.env.NODE_ENV || 'development',
+            },
+          }),
+        ],
+      },
+    },
+
+    // Use both default and langfuse exporters
+    configSelector: (context) => {
+      // You can return multiple configs
+      return ['default', 'langfuse'];
+    },
+  },
+});
+```
+
+<Callout type="tip">
+  The `environment` option in Langfuse configuration is crucial for filtering traces in the Langfuse UI. Always set it to help distinguish between development, staging, and production traces.
+</Callout>
+
+## Realtime vs Batch Mode
+
+### Development with Realtime Mode
+
+For immediate trace visibility during development:
+
+```typescript filename="src/mastra/index.ts"
+new LangfuseExporter({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+  baseUrl: process.env.LANGFUSE_BASE_URL,
+  realtime: true, // Traces appear immediately in Langfuse
+  options: {
+    environment: 'development',
+  },
+})
+```
+
+### Production with Batch Mode
+
+For better performance in production:
+
+```typescript filename="src/mastra/index.ts"
+new LangfuseExporter({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+  baseUrl: process.env.LANGFUSE_BASE_URL,
+  realtime: false, // Default - batches traces for efficiency
+  options: {
+    environment: 'production',
+  },
+})
+```
+
+### Dynamic Mode Selection
+
+```typescript filename="src/mastra/index.ts"
+new LangfuseExporter({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+  baseUrl: process.env.LANGFUSE_BASE_URL,
+  realtime: process.env.NODE_ENV === 'development',
+  options: {
+    environment: process.env.NODE_ENV,
+    // Additional Langfuse options
+    version: process.env.APP_VERSION,
+    release: process.env.GIT_COMMIT,
+  },
+})
+```
+
+## Vercel Deployment
+
+Special configuration for Vercel deployments to ensure Langfuse works correctly:
+
+### 1. Set Environment Variables in Vercel
+
+```bash
+LANGFUSE_PUBLIC_KEY=pk-lf-xxxxxxxxxxxx
+LANGFUSE_SECRET_KEY=sk-lf-xxxxxxxxxxxx
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
+NODE_ENV=production
+```
+
+### 2. Configure for Edge Runtime
+
+```typescript filename="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { LangfuseExporter } from "@mastra/langfuse";
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      langfuse: {
+        serviceName: 'vercel-app',
+        exporters: [
+          new LangfuseExporter({
+            publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+            secretKey: process.env.LANGFUSE_SECRET_KEY!,
+            baseUrl: process.env.LANGFUSE_BASE_URL,
+            // Important for Vercel
+            realtime: false, // Use batching to avoid timeout issues
+            options: {
+              environment: process.env.VERCEL_ENV || 'production',
+              // Vercel-specific metadata
+              region: process.env.VERCEL_REGION,
+              gitBranch: process.env.VERCEL_GIT_COMMIT_REF,
+            },
+          }),
+        ],
+      },
+    },
+  },
+});
+```
+
+### 3. Handle Vercel Function Timeouts
+
+```typescript filename="api/agent/route.ts"
+import { mastra } from "@/mastra";
+
+export async function POST(request: Request) {
+  const agent = mastra.getAgent("my-agent");
+
+  // Ensure traces are flushed before function ends
+  try {
+    const result = await agent.generate(await request.text());
+
+    // Flush traces before responding
+    await mastra.observability?.shutdown();
+
+    return Response.json({ result: result.text });
+  } catch (error) {
+    // Flush traces even on error
+    await mastra.observability?.shutdown();
+    throw error;
+  }
+}
+```
+
+<Callout type="warning">
+  **Vercel Troubleshooting**: If traces aren't appearing in Langfuse from Vercel:
+  1. Ensure environment variables are set in Vercel dashboard
+  2. Use batch mode (realtime: false)
+  3. Call `shutdown()` to flush traces before function ends
+  4. Check Vercel function logs for errors
+</Callout>
+
+## Complete Working Example
+
+Here's a full example with agent and workflow tracing:
+
+```typescript filename="src/langfuse-example.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { Workflow } from "@mastra/core/workflow";
+import { LangfuseExporter } from "@mastra/langfuse";
+import { LibSQLStorage } from "@mastra/libsql";
+import { openai } from "@ai-sdk/openai";
+import dotenv from "dotenv";
+
+// Load environment variables
+dotenv.config();
+
+// 1. Configure Mastra with Langfuse
+const mastra = new Mastra({
+  storage: new LibSQLStorage({
+    url: 'file:local.db'
+  }),
+
+  observability: {
+    // Enable default exporters
+    default: { enabled: true },
+
+    // Configure Langfuse
+    configs: {
+      langfuse: {
+        serviceName: 'langfuse-demo',
+        sampling: { type: 'always' },
+        exporters: [
+          new LangfuseExporter({
+            publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+            secretKey: process.env.LANGFUSE_SECRET_KEY!,
+            baseUrl: process.env.LANGFUSE_BASE_URL,
+            realtime: process.env.NODE_ENV === 'development',
+            options: {
+              environment: process.env.NODE_ENV || 'development',
+              version: '1.0.0',
+            },
+          }),
+        ],
+      },
+    },
+
+    // Use both default and Langfuse
+    configSelector: () => ['default', 'langfuse'],
+  },
+});
+
+// 2. Create an agent
+const agent = new Agent({
+  name: "langfuse-agent",
+  instructions: "You are a helpful assistant.",
+  model: openai("gpt-4"),
+  tools: {
+    calculate: {
+      description: "Perform a calculation",
+      input: {
+        expression: { type: "string", description: "Math expression" }
+      },
+      execute: async ({ expression }) => {
+        // This tool call will be traced in Langfuse
+        try {
+          const result = eval(expression); // Simple eval for demo
+          return { result, expression };
+        } catch (error) {
+          return { error: "Invalid expression" };
+        }
+      },
+    },
+  },
+});
+
+// 3. Create a workflow
+const workflow = new Workflow({
+  name: "langfuse-workflow",
+  steps: {
+    askAgent: {
+      execute: async ({ inputData }) => {
+        const response = await agent.generate(inputData.question);
+        return { answer: response.text };
+      },
+    },
+    processAnswer: {
+      execute: async ({ inputData }) => {
+        return {
+          processed: true,
+          answer: inputData.answer,
+          timestamp: new Date().toISOString(),
+        };
+      },
+    },
+  },
+});
+
+// 4. Register components
+mastra.registerAgent(agent);
+mastra.registerWorkflow(workflow);
+
+// 5. Execute and trace
+async function main() {
+  console.log("Starting Langfuse integration example...\n");
+
+  // Execute agent with metadata
+  const agentResult = await agent.generate(
+    "Calculate 25 * 4 + 10",
+    {
+      metadata: {
+        userId: "user_123",
+        sessionId: "session_abc",
+        requestType: "calculation",
+      },
+    }
+  );
+
+  console.log("Agent result:", agentResult.text);
+
+  // Execute workflow
+  const workflowResult = await workflow.execute(
+    { question: "What is the capital of France?" },
+    {
+      metadata: {
+        source: "api",
+        userId: "user_456",
+      },
+    }
+  );
+
+  console.log("Workflow result:", workflowResult);
+
+  // Give time for batched traces to send
+  if (process.env.NODE_ENV === 'production') {
+    console.log("\nWaiting for traces to batch and send...");
+    await new Promise(resolve => setTimeout(resolve, 5000));
+  }
+
+  console.log("\n✅ Traces sent to Langfuse!");
+  console.log("View them at:", process.env.LANGFUSE_BASE_URL || "https://cloud.langfuse.com");
+  console.log("Filter by environment:", process.env.NODE_ENV);
+}
+
+// Run the example
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error("Error:", error);
+    process.exit(1);
+  });
+```
+
+## Viewing Traces in Langfuse
+
+1. Log into your Langfuse dashboard
+2. Navigate to your project
+3. Click on "Traces" in the sidebar
+4. Use filters to find your traces:
+   - **Environment**: Filter by development/production
+   - **Service**: Filter by service name
+   - **Time Range**: Adjust to see recent traces
+   - **Metadata**: Search by custom metadata
+
+### Langfuse Features
+
+- **Trace Timeline**: Visual representation of execution flow
+- **Token Usage**: Detailed token counts and costs
+- **Latency Analysis**: Performance metrics for each operation
+- **Error Tracking**: Failed operations and error messages
+- **Scoring**: Add manual or automated quality scores
+- **Sessions**: Group related traces by session ID
+- **Comparison**: Compare different model versions
+
+## Advanced Configuration
+
+### Multi-Environment Setup
+
+```typescript filename="src/mastra/index.ts"
+const getLangfuseConfig = () => {
+  const environment = process.env.NODE_ENV || 'development';
+
+  return {
+    publicKey: process.env[`LANGFUSE_PUBLIC_KEY_${environment.toUpperCase()}`] ||
+               process.env.LANGFUSE_PUBLIC_KEY!,
+    secretKey: process.env[`LANGFUSE_SECRET_KEY_${environment.toUpperCase()}`] ||
+               process.env.LANGFUSE_SECRET_KEY!,
+    baseUrl: process.env.LANGFUSE_BASE_URL,
+    realtime: environment === 'development',
+    options: {
+      environment,
+      version: process.env.npm_package_version,
+      gitCommit: process.env.GIT_COMMIT,
+      deploymentId: process.env.DEPLOYMENT_ID,
+    },
+  };
+};
+
+new LangfuseExporter(getLangfuseConfig())
+```
+
+### Custom Metadata Enrichment
+
+```typescript
+class LangfuseMetadataProcessor implements AISpanProcessor {
+  name = 'langfuse-metadata';
+
+  process(span: AnyAISpan): AnyAISpan | null {
+    // Add Langfuse-specific metadata
+    return {
+      ...span,
+      metadata: {
+        ...span.metadata,
+        langfuseUserId: process.env.LANGFUSE_USER_ID,
+        langfuseSessionId: generateSessionId(),
+        langfuseRelease: process.env.RELEASE_VERSION,
+      },
+    };
+  }
+
+  async shutdown(): Promise<void> {}
+}
+```
+
+### Cost Tracking
+
+```typescript
+// Track costs in Langfuse
+const result = await agent.generate(prompt, {
+  metadata: {
+    costCenter: 'department-a',
+    project: 'customer-support',
+    estimatedCost: 0.05, // Pre-calculated estimate
+  },
+});
+```
+
+## Troubleshooting
+
+### Traces Not Appearing
+
+1. **Check credentials**:
+   ```bash
+   echo $LANGFUSE_PUBLIC_KEY
+   echo $LANGFUSE_SECRET_KEY
+   ```
+
+2. **Verify connection**:
+   ```typescript
+   console.log("Langfuse URL:", process.env.LANGFUSE_BASE_URL);
+   ```
+
+3. **Enable debug logging**:
+   ```typescript
+   new LangfuseExporter({
+     // ... config
+     options: {
+       debug: true, // Enable debug logs
+     },
+   })
+   ```
+
+### Vercel Issues
+
+- Ensure environment variables are set in Vercel dashboard
+- Use batch mode (realtime: false)
+- Implement proper shutdown handling
+- Check function logs for errors
+
+### Performance Issues
+
+- Use batch mode in production
+- Implement sampling for high-volume applications
+- Consider async processing for large traces
+
+## Best Practices
+
+1. **Always set environment flag** for easy filtering in Langfuse UI
+2. **Use batch mode in production** for better performance
+3. **Include session IDs** to group related traces
+4. **Add custom metadata** for business context
+5. **Monitor token usage** to track costs
+6. **Set up alerts** in Langfuse for errors or high latency
+
+## Related
+
+- [Basic AI Tracing](/examples/observability/basic-ai-tracing.mdx)
+- [Braintrust Integration](/examples/observability/braintrust-integration.mdx)
+- [Best Practices](/examples/observability/best-practices.mdx)
+- [Langfuse Documentation](https://langfuse.com/docs)
+- [LangfuseExporter Reference](/reference/observability/ai-tracing/exporters/langfuse-exporter.mdx)

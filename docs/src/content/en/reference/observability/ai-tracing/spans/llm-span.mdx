@@ -1,0 +1,481 @@
+---
+title: "LLM Spans | Span Types | AI Tracing | Reference | Mastra Docs"
+description: Reference for LLM-specific span attributes and tracking
+---
+
+import { PropertiesTable } from "@/components/properties-table";
+
+# LLM Spans
+
+LLM spans provide detailed tracking of Large Language Model operations, including token usage, model parameters, and response characteristics. This span type is a specialized subset of agent spans focused specifically on LLM interactions.
+
+## LLM_GENERATION Span
+
+The `LLM_GENERATION` span type tracks individual calls to LLM APIs.
+
+### Core Attributes
+
+<PropertiesTable
+  props={[
+    {
+      name: "model",
+      type: "string",
+      description: "Model identifier (e.g., 'gpt-4', 'claude-3-opus')",
+      required: true,
+    },
+    {
+      name: "provider",
+      type: "string",
+      description: "LLM provider name (e.g., 'openai', 'anthropic', 'google')",
+      required: true,
+    },
+    {
+      name: "promptTokens",
+      type: "number",
+      description: "Number of tokens in the input prompt",
+      required: false,
+    },
+    {
+      name: "completionTokens",
+      type: "number",
+      description: "Number of tokens in the generated completion",
+      required: false,
+    },
+    {
+      name: "totalTokens",
+      type: "number",
+      description: "Total token count (prompt + completion)",
+      required: false,
+    },
+  ]}
+/>
+
+### Model Parameters
+
+<PropertiesTable
+  props={[
+    {
+      name: "temperature",
+      type: "number",
+      description: "Controls randomness (0.0 to 2.0)",
+      required: false,
+    },
+    {
+      name: "maxTokens",
+      type: "number",
+      description: "Maximum tokens to generate",
+      required: false,
+    },
+    {
+      name: "topP",
+      type: "number",
+      description: "Nucleus sampling parameter (0.0 to 1.0)",
+      required: false,
+    },
+    {
+      name: "topK",
+      type: "number",
+      description: "Top-k sampling parameter",
+      required: false,
+    },
+    {
+      name: "frequencyPenalty",
+      type: "number",
+      description: "Penalize frequent tokens (-2.0 to 2.0)",
+      required: false,
+    },
+    {
+      name: "presencePenalty",
+      type: "number",
+      description: "Penalize tokens based on presence (-2.0 to 2.0)",
+      required: false,
+    },
+    {
+      name: "stopSequences",
+      type: "string[]",
+      description: "Sequences that stop generation",
+      required: false,
+    },
+  ]}
+/>
+
+### Response Metadata
+
+<PropertiesTable
+  props={[
+    {
+      name: "finishReason",
+      type: "string",
+      description: "Why generation stopped ('stop', 'length', 'tool_calls', 'content_filter')",
+      required: false,
+    },
+    {
+      name: "latency",
+      type: "number",
+      description: "Time to first token in milliseconds",
+      required: false,
+    },
+    {
+      name: "throughput",
+      type: "number",
+      description: "Tokens per second",
+      required: false,
+    },
+    {
+      name: "cacheHit",
+      type: "boolean",
+      description: "Whether response was served from cache",
+      required: false,
+    },
+  ]}
+/>
+
+## Common LLM Providers
+
+### OpenAI
+
+```typescript
+{
+  type: 'LLM_GENERATION',
+  name: 'openai-gpt-4',
+  attributes: {
+    model: 'gpt-4-0125-preview',
+    provider: 'openai',
+    temperature: 0.7,
+    maxTokens: 2000,
+    topP: 0.95
+  },
+  input: {
+    messages: [
+      { role: 'system', content: 'You are a helpful assistant.' },
+      { role: 'user', content: 'Explain quantum computing' }
+    ]
+  },
+  output: {
+    content: 'Quantum computing is...',
+    finishReason: 'stop',
+    toolCalls: []
+  },
+  metadata: {
+    promptTokens: 25,
+    completionTokens: 150,
+    totalTokens: 175,
+    estimatedCost: 0.00525,
+    latency: 450,
+    throughput: 333.33
+  }
+}
+```
+
+### Anthropic Claude
+
+```typescript
+{
+  type: 'LLM_GENERATION',
+  name: 'anthropic-claude',
+  attributes: {
+    model: 'claude-3-opus-20240229',
+    provider: 'anthropic',
+    temperature: 0.5,
+    maxTokens: 4000
+  },
+  input: {
+    system: 'You are Claude, an AI assistant.',
+    messages: [
+      { role: 'user', content: 'Write a poem about AI' }
+    ]
+  },
+  output: {
+    content: 'In circuits deep and silicon bright...',
+    finishReason: 'stop'
+  },
+  metadata: {
+    promptTokens: 20,
+    completionTokens: 100,
+    totalTokens: 120,
+    inputCacheTokens: 0,
+    outputCacheWriteTokens: 0
+  }
+}
+```
+
+### Google Gemini
+
+```typescript
+{
+  type: 'LLM_GENERATION',
+  name: 'google-gemini',
+  attributes: {
+    model: 'gemini-pro',
+    provider: 'google',
+    temperature: 0.9,
+    topK: 40,
+    topP: 0.95
+  },
+  input: {
+    contents: [
+      {
+        parts: [
+          { text: 'Analyze this image and describe what you see' },
+          { inlineData: { mimeType: 'image/jpeg', data: '...' } }
+        ]
+      }
+    ]
+  },
+  output: {
+    text: 'The image shows...',
+    finishReason: 'STOP'
+  },
+  metadata: {
+    promptTokens: 150, // Including image tokens
+    completionTokens: 200,
+    totalTokens: 350
+  }
+}
+```
+
+## Streaming Responses
+
+Track streaming LLM responses with progressive updates:
+
+```typescript
+// Initial span creation
+{
+  type: 'LLM_GENERATION',
+  name: 'streaming-response',
+  attributes: {
+    model: 'gpt-4',
+    provider: 'openai',
+    stream: true
+  },
+  input: { /* ... */ }
+}
+
+// Update as chunks arrive
+span.update({
+  metadata: {
+    chunksReceived: 15,
+    partialTokens: 150,
+    timeToFirstChunk: 200 // ms
+  }
+})
+
+// Final update when complete
+span.end({
+  output: {
+    content: 'Complete response text...',
+    finishReason: 'stop'
+  },
+  metadata: {
+    totalChunks: 25,
+    completionTokens: 250,
+    streamDuration: 3500 // ms
+  }
+})
+```
+
+## Function/Tool Calling
+
+Track LLM responses that trigger tool usage:
+
+```typescript
+{
+  type: 'LLM_GENERATION',
+  name: 'function-calling',
+  attributes: {
+    model: 'gpt-4-0125-preview',
+    provider: 'openai'
+  },
+  input: {
+    messages: [
+      { role: 'user', content: 'What is the weather in NYC?' }
+    ],
+    tools: [
+      {
+        type: 'function',
+        function: {
+          name: 'get_weather',
+          description: 'Get current weather',
+          parameters: { /* ... */ }
+        }
+      }
+    ]
+  },
+  output: {
+    toolCalls: [
+      {
+        id: 'call_123',
+        type: 'function',
+        function: {
+          name: 'get_weather',
+          arguments: '{"location": "New York City"}'
+        }
+      }
+    ],
+    finishReason: 'tool_calls'
+  }
+}
+```
+
+## Cost Tracking
+
+Include cost estimation in metadata:
+
+```typescript
+metadata: {
+  promptTokens: 1000,
+  completionTokens: 500,
+  totalTokens: 1500,
+  // Cost calculation based on model pricing
+  estimatedCost: {
+    prompt: 0.01,    // $0.01 per 1K tokens
+    completion: 0.02, // $0.02 per 1K tokens
+    total: 0.03,
+    currency: 'USD'
+  },
+  // Track against budget
+  budgetRemaining: 9.97,
+  budgetUsagePercent: 0.3
+}
+```
+
+## Error Tracking
+
+Track LLM-specific errors:
+
+```typescript
+{
+  type: 'LLM_GENERATION',
+  name: 'failed-generation',
+  status: 'ERROR',
+  attributes: {
+    model: 'gpt-4',
+    provider: 'openai'
+  },
+  error: {
+    type: 'RateLimitError',
+    message: 'Rate limit exceeded',
+    code: 'rate_limit_exceeded',
+    details: {
+      limit: 10000,
+      remaining: 0,
+      resetAt: '2024-01-20T15:00:00Z'
+    }
+  }
+}
+```
+
+## Performance Optimization
+
+### Caching
+
+Track cache performance:
+
+```typescript
+metadata: {
+  cacheHit: true,
+  cacheKey: 'hash_of_prompt',
+  cacheTTL: 3600, // seconds
+  savedTokens: 1500,
+  savedCost: 0.045,
+  savedLatency: 2950 // ms
+}
+```
+
+### Batching
+
+Track batched LLM requests:
+
+```typescript
+{
+  type: 'LLM_GENERATION',
+  name: 'batch-completion',
+  attributes: {
+    model: 'gpt-3.5-turbo',
+    provider: 'openai',
+    batchSize: 5
+  },
+  input: {
+    batch: [
+      { id: 'req_1', messages: [...] },
+      { id: 'req_2', messages: [...] },
+      // ...
+    ]
+  },
+  output: {
+    responses: [
+      { id: 'req_1', content: '...', tokens: 100 },
+      { id: 'req_2', content: '...', tokens: 150 },
+      // ...
+    ]
+  },
+  metadata: {
+    totalTokens: 750,
+    averageLatency: 200,
+    batchEfficiency: 0.85 // vs individual requests
+  }
+}
+```
+
+## Best Practices
+
+### Always Include Token Counts
+
+```typescript
+// Good
+metadata: {
+  promptTokens: 150,
+  completionTokens: 200,
+  totalTokens: 350
+}
+
+// Better - include cost
+metadata: {
+  promptTokens: 150,
+  completionTokens: 200,
+  totalTokens: 350,
+  estimatedCost: 0.0105
+}
+```
+
+### Track Model Versions
+
+```typescript
+attributes: {
+  model: 'gpt-4-0125-preview', // Include specific version
+  provider: 'openai',
+  modelVersion: '2024-01-25', // Track version date
+  apiVersion: 'v1' // API version
+}
+```
+
+### Monitor Performance Metrics
+
+```typescript
+metadata: {
+  latency: 450, // Time to first token
+  totalDuration: 3500, // Total request time
+  throughput: 57.14, // Tokens per second
+  queueTime: 50, // Time waiting in queue
+  processingTime: 3400 // Actual processing time
+}
+```
+
+### Include Context Information
+
+```typescript
+metadata: {
+  conversationId: 'conv_123',
+  messageIndex: 5,
+  contextWindow: 8192,
+  contextUsed: 3500,
+  contextRemaining: 4692
+}
+```
+
+## Related
+
+- [Agent Spans](/reference/observability/ai-tracing/spans/agent-span.mdx)
+- [Token Usage Tracking](/examples/observability/basic-ai-tracing.mdx)
+- [Cost Optimization](/examples/observability/best-practices.mdx)
+- [LLM Provider Configuration](/docs/agents/overview.mdx)

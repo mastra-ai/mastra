@@ -1,0 +1,331 @@
+---
+title: "DefaultExporter | Exporters | AI Tracing | Reference | Mastra Docs"
+description: API reference for the DefaultExporter class and storage provider configuration
+---
+
+import { PropertiesTable } from "@/components/properties-table";
+import { Callout } from "nextra/components";
+
+# DefaultExporter
+
+The `DefaultExporter` persists traces to your configured Mastra storage backend. It provides automatic batching, retry logic, and strategy selection based on storage capabilities.
+
+## Constructor
+
+```typescript
+constructor(options?: DefaultExporterOptions)
+```
+
+Creates a new DefaultExporter instance with the specified options.
+
+### Parameters
+
+<PropertiesTable
+  props={[
+    {
+      name: "options",
+      type: "DefaultExporterOptions",
+      description: "Configuration options for the exporter",
+      required: false,
+    },
+  ]}
+/>
+
+## Configuration
+
+```typescript
+type DefaultExporterOptions = {
+  maxBatchSize?: number;
+  maxBatchWaitMs?: number;
+  maxRetries?: number;
+  strategy?: ExportStrategy;
+  storage?: MastraStorage;
+}
+
+type ExportStrategy = 'auto' | 'realtime' | 'batch-with-updates' | 'insert-only';
+```
+
+### Properties
+
+<PropertiesTable
+  props={[
+    {
+      name: "maxBatchSize",
+      type: "number",
+      description: "Maximum number of spans per batch (default: 1000)",
+      required: false,
+    },
+    {
+      name: "maxBatchWaitMs",
+      type: "number",
+      description: "Maximum wait time before flushing batch in milliseconds (default: 5000)",
+      required: false,
+    },
+    {
+      name: "maxRetries",
+      type: "number",
+      description: "Number of retry attempts for failed exports (default: 4)",
+      required: false,
+    },
+    {
+      name: "strategy",
+      type: "ExportStrategy",
+      description: "Export strategy to use (default: 'auto')",
+      required: false,
+    },
+    {
+      name: "storage",
+      type: "MastraStorage",
+      description: "Storage backend to use (defaults to Mastra's configured storage)",
+      required: false,
+    },
+  ]}
+/>
+
+## Export Strategies
+
+The DefaultExporter supports different strategies based on your storage backend's capabilities:
+
+### auto (default)
+Automatically selects the best strategy based on storage capabilities:
+- Uses `batch-with-updates` if storage supports batch updates
+- Falls back to `realtime` otherwise
+
+### realtime
+Each span is immediately persisted to storage:
+- Best for debugging and development
+- Higher storage overhead
+- Immediate visibility of traces
+
+### batch-with-updates
+Batches spans and updates existing spans when needed:
+- Optimal for production with supporting storage backends
+- Reduces storage operations
+- Updates incomplete spans efficiently
+
+### insert-only
+Only inserts new spans, never updates:
+- Fastest performance
+- May result in incomplete span data
+- Suitable when span updates are not critical
+
+## Supported Storage Providers
+
+### libsql
+
+Full-featured SQLite-compatible storage with complete support for all strategies.
+
+```typescript
+import { LibSQLStorage } from '@mastra/libsql';
+
+export const mastra = new Mastra({
+  storage: new LibSQLStorage({
+    url: process.env.LIBSQL_URL || 'file:local.db',
+    authToken: process.env.LIBSQL_AUTH_TOKEN, // Optional for remote
+  }),
+  observability: {
+    default: { enabled: true }
+  }
+});
+```
+
+**Features:**
+- Supports all export strategies
+- Batch update capabilities
+- Local file or remote database
+- Production-ready persistence
+
+**Configuration:**
+```typescript
+type LibSQLConfig = {
+  url: string;        // Database URL (file: or libsql://)
+  authToken?: string; // Auth token for remote databases
+}
+```
+
+### memory
+
+In-memory storage for development and testing.
+
+```typescript
+import { MemoryStorage } from '@mastra/memory';
+
+export const mastra = new Mastra({
+  storage: new MemoryStorage(),
+  observability: {
+    default: { enabled: true }
+  }
+});
+```
+
+**Features:**
+- Fast, in-memory operations
+- Supports all export strategies
+- No persistence (data lost on restart)
+- Ideal for testing
+
+<Callout type="warning">
+  Memory storage is not suitable for production as data is lost when the process restarts.
+</Callout>
+
+### postgres (Coming Soon)
+
+PostgreSQL storage with full SQL capabilities.
+
+```typescript
+import { PostgresStorage } from '@mastra/postgres';
+
+export const mastra = new Mastra({
+  storage: new PostgresStorage({
+    connectionString: process.env.DATABASE_URL,
+  }),
+  observability: {
+    default: { enabled: true }
+  }
+});
+```
+
+## Usage Examples
+
+### Basic Configuration
+
+```typescript
+import { DefaultExporter } from '@mastra/core/ai-tracing';
+
+const exporter = new DefaultExporter({
+  maxBatchSize: 100,
+  maxBatchWaitMs: 1000,
+  strategy: 'auto'
+});
+```
+
+### Custom Storage Backend
+
+```typescript
+import { DefaultExporter } from '@mastra/core/ai-tracing';
+import { LibSQLStorage } from '@mastra/libsql';
+
+const customStorage = new LibSQLStorage({
+  url: 'libsql://my-database.turso.io',
+  authToken: process.env.TURSO_AUTH_TOKEN
+});
+
+const exporter = new DefaultExporter({
+  storage: customStorage,
+  strategy: 'batch-with-updates'
+});
+```
+
+### Development Configuration
+
+```typescript
+import { DefaultExporter } from '@mastra/core/ai-tracing';
+import { MemoryStorage } from '@mastra/memory';
+
+const exporter = new DefaultExporter({
+  storage: new MemoryStorage(),
+  strategy: 'realtime', // Immediate visibility for debugging
+  maxBatchSize: 1       // No batching in development
+});
+```
+
+### Production Configuration
+
+```typescript
+import { DefaultExporter } from '@mastra/core/ai-tracing';
+
+const exporter = new DefaultExporter({
+  strategy: 'batch-with-updates',
+  maxBatchSize: 1000,
+  maxBatchWaitMs: 5000,
+  maxRetries: 4
+});
+```
+
+## Strategy Selection Guide
+
+Choose your strategy based on your requirements:
+
+| Strategy | Use When | Storage Support | Performance | Data Completeness |
+|----------|----------|-----------------|-------------|-------------------|
+| `auto` | Default choice | Any | Optimal | Complete |
+| `realtime` | Debugging, immediate visibility needed | Any | Lower | Complete |
+| `batch-with-updates` | Production with full-featured storage | libsql, postgres | High | Complete |
+| `insert-only` | Performance critical, updates not needed | Any | Highest | Potentially incomplete |
+
+## Error Handling
+
+The DefaultExporter includes automatic retry logic for transient failures:
+
+```typescript
+const exporter = new DefaultExporter({
+  maxRetries: 4, // Retry up to 4 times
+  // Exponential backoff between retries
+});
+```
+
+If storage is not configured, the DefaultExporter logs a warning and operates as a no-op:
+
+```
+[DefaultExporter] Storage not configured. Spans will not be persisted.
+```
+
+## Methods
+
+### export
+
+```typescript
+async export(spans: ReadableSpan[]): Promise<void>
+```
+
+Exports a batch of spans to storage.
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Flushes any pending spans and closes the exporter.
+
+## Integration with Mastra
+
+When using the default configuration, the DefaultExporter is automatically included:
+
+```typescript
+export const mastra = new Mastra({
+  observability: {
+    default: { enabled: true }
+    // DefaultExporter is automatically configured
+  }
+});
+```
+
+To customize the DefaultExporter in the default configuration:
+
+```typescript
+import { DefaultExporter } from '@mastra/core/ai-tracing';
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      custom: {
+        serviceName: 'my-service',
+        exporters: [
+          new DefaultExporter({
+            strategy: 'batch-with-updates',
+            maxBatchSize: 500
+          })
+        ]
+      }
+    }
+  }
+});
+```
+
+## Related
+
+- [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter.mdx)
+- [ConsoleExporter](/reference/observability/ai-tracing/exporters/console-exporter.mdx)
+- [Storage Configuration](/reference/storage/overview.mdx)
+- [AI Tracing Configuration](/reference/observability/ai-tracing/configuration.mdx)

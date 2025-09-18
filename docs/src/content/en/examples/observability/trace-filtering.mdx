@@ -1,0 +1,575 @@
+---
+title: "Filtering Traces | Examples | Observability | Mastra Docs"
+description: Learn how to filter unwanted traces like postgres inserts to reduce noise
+---
+
+import { Callout } from "nextra/components";
+
+# Trace Filtering Example
+
+This example shows how to filter out unwanted traces to reduce noise in your observability data. A common issue is postgres insert traces cluttering the observability view (GitHub issue #7727).
+
+## The Problem
+
+When using Mastra with database operations, you might see many low-value traces like:
+- Database insert operations
+- Health check endpoints
+- Polling operations
+- Internal system calls
+
+These can overwhelm your tracing system and make it hard to find important traces.
+
+## Solution: Custom Filtering
+
+### 1. Filter at Sampling Level
+
+Prevent traces from being created in the first place:
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      production: {
+        serviceName: 'my-service',
+        sampling: {
+          type: 'custom',
+          sampler: (context) => {
+            // Filter out postgres insert traces
+            if (context.metadata?.operation === 'postgres.insert') {
+              return false;
+            }
+
+            // Filter out specific tables
+            if (context.metadata?.table &&
+                ['logs', 'metrics', 'traces'].includes(context.metadata.table)) {
+              return false;
+            }
+
+            // Filter out health checks
+            if (context.metadata?.endpoint === '/health') {
+              return false;
+            }
+
+            // Sample everything else
+            return true;
+          }
+        },
+        exporters: [...]
+      }
+    }
+  }
+});
+```
+
+### 2. Filter with Custom Processor
+
+Process and filter spans before they're exported:
+
+```typescript filename="src/processors/trace-filter.ts" showLineNumbers copy
+import type { AISpanProcessor, AnyAISpan } from '@mastra/core/ai-tracing';
+
+export class TraceFilterProcessor implements AISpanProcessor {
+  name = 'trace-filter';
+
+  constructor(
+    private filters: {
+      excludeOperations?: string[];
+      excludeSpanTypes?: string[];
+      excludePatterns?: RegExp[];
+      minDuration?: number;
+      onlyErrors?: boolean;
+    } = {}
+  ) {}
+
+  process(span: AnyAISpan): AnyAISpan | null {
+    // Filter out specific operations
+    if (this.filters.excludeOperations?.includes(span.name)) {
+      return null; // Drop the span
+    }
+
+    // Filter out specific span types
+    if (this.filters.excludeSpanTypes?.includes(span.type)) {
+      return null;
+    }
+
+    // Filter by name patterns
+    if (this.filters.excludePatterns) {
+      for (const pattern of this.filters.excludePatterns) {
+        if (pattern.test(span.name)) {
+          return null;
+        }
+      }
+    }
+
+    // Filter out fast operations (likely not interesting)
+    if (this.filters.minDuration && span.duration < this.filters.minDuration) {
+      return null;
+    }
+
+    // Only keep errors if specified
+    if (this.filters.onlyErrors && span.status !== 'ERROR') {
+      return null;
+    }
+
+    return span; // Keep the span
+  }
+
+  async shutdown(): Promise<void> {}
+}
+```
+
+Use the filter processor:
+
+```typescript filename="src/mastra/index.ts"
+import { TraceFilterProcessor } from './processors/trace-filter';
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      filtered: {
+        serviceName: 'my-service',
+        processors: [
+          new TraceFilterProcessor({
+            excludeOperations: [
+              'postgres.insert',
+              'postgres.update',
+              'redis.get',
+              'redis.set'
+            ],
+            excludeSpanTypes: ['DATABASE', 'CACHE'],
+            excludePatterns: [
+              /^health-check/,
+              /^internal\./,
+              /\.poll$/
+            ],
+            minDuration: 10, // Filter out operations faster than 10ms
+          })
+        ],
+        exporters: [...]
+      }
+    }
+  }
+});
+```
+
+## Filtering Postgres Insert Traces
+
+Specific solution for filtering postgres traces:
+
+```typescript filename="src/mastra/postgres-filter.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { LangfuseExporter } from "@mastra/langfuse";
+
+// Custom processor to filter postgres operations
+class PostgresFilterProcessor implements AISpanProcessor {
+  name = 'postgres-filter';
+
+  private excludedOperations = new Set([
+    'insert',
+    'batch_insert',
+    'update',
+    'upsert'
+  ]);
+
+  private excludedTables = new Set([
+    'logs',
+    'audit_logs',
+    'metrics',
+    'sessions',
+    'traces' // Don't trace trace inserts!
+  ]);
+
+  process(span: AnyAISpan): AnyAISpan | null {
+    // Check if this is a database span
+    if (!span.name.toLowerCase().includes('postgres') &&
+        !span.name.toLowerCase().includes('pg') &&
+        !span.metadata?.database) {
+      return span; // Not a database span, keep it
+    }
+
+    // Extract operation and table from span
+    const operation = span.metadata?.operation ||
+                     span.name.split('.').pop()?.toLowerCase();
+    const table = span.metadata?.table ||
+                  span.metadata?.collection;
+
+    // Filter out excluded operations
+    if (operation && this.excludedOperations.has(operation)) {
+      console.debug(`Filtering postgres ${operation} on ${table}`);
+      return null;
+    }
+
+    // Filter out excluded tables
+    if (table && this.excludedTables.has(table)) {
+      console.debug(`Filtering operation on table ${table}`);
+      return null;
+    }
+
+    // Keep selects and other read operations
+    return span;
+  }
+
+  async shutdown(): Promise<void> {}
+}
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      production: {
+        serviceName: 'my-app',
+        processors: [
+          new PostgresFilterProcessor(),
+          new SensitiveDataFilter() // Still redact sensitive data
+        ],
+        exporters: [
+          new LangfuseExporter({
+            // Langfuse config
+          })
+        ]
+      }
+    }
+  }
+});
+```
+
+## Advanced Filtering Strategies
+
+### Dynamic Filtering Based on Load
+
+Adjust filtering based on system load:
+
+```typescript filename="src/processors/adaptive-filter.ts" showLineNumbers copy
+class AdaptiveFilterProcessor implements AISpanProcessor {
+  name = 'adaptive-filter';
+
+  private spanCount = 0;
+  private lastReset = Date.now();
+  private readonly maxSpansPerMinute = 1000;
+
+  process(span: AnyAISpan): AnyAISpan | null {
+    // Reset counter every minute
+    if (Date.now() - this.lastReset > 60000) {
+      this.spanCount = 0;
+      this.lastReset = Date.now();
+    }
+
+    this.spanCount++;
+
+    // If we're over the limit, be more aggressive with filtering
+    if (this.spanCount > this.maxSpansPerMinute) {
+      // Only keep errors and slow operations
+      if (span.status === 'ERROR' || span.duration > 1000) {
+        return span;
+      }
+      return null;
+    }
+
+    // Normal filtering
+    if (this.isLowValueSpan(span)) {
+      return null;
+    }
+
+    return span;
+  }
+
+  private isLowValueSpan(span: AnyAISpan): boolean {
+    // Define what constitutes a low-value span
+    return span.duration < 5 || // Very fast operations
+           span.name.includes('health') ||
+           span.name.includes('metrics') ||
+           span.type === 'INTERNAL';
+  }
+
+  async shutdown(): Promise<void> {}
+}
+```
+
+### Allowlist Approach
+
+Only trace specific important operations:
+
+```typescript filename="src/processors/allowlist-filter.ts" showLineNumbers copy
+class AllowlistFilterProcessor implements AISpanProcessor {
+  name = 'allowlist-filter';
+
+  private allowedOperations = new Set([
+    'AGENT_RUN',
+    'LLM_GENERATION',
+    'TOOL_CALL',
+    'WORKFLOW_RUN',
+    'payment.process',
+    'user.signup',
+    'order.create'
+  ]);
+
+  process(span: AnyAISpan): AnyAISpan | null {
+    // Always keep errors
+    if (span.status === 'ERROR') {
+      return span;
+    }
+
+    // Check if operation is allowed
+    if (this.allowedOperations.has(span.type) ||
+        this.allowedOperations.has(span.name)) {
+      return span;
+    }
+
+    // Check for important metadata
+    if (span.metadata?.important === true ||
+        span.metadata?.critical === true) {
+      return span;
+    }
+
+    // Filter out everything else
+    return null;
+  }
+
+  async shutdown(): Promise<void> {}
+}
+```
+
+### Intelligent Filtering
+
+Filter based on trace relationships:
+
+```typescript filename="src/processors/intelligent-filter.ts" showLineNumbers copy
+class IntelligentFilterProcessor implements AISpanProcessor {
+  name = 'intelligent-filter';
+
+  private importantTraceIds = new Set<string>();
+
+  process(span: AnyAISpan): AnyAISpan | null {
+    // If this is an important span, track its trace ID
+    if (this.isImportantSpan(span)) {
+      this.importantTraceIds.add(span.traceId);
+      return span;
+    }
+
+    // If this span belongs to an important trace, keep it
+    if (this.importantTraceIds.has(span.traceId)) {
+      return span;
+    }
+
+    // Otherwise, apply filtering
+    if (this.shouldFilter(span)) {
+      return null;
+    }
+
+    return span;
+  }
+
+  private isImportantSpan(span: AnyAISpan): boolean {
+    return span.type === 'AGENT_RUN' ||
+           span.type === 'WORKFLOW_RUN' ||
+           span.status === 'ERROR' ||
+           span.duration > 5000;
+  }
+
+  private shouldFilter(span: AnyAISpan): boolean {
+    return span.name.includes('postgres.insert') ||
+           span.name.includes('cache.get') ||
+           span.duration < 10;
+  }
+
+  async shutdown(): Promise<void> {
+    this.importantTraceIds.clear();
+  }
+}
+```
+
+## Environment-Specific Filtering
+
+Different filtering for different environments:
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+const getFilteringConfig = () => {
+  const env = process.env.NODE_ENV;
+
+  switch (env) {
+    case 'development':
+      // No filtering in development
+      return null;
+
+    case 'staging':
+      // Light filtering in staging
+      return new TraceFilterProcessor({
+        excludePatterns: [/^health-check/],
+        minDuration: 1
+      });
+
+    case 'production':
+      // Aggressive filtering in production
+      return new TraceFilterProcessor({
+        excludeOperations: [
+          'postgres.insert',
+          'postgres.update',
+          'cache.get',
+          'cache.set'
+        ],
+        excludePatterns: [
+          /^internal\./,
+          /^health/,
+          /\.poll$/
+        ],
+        minDuration: 10
+      });
+
+    default:
+      return null;
+  }
+};
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      default: {
+        serviceName: 'my-service',
+        processors: [
+          getFilteringConfig(),
+          new SensitiveDataFilter()
+        ].filter(Boolean), // Remove null processors
+        exporters: [...]
+      }
+    }
+  }
+});
+```
+
+## Testing Your Filters
+
+Verify your filters work as expected:
+
+```typescript filename="test/filter.test.ts" showLineNumbers copy
+import { TraceFilterProcessor } from '../src/processors/trace-filter';
+
+describe('TraceFilterProcessor', () => {
+  const processor = new TraceFilterProcessor({
+    excludeOperations: ['postgres.insert'],
+    minDuration: 10
+  });
+
+  it('should filter postgres insert operations', () => {
+    const span = {
+      name: 'postgres.insert',
+      type: 'DATABASE',
+      duration: 5
+    };
+
+    const result = processor.process(span);
+    expect(result).toBeNull();
+  });
+
+  it('should keep important operations', () => {
+    const span = {
+      name: 'agent.run',
+      type: 'AGENT_RUN',
+      duration: 1000
+    };
+
+    const result = processor.process(span);
+    expect(result).toBe(span);
+  });
+
+  it('should filter fast operations', () => {
+    const span = {
+      name: 'cache.get',
+      type: 'CACHE',
+      duration: 5
+    };
+
+    const result = processor.process(span);
+    expect(result).toBeNull();
+  });
+});
+```
+
+## Best Practices
+
+### 1. Start Conservative
+
+Begin with minimal filtering and increase gradually:
+
+```typescript
+// Week 1: Only filter health checks
+excludePatterns: [/^health/]
+
+// Week 2: Add database inserts
+excludeOperations: ['postgres.insert']
+
+// Week 3: Add more aggressive filtering
+minDuration: 10
+```
+
+### 2. Always Keep Errors
+
+Never filter out error traces:
+
+```typescript
+process(span: AnyAISpan): AnyAISpan | null {
+  if (span.status === 'ERROR') {
+    return span; // Always keep errors
+  }
+  // Rest of filtering logic
+}
+```
+
+### 3. Monitor Filter Effectiveness
+
+Track what you're filtering:
+
+```typescript
+class MonitoredFilterProcessor implements AISpanProcessor {
+  private filtered = 0;
+  private total = 0;
+
+  process(span: AnyAISpan): AnyAISpan | null {
+    this.total++;
+
+    if (this.shouldFilter(span)) {
+      this.filtered++;
+
+      // Log filtering stats periodically
+      if (this.total % 1000 === 0) {
+        console.log(`Filtered ${this.filtered}/${this.total} spans (${(this.filtered/this.total*100).toFixed(1)}%)`);
+      }
+
+      return null;
+    }
+
+    return span;
+  }
+}
+```
+
+### 4. Use Metadata for Filtering Hints
+
+Add metadata to help with filtering decisions:
+
+```typescript
+// When creating traces
+await agent.generate(prompt, {
+  metadata: {
+    importance: 'low', // Hint for filtering
+    operation: 'internal.cleanup',
+    skipTracing: true // Custom flag
+  }
+});
+
+// In your filter
+if (span.metadata?.skipTracing === true) {
+  return null;
+}
+```
+
+<Callout type="tip">
+  Remember that filtering happens before export, so filtered spans won't consume storage or network resources. However, they still consume some CPU for the filtering decision itself.
+</Callout>
+
+## Related
+
+- [Cleanup Strategies](/examples/observability/cleanup-strategies.mdx) - Managing stored traces
+- [Sampling Strategies](/reference/observability/ai-tracing/sampling/sampling-strategies.mdx) - Filtering at sampling time
+- [Custom Processors](/reference/observability/ai-tracing/processors/sensitive-data-filter.mdx) - Building processors
+- [Best Practices](/examples/observability/best-practices.mdx) - Production patterns

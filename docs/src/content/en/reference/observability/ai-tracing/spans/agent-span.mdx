@@ -1,0 +1,440 @@
+---
+title: "Agent Spans | Span Types | AI Tracing | Reference | Mastra Docs"
+description: Reference for agent-related span types and their attributes
+---
+
+import { PropertiesTable } from "@/components/properties-table";
+
+# Agent Spans
+
+Agent spans track the execution of AI agents, including their interactions with LLMs, tool usage, and memory operations.
+
+## Span Types
+
+### AGENT_RUN
+
+Represents the complete execution of an agent from start to finish.
+
+#### Attributes
+
+<PropertiesTable
+  props={[
+    {
+      name: "agentId",
+      type: "string",
+      description: "Unique identifier for the agent",
+      required: true,
+    },
+    {
+      name: "agentName",
+      type: "string",
+      description: "Human-readable agent name",
+      required: false,
+    },
+    {
+      name: "instructions",
+      type: "string",
+      description: "System instructions provided to the agent",
+      required: false,
+    },
+    {
+      name: "availableTools",
+      type: "string[]",
+      description: "List of tool names available to the agent",
+      required: false,
+    },
+    {
+      name: "maxSteps",
+      type: "number",
+      description: "Maximum number of reasoning steps allowed",
+      required: false,
+    },
+    {
+      name: "temperature",
+      type: "number",
+      description: "Temperature setting for LLM responses",
+      required: false,
+    },
+  ]}
+/>
+
+#### Example
+
+```typescript
+{
+  type: 'AGENT_RUN',
+  name: 'customer-support-agent',
+  startTime: new Date(),
+  attributes: {
+    agentId: 'agent_123',
+    agentName: 'Customer Support Agent',
+    instructions: 'Help customers with their inquiries',
+    availableTools: ['search-kb', 'create-ticket'],
+    maxSteps: 10,
+    temperature: 0.7
+  },
+  input: {
+    message: 'I need help with my order',
+    threadId: 'thread_456'
+  }
+}
+```
+
+### LLM_GENERATION
+
+Tracks individual LLM API calls made by the agent.
+
+#### Attributes
+
+<PropertiesTable
+  props={[
+    {
+      name: "model",
+      type: "string",
+      description: "Model identifier (e.g., 'gpt-4', 'claude-3')",
+      required: true,
+    },
+    {
+      name: "provider",
+      type: "string",
+      description: "LLM provider name (e.g., 'openai', 'anthropic')",
+      required: true,
+    },
+    {
+      name: "promptTokens",
+      type: "number",
+      description: "Number of tokens in the prompt",
+      required: false,
+    },
+    {
+      name: "completionTokens",
+      type: "number",
+      description: "Number of tokens in the completion",
+      required: false,
+    },
+    {
+      name: "totalTokens",
+      type: "number",
+      description: "Total tokens used (prompt + completion)",
+      required: false,
+    },
+    {
+      name: "temperature",
+      type: "number",
+      description: "Temperature parameter used",
+      required: false,
+    },
+    {
+      name: "maxTokens",
+      type: "number",
+      description: "Maximum tokens allowed for completion",
+      required: false,
+    },
+    {
+      name: "topP",
+      type: "number",
+      description: "Top-p sampling parameter",
+      required: false,
+    },
+    {
+      name: "frequencyPenalty",
+      type: "number",
+      description: "Frequency penalty parameter",
+      required: false,
+    },
+    {
+      name: "presencePenalty",
+      type: "number",
+      description: "Presence penalty parameter",
+      required: false,
+    },
+    {
+      name: "finishReason",
+      type: "string",
+      description: "Reason for completion (e.g., 'stop', 'length', 'tool_calls')",
+      required: false,
+    },
+  ]}
+/>
+
+#### Example
+
+```typescript
+{
+  type: 'LLM_GENERATION',
+  name: 'openai-gpt-4',
+  startTime: new Date(),
+  attributes: {
+    model: 'gpt-4',
+    provider: 'openai',
+    temperature: 0.7,
+    maxTokens: 1000,
+    topP: 0.95
+  },
+  input: {
+    messages: [
+      { role: 'system', content: 'You are a helpful assistant' },
+      { role: 'user', content: 'What is the weather?' }
+    ]
+  },
+  output: {
+    content: 'I cannot provide real-time weather information...',
+    finishReason: 'stop'
+  },
+  metadata: {
+    promptTokens: 25,
+    completionTokens: 50,
+    totalTokens: 75
+  }
+}
+```
+
+### TOOL_CALL
+
+Represents the execution of a tool or function by the agent.
+
+#### Attributes
+
+<PropertiesTable
+  props={[
+    {
+      name: "toolId",
+      type: "string",
+      description: "Unique identifier for the tool",
+      required: true,
+    },
+    {
+      name: "toolName",
+      type: "string",
+      description: "Human-readable tool name",
+      required: true,
+    },
+    {
+      name: "toolType",
+      type: "string",
+      description: "Type of tool (e.g., 'function', 'api', 'database')",
+      required: false,
+    },
+    {
+      name: "success",
+      type: "boolean",
+      description: "Whether the tool execution succeeded",
+      required: false,
+    },
+    {
+      name: "errorMessage",
+      type: "string",
+      description: "Error message if tool execution failed",
+      required: false,
+    },
+  ]}
+/>
+
+#### Example
+
+```typescript
+{
+  type: 'TOOL_CALL',
+  name: 'search-knowledge-base',
+  startTime: new Date(),
+  attributes: {
+    toolId: 'tool_search_kb',
+    toolName: 'Search Knowledge Base',
+    toolType: 'database'
+  },
+  input: {
+    query: 'refund policy',
+    limit: 5
+  },
+  output: {
+    results: [
+      { id: 1, title: 'Refund Policy', content: '...' },
+      { id: 2, title: 'Return Process', content: '...' }
+    ],
+    count: 2
+  },
+  metadata: {
+    success: true,
+    queryTime: 45
+  }
+}
+```
+
+### MCP_TOOL_CALL
+
+Tracks Model Context Protocol tool executions.
+
+#### Attributes
+
+<PropertiesTable
+  props={[
+    {
+      name: "serverName",
+      type: "string",
+      description: "MCP server name",
+      required: true,
+    },
+    {
+      name: "serverVersion",
+      type: "string",
+      description: "MCP server version",
+      required: false,
+    },
+    {
+      name: "toolName",
+      type: "string",
+      description: "Name of the MCP tool",
+      required: true,
+    },
+    {
+      name: "protocol",
+      type: "string",
+      description: "MCP protocol version",
+      required: false,
+    },
+    {
+      name: "success",
+      type: "boolean",
+      description: "Whether the MCP call succeeded",
+      required: false,
+    },
+  ]}
+/>
+
+#### Example
+
+```typescript
+{
+  type: 'MCP_TOOL_CALL',
+  name: 'filesystem-read',
+  startTime: new Date(),
+  attributes: {
+    serverName: 'filesystem-server',
+    serverVersion: '1.0.0',
+    toolName: 'read_file',
+    protocol: 'mcp/1.0'
+  },
+  input: {
+    path: '/config/settings.json'
+  },
+  output: {
+    content: '{"theme": "dark", "language": "en"}',
+    encoding: 'utf-8'
+  },
+  metadata: {
+    success: true,
+    fileSize: 45
+  }
+}
+```
+
+## Common Patterns
+
+### Nested Span Structure
+
+Agent operations typically create a hierarchy of spans:
+
+```
+AGENT_RUN
+├── LLM_GENERATION (initial response)
+├── TOOL_CALL (search for information)
+├── LLM_GENERATION (process tool results)
+└── TOOL_CALL (take action)
+```
+
+### Memory Operations
+
+Memory recall and storage are tracked as tool calls:
+
+```typescript
+{
+  type: 'TOOL_CALL',
+  name: 'memory-recall',
+  attributes: {
+    toolId: 'memory_semantic_recall',
+    toolName: 'Semantic Memory Recall',
+    toolType: 'memory'
+  },
+  input: {
+    query: 'previous orders',
+    topK: 5,
+    threshold: 0.7
+  },
+  output: {
+    memories: [...],
+    count: 3
+  }
+}
+```
+
+### Error Tracking
+
+Failed operations include error details:
+
+```typescript
+{
+  type: 'TOOL_CALL',
+  name: 'api-call',
+  status: 'ERROR',
+  attributes: {
+    toolId: 'external_api',
+    toolName: 'External API',
+    success: false,
+    errorMessage: 'Connection timeout'
+  },
+  error: {
+    name: 'NetworkError',
+    message: 'Connection timeout after 30s',
+    stack: '...'
+  }
+}
+```
+
+## Metadata Best Practices
+
+### Token Tracking
+
+Always include token counts for LLM operations:
+
+```typescript
+metadata: {
+  promptTokens: 150,
+  completionTokens: 200,
+  totalTokens: 350,
+  estimatedCost: 0.0105 // Optional cost tracking
+}
+```
+
+### Performance Metrics
+
+Include timing and performance data:
+
+```typescript
+metadata: {
+  latency: 1250, // ms
+  cacheHit: false,
+  retryCount: 0,
+  queueTime: 50 // ms
+}
+```
+
+### Context Information
+
+Add relevant context for debugging:
+
+```typescript
+metadata: {
+  sessionId: 'session_789',
+  userId: 'user_123',
+  environment: 'production',
+  feature: 'chat-support',
+  version: '1.2.0'
+}
+```
+
+## Related
+
+- [LLM Spans](/reference/observability/ai-tracing/spans/llm-span.mdx)
+- [Workflow Spans](/reference/observability/ai-tracing/spans/workflow-span.mdx)
+- [Creating Child Spans](/docs/observability/ai-tracing.mdx#creating-child-spans)
+- [Agent Memory](/docs/agents/agent-memory.mdx)

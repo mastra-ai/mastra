@@ -1,0 +1,585 @@
+---
+title: "Workflow Spans | Span Types | AI Tracing | Reference | Mastra Docs"
+description: Reference for workflow-related span types and their attributes
+---
+
+import { PropertiesTable } from "@/components/properties-table";
+
+# Workflow Spans
+
+Workflow spans track the execution of Mastra workflows, including individual steps, control flow operations, and state transitions.
+
+## Span Types
+
+### WORKFLOW_RUN
+
+Represents the complete execution of a workflow from start to finish.
+
+#### Attributes
+
+<PropertiesTable
+  props={[
+    {
+      name: "workflowId",
+      type: "string",
+      description: "Unique identifier for the workflow",
+      required: true,
+    },
+    {
+      name: "workflowName",
+      type: "string",
+      description: "Human-readable workflow name",
+      required: true,
+    },
+    {
+      name: "version",
+      type: "string",
+      description: "Workflow version",
+      required: false,
+    },
+    {
+      name: "trigger",
+      type: "string",
+      description: "How the workflow was triggered (e.g., 'manual', 'schedule', 'event')",
+      required: false,
+    },
+    {
+      name: "status",
+      type: "string",
+      description: "Final workflow status (e.g., 'completed', 'failed', 'suspended')",
+      required: false,
+    },
+  ]}
+/>
+
+#### Example
+
+```typescript
+{
+  type: 'WORKFLOW_RUN',
+  name: 'customer-onboarding',
+  startTime: new Date(),
+  attributes: {
+    workflowId: 'wf_onboarding_v2',
+    workflowName: 'Customer Onboarding',
+    version: '2.1.0',
+    trigger: 'manual'
+  },
+  input: {
+    customerId: 'cust_123',
+    email: 'user@example.com',
+    plan: 'premium'
+  },
+  output: {
+    success: true,
+    accountId: 'acc_456',
+    completedSteps: 5
+  },
+  metadata: {
+    status: 'completed',
+    duration: 3500
+  }
+}
+```
+
+### WORKFLOW_STEP
+
+Tracks individual step execution within a workflow.
+
+#### Attributes
+
+<PropertiesTable
+  props={[
+    {
+      name: "stepId",
+      type: "string",
+      description: "Unique identifier for the step",
+      required: true,
+    },
+    {
+      name: "stepName",
+      type: "string",
+      description: "Human-readable step name",
+      required: true,
+    },
+    {
+      name: "stepType",
+      type: "string",
+      description: "Type of step (e.g., 'action', 'decision', 'transform')",
+      required: false,
+    },
+    {
+      name: "retryCount",
+      type: "number",
+      description: "Number of retry attempts",
+      required: false,
+    },
+    {
+      name: "status",
+      type: "string",
+      description: "Step execution status",
+      required: false,
+    },
+  ]}
+/>
+
+#### Example
+
+```typescript
+{
+  type: 'WORKFLOW_STEP',
+  name: 'validate-email',
+  startTime: new Date(),
+  attributes: {
+    stepId: 'step_validate_email',
+    stepName: 'Validate Email',
+    stepType: 'action'
+  },
+  input: {
+    email: 'user@example.com'
+  },
+  output: {
+    isValid: true,
+    domain: 'example.com',
+    disposable: false
+  },
+  metadata: {
+    status: 'success',
+    validationService: 'email-validator-api'
+  }
+}
+```
+
+### WORKFLOW_CONDITIONAL
+
+Represents a conditional branching point in the workflow.
+
+#### Attributes
+
+<PropertiesTable
+  props={[
+    {
+      name: "conditionId",
+      type: "string",
+      description: "Unique identifier for the condition",
+      required: true,
+    },
+    {
+      name: "conditionName",
+      type: "string",
+      description: "Human-readable condition name",
+      required: false,
+    },
+    {
+      name: "branchTaken",
+      type: "string",
+      description: "Which branch was taken (e.g., 'if', 'else', 'elseif-1')",
+      required: false,
+    },
+    {
+      name: "evaluationResult",
+      type: "boolean",
+      description: "Result of the condition evaluation",
+      required: false,
+    },
+  ]}
+/>
+
+#### Example
+
+```typescript
+{
+  type: 'WORKFLOW_CONDITIONAL',
+  name: 'check-user-tier',
+  startTime: new Date(),
+  attributes: {
+    conditionId: 'cond_user_tier',
+    conditionName: 'Check User Tier',
+    branchTaken: 'premium'
+  },
+  input: {
+    userTier: 'premium',
+    features: ['advanced', 'support']
+  },
+  metadata: {
+    evaluationResult: true,
+    condition: "userTier === 'premium'"
+  }
+}
+```
+
+### WORKFLOW_CONDITIONAL_EVAL
+
+Tracks individual condition evaluations within a conditional block.
+
+#### Attributes
+
+<PropertiesTable
+  props={[
+    {
+      name: "expression",
+      type: "string",
+      description: "The condition expression evaluated",
+      required: true,
+    },
+    {
+      name: "result",
+      type: "boolean",
+      description: "Result of the evaluation",
+      required: true,
+    },
+    {
+      name: "variables",
+      type: "Record<string, any>",
+      description: "Variables used in the evaluation",
+      required: false,
+    },
+  ]}
+/>
+
+#### Example
+
+```typescript
+{
+  type: 'WORKFLOW_CONDITIONAL_EVAL',
+  name: 'evaluate-condition',
+  startTime: new Date(),
+  attributes: {
+    expression: 'age >= 18 && country === "US"',
+    result: true
+  },
+  input: {
+    variables: {
+      age: 25,
+      country: 'US'
+    }
+  },
+  output: {
+    result: true
+  }
+}
+```
+
+### WORKFLOW_PARALLEL
+
+Represents parallel execution of multiple workflow branches.
+
+#### Attributes
+
+<PropertiesTable
+  props={[
+    {
+      name: "parallelId",
+      type: "string",
+      description: "Unique identifier for the parallel block",
+      required: true,
+    },
+    {
+      name: "branches",
+      type: "string[]",
+      description: "List of branch names being executed",
+      required: true,
+    },
+    {
+      name: "strategy",
+      type: "string",
+      description: "Execution strategy (e.g., 'all', 'race', 'some')",
+      required: false,
+    },
+    {
+      name: "completedBranches",
+      type: "number",
+      description: "Number of branches that completed",
+      required: false,
+    },
+  ]}
+/>
+
+#### Example
+
+```typescript
+{
+  type: 'WORKFLOW_PARALLEL',
+  name: 'parallel-validation',
+  startTime: new Date(),
+  attributes: {
+    parallelId: 'par_validation',
+    branches: ['validate-email', 'validate-phone', 'validate-address'],
+    strategy: 'all'
+  },
+  output: {
+    results: {
+      'validate-email': { valid: true },
+      'validate-phone': { valid: true },
+      'validate-address': { valid: false, error: 'Invalid zip code' }
+    }
+  },
+  metadata: {
+    completedBranches: 3,
+    failedBranches: 1
+  }
+}
+```
+
+### WORKFLOW_LOOP
+
+Tracks loop execution within workflows.
+
+#### Attributes
+
+<PropertiesTable
+  props={[
+    {
+      name: "loopId",
+      type: "string",
+      description: "Unique identifier for the loop",
+      required: true,
+    },
+    {
+      name: "loopType",
+      type: "string",
+      description: "Type of loop (e.g., 'for', 'while', 'foreach')",
+      required: false,
+    },
+    {
+      name: "iteration",
+      type: "number",
+      description: "Current iteration number",
+      required: false,
+    },
+    {
+      name: "totalIterations",
+      type: "number",
+      description: "Total number of iterations (if known)",
+      required: false,
+    },
+    {
+      name: "breakCondition",
+      type: "string",
+      description: "Condition that caused the loop to break",
+      required: false,
+    },
+  ]}
+/>
+
+#### Example
+
+```typescript
+{
+  type: 'WORKFLOW_LOOP',
+  name: 'process-batch',
+  startTime: new Date(),
+  attributes: {
+    loopId: 'loop_batch_process',
+    loopType: 'foreach',
+    totalIterations: 10
+  },
+  input: {
+    items: ['item1', 'item2', '...']
+  },
+  output: {
+    processedItems: 10,
+    failedItems: 0
+  },
+  metadata: {
+    averageIterationTime: 250
+  }
+}
+```
+
+### WORKFLOW_SLEEP
+
+Represents a delay or wait operation in the workflow.
+
+#### Attributes
+
+<PropertiesTable
+  props={[
+    {
+      name: "duration",
+      type: "number",
+      description: "Sleep duration in milliseconds",
+      required: true,
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "Reason for the delay",
+      required: false,
+    },
+  ]}
+/>
+
+#### Example
+
+```typescript
+{
+  type: 'WORKFLOW_SLEEP',
+  name: 'rate-limit-delay',
+  startTime: new Date(),
+  attributes: {
+    duration: 1000,
+    reason: 'API rate limiting'
+  }
+}
+```
+
+### WORKFLOW_WAIT_EVENT
+
+Tracks waiting for external events.
+
+#### Attributes
+
+<PropertiesTable
+  props={[
+    {
+      name: "eventType",
+      type: "string",
+      description: "Type of event being waited for",
+      required: true,
+    },
+    {
+      name: "timeout",
+      type: "number",
+      description: "Maximum wait time in milliseconds",
+      required: false,
+    },
+    {
+      name: "eventReceived",
+      type: "boolean",
+      description: "Whether the event was received",
+      required: false,
+    },
+  ]}
+/>
+
+#### Example
+
+```typescript
+{
+  type: 'WORKFLOW_WAIT_EVENT',
+  name: 'wait-for-approval',
+  startTime: new Date(),
+  attributes: {
+    eventType: 'user_approval',
+    timeout: 86400000 // 24 hours
+  },
+  output: {
+    eventReceived: true,
+    eventData: {
+      approved: true,
+      approvedBy: 'manager@company.com',
+      timestamp: '2024-01-20T15:30:00Z'
+    }
+  }
+}
+```
+
+## Common Patterns
+
+### Nested Workflow Structure
+
+Workflows create hierarchical span structures:
+
+```
+WORKFLOW_RUN
+├── WORKFLOW_STEP (initialize)
+├── WORKFLOW_CONDITIONAL (check-conditions)
+│   └── WORKFLOW_CONDITIONAL_EVAL
+├── WORKFLOW_PARALLEL (parallel-processing)
+│   ├── WORKFLOW_STEP (branch-1)
+│   └── WORKFLOW_STEP (branch-2)
+├── WORKFLOW_LOOP (process-items)
+│   ├── WORKFLOW_STEP (iteration-1)
+│   └── WORKFLOW_STEP (iteration-2)
+└── WORKFLOW_STEP (finalize)
+```
+
+### Error Handling
+
+Track error recovery and compensation:
+
+```typescript
+{
+  type: 'WORKFLOW_STEP',
+  name: 'error-handler',
+  attributes: {
+    stepId: 'step_error_handler',
+    stepName: 'Handle Error',
+    stepType: 'compensation'
+  },
+  input: {
+    error: {
+      name: 'ValidationError',
+      message: 'Invalid input data'
+    }
+  },
+  output: {
+    handled: true,
+    action: 'rollback'
+  }
+}
+```
+
+### State Transitions
+
+Track workflow state changes:
+
+```typescript
+metadata: {
+  previousState: 'processing',
+  currentState: 'suspended',
+  stateTransition: 'suspend',
+  suspensionReason: 'waiting_for_approval'
+}
+```
+
+## Metadata Best Practices
+
+### Performance Tracking
+
+Include execution metrics:
+
+```typescript
+metadata: {
+  executionTime: 1500, // ms
+  queueTime: 200, // ms
+  cpuTime: 1200, // ms
+  memoryUsed: 45678 // bytes
+}
+```
+
+### Business Context
+
+Add business-relevant information:
+
+```typescript
+metadata: {
+  customerId: 'cust_123',
+  orderId: 'ord_456',
+  priority: 'high',
+  sla: '2h',
+  cost: 0.05
+}
+```
+
+### Debugging Information
+
+Include data for troubleshooting:
+
+```typescript
+metadata: {
+  retryAttempt: 2,
+  maxRetries: 3,
+  backoffDelay: 1000,
+  errorCount: 1,
+  warnings: ['Rate limit approaching']
+}
+```
+
+## Related
+
+- [Agent Spans](/reference/observability/ai-tracing/spans/agent-span.mdx)
+- [Workflow Documentation](/docs/workflows/overview.mdx)
+- [Control Flow](/docs/workflows/control-flow.mdx)
+- [Error Handling](/examples/observability/troubleshooting.mdx)

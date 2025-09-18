@@ -1,0 +1,304 @@
+---
+title: "Configuration | AI Tracing | Reference | Mastra Docs"
+description: Complete configuration options for AI Tracing including configSelector
+---
+
+import { PropertiesTable } from "@/components/properties-table";
+
+# AI Tracing Configuration
+
+Complete configuration options for Mastra's AI Tracing system, including multi-instance setup and dynamic configuration selection.
+
+## Configuration Schema
+
+```typescript
+type AITracingConfig = {
+  default?: {
+    enabled?: boolean;
+  };
+  configs?: Record<string, AITracingInstanceConfig | MastraAITracing>;
+  configSelector?: TracingSelector;
+};
+```
+
+### Properties
+
+<PropertiesTable
+  props={[
+    {
+      name: "default",
+      type: "{ enabled?: boolean }",
+      description: "Enable default configuration with built-in exporters",
+      required: false,
+    },
+    {
+      name: "configs",
+      type: "Record<string, AITracingInstanceConfig | MastraAITracing>",
+      description: "Map of tracing instance names to their configurations",
+      required: false,
+    },
+    {
+      name: "configSelector",
+      type: "TracingSelector",
+      description: "Function to select which tracing instance to use at runtime",
+      required: false,
+    },
+  ]}
+/>
+
+## Instance Configuration
+
+```typescript
+type AITracingInstanceConfig = {
+  serviceName: string;
+  sampling?: SamplingConfig;
+  exporters?: AITracingExporter[];
+  processors?: AISpanProcessor[];
+};
+```
+
+### Properties
+
+<PropertiesTable
+  props={[
+    {
+      name: "serviceName",
+      type: "string",
+      description: "Name to identify your service in traces",
+      required: true,
+    },
+    {
+      name: "sampling",
+      type: "SamplingConfig",
+      description: "Control which traces are sampled",
+      required: false,
+    },
+    {
+      name: "exporters",
+      type: "AITracingExporter[]",
+      description: "Array of exporters to send trace data to",
+      required: false,
+    },
+    {
+      name: "processors",
+      type: "AISpanProcessor[]",
+      description: "Array of processors to transform spans before export",
+      required: false,
+    },
+  ]}
+/>
+
+## Config Selector
+
+The `configSelector` function allows dynamic selection of tracing configuration based on runtime context.
+
+### Signature
+
+```typescript
+type TracingSelector = (
+  context: TracingContext,
+  availableTracers: Set<string>
+) => string | undefined;
+```
+
+### Parameters
+
+<PropertiesTable
+  props={[
+    {
+      name: "context",
+      type: "TracingContext",
+      description: "Runtime context including metadata and runtime context map",
+      required: true,
+    },
+    {
+      name: "availableTracers",
+      type: "Set<string>",
+      description: "Set of configured tracer instance names",
+      required: true,
+    },
+  ]}
+/>
+
+### TracingContext Type
+
+```typescript
+type TracingContext = {
+  metadata?: Record<string, any>;
+  runtimeContext?: Map<string, any>;
+};
+```
+
+## Configuration Examples
+
+### Basic Configuration
+
+```typescript
+export const mastra = new Mastra({
+  observability: {
+    default: { enabled: true }
+  }
+});
+```
+
+### Multi-Instance Configuration
+
+```typescript
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      production: {
+        serviceName: 'prod-service',
+        sampling: { type: 'ratio', probability: 0.1 },
+        exporters: [langfuseExporter],
+      },
+      development: {
+        serviceName: 'dev-service',
+        sampling: { type: 'always' },
+        exporters: [consoleExporter],
+      },
+    },
+  },
+});
+```
+
+### Dynamic Configuration Selection
+
+```typescript
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      langfuse: {
+        serviceName: 'langfuse-service',
+        exporters: [langfuseExporter],
+      },
+      braintrust: {
+        serviceName: 'braintrust-service',
+        exporters: [braintrustExporter],
+      },
+    },
+    configSelector: (context, availableTracers) => {
+      // Select based on user preference
+      const userPreference = context.metadata?.tracingProvider;
+      if (userPreference && availableTracers.has(userPreference)) {
+        return userPreference;
+      }
+
+      // Fall back to environment-based selection
+      if (process.env.NODE_ENV === 'production') {
+        return 'langfuse';
+      }
+      return 'braintrust';
+    },
+  },
+});
+```
+
+### Context-Based Routing
+
+```typescript
+export const mastra = new Mastra({
+  observability: {
+    default: { enabled: true },
+    configs: {
+      external: {
+        serviceName: 'external-service',
+        exporters: [langfuseExporter, braintrustExporter],
+      },
+    },
+    configSelector: (context, availableTracers) => {
+      // Route based on runtime context
+      const useExternal = context.runtimeContext?.get('useExternalTracing');
+      if (useExternal) {
+        return 'external';
+      }
+
+      // Route based on request metadata
+      if (context.metadata?.userId?.startsWith('test_')) {
+        return undefined; // Disable tracing for test users
+      }
+
+      return 'default';
+    },
+  },
+});
+```
+
+### Feature Flag Integration
+
+```typescript
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      standard: {
+        serviceName: 'standard-service',
+        exporters: [defaultExporter],
+      },
+      enhanced: {
+        serviceName: 'enhanced-service',
+        exporters: [defaultExporter, langfuseExporter],
+        processors: [new CustomEnrichmentProcessor()],
+      },
+    },
+    configSelector: async (context, availableTracers) => {
+      // Check feature flag
+      const enhancedTracing = await featureFlags.isEnabled(
+        'enhanced-tracing',
+        context.metadata?.userId
+      );
+
+      return enhancedTracing ? 'enhanced' : 'standard';
+    },
+  },
+});
+```
+
+## Runtime Context Usage
+
+Set runtime context values when executing agents or workflows:
+
+```typescript
+// Set context for agent execution
+const result = await agent.generate('Hello', {
+  runtimeContext: new Map([
+    ['useExternalTracing', true],
+    ['debug', 'true'],
+  ]),
+});
+
+// Set context for workflow execution
+const output = await workflow.execute(input, {
+  runtimeContext: new Map([
+    ['tracingProvider', 'langfuse'],
+  ]),
+});
+```
+
+## Default Configuration Details
+
+When `default.enabled` is `true`, Mastra automatically configures:
+
+- **Service Name**: `"mastra"`
+- **Sampling**: Always sample (100% of traces)
+- **Exporters**:
+  - `DefaultExporter` with auto-selected strategy
+  - `CloudExporter` if `MASTRA_CLOUD_ACCESS_TOKEN` is set
+- **Processors**:
+  - `SensitiveDataFilter` with standard sensitive fields
+
+## Configuration Validation
+
+Mastra validates configuration at startup:
+
+- Cannot name a custom config `"default"` when default is enabled
+- Service name is required for each config
+- Exporters must implement `AITracingExporter` interface
+- Processors must implement `AISpanProcessor` interface
+- ConfigSelector must return a valid config name or undefined
+
+## Related
+
+- [MastraAITracing Class](/reference/observability/ai-tracing/ai-tracing.mdx)
+- [Sampling Strategies](/reference/observability/ai-tracing/sampling/sampling-strategies.mdx)
+- [Exporters](/reference/observability/ai-tracing/exporters/default-exporter.mdx)
+- [Processors](/reference/observability/ai-tracing/processors/sensitive-data-filter.mdx)

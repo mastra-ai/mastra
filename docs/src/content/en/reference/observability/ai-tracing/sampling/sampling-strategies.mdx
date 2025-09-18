@@ -1,0 +1,517 @@
+---
+title: "Sampling Strategies | AI Tracing | Reference | Mastra Docs"
+description: Control which traces are collected with sampling strategies
+---
+
+import { PropertiesTable } from "@/components/properties-table";
+import { Callout } from "nextra/components";
+
+# Sampling Strategies
+
+Sampling strategies control which traces are collected and exported, helping you balance observability needs with performance and cost considerations.
+
+## Configuration
+
+```typescript
+type SamplingConfig = {
+  type: 'always' | 'never' | 'ratio' | 'custom';
+  probability?: number; // For ratio sampling (0.0 to 1.0)
+  sampler?: (context: TraceContext) => boolean; // For custom sampling
+}
+```
+
+### Properties
+
+<PropertiesTable
+  props={[
+    {
+      name: "type",
+      type: "'always' | 'never' | 'ratio' | 'custom'",
+      description: "Sampling strategy type",
+      required: true,
+    },
+    {
+      name: "probability",
+      type: "number",
+      description: "Sampling probability for ratio type (0.0 to 1.0)",
+      required: false,
+    },
+    {
+      name: "sampler",
+      type: "(context: TraceContext) => boolean",
+      description: "Custom sampling function",
+      required: false,
+    },
+  ]}
+/>
+
+## Sampling Types
+
+### Always Sample
+
+Collects 100% of traces. Best for development and debugging.
+
+```typescript
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      development: {
+        serviceName: 'dev-service',
+        sampling: {
+          type: 'always'
+        },
+        exporters: [...]
+      }
+    }
+  }
+});
+```
+
+**Use when:**
+- Debugging issues in development
+- Low traffic applications
+- Critical operations that must always be traced
+
+### Never Sample
+
+Disables tracing completely. No spans are created or exported.
+
+```typescript
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      disabled: {
+        serviceName: 'my-service',
+        sampling: {
+          type: 'never'
+        },
+        exporters: [...]
+      }
+    }
+  }
+});
+```
+
+**Use when:**
+- Running tests that don't need tracing
+- Temporarily disabling tracing
+- Specific environments where tracing is not needed
+
+### Ratio Sampling
+
+Randomly samples a percentage of traces based on probability.
+
+```typescript
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      production: {
+        serviceName: 'prod-service',
+        sampling: {
+          type: 'ratio',
+          probability: 0.1 // Sample 10% of traces
+        },
+        exporters: [...]
+      }
+    }
+  }
+});
+```
+
+**Probability values:**
+- `0.0` - No traces sampled (equivalent to 'never')
+- `0.1` - 10% of traces sampled
+- `0.5` - 50% of traces sampled
+- `1.0` - All traces sampled (equivalent to 'always')
+
+**Use when:**
+- High-traffic production environments
+- Need representative sampling
+- Cost optimization is important
+
+### Custom Sampling
+
+Implement custom logic to determine which traces to sample.
+
+```typescript
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      custom: {
+        serviceName: 'my-service',
+        sampling: {
+          type: 'custom',
+          sampler: (context: TraceContext) => {
+            // Your custom logic here
+            return true; // or false
+          }
+        },
+        exporters: [...]
+      }
+    }
+  }
+});
+```
+
+## Custom Sampling Examples
+
+### User-Based Sampling
+
+Sample specific users or user segments:
+
+```typescript
+sampling: {
+  type: 'custom',
+  sampler: (context) => {
+    const userId = context.metadata?.userId;
+
+    // Always sample premium users
+    if (context.metadata?.userTier === 'premium') {
+      return true;
+    }
+
+    // Sample 10% of free users
+    if (context.metadata?.userTier === 'free') {
+      return Math.random() < 0.1;
+    }
+
+    // Sample all internal users
+    if (userId?.startsWith('internal_')) {
+      return true;
+    }
+
+    return false;
+  }
+}
+```
+
+### Error-Focused Sampling
+
+Always sample errors, sample successes at lower rate:
+
+```typescript
+sampling: {
+  type: 'custom',
+  sampler: (context) => {
+    // Always sample errors
+    if (context.metadata?.error || context.metadata?.status === 'error') {
+      return true;
+    }
+
+    // Sample 5% of successful operations
+    return Math.random() < 0.05;
+  }
+}
+```
+
+### Time-Based Sampling
+
+Sample more during business hours:
+
+```typescript
+sampling: {
+  type: 'custom',
+  sampler: (context) => {
+    const hour = new Date().getHours();
+    const isBusinessHours = hour >= 9 && hour < 17;
+
+    // Higher sampling during business hours
+    const probability = isBusinessHours ? 0.2 : 0.05;
+    return Math.random() < probability;
+  }
+}
+```
+
+### Operation-Based Sampling
+
+Different sampling rates for different operations:
+
+```typescript
+sampling: {
+  type: 'custom',
+  sampler: (context) => {
+    const operation = context.metadata?.operation;
+
+    // Critical operations - always sample
+    if (['payment', 'signup', 'checkout'].includes(operation)) {
+      return true;
+    }
+
+    // Important operations - 50% sampling
+    if (['search', 'recommendation'].includes(operation)) {
+      return Math.random() < 0.5;
+    }
+
+    // Regular operations - 10% sampling
+    return Math.random() < 0.1;
+  }
+}
+```
+
+### Performance-Based Sampling
+
+Sample slow operations more frequently:
+
+```typescript
+sampling: {
+  type: 'custom',
+  sampler: (context) => {
+    const duration = context.metadata?.duration;
+
+    // Always sample very slow operations (>5s)
+    if (duration > 5000) {
+      return true;
+    }
+
+    // 50% sampling for slow operations (>1s)
+    if (duration > 1000) {
+      return Math.random() < 0.5;
+    }
+
+    // 5% sampling for normal operations
+    return Math.random() < 0.05;
+  }
+}
+```
+
+## Head-Based vs Tail-Based Sampling
+
+Mastra uses **head-based sampling** - the decision to sample is made at the start of a trace.
+
+### Head-Based Sampling (Mastra)
+
+```typescript
+// Decision made at trace start
+const shouldSample = sampler(context);
+if (shouldSample) {
+  // Create and track all spans in the trace
+}
+```
+
+**Advantages:**
+- Lower overhead (no need to buffer traces)
+- Immediate decision
+- Simpler implementation
+
+**Disadvantages:**
+- Can't sample based on trace outcome
+- May miss important error traces
+
+### Tail-Based Sampling (Future)
+
+<Callout type="info">
+  Tail-based sampling (sampling decisions made after trace completion) is not currently supported but may be added in future versions.
+</Callout>
+
+## Adaptive Sampling
+
+Implement dynamic sampling that adjusts based on system load:
+
+```typescript
+class AdaptiveSampler {
+  private requestCount = 0;
+  private errorCount = 0;
+  private lastReset = Date.now();
+
+  sample(context: TraceContext): boolean {
+    this.requestCount++;
+
+    // Reset counters every minute
+    if (Date.now() - this.lastReset > 60000) {
+      this.requestCount = 0;
+      this.errorCount = 0;
+      this.lastReset = Date.now();
+    }
+
+    // Always sample errors
+    if (context.metadata?.error) {
+      this.errorCount++;
+      return true;
+    }
+
+    // Increase sampling if error rate is high
+    const errorRate = this.errorCount / Math.max(this.requestCount, 1);
+    if (errorRate > 0.05) {
+      return Math.random() < 0.5; // 50% sampling during issues
+    }
+
+    // Reduce sampling if traffic is high
+    if (this.requestCount > 1000) {
+      return Math.random() < 0.01; // 1% sampling under load
+    }
+
+    return Math.random() < 0.1; // Default 10% sampling
+  }
+}
+
+const adaptiveSampler = new AdaptiveSampler();
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      adaptive: {
+        serviceName: 'adaptive-service',
+        sampling: {
+          type: 'custom',
+          sampler: (context) => adaptiveSampler.sample(context)
+        },
+        exporters: [...]
+      }
+    }
+  }
+});
+```
+
+## Cost Optimization
+
+Estimate and control tracing costs:
+
+```typescript
+class CostAwareSampler {
+  private monthlyBudget = 100; // $100 per month
+  private costPerTrace = 0.0001; // $0.0001 per trace
+  private monthlyTraces = 0;
+  private currentMonth = new Date().getMonth();
+
+  sample(context: TraceContext): boolean {
+    const month = new Date().getMonth();
+
+    // Reset counter for new month
+    if (month !== this.currentMonth) {
+      this.monthlyTraces = 0;
+      this.currentMonth = month;
+    }
+
+    // Check if within budget
+    const currentCost = this.monthlyTraces * this.costPerTrace;
+    if (currentCost >= this.monthlyBudget) {
+      // Budget exceeded, only sample critical operations
+      return context.metadata?.critical === true;
+    }
+
+    this.monthlyTraces++;
+
+    // Normal sampling logic
+    return Math.random() < 0.1;
+  }
+}
+```
+
+## Sampling Context
+
+The `TraceContext` provides information for sampling decisions:
+
+```typescript
+type TraceContext = {
+  metadata?: {
+    userId?: string;
+    userTier?: string;
+    operation?: string;
+    environment?: string;
+    error?: boolean;
+    status?: string;
+    duration?: number;
+    critical?: boolean;
+    [key: string]: any;
+  };
+  runtimeContext?: Map<string, any>;
+};
+```
+
+Set context when executing operations:
+
+```typescript
+// Agent execution with context
+const result = await agent.generate('Hello', {
+  metadata: {
+    userId: 'user_123',
+    userTier: 'premium',
+    operation: 'chat'
+  }
+});
+
+// Workflow execution with context
+const output = await workflow.execute(input, {
+  metadata: {
+    critical: true,
+    operation: 'payment_processing'
+  }
+});
+```
+
+## Best Practices
+
+### 1. Start High, Reduce Gradually
+
+Begin with high sampling in production, then reduce:
+
+```typescript
+// Week 1: 100% sampling to establish baseline
+{ type: 'always' }
+
+// Week 2: 50% sampling
+{ type: 'ratio', probability: 0.5 }
+
+// Week 3+: 10% sampling with error bias
+{ type: 'custom', sampler: errorBiasedSampler }
+```
+
+### 2. Always Sample Critical Paths
+
+```typescript
+sampler: (context) => {
+  // Critical business operations
+  const criticalOps = ['payment', 'auth', 'signup'];
+  if (criticalOps.includes(context.metadata?.operation)) {
+    return true;
+  }
+  // Regular sampling for others
+  return Math.random() < 0.1;
+}
+```
+
+### 3. Use Different Strategies Per Environment
+
+```typescript
+const samplingByEnv = {
+  development: { type: 'always' },
+  staging: { type: 'ratio', probability: 0.5 },
+  production: { type: 'ratio', probability: 0.1 }
+};
+
+sampling: samplingByEnv[process.env.NODE_ENV] || { type: 'always' }
+```
+
+### 4. Monitor Sampling Effectiveness
+
+Track whether sampling provides sufficient visibility:
+
+```typescript
+class SamplingMonitor {
+  private sampled = 0;
+  private total = 0;
+
+  sample(context: TraceContext): boolean {
+    this.total++;
+    const shouldSample = Math.random() < 0.1;
+
+    if (shouldSample) {
+      this.sampled++;
+    }
+
+    // Log sampling rate periodically
+    if (this.total % 1000 === 0) {
+      console.log(`Sampling rate: ${(this.sampled / this.total * 100).toFixed(2)}%`);
+    }
+
+    return shouldSample;
+  }
+}
+```
+
+## Related
+
+- [AI Tracing Configuration](/reference/observability/ai-tracing/configuration.mdx)
+- [Cost Optimization](/examples/observability/best-practices.mdx)
+- [Performance Tuning](/examples/observability/troubleshooting.mdx)
+- [Custom Sampling Examples](/examples/observability/basic-ai-tracing.mdx)

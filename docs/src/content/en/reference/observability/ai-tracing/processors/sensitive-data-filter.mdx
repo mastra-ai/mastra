@@ -1,0 +1,400 @@
+---
+title: "SensitiveDataFilter | Processors | AI Tracing | Reference | Mastra Docs"
+description: API reference for the SensitiveDataFilter processor for redacting sensitive data
+---
+
+import { PropertiesTable } from "@/components/properties-table";
+import { Callout } from "nextra/components";
+
+# SensitiveDataFilter
+
+The `SensitiveDataFilter` processor automatically redacts sensitive information from span data before it's exported to observability platforms. It's enabled by default in Mastra's AI tracing configuration.
+
+## Constructor
+
+```typescript
+constructor(sensitiveKeys?: string[])
+```
+
+Creates a new SensitiveDataFilter with specified sensitive field names.
+
+### Parameters
+
+<PropertiesTable
+  props={[
+    {
+      name: "sensitiveKeys",
+      type: "string[]",
+      description: "Array of field names to redact (case-insensitive)",
+      required: false,
+    },
+  ]}
+/>
+
+## Default Sensitive Fields
+
+When no custom fields are provided, the filter redacts these common sensitive fields:
+
+- `password`
+- `token`
+- `secret`
+- `key`
+- `apiKey`
+- `api_key`
+- `auth`
+- `authorization`
+- `bearer`
+- `jwt`
+- `credential`
+- `credentials`
+- `sessionId`
+- `session_id`
+- `cookie`
+- `cookies`
+
+## How It Works
+
+The SensitiveDataFilter:
+
+1. **Scans recursively** through all span data
+2. **Matches field names** case-insensitively
+3. **Redacts values** with `[REDACTED]`
+4. **Preserves structure** of the data
+5. **Handles nested objects** and arrays
+
+### Redaction Process
+
+```typescript
+// Before filtering
+{
+  input: {
+    user: 'john@example.com',
+    password: 'secret123',
+    data: {
+      apiKey: 'sk-abc123xyz',
+      content: 'Hello world'
+    }
+  }
+}
+
+// After filtering
+{
+  input: {
+    user: 'john@example.com',
+    password: '[REDACTED]',
+    data: {
+      apiKey: '[REDACTED]',
+      content: 'Hello world'
+    }
+  }
+}
+```
+
+## Usage Examples
+
+### Using Default Fields
+
+```typescript
+import { SensitiveDataFilter } from '@mastra/core/ai-tracing';
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      production: {
+        serviceName: 'my-service',
+        processors: [
+          new SensitiveDataFilter() // Uses default sensitive fields
+        ],
+        exporters: [...]
+      }
+    }
+  }
+});
+```
+
+### Custom Sensitive Fields
+
+```typescript
+import { SensitiveDataFilter } from '@mastra/core/ai-tracing';
+
+const customSensitiveFields = [
+  // Default fields
+  'password', 'token', 'secret', 'key', 'apiKey',
+  // Custom fields for your application
+  'ssn', 'socialSecurityNumber',
+  'creditCard', 'credit_card', 'cardNumber',
+  'cvv', 'securityCode',
+  'bankAccount', 'accountNumber',
+  'routingNumber',
+  'dateOfBirth', 'dob',
+  'email', 'phoneNumber',
+  'address', 'zipCode'
+];
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      production: {
+        serviceName: 'my-service',
+        processors: [
+          new SensitiveDataFilter(customSensitiveFields)
+        ],
+        exporters: [...]
+      }
+    }
+  }
+});
+```
+
+### Environment-Specific Configuration
+
+```typescript
+const isDevelopment = process.env.NODE_ENV === 'development';
+
+const sensitiveFields = isDevelopment
+  ? ['password', 'secret'] // Minimal redaction in dev
+  : [
+      'password', 'token', 'secret', 'key',
+      'email', 'phone', 'address', 'ssn',
+      'creditCard', 'bankAccount'
+    ]; // Comprehensive redaction in production
+
+new SensitiveDataFilter(sensitiveFields);
+```
+
+## Advanced Patterns
+
+### Partial Redaction
+
+For custom partial redaction, extend the SensitiveDataFilter:
+
+```typescript
+class PartialRedactionFilter extends SensitiveDataFilter {
+  protected redactValue(key: string, value: any): any {
+    if (key.toLowerCase().includes('email') && typeof value === 'string') {
+      // Partially redact email: john@example.com -> j***@example.com
+      const [user, domain] = value.split('@');
+      if (domain) {
+        return `${user[0]}***@${domain}`;
+      }
+    }
+
+    if (key.toLowerCase().includes('phone') && typeof value === 'string') {
+      // Show last 4 digits: 555-123-4567 -> ***-***-4567
+      return value.replace(/\d(?=\d{4})/g, '*');
+    }
+
+    // Default redaction for other fields
+    return '[REDACTED]';
+  }
+}
+```
+
+### Conditional Redaction
+
+Redact based on environment or context:
+
+```typescript
+class ConditionalRedactionFilter extends SensitiveDataFilter {
+  process(span: AnyAISpan): AnyAISpan | null {
+    // Only redact in production
+    if (process.env.NODE_ENV !== 'production') {
+      return span;
+    }
+
+    // Only redact external traces
+    if (span.attributes?.internal === true) {
+      return span;
+    }
+
+    return super.process(span);
+  }
+}
+```
+
+### Allowlist Pattern
+
+Only allow specific fields:
+
+```typescript
+class AllowlistFilter implements AISpanProcessor {
+  name = 'allowlist-filter';
+
+  constructor(private allowedFields: Set<string>) {}
+
+  process(span: AnyAISpan): AnyAISpan | null {
+    const filtered = this.filterObject(span);
+    return filtered as AnyAISpan;
+  }
+
+  private filterObject(obj: any): any {
+    if (!obj || typeof obj !== 'object') return obj;
+
+    const filtered: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (this.allowedFields.has(key.toLowerCase())) {
+        filtered[key] = Array.isArray(value)
+          ? value.map(v => this.filterObject(v))
+          : this.filterObject(value);
+      }
+    }
+    return filtered;
+  }
+
+  async shutdown(): Promise<void> {}
+}
+```
+
+## What Gets Filtered
+
+The SensitiveDataFilter processes:
+
+- **Span attributes** - Core span properties
+- **Span metadata** - Additional context data
+- **Input data** - Request/input parameters
+- **Output data** - Response/output values
+- **Error details** - Error messages and stack traces
+- **Custom fields** - Any additional span data
+
+## Performance Considerations
+
+<Callout type="info">
+  The SensitiveDataFilter operates synchronously on each span with minimal overhead. For high-volume applications, consider:
+
+  1. Limiting the number of sensitive fields to check
+  2. Using simpler field names (avoid complex patterns)
+  3. Filtering at the source when possible
+</Callout>
+
+## Methods
+
+### process
+
+```typescript
+process(span: AnyAISpan): AnyAISpan | null
+```
+
+Processes a span and redacts sensitive fields.
+
+<PropertiesTable
+  props={[
+    {
+      name: "span",
+      type: "AnyAISpan",
+      description: "The span to process",
+      required: true,
+    },
+  ]}
+/>
+
+Returns the processed span with sensitive data redacted, or `null` to drop the span.
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Performs cleanup (no-op for SensitiveDataFilter).
+
+## Combining with Other Processors
+
+Processors are executed in order:
+
+```typescript
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      production: {
+        serviceName: 'my-service',
+        processors: [
+          // First: Redact sensitive data
+          new SensitiveDataFilter(['password', 'apiKey']),
+
+          // Second: Enrich with metadata
+          new MetadataEnrichmentProcessor(),
+
+          // Third: Filter by criteria
+          new SpanFilterProcessor(span => span.duration > 100)
+        ],
+        exporters: [...]
+      }
+    }
+  }
+});
+```
+
+## Security Best Practices
+
+### 1. Comprehensive Field List
+
+Include all potentially sensitive fields:
+
+```typescript
+const comprehensiveFields = [
+  // Authentication
+  'password', 'token', 'secret', 'apiKey', 'jwt',
+
+  // Personal Information
+  'email', 'phone', 'ssn', 'dateOfBirth',
+
+  // Financial
+  'creditCard', 'bankAccount', 'routingNumber',
+
+  // Medical
+  'patientId', 'diagnosis', 'medication',
+
+  // Custom identifiers
+  'userId', 'customerId', 'accountId'
+];
+```
+
+### 2. Test Redaction
+
+Verify redaction works as expected:
+
+```typescript
+// Test configuration
+const filter = new SensitiveDataFilter(['apiKey']);
+
+const testSpan = {
+  input: { apiKey: 'sk-test123' }
+};
+
+const filtered = filter.process(testSpan);
+assert(filtered.input.apiKey === '[REDACTED]');
+```
+
+### 3. Monitor for Leaks
+
+Periodically review exported traces for sensitive data:
+
+```typescript
+class LeakDetector implements AISpanProcessor {
+  private patterns = [
+    /sk-[a-zA-Z0-9]{48}/,  // OpenAI API keys
+    /\b\d{3}-\d{2}-\d{4}\b/, // SSN pattern
+    /\b\d{16}\b/,            // Credit card pattern
+  ];
+
+  process(span: AnyAISpan): AnyAISpan | null {
+    const stringified = JSON.stringify(span);
+
+    for (const pattern of this.patterns) {
+      if (pattern.test(stringified)) {
+        console.error('Potential sensitive data leak detected!');
+        // Log incident for review
+      }
+    }
+
+    return span;
+  }
+}
+```
+
+## Related
+
+- [Custom Processors](/examples/observability/custom-exporter.mdx)
+- [Security Best Practices](/examples/observability/best-practices.mdx)
+- [AI Tracing Configuration](/reference/observability/ai-tracing/configuration.mdx)
+- [Sensitive Data Example](/examples/observability/sensitive-data-filtering.mdx)

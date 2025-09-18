@@ -1,0 +1,305 @@
+---
+title: "CloudExporter | Exporters | AI Tracing | Reference | Mastra Docs"
+description: API reference for the CloudExporter class for sending traces to Mastra Cloud
+---
+
+import { PropertiesTable } from "@/components/properties-table";
+import { Callout } from "nextra/components";
+
+# CloudExporter
+
+The `CloudExporter` sends traces to Mastra Cloud for online visualization, team collaboration, and production monitoring. It provides automatic batching, compression, and secure token-based authentication.
+
+## Constructor
+
+```typescript
+constructor(options?: CloudExporterOptions)
+```
+
+Creates a new CloudExporter instance with the specified options.
+
+### Parameters
+
+<PropertiesTable
+  props={[
+    {
+      name: "options",
+      type: "CloudExporterOptions",
+      description: "Configuration options for the exporter",
+      required: false,
+    },
+  ]}
+/>
+
+## Configuration
+
+```typescript
+type CloudExporterOptions = {
+  accessToken?: string;
+  endpoint?: string;
+  maxBatchSize?: number;
+  maxBatchWaitMs?: number;
+  headers?: Record<string, string>;
+  compression?: boolean;
+}
+```
+
+### Properties
+
+<PropertiesTable
+  props={[
+    {
+      name: "accessToken",
+      type: "string",
+      description: "Mastra Cloud access token (defaults to MASTRA_CLOUD_ACCESS_TOKEN env var)",
+      required: false,
+    },
+    {
+      name: "endpoint",
+      type: "string",
+      description: "Custom API endpoint (defaults to https://api.mastra.ai/ai/spans/publish)",
+      required: false,
+    },
+    {
+      name: "maxBatchSize",
+      type: "number",
+      description: "Maximum number of spans per batch (default: 1000)",
+      required: false,
+    },
+    {
+      name: "maxBatchWaitMs",
+      type: "number",
+      description: "Maximum wait time before flushing batch in milliseconds (default: 5000)",
+      required: false,
+    },
+    {
+      name: "headers",
+      type: "Record<string, string>",
+      description: "Additional HTTP headers to include in requests",
+      required: false,
+    },
+    {
+      name: "compression",
+      type: "boolean",
+      description: "Enable gzip compression for payloads (default: true)",
+      required: false,
+    },
+  ]}
+/>
+
+## Environment Variables
+
+The CloudExporter can be configured using environment variables:
+
+- `MASTRA_CLOUD_ACCESS_TOKEN` - Your Mastra Cloud access token
+- `MASTRA_CLOUD_AI_TRACES_ENDPOINT` - Optional custom endpoint URL
+
+## Getting an Access Token
+
+1. Sign up at [mastra.ai](https://mastra.ai)
+2. Navigate to your project settings
+3. Generate an access token under "API Tokens"
+4. Set the token in your environment:
+
+```bash
+export MASTRA_CLOUD_ACCESS_TOKEN=your_token_here
+```
+
+## Usage Examples
+
+### Basic Configuration
+
+```typescript
+import { CloudExporter } from '@mastra/core/ai-tracing';
+
+// Uses environment variables
+const exporter = new CloudExporter();
+```
+
+### Explicit Configuration
+
+```typescript
+import { CloudExporter } from '@mastra/core/ai-tracing';
+
+const exporter = new CloudExporter({
+  accessToken: 'your_token_here',
+  maxBatchSize: 500,
+  maxBatchWaitMs: 2000,
+  compression: true
+});
+```
+
+### Custom Endpoint
+
+```typescript
+import { CloudExporter } from '@mastra/core/ai-tracing';
+
+const exporter = new CloudExporter({
+  endpoint: 'https://custom.mastra.ai/traces',
+  accessToken: process.env.CUSTOM_TOKEN,
+  headers: {
+    'X-Custom-Header': 'value'
+  }
+});
+```
+
+### Development vs Production
+
+```typescript
+import { CloudExporter } from '@mastra/core/ai-tracing';
+
+const exporter = new CloudExporter({
+  // Smaller batches in development for faster feedback
+  maxBatchSize: process.env.NODE_ENV === 'development' ? 10 : 1000,
+  maxBatchWaitMs: process.env.NODE_ENV === 'development' ? 1000 : 5000,
+});
+```
+
+## Features
+
+### Automatic Batching
+
+The CloudExporter automatically batches spans to reduce network overhead:
+
+- Spans are collected until `maxBatchSize` is reached
+- Or until `maxBatchWaitMs` milliseconds have passed
+- Batches are sent with automatic retry on failure
+
+### Compression
+
+By default, the CloudExporter compresses payloads using gzip:
+
+- Reduces bandwidth usage by up to 90%
+- Automatically enabled for better performance
+- Can be disabled if needed
+
+### Secure Authentication
+
+All requests include authentication headers:
+
+```http
+Authorization: Bearer <access_token>
+Content-Type: application/json
+Content-Encoding: gzip (if compression enabled)
+```
+
+### Graceful Degradation
+
+If no access token is configured:
+
+- Logs a helpful message with signup instructions
+- Operates as a no-op (doesn't block your application)
+- No errors thrown
+
+Example log message:
+```
+[CloudExporter] No access token configured. Sign up at https://mastra.ai to get started with Mastra Cloud tracing.
+```
+
+## Integration with Mastra
+
+When using the default configuration, the CloudExporter is automatically included:
+
+```typescript
+export const mastra = new Mastra({
+  observability: {
+    default: { enabled: true }
+    // CloudExporter is automatically configured if token is available
+  }
+});
+```
+
+To explicitly configure the CloudExporter:
+
+```typescript
+import { CloudExporter } from '@mastra/core/ai-tracing';
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      production: {
+        serviceName: 'my-service',
+        exporters: [
+          new CloudExporter({
+            maxBatchSize: 2000,
+            compression: true
+          })
+        ]
+      }
+    }
+  }
+});
+```
+
+## Methods
+
+### export
+
+```typescript
+async export(spans: ReadableSpan[]): Promise<void>
+```
+
+Exports a batch of spans to Mastra Cloud.
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Flushes any pending spans and closes the exporter.
+
+## Viewing Traces
+
+Once configured, traces are available in the Mastra Cloud dashboard:
+
+1. Log in to [mastra.ai](https://mastra.ai)
+2. Navigate to your project
+3. Click on "AI Traces" in the sidebar
+4. Use filters to find specific traces:
+   - By service name
+   - By span type
+   - By time range
+   - By metadata attributes
+
+## Features in Mastra Cloud
+
+- **Real-time Updates**: See traces as they arrive
+- **Team Collaboration**: Share traces with team members
+- **Advanced Filtering**: Search by any span attribute
+- **Trace Timeline**: Visualize execution flow
+- **Token Analytics**: Track LLM token usage and costs
+- **Error Analysis**: Identify and debug failures
+- **Performance Insights**: Find bottlenecks and optimize
+
+## Error Handling
+
+The CloudExporter includes:
+
+- Automatic retry with exponential backoff
+- Circuit breaker for persistent failures
+- Detailed error logging for debugging
+
+Example error scenarios:
+
+```typescript
+// Invalid token
+[CloudExporter] Authentication failed. Please check your access token.
+
+// Network error
+[CloudExporter] Failed to send batch after 4 retries. Error: Network timeout
+
+// Rate limiting
+[CloudExporter] Rate limited. Backing off for 60 seconds.
+```
+
+<Callout type="tip">
+  For production deployments, we recommend using both DefaultExporter (for local persistence) and CloudExporter (for online monitoring) together for redundancy.
+</Callout>
+
+## Related
+
+- [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter.mdx)
+- [ConsoleExporter](/reference/observability/ai-tracing/exporters/console-exporter.mdx)
+- [AI Tracing Configuration](/reference/observability/ai-tracing/configuration.mdx)
+- [Mastra Cloud Documentation](https://docs.mastra.ai/cloud)
