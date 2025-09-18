@@ -1606,11 +1606,13 @@ export class Run<
     runtimeContext,
     tracingContext,
     format,
+    closeOnSuspend = true,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     format?: 'aisdk' | 'mastra' | undefined;
+    closeOnSuspend?: boolean;
   } = {}): MastraWorkflowStream<TInput, TOutput, TSteps> {
     if (this.closeStreamAction && this.activeStream) {
       return this.activeStream;
@@ -1685,9 +1687,13 @@ export class Run<
           writableStream: writable,
           format,
         }).then(result => {
-          // always close stream, even if the workflow is suspended
-          // this will trigger a finish event with workflow status set to suspended
-          this.closeStreamAction?.().catch(() => {});
+          if (closeOnSuspend) {
+            // always close stream, even if the workflow is suspended
+            // this will trigger a finish event with workflow status set to suspended
+            this.closeStreamAction?.().catch(() => {});
+          } else if (result.status !== 'suspended') {
+            this.closeStreamAction?.().catch(() => {});
+          }
 
           return result;
         });
@@ -1713,7 +1719,11 @@ export class Run<
     format,
   }: {
     resumeData?: z.infer<TInput>;
-    step?: Step<string, any, any, any, any, TEngineType>;
+    step?:
+      | Step<string, any, any, any, any, TEngineType>
+      | [...Step<string, any, any, any, any, TEngineType>[], Step<string, any, any, any, any, TEngineType>]
+      | string
+      | string[];
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     format?: 'aisdk' | 'mastra' | undefined;
