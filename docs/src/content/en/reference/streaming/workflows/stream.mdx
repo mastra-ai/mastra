@@ -35,6 +35,22 @@ const stream = await run.stream({
       description: "Runtime context data to use during workflow execution",
       isOptional: true,
     },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      isOptional: true,
+      description: "AI tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+      properties: [
+        {
+          parameters: [{
+            name: "currentSpan",
+            type: "AISpan",
+            isOptional: true,
+            description: "Current AI span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution."
+          }]
+        }
+      ]
+    },
   ]}
 />
 
@@ -51,6 +67,12 @@ const stream = await run.stream({
       name: "getWorkflowState",
       type: "() => Promise<WorkflowResult<TOutput, TSteps>>",
       description: "A function that returns a promise resolving to the final workflow result",
+    },
+    {
+      name: "traceId",
+      type: "string",
+      isOptional: true,
+      description: "The trace ID associated with this execution when AI tracing is enabled. Use this to correlate logs and debug execution flow.",
     },
   ]}
 />

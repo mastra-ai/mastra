@@ -33,6 +33,53 @@ export const tool = createTool({
 });
 ```
 
+## Example with TracingContext
+
+```typescript filename="src/mastra/tools/traced-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const tracedTool = createTool({
+  id: "data-processor",
+  description: "Process data with custom tracing",
+  inputSchema: z.object({
+    data: z.array(z.string())
+  }),
+  outputSchema: z.object({
+    processed: z.number(),
+    summary: z.string()
+  }),
+  execute: async ({ context, tracingContext }) => {
+    // Create a custom child span if tracing is available
+    const span = tracingContext?.currentSpan?.createSpan({
+      name: "data-processing-operation",
+      type: "TOOL_CALL",
+      attributes: {
+        dataCount: context.data.length,
+      }
+    });
+
+    try {
+      // Process data
+      const processed = context.data.length;
+      const summary = `Processed ${processed} items`;
+
+      // Add custom attributes to the span
+      span?.setAttribute("processingComplete", true);
+      span?.setAttribute("summary", summary);
+
+      return {
+        processed,
+        summary
+      };
+    } finally {
+      // End the custom span
+      span?.end();
+    }
+  }
+});
+```
+
 ## Parameters
 
 <PropertiesTable
@@ -68,8 +115,41 @@ export const tool = createTool({
       name: "execute",
       type: "function",
       description:
-        "The function that contains the tool's logic. It receives an object with `context` (the parsed input based on `inputSchema`), `runtimeContext`, and an object containing `abortSignal`.",
+        "The function that contains the tool's logic. It receives an object with `context` (the parsed input based on `inputSchema`), `runtimeContext`, `tracingContext`, and an object containing `abortSignal`.",
       isOptional: false,
+      properties: [
+        {
+          parameters: [{
+            name: "context",
+            type: "z.infer<TInput>",
+            description: "The parsed input based on inputSchema"
+          }]
+        },
+        {
+          parameters: [{
+            name: "runtimeContext",
+            type: "RuntimeContext",
+            isOptional: true,
+            description: "Runtime context for accessing shared state and dependencies"
+          }]
+        },
+        {
+          parameters: [{
+            name: "tracingContext",
+            type: "TracingContext",
+            isOptional: true,
+            description: "AI tracing context for creating child spans and adding metadata. Automatically injected when the tool is called within a traced operation."
+          }]
+        },
+        {
+          parameters: [{
+            name: "abortSignal",
+            type: "AbortSignal",
+            isOptional: true,
+            description: "Signal for aborting the tool execution"
+          }]
+        }
+      ]
     },
   ]}
 />

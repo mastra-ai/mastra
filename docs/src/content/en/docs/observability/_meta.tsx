@@ -1,9 +1,9 @@
-import { Tag } from "@/components/tag";
 const meta = {
+  overview: "Overview",
   logging: "Logging",
-  tracing: "Tracing",
+  "ai-tracing": "AI Tracing",
+  tracing: "OTLP Tracing",
   "nextjs-tracing": { title: "Next.js Tracing", display: "hidden" },
-  "ai-tracing": <Tag text="experimental">AI Tracing</Tag>,
 };
 
 export default meta;
