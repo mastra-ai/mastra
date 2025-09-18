@@ -16,7 +16,7 @@ import {
 
 export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('result.warnings', () => {
-    it.only('should resolve with warnings', async () => {
+    it('should resolve with warnings', async () => {
       const messageList = new MessageList();
       messageList.add(
         {
@@ -429,7 +429,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       await result.aisdk.v5.consumeStream();
 
-      const steps = result.aisdk.v5.steps;
+      const steps = await result.aisdk.v5.steps;
       // console.log('test-steps', JSON.stringify(steps, null, 2));
 
       expect(steps).toMatchInlineSnapshot(`
@@ -576,7 +576,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       await result.aisdk.v5.consumeStream();
 
-      expect(result.aisdk.v5.steps).toMatchInlineSnapshot(`
+      expect(await result.aisdk.v5.steps).toMatchInlineSnapshot(`
         [
           DefaultStepResult {
             "content": [
@@ -718,13 +718,41 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "modelProvider": "mock-provider",
               "modelVersion": "v2",
               "timestamp": 1970-01-01T00:00:00.000Z,
+              "uiMessages": [
+                {
+                  "id": "msg-0",
+                  "metadata": {
+                    "__originalContent": "Hello!",
+                    "createdAt": 2024-01-01T00:00:00.002Z,
+                  },
+                  "parts": [
+                    {
+                      "mediaType": "text/plain",
+                      "providerMetadata": undefined,
+                      "type": "file",
+                      "url": "data:text/plain;base64,Hello World",
+                    },
+                    {
+                      "text": "Hello!",
+                      "type": "text",
+                    },
+                    {
+                      "mediaType": "image/jpeg",
+                      "providerMetadata": undefined,
+                      "type": "file",
+                      "url": "data:image/jpeg;base64,QkFVRw==",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+              ],
             },
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "totalTokens": 13,
             },
-            "warnings": {},
+            "warnings": [],
           },
         ]
       `);

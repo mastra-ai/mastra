@@ -862,9 +862,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               if (
                 result.payload.toolName === 'flakeyTool' &&
                 result.payload.result &&
-                (typeof result.payload.result === 'object' && 'output' in result.payload.result ?
-                  (result.payload.result as { output?: string }).output?.includes('Success') :
-                  false)
+                result.payload.result.output?.includes('Success')
               ) {
                 foundSuccess = true;
                 break;
@@ -4869,7 +4867,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               thread: 'test-thread-7050',
               resource: 'test-resource-7050',
             },
-            onStepFinish: async (step: any) => {
+            onStepFinish: async step => {
               capturedStep = step;
             },
           });
@@ -4903,13 +4901,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           // should only have a single text part of combined text delta chunks
 
           // More flexible check - content might be string or array depending on message type
-          if (typeof firstMessage.content === 'string') {
-            // If it's a string, that's fine - it means the text was properly combined
-            expect(firstMessage.content).toBe('Hello world');
-          } else if (Array.isArray(firstMessage.content)) {
-            // If it's an array, check that there's only one text part
-            expect(firstMessage.content.filter((p: any) => p.type === `text`)).toHaveLength(1);
-          }
+          expect(firstMessage.content?.filter(p => p.type === `text`)).toHaveLength(1);
         }
       });
 
@@ -9345,7 +9337,7 @@ describe('Agent Tests', () => {
     expect(finalCoreMessages.length).toBe(4); // Assistant call for tool-1, Tool result for tool-1, Assistant call for tool-2, Tool result for tool-2
   });
 
-  // agentTests({ version: 'v1' });
+  agentTests({ version: 'v1' });
   agentTests({ version: 'v2' });
 
   describe('agent.stopWhen', () => {
