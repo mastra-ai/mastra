@@ -4,7 +4,7 @@ import keyword_extractor from 'keyword-extractor';
 
 export function createKeywordCoverageScorer() {
   return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
-    name: 'Completeness',
+    name: 'keyword-coverage',
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
   })

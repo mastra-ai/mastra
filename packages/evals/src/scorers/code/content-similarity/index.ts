@@ -11,7 +11,7 @@ export function createContentSimilarityScorer(
   { ignoreCase, ignoreWhitespace }: ContentSimilarityOptions = { ignoreCase: true, ignoreWhitespace: true },
 ) {
   return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
-    name: 'Completeness',
+    name: 'content-similarity',
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
   })

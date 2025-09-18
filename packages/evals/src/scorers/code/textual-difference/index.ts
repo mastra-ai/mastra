@@ -4,7 +4,7 @@ import { SequenceMatcher } from 'difflib';
 
 export function createTextualDifferenceScorer() {
   return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
-    name: 'Completeness',
+    name: 'textual-difference',
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
   })
