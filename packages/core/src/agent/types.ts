@@ -272,7 +272,7 @@ export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boole
 export type AgentExecuteOnFinishOptions = {
   instructions: string;
   runId: string;
-  result: Parameters<StreamTextOnFinishCallback<ToolSet>>[0];
+  result: Parameters<StreamTextOnFinishCallback<ToolSet>>[0] & { object?: unknown };
   thread: StorageThreadType | null | undefined;
   readOnlyMemory?: boolean;
   threadId?: string;

@@ -78,9 +78,12 @@ export class MastraWorkflowStream<
                 chunk.payload?.output?.from === 'WORKFLOW' &&
                 chunk.payload?.output?.type === 'finish')
             ) {
-              const finishPayload = chunk.payload?.output.payload;
-              if (finishPayload) {
-                updateUsageCount(finishPayload.usage);
+              const output = chunk.payload?.output;
+              if (output && 'payload' in output && output.payload) {
+                const finishPayload = output.payload;
+                if ('usage' in finishPayload && finishPayload.usage) {
+                  updateUsageCount(finishPayload.usage);
+                }
               }
             }
 

@@ -5,6 +5,7 @@ import type { Span } from '@opentelemetry/api';
 import type { CallSettings, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
 import { getResponseFormat } from '../../base/schema';
 import type { OutputSchema } from '../../base/schema';
+import type { LanguageModelV2StreamResult, OnResult } from '../../types';
 import { prepareToolsAndToolChoice } from './compat';
 import { AISDKV5InputStream } from './input';
 import { getModelSupport } from './model-supports';
@@ -24,7 +25,7 @@ type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   telemetry_settings?: TelemetrySettings;
   includeRawChunks?: boolean;
   modelSettings?: CallSettings;
-  onResult: (result: { warnings: Record<string, unknown>; request: Record<string, unknown>; rawResponse: Record<string, unknown> }) => void;
+  onResult: OnResult;
   output?: OUTPUT;
   /**
   Additional HTTP headers to be sent with the request.
@@ -95,13 +96,8 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
           ...(modelSettings ?? {}),
           headers,
         });
-        return {
-          stream: streamResult.stream,
-          warnings: {},
-          request: streamResult.request || {},
-          rawResponse: streamResult.response || {},
-          response: streamResult.response || {},
-        };
+        // We have to cast this because doStream is missing the warnings property in its return type even though it exists
+        return streamResult as LanguageModelV2StreamResult;
       } catch (error) {
         console.error('Error creating stream', error);
         if (isAbortError(error) && options?.abortSignal?.aborted) {
@@ -125,7 +121,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
               controller.close();
             },
           }),
-          warnings: {},
+          warnings: [],
           request: {},
           rawResponse: {},
         };

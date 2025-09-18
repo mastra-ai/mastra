@@ -19,7 +19,16 @@ import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import { transformSteps } from '../aisdk/v5/output-helpers';
 import type { DefaultStepResult } from '../aisdk/v5/output-helpers';
-import type { BufferedByStep, ChunkType, StepBufferItem, SourceChunk, FileChunk, ToolCallChunk, ToolResultChunk, ToolCallPayload } from '../types';
+import type {
+  BufferedByStep,
+  ChunkType,
+  StepBufferItem,
+  SourceChunk,
+  FileChunk,
+  ToolCallChunk,
+  ToolResultChunk,
+  ToolCallPayload,
+} from '../types';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
@@ -46,16 +55,20 @@ export class JsonToSseTransformStream extends TransformStream<unknown, string> {
 }
 
 // Our actual callback types - we pass StepBufferItem which extends StepResult but with our custom properties
-type MastraOnStepFinishCallback = (event: StepBufferItem & { model?: { modelId?: string; provider?: string; version: string } }) => Promise<void> | void;
+type MastraOnStepFinishCallback = (
+  event: StepBufferItem & { model?: { modelId?: string; provider?: string; version: string } },
+) => Promise<void> | void;
 
 // For onFinish, we pass a similar structure but with additional properties
-type MastraOnFinishCallback = (event: StepBufferItem & {
-  steps: DefaultStepResult<ToolSet>[];  // Use our DefaultStepResult type from output-helpers
-  totalUsage: LanguageModelUsage;
-  model?: { modelId?: string; provider?: string; version: string };
-  error?: Error | string | { message: string; stack: string };
-  object?: unknown;
-}) => Promise<void> | void;
+type MastraOnFinishCallback = (
+  event: StepBufferItem & {
+    steps: DefaultStepResult<ToolSet>[]; // Use our DefaultStepResult type from output-helpers
+    totalUsage: LanguageModelUsage;
+    model?: { modelId?: string; provider?: string; version: string };
+    error?: Error | string | { message: string; stack: string };
+    object?: unknown;
+  },
+) => Promise<void> | void;
 
 type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   runId: string;
@@ -216,11 +229,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       processedStream = stream.pipeThrough(
         new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
           async transform(chunk, controller) {
-            const {
-              part: processed,
-              blocked,
-              reason,
-            } = await processorRunner.processPart(chunk, processorStates);
+            const { part: processed, blocked, reason } = await processorRunner.processPart(chunk, processorStates);
             if (blocked) {
               // Emit a tripwire chunk so downstream knows about the abort
               controller.enqueue({
@@ -356,20 +365,22 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 text: self.#bufferedByStep.text,
                 reasoning: self.#bufferedReasoning.map(text => ({ type: 'reasoning' as const, text })), // Convert string array to ReasoningPart array
                 reasoningText: self.#bufferedByStep.reasoning || undefined,
-                staticToolCalls: [],  // These would need conversion which we're avoiding
+                staticToolCalls: [], // These would need conversion which we're avoiding
                 dynamicToolCalls: [],
                 staticToolResults: [],
                 dynamicToolResults: [],
                 finishReason: chunk.payload.stepResult.reason,
                 usage: chunk.payload.output.usage,
                 warnings: self.#warnings,
-                request: request || {} as LanguageModelRequestMetadata,
+                request: request || ({} as LanguageModelRequestMetadata),
                 response: {
                   id: chunk.payload.id || '',
                   timestamp: (chunk.payload.metadata?.timestamp as Date) || new Date(),
-                  modelId: (chunk.payload.metadata?.modelId as string) || (chunk.payload.metadata?.model as string) || '',
+                  modelId:
+                    (chunk.payload.metadata?.modelId as string) || (chunk.payload.metadata?.model as string) || '',
                   ...otherMetadata,
-                  messages: messageList.get.response.aiV5.model()
+                  messages: messageList.get.response.aiV5.model(),
+                  uiMessages: messageList.get.response.aiV5.ui(),
                 },
                 providerMetadata: providerMetadata,
               };
@@ -445,8 +456,12 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 inputTokens: self.#usageCount.inputTokens || 0,
                 outputTokens: self.#usageCount.outputTokens || 0,
                 totalTokens: self.#usageCount.totalTokens || 0,
-                ...(self.#usageCount.reasoningTokens !== undefined && { reasoningTokens: self.#usageCount.reasoningTokens }),
-                ...(self.#usageCount.cachedInputTokens !== undefined && { cachedInputTokens: self.#usageCount.cachedInputTokens }),
+                ...(self.#usageCount.reasoningTokens !== undefined && {
+                  reasoningTokens: self.#usageCount.reasoningTokens,
+                }),
+                ...(self.#usageCount.cachedInputTokens !== undefined && {
+                  cachedInputTokens: self.#usageCount.cachedInputTokens,
+                }),
               };
 
               try {
@@ -459,7 +474,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
                   const messages = self.messageList.get.response.v2();
                   const messagesWithStructuredData = messages.filter(
-                    msg => msg.content.metadata && 'structuredOutput' in msg.content.metadata && msg.content.metadata.structuredOutput,
+                    msg =>
+                      msg.content.metadata &&
+                      'structuredOutput' in msg.content.metadata &&
+                      msg.content.metadata.structuredOutput,
                   );
 
                   if (
@@ -492,7 +510,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   // Check for structuredOutput in metadata (from output processors in stream mode)
                   const messages = self.messageList.get.response.v2();
                   const messagesWithStructuredData = messages.filter(
-                    msg => msg.content.metadata && 'structuredOutput' in msg.content.metadata && msg.content.metadata.structuredOutput,
+                    msg =>
+                      msg.content.metadata &&
+                      'structuredOutput' in msg.content.metadata &&
+                      msg.content.metadata.structuredOutput,
                   );
 
                   if (
@@ -549,7 +570,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   ...baseFinishStep,
 
                   // Override/additional properties for the finish event
-                  steps: transformSteps({ steps: self.#bufferedSteps }),  // Convert to DefaultStepResult[]
+                  steps: transformSteps({ steps: self.#bufferedSteps }), // Convert to DefaultStepResult[]
                   totalUsage: self.#getTotalUsage(),
 
                   // Custom properties (not part of standard callback)
@@ -616,15 +637,16 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   ...(baseFinishStep?.toolCalls && options?.telemetry_settings?.recordOutputs !== false
                     ? {
                         'stream.response.toolCalls': JSON.stringify(
-                          baseFinishStep?.toolCalls?.map(toolCall => {
+                          baseFinishStep?.toolCalls
+                            ?.map(toolCall => {
                               return {
                                 type: 'tool-call',
                                 toolCallId: toolCall.payload.toolCallId,
                                 args: toolCall.payload.args,
                                 toolName: toolCall.payload.toolName,
                               };
-
-                          }).filter(Boolean),
+                            })
+                            .filter(Boolean),
                         ),
                       }
                     : {}),

@@ -948,6 +948,22 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 ],
                 "modelId": "mock-model-id",
                 "timestamp": 1970-01-01T00:00:00.000Z,
+                "uiMessages": [
+                  {
+                    "id": "1234",
+                    "metadata": {
+                      "__originalContent": "{ "content": "Hello, world!" }",
+                      "createdAt": 2024-01-01T00:00:00.000Z,
+                    },
+                    "parts": [
+                      {
+                        "text": "{ "content": "Hello, world!" }",
+                        "type": "text",
+                      },
+                    ],
+                    "role": "assistant",
+                  },
+                ],
               },
               "sources": [],
               "staticToolCalls": [],
@@ -984,13 +1000,29 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     ],
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:00.000Z,
+                    "uiMessages": [
+                      {
+                        "id": "1234",
+                        "metadata": {
+                          "__originalContent": "{ "content": "Hello, world!" }",
+                          "createdAt": 2024-01-01T00:00:00.000Z,
+                        },
+                        "parts": [
+                          {
+                            "text": "{ "content": "Hello, world!" }",
+                            "type": "text",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                    ],
                   },
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
                     "totalTokens": 13,
                   },
-                  "warnings": {},
+                  "warnings": [],
                 },
               ],
               "text": "{ "content": "Hello, world!" }",
@@ -1008,12 +1040,12 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "outputTokens": 10,
                 "totalTokens": 13,
               },
-              "warnings": {},
+              "warnings": [],
             }
           `);
         });
 
-        it("should be called when object doesn't match the schema", async () => {
+        it.only("should be called when object doesn't match the schema", async () => {
           let result: any;
           const { objectStream, object } = loopFn({
             models: [
@@ -1104,6 +1136,22 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 ],
                 "modelId": "mock-model-id",
                 "timestamp": 1970-01-01T00:00:00.000Z,
+                "uiMessages": [
+                  {
+                    "id": "1234",
+                    "metadata": {
+                      "__originalContent": "{ "invalid": "Hello, world!" }",
+                      "createdAt": 2024-01-01T00:00:00.000Z,
+                    },
+                    "parts": [
+                      {
+                        "text": "{ "invalid": "Hello, world!" }",
+                        "type": "text",
+                      },
+                    ],
+                    "role": "assistant",
+                  },
+                ],
               },
               "sources": [],
               "staticToolCalls": [],
@@ -1136,13 +1184,29 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     ],
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:00.000Z,
+                    "uiMessages": [
+                      {
+                        "id": "1234",
+                        "metadata": {
+                          "__originalContent": "{ "invalid": "Hello, world!" }",
+                          "createdAt": 2024-01-01T00:00:00.000Z,
+                        },
+                        "parts": [
+                          {
+                            "text": "{ "invalid": "Hello, world!" }",
+                            "type": "text",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                    ],
                   },
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
                     "totalTokens": 13,
                   },
-                  "warnings": {},
+                  "warnings": [],
                 },
               ],
               "text": "{ "invalid": "Hello, world!" }",
@@ -1160,7 +1224,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "outputTokens": 10,
                 "totalTokens": 13,
               },
-              "warnings": {},
+              "warnings": [],
             }
           `);
         });

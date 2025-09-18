@@ -297,7 +297,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
             totalUsage: chunk.payload.totalUsage,
             headers: responseFromModel.rawResponse?.headers,
             messageId,
-            isContinued: !['stop', 'error'].includes(chunk.payload.reason),
+            isContinued: !['stop', 'error'].includes(chunk.payload.reason as string),
             request: responseFromModel.request,
           },
         });
@@ -527,7 +527,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
                   type: 'step-start',
                   payload: {
                     request: request || {},
-                    warnings: [],
+                    warnings: warnings || [],
                     messageId: messageId,
                   },
                 });

@@ -8,12 +8,8 @@ import type {
   LanguageModelV2,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider-v5';
-import type { LanguageModelV1StreamPart, LanguageModelRequestMetadata } from 'ai';
-import type {
-  CoreMessage,
-  StepResult,
-  ToolSet
-} from 'ai-v5';
+import type { LanguageModelRequestMetadata } from 'ai';
+import type { CoreMessage, StepResult, ToolSet, UIMessage } from 'ai-v5';
 import type { WorkflowStreamEvent } from '../workflows/types';
 import type { OutputSchema, PartialSchemaOutput } from './base/schema';
 
@@ -230,8 +226,20 @@ interface ToolOutputPayload {
   [key: string]: unknown;
 }
 
+// Define a specific type for nested workflow outputs
+type NestedWorkflowOutput = {
+  from: ChunkFrom;
+  type: string;
+  payload?: {
+    output?: ChunkType | NestedWorkflowOutput; // Allow one level of nesting
+    usage?: unknown;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
 interface StepOutputPayload {
-  output: unknown & { from: ChunkFrom; type: string };
+  output: ChunkType | NestedWorkflowOutput;
   [key: string]: unknown;
 }
 
@@ -406,18 +414,29 @@ export type ChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & WorkflowStreamEvent)
   | NetworkChunkType;
 
+export interface LanguageModelV2StreamResult {
+  stream: ReadableStream<LanguageModelV2StreamPart>;
+  request: {
+    body?: unknown;
+  };
+  response: {
+    headers?: Record<string, string>;
+  };
+  warnings?: LanguageModelV2CallWarning[];
+}
+
 export type OnResult = (result: {
-  warnings: Record<string, unknown>;
-  request: Record<string, unknown>;
-  rawResponse: Record<string, unknown>;
+  warnings?: LanguageModelV2CallWarning[];
+  request: LanguageModelV2StreamResult['request'] | LanguageModelRequestMetadata;
+  rawResponse: LanguageModelV2StreamResult['response'] | Record<string, never>;
 }) => void;
 
 export type CreateStream = () => Promise<{
-  stream: ReadableStream<LanguageModelV1StreamPart | LanguageModelV2StreamPart | Record<string, unknown>>;
-  warnings: Record<string, unknown>;
-  request: Record<string, unknown>;
-  rawResponse?: Record<string, unknown>;
-  response?: Record<string, unknown>;
+  stream: ReadableStream<LanguageModelV2StreamPart>;
+  warnings?: LanguageModelV2CallWarning[];
+  request: LanguageModelV2StreamResult['request'] | LanguageModelRequestMetadata;
+  rawResponse?: LanguageModelV2StreamResult['response'];
+  response?: LanguageModelV2StreamResult['response'];
 }>;
 
 // Type helpers for chunk payloads
@@ -426,7 +445,8 @@ export type FileChunk = BaseChunkType & { type: 'file'; payload: FilePayload };
 export type ToolCallChunk = BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload };
 export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload };
 
-export interface StepBufferItem<TOOLS extends ToolSet = ToolSet> extends Omit<StepResult<TOOLS>, 'sources' | 'files' | 'toolCalls' | 'toolResults'> {
+export interface StepBufferItem<TOOLS extends ToolSet = ToolSet>
+  extends Omit<StepResult<TOOLS>, 'sources' | 'files' | 'toolCalls' | 'toolResults' | 'response'> {
   // Our custom properties
   stepType: 'initial' | 'tool-result';
   isContinued?: boolean;
@@ -436,6 +456,11 @@ export interface StepBufferItem<TOOLS extends ToolSet = ToolSet> extends Omit<St
   files: FileChunk[];
   toolCalls: ToolCallChunk[];
   toolResults: ToolResultChunk[];
+
+  // Override response to include uiMessages
+  response: StepResult<TOOLS>['response'] & {
+    uiMessages?: UIMessage[];
+  };
 }
 
 export interface BufferedByStep {

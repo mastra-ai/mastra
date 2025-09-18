@@ -25,16 +25,6 @@ export type StreamPart =
 
 export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: string }): ChunkType | undefined {
   switch (value.type) {
-    case 'stream-start':
-      return {
-        type: 'step-start',
-        runId: ctx.runId,
-        from: ChunkFrom.AGENT,
-        payload: {
-          request: {},
-          warnings: value.warnings,
-        },
-      };
     case 'response-metadata':
       return {
         type: 'response-metadata',
@@ -466,7 +456,7 @@ export function convertMastraChunkToAISDKv5({
           id: chunk.payload.id || '',
           timestamp: new Date(),
           modelId: (rest.modelId as string) || (rest.model as string) || '',
-          ...rest
+          ...rest,
         },
         usage: chunk.payload.output.usage,
         finishReason: chunk.payload.stepResult.reason,
