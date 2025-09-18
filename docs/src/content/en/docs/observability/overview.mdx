@@ -1,13 +1,20 @@
 ---
 title: "Overview | Observability | Mastra Docs"
-description: Monitor and debug AI applications with Mastra's observability features including AI tracing and structured logging.
+description: Monitor and debug applications with Mastra's Observability features.
 ---
+
+import { Callout } from "nextra/components";
 
 # Observability Overview
 
 Mastra provides comprehensive observability features designed specifically for AI applications. Monitor LLM operations, trace agent decisions, and debug complex workflows with specialized tools that understand AI-specific patterns.
 
 ## Key Features
+
+### Structured Logging
+Debug applications with contextual logging:
+- **Context propagation**: Automatic correlation with traces
+- **Configurable levels**: Filter by severity in development and production
 
 ### AI Tracing
 Specialized tracing for AI operations that captures:
@@ -16,127 +23,44 @@ Specialized tracing for AI operations that captures:
 - **Workflow steps**: Branching logic, parallel execution, and step outputs
 - **Automatic instrumentation**: Zero-configuration tracing with decorators
 
-### Structured Logging
-Debug applications with contextual logging:
-- **PinoLogger**: High-performance JSON logging
-- **Context propagation**: Automatic correlation with traces
-- **Configurable levels**: Filter by severity in development and production
+### OTLP Tracing (Deprecated)
+Traditional distributed tracing with OpenTelemetry:
+- **Standard OTLP protocol**: Compatible with existing observability infrastructure
+- **HTTP and database instrumentation**: Automatic spans for common operations
+- **Provider integrations**: Datadog, New Relic, Jaeger, and other OTLP collectors
+- **Distributed context**: W3C Trace Context propagation
+
+<Callout type="warning">
+OTLP Tracing is deprecated and will be removed in a future release. For new projects, use AI Tracing which provides better support for AI-specific operations. See the [migration guide](/examples/observability/migration-from-otlp.mdx) for details.
+</Callout>
 
 ## Quick Start
 
-### Basic Setup
-
-Configure AI tracing in your Mastra instance:
+Configure Observability in your Mastra instance:
 
 ```typescript filename="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
-import { LangfuseExporter } from "@mastra/langfuse";
+import { PinoLogger } from "@mastra/core";
+import { createLibSqlStorage } from "@mastra/libsql";
 
 export const mastra = new Mastra({
+  // ... other config
+  logger: new PinoLogger(),
   observability: {
-    // Default and Cloud exporters are included automatically
-    exporters: [
-      new LangfuseExporter({
-        publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
-        secretKey: process.env.LANGFUSE_SECRET_KEY!,
-        baseUrl: process.env.LANGFUSE_BASEURL,
-      }),
-    ],
+    default: { enabled: true }, // Enables AI Tracing
   },
+  storage: new LibSQLStore({
+    url: "file:./mastra.db", // Storage is required for tracing
+  }),
+  telemetry: {
+    enabled: true, // Enables OTLP Tracing (Deprecated)
+  }
 });
 ```
 
-### View Traces
+With this basic setup, you will see Traces and Logs in both the Playground and in Mastra Cloud.
 
-Traces are automatically sent to configured exporters:
-- **Mastra Playground**: View traces locally during development
-- **Mastra Cloud**: Production monitoring with team collaboration
-- **External providers**: Langfuse, Braintrust for specialized analysis
-
-## Feature Comparison
-
-| Feature | AI Tracing | OTLP Tracing (Deprecated) |
-|---------|------------|---------------------------|
-| **Configuration** | `observability` property | `telemetry` property |
-| **Focus** | AI-specific operations | General distributed tracing |
-| **Automatic instrumentation** | ✓ Agents, LLMs, tools, workflows | ✓ HTTP, database calls |
-| **Token tracking** | ✓ Built-in | ✗ Manual |
-| **Conversation threads** | ✓ Native support | ✗ Manual correlation |
-| **Provider formats** | ✓ Langfuse, Braintrust native | ✗ OTLP only |
-| **Storage backends** | ✓ libsql, memory | ✗ External collectors |
-| **Sampling strategies** | ✓ AI-aware sampling | ✓ Standard sampling |
-
-## Choosing the Right Approach
-
-### Use AI Tracing when:
-- Building agent-based applications
-- Monitoring LLM token usage and costs
-- Debugging conversation flows
-- Analyzing tool execution patterns
-- Exporting to AI-specific platforms (Langfuse, Braintrust)
-
-### Continue using OTLP Tracing when:
-- You have existing OTLP infrastructure
-- Monitoring traditional microservices alongside AI
-- Required by compliance or organizational standards
-
-<Callout type="note">
-OTLP Tracing is deprecated and will be removed in a future release. We recommend migrating to AI Tracing for all new projects. See the [migration guide](/examples/observability/migration-from-otlp.mdx) for details.
-</Callout>
-
-## Built-in Exporters
-
-Mastra includes three exporters by default:
-
-### DefaultExporter
-Persists traces to local storage for development and debugging:
-- **libsql**: SQLite-compatible database with full query support
-- **memory**: In-memory storage for testing
-
-### CloudExporter
-Sends traces to Mastra Cloud for production monitoring:
-- Team collaboration features
-- Advanced filtering and search
-- Long-term retention
-
-### Third-party Exporters
-Connect to specialized AI observability platforms:
-- **[Langfuse](/examples/observability/langfuse-integration.mdx)**: Open-source LLM observability
-- **[Braintrust](/examples/observability/braintrust-integration.mdx)**: AI evaluation and monitoring
-- **OpenTelemetry**: Coming soon
-- **PostHog**: Coming soon
-
-## Configuration Options
-
-### Basic Configuration
-```typescript
-{
-  observability: {
-    exporters: [...],  // Additional exporters
-    sampling: {
-      sampleRate: 1.0, // Sample 100% of traces
-    },
-  }
-}
-```
-
-### Advanced Configuration
-Use `configSelector` for dynamic configuration:
-
-```typescript
-{
-  observability: {
-    configSelector: (ctx) => ({
-      exporters: ctx.environment === 'production'
-        ? [new LangfuseExporter(...)]
-        : [],
-      sampling: {
-        sampleRate: ctx.environment === 'production' ? 0.1 : 1.0,
-      },
-    }),
-  },
-}
-```
+We also support various external tracing providers like Langfuse and Braintrust. See more about this in the [AI Tracing](/docs/observability/ai-tracing.mdx) documentation.
 
 ## What's Next?
 

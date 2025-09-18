@@ -1,5 +1,5 @@
 ---
-title: "AI Tracing | Observability | Mastra Docs"
+title: "AI Tracing TEST | Observability | Mastra Docs"
 description: "Set up AI tracing for Mastra applications"
 ---
 
@@ -15,13 +15,13 @@ Unlike traditional application tracing, AI Tracing focuses specifically on under
 
 You create AI traces by:
 
-- **Configuring exporters** to send trace data to observability platforms like Langfuse
+- **Configuring exporters** to send trace data to observability platforms
 - **Setting sampling strategies** to control which traces are collected
-- **Running agents and workflows** — Mastra automatically instruments them with detailed AI tracing
+- **Running agents and workflows** — Mastra automatically instruments them with AI Tracing
 
 This provides full visibility into your AI operations with minimal setup, helping you build more reliable and observable AI applications.
 
-## Basic Configuration
+## Basic Config
 
 ```ts filename="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
@@ -29,82 +29,61 @@ export const mastra = new Mastra({
   observability: {
     default: { enabled: true }, // Enables DefaultExporter and CloudExporter
   },
+  storage: new LibSQLStore({
+    url: "file:./mastra.db", // Storage is required for tracing
+  }),
 });
 ```
 
 When enabled, the default configuration automatically includes:
 - **Service Name**: `"mastra"`
-- **Sampling**: Always sample (100% of traces)
+- **Sampling**: `"always"`- Sample (100% of traces)
 - **Exporters**:
   - `DefaultExporter` - Persists traces to your configured storage
   - `CloudExporter` - Sends traces to Mastra Cloud (requires `MASTRA_CLOUD_ACCESS_TOKEN`)
 - **Processors**: `SensitiveDataFilter` - Automatically redacts sensitive fields
 
-## Adding External Exporters
+### Expanded Basic Config
 
-### Langfuse
-
-[Langfuse](https://langfuse.com/) provides open-source LLM observability with detailed trace analysis.
-
-```bash
-npm install @mastra/langfuse
-```
+This default configuration is a minimal helper that equates to this more verbose configuration:
 
 ```ts filename="src/mastra/index.ts" showLineNumbers copy
-import { LangfuseExporter } from '@mastra/langfuse';
+import { CloudExporter, DefaultExporter, SensitiveDataFilter } from '@mastra/core/ai-tracing';
 
 export const mastra = new Mastra({
+  // ... other config
   observability: {
-    configs: {
-      langfuse: {
-        serviceName: 'my-service',
-        exporters: [
-          new LangfuseExporter({
-            publicKey: process.env.LANGFUSE_PUBLIC_KEY,
-            secretKey: process.env.LANGFUSE_SECRET_KEY,
-            baseUrl: process.env.LANGFUSE_BASE_URL, // Optional
-            realtime: process.env.NODE_ENV === 'development',
-            options: {
-              environment: process.env.NODE_ENV, // Shows in Langfuse UI
-            },
-          }),
+    config: {
+      default: {
+        serviceName: "mastra",
+        sampling: { type: 'always' },
+        processors: [
+          new SensitiveDataFilter(),
         ],
-      },
-    },
+        exporters: [
+          new CloudExporter(),
+          new DefaultExporter(),
+        ],
+      }
+    }
   },
+  storage: new LibSQLStore({
+    url: "file:./mastra.db", // Storage is required for tracing
+  }),
 });
 ```
 
-<Callout type="tip">
-  Set `realtime: true` during development for immediate trace visibility in the Langfuse dashboard. In production, use batch mode (default) for better performance.
-</Callout>
 
-### Braintrust
+## External Exporters
 
-[Braintrust](https://www.braintrust.dev/) provides AI evaluation and monitoring capabilities.
+The following external exporters are currently supported. See the linked reference documentation to set them up.
 
-```bash
-npm install @mastra/braintrust
-```
+| Provider | Status | Reference | Example |
+|------|------|------|-----|
+| [Langfuse](https://langfuse.com/) | Beta ||
+| [Braintrust](https://www.braintrust.dev/) | Beta ||
+| [OpenTelemetry](https://opentelemetry.io/) | Coming Soon ||
 
-```ts filename="src/mastra/index.ts" showLineNumbers copy
-import { BraintrustExporter } from '@mastra/braintrust';
-
-export const mastra = new Mastra({
-  observability: {
-    configs: {
-      braintrust: {
-        serviceName: 'my-service',
-        exporters: [
-          new BraintrustExporter({
-            apiKey: process.env.BRAINTRUST_API_KEY,
-          }),
-        ],
-      },
-    },
-  },
-});
-```
 
 ## Sampling Strategies
 
@@ -120,18 +99,6 @@ export const mastra = new Mastra({
         sampling: {
           type: 'ratio',
           probability: 0.1
-        },
-        exporters: [langfuseExporter],
-      },
-      debug: {
-        serviceName: 'my-service',
-        // Custom sampling logic
-        sampling: {
-          type: 'custom',
-          sampler: (context) => {
-            // Only trace specific users
-            return context.metadata?.userId === 'debug-user';
-          }
         },
         exporters: [langfuseExporter],
       },

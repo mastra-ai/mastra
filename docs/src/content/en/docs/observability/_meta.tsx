@@ -1,8 +1,8 @@
 const meta = {
   overview: "Overview",
-  "ai-tracing": "AI Tracing",
-  tracing: "Tracing (OTLP)",
   logging: "Logging",
+  "ai-tracing": "AI Tracing",
+  tracing: "OTLP Tracing",
   "nextjs-tracing": { title: "Next.js Tracing", display: "hidden" },
 };
 
