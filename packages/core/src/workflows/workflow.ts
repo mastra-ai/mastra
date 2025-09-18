@@ -187,10 +187,9 @@ export function createStep<
           args: inputData,
         };
 
-        // TODO: add support for format, if format is undefined use stream, else streamVNext
         let stream: ReadableStream<any>;
 
-        if (streamFormat === 'aisdk') {
+        if ((await params.getModel()).specificationVersion === 'v1') {
           const { fullStream } = await params.stream(inputData.prompt, {
             // resourceId: inputData.resourceId,
             // threadId: inputData.threadId,
@@ -200,9 +199,20 @@ export function createStep<
             },
             abortSignal,
           });
-
           stream = fullStream as any;
+        } else {
+          const modelOutput = await params.streamVNext(inputData.prompt, {
+            runtimeContext,
+            onFinish: result => {
+              streamPromise.resolve(result.text);
+            },
+            // abortSignal,
+          });
 
+          stream = modelOutput.fullStream;
+        }
+
+        if (streamFormat === 'aisdk') {
           await emitter.emit('watch-v2', {
             type: 'tool-call-streaming-start',
             ...(toolData ?? {}),
@@ -221,16 +231,6 @@ export function createStep<
             ...(toolData ?? {}),
           });
         } else {
-          const modelOutput = await params.streamVNext(inputData.prompt, {
-            runtimeContext,
-            onFinish: result => {
-              streamPromise.resolve(result.text);
-            },
-            // abortSignal,
-          });
-
-          stream = modelOutput.fullStream;
-
           for await (const chunk of stream) {
             await writer.write(chunk as any);
           }
