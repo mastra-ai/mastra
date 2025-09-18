@@ -1464,6 +1464,7 @@ export class Agent<
           model: await this.getModel({ runtimeContext }),
           writableStream,
           tracingPolicy: this.#options?.tracingPolicy,
+          requireApproval: (tool as any).requireApproval,
         };
         return [k, makeCoreTool(tool, options)];
       }),
