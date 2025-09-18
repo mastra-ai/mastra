@@ -32,13 +32,17 @@ export class Tool<
     if (opts.execute) {
       const originalExecute = opts.execute;
       this.execute = async (context: TContext, options?: ToolInvocationOptions) => {
+        const { resumeData, suspend } = options as {
+          resumeData?: any;
+          suspend?: (suspendPayload: any) => Promise<any>;
+        };
         // Validate input if schema exists
         const { data, error } = validateToolInput(this.inputSchema, context, this.id);
         if (error) {
           return error as any;
         }
 
-        return originalExecute(data as TContext, options);
+        return originalExecute({ ...(data as TContext), suspend, resumeData } as TContext, options);
       };
     }
   }

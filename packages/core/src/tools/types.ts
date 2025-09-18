@@ -12,10 +12,7 @@ import type { ToolStream } from './stream';
 export type VercelTool = Tool;
 export type VercelToolV5 = ToolV5;
 
-export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions; /* & {
-  suspend?: (suspendPayload: any) => Promise<any>;
-  resumeData?: any;
-}; */
+export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
 
 // Define CoreTool as a discriminated union to match the AI SDK's Tool type
 export type CoreTool = {
@@ -61,6 +58,8 @@ export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema | undefined 
   runtimeContext: RuntimeContext;
   writer?: ToolStream<any>;
   tracingContext?: TracingContext;
+  suspend: (suspendPayload: any) => Promise<any>;
+  resumeData?: any;
 }
 
 export interface ToolAction<
