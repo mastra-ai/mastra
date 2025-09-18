@@ -10,10 +10,11 @@ interface ContentSimilarityOptions {
 export function createContentSimilarityScorer(
   { ignoreCase, ignoreWhitespace }: ContentSimilarityOptions = { ignoreCase: true, ignoreWhitespace: true },
 ) {
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer({
     name: 'content-similarity',
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
+    type: 'agent',
   })
     .preprocess(async ({ run }) => {
       let processedInput = run.input?.inputMessages.map((i: { content: string }) => i.content).join(', ') || '';

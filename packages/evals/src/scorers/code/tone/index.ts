@@ -9,10 +9,11 @@ interface ToneScorerConfig {
 export function createToneScorer(config: ToneScorerConfig = {}) {
   const { referenceTone } = config;
 
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer({
     name: 'tone',
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
+    type: 'agent',
   })
     .preprocess(async ({ run }) => {
       const sentiment = new Sentiment();

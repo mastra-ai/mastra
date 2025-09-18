@@ -30,13 +30,14 @@ const analyzeOutputSchema = z.object({
 export function createToolCallAccuracyScorerLLM({ model, availableTools }: ToolCallAccuracyOptions) {
   const toolDefinitions = availableTools.map(tool => `${tool.id}: ${tool.description}`).join('\n');
 
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer({
     name: 'Tool Call Accuracy (LLM)',
     description: 'Evaluates whether an agent selected appropriate tools for the given task using LLM analysis',
     judge: {
       model,
       instructions: TOOL_SELECTION_ACCURACY_INSTRUCTIONS,
     },
+    type: 'agent',
   })
     .preprocess(async ({ run }) => {
       const isInputInvalid = !run.input || !run.input.inputMessages || run.input.inputMessages.length === 0;

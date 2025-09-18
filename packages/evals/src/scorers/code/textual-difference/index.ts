@@ -3,10 +3,11 @@ import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/co
 import { SequenceMatcher } from 'difflib';
 
 export function createTextualDifferenceScorer() {
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer({
     name: 'textual-difference',
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
+    type: 'agent',
   })
     .preprocess(async ({ run }) => {
       const input = run.input?.inputMessages?.map((i: { content: string }) => i.content).join(', ') || '';
