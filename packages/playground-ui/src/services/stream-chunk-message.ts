@@ -81,7 +81,6 @@ export const handleStreamChunk = async ({
                 part.toolCallId === chunk.payload.toolCallId
               ) {
                 const existingToolOutput = part.args?.__mastraMetadata?.toolOutput || [];
-                existingToolOutput.push(chunk?.payload?.output);
 
                 return {
                   ...part,
@@ -89,7 +88,7 @@ export const handleStreamChunk = async ({
                     ...part.args,
                     __mastraMetadata: {
                       ...part.args?.__mastraMetadata,
-                      toolOutput: existingToolOutput,
+                      toolOutput: [...existingToolOutput, chunk?.payload?.output],
                     },
                   },
                 };

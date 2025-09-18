@@ -7,28 +7,11 @@ export const cookingTool = createTool({
   inputSchema: z.object({
     ingredient: z.string(),
   }),
-  execute: async ({ context, writer }, options) => {
+  execute: async ({ context }, options) => {
     console.log('My cooking tool is running!', context.ingredient);
     if (options?.toolCallId) {
       console.log('Cooking tool call ID:', options.toolCallId);
     }
-
-    await writer?.write({
-      type: 'custom-event',
-      status: 'success',
-      payload: {
-        message: 'First shoot',
-      },
-    });
-
-    await writer?.write({
-      type: 'custom-event',
-      status: 'success',
-      payload: {
-        message: 'second shoot',
-      },
-    });
-
-    return 'Something great';
+    return 'My tool result';
   },
 });
