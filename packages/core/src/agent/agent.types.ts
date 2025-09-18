@@ -1,6 +1,6 @@
 import type { JSONSchema7 } from '@ai-sdk/provider';
 import type { TelemetrySettings } from 'ai';
-import type { ModelMessage, ToolChoice } from 'ai-v5';
+import type { ModelMessage, SystemModelMessage, ToolChoice } from 'ai-v5';
 import type { z } from 'zod';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodAny } from 'zod/v4';
@@ -15,6 +15,7 @@ import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
 import type { MessageListInput } from './message-list';
 import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions } from './types';
+import type { CoreSystemMessage } from '../llm';
 
 export type MultiPrimitiveExecutionOptions = {
   /** Memory configuration for conversation persistence and retrieval */
@@ -52,7 +53,7 @@ export type AgentExecutionOptions<
   instructions?: string;
 
   /** Custom system message to include in the prompt */
-  system?: string;
+  system?: string | CoreSystemMessage | SystemModelMessage;
 
   /** Additional context messages to provide to the agent */
   context?: ModelMessage[];

@@ -2,6 +2,7 @@ import deepEqual from 'fast-deep-equal';
 import { z } from 'zod';
 import type { AISpan, AISpanType } from '../../../ai-tracing';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
+import type { CoreSystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
 import type { RuntimeContext } from '../../../runtime-context';
@@ -10,6 +11,24 @@ import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { MessageList } from '../../message-list';
 import type { AgentCapabilities } from './types';
+import type { SystemModelMessage } from 'ai-v5';
+
+/**
+ * Helper function to add user-provided system message to a MessageList
+ * Handles string, CoreSystemMessage, and SystemModelMessage formats
+ */
+function addUserSystemMessage(
+  messageList: MessageList,
+  system: string | CoreSystemMessage | SystemModelMessage | undefined,
+): void {
+  if (!system) return;
+
+  if (typeof system === 'string') {
+    messageList.addSystem(system, 'user-provided');
+  } else if ('content' in system && system.content) {
+    messageList.addSystem(system.content, 'user-provided');
+  }
+}
 
 interface PrepareMemoryStepOptions<
   OUTPUT extends OutputSchema | undefined = undefined,
@@ -67,6 +86,9 @@ export function createPrepareMemoryStep<
           content: instructions,
         })
         .add(options.context || [], 'context');
+
+      // Add user-provided system message if present
+      addUserSystemMessage(messageList, options.system);
 
       if (!memory || (!thread?.id && !resourceId)) {
         messageList.add(options.messages, 'user');
@@ -236,9 +258,12 @@ export function createPrepareMemoryStep<
         .addSystem(instructions)
         .addSystem(memorySystemMessage)
         .addSystem(systemMessages)
-        .add(options.context || [], 'context')
-        .add(processedMemoryMessages, 'memory')
-        .add(messageList.get.input.v2(), 'user');
+        .add(options.context || [], 'context');
+
+      // Add user-provided system message if present
+      addUserSystemMessage(processedList, options.system);
+
+      processedList.add(processedMemoryMessages, 'memory').add(messageList.get.input.v2(), 'user');
 
       return {
         thread: threadObject,
