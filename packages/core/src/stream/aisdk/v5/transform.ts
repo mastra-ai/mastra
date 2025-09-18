@@ -9,7 +9,7 @@ import type { ChunkType } from '../../types';
 import { ChunkFrom } from '../../types';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './file';
 
-type StreamPart =
+export type StreamPart =
   | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
   | {
       type: 'finish';
@@ -25,12 +25,22 @@ type StreamPart =
 
 export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: string }): ChunkType | undefined {
   switch (value.type) {
+    case 'stream-start':
+      return {
+        type: 'step-start',
+        runId: ctx.runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          request: {},
+          warnings: value.warnings,
+        },
+      };
     case 'response-metadata':
       return {
         type: 'response-metadata',
         runId: ctx.runId,
         from: ChunkFrom.AGENT,
-        payload: value,
+        payload: { ...value },
       };
     case 'text-start':
       return {

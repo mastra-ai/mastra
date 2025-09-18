@@ -6,17 +6,13 @@ import type {
   LanguageModelV2CallWarning,
   LanguageModelV2ResponseMetadata,
   LanguageModelV2,
-  LanguageModelV2Source,
+  LanguageModelV2StreamPart,
 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1StreamPart, LanguageModelRequestMetadata } from 'ai';
 import type {
   CoreMessage,
   StepResult,
-  ToolSet,
-  TypedToolCall,
-  TypedToolResult,
-  GeneratedFile,
-  ReasoningUIPart
+  ToolSet
 } from 'ai-v5';
 import type { WorkflowStreamEvent } from '../workflows/types';
 import type { OutputSchema, PartialSchemaOutput } from './base/schema';
@@ -73,7 +69,7 @@ interface ReasoningEndPayload {
   signature?: string;
 }
 
-interface SourcePayload {
+export interface SourcePayload {
   id: string;
   sourceType: 'url' | 'document';
   title: string;
@@ -83,14 +79,14 @@ interface SourcePayload {
   providerMetadata?: SharedV2ProviderMetadata;
 }
 
-interface FilePayload {
+export interface FilePayload {
   data: string | Uint8Array;
   base64?: string;
   mimeType: string;
   providerMetadata?: SharedV2ProviderMetadata;
 }
 
-interface ToolCallPayload {
+export interface ToolCallPayload {
   toolCallId: string;
   toolName: string;
   args?: Record<string, unknown>;
@@ -99,7 +95,7 @@ interface ToolCallPayload {
   output?: unknown;
 }
 
-interface ToolResultPayload {
+export interface ToolResultPayload {
   toolCallId: string;
   toolName: string;
   result: unknown;
@@ -195,6 +191,11 @@ export interface StepFinishPayload {
     providerMetadata?: SharedV2ProviderMetadata;
     [key: string]: unknown;
   };
+  messages?: {
+    all: CoreMessage[];
+    user: CoreMessage[];
+    nonUser: CoreMessage[];
+  };
   [key: string]: unknown;
 }
 
@@ -230,7 +231,7 @@ interface ToolOutputPayload {
 }
 
 interface StepOutputPayload {
-  output: unknown;
+  output: unknown & { from: ChunkFrom; type: string };
   [key: string]: unknown;
 }
 
@@ -412,41 +413,38 @@ export type OnResult = (result: {
 }) => void;
 
 export type CreateStream = () => Promise<{
-  stream: ReadableStream<LanguageModelV1StreamPart | Record<string, unknown>>;
+  stream: ReadableStream<LanguageModelV1StreamPart | LanguageModelV2StreamPart | Record<string, unknown>>;
   warnings: Record<string, unknown>;
   request: Record<string, unknown>;
   rawResponse?: Record<string, unknown>;
   response?: Record<string, unknown>;
 }>;
 
-export interface StepBufferItem<TOOLS extends ToolSet = ToolSet> {
+// Type helpers for chunk payloads
+export type SourceChunk = BaseChunkType & { type: 'source'; payload: SourcePayload };
+export type FileChunk = BaseChunkType & { type: 'file'; payload: FilePayload };
+export type ToolCallChunk = BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload };
+export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload };
+
+export interface StepBufferItem<TOOLS extends ToolSet = ToolSet> extends Omit<StepResult<TOOLS>, 'sources' | 'files' | 'toolCalls' | 'toolResults'> {
+  // Our custom properties
   stepType: 'initial' | 'tool-result';
-  text: string;
-  reasoning?: string;
-  sources: LanguageModelV2Source[];
-  files: GeneratedFile[];
-  toolCalls: TypedToolCall<TOOLS>[];
-  toolResults: TypedToolResult<TOOLS>[];
-  warnings?: LanguageModelV2CallWarning[];
-  reasoningDetails?: ReasoningUIPart;
-  providerMetadata?: SharedV2ProviderMetadata;
-  experimental_providerMetadata?: SharedV2ProviderMetadata;
   isContinued?: boolean;
-  logprobs?: LanguageModelV1LogProbs;
-  finishReason?: LanguageModelV2FinishReason;
-  response?: StepResult<TOOLS>['response'];
-  request?: LanguageModelRequestMetadata;
-  usage?: LanguageModelV2Usage;
-  content: StepResult<TOOLS>['content'];
+
+  // Keep original Mastra chunk format for these
+  sources: SourceChunk[];
+  files: FileChunk[];
+  toolCalls: ToolCallChunk[];
+  toolResults: ToolResultChunk[];
 }
 
-export interface BufferedByStep<TOOLS extends ToolSet = ToolSet> {
+export interface BufferedByStep {
   text: string;
   reasoning: string;
-  sources: LanguageModelV2Source[];
-  files: GeneratedFile[];
-  toolCalls: TypedToolCall<TOOLS>[];
-  toolResults: TypedToolResult<TOOLS>[];
+  sources: SourceChunk[];
+  files: FileChunk[];
+  toolCalls: ToolCallChunk[];
+  toolResults: ToolResultChunk[];
   msgCount: number;
 }
 

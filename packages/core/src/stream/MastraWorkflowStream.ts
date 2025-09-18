@@ -123,7 +123,7 @@ export class MastraWorkflowStream<
           payload: {
             workflowStatus,
             output: {
-              usage: this.#usageCount as any,
+              usage: this.#usageCount,
             },
             metadata: {},
           },

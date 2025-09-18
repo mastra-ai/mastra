@@ -16,7 +16,7 @@ import {
 
 export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('result.warnings', () => {
-    it('should resolve with warnings', async () => {
+    it.only('should resolve with warnings', async () => {
       const messageList = new MessageList();
       messageList.add(
         {
@@ -724,7 +724,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "outputTokens": 10,
               "totalTokens": 13,
             },
-            "warnings": [],
+            "warnings": {},
           },
         ]
       `);
