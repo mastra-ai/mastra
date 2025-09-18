@@ -5,6 +5,7 @@ import type { z } from 'zod';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodAny } from 'zod/v4';
 import type { TracingContext, TracingOptions } from '../ai-tracing';
+import type { SystemMessage } from '../llm';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
@@ -50,6 +51,9 @@ export type AgentExecutionOptions<
 
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: string;
+
+  /** Custom system message to include in the prompt */
+  system?: SystemMessage;
 
   /** Additional context messages to provide to the agent */
   context?: ModelMessage[];
