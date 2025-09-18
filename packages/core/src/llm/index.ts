@@ -15,6 +15,7 @@ import type {
   StreamTextOnFinishCallback,
   StreamObjectOnFinishCallback,
 } from 'ai';
+import type { SystemModelMessage } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
@@ -23,7 +24,6 @@ import type { Run } from '../run/types';
 import type { RuntimeContext } from '../runtime-context';
 import type { CoreTool } from '../tools/types';
 import type { MastraLanguageModel } from './model/shared.types';
-import type { SystemModelMessage } from 'ai-v5';
 
 export type LanguageModel = MastraLanguageModel;
 

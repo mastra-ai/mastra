@@ -6670,7 +6670,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       // Consume the stream
       const fullContent = await result.textStream;
-      for await (const chunk of fullContent) {
+      for await (const _chunk of fullContent) {
         // Just consume the stream
       }
 

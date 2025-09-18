@@ -5,6 +5,7 @@ import type { z } from 'zod';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodAny } from 'zod/v4';
 import type { TracingContext, TracingOptions } from '../ai-tracing';
+import type { SystemMessage } from '../llm';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
@@ -15,7 +16,6 @@ import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
 import type { MessageListInput } from './message-list';
 import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions } from './types';
-import type { SystemMessage } from '../llm';
 
 export type MultiPrimitiveExecutionOptions = {
   /** Memory configuration for conversation persistence and retrieval */
