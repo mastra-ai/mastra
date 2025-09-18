@@ -711,15 +711,7 @@ export function createStep<
       outputSchema: z.object({
         text: z.string(),
       }),
-      execute: async ({
-        inputData,
-        [EMITTER_SYMBOL]: emitter,
-        [STREAM_FORMAT_SYMBOL]: streamFormat,
-        runtimeContext,
-        abortSignal,
-        abort,
-        writer,
-      }) => {
+      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext, abortSignal, abort, tracingContext }) => {
         let streamPromise = {} as {
           promise: Promise<string>;
           resolve: (value: string) => void;
@@ -735,58 +727,38 @@ export function createStep<
           args: inputData,
         };
 
-        let stream: ReadableStream<any>;
-
-        if ((await params.getModel()).specificationVersion === 'v1') {
-          const { fullStream } = await params.stream(inputData.prompt, {
-            // resourceId: inputData.resourceId,
-            // threadId: inputData.threadId,
-            runtimeContext,
-            onFinish: result => {
-              streamPromise.resolve(result.text);
-            },
-            abortSignal,
-          });
-          stream = fullStream as any;
-        } else {
-          const modelOutput = await params.streamVNext(inputData.prompt, {
-            runtimeContext,
-            onFinish: result => {
-              streamPromise.resolve(result.text);
-            },
-            // abortSignal,
-          });
-
-          stream = modelOutput.fullStream;
-        }
-
-        if (streamFormat === 'aisdk') {
-          await emitter.emit('watch-v2', {
-            type: 'tool-call-streaming-start',
-            ...(toolData ?? {}),
-          });
-          for await (const chunk of stream) {
-            if (chunk.type === 'text-delta') {
-              await emitter.emit('watch-v2', {
-                type: 'tool-call-delta',
-                ...(toolData ?? {}),
-                argsTextDelta: chunk.textDelta,
-              });
-            }
-          }
-          await emitter.emit('watch-v2', {
-            type: 'tool-call-streaming-finish',
-            ...(toolData ?? {}),
-          });
-        } else {
-          for await (const chunk of stream) {
-            await writer.write(chunk as any);
-          }
-        }
+        const { fullStream } = await params.stream(inputData.prompt, {
+          runtimeContext,
+          tracingContext,
+          onFinish: result => {
+            streamPromise.resolve(result.text);
+          },
+          abortSignal,
+        });
 
         if (abortSignal.aborted) {
           return abort();
         }
+
+        await emitter.emit('watch-v2', {
+          type: 'tool-call-streaming-start',
+          ...(toolData ?? {}),
+        });
+
+        for await (const chunk of fullStream) {
+          if (chunk.type === 'text-delta') {
+            await emitter.emit('watch-v2', {
+              type: 'tool-call-delta',
+              ...(toolData ?? {}),
+              argsTextDelta: chunk.textDelta,
+            });
+          }
+        }
+
+        await emitter.emit('watch-v2', {
+          type: 'tool-call-streaming-finish',
+          ...(toolData ?? {}),
+        });
 
         return {
           text: await streamPromise.promise,
