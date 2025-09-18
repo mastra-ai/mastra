@@ -115,6 +115,13 @@ export function TraceDialog({
   const traceInfo = getTraceInfo(traceDetails, computeAgentsLink, computeWorkflowsLink);
   const selectedSpanInfo = getSpanInfo({ span: selectedSpan, withTraceId: !combinedView, withSpanId: combinedView });
 
+  let entityType;
+  if (traceDetails?.attributes?.agentId) {
+    entityType = 'Agent';
+  } else if (traceDetails?.attributes?.workflowId) {
+    entityType = 'Workflow';
+  }
+
   return (
     <>
       <SideDialog
@@ -153,13 +160,7 @@ export function TraceDialog({
                   trace={traceDetails}
                   spanId={selectedSpanId}
                   onScorerTriggered={onScorerTriggered}
-                  entityType={
-                    traceDetails?.attributes?.agentId
-                      ? 'Agent'
-                      : traceDetails?.attributes?.workflowId
-                        ? 'Workflow'
-                        : '-'
-                  }
+                  entityType={entityType}
                 />
               </div>
             )}
