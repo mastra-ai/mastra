@@ -704,14 +704,14 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-### オプション対応の高度な例
+### オプションを使用した高度な例
 
-```typescript showLineNumbers copy
+```typescript 行番号を表示
 import { z } from "zod";
 import { stepCountIs } from 'ai-v5';
 
 await agent.streamVNext("エージェントへのメッセージ", {
-  format: 'aisdk', // AI SDK v5 互換モードを有効化
+  format: 'aisdk', // AI SDK v5 との互換性を有効化
   stopWhen: stepCountIs(3), // 3ステップで停止
   modelSettings: {
     temperature: 0.7,
@@ -721,7 +721,7 @@ await agent.streamVNext("エージェントへのメッセージ", {
     resource: "test-app"
   },
   toolChoice: "auto",
-  // 開発体験（DX）を向上させるための構造化出力
+  // より良いDXのための構造化出力
   structuredOutput: {
     schema: z.object({
       sentiment: z.enum(['positive', 'negative', 'neutral']),
@@ -730,7 +730,7 @@ await agent.streamVNext("エージェントへのメッセージ", {
     model: openai("gpt-4o-mini"),
     errorStrategy: 'warn',
   },
-  // ストリーミング応答の検証用出力プロセッサ
+  // ストリーミング応答検証用の出力プロセッサ
   outputProcessors: [
     new ModerationProcessor({ model: openai("gpt-4.1-nano") }),
     new BatchPartsProcessor({ maxBatchSize: 3, maxWaitTime: 100 }),
