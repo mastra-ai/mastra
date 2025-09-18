@@ -4,6 +4,7 @@ import type { AISpan, AISpanType } from '../../../ai-tracing';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
 import type { RuntimeContext } from '../../../runtime-context';
+import { MastraModelOutput } from '../../../stream';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createWorkflow } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
@@ -11,8 +12,8 @@ import type { SaveQueueManager } from '../../save-queue';
 import { createMapResultsStep } from './map-results-step';
 import { createPrepareMemoryStep } from './prepare-memory-step';
 import { createPrepareToolsStep } from './prepare-tools-step';
+import type { AgentCapabilities } from './schema';
 import { createStreamStep } from './stream-step';
-import type { AgentCapabilities } from './types';
 
 interface CreatePrepareStreamWorkflowOptions<
   OUTPUT extends OutputSchema | undefined = undefined,
@@ -53,7 +54,7 @@ export function createPrepareStreamWorkflow<
   saveQueueManager,
   returnScorerData,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>) {
-  // Create steps with proper context
+
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
     options,
@@ -102,12 +103,11 @@ export function createPrepareStreamWorkflow<
     instructions,
   });
 
-  // Create and return the workflow
   return createWorkflow({
     id: 'execution-workflow',
-    inputSchema: z.any(),
-    outputSchema: z.any(),
-    steps: [prepareToolsStep, prepareMemoryStep],
+    inputSchema: z.object({}),
+    outputSchema: z.instanceof(MastraModelOutput),
+    steps: [prepareToolsStep, prepareMemoryStep, streamStep],
     options: {
       tracingPolicy: {
         internal: InternalSpans.WORKFLOW,

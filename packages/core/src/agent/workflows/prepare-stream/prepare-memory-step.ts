@@ -9,7 +9,8 @@ import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { MessageList } from '../../message-list';
-import type { AgentCapabilities } from './types';
+import type { AgentCapabilities } from './schema';
+import { prepareMemoryStepOutputSchema } from './schema';
 
 interface PrepareMemoryStepOptions<
   OUTPUT extends OutputSchema | undefined = undefined,
@@ -45,14 +46,8 @@ export function createPrepareMemoryStep<
 }: PrepareMemoryStepOptions<OUTPUT, FORMAT>) {
   return createStep({
     id: 'prepare-memory-step',
-    inputSchema: z.any(),
-    outputSchema: z.object({
-      threadExists: z.boolean(),
-      thread: z.any(),
-      messageList: z.any(),
-      tripwire: z.boolean().optional(),
-      tripwireReason: z.string().optional(),
-    }),
+    inputSchema: z.object({}),
+    outputSchema: prepareMemoryStepOutputSchema,
     execute: async ({ tracingContext }) => {
       const thread = threadFromArgs;
       const messageList = new MessageList({
