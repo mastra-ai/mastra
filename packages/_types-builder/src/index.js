@@ -10,7 +10,8 @@ const rgxFrom = /(?<=from )['|"](.*)['|"]/gm;
 export async function generateTypes(rootDir) {
   try {
     // Use spawn instead of exec to properly inherit stdio
-    const tscProcess = spawn('pnpm', ['tsc', '-p', 'tsconfig.build.json'], {
+    // Use npx to run tsc to avoid Windows PATH issues with pnpm
+    const tscProcess = spawn('npx', ['tsc', '-p', 'tsconfig.build.json'], {
       cwd: rootDir,
       stdio: 'inherit',
     });
