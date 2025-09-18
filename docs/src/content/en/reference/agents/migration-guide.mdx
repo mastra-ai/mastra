@@ -1,0 +1,177 @@
+import { Callout } from 'nextra/components';
+import { Tag } from '@/components/tag';
+
+# Migration Guide: Legacy to VNext APIs
+
+<Callout type="warning">
+  This guide covers the migration from legacy `generate()` and `stream()` methods to the new experimental `generateVNext()` and `streamVNext()` methods.
+</Callout>
+
+## Overview
+
+The legacy `generate()` and `stream()` methods in Mastra agents are being replaced by the new experimental `generateVNext()` and `streamVNext()` methods. These new APIs offer enhanced capabilities, better performance, and improved compatibility with AI SDK v5.
+
+## Key Differences
+
+### 1. Model Version Support
+
+- **Legacy APIs**: Only support V1 models
+- **VNext APIs**: Only support V2 models
+
+### 2. Output Format Options
+
+- **Legacy APIs**: Limited output formatting
+- **VNext APIs**: Support both Mastra native format and AI SDK v5 compatibility mode
+
+### 3. Return Types
+
+- **Legacy `generate()`**: Returns `GenerateTextResult` or `GenerateObjectResult`
+- **VNext `generateVNext()`**: Returns the full output from `getFullOutput()` method
+- **Legacy `stream()`**: Returns streaming response with callbacks
+- **VNext `streamVNext()`**: Returns `MastraModelOutput` or `AISDKV5OutputStream`
+
+## Migration Examples
+
+### Migrating from `generate()` to `generateVNext()`
+
+#### Legacy `generate()` usage:
+```typescript
+const result = await agent.generate(messages, {
+  structuredOutput: {
+    schema: z.object({
+      name: z.string(),
+      age: z.number()
+    })
+  },
+  temperature: 0.7,
+  maxSteps: 5
+});
+```
+
+#### VNext `generateVNext()` equivalent:
+```typescript
+const result = await agent.generateVNext(messages, {
+  structuredOutput: {
+    schema: z.object({
+      name: z.string(),
+      age: z.number()
+    })
+  },
+  modelSettings: {
+    temperature: 0.7
+  },
+  maxSteps: 5
+});
+```
+
+### Migrating from `stream()` to `streamVNext()`
+
+#### Legacy `stream()` usage:
+```typescript
+const streamResult = await agent.stream(messages, {
+  onFinish: (result) => {
+    console.log('Finished:', result);
+  },
+  temperature: 0.7,
+  maxSteps: 5
+});
+```
+
+#### VNext `streamVNext()` equivalent:
+```typescript
+const streamResult = await agent.streamVNext(messages, {
+  callbacks: {
+    onFinish: (result) => {
+      console.log('Finished:', result);
+    }
+  },
+  modelSettings: {
+    temperature: 0.7
+  },
+  maxSteps: 5
+});
+```
+
+## Parameter Mapping
+
+| Legacy Parameter | VNext Equivalent | Notes |
+|------------------|------------------|-------|
+| `temperature` | `modelSettings.temperature` | Moved to nested settings object |
+| `maxSteps` | `maxSteps` | Same location |
+| `onFinish` | `callbacks.onFinish` | Moved to callbacks object |
+| `onStepFinish` | `callbacks.onStepFinish` | Moved to callbacks object |
+| `structuredOutput` | `structuredOutput` | Same location but enhanced |
+| `memory` | `memory` | Same location |
+| `toolChoice` | `toolChoice` | Same location |
+| `providerOptions` | `providerOptions` | Same location |
+
+## Enhanced Features in VNext APIs
+
+### 1. Format Options
+The VNext APIs support a `format` option that allows you to choose between Mastra's native format and AI SDK v5 compatibility:
+
+```typescript
+// Mastra native format (default)
+const result = await agent.streamVNext(messages, {
+  format: 'mastra'
+});
+
+// AI SDK v5 compatibility
+const result = await agent.streamVNext(messages, {
+  format: 'aisdk'
+});
+```
+
+### 2. Improved Callback System
+VNext APIs provide a more comprehensive callback system:
+
+```typescript
+const result = await agent.streamVNext(messages, {
+  callbacks: {
+    onFinish: (result) => console.log('Finished:', result),
+    onStepFinish: (step) => console.log('Step finished:', step),
+    onChunk: (chunk) => console.log('Chunk received:', chunk),
+    onError: (error) => console.log('Error occurred:', error),
+    onAbort: () => console.log('Stream aborted')
+  }
+});
+```
+
+### 3. Better Structured Output Handling
+The `structuredOutput` parameter in VNext APIs has enhanced capabilities:
+
+```typescript
+const result = await agent.generateVNext(messages, {
+  structuredOutput: {
+    schema: userSchema,
+    model: openai('gpt-4o'),
+    errorStrategy: 'retry',
+    fallbackValue: { name: 'Unknown', age: 0 }
+  }
+});
+```
+
+## Important Notes
+
+1. **Model Version Check**: VNext APIs will throw an error if used with V1 models. Ensure your models are V2 compatible.
+
+2. **Return Type Differences**: The return types are different between legacy and VNext APIs. Update your code to handle the new return structures.
+
+3. **Callback Organization**: Callbacks are now organized under a `callbacks` object rather than being top-level parameters.
+
+4. **Model Settings**: Model-specific settings like `temperature` are now grouped under `modelSettings`.
+
+5. **Experimental Status**: These APIs are currently experimental and may change before becoming the default implementation.
+
+## Migration Checklist
+
+- [ ] Update model references to V2 compatible models
+- [ ] Move model settings to `modelSettings` object
+- [ ] Move callbacks to `callbacks` object
+- [ ] Test return type handling in your application
+- [ ] Update any type definitions or interfaces
+- [ ] Verify structured output usage with new schema options
+- [ ] Check memory configuration compatibility
+- [ ] Update provider-specific options if needed
+
+By following this guide, you should be able to smoothly transition your code from the legacy APIs to the new VNext APIs.

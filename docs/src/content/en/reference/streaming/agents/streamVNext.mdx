@@ -23,6 +23,14 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
 });
 ```
 
+:::note
+`streamVNext` is designed for V2 models only. V1 models are legacy models that use the older AI SDK specification, while V2 models use the newer AI SDK specification with enhanced capabilities. The framework automatically detects which version your model is and routes to the appropriate API.
+:::
+
+## Breaking Changes
+
+This API is experimental and subject to change. The current `stream` method will be renamed to `streamLegacy` and the current `generate` method will be renamed to `generateLegacy` in the future.
+
 ## Parameters
 
 <PropertiesTable
@@ -40,6 +48,10 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
     },
   ]}
 />
+
+:::note
+`streamVNext` is designed for V2 models only. V1 models are legacy models that use the older AI SDK specification, while V2 models use the newer AI SDK specification with enhanced capabilities. The framework automatically detects which version your model is and routes to the appropriate API.
+:::
 
 ### Options
 
