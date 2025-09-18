@@ -675,6 +675,7 @@ export class MastraClient extends BaseResource {
   score(params: {
     scorerName: string;
     targets: Array<{ traceId: string; spanId?: string }>;
+    scorerRunFormat?: 'span' | 'agent';
   }): Promise<{ status: string; message: string }> {
     return this.observability.score(params);
   }
