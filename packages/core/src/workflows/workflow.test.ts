@@ -559,7 +559,7 @@ describe('Workflow', () => {
       const run = await workflow.createRunAsync({
         runId: 'test-run-id',
       });
-      const { stream } = await run.stream({
+      const { stream } = run.stream({
         inputData: {
           prompt1: 'Capital of France, just the name',
           prompt2: 'Capital of UK, just the name',
@@ -8502,7 +8502,7 @@ describe('Workflow', () => {
       const otherStep = createStep({
         id: 'other',
         inputSchema: z.object({ newValue: z.number() }),
-        outputSchema: z.object({ other: z.number() }),
+        outputSchema: z.object({ newValue: z.number(), other: z.number() }),
         execute: other,
       });
 
@@ -8544,6 +8544,16 @@ describe('Workflow', () => {
         outputSchema: z.object({ success: z.boolean() }),
       })
         .then(startStep)
+        .map({
+          finalValue: mapVariable({
+            step: startStep,
+            path: 'newValue',
+          }),
+          newValue: mapVariable({
+            step: startStep,
+            path: 'newValue',
+          }),
+        })
         .then(finalStep)
         .commit();
       counterWorkflow
@@ -8739,7 +8749,7 @@ describe('Workflow', () => {
       const otherStep = createStep({
         id: 'other',
         inputSchema: z.object({ newValue: z.number() }),
-        outputSchema: z.object({ other: z.number() }),
+        outputSchema: z.object({ newValue: z.number(), other: z.number() }),
         execute: other,
       });
 
@@ -8867,7 +8877,7 @@ describe('Workflow', () => {
         const otherStep = createStep({
           id: 'other',
           inputSchema: z.object({ newValue: z.number() }),
-          outputSchema: z.object({ other: z.number() }),
+          outputSchema: z.object({ newValue: z.number(), other: z.number() }),
           execute: other,
         });
 
@@ -8912,6 +8922,16 @@ describe('Workflow', () => {
           outputSchema: finalStep.outputSchema,
         })
           .then(startStep)
+          .map({
+            finalValue: mapVariable({
+              step: finalStep,
+              path: 'finalValue',
+            }),
+            newValue: mapVariable({
+              step: startStep,
+              path: 'newValue',
+            }),
+          })
           .then(finalStep)
           .commit();
         counterWorkflow
@@ -9002,7 +9022,7 @@ describe('Workflow', () => {
         const otherStep = createStep({
           id: 'other',
           inputSchema: z.object({ newValue: z.number() }),
-          outputSchema: z.object({ other: z.number() }),
+          outputSchema: z.object({ newValue: z.number(), other: z.number() }),
           execute: other,
         });
 
@@ -9047,6 +9067,12 @@ describe('Workflow', () => {
           outputSchema: finalStep.outputSchema,
         })
           .then(startStep)
+          .map(async ({ inputData }) => {
+            return {
+              finalValue: inputData.newValue + 1,
+              newValue: inputData.newValue,
+            };
+          })
           .then(finalStep)
           .commit();
         counterWorkflow
@@ -9138,7 +9164,7 @@ describe('Workflow', () => {
         const otherStep = createStep({
           id: 'other',
           inputSchema: z.object({ newValue: z.number() }),
-          outputSchema: z.object({ other: z.number() }),
+          outputSchema: z.object({ newValue: z.number(), other: z.number() }),
           execute: other,
         });
 
@@ -9215,7 +9241,10 @@ describe('Workflow', () => {
               }),
               outputSchema: otherStep.outputSchema,
               execute: async ({ inputData }) => {
-                return { other: inputData['nested-workflow-c']?.other ?? inputData['nested-workflow-d']?.other };
+                return {
+                  newValue: inputData['nested-workflow-c']?.newValue ?? inputData['nested-workflow-d']?.newValue,
+                  other: inputData['nested-workflow-c']?.other ?? inputData['nested-workflow-d']?.other,
+                };
               },
             }),
           )
@@ -9316,7 +9345,7 @@ describe('Workflow', () => {
         const otherStep = createStep({
           id: 'other',
           inputSchema: z.object({ newValue: z.number() }),
-          outputSchema: z.object({ other: z.number() }),
+          outputSchema: z.object({ newValue: z.number(), other: z.number() }),
           execute: other,
         });
 
@@ -9666,7 +9695,7 @@ describe('Workflow', () => {
         const otherStep = createStep({
           id: 'other',
           inputSchema: z.object({ newValue: z.number() }),
-          outputSchema: z.object({ other: z.number() }),
+          outputSchema: z.object({ newValue: z.number(), other: z.number() }),
           execute: other,
         });
 
@@ -9781,7 +9810,7 @@ describe('Workflow', () => {
       const otherStep = createStep({
         id: 'other',
         inputSchema: z.object({ newValue: z.number() }),
-        outputSchema: z.object({ other: z.number() }),
+        outputSchema: z.object({ newValue: z.number(), other: z.number() }),
         execute: other,
       });
 
@@ -10246,7 +10275,7 @@ describe('Workflow', () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         mastra,
-        inputSchema: z.object({}),
+        inputSchema: z.object({ human: z.boolean() }),
         outputSchema: z.object({}),
       });
       workflow.then(step).commit();
