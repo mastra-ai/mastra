@@ -259,7 +259,7 @@ When creating custom output processors:
 
 ## Integration with Agent Methods
 
-Output processors work with both `generate()` and `streamVNext()` methods. The processor pipeline completes after the agent generates a response but before it's returned to the user.
+Output processors work with both `generate()` and `stream()` methods. The processor pipeline completes after the agent generates a response but before it's returned to the user.
 
 ```typescript copy showLineNumbers
 // Processors run after generate() but before returning result
@@ -267,8 +267,8 @@ const result = await agent.generate('Hello');
 console.log(result.text); // Processed text
 console.log(result.object); // Structured data if applicable
 
-// Processors also run during streamVNext() for each part
-const stream = await agent.streamVNext('Hello');
+// Processors also run during stream() for each part
+const stream = await agent.stream('Hello');
 for await (const part of stream) {
   console.log(part); // Processed parts
 }
@@ -287,7 +287,7 @@ const result = await agent.generate('Hello', {
 });
 
 // Same for streaming
-const stream = await agent.streamVNext('Hello', {
+const stream = await agent.stream('Hello', {
   outputProcessors: [
     new TokenLimiterProcessor({ maxTokens: 500 }),
   ],

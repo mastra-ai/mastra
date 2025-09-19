@@ -408,7 +408,7 @@ Install the latest version to the `@ai-sdk/openai` package:
 Update the `planActivities` step in `src/mastra/workflows/weather-workflow.ts` as follow:
 ```ts filename="src/mastra/workflows/weather-workflow.ts" showLineNumbers{150} copy
 const response = await agent.stream([ // [!code --]
-const response = await agent.streamVNext([ // [!code ++]
+const response = await agent.stream([ // [!code ++]
   {
     role: 'user',
     content: prompt,

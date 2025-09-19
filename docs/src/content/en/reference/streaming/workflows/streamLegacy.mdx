@@ -1,11 +1,17 @@
 ---
-title: "Reference: Run.streamLegacy() | Workflows | Mastra Docs"
-description: Documentation for the `Run.streamLegacy()` method in workflows, which allows you to monitor the execution of a workflow run as a stream.
+title: "Reference: Run.streamLegacy() (Legacy) | Workflows | Mastra Docs"
+description: Documentation for the legacy `Run.streamLegacy()` method in workflows. This method is deprecated and will be removed in a future version.
 ---
 
-# Run.streamLegacy()
+import { Callout } from 'nextra/components';
 
-The `.streamLegacy()` method allows you to monitor the execution of a workflow run, providing real-time updates on the status of steps.
+# Run.streamLegacy() (Legacy)
+
+<Callout type="warning">
+  **Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.stream()`](./stream.mdx) method instead.
+</Callout>
+
+The `.streamLegacy()` method is the legacy version for monitoring the execution of a workflow run, providing real-time updates on the status of steps.
 
 ## Usage example
 

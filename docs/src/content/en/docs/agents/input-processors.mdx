@@ -262,14 +262,14 @@ When creating custom processors:
 
 ## Integration with Agent Methods
 
-Input processors work with the `generate()`, `stream()`, and `streamVNext()` methods. The entire processor pipeline completes before the agent begins generating or streaming a response.
+Input processors work with the `generate()`, `stream()`, and `stream()` methods. The entire processor pipeline completes before the agent begins generating or streaming a response.
 
 ```typescript copy showLineNumbers
 // Processors run before generate()
 const result = await agent.generate('Hello');
 
-// Processors also run before streamVNext()
-const stream = await agent.streamVNext('Hello');
+// Processors also run before stream()
+const stream = await agent.stream('Hello');
 for await (const chunk of stream) {
   console.log(chunk);
 }
