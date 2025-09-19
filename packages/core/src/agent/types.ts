@@ -10,6 +10,7 @@ import type {
   DefaultLLMTextObjectOptions,
   DefaultLLMTextOptions,
   OutputType,
+  SystemMessage,
 } from '../llm';
 import type {
   StreamTextOnFinishCallback,
@@ -39,6 +40,9 @@ export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, Me
 export type { Message as AiMessageType } from 'ai';
 
 export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5>;
+
+export type AgentInstructions = SystemMessage;
+export type DynamicAgentInstructions = DynamicArgument<AgentInstructions>;
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
@@ -72,7 +76,7 @@ export interface AgentConfig<
   id?: TAgentId;
   name: TAgentId;
   description?: string;
-  instructions: DynamicArgument<string>;
+  instructions: DynamicAgentInstructions;
   model:
     | DynamicArgument<MastraLanguageModel>
     | {
@@ -114,7 +118,7 @@ export type AgentGenerateOptions<
   EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = {
   /** Optional instructions to override the agent's default instructions */
-  instructions?: string;
+  instructions?: SystemMessage;
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
@@ -198,7 +202,7 @@ export type AgentStreamOptions<
   EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = {
   /** Optional instructions to override the agent's default instructions */
-  instructions?: string;
+  instructions?: SystemMessage;
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
@@ -270,7 +274,7 @@ export type AgentStreamOptions<
 export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };
 
 export type AgentExecuteOnFinishOptions = {
-  instructions: string;
+  instructions: SystemMessage;
   runId: string;
   result: Record<string, any>;
   thread: StorageThreadType | null | undefined;

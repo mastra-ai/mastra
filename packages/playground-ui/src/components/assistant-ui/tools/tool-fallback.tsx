@@ -54,6 +54,7 @@ const ToolFallbackInner: ToolCallMessagePartComponent = ({ toolName, result, arg
       toolName={toolName}
       args={args}
       result={result}
+      toolOutput={args?.__mastraMetadata?.toolOutput || []}
       networkMetadata={args?.__mastraMetadata?.networkMetadata}
     />
   );

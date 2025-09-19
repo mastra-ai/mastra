@@ -1,5 +1,14 @@
 # @mastra/evals
 
+## 0.13.8-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#8007](https://github.com/mastra-ai/mastra/pull/8007))
+  - Updated dependency [`fs-extra@^11.3.2` ↗︎](https://www.npmjs.com/package/fs-extra/v/11.3.2) (from `^11.3.1`, in `dependencies`)
+- Updated dependencies [[`c45298a`](https://github.com/mastra-ai/mastra/commit/c45298a0a0791db35cf79f1199d77004da0704cb)]:
+  - @mastra/core@0.17.2-alpha.1
+
 ## 0.13.7
 
 ### Patch Changes

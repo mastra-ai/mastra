@@ -11,9 +11,10 @@ export interface ToolBadgeProps {
     input?: string | Record<string, unknown>;
     selectionReason?: string;
   };
+  toolOutput: Array<{ toolId: string }>;
 }
 
-export const ToolBadge = ({ toolName, args, result, networkMetadata }: ToolBadgeProps) => {
+export const ToolBadge = ({ toolName, args, result, networkMetadata, toolOutput }: ToolBadgeProps) => {
   let argSlot = null;
 
   try {
@@ -25,7 +26,7 @@ export const ToolBadge = ({ toolName, args, result, networkMetadata }: ToolBadge
 
   let resultSlot =
     typeof result === 'string' ? (
-      <pre className="whitespace-pre-wrap">{result}</pre>
+      <pre className="whitespace-pre-wrap bg-surface4 p-4 rounded-md">{result}</pre>
     ) : (
       <SyntaxHighlighter data={result} />
     );
@@ -49,10 +50,20 @@ export const ToolBadge = ({ toolName, args, result, networkMetadata }: ToolBadge
           {argSlot}
         </div>
 
-        {result !== undefined && (
+        {resultSlot !== undefined && (
           <div>
             <p className="font-medium pb-2">Tool result</p>
             {resultSlot}
+          </div>
+        )}
+
+        {toolOutput.length > 0 && (
+          <div>
+            <p className="font-medium pb-2">Tool output</p>
+
+            <div className="h-40 overflow-y-auto">
+              <SyntaxHighlighter data={toolOutput} />
+            </div>
           </div>
         )}
       </div>

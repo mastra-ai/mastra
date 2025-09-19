@@ -24,7 +24,13 @@ export const useCodemirrorTheme = () => {
   );
 };
 
-export const SyntaxHighlighter = ({ data, className }: { data: Record<string, unknown>; className?: string }) => {
+export const SyntaxHighlighter = ({
+  data,
+  className,
+}: {
+  data: Record<string, unknown> | Array<Record<string, unknown>>;
+  className?: string;
+}) => {
   const formattedCode = JSON.stringify(data, null, 2);
   const theme = useCodemirrorTheme();
 
