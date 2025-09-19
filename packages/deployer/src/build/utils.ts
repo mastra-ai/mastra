@@ -46,5 +46,23 @@ export async function getPackageRootPath(packageName: string): Promise<string | 
  * We store these compiled files inside `node_modules/.cache` for each workspace package.
  */
 export function getCompiledDepCachePath(rootPath: string, packageName: string) {
-  return join(rootPath, 'node_modules', '.cache', packageName);
+  return slash(join(rootPath, 'node_modules', '.cache', packageName));
+}
+
+/**
+ * Convert windows backslashes to posix slashes
+ *
+ * @example
+ * ```ts
+ * slash('C:\\Users\\user\\code\\mastra') // 'C:/Users/user/code/mastra'
+ * ```
+ */
+export function slash(path: string) {
+  const isExtendedLengthPath = path.startsWith('\\\\?\\');
+
+  if (isExtendedLengthPath) {
+    return path;
+  }
+
+  return path.replaceAll('\\', '/');
 }

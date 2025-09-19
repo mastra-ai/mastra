@@ -8,7 +8,7 @@ import * as path from 'node:path';
 import { rollup, type OutputChunk, type OutputAsset } from 'rollup';
 import { esbuild } from '../plugins/esbuild';
 import { aliasHono } from '../plugins/hono-alias';
-import { getCompiledDepCachePath, getPackageRootPath } from '../utils';
+import { getCompiledDepCachePath, getPackageRootPath, slash } from '../utils';
 import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS, DEPRECATED_EXTERNALS } from './constants';
@@ -25,13 +25,10 @@ function prepareEntryFileName(name: string, rootDir: string) {
    */
   const relativePath = path.relative(rootDir, name);
 
-  return (
-    relativePath
-      /**
-       * Use posix separators (/) for entry names, as Rollup expects that
-       */
-      .replaceAll(path.sep, path.posix.sep)
-  );
+  /**
+   * Use posix separators (/) for entry names, as Rollup expects that
+   */
+  return slash(relativePath);
 }
 
 /**
@@ -125,7 +122,7 @@ async function getInputPlugins(
     const dir = await getPackageRootPath(pkg);
 
     if (dir) {
-      transpilePackagesMap.set(pkg, dir);
+      transpilePackagesMap.set(pkg, slash(dir));
     }
   }
 

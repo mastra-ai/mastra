@@ -1,4 +1,5 @@
 import { dirname, extname } from 'path';
+import { pathToFileURL } from 'node:url';
 import resolveFrom from 'resolve-from';
 import type { Plugin } from 'rollup';
 import { builtinModules } from 'node:module';
@@ -68,7 +69,7 @@ export function nodeModulesExtensionResolver(): Plugin {
         const resolved = safeResolve(id, importer);
         if (resolved) {
           return {
-            id: resolved,
+            id: pathToFileURL(resolved).href,
             external: true,
           };
         }
@@ -89,7 +90,7 @@ export function nodeModulesExtensionResolver(): Plugin {
             const newImportWithExtension = resolved.replace(dirname(pkgJsonPath), pkgName);
 
             return {
-              id: newImportWithExtension,
+              id: pathToFileURL(newImportWithExtension).href,
               external: true,
             };
           }
