@@ -499,12 +499,6 @@ do:
       workflow.__registerMastra(this);
       workflow.__registerPrimitives({
         logger: this.getLogger(),
-        telemetry: this.#telemetry,
-        storage: this.storage,
-        memory: this.memory,
-        agents: agents,
-        tts: this.#tts,
-        vectors: this.#vectors,
       });
       // @ts-ignore
       this.#internalMastraWorkflows[key] = workflow;
