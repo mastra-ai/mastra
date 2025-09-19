@@ -20,7 +20,6 @@ export interface AgentMetadataProps {
   agent: GetAgentResponse;
   promptSlot: ReactNode;
   hasMemoryEnabled: boolean;
-  computeScorerLink: (scorerId: string) => string;
   modelProviders: string[];
   updateModel: AgentMetadataModelSwitcherProps['updateModel'];
 }
@@ -56,7 +55,6 @@ export const AgentMetadata = ({
   agent,
   promptSlot,
   hasMemoryEnabled,
-  computeScorerLink,
   updateModel,
   modelProviders,
 }: AgentMetadataProps) => {
@@ -147,7 +145,7 @@ export const AgentMetadata = ({
       </AgentMetadataSection>
 
       <AgentMetadataSection title="Scorers">
-        <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" computeScorerLink={computeScorerLink} />
+        <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
       </AgentMetadataSection>
       <AgentMetadataSection title="System Prompt">{promptSlot}</AgentMetadataSection>
     </AgentMetadataWrapper>
@@ -204,13 +202,12 @@ export const AgentMetadataWorkflowList = ({ workflows }: AgentMetadataWorkflowLi
 };
 
 interface AgentMetadataScorerListProps {
-  computeScorerLink: (scorerId: string) => string;
   entityId: string;
   entityType: string;
 }
 
-export const AgentMetadataScorerList = ({ entityId, entityType, computeScorerLink }: AgentMetadataScorerListProps) => {
-  const { Link } = useLinkComponent();
+export const AgentMetadataScorerList = ({ entityId, entityType }: AgentMetadataScorerListProps) => {
+  const { Link, paths } = useLinkComponent();
   const { scorers, isLoading } = useScorers();
 
   const scorerList = Object.keys(scorers)
@@ -236,7 +233,7 @@ export const AgentMetadataScorerList = ({ entityId, entityType, computeScorerLin
     <AgentMetadataList>
       {scorerList.map(scorer => (
         <AgentMetadataListItem key={scorer.id}>
-          <Link href={computeScorerLink(scorer.id)}>
+          <Link href={paths.scorerLink(scorer.id)}>
             <Badge icon={<GaugeIcon className="text-icon3" />}>{scorer.scorer.config.name}</Badge>
           </Link>
         </AgentMetadataListItem>

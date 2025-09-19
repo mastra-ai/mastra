@@ -22,6 +22,8 @@ type LinkComponentPaths = {
   workflowLink: (workflowId: string) => string;
 
   networkLink: (networkId: string) => string;
+
+  scorerLink: (scorerId: string) => string;
 };
 
 const LinkComponentContext = createContext<{
@@ -38,6 +40,7 @@ const LinkComponentContext = createContext<{
     workflowsLink: () => '',
     workflowLink: () => '',
     networkLink: () => '',
+    scorerLink: () => '',
   },
 });
 

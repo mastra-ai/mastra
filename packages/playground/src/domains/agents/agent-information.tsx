@@ -77,7 +77,6 @@ export function AgentInformation({ agentId }: { agentId: string }) {
                 modelProviders={modelProviders || []}
                 hasMemoryEnabled={Boolean(memory?.result)}
                 promptSlot={<AgentPromptEnhancer agentId={agentId} />}
-                computeScorerLink={(scorerId: string) => `/scorers/${scorerId}`}
               />
             )}
           </TabContent>

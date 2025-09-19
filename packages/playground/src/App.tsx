@@ -49,6 +49,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   workflowsLink: () => `/workflows`,
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
   networkLink: (networkId: string) => `/networks/v-next/${networkId}/chat`,
+  scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
 };
 
 const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
