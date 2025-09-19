@@ -45,6 +45,9 @@ import Template from './pages/templates/template';
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
+  agentsLink: () => `/agents`,
+  workflowsLink: () => `/workflows`,
+  workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
 };
 
 const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {

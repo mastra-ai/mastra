@@ -16,11 +16,10 @@ import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './a
 import { LoadingBadge } from '@/components/assistant-ui/tools/badges/loading-badge';
 
 export interface AgentMetadataProps {
+  agentId: string;
   agent: GetAgentResponse;
   promptSlot: ReactNode;
   hasMemoryEnabled: boolean;
-  computeToolLink: (tool: GetToolResponse) => string;
-  computeWorkflowLink: (workflowId: string, workflow: GetWorkflowResponse) => string;
   computeScorerLink: (scorerId: string) => string;
   modelProviders: string[];
   updateModel: AgentMetadataModelSwitcherProps['updateModel'];
@@ -53,11 +52,10 @@ export const AgentMetadataNetworkList = ({ agents }: AgentMetadataNetworkListPro
 };
 
 export const AgentMetadata = ({
+  agentId,
   agent,
   promptSlot,
   hasMemoryEnabled,
-  computeToolLink,
-  computeWorkflowLink,
   computeScorerLink,
   updateModel,
   modelProviders,
@@ -135,7 +133,7 @@ export const AgentMetadata = ({
           title: 'Using Tools and MCP documentation',
         }}
       >
-        <AgentMetadataToolList tools={tools} computeToolLink={computeToolLink} />
+        <AgentMetadataToolList tools={tools} agentId={agentId} />
       </AgentMetadataSection>
 
       <AgentMetadataSection
@@ -145,7 +143,7 @@ export const AgentMetadata = ({
           title: 'Workflows documentation',
         }}
       >
-        <AgentMetadataWorkflowList workflows={workflows} computeWorkflowLink={computeWorkflowLink} />
+        <AgentMetadataWorkflowList workflows={workflows} />
       </AgentMetadataSection>
 
       <AgentMetadataSection title="Scorers">
@@ -158,11 +156,11 @@ export const AgentMetadata = ({
 
 export interface AgentMetadataToolListProps {
   tools: GetToolResponse[];
-  computeToolLink: (tool: GetToolResponse) => string;
+  agentId: string;
 }
 
-export const AgentMetadataToolList = ({ tools, computeToolLink }: AgentMetadataToolListProps) => {
-  const { Link } = useLinkComponent();
+export const AgentMetadataToolList = ({ tools, agentId }: AgentMetadataToolListProps) => {
+  const { Link, paths } = useLinkComponent();
 
   if (tools.length === 0) {
     return <AgentMetadataListEmpty>No tools</AgentMetadataListEmpty>;
@@ -172,7 +170,7 @@ export const AgentMetadataToolList = ({ tools, computeToolLink }: AgentMetadataT
     <AgentMetadataList>
       {tools.map(tool => (
         <AgentMetadataListItem key={tool.id}>
-          <Link href={computeToolLink(tool)}>
+          <Link href={paths.agentToolLink(agentId, tool.id)}>
             <Badge icon={<ToolsIcon className="text-[#ECB047]" />}>{tool.id}</Badge>
           </Link>
         </AgentMetadataListItem>
@@ -183,11 +181,10 @@ export const AgentMetadataToolList = ({ tools, computeToolLink }: AgentMetadataT
 
 export interface AgentMetadataWorkflowListProps {
   workflows: Array<{ id: string } & GetWorkflowResponse>;
-  computeWorkflowLink: (workflowId: string, workflow: GetWorkflowResponse) => string;
 }
 
-export const AgentMetadataWorkflowList = ({ workflows, computeWorkflowLink }: AgentMetadataWorkflowListProps) => {
-  const { Link } = useLinkComponent();
+export const AgentMetadataWorkflowList = ({ workflows }: AgentMetadataWorkflowListProps) => {
+  const { Link, paths } = useLinkComponent();
 
   if (workflows.length === 0) {
     return <AgentMetadataListEmpty>No workflows</AgentMetadataListEmpty>;
@@ -197,7 +194,7 @@ export const AgentMetadataWorkflowList = ({ workflows, computeWorkflowLink }: Ag
     <AgentMetadataList>
       {workflows.map(workflow => (
         <AgentMetadataListItem key={workflow.id}>
-          <Link href={computeWorkflowLink(workflow.id, workflow)}>
+          <Link href={paths.workflowLink(workflow.id)}>
             <Badge icon={<WorkflowIcon className="text-accent3" />}>{workflow.name}</Badge>
           </Link>
         </AgentMetadataListItem>
