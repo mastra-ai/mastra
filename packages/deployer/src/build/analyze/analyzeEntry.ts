@@ -40,11 +40,6 @@ function getInputPlugins(
 
   plugins.push(
     ...[
-      nodeResolve({
-        preferBuiltins: true,
-        extensions: ['.mjs', '.js', '.ts', '.json'],
-        exportConditions: ['node'],
-      }),
       tsConfigPaths(),
       {
         name: 'custom-alias-resolver',
