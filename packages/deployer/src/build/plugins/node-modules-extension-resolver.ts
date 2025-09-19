@@ -69,7 +69,7 @@ export function nodeModulesExtensionResolver(): Plugin {
         const resolved = safeResolve(id, importer);
         if (resolved) {
           return {
-            id: pathToFileURL(resolved),
+            id: pathToFileURL(resolved).href,
             external: true,
           };
         }
@@ -90,7 +90,7 @@ export function nodeModulesExtensionResolver(): Plugin {
             const newImportWithExtension = resolved.replace(dirname(pkgJsonPath), pkgName);
 
             return {
-              id: pathToFileURL(newImportWithExtension),
+              id: pathToFileURL(newImportWithExtension).href,
               external: true,
             };
           }
