@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "6.2.1",
+  "version": "6.2.2-alpha.0",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -102,7 +102,6 @@
     "shiki": "^1.29.2",
     "sonner": "^2.0.5",
     "superjson": "^2.2.2",
-    "swr": "^2.3.6",
     "tailwindcss-animate": "^1.0.7",
     "unified": "^11.0.5",
     "use-debounce": "^10.0.6",
