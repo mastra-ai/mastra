@@ -526,10 +526,9 @@ The system automatically detects configuration changes and only rebuilds indexes
 
 ## Best Practices
 
-- **Start with IVFFlat** for most use cases, it provides good balance
-- **Use HNSW** when you need the fastest possible queries and can afford memory
+- Regularly evaluate your index configuration to ensure optimal performance.
+- Adjust parameters like `lists` and `m` based on dataset size and query requirements.
 - **Monitor index performance** using `describeIndex()` to track usage
-- **Set appropriate lists/m values** based on your dataset size
 - Rebuild indexes periodically to maintain efficiency, especially after significant data changes
 
 ## Direct Pool Access
