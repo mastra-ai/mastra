@@ -1,5 +1,18 @@
 # @mastra/playground-ui
 
+## 6.2.2-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#8019](https://github.com/mastra-ai/mastra/pull/8019))
+  - Updated dependency [`motion@^12.23.13` ↗︎](https://www.npmjs.com/package/motion/v/12.23.13) (from `^12.23.12`, in `dependencies`)
+
+- show the tool-output stream in the playground for streamVNext ([#7983](https://github.com/mastra-ai/mastra/pull/7983))
+
+- Updated dependencies [[`c45298a`](https://github.com/mastra-ai/mastra/commit/c45298a0a0791db35cf79f1199d77004da0704cb)]:
+  - @mastra/core@0.17.2-alpha.1
+  - @mastra/client-js@0.13.2-alpha.1
+
 ## 6.2.2-alpha.0
 
 ### Patch Changes

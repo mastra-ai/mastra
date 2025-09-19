@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.17.2-alpha.1
+
+### Patch Changes
+
+- show the tool-output stream in the playground for streamVNext ([#7983](https://github.com/mastra-ai/mastra/pull/7983))
+
 ## 0.17.2-alpha.0
 
 ### Patch Changes
