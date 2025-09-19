@@ -1,4 +1,4 @@
-import type { GenerateTextOnStepFinishCallback, TelemetrySettings } from 'ai';
+import type { GenerateTextOnStepFinishCallback, TelemetrySettings, ToolSet } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
@@ -276,7 +276,7 @@ export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boole
 export type AgentExecuteOnFinishOptions = {
   instructions: SystemMessage;
   runId: string;
-  result: Record<string, any>;
+  result: Parameters<StreamTextOnFinishCallback<ToolSet>>[0] & { object?: unknown };
   thread: StorageThreadType | null | undefined;
   readOnlyMemory?: boolean;
   threadId?: string;

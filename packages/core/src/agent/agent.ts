@@ -3117,19 +3117,18 @@ export class Agent<
     overrideScorers,
   }: AgentExecuteOnFinishOptions) {
     const resToLog = {
-      text: result?.text,
-      object: result?.object,
-      toolResults: result?.toolResults,
-      toolCalls: result?.toolCalls,
-      usage: result?.usage,
-      steps: result?.steps?.map((s: any) => {
+      text: result.text,
+      object: result.object,
+      toolResults: result.toolResults,
+      toolCalls: result.toolCalls,
+      usage: result.usage,
+      steps: result.steps.map(s => {
         return {
-          stepType: s?.stepType,
-          text: result?.text,
-          object: result?.object,
-          toolResults: result?.toolResults,
-          toolCalls: result?.toolCalls,
-          usage: result?.usage,
+          stepType: s.stepType,
+          text: s.text,
+          toolResults: s.toolResults,
+          toolCalls: s.toolCalls,
+          usage: s.usage,
         };
       }),
     };
@@ -3142,8 +3141,8 @@ export class Agent<
 
     const messageListResponses = messageList.get.response.aiV4.core();
 
-    const usedWorkingMemory = messageListResponses?.some(
-      m => m.role === 'tool' && m?.content?.some(c => c?.toolName === 'updateWorkingMemory'),
+    const usedWorkingMemory = messageListResponses.some(
+      m => m.role === 'tool' && m.content.some(c => c.toolName === 'updateWorkingMemory'),
     );
     // working memory updates the thread, so we need to get the latest thread if we used it
     const memory = await this.getMemory({ runtimeContext });
@@ -3156,6 +3155,7 @@ export class Agent<
         if (!responseMessages && result.object) {
           responseMessages = [
             {
+              id: result.response.id || runId,
               role: 'assistant',
               content: [
                 {
@@ -3168,9 +3168,7 @@ export class Agent<
         }
 
         if (responseMessages) {
-          // @TODO: PREV VERSION DIDNT RETURN USER MESSAGES, SO WE FILTER THEM OUT
-          const filteredMessages = responseMessages.filter((m: any) => m.role !== 'user');
-          messageList.add(filteredMessages, 'response');
+          messageList.add(responseMessages, 'response');
         }
 
         if (!threadExists) {
@@ -3195,7 +3193,7 @@ export class Agent<
             shouldGenerate,
             model: titleModel,
             instructions: titleInstructions,
-          } = this.resolveTitleGenerationConfig(config?.threads?.generateTitle);
+          } = this.resolveTitleGenerationConfig(config.threads?.generateTitle);
 
           if (shouldGenerate && userMessage) {
             promises.push(
@@ -3249,6 +3247,7 @@ export class Agent<
       if (!responseMessages && result.object) {
         responseMessages = [
           {
+            id: result.response.id || runId,
             role: 'assistant',
             content: [
               {
@@ -3277,9 +3276,9 @@ export class Agent<
 
     agentAISpan?.end({
       output: {
-        text: result?.text,
-        object: result?.object,
-        files: result?.files,
+        text: result.text,
+        object: result.object,
+        files: result.files,
       },
     });
   }

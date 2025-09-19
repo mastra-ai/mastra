@@ -915,6 +915,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "error": undefined,
               "files": [],
               "finishReason": "stop",
+              "isContinued": false,
               "model": {
                 "modelId": "mock-model-id",
                 "provider": "mock-provider",
@@ -922,6 +923,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
               "object": {
                 "content": "Hello, world!",
+              },
+              "providerMetadata": {
+                "testProvider": {
+                  "testKey": "testValue",
+                },
               },
               "reasoning": [],
               "reasoningText": undefined,
@@ -962,6 +968,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "sources": [],
               "staticToolCalls": [],
               "staticToolResults": [],
+              "stepType": "initial",
               "steps": [
                 DefaultStepResult {
                   "content": [
@@ -993,6 +1000,22 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     ],
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:00.000Z,
+                    "uiMessages": [
+                      {
+                        "id": "1234",
+                        "metadata": {
+                          "__originalContent": "{ "content": "Hello, world!" }",
+                          "createdAt": 2024-01-01T00:00:00.000Z,
+                        },
+                        "parts": [
+                          {
+                            "text": "{ "content": "Hello, world!" }",
+                            "type": "text",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                    ],
                   },
                   "usage": {
                     "inputTokens": 3,
@@ -1084,6 +1107,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             Error message: Validation failed],
               "files": [],
               "finishReason": "error",
+              "isContinued": false,
               "model": {
                 "modelId": "mock-model-id",
                 "provider": "mock-provider",
@@ -1092,6 +1116,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "object": {
                 "invalid": "Hello, world!",
               },
+              "providerMetadata": undefined,
               "reasoning": [],
               "reasoningText": undefined,
               "request": {},
@@ -1131,6 +1156,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "sources": [],
               "staticToolCalls": [],
               "staticToolResults": [],
+              "stepType": "initial",
               "steps": [
                 DefaultStepResult {
                   "content": [
@@ -1158,6 +1184,22 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     ],
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:00.000Z,
+                    "uiMessages": [
+                      {
+                        "id": "1234",
+                        "metadata": {
+                          "__originalContent": "{ "invalid": "Hello, world!" }",
+                          "createdAt": 2024-01-01T00:00:00.000Z,
+                        },
+                        "parts": [
+                          {
+                            "text": "{ "invalid": "Hello, world!" }",
+                            "type": "text",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                    ],
                   },
                   "usage": {
                     "inputTokens": 3,

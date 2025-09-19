@@ -1,3 +1,4 @@
+import type { LanguageModelV2FinishReason } from '@ai-sdk/provider-v5';
 import type { StepResult, ToolSet } from 'ai-v5';
 import { InternalSpans } from '../../../ai-tracing';
 import type { OutputSchema } from '../../../stream/base/schema';
@@ -124,11 +125,36 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       }
 
       if (typedInputData.stepResult?.reason !== 'abort') {
+        // Convert LLMIterationData to StepFinishPayload structure
+        const stepFinishPayload: StepFinishPayload = {
+          id: typedInputData.metadata?.id,
+          providerMetadata: typedInputData.metadata?.providerMetadata,
+          messageId: typedInputData.messageId,
+          stepResult: {
+            logprobs: typedInputData.stepResult?.logprobs,
+            isContinued: typedInputData.stepResult?.isContinued,
+            warnings: typedInputData.stepResult?.warnings,
+            reason: typedInputData.stepResult?.reason as LanguageModelV2FinishReason,
+          },
+          output: {
+            usage: typedInputData.output.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          },
+          metadata: {
+            request: typedInputData.stepResult?.request || typedInputData.metadata?.request,
+            providerMetadata: typedInputData.metadata?.providerMetadata,
+            ...(typedInputData.metadata || {}),
+          },
+          messages: typedInputData.messages,
+        };
+
+        console.log('typedInputData.messages', JSON.stringify(typedInputData.messages, null, 2));
+        console.log('agentic-loop messages.nonUser:', JSON.stringify(typedInputData.messages?.nonUser, null, 2));
+
         controller.enqueue({
           type: 'step-finish',
           runId,
           from: ChunkFrom.AGENT,
-          payload: typedInputData as StepFinishPayload,
+          payload: stepFinishPayload,
         });
       }
 

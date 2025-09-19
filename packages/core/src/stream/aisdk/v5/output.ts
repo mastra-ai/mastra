@@ -1,7 +1,7 @@
 import type { ReadableStream } from 'stream/web';
 import { TransformStream } from 'stream/web';
 import { getErrorMessage } from '@ai-sdk/provider-v5';
-import { consumeStream, createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from 'ai-v5';
+import { consumeStream, createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse, generateId } from 'ai-v5';
 import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
 import type z from 'zod';
 import type { MessageList } from '../../../agent/message-list';
@@ -51,7 +51,9 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
 
   toTextStreamResponse(init?: ResponseInit): Response {
     return createTextStreamResponse({
-      textStream: this.#modelOutput.textStream as any,
+      // Type assertion needed due to ReadableStream type mismatch between Node.js (stream/web) and DOM types
+      // Both have the same interface but TypeScript treats them as incompatible
+      textStream: this.#modelOutput.textStream as unknown as globalThis.ReadableStream<string>,
       ...init,
     });
   }
@@ -106,7 +108,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
     return createUIMessageStream({
       onError,
       onFinish,
-      generateId: () => responseMessageId ?? generateMessageId?.(),
+      generateId: () => responseMessageId ?? generateMessageId?.() ?? generateId(),
       execute: async ({ writer }) => {
         for await (const part of this.fullStream) {
           const messageMetadataValue = messageMetadata?.({ part: part as TextStreamPart<ToolSet> });
@@ -127,7 +129,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
           });
 
           if (transformedChunk) {
-            writer.write(transformedChunk as any);
+            writer.write(transformedChunk);
           }
 
           // start and finish events already have metadata
@@ -146,13 +148,8 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   async consumeStream(options?: ConsumeStreamOptions): Promise<void> {
     try {
       await consumeStream({
-        stream: (this.fullStream as any).pipeThrough(
-          new TransformStream({
-            transform(chunk, controller) {
-              controller.enqueue(chunk);
-            },
-          }),
-        ) as any,
+        // Type coercion needed due to ReadableStream type mismatch between Node and DOM types
+        stream: this.fullStream as unknown as Parameters<typeof consumeStream>[0]['stream'],
         onError: options?.onError,
       });
     } catch (error) {
@@ -176,11 +173,10 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
       files
         .map(file => {
           if (file.type === 'file') {
-            return (
-              convertMastraChunkToAISDKv5({
-                chunk: file,
-              }) as any
-            )?.file;
+            const result = convertMastraChunkToAISDKv5({
+              chunk: file,
+            });
+            return result && 'file' in result ? result.file : undefined;
           }
           return;
         })
@@ -199,23 +195,6 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
     return this.#modelOutput.objectStream;
   }
 
-  get generateTextFiles() {
-    return this.#modelOutput.files.then(files =>
-      files
-        .map(file => {
-          if (file.type === 'file') {
-            return (
-              convertMastraChunkToAISDKv5({
-                chunk: file,
-                mode: 'generate',
-              }) as any
-            )?.file;
-          }
-          return;
-        })
-        .filter(Boolean),
-    );
-  }
 
   get toolCalls() {
     return this.#modelOutput.toolCalls.then(toolCalls =>
@@ -242,7 +221,31 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   }
 
   get reasoning() {
-    return this.#modelOutput.reasoningDetails;
+    return this.#modelOutput.reasoning;
+  }
+
+  get warnings() {
+    return this.#modelOutput.warnings;
+  }
+
+  get usage() {
+    return this.#modelOutput.usage;
+  }
+
+  get finishReason() {
+    return this.#modelOutput.finishReason;
+  }
+
+  get providerMetadata() {
+    return this.#modelOutput.providerMetadata;
+  }
+
+  get request() {
+    return this.#modelOutput.request;
+  }
+
+  get totalUsage() {
+    return this.#modelOutput.totalUsage;
   }
 
   get response() {
@@ -255,9 +258,6 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
     return this.#modelOutput.steps.then(steps => transformSteps({ steps }));
   }
 
-  get generateTextSteps() {
-    return this.#modelOutput.steps.then(steps => transformSteps({ steps }));
-  }
 
   get content() {
     return this.#messageList.get.response.aiV5.modelContent();
@@ -335,7 +335,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
       ),
     );
 
-    return transformedStream as any as AIV5FullStreamType<OUTPUT>;
+    return transformedStream as AIV5FullStreamType<OUTPUT>;
   }
 
   async getFullOutput() {
@@ -346,7 +346,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
     const fullOutput = {
       text: await this.#modelOutput.text,
       usage: await this.#modelOutput.usage,
-      steps: await this.generateTextSteps,
+      steps: await this.steps,
       finishReason: await this.#modelOutput.finishReason,
       warnings: await this.#modelOutput.warnings,
       providerMetadata: await this.#modelOutput.providerMetadata,
@@ -356,7 +356,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
       toolCalls: await this.toolCalls,
       toolResults: await this.toolResults,
       sources: await this.sources,
-      files: await this.generateTextFiles,
+      files: await this.files,
       response: await this.response,
       content: this.content,
       totalUsage: await this.#modelOutput.totalUsage,
