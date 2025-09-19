@@ -16,11 +16,11 @@ export function AgentSidebar({
   threads?: StorageThreadType[];
   isLoading: boolean;
 }) {
-  const { deleteThread } = useDeleteThread();
+  const { mutateAsync } = useDeleteThread();
   const navigate = useNavigate();
 
   const handleDelete = async (deleteId: string) => {
-    await deleteThread({ threadId: deleteId!, resourceid: agentId, agentId });
+    await mutateAsync({ threadId: deleteId!, agentId });
     if (deleteId === threadId) {
       navigate(`/agents/${agentId}/chat/${uuid()}`);
     }
