@@ -4006,8 +4006,16 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it('should support array of CoreSystemMessage with provider metadata', async () => {
       const instructionsArray: CoreSystemMessage[] = [
         { role: 'system', content: 'You are a helpful assistant.' },
-        { role: 'system', content: 'Always be polite.' },
-        { role: 'system', content: 'Use technical language.' },
+        {
+          role: 'system',
+          content: 'Always be polite.',
+          experimental_providerMetadata: { anthropic: { cache_control: { type: 'ephemeral' } } },
+        },
+        {
+          role: 'system',
+          content: 'Use technical language.',
+          providerOptions: { openai: { reasoning_effort: 'medium' } },
+        },
       ];
 
       const agent = new Agent({
@@ -4236,13 +4244,24 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         model: dummyModel,
       });
 
-      const response = await agent.generate('Hello', {
-        instructions: {
-          role: 'system',
-          content: 'Override instructions',
-        },
-      });
-      expect(response.text).toBe('Dummy response');
+      if (version === 'v1') {
+        const response = await agent.generate('Hello', {
+          instructions: {
+            role: 'system',
+            content: 'Override instructions',
+          },
+        });
+        expect(response.text).toBe('Dummy response');
+      } else {
+        // For v2, use generateVNext
+        const response = await agent.generateVNext('Hello', {
+          instructions: {
+            role: 'system',
+            content: 'Override instructions',
+          },
+        });
+        expect(response.text).toBe('Dummy response');
+      }
     });
 
     it('should convert CoreSystemMessage instructions for voice', async () => {
@@ -4265,6 +4284,122 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       // Verify voice received the instruction text
       expect(mockVoice.addInstructions).toHaveBeenCalledWith('You are a helpful voice assistant.');
+    });
+
+    it('should support SystemModelMessage with providerOptions', async () => {
+      const systemMessage: SystemModelMessage = {
+        role: 'system',
+        content: 'You are an expert programmer.',
+        providerOptions: {
+          openai: { reasoning_effort: 'high' },
+        },
+      };
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: systemMessage,
+        model: dummyModel,
+      });
+
+      const instructions = await agent.getInstructions();
+      expect(instructions).toEqual(systemMessage);
+    });
+
+    it('should support array of SystemModelMessage', async () => {
+      const instructionsArray: SystemModelMessage[] = [
+        {
+          role: 'system',
+          content: 'You are an expert.',
+          providerOptions: { openai: { temperature: 0.7 } },
+        },
+        {
+          role: 'system',
+          content: 'Be concise.',
+          providerOptions: { openai: { max_tokens: 100 } },
+        },
+      ];
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: instructionsArray,
+        model: dummyModel,
+      });
+
+      const instructions = await agent.getInstructions();
+      expect(instructions).toEqual(instructionsArray);
+    });
+
+    it('should combine instructions with system option in streamVNext', async () => {
+      if (version === 'v2') {
+        const agent = new Agent({
+          name: 'test-agent',
+          instructions: 'You are a helpful assistant.',
+          model: dummyModel,
+        });
+
+        const additionalSystem = {
+          role: 'system' as const,
+          content: 'Be concise in your responses.',
+        };
+
+        const stream = await agent.streamVNext('Hello', {
+          system: additionalSystem,
+        });
+
+        // Verify stream completes without error
+        const result = await stream.getFullOutput();
+        expect(result).toBeDefined();
+      } else {
+        expect(true).toBe(true);
+      }
+    });
+
+    it('should allow override with array instructions in generate options', async () => {
+      const agent = new Agent({
+        name: 'override-array-agent',
+        instructions: 'Default instructions',
+        model: dummyModel,
+      });
+
+      if (version === 'v1') {
+        const response = await agent.generate('Hello', {
+          instructions: ['Override instruction 1', 'Override instruction 2'],
+        });
+        expect(response.text).toBe('Dummy response');
+      } else {
+        // For v2, use generateVNext
+        const response = await agent.generateVNext('Hello', {
+          instructions: ['Override instruction 1', 'Override instruction 2'],
+        });
+        expect(response.text).toBe('Dummy response');
+      }
+    });
+
+    it('should support dynamic instructions returning SystemModelMessage', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: ({ runtimeContext }) => {
+          const mode = runtimeContext?.get('mode') || 'default';
+          return {
+            role: 'system' as const,
+            content: `You are in ${mode} mode.`,
+            providerOptions: {
+              openai: { temperature: mode === 'creative' ? 0.9 : 0.3 },
+            },
+          } as SystemModelMessage;
+        },
+        model: dummyModel,
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('mode', 'creative');
+
+      const instructions = await agent.getInstructions({ runtimeContext });
+      expect(instructions).toEqual({
+        role: 'system',
+        content: 'You are in creative mode.',
+        providerOptions: { openai: { temperature: 0.9 } },
+      });
     });
   });
 
