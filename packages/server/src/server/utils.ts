@@ -127,11 +127,27 @@ export class WorkflowRegistry {
 }
 
 export function systemMessageToString(message: SystemMessage): string {
+  if (!message) {
+    return '';
+  }
+
   if (typeof message === 'string') {
     return message;
-  } else if (Array.isArray(message)) {
-    return message.map(m => (typeof m === 'string' ? m : m.content)).join('\n');
-  } else {
-    return message.content;
   }
+
+  if (Array.isArray(message)) {
+    return message
+      .map(m => {
+        if (typeof m === 'string') {
+          return m;
+        }
+        // Safely extract content from message objects
+        return typeof m.content === 'string' ? m.content : '';
+      })
+      .filter(content => content) // Remove empty strings
+      .join('\n');
+  }
+
+  // Handle single message object - safely extract content
+  return typeof message.content === 'string' ? message.content : '';
 }
