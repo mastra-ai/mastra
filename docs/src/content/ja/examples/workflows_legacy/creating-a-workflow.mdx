@@ -1,0 +1,76 @@
+---
+title: "例: ワークフローの作成 | ワークフロー（レガシー） | Mastra ドキュメント"
+description: Mastra を使って、1つのステップからなるシンプルなワークフローを定義し実行する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+
+
+# シンプルなワークフローの作成（レガシー）
+
+ワークフローを使用すると、構造化されたパスで一連の操作を定義し実行することができます。この例では、単一のステップを持つレガシーワークフローを示しています。
+
+```ts showLineNumbers copy
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
+
+const myWorkflow = new LegacyWorkflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    input: z.number(),
+  }),
+});
+
+const stepOne = new LegacyStep({
+  id: "stepOne",
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    doubledValue: z.number(),
+  }),
+  execute: async ({ context }) => {
+    const doubledValue = context?.triggerData?.input * 2;
+    return { doubledValue };
+  },
+});
+
+myWorkflow.step(stepOne).commit();
+
+const { runId, start } = myWorkflow.createRun();
+
+const res = await start({
+  triggerData: { input: 90 },
+});
+
+console.log(res.results);
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/create-workflow"
+  }
+/>
+
+
+
+## Workflows (Legacy)
+
+以下のリンクは、レガシーワークフローのサンプルドキュメントを提供します：
+
+- [順次ステップを持つWorkflow (Legacy)](/examples/workflows_legacy/sequential-steps)
+- [ステップでの並列実行](/examples/workflows_legacy/parallel-steps)
+- [分岐パス](/examples/workflows_legacy/branching-paths)
+- [条件分岐を持つWorkflow (Legacy)（実験的）](/examples/workflows_legacy/conditional-branching)
+- [Workflow (Legacy)からAgentを呼び出す](/examples/workflows_legacy/calling-agent)
+- [Workflowステップとしてのツール (Legacy)](/examples/workflows_legacy/using-a-tool-as-a-step)
+- [循環依存関係を持つWorkflow (Legacy)](/examples/workflows_legacy/cyclical-dependencies)
+- [Workflow変数を使用したデータマッピング (Legacy)](/examples/workflows_legacy/workflow-variables)
+- [Human in the Loop Workflow (Legacy)](/examples/workflows_legacy/human-in-the-loop)
+- [一時停止と再開を持つWorkflow (Legacy)](/examples/workflows_legacy/suspend-and-resume)

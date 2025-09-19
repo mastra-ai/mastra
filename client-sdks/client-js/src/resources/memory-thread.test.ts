@@ -1,6 +1,6 @@
 import { describe, expect, beforeEach, it, vi } from 'vitest';
-import { MemoryThread } from './memory-thread';
 import type { ClientOptions } from '../types';
+import { MemoryThread } from './memory-thread';
 
 // Mock fetch globally
 global.fetch = vi.fn();

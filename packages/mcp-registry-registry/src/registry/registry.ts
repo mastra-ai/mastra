@@ -62,13 +62,6 @@ export const registryData: RegistryFile = {
       count: '1800+',
     },
     {
-      id: 'dextermcp',
-      name: 'Dexter MCP',
-      description: 'Enhance your AI with specialized MCP servers for various tasks',
-      url: 'https://www.dextermcp.net/',
-      tags: ['verified'],
-    },
-    {
       id: 'fleur',
       name: 'Fleur',
       description: 'Fleur is the app store for Claude',

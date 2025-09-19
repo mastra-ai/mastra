@@ -1,5 +1,5 @@
 import { SpeechSynthesisAdapter } from '@assistant-ui/react';
-import { Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 
 export class VoiceAttachmentAdapter implements SpeechSynthesisAdapter {
   constructor(private readonly agent: Agent) {}

@@ -1,5 +1,5 @@
+import type { MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { MastraMessageV1, MastraMessageV2 } from '@mastra/core';
 import { MastraClient } from './client';
 
 describe('V2 Message Format Support', () => {

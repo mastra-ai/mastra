@@ -1,0 +1,386 @@
+---
+title: "Reference: Amazon S3 Vectors Store | Vector Databases | RAG | Mastra Docs"
+description: Documentation for the S3Vectors class in Mastra, which provides vector search using Amazon S3 Vectors (Preview).
+---
+
+# Amazon S3 Vectors Store
+
+> ⚠️ Amazon S3 Vectors is a Preview service.
+> Preview features may change or be removed without notice and are not covered by AWS SLAs.
+> Behavior, limits, and regional availability can change at any time.
+> This library may introduce breaking changes to stay aligned with AWS.
+
+The `S3Vectors` class provides vector search using [Amazon S3 Vectors (Preview)](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors.html). It stores vectors in **vector buckets** and performs similarity search in **vector indexes**, with JSON-based metadata filters.
+
+## Installation
+
+```bash copy
+npm install @mastra/s3vectors
+```
+
+## Usage Example
+
+```typescript copy showLineNumbers
+import { S3Vectors } from "@mastra/s3vectors";
+
+const store = new S3Vectors({
+  vectorBucketName: process.env.S3_VECTORS_BUCKET_NAME!, // e.g. "my-vector-bucket"
+  clientConfig: {
+    region: process.env.AWS_REGION!, // credentials use the default AWS provider chain
+  },
+  // Optional: mark large/long-text fields as non-filterable at index creation time
+  nonFilterableMetadataKeys: ["content"],
+});
+
+// Create an index (names are normalized: "_" → "-" and lowercased)
+await store.createIndex({
+  indexName: "my_index",
+  dimension: 1536,
+  metric: "cosine", // "euclidean" also supported; "dotproduct" is NOT supported
+});
+
+// Upsert vectors (ids auto-generated if omitted). Date values in metadata are serialized to epoch ms.
+const ids = await store.upsert({
+  indexName: "my_index",
+  vectors: [
+    [0.1, 0.2 /* … */],
+    [0.3, 0.4 /* … */],
+  ],
+  metadata: [
+    { text: "doc1", genre: "documentary", year: 2023, createdAt: new Date("2024-01-01") },
+    { text: "doc2", genre: "comedy", year: 2021 },
+  ],
+});
+
+// Query with metadata filters (implicit AND is canonicalized)
+const results = await store.query({
+  indexName: "my-index",
+  queryVector: [0.1, 0.2 /* … */],
+  topK: 10, // Service-side limits may apply (commonly 30)
+  filter: { genre: { $in: ["documentary", "comedy"] }, year: { $gte: 2020 } },
+  includeVector: false, // set true to include raw vectors (may trigger a secondary fetch)
+});
+
+// Clean up resources (closes the underlying HTTP handler)
+await store.disconnect();
+```
+
+## Constructor Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "vectorBucketName",
+      type: "string",
+      description: "Target S3 Vectors vector bucket name.",
+    },
+    {
+      name: "clientConfig",
+      type: "S3VectorsClientConfig",
+      isOptional: true,
+      description: "AWS SDK v3 client options (e.g., `region`, `credentials`).",
+    },
+    {
+      name: "nonFilterableMetadataKeys",
+      type: "string[]",
+      isOptional: true,
+      description: "Metadata keys that should NOT be filterable (applied to the index at creation time). Use this for large text fields like `content`.",
+    },
+  ]}
+/>
+
+## Methods
+
+### createIndex()
+
+Creates a new vector index in the configured vector bucket. If the index already exists, the call validates the schema and becomes a no-op (existing metric and dimension are preserved).
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Logical index name. Normalized internally: underscores are replaced with hyphens and the name is lowercased.",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "Vector dimension (must match your embedding model)",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "Distance metric for similarity search. `dotproduct` is not supported by S3 Vectors.",
+    },
+  ]}
+/>
+
+### upsert()
+
+Adds or replaces vectors (full-record put). If `ids` are not provided, UUIDs are generated.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to upsert into",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "Array of embedding vectors",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "Metadata for each vector",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "Optional vector IDs (auto-generated if not provided)",
+    },
+  ]}
+/>
+
+### query()
+
+Searches for nearest neighbors with optional metadata filtering.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to query",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "Query vector to find similar vectors",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "Number of results to return",
+    },
+    {
+      name: "filter",
+      type: "S3VectorsFilter",
+      isOptional: true,
+      description: "JSON-based metadata filter supporting `$and`, `$or`, `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$exists`.",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to include vectors in the results",
+    },
+  ]}
+/>
+
+
+> **Scoring:** Results include `score = 1/(1 + distance)` so that higher is better while preserving the underlying distance ranking.
+
+### describeIndex()
+
+Returns information about the index.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Index name to describe.",
+    },
+  ]}
+/>
+
+Returns:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number; // computed via ListVectors pagination (O(n))
+  metric: "cosine" | "euclidean";
+}
+```
+
+### deleteIndex()
+
+Deletes an index and its data.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Index to delete.",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+Lists all indexes in the configured vector bucket.
+
+Returns: `Promise<string[]>`
+
+### updateVector()
+
+Updates a vector or metadata for a specific ID within an index.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Index containing the vector.",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID to update.",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "Update data containing vector and/or metadata",
+    },
+    {
+      name: "update.vector",
+      type: "number[]",
+      isOptional: true,
+      description: "New vector data to update",
+    },
+    {
+      name: "update.metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "New metadata to update",
+    },
+  ]}
+/>
+
+### deleteVector()
+
+Deletes a specific vector by ID.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Index containing the vector.",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID to delete.",
+    },
+  ]}
+/>
+
+### disconnect()
+
+Closes the underlying AWS SDK HTTP handler to free sockets.
+
+## Response Types
+
+Query results are returned in this format:
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number; // 1/(1 + distance)
+  metadata: Record<string, any>;
+  vector?: number[]; // Only included if includeVector is true
+}
+```
+
+## Filter Syntax
+
+S3 Vectors supports a strict subset of operators and value types. The Mastra filter translator:
+
+* **Canonicalizes implicit AND**: `{a:1,b:2}` → `{ $and: [{a:1},{b:2}] }`.
+* **Normalizes Date values** to epoch ms for numeric comparisons and array elements.
+* **Disallows Date** in equality positions (`field: value` or `$eq/$ne`); equality values must be **string | number | boolean**.
+* **Rejects** null/undefined for equality; **array equality** is not supported (use `$in`/`$nin`).
+* Only **`$and` / `$or`** are allowed as top-level logical operators.
+* Logical operators must contain **field conditions** (not direct operators).
+
+**Supported operators:**
+
+* **Logical:** `$and`, `$or` (non-empty arrays)
+* **Basic:** `$eq`, `$ne` (string | number | boolean)
+* **Numeric:** `$gt`, `$gte`, `$lt`, `$lte` (number or `Date` → epoch ms)
+* **Array:** `$in`, `$nin` (non-empty arrays of string | number | boolean; `Date` → epoch ms)
+* **Element:** `$exists` (boolean)
+
+**Unsupported / disallowed (rejected):** `$not`, `$nor`, `$regex`, `$all`, `$elemMatch`, `$size`, `$text`, etc.
+
+**Examples:**
+
+```typescript copy
+// Implicit AND
+{ genre: { $in: ["documentary", "comedy"] }, year: { $gte: 2020 } }
+
+// Explicit logicals and ranges
+{
+  $and: [
+    { price: { $gte: 100, $lte: 1000 } },
+    { $or: [{ stock: { $gt: 0 } }, { preorder: true }] }
+  ]
+}
+
+// Dates in range (converted to epoch ms)
+{ timestamp: { $gt: new Date("2024-01-01T00:00:00Z") } }
+```
+
+> **Non-filterable keys:** If you set `nonFilterableMetadataKeys` at index creation, those keys are stored but **cannot** be used in filters.
+
+## Error Handling
+
+The store throws typed errors that can be caught:
+
+```typescript copy
+try {
+  await store.query({
+    indexName: "index-name",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
+    console.log(error.details); // Additional error context
+  }
+}
+```
+
+## Environment Variables
+
+Typical environment variables when wiring your app:
+
+* `S3_VECTORS_BUCKET_NAME`: Your S3 **vector bucket** name (used to populate `vectorBucketName`).
+* `AWS_REGION`: AWS region for the S3 Vectors bucket.
+* **AWS credentials**: via the standard AWS SDK provider chain (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_PROFILE`, etc.).
+
+## Best Practices
+
+* Choose the metric (`cosine` or `euclidean`) to match your embedding model; `dotproduct` is not supported.
+* Keep **filterable** metadata small and structured (string/number/boolean). Store large text (e.g., `content`) as **non-filterable**.
+* Use **dotted paths** for nested metadata and explicit `$and`/`$or` for complex logic.
+* Avoid calling `describeIndex()` on hot paths—`count` is computed with paginated `ListVectors` (**O(n)**).
+* Use `includeVector: true` only when you need raw vectors.
+
+## Related
+
+* [Metadata Filters](./metadata-filters)

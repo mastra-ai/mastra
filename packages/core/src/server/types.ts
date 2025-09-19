@@ -5,7 +5,7 @@ import type { Mastra } from '../mastra';
 import type { RuntimeContext } from '../runtime-context';
 import type { MastraAuthProvider } from './auth';
 
-export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'ALL';
+export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL';
 
 export type ApiRoute =
   | {
@@ -14,6 +14,7 @@ export type ApiRoute =
       handler: Handler;
       middleware?: MiddlewareHandler | MiddlewareHandler[];
       openapi?: DescribeRouteOptions;
+      requiresAuth?: boolean;
     }
   | {
       path: string;
@@ -21,6 +22,7 @@ export type ApiRoute =
       createHandler: ({ mastra }: { mastra: Mastra }) => Promise<Handler>;
       middleware?: MiddlewareHandler | MiddlewareHandler[];
       openapi?: DescribeRouteOptions;
+      requiresAuth?: boolean;
     };
 
 export type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
@@ -29,6 +31,7 @@ export type ContextWithMastra = Context<{
   Variables: {
     mastra: Mastra;
     runtimeContext: RuntimeContext;
+    customRouteAuthConfig?: Map<string, boolean>;
   };
 }>;
 
@@ -134,4 +137,12 @@ export type ServerConfig = {
    * Authentication configuration for the server
    */
   experimental_auth?: MastraAuthConfig<any> | MastraAuthProvider<any>;
+
+  /**
+   * If you want to run `mastra dev` with HTTPS, you can run it with the `--https` flag and provide the key and cert files here.
+   */
+  https?: {
+    key: Buffer;
+    cert: Buffer;
+  };
 };

@@ -1,9 +1,10 @@
+import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
 import type { AssistantContent, CoreMessage, EmbeddingModel, ToolContent, UserContent } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 
 export type { MastraMessageV2 } from '../agent';
 import type { ZodObject } from 'zod';
-import type { MastraLanguageModel } from '../agent/types';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { MastraStorage } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraVector } from '../vector';
@@ -70,15 +71,14 @@ type WorkingMemoryNone = BaseWorkingMemory & {
 
 export type WorkingMemory = TemplateWorkingMemory | SchemaWorkingMemory | WorkingMemoryNone;
 
+export type SemanticRecall = {
+  topK: number;
+  messageRange: number | { before: number; after: number };
+  scope?: 'thread' | 'resource';
+};
 export type MemoryConfig = {
   lastMessages?: number | false;
-  semanticRecall?:
-    | boolean
-    | {
-        topK: number;
-        messageRange: number | { before: number; after: number };
-        scope?: 'thread' | 'resource';
-      };
+  semanticRecall?: boolean | SemanticRecall;
   workingMemory?: WorkingMemory;
   threads?: {
     generateTitle?:
@@ -97,7 +97,7 @@ export type SharedMemoryConfig = {
   options?: MemoryConfig;
 
   vector?: MastraVector | false;
-  embedder?: EmbeddingModel<string>;
+  embedder?: EmbeddingModel<string> | EmbeddingModelV2<string>;
 
   processors?: MemoryProcessor[];
 };

@@ -1,6 +1,7 @@
 import { connect, Index } from '@lancedb/lancedb';
 import type { Connection, ConnectionOptions, CreateTableOptions, Table, TableLike } from '@lancedb/lancedb';
 
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type {
   CreateIndexParams,
   DeleteIndexParams,
@@ -11,8 +12,7 @@ import type {
   QueryVectorParams,
   UpdateVectorParams,
   UpsertVectorParams,
-} from '@mastra/core';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+} from '@mastra/core/vector';
 
 import { MastraVector } from '@mastra/core/vector';
 import type { LanceVectorFilter } from './filter';

@@ -1,0 +1,111 @@
+---
+title: "LanceDB Storage"
+description: MastraにおけるLanceDBストレージ実装のドキュメント。
+---
+
+
+
+# LanceDB Storage
+
+LanceDB ストレージ実装は、従来のデータストレージとベクトル操作の両方を得意とする LanceDB データベースシステムを使用した高性能ストレージソリューションを提供します。
+
+
+
+## インストール
+
+```bash
+npm install @mastra/lance
+```
+
+
+
+## 使用方法
+
+### 基本的なストレージの使用方法
+
+```typescript copy showLineNumbers
+import { LanceStorage } from "@mastra/lance";
+
+// Connect to a local database
+const storage = await LanceStorage.create("my-storage", "/path/to/db");
+
+// Connect to a LanceDB cloud database
+const storage = await LanceStorage.create("my-storage", "db://host:port");
+
+// Connect to a cloud database with custom options
+const storage = await LanceStorage.create("my-storage", "s3://bucket/db", {
+  storageOptions: { timeout: "60s" },
+});
+```
+
+
+
+## パラメータ
+
+### LanceStorage.create()
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "ストレージインスタンスの名前識別子",
+      isOptional: false,
+    },
+    {
+      name: "uri",
+      type: "string",
+      description:
+        "LanceDBデータベースに接続するためのURI。ローカルパス、クラウドDB URL、またはS3バケットURLを指定できます",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "ConnectionOptions",
+      description:
+        "タイムアウト設定、認証などのLanceDBの接続オプション",
+      isOptional: true,
+    },
+  ]}
+/>
+
+
+
+## 追加の注意事項
+
+### スキーマ管理
+
+LanceStorage実装は、スキーマの作成と更新を自動的に処理します。MastraのスキーマタイプをApache Arrowデータタイプにマッピングし、これらはLanceDBで内部的に使用されます：
+
+- `text`, `uuid` → Utf8
+- `int`, `integer` → Int32
+- `float` → Float32
+- `jsonb`, `json` → Utf8 (シリアル化)
+- `binary` → Binary
+
+### デプロイメントオプション
+
+LanceDBストレージは、異なるデプロイメントシナリオに対して設定できます：
+
+- **ローカル開発**: 開発とテスト用にローカルファイルパスを使用
+  ```
+  /path/to/db
+  ```
+- **クラウドデプロイメント**: ホストされたLanceDBインスタンスに接続
+  ```
+  db://host:port
+  ```
+- **S3ストレージ**: スケーラブルなクラウドストレージ用にAmazon S3を使用
+  ```
+  s3://bucket/db
+  ```
+
+### テーブル管理
+
+LanceStorageは、テーブル管理のためのメソッドを提供します：
+
+- カスタムスキーマでテーブルを作成
+- テーブルを削除
+- テーブルをクリア（すべてのレコードを削除）
+- キーによるレコードの読み込み
+- 単一およびバッチレコードの挿入

@@ -11,20 +11,20 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "description": "A Mastra template that processes PDF files and converts their content to audio using voice synthesis. Features PDF text extraction, summarization, and text-to-speech conversion with configurable voice options.",
   "type": "module",
   "engines": {
     "node": ">=20.9.0"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^1.3.23",
+    "@ai-sdk/openai": "^1.3.24",
     "@mastra/core": "latest",
     "@mastra/libsql": "latest",
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",
     "@mastra/voice-openai": "latest",
-    "ai": "^4.0.56",
+    "ai": "^4.3.19",
     "pdf2json": "^3.1.3",
     "zod": "^3.25.76"
   },

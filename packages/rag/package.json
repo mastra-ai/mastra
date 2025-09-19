@@ -1,10 +1,14 @@
 {
   "name": "@mastra/rag",
-  "version": "1.0.8",
+  "version": "1.2.5",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
   "exports": {
     ".": {
       "import": {
@@ -20,7 +24,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
-    "buld:watch": "pnpm build --watch",
+    "build:watch": "pnpm build --watch",
     "vitest": "vitest",
     "test": "vitest run",
     "lint": "eslint ."
@@ -31,30 +35,31 @@
     "@paralleldrive/cuid2": "^2.2.2",
     "big.js": "^7.0.1",
     "js-tiktoken": "^1.0.20",
-    "node-html-better-parser": "^1.5.2",
+    "node-html-better-parser": "^1.5.7",
     "pathe": "^2.0.3",
-    "zeroentropy": "0.1.0-alpha.6",
-    "zod": "^3.25.67"
+    "zeroentropy": "0.1.0-alpha.6"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.0-0 <0.14.0-0",
-    "ai": "^4.0.0"
+    "@mastra/core": ">=0.15.3-0 <0.18.0-0",
+    "ai": "^4.0.0 || ^5.0.0",
+    "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
     "@ai-sdk/cohere": "^1.2.10",
-    "@ai-sdk/openai": "^1.3.22",
+    "@ai-sdk/openai": "^1.3.24",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/big.js": "^6.2.2",
     "@types/node": "^20.19.0",
-    "ai": "^4.3.16",
+    "ai": "^4.3.19",
     "dotenv": "^17.0.0",
-    "eslint": "^9.30.1",
+    "eslint": "^9.35.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
-    "@internal/types-builder": "workspace:*"
+    "@internal/types-builder": "workspace:*",
+    "zod": "^3.25.76"
   },
   "keywords": [
     "rag",
@@ -71,5 +76,14 @@
     "llm",
     "llms",
     "typescript"
-  ]
+  ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/rag"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  }
 }

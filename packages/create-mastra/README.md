@@ -4,22 +4,16 @@ The easiest way to get started with Mastra is by using `create-mastra`. This CLI
 
 ## Usage
 
-Using npx:
+Using npm:
 
 ```bash
 npx create-mastra@latest
 ```
 
-Using npm:
-
-```bash
-npm create mastra@latest
-```
-
 Using yarn:
 
 ```bash
-yarn create mastra
+yarn dlx create-mastra@latest
 ```
 
 Using pnpm:

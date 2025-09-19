@@ -1,0 +1,4 @@
+memory.db
+*.db
+*.db*
+src/worker/*.js

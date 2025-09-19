@@ -1,9 +1,9 @@
-import { cn } from '@/lib/utils';
+import clsx from 'clsx';
 
 function Spinner({ color = '#fff', className }: { color?: string; className?: string }) {
   return (
     <svg
-      className={cn('animate-spin duration-700', className)}
+      className={clsx('animate-spin duration-700', className)}
       xmlns="http://www.w3.org/2000/svg"
       width="24"
       height="24"

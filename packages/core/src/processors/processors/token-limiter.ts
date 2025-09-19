@@ -1,8 +1,8 @@
-import type { TextStreamPart, ObjectStreamPart } from 'ai';
 import { Tiktoken } from 'js-tiktoken/lite';
 import type { TiktokenBPE } from 'js-tiktoken/lite';
 import o200k_base from 'js-tiktoken/ranks/o200k_base';
 import type { MastraMessageV2 } from '../../agent/message-list';
+import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
 /**
@@ -56,11 +56,11 @@ export class TokenLimiterProcessor implements Processor {
   }
 
   async processOutputStream(args: {
-    part: TextStreamPart<any> | ObjectStreamPart<any>;
-    streamParts: (TextStreamPart<any> | ObjectStreamPart<any>)[];
+    part: ChunkType;
+    streamParts: ChunkType[];
     state: Record<string, any>;
     abort: (reason?: string) => never;
-  }): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null> {
+  }): Promise<ChunkType | null> {
     const { part, abort } = args;
 
     // Count tokens in the current part
@@ -99,10 +99,10 @@ export class TokenLimiterProcessor implements Processor {
     return result;
   }
 
-  private countTokensInChunk(part: TextStreamPart<any> | ObjectStreamPart<any>): number {
+  private countTokensInChunk(part: ChunkType): number {
     if (part.type === 'text-delta') {
       // For text chunks, count the text content directly
-      return this.encoder.encode(part.textDelta).length;
+      return this.encoder.encode(part.payload.text).length;
     } else if (part.type === 'object') {
       // For object chunks, count the JSON representation
       // This is similar to how the memory processor handles object content
@@ -110,23 +110,23 @@ export class TokenLimiterProcessor implements Processor {
       return this.encoder.encode(objectString).length;
     } else if (part.type === 'tool-call') {
       // For tool-call chunks, count tool name and args
-      let tokenString = part.toolName;
-      if (part.args) {
-        if (typeof part.args === 'string') {
-          tokenString += part.args;
+      let tokenString = part.payload.toolName;
+      if (part.payload.args) {
+        if (typeof part.payload.args === 'string') {
+          tokenString += part.payload.args;
         } else {
-          tokenString += JSON.stringify(part.args);
+          tokenString += JSON.stringify(part.payload.args);
         }
       }
       return this.encoder.encode(tokenString).length;
     } else if (part.type === 'tool-result') {
       // For tool-result chunks, count the result
       let tokenString = '';
-      if (part.result !== undefined) {
-        if (typeof part.result === 'string') {
-          tokenString += part.result;
+      if (part.payload.result !== undefined) {
+        if (typeof part.payload.result === 'string') {
+          tokenString += part.payload.result;
         } else {
-          tokenString += JSON.stringify(part.result);
+          tokenString += JSON.stringify(part.payload.result);
         }
       }
       return this.encoder.encode(tokenString).length;

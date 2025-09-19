@@ -1,13 +1,14 @@
 import { createHash } from 'crypto';
-import type { CoreMessage, LanguageModelV1 } from 'ai';
+import type { WritableStream } from 'stream/web';
+import type { CoreMessage } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
-import type { AnyAISpan } from './ai-tracing';
+import type { TracingContext, TracingPolicy } from './ai-tracing';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
-import type { AiMessageType, MastraMemory } from './memory';
+import type { AiMessageType, MastraLanguageModel, MastraMemory } from './memory';
 import type { RuntimeContext } from './runtime-context';
 import type { ChunkType } from './stream/types';
 import type { CoreTool, VercelTool, VercelToolV5 } from './tools';
@@ -223,11 +224,12 @@ export interface ToolOptions {
   description?: string;
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
   runtimeContext: RuntimeContext;
+  tracingContext?: TracingContext;
+  tracingPolicy?: TracingPolicy;
   memory?: MastraMemory;
   agentName?: string;
-  model?: LanguageModelV1;
+  model?: MastraLanguageModel;
   writableStream?: WritableStream<ChunkType>;
-  agentAISpan?: AnyAISpan;
 }
 
 /**
@@ -514,4 +516,45 @@ export function parseFieldKey(key: string): FieldKey {
     }
   }
   return key as FieldKey;
+}
+
+/**
+ * Performs a fetch request with automatic retries using exponential backoff
+ * @param url The URL to fetch from
+ * @param options Standard fetch options
+ * @param maxRetries Maximum number of retry attempts
+ * @param validateResponse Optional function to validate the response beyond HTTP status
+ * @returns The fetch Response if successful
+ */
+export async function fetchWithRetry(
+  url: string,
+  options: RequestInit = {},
+  maxRetries: number = 3,
+): Promise<Response> {
+  let retryCount = 0;
+  let lastError: Error | null = null;
+
+  while (retryCount < maxRetries) {
+    try {
+      const response = await fetch(url, options);
+
+      if (!response.ok) {
+        throw new Error(`Request failed with status: ${response.status} ${response.statusText}`);
+      }
+
+      return response;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      retryCount++;
+
+      if (retryCount >= maxRetries) {
+        break;
+      }
+
+      const delay = Math.min(1000 * Math.pow(2, retryCount) * 1000, 10000);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError || new Error('Request failed after multiple retry attempts');
 }

@@ -1,6 +1,8 @@
-import type { TextStreamPart, ObjectStreamPart } from 'ai';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { ChunkType } from '../../stream';
+import { ChunkFrom } from '../../stream/types';
 import { BatchPartsProcessor } from './batch-parts';
+import type { BatchPartsState } from './batch-parts';
 
 describe('BatchPartsProcessor', () => {
   let processor: BatchPartsProcessor;
@@ -18,13 +20,27 @@ describe('BatchPartsProcessor', () => {
     it('should batch text chunks and emit when batch size is reached', async () => {
       processor = new BatchPartsProcessor({ batchSize: 3 });
 
-      // First two chunks should not be emitted
-      const chunk1: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
-      const chunk2: TextStreamPart<any> = { type: 'text-delta', textDelta: ' ' };
-      const chunk3: TextStreamPart<any> = { type: 'text-delta', textDelta: 'world' };
+      const chunk1: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
+      const chunk2: ChunkType = {
+        type: 'text-delta',
+        payload: { text: ' ', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
+      const chunk3: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'world', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
 
       // Use shared state object
-      const state: Record<string, any> = {};
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
 
       const result1 = await processor.processOutputStream({
         part: chunk1,
@@ -55,7 +71,9 @@ describe('BatchPartsProcessor', () => {
       expect(result2).toBeNull();
       expect(result3).toEqual({
         type: 'text-delta',
-        textDelta: 'Hello world',
+        runId: '1',
+        from: ChunkFrom.AGENT,
+        payload: { text: 'Hello world', id: '1' },
       });
     });
 
@@ -63,15 +81,15 @@ describe('BatchPartsProcessor', () => {
       processor = new BatchPartsProcessor();
 
       const chunks = [
-        { type: 'text-delta', textDelta: 'A' },
-        { type: 'text-delta', textDelta: 'B' },
-        { type: 'text-delta', textDelta: 'C' },
-        { type: 'text-delta', textDelta: 'D' },
-        { type: 'text-delta', textDelta: 'E' },
-      ] as TextStreamPart<any>[];
+        { type: 'text-delta', payload: { text: 'A', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'B', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'C', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'D', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'E', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+      ] as ChunkType[];
 
       // Use shared state object
-      const state: Record<string, any> = {};
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
 
       // First 4 should return null
       for (let i = 0; i < 4; i++) {
@@ -97,7 +115,9 @@ describe('BatchPartsProcessor', () => {
       });
       expect(result).toEqual({
         type: 'text-delta',
-        textDelta: 'ABCDE',
+        runId: '1',
+        from: ChunkFrom.AGENT,
+        payload: { text: 'ABCDE', id: '1' },
       });
     });
   });
@@ -107,11 +127,21 @@ describe('BatchPartsProcessor', () => {
       processor = new BatchPartsProcessor({ batchSize: 5 });
 
       // Add some text chunks first
-      const textChunk1: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
-      const textChunk2: TextStreamPart<any> = { type: 'text-delta', textDelta: ' world' };
+      const textChunk1: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
+      const textChunk2: ChunkType = {
+        type: 'text-delta',
+        payload: { text: ' world', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
 
       // Use shared state object
-      const state: Record<string, any> = {};
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
 
       await processor.processOutputStream({
         part: textChunk1,
@@ -131,7 +161,7 @@ describe('BatchPartsProcessor', () => {
       });
 
       // Now add a non-text part
-      const objectChunk: ObjectStreamPart<any> = { type: 'object', object: { key: 'value' } };
+      const objectChunk: ChunkType = { type: 'object', object: { key: 'value' }, runId: '1', from: ChunkFrom.AGENT };
       const result = await processor.processOutputStream({
         part: objectChunk,
         streamParts: [textChunk1, textChunk2],
@@ -144,7 +174,9 @@ describe('BatchPartsProcessor', () => {
       // Should emit the batched text first
       expect(result).toEqual({
         type: 'text-delta',
-        textDelta: 'Hello world',
+        runId: '1',
+        from: ChunkFrom.AGENT,
+        payload: { text: 'Hello world', id: '1' },
       });
     });
 
@@ -152,7 +184,12 @@ describe('BatchPartsProcessor', () => {
       processor = new BatchPartsProcessor({ batchSize: 5, emitOnNonText: false });
 
       // Add some text chunks first
-      const textChunk: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
+      const textChunk: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
       await processor.processOutputStream({
         part: textChunk,
         streamParts: [textChunk],
@@ -163,7 +200,7 @@ describe('BatchPartsProcessor', () => {
       });
 
       // Add a non-text part
-      const objectChunk: ObjectStreamPart<any> = { type: 'object', object: { key: 'value' } };
+      const objectChunk: ChunkType = { type: 'object', object: { key: 'value' }, runId: '1', from: ChunkFrom.AGENT };
       const result = await processor.processOutputStream({
         part: objectChunk,
         streamParts: [objectChunk],
@@ -180,15 +217,15 @@ describe('BatchPartsProcessor', () => {
     it('should handle mixed text and non-text chunks correctly', async () => {
       processor = new BatchPartsProcessor({ batchSize: 3 });
 
-      const chunks: (TextStreamPart<any> | ObjectStreamPart<any>)[] = [
-        { type: 'text-delta', textDelta: 'Hello' },
-        { type: 'object', object: { key: 'value' } },
-        { type: 'text-delta', textDelta: ' world' },
-        { type: 'text-delta', textDelta: '!' },
+      const chunks: ChunkType[] = [
+        { type: 'text-delta', payload: { text: 'Hello', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'object', object: { key: 'value' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: ' world', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: '!', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
       ];
 
       // Use shared state object
-      const state: Record<string, any> = {};
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
 
       // First part - should not emit
       let result = await processor.processOutputStream({
@@ -212,7 +249,9 @@ describe('BatchPartsProcessor', () => {
       });
       expect(result).toEqual({
         type: 'text-delta',
-        textDelta: 'Hello',
+        runId: '1',
+        from: ChunkFrom.AGENT,
+        payload: { text: 'Hello', id: '1' },
       });
 
       // Third and fourth chunks - should batch together
@@ -242,11 +281,21 @@ describe('BatchPartsProcessor', () => {
     it('should emit batch after maxWaitTime even if batch size not reached', async () => {
       processor = new BatchPartsProcessor({ batchSize: 5, maxWaitTime: 1000 });
 
-      const chunk1: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
-      const chunk2: TextStreamPart<any> = { type: 'text-delta', textDelta: ' world' };
+      const chunk1: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
+      const chunk2: ChunkType = {
+        type: 'text-delta',
+        payload: { text: ' world', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
 
       // Use shared state object
-      const state: Record<string, any> = {};
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
 
       // Add chunks
       await processor.processOutputStream({
@@ -271,7 +320,12 @@ describe('BatchPartsProcessor', () => {
 
       // The timeout should have triggered and emitted the batch
       // We need to process another part to see the result
-      const chunk3: TextStreamPart<any> = { type: 'text-delta', textDelta: '!' };
+      const chunk3: ChunkType = {
+        type: 'text-delta',
+        payload: { text: '!', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
       const result = await processor.processOutputStream({
         part: chunk3,
         streamParts: [chunk3],
@@ -284,14 +338,21 @@ describe('BatchPartsProcessor', () => {
       // Should emit the batched text including the current part when timeout triggers
       expect(result).toEqual({
         type: 'text-delta',
-        textDelta: 'Hello world!',
+        runId: '1',
+        from: ChunkFrom.AGENT,
+        payload: { text: 'Hello world!', id: '1' },
       });
     });
 
     it('should not set timeout if maxWaitTime is not specified', async () => {
       processor = new BatchPartsProcessor({ batchSize: 5 });
 
-      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
       await processor.processOutputStream({
         part: part,
         streamParts: [part],
@@ -305,7 +366,12 @@ describe('BatchPartsProcessor', () => {
       vi.advanceTimersByTime(5000);
 
       // Should still not emit until batch size is reached
-      const chunk2: TextStreamPart<any> = { type: 'text-delta', textDelta: ' world' };
+      const chunk2: ChunkType = {
+        type: 'text-delta',
+        payload: { text: ' world', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
       const result = await processor.processOutputStream({
         part: chunk2,
         streamParts: [chunk2],
@@ -323,12 +389,12 @@ describe('BatchPartsProcessor', () => {
       processor = new BatchPartsProcessor({ batchSize: 5 });
 
       const chunks = [
-        { type: 'text-delta', textDelta: 'Hello' },
-        { type: 'text-delta', textDelta: ' world' },
-      ] as TextStreamPart<any>[];
+        { type: 'text-delta', payload: { text: 'Hello', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: ' world', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+      ] as ChunkType[];
 
       // Use shared state object
-      const state: Record<string, any> = {};
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
 
       // Add chunks (should not emit yet)
       await processor.processOutputStream({
@@ -352,7 +418,9 @@ describe('BatchPartsProcessor', () => {
       const result = processor.flush(state);
       expect(result).toEqual({
         type: 'text-delta',
-        textDelta: 'Hello world',
+        runId: '1',
+        from: ChunkFrom.AGENT,
+        payload: { text: 'Hello world', id: '1' },
       });
     });
 
@@ -367,7 +435,12 @@ describe('BatchPartsProcessor', () => {
     it('should handle single part correctly', async () => {
       processor = new BatchPartsProcessor({ batchSize: 3 });
 
-      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
       const result = await processor.processOutputStream({
         part: part,
         streamParts: [part],
@@ -384,11 +457,21 @@ describe('BatchPartsProcessor', () => {
     it('should handle empty text deltas', async () => {
       processor = new BatchPartsProcessor({ batchSize: 2 });
 
-      const chunk1: TextStreamPart<any> = { type: 'text-delta', textDelta: '' };
-      const chunk2: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
+      const chunk1: ChunkType = {
+        type: 'text-delta',
+        payload: { text: '', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
+      const chunk2: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
 
       // Use shared state object
-      const state: Record<string, any> = {};
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
 
       const result1 = await processor.processOutputStream({
         part: chunk1,
@@ -410,18 +493,20 @@ describe('BatchPartsProcessor', () => {
       expect(result1).toBeNull();
       expect(result2).toEqual({
         type: 'text-delta',
-        textDelta: 'Hello',
+        runId: '1',
+        from: ChunkFrom.AGENT,
+        payload: { text: 'Hello', id: '1' },
       });
     });
 
     it('should handle only non-text chunks', async () => {
       processor = new BatchPartsProcessor({ batchSize: 3 });
 
-      const objectChunk1: ObjectStreamPart<any> = { type: 'object', object: { key1: 'value1' } };
-      const objectChunk2: ObjectStreamPart<any> = { type: 'object', object: { key2: 'value2' } };
+      const objectChunk1: ChunkType = { type: 'object', object: { key1: 'value1' }, runId: '1', from: ChunkFrom.AGENT };
+      const objectChunk2: ChunkType = { type: 'object', object: { key2: 'value2' }, runId: '1', from: ChunkFrom.AGENT };
 
       // Use shared state object
-      const state: Record<string, any> = {};
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
 
       const result1 = await processor.processOutputStream({
         part: objectChunk1,
@@ -449,12 +534,27 @@ describe('BatchPartsProcessor', () => {
       processor = new BatchPartsProcessor({ batchSize: 3 });
 
       // Use shared state object
-      const state: Record<string, any> = {};
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
 
       // Add text chunks first
-      const textChunk1: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
-      const textChunk2: TextStreamPart<any> = { type: 'text-delta', textDelta: ' world' };
-      const textChunk3: TextStreamPart<any> = { type: 'text-delta', textDelta: '!' };
+      const textChunk1: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
+      const textChunk2: ChunkType = {
+        type: 'text-delta',
+        payload: { text: ' world', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
+      const textChunk3: ChunkType = {
+        type: 'text-delta',
+        payload: { text: '!', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
 
       // First two should not emit
       await processor.processOutputStream({
@@ -486,11 +586,13 @@ describe('BatchPartsProcessor', () => {
 
       expect(result).toEqual({
         type: 'text-delta',
-        textDelta: 'Hello world!',
+        runId: '1',
+        from: ChunkFrom.AGENT,
+        payload: { text: 'Hello world!', id: '1' },
       });
 
       // Now add a non-text part - it should be emitted immediately and not accumulated
-      const objectChunk: ObjectStreamPart<any> = { type: 'object', object: { key: 'value' } };
+      const objectChunk: ChunkType = { type: 'object', object: { key: 'value' }, runId: '1', from: ChunkFrom.AGENT };
       const result2 = await processor.processOutputStream({
         part: objectChunk,
         streamParts: [objectChunk],

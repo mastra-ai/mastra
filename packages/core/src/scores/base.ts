@@ -1,9 +1,10 @@
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { Agent } from '../agent';
+import { InternalSpans } from '../ai-tracing';
+import type { TracingContext } from '../ai-tracing';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
-import type { LanguageModel } from '../llm';
-import type { MastraLanguageModel } from '../memory';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
 import { createWorkflow, createStep } from '../workflows';
 import type { ScoringSamplingConfig } from './types';
 
@@ -21,7 +22,7 @@ interface ScorerConfig<TName extends string = string, TInput = any, TRunOutput =
   name: TName;
   description: string;
   judge?: {
-    model: LanguageModel;
+    model: MastraLanguageModel;
     instructions: string;
   };
 }
@@ -33,6 +34,7 @@ interface ScorerRun<TInput = any, TOutput = any> {
   output: TOutput;
   groundTruth?: any;
   runtimeContext?: Record<string, any>;
+  tracingContext?: TracingContext;
 }
 
 // Prompt object definition with conditional typing
@@ -331,6 +333,8 @@ class MastraScorer<
       });
     }
 
+    const { tracingContext } = input;
+
     let runId = input.runId;
     if (!runId) {
       runId = randomUUID();
@@ -344,6 +348,7 @@ class MastraScorer<
       inputData: {
         run,
       },
+      tracingContext,
     });
 
     if (workflowResult.status === 'failed') {
@@ -396,7 +401,7 @@ class MastraScorer<
         description: `Scorer step: ${scorerStep.name}`,
         inputSchema: z.any(),
         outputSchema: z.any(),
-        execute: async ({ inputData, getInitData }) => {
+        execute: async ({ inputData, getInitData, tracingContext }) => {
           const { accumulatedResults = {}, generatedPrompts = {} } = inputData;
           const { run } = getInitData();
 
@@ -405,7 +410,7 @@ class MastraScorer<
           let stepResult;
           let newGeneratedPrompts = generatedPrompts;
           if (scorerStep.isPromptObject) {
-            const { result, prompt } = await this.executePromptStep(scorerStep, context);
+            const { result, prompt } = await this.executePromptStep(scorerStep, tracingContext, context);
             stepResult = result;
             newGeneratedPrompts = {
               ...generatedPrompts,
@@ -446,6 +451,12 @@ class MastraScorer<
         generateScorePrompt: z.string().optional(),
         generateReasonPrompt: z.string().optional(),
       }),
+      options: {
+        // mark all spans generated as part of the scorer workflow internal
+        tracingPolicy: {
+          internal: InternalSpans.ALL,
+        },
+      },
     });
 
     let chainedWorkflow = workflow;
@@ -474,7 +485,7 @@ class MastraScorer<
     return await scorerStep.definition(context);
   }
 
-  private async executePromptStep(scorerStep: ScorerStepDefinition, context: any) {
+  private async executePromptStep(scorerStep: ScorerStepDefinition, tracingContext: TracingContext, context: any) {
     const originalStep = this.originalPromptObjects.get(scorerStep.name);
     if (!originalStep) {
       throw new Error(`Step "${scorerStep.name}" is not a prompt object`);
@@ -497,24 +508,52 @@ class MastraScorer<
       });
     }
 
-    const judge = new Agent({ name: 'judge', model, instructions });
+    const judge = new Agent({
+      name: 'judge',
+      model,
+      instructions,
+      options: { tracingPolicy: { internal: InternalSpans.ALL } },
+    });
 
     // GenerateScore output must be a number
     if (scorerStep.name === 'generateScore') {
-      const result = await judge.generate(prompt, {
-        output: z.object({ score: z.number() }),
-      });
+      let result;
+      if (model.specificationVersion === 'v2') {
+        result = await judge.generateVNext(prompt, {
+          output: z.object({ score: z.number() }),
+          tracingContext,
+        });
+      } else {
+        result = await judge.generate(prompt, {
+          output: z.object({ score: z.number() }),
+          tracingContext,
+        });
+      }
       return { result: result.object.score, prompt };
 
       // GenerateReason output must be a string
     } else if (scorerStep.name === 'generateReason') {
-      const result = await judge.generate(prompt);
+      let result;
+      if (model.specificationVersion === 'v2') {
+        result = await judge.generateVNext(prompt, { tracingContext });
+      } else {
+        result = await judge.generate(prompt, { tracingContext });
+      }
       return { result: result.text, prompt };
     } else {
       const promptStep = originalStep as PromptObject<any, any, any, TInput, TRunOutput>;
-      const result = await judge.generate(prompt, {
-        output: promptStep.outputSchema,
-      });
+      let result;
+      if (model.specificationVersion === 'v2') {
+        result = await judge.generateVNext(prompt, {
+          output: promptStep.outputSchema,
+          tracingContext,
+        });
+      } else {
+        result = await judge.generate(prompt, {
+          output: promptStep.outputSchema,
+          tracingContext,
+        });
+      }
       return { result: result.object, prompt };
     }
   }

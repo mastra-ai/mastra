@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { toast } from 'sonner';
-import { LegacyWorkflowRunResult, WorkflowWatchResult, GetWorkflowResponse } from '@mastra/client-js';
+import { LegacyWorkflowRunResult, WorkflowWatchResult } from '@mastra/client-js';
 import type { LegacyWorkflow } from '@mastra/core/workflows/legacy';
 import { useMastraClient } from '@/contexts/mastra-client-context';
+import { usePlaygroundStore } from '@/store/playground-store';
+import { useQuery } from '@tanstack/react-query';
 
 export type ExtendedLegacyWorkflowRunResult = LegacyWorkflowRunResult & {
   sanitizedOutput?: string | null;
@@ -21,42 +23,17 @@ export type ExtendedWorkflowWatchResult = WorkflowWatchResult & {
   } | null;
 };
 
-export const useWorkflow = (workflowId: string) => {
-  const [workflow, setWorkflow] = useState<GetWorkflowResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
+export const useWorkflow = (workflowId: string, enabled = true) => {
   const client = useMastraClient();
-
-  useEffect(() => {
-    const fetchWorkflow = async () => {
-      setIsLoading(true);
-      try {
-        if (!workflowId) {
-          setWorkflow(null);
-          setIsLoading(false);
-          return;
-        }
-        const res = await client.getWorkflow(workflowId).details();
-        if (!res) {
-          setWorkflow(null);
-          console.error('Error fetching workflow');
-          toast.error('Error fetching workflow');
-          return;
-        }
-        setWorkflow(res);
-      } catch (error) {
-        setWorkflow(null);
-        console.error('Error fetching workflow', error);
-        toast.error('Error fetching workflow');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchWorkflow();
-  }, [workflowId]);
-
-  return { workflow, isLoading };
+  const { runtimeContext } = usePlaygroundStore();
+  return useQuery({
+    queryKey: ['workflow', workflowId],
+    queryFn: () => client.getWorkflow(workflowId).details(runtimeContext),
+    retry: false,
+    refetchOnWindowFocus: false,
+    throwOnError: false,
+    enabled,
+  });
 };
 
 export const useLegacyWorkflow = (workflowId: string) => {
@@ -74,7 +51,8 @@ export const useLegacyWorkflow = (workflowId: string) => {
           setIsLoading(false);
           return;
         }
-        const res = await client.getLegacyWorkflow(workflowId).details();
+        const { runtimeContext } = usePlaygroundStore.getState();
+        const res = await client.getLegacyWorkflow(workflowId).details(runtimeContext);
         if (!res) {
           setLegacyWorkflow(null);
           console.error('Error fetching legacy workflow');
@@ -86,7 +64,7 @@ export const useLegacyWorkflow = (workflowId: string) => {
           Object.values(steps)?.map(async step => {
             if (!step.workflowId) return step;
 
-            const wFlow = await client.getLegacyWorkflow(step.workflowId).details();
+            const wFlow = await client.getLegacyWorkflow(step.workflowId).details(runtimeContext);
 
             if (!wFlow) return step;
 

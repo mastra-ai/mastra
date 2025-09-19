@@ -20,7 +20,8 @@ import type {
   ThreadSortOptions,
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
-import type { WorkflowRunState } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import type { ClientConfig } from 'pg';
 import pgPromise from 'pg-promise';
 import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
 import { LegacyEvalsPG } from './domains/legacy-evals';
@@ -29,6 +30,8 @@ import { StoreOperationsPG } from './domains/operations';
 import { ScoresPG } from './domains/scores';
 import { TracesPG } from './domains/traces';
 import { WorkflowsPG } from './domains/workflows';
+
+export type { CreateIndexOptions, IndexInfo } from '@mastra/core/storage';
 
 export type PostgresConfig = {
   schemaName?: string;
@@ -46,6 +49,8 @@ export type PostgresConfig = {
   | {
       connectionString: string;
     }
+  // Support Cloud SQL Connector & pg ClientConfig
+  | ClientConfig
 );
 
 export class PostgresStore extends MastraStorage {
@@ -58,9 +63,31 @@ export class PostgresStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor(config: PostgresConfig) {
+    // Type guards for better type safety
+    const isConnectionStringConfig = (cfg: PostgresConfig): cfg is PostgresConfig & { connectionString: string } => {
+      return 'connectionString' in cfg;
+    };
+
+    const isHostConfig = (
+      cfg: PostgresConfig,
+    ): cfg is PostgresConfig & {
+      host: string;
+      port: number;
+      database: string;
+      user: string;
+      password: string;
+      ssl?: boolean | ISSLConfig;
+    } => {
+      return 'host' in cfg && 'database' in cfg && 'user' in cfg && 'password' in cfg;
+    };
+
+    const isCloudSqlConfig = (cfg: PostgresConfig): cfg is PostgresConfig & ClientConfig => {
+      return 'stream' in cfg || ('password' in cfg && typeof cfg.password === 'function');
+    };
+
     // Validation: connectionString or host/database/user/password must not be empty
     try {
-      if ('connectionString' in config) {
+      if (isConnectionStringConfig(config)) {
         if (
           !config.connectionString ||
           typeof config.connectionString !== 'string' ||
@@ -70,32 +97,56 @@ export class PostgresStore extends MastraStorage {
             'PostgresStore: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.',
           );
         }
-      } else {
-        const required = ['host', 'database', 'user', 'password'];
+      } else if (isCloudSqlConfig(config)) {
+        // valid connector config; no-op
+      } else if (isHostConfig(config)) {
+        const required = ['host', 'database', 'user', 'password'] as const;
         for (const key of required) {
-          if (!(key in config) || typeof (config as any)[key] !== 'string' || (config as any)[key].trim() === '') {
+          if (!config[key] || typeof config[key] !== 'string' || config[key].trim() === '') {
             throw new Error(
               `PostgresStore: ${key} must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.`,
             );
           }
         }
+      } else {
+        throw new Error(
+          'PostgresStore: invalid config. Provide either {connectionString}, {host,port,database,user,password}, or a pg ClientConfig (e.g., Cloud SQL connector with `stream`).',
+        );
       }
       super({ name: 'PostgresStore' });
       this.schema = config.schemaName || 'public';
-      this.#config = {
-        max: config.max,
-        idleTimeoutMillis: config.idleTimeoutMillis,
-        ...(`connectionString` in config
-          ? { connectionString: config.connectionString }
-          : {
-              host: config.host,
-              port: config.port,
-              database: config.database,
-              user: config.user,
-              password: config.password,
-              ssl: config.ssl,
-            }),
-      };
+      if (isConnectionStringConfig(config)) {
+        this.#config = {
+          connectionString: config.connectionString,
+          max: config.max,
+          idleTimeoutMillis: config.idleTimeoutMillis,
+        } as any;
+      } else if (isCloudSqlConfig(config)) {
+        // Cloud SQL connector config
+        this.#config = {
+          ...config,
+          max: config.max,
+          idleTimeoutMillis: config.idleTimeoutMillis,
+        } as any;
+      } else if (isHostConfig(config)) {
+        this.#config = {
+          host: config.host,
+          port: config.port,
+          database: config.database,
+          user: config.user,
+          password: config.password,
+          ssl: config.ssl,
+          max: config.max,
+          idleTimeoutMillis: config.idleTimeoutMillis,
+        } as any;
+      } else {
+        // This should never happen due to validation above, but included for completeness
+        this.#config = {
+          ...(config as ClientConfig),
+          max: (config as any).max,
+          idleTimeoutMillis: (config as any).idleTimeoutMillis,
+        } as any;
+      }
       this.stores = {} as StorageDomains;
     } catch (e) {
       throw new MastraError(
@@ -117,7 +168,7 @@ export class PostgresStore extends MastraStorage {
     try {
       this.isConnected = true;
       this.#pgp = pgPromise();
-      this.#db = this.#pgp(this.#config);
+      this.#db = this.#pgp(this.#config as any);
 
       const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema });
       const scores = new ScoresPG({ client: this.#db, operations, schema: this.schema });
@@ -136,6 +187,16 @@ export class PostgresStore extends MastraStorage {
       };
 
       await super.init();
+
+      // Create automatic performance indexes by default
+      // This is done after table creation and is safe to run multiple times
+      try {
+        await operations.createAutomaticIndexes();
+      } catch (indexError) {
+        // Log the error but don't fail initialization
+        // Indexes are performance optimizations, not critical for functionality
+        console.warn('Failed to create indexes:', indexError);
+      }
     } catch (error) {
       this.isConnected = false;
       throw new MastraError(
@@ -170,6 +231,8 @@ export class PostgresStore extends MastraStorage {
       hasColumn: true,
       createTable: true,
       deleteMessages: true,
+      aiTracing: false,
+      indexManagement: true,
     };
   }
 
@@ -302,6 +365,18 @@ export class PostgresStore extends MastraStorage {
     return this.stores.memory.getMessages(args);
   }
 
+  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
+  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
+  async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    return this.stores.memory.getMessagesById({ messageIds, format });
+  }
+
   public async getMessagesPaginated(
     args: StorageGetMessagesArg & {
       format?: 'v1' | 'v2';
@@ -359,16 +434,52 @@ export class PostgresStore extends MastraStorage {
   /**
    * Workflows
    */
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    runtimeContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    runtimeContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext });
+  }
+
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: {
+      status: string;
+      result?: StepResult<any, any, any, any>;
+      error?: string;
+      suspendedPaths?: Record<string, number[]>;
+      waitingPaths?: Record<string, number[]>;
+    };
+  }): Promise<WorkflowRunState | undefined> {
+    return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
+  }
+
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
-    return this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+    return this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, resourceId, snapshot });
   }
 
   async loadWorkflowSnapshot({

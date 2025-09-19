@@ -2,7 +2,7 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
-import type { MastraLanguageModel } from '../../agent/types';
+import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { Processor } from '../index';
 
 /**
@@ -250,14 +250,27 @@ export class LanguageDetector implements Processor {
     const prompt = this.createDetectionPrompt(content);
 
     try {
-      const response = await this.detectionAgent.generate(prompt, {
-        output: z.object({
-          iso_code: z.string().optional(),
-          confidence: z.number().min(0).max(1).optional(),
-          translated_text: z.string().optional(),
-        }),
-        temperature: 0,
+      const model = await this.detectionAgent.getModel();
+      let response;
+      const schema = z.object({
+        iso_code: z.string().optional(),
+        confidence: z.number().min(0).max(1).optional(),
+        translated_text: z.string().optional(),
       });
+
+      if (model.specificationVersion === 'v2') {
+        response = await this.detectionAgent.generateVNext(prompt, {
+          output: schema,
+          modelSettings: {
+            temperature: 0,
+          },
+        });
+      } else {
+        response = await this.detectionAgent.generate(prompt, {
+          output: schema,
+          temperature: 0,
+        });
+      }
 
       if (response.object.translated_text && !response.object.confidence) {
         response.object.confidence = 0.95;

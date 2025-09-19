@@ -1,8 +1,10 @@
-import type { TextStreamPart, TextPart, ObjectStreamPart } from 'ai';
+import type { TextPart } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import type { ChunkType } from '../../stream';
+import { ChunkFrom } from '../../stream/types';
 import type { PIIDetectionResult, PIIDetection } from './pii-detector';
 import { PIIDetector } from './pii-detector';
 
@@ -817,9 +819,11 @@ describe('PIIDetector', () => {
       const model = setupMockModel(createMockPIIResult());
       const detector = new PIIDetector({ model });
 
-      const part: ObjectStreamPart<any> = {
+      const part: ChunkType = {
         type: 'object' as const,
         object: { status: 'ok' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
       };
 
       const result = await detector.processOutputStream({
@@ -836,9 +840,14 @@ describe('PIIDetector', () => {
       const model = setupMockModel(createMockPIIResult());
       const detector = new PIIDetector({ model });
 
-      const part: TextStreamPart<any> = {
+      const part: ChunkType = {
         type: 'text-delta' as const,
-        textDelta: '',
+        payload: {
+          id: 'test-id',
+          text: '',
+        },
+        runId: 'test-run-id',
+        from: ChunkFrom.USER,
       };
 
       const result = await detector.processOutputStream({
@@ -864,9 +873,14 @@ describe('PIIDetector', () => {
       const model = setupMockModel(createMockPIIResult(['email'], detections, 'My email is j***.d**@e******.com'));
       const detector = new PIIDetector({ model });
 
-      const part: TextStreamPart<any> = {
+      const part: ChunkType = {
         type: 'text-delta',
-        textDelta: 'My email is test@example.com',
+        payload: {
+          id: 'test-id',
+          text: 'My email is test@example.com',
+        },
+        runId: 'test-run-id',
+        from: ChunkFrom.USER,
       };
 
       const result = await detector.processOutputStream({
@@ -878,7 +892,12 @@ describe('PIIDetector', () => {
 
       expect(result).toEqual({
         type: 'text-delta',
-        textDelta: 'My email is j***.d**@e******.com',
+        payload: {
+          id: 'test-id',
+          text: 'My email is j***.d**@e******.com',
+        },
+        runId: 'test-run-id',
+        from: ChunkFrom.USER,
       });
     });
 
@@ -886,9 +905,15 @@ describe('PIIDetector', () => {
       const model = setupMockModel(createMockPIIResult(['email']));
       const detector = new PIIDetector({ model, strategy: 'block' });
 
-      const part: TextStreamPart<any> = {
+      const part: ChunkType = {
         type: 'text-delta',
-        textDelta: 'My email is test@example.com',
+        payload: {
+          id: 'test-id',
+          text: 'My email is test@example.com',
+          providerMetadata: {},
+        },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
       };
 
       const mockAbort = vi.fn().mockImplementation(() => {
@@ -911,9 +936,15 @@ describe('PIIDetector', () => {
       const model = setupMockModel(createMockPIIResult(['email']));
       const detector = new PIIDetector({ model, strategy: 'filter' });
 
-      const part: TextStreamPart<any> = {
+      const part: ChunkType = {
         type: 'text-delta',
-        textDelta: 'My email is test@example.com',
+        payload: {
+          id: 'test-id',
+          text: 'My email is test@example.com',
+          providerMetadata: {},
+        },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
       };
 
       const result = await detector.processOutputStream({
@@ -932,9 +963,15 @@ describe('PIIDetector', () => {
       const model = setupMockModel(createMockPIIResult(['email']));
       const detector = new PIIDetector({ model, strategy: 'warn' });
 
-      const part: TextStreamPart<any> = {
+      const part: ChunkType = {
         type: 'text-delta',
-        textDelta: 'My email is test@example.com',
+        payload: {
+          id: 'test-id',
+          text: 'My email is test@example.com',
+          providerMetadata: {},
+        },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
       };
 
       const result = await detector.processOutputStream({
@@ -959,9 +996,15 @@ describe('PIIDetector', () => {
       });
       const detector = new PIIDetector({ model });
 
-      const part: TextStreamPart<any> = {
+      const part: ChunkType = {
         type: 'text-delta',
-        textDelta: 'My email is test@example.com',
+        payload: {
+          id: 'test-id',
+          text: 'My email is test@example.com',
+          providerMetadata: {},
+        },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
       };
 
       const result = await detector.processOutputStream({

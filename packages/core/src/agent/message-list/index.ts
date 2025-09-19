@@ -6,8 +6,18 @@ import * as AIV5 from 'ai-v5';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { DefaultGeneratedFileWithType } from '../../stream/aisdk/v5/file';
+import { convertImageFilePart } from './prompt/convert-file';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
 import { convertDataContentToBase64String } from './prompt/data-content';
+import { downloadAssetsFromMessages } from './prompt/download-assets';
+import {
+  categorizeFileData,
+  createDataUri,
+  getImageCacheKey,
+  imageContentToDataUri,
+  imageContentToString,
+  parseDataUri,
+} from './prompt/image-utils';
 import type { AIV4Type, AIV5Type } from './types';
 import { getToolName } from './utils/ai-v5/tool';
 
@@ -79,6 +89,9 @@ export type MessageInput =
   | MastraMessageV1
   | MastraMessageV2 // <- this is how we currently store in the DB
   | MastraMessageV3; // <- this could be stored in the db but is not currently. we do accept this as an input though, and we use it to transform from aiv4->v5 types as an intermediary type
+
+export { convertMessages } from './utils/convert-messages';
+export type { OutputFormat } from './utils/convert-messages';
 
 type MessageSource =
   | 'memory'
@@ -217,7 +230,7 @@ export class MessageList {
         if (needsDefaultUserMessage) {
           const defaultMessage: AIV5Type.ModelMessage = {
             role: 'user',
-            content: ' ',
+            content: '.',
           };
           messages.unshift(defaultMessage);
         }
@@ -226,20 +239,68 @@ export class MessageList {
       },
 
       // Used for creating LLM prompt messages without AI SDK streamText/generateText
-      llmPrompt: (): LanguageModelV2Prompt => {
+      llmPrompt: async (
+        options: {
+          downloadConcurrency?: number;
+          downloadRetries?: number;
+          supportedUrls?: Record<string, RegExp[]>;
+        } = {
+          downloadConcurrency: 10,
+          downloadRetries: 3,
+        },
+      ): Promise<LanguageModelV2Prompt> => {
         const modelMessages = this.all.aiV5.model();
         const systemMessages = this.aiV4CoreMessagesToAIV5ModelMessages(
           [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
           `system`,
         );
-        const messages = [...systemMessages, ...modelMessages];
+
+        const downloadedAssets = await downloadAssetsFromMessages({
+          messages: modelMessages,
+          downloadConcurrency: options?.downloadConcurrency,
+          downloadRetries: options?.downloadRetries,
+          supportedUrls: options?.supportedUrls,
+        });
+
+        let messages = [...systemMessages, ...modelMessages];
+
+        if (Object.keys(downloadedAssets || {}).length > 0) {
+          messages = messages.map(message => {
+            if (message.role === 'user') {
+              if (typeof message.content === 'string') {
+                return {
+                  role: 'user' as const,
+                  content: [{ type: 'text' as const, text: message.content }],
+                  providerOptions: message.providerOptions,
+                } as AIV5Type.ModelMessage;
+              }
+
+              const convertedContent = message.content
+                .map(part => {
+                  if (part.type === 'image' || part.type === 'file') {
+                    return convertImageFilePart(part, downloadedAssets);
+                  }
+                  return part;
+                })
+                .filter(part => part.type !== 'text' || part.text !== '');
+
+              return {
+                role: 'user' as const,
+                content: convertedContent,
+                providerOptions: message.providerOptions,
+              } as AIV5Type.ModelMessage;
+            }
+
+            return message;
+          });
+        }
 
         // Ensure we have at least one user message
         const needsDefaultUserMessage = !messages.length || messages[0]?.role === 'assistant';
         if (needsDefaultUserMessage) {
           const defaultMessage: AIV5Type.ModelMessage = {
             role: 'user',
-            content: ' ',
+            content: '.',
           };
           messages.unshift(defaultMessage);
         }
@@ -267,7 +328,7 @@ export class MessageList {
         if (needsDefaultUserMessage) {
           const defaultMessage: AIV4Type.CoreMessage = {
             role: 'user',
-            content: ' ',
+            content: '.',
           };
           messages.unshift(defaultMessage);
         }
@@ -288,7 +349,7 @@ export class MessageList {
         if (needsDefaultUserMessage) {
           const defaultMessage: AIV4Type.CoreMessage = {
             role: 'user',
-            content: ' ',
+            content: '.',
           };
           messages.unshift(defaultMessage);
         }
@@ -370,7 +431,140 @@ export class MessageList {
         this.aiV5UIMessagesToAIV5ModelMessages(this.response.aiV5.ui()).filter(
           m => m.role === `tool` || m.role === `assistant`,
         ),
-      modelContent: (): AIV5Type.StepResult<any>['content'] => {
+      modelContent: (stepNumber?: number): AIV5Type.StepResult<any>['content'] => {
+        if (typeof stepNumber === 'number') {
+          const uiMessages = this.response.aiV5.ui();
+          const uiMessagesParts = uiMessages.flatMap(item => item.parts);
+
+          // Find step boundaries by looking for step-start markers
+          const stepBoundaries: number[] = [];
+          uiMessagesParts.forEach((part, index) => {
+            if (part.type === 'step-start') {
+              stepBoundaries.push(index);
+            }
+          });
+
+          // Handle -1 to get the last step (the current/most recent step)
+          if (stepNumber === -1) {
+            // For tool-only steps without step-start markers, we need different logic
+            // Each tool part represents a complete step (tool call + result)
+            const toolParts = uiMessagesParts.filter(p => p.type?.startsWith('tool-'));
+            const hasStepStart = stepBoundaries.length > 0;
+
+            if (!hasStepStart && toolParts.length > 0) {
+              // No step-start markers but we have tool parts
+              // Each tool part is a separate step, so return only the last tool
+              const lastToolPart = toolParts[toolParts.length - 1];
+              if (!lastToolPart) {
+                return [];
+              }
+              const lastToolIndex = uiMessagesParts.indexOf(lastToolPart);
+              const previousToolPart = toolParts[toolParts.length - 2];
+              const previousToolIndex = previousToolPart ? uiMessagesParts.indexOf(previousToolPart) : -1;
+
+              const startIndex = previousToolIndex + 1;
+              const stepParts = uiMessagesParts.slice(startIndex, lastToolIndex + 1);
+
+              const stepUiMessages: AIV5Type.UIMessage[] = [
+                {
+                  id: 'last-step',
+                  role: 'assistant',
+                  parts: stepParts,
+                },
+              ];
+              const modelMessages = AIV5.convertToModelMessages(this.sanitizeV5UIMessages(stepUiMessages));
+              return modelMessages.flatMap(this.response.aiV5.stepContent);
+            }
+
+            // Count total steps (1 + number of step-start markers)
+            const totalSteps = stepBoundaries.length + 1;
+
+            // Get the content for the last step using the regular step logic
+            if (totalSteps === 1 && !hasStepStart) {
+              // Only one step, return all content
+              const stepUiMessages: AIV5Type.UIMessage[] = [
+                {
+                  id: 'last-step',
+                  role: 'assistant',
+                  parts: uiMessagesParts,
+                },
+              ];
+              const modelMessages = AIV5.convertToModelMessages(this.sanitizeV5UIMessages(stepUiMessages));
+              return modelMessages.flatMap(this.response.aiV5.stepContent);
+            }
+
+            // Multiple steps - get content after the last step-start marker
+            const lastStepStart = stepBoundaries[stepBoundaries.length - 1];
+            if (lastStepStart === undefined) {
+              return [];
+            }
+            const stepParts = uiMessagesParts.slice(lastStepStart + 1);
+
+            if (stepParts.length === 0) {
+              return [];
+            }
+
+            const stepUiMessages: AIV5Type.UIMessage[] = [
+              {
+                id: 'last-step',
+                role: 'assistant',
+                parts: stepParts,
+              },
+            ];
+
+            const modelMessages = AIV5.convertToModelMessages(this.sanitizeV5UIMessages(stepUiMessages));
+            return modelMessages.flatMap(this.response.aiV5.stepContent);
+          }
+
+          // Step 1 is everything before the first step-start
+          if (stepNumber === 1) {
+            const firstStepStart = stepBoundaries[0] ?? uiMessagesParts.length;
+            if (firstStepStart === 0) {
+              // No content before first step-start
+              return [];
+            }
+
+            const stepParts = uiMessagesParts.slice(0, firstStepStart);
+            const stepUiMessages: AIV5Type.UIMessage[] = [
+              {
+                id: 'step-1',
+                role: 'assistant',
+                parts: stepParts,
+              },
+            ];
+
+            // Convert to model messages without adding extra step-start markers
+            const modelMessages = AIV5.convertToModelMessages(this.sanitizeV5UIMessages(stepUiMessages));
+            return modelMessages.flatMap(this.response.aiV5.stepContent);
+          }
+
+          // For steps 2+, content is between (stepNumber-1)th and stepNumber-th step-start markers
+          const stepIndex = stepNumber - 2; // -2 because step 2 is at index 0 in boundaries
+          if (stepIndex < 0 || stepIndex >= stepBoundaries.length) {
+            return [];
+          }
+
+          const startIndex = (stepBoundaries[stepIndex] ?? 0) + 1; // Start after the step-start marker
+          const endIndex = stepBoundaries[stepIndex + 1] ?? uiMessagesParts.length;
+
+          if (startIndex >= endIndex) {
+            return [];
+          }
+
+          const stepParts = uiMessagesParts.slice(startIndex, endIndex);
+          const stepUiMessages: AIV5Type.UIMessage[] = [
+            {
+              id: `step-${stepNumber}`,
+              role: 'assistant',
+              parts: stepParts,
+            },
+          ];
+
+          // Convert to model messages without adding extra step-start markers
+          const modelMessages = AIV5.convertToModelMessages(this.sanitizeV5UIMessages(stepUiMessages));
+          return modelMessages.flatMap(this.response.aiV5.stepContent);
+        }
+
         return this.response.aiV5.model().map(this.response.aiV5.stepContent).flat();
       },
       stepContent: (message?: AIV5Type.ModelMessage): AIV5Type.StepResult<any>['content'] => {
@@ -394,7 +588,7 @@ export class MessageList {
               file: new DefaultGeneratedFileWithType({
                 data:
                   typeof c.data === `string`
-                    ? c.data
+                    ? parseDataUri(c.data).base64Content // Strip data URI prefix if present
                     : c.data instanceof URL
                       ? c.data.toString()
                       : convertDataContentToBase64String(c.data),
@@ -407,7 +601,7 @@ export class MessageList {
               file: new DefaultGeneratedFileWithType({
                 data:
                   typeof c.image === `string`
-                    ? c.image
+                    ? parseDataUri(c.image).base64Content // Strip data URI prefix if present
                     : c.image instanceof URL
                       ? c.image.toString()
                       : convertDataContentToBase64String(c.image),
@@ -415,7 +609,7 @@ export class MessageList {
               }),
             };
           }
-          return c;
+          return { ...c };
         });
       },
     },
@@ -524,7 +718,7 @@ export class MessageList {
     if (tag && !this.isDuplicateSystem(coreMessage, tag)) {
       this.taggedSystemMessages[tag] ||= [];
       this.taggedSystemMessages[tag].push(coreMessage);
-    } else if (!this.isDuplicateSystem(coreMessage)) {
+    } else if (!tag && !this.isDuplicateSystem(coreMessage)) {
       this.systemMessages.push(coreMessage);
     }
   }
@@ -635,10 +829,13 @@ export class MessageList {
       }
       return uiMessage;
     } else if (m.role === `assistant`) {
+      const isSingleTextContentArray =
+        Array.isArray(m.content.content) && m.content.content.length === 1 && m.content.content[0].type === `text`;
+
       const uiMessage: UIMessageWithMetadata = {
         id: m.id,
         role: m.role,
-        content: m.content.content || contentString,
+        content: isSingleTextContentArray ? contentString : m.content.content || contentString,
         createdAt: m.createdAt,
         parts,
         reasoning: undefined,
@@ -898,9 +1095,29 @@ export class MessageList {
     ).length;
     // If the number of parts in the latest message is less than the number of parts in the new message, insert the part
     if (latestPartCount < newPartCount) {
+      // Check if we need to add a step-start before text parts when merging assistant messages
+      // Only add after tool invocations, and only if the incoming message doesn't already have step-start
+      const partIndex = newMessage.content.parts.indexOf(part);
+      const hasStepStartBefore = partIndex > 0 && newMessage.content.parts[partIndex - 1]?.type === 'step-start';
+
+      const needsStepStart =
+        latestMessage.role === 'assistant' &&
+        part.type === 'text' &&
+        !hasStepStartBefore &&
+        latestMessage.content.parts.length > 0 &&
+        latestMessage.content.parts.at(-1)?.type === 'tool-invocation';
+
       if (typeof insertAt === 'number') {
-        latestMessage.content.parts.splice(insertAt, 0, part);
+        if (needsStepStart) {
+          latestMessage.content.parts.splice(insertAt, 0, { type: 'step-start' });
+          latestMessage.content.parts.splice(insertAt + 1, 0, part);
+        } else {
+          latestMessage.content.parts.splice(insertAt, 0, part);
+        }
       } else {
+        if (needsStepStart) {
+          latestMessage.content.parts.push({ type: 'step-start' });
+        }
         latestMessage.content.parts.push(part);
       }
     }
@@ -1162,8 +1379,20 @@ export class MessageList {
     const experimentalAttachments: AIV4Type.UIMessage['experimental_attachments'] = [];
     const toolInvocations: AIV4Type.ToolInvocation[] = [];
 
+    const isSingleTextContent =
+      messageSource === `response` &&
+      Array.isArray(coreMessage.content) &&
+      coreMessage.content.length === 1 &&
+      coreMessage.content[0] &&
+      coreMessage.content[0].type === `text` &&
+      `text` in coreMessage.content[0] &&
+      coreMessage.content[0].text;
+
+    if (isSingleTextContent && messageSource === `response`) {
+      coreMessage.content = isSingleTextContent;
+    }
+
     if (typeof coreMessage.content === 'string') {
-      parts.push({ type: 'step-start' });
       parts.push({
         type: 'text',
         text: coreMessage.content,
@@ -1172,6 +1401,11 @@ export class MessageList {
       for (const part of coreMessage.content) {
         switch (part.type) {
           case 'text':
+            // Add step-start only after tool invocations, not at the beginning
+            const prevPart = parts.at(-1);
+            if (coreMessage.role === 'assistant' && prevPart && prevPart.type === 'tool-invocation') {
+              parts.push({ type: 'step-start' });
+            }
             parts.push({
               type: 'text',
               text: part.text,
@@ -1252,7 +1486,11 @@ export class MessageList {
             });
             break;
           case 'image':
-            parts.push({ type: 'file', data: part.image.toString(), mimeType: part.mimeType! });
+            parts.push({
+              type: 'file',
+              data: imageContentToString(part.image),
+              mimeType: part.mimeType!,
+            });
             break;
           case 'file':
             // CoreMessage file parts can have mimeType and data (binary/data URL) or just a URL
@@ -1262,6 +1500,28 @@ export class MessageList {
                 data: part.data.toString(),
                 mimeType: part.mimeType,
               });
+            } else if (typeof part.data === 'string') {
+              const categorized = categorizeFileData(part.data, part.mimeType);
+
+              if (categorized.type === 'url' || categorized.type === 'dataUri') {
+                // It's a URL or data URI, use it directly
+                parts.push({
+                  type: 'file',
+                  data: part.data,
+                  mimeType: categorized.mimeType || 'image/png',
+                });
+              } else {
+                // Raw data, convert to base64
+                try {
+                  parts.push({
+                    type: 'file',
+                    mimeType: categorized.mimeType || 'image/png',
+                    data: convertDataContentToBase64String(part.data),
+                  });
+                } catch (error) {
+                  console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
+                }
+              }
             } else {
               // If it's binary data, convert to base64 and add to parts
               try {
@@ -1399,7 +1659,7 @@ export class MessageList {
     return key;
   }
 
-  private static coreContentToString(content: AIV4Type.CoreMessage['content']): string {
+  static coreContentToString(content: AIV4Type.CoreMessage['content']): string {
     if (typeof content === `string`) return content;
 
     return content.reduce((p, c) => {
@@ -1434,7 +1694,7 @@ export class MessageList {
         key += part.mimeType;
       }
       if (part.type === `image`) {
-        key += part.image instanceof URL ? part.image.toString() : part.image.toString().length;
+        key += getImageCacheKey(part.image);
         key += part.mimeType;
       }
       if (part.type === `redacted-reasoning`) {
@@ -1869,18 +2129,35 @@ export class MessageList {
             switch (p.type) {
               case 'text':
                 return p;
-              case 'file':
+              case 'file': {
                 // Skip file parts that came from experimental_attachments
                 // They will be restored separately from __originalExperimentalAttachments
-                if (attachmentUrls.has(p.url)) {
+
+                // AIV5 file parts can have either 'url' or 'data' field
+                // 'url' field is used when converting from V2 to V3
+                // 'data' field is used in native AIV5 UIMessages
+                const fileDataSource =
+                  'url' in p && typeof p.url === 'string'
+                    ? p.url
+                    : 'data' in p && typeof p.data === 'string'
+                      ? p.data
+                      : undefined;
+
+                if (!fileDataSource) {
                   return null;
                 }
+
+                if (attachmentUrls.has(fileDataSource)) {
+                  return null;
+                }
+
                 return {
                   type: 'file',
                   mimeType: p.mediaType,
-                  data: p.url,
+                  data: fileDataSource,
                   providerMetadata: p.providerMetadata,
                 };
+              }
               case 'reasoning':
                 if (p.text === '') return null;
                 return {
@@ -1924,10 +2201,12 @@ export class MessageList {
     // Restore original content from metadata if it exists
     const originalContent = (v3Msg.content.metadata as any)?.__originalContent;
     if (originalContent !== undefined) {
-      if (
-        typeof originalContent !== `string` ||
-        v2Msg.content.parts.every(p => p.type === `step-start` || p.type === `text`)
-      ) {
+      // Only restore original content if:
+      // 1. It's a string (simple text content), OR
+      // 2. We only have text/step-start parts (no file, tool, reasoning parts)
+      const hasOnlyTextOrStepStart = v2Msg.content.parts.every(p => p.type === `step-start` || p.type === `text`);
+
+      if (typeof originalContent === `string` || hasOnlyTextOrStepStart) {
         v2Msg.content.content = originalContent;
       }
     }
@@ -1938,6 +2217,52 @@ export class MessageList {
     const originalAttachments = (v3Msg.content.metadata as any)?.__originalExperimentalAttachments;
     if (originalAttachments && Array.isArray(originalAttachments)) {
       v2Msg.content.experimental_attachments = originalAttachments || [];
+    }
+
+    // For AI SDK V4 compatibility: External URLs in file parts may need to be in experimental_attachments
+    // However, we should preserve file parts that have providerMetadata for proper roundtrip conversion
+    // Also preserve file parts that came from AI SDK v5 format (which have URLs in file parts)
+    // We can detect V5 format by checking if __originalContent is an array with file parts
+    const originalContentIsV5 =
+      Array.isArray((v3Msg.content.metadata as any)?.__originalContent) &&
+      (v3Msg.content.metadata as any)?.__originalContent.some((part: any) => part.type === 'file');
+
+    const urlFileParts = originalContentIsV5
+      ? []
+      : v2Msg.content.parts.filter(
+          p =>
+            p.type === 'file' &&
+            typeof p.data === 'string' &&
+            (p.data.startsWith('http://') || p.data.startsWith('https://')) &&
+            !p.providerMetadata, // Don't move if it has providerMetadata (needed for roundtrip)
+        );
+
+    if (urlFileParts.length > 0) {
+      // Initialize experimental_attachments if not present
+      if (!v2Msg.content.experimental_attachments) {
+        v2Msg.content.experimental_attachments = [];
+      }
+
+      // Move URL file parts without providerMetadata to experimental_attachments
+      for (const urlPart of urlFileParts) {
+        if (urlPart.type === 'file') {
+          v2Msg.content.experimental_attachments.push({
+            url: urlPart.data,
+            contentType: urlPart.mimeType,
+          });
+        }
+      }
+
+      // Remove URL file parts (without providerMetadata) from parts array
+      v2Msg.content.parts = v2Msg.content.parts.filter(
+        p =>
+          !(
+            p.type === 'file' &&
+            typeof p.data === 'string' &&
+            (p.data.startsWith('http://') || p.data.startsWith('https://')) &&
+            !p.providerMetadata
+          ),
+      );
     }
 
     // Set toolInvocations on V2
@@ -2044,15 +2369,69 @@ export class MessageList {
           }
           break;
 
-        case 'file':
-          parts.push({
-            type: 'file',
-            url: part.data,
-            mediaType: part.mimeType,
-            providerMetadata: part.providerMetadata,
-          });
+        case 'file': {
+          // Categorize the file data
+          const categorized =
+            typeof part.data === 'string'
+              ? categorizeFileData(part.data, part.mimeType)
+              : { type: 'raw' as const, mimeType: part.mimeType, data: part.data };
+
+          if (categorized.type === 'url' && typeof part.data === 'string') {
+            // It's a URL, use the 'url' field directly
+            parts.push({
+              type: 'file',
+              url: part.data,
+              mediaType: categorized.mimeType || 'image/png',
+              providerMetadata: part.providerMetadata,
+            });
+            fileUrls.add(part.data);
+          } else {
+            // For AI SDK V5 compatibility with inline images (especially Google Gemini),
+            // file parts need a 'data' field with base64 content (without data URI prefix)
+            let filePartData: string;
+            let extractedMimeType = part.mimeType;
+
+            // Parse data URI if present to extract base64 content and MIME type
+            if (typeof part.data === 'string') {
+              const parsed = parseDataUri(part.data);
+
+              if (parsed.isDataUri) {
+                // It's already a data URI, extract the base64 content and MIME type
+                filePartData = parsed.base64Content;
+                if (parsed.mimeType) {
+                  extractedMimeType = extractedMimeType || parsed.mimeType;
+                }
+              } else {
+                // It's not a data URI, treat it as raw base64 or plain text
+                filePartData = part.data;
+              }
+            } else {
+              filePartData = part.data;
+            }
+
+            // Ensure we always have a valid MIME type - default to image/png for better compatibility
+            const finalMimeType = extractedMimeType || 'image/png';
+
+            // Only create a data URI if it's not already one
+            let dataUri: string;
+            if (typeof filePartData === 'string' && filePartData.startsWith('data:')) {
+              // Already a data URI
+              dataUri = filePartData;
+            } else {
+              // Create a data URI from the base64 data
+              dataUri = createDataUri(filePartData, finalMimeType);
+            }
+
+            parts.push({
+              type: 'file',
+              url: dataUri, // Use url field with data URI
+              mediaType: finalMimeType,
+              providerMetadata: part.providerMetadata,
+            });
+          }
           fileUrls.add(part.data);
           break;
+        }
       }
     }
 
@@ -2086,7 +2465,23 @@ export class MessageList {
   }
 
   private aiV5UIMessagesToAIV5ModelMessages(messages: AIV5Type.UIMessage[]): AIV5Type.ModelMessage[] {
-    return AIV5.convertToModelMessages(this.sanitizeV5UIMessages(messages));
+    const preprocessed = this.addStartStepPartsForAIV5(this.sanitizeV5UIMessages(messages));
+    const result = AIV5.convertToModelMessages(preprocessed);
+    return result;
+  }
+  private addStartStepPartsForAIV5(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
+    for (const message of messages) {
+      if (message.role !== `assistant`) continue;
+      for (const [index, part] of message.parts.entries()) {
+        if (!AIV5.isToolUIPart(part)) continue;
+        // If we don't insert step-start between tools and other parts, AIV5.convertToModelMessages will incorrectly add extra tool parts in the wrong order
+        // ex: ui message with parts: [tool-result, text] becomes [assistant-message-with-both-parts, tool-result-message], when it should become [tool-call-message, tool-result-message, text-message]
+        if (message.parts.at(index + 1)?.type !== `step-start`) {
+          message.parts.splice(index + 1, 0, { type: 'step-start' });
+        }
+      }
+    }
+    return messages;
   }
   private sanitizeV5UIMessages(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
     const msgs = messages
@@ -2207,10 +2602,7 @@ export class MessageList {
     const id = `id` in coreMessage && typeof coreMessage.id === `string` ? coreMessage.id : this.newMessageId();
     const parts: AIV5Type.UIMessage['parts'] = [];
 
-    // Add step-start for input messages
-    if (messageSource === 'input' && coreMessage.role === 'user') {
-      parts.push({ type: 'step-start' });
-    }
+    // Note: step-start should only be added after tool invocations for assistant messages, never for user messages
 
     if (typeof coreMessage.content === 'string') {
       parts.push({
@@ -2221,6 +2613,18 @@ export class MessageList {
       for (const part of coreMessage.content) {
         switch (part.type) {
           case 'text':
+            // Add step-start only after tool results for assistant messages
+            const prevPart = parts.at(-1);
+            if (
+              coreMessage.role === 'assistant' &&
+              prevPart &&
+              AIV5.isToolUIPart(prevPart) &&
+              prevPart.state === 'output-available'
+            ) {
+              parts.push({
+                type: 'step-start',
+              });
+            }
             parts.push({
               type: 'text',
               text: part.text,
@@ -2230,8 +2634,7 @@ export class MessageList {
 
           case 'tool-call':
             parts.push({
-              type: 'dynamic-tool',
-              toolName: part.toolName,
+              type: `tool-${part.toolName}`,
               state: 'input-available',
               toolCallId: part.toolCallId,
               input: part.input,
@@ -2240,8 +2643,7 @@ export class MessageList {
 
           case 'tool-result':
             parts.push({
-              type: 'dynamic-tool',
-              toolName: part.toolName,
+              type: `tool-${part.toolName}`,
               state: 'output-available',
               toolCallId: part.toolCallId,
               output:
@@ -2260,28 +2662,123 @@ export class MessageList {
               providerMetadata: part.providerOptions,
             });
             break;
-          case 'image':
+          case 'image': {
+            // For AI SDK V5 compatibility, use 'data' field with base64 content
+            let imageData: string;
+            let extractedMimeType = part.mediaType;
+
+            // Convert image to data URI if it's binary, or string otherwise
+            const imageStr = imageContentToDataUri(part.image, extractedMimeType || 'image/png');
+
+            // Parse the image string to extract base64 content and MIME type
+            const parsed = parseDataUri(imageStr);
+            if (parsed.isDataUri) {
+              imageData = parsed.base64Content;
+              if (!extractedMimeType && parsed.mimeType) {
+                extractedMimeType = parsed.mimeType;
+              }
+            } else if (imageStr.startsWith('http://') || imageStr.startsWith('https://')) {
+              // For external URLs, use url field instead
+              parts.push({
+                type: 'file',
+                url: imageStr,
+                mediaType: part.mediaType || 'image/jpeg', // Default to image/jpeg for URLs
+                providerMetadata: part.providerOptions,
+              });
+              break;
+            } else {
+              imageData = imageStr;
+            }
+
+            // Ensure we have a valid MIME type - default to image/jpeg if not specified
+            const finalMimeType = extractedMimeType || 'image/jpeg';
+
+            // For AI SDK V5, file parts should use 'url' field with data URI
+            const dataUri = imageData.startsWith('data:') ? imageData : createDataUri(imageData, finalMimeType);
+
             parts.push({
               type: 'file',
-              url: part.image.toString(),
-              mediaType: part.mediaType || 'unknown',
+              url: dataUri,
+              mediaType: finalMimeType,
               providerMetadata: part.providerOptions,
             });
             break;
-          case 'file':
+          }
+          case 'file': {
             if (part.data instanceof URL) {
-              parts.push({
-                type: 'file',
-                url: part.data.toString(),
-                mediaType: part.mediaType,
-                providerMetadata: part.providerOptions,
-              });
-            } else {
-              try {
+              const urlStr = part.data.toString();
+              let extractedMimeType = part.mediaType;
+
+              // Parse data URI if present
+              const parsed = parseDataUri(urlStr);
+              if (parsed.isDataUri) {
+                if (!extractedMimeType && parsed.mimeType) {
+                  extractedMimeType = parsed.mimeType;
+                }
+
+                if (parsed.base64Content !== urlStr) {
+                  // Valid data URI with base64 content - use url field with data URI
+                  const dataUri = createDataUri(parsed.base64Content, extractedMimeType || 'image/png');
+                  parts.push({
+                    type: 'file',
+                    url: dataUri,
+                    mediaType: extractedMimeType || 'image/png',
+                    providerMetadata: part.providerOptions,
+                  });
+                } else {
+                  // Malformed data URI, use as URL
+                  parts.push({
+                    type: 'file',
+                    url: urlStr,
+                    mediaType: part.mediaType || 'image/png',
+                    providerMetadata: part.providerOptions,
+                  });
+                }
+              } else {
+                // Regular URL
                 parts.push({
                   type: 'file',
-                  mediaType: part.mediaType,
-                  url: convertDataContentToBase64String(part.data),
+                  url: urlStr,
+                  mediaType: part.mediaType || 'application/octet-stream',
+                  providerMetadata: part.providerOptions,
+                });
+              }
+            } else if (typeof part.data === 'string') {
+              // Categorize the file data and extract MIME type if present
+              const categorized = categorizeFileData(part.data, part.mediaType);
+
+              if (categorized.type === 'url' || categorized.type === 'dataUri') {
+                // It's a URL or data URI, use it directly
+                parts.push({
+                  type: 'file',
+                  url: part.data,
+                  mediaType: categorized.mimeType || 'application/octet-stream',
+                  providerMetadata: part.providerOptions,
+                });
+              } else {
+                // Raw data, convert to base64 and create data URI
+                try {
+                  const base64Data = convertDataContentToBase64String(part.data);
+                  const dataUri = createDataUri(base64Data, categorized.mimeType || 'image/png');
+                  parts.push({
+                    type: 'file',
+                    url: dataUri,
+                    mediaType: categorized.mimeType || 'image/png',
+                    providerMetadata: part.providerOptions,
+                  });
+                } catch (error) {
+                  console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
+                }
+              }
+            } else {
+              // Binary data, convert to base64
+              try {
+                const base64Data = convertDataContentToBase64String(part.data);
+                const dataUri = createDataUri(base64Data, part.mediaType || 'image/png');
+                parts.push({
+                  type: 'file',
+                  url: dataUri,
+                  mediaType: part.mediaType || 'image/png',
                   providerMetadata: part.providerOptions,
                 });
               } catch (error) {
@@ -2289,6 +2786,7 @@ export class MessageList {
               }
             }
             break;
+          }
         }
       }
     }
@@ -2447,7 +2945,7 @@ export class MessageList {
         key += part.mediaType;
       }
       if (part.type === `image`) {
-        key += part.image instanceof URL ? part.image.toString() : part.image.toString().length;
+        key += getImageCacheKey(part.image);
         key += part.mediaType;
       }
     }

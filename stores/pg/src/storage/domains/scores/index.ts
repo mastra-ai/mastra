@@ -1,13 +1,12 @@
-import type { PaginationInfo, StoragePagination } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
+import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import { safelyParseJSON, ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
 import { getTableName } from '../utils';
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  console.log(`row is`, JSON.stringify(row, null, 2));
   return {
     ...row,
     input: safelyParseJSON(row.input),
@@ -158,8 +157,6 @@ export class ScoresPG extends ScoresStorage {
         entity,
         ...rest
       } = score;
-
-      console.log(`saving score with id: ${id}`);
 
       await this.operations.insert({
         tableName: TABLE_SCORERS,

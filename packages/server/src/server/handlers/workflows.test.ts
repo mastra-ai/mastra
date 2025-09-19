@@ -1,10 +1,10 @@
 import { Mastra } from '@mastra/core';
 import { MockStore } from '@mastra/core/storage';
+import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';
 import { stringify } from 'superjson';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
 import {
   getWorkflowsHandler,
@@ -253,7 +253,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should get workflow run successfully', async () => {
-      const run = mockWorkflow.createRun({
+      const run = await mockWorkflow.createRunAsync({
         runId: 'test-run',
       });
 
@@ -299,7 +299,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should get workflow run execution result successfully', async () => {
-      const run = mockWorkflow.createRun({
+      const run = await mockWorkflow.createRunAsync({
         runId: 'test-run',
       });
       await run.start({ inputData: {} });
@@ -310,11 +310,11 @@ describe('vNext Workflow Handlers', () => {
       });
 
       expect(result).toEqual({
+        error: undefined,
         status: 'success',
         result: { result: 'success' },
         payload: {},
         steps: {
-          input: {},
           'test-step': {
             status: 'success',
             output: { result: 'success' },
@@ -388,7 +388,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should start workflow run successfully', async () => {
-      const run = mockWorkflow.createRun({
+      const run = await mockWorkflow.createRunAsync({
         runId: 'test-run',
       });
 
@@ -482,7 +482,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should resume workflow run successfully', async () => {
-      const run = reusableWorkflow.createRun({
+      const run = await reusableWorkflow.createRunAsync({
         runId: 'test-run',
       });
 
@@ -521,7 +521,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should get workflow runs successfully (not empty)', async () => {
-      const run = mockWorkflow.createRun({
+      const run = await mockWorkflow.createRunAsync({
         runId: 'test-run',
       });
       await run.start({ inputData: {} });

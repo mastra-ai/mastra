@@ -1,22 +1,36 @@
 import type {
-  MastraMessageV1,
+  AgentExecutionOptions,
+  MultiPrimitiveExecutionOptions,
+  AgentGenerateOptions,
+  AgentStreamOptions,
+  StructuredOutputOptions,
+  ToolsInput,
+  UIMessageWithMetadata,
+} from '@mastra/core/agent';
+import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { CoreMessage } from '@mastra/core/llm';
+import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
+import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
+import type {
   AiMessageType,
-  CoreMessage,
-  QueryResult,
+  MastraMessageV1,
+  MastraMessageV2,
+  MemoryConfig,
   StorageThreadType,
-  WorkflowRuns,
-  WorkflowRun,
+} from '@mastra/core/memory';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
+import type {
+  AITraceRecord,
+  AISpanRecord,
   LegacyWorkflowRuns,
   StorageGetMessagesArg,
   PaginationInfo,
-  MastraMessageV2,
-} from '@mastra/core';
-import type { AgentGenerateOptions, AgentStreamOptions, ToolsInput, UIMessageWithMetadata } from '@mastra/core/agent';
-import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
-
-import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
-import type { MastraScorer, MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
+  WorkflowRun,
+  WorkflowRuns,
+} from '@mastra/core/storage';
+import type { OutputSchema } from '@mastra/core/stream';
+import type { QueryResult } from '@mastra/core/vector';
 import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
 import type {
   StepAction,
@@ -39,6 +53,8 @@ export interface ClientOptions {
   headers?: Record<string, string>;
   /** Abort signal for request */
   abortSignal?: AbortSignal;
+  /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
+  credentials?: 'omit' | 'same-origin' | 'include';
 }
 
 export interface RequestOptions {
@@ -46,6 +62,8 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   body?: any;
   stream?: boolean;
+  /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
+  credentials?: 'omit' | 'same-origin' | 'include';
 }
 
 type WithoutMethods<T> = {
@@ -58,13 +76,18 @@ type WithoutMethods<T> = {
         : K]: T[K];
 };
 
+export type NetworkStreamParams = {
+  messages: MessageListInput;
+} & MultiPrimitiveExecutionOptions;
 export interface GetAgentResponse {
   name: string;
   instructions: string;
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;
+  agents: Record<string, { id: string; name: string }>;
   provider: string;
   modelId: string;
+  modelVersion: string;
   defaultGenerateOptions: WithoutMethods<AgentGenerateOptions>;
   defaultStreamOptions: WithoutMethods<AgentStreamOptions>;
 }
@@ -88,6 +111,30 @@ export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefin
 } & WithoutMethods<
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
 >;
+
+export type StreamVNextParams<OUTPUT extends OutputSchema = undefined> = {
+  messages: MessageListInput;
+  output?: OUTPUT;
+  runtimeContext?: RuntimeContext | Record<string, any>;
+  clientTools?: ToolsInput;
+} & OutputOptions<OUTPUT> &
+  WithoutMethods<
+    Omit<
+      AgentExecutionOptions<OUTPUT>,
+      'output' | 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
+    >
+  >;
+
+type OutputOptions<OUTPUT extends OutputSchema = undefined> =
+  | {
+      output?: OUTPUT;
+      structuredOutput?: never;
+    }
+  | {
+      // Can't serialize the model, so we need to omit it, falls back to agent's model
+      structuredOutput?: Omit<StructuredOutputOptions<OUTPUT>, 'model'>;
+      output?: never;
+    };
 
 export type UpdateModelParams = {
   modelId: string;
@@ -171,7 +218,7 @@ export interface GetWorkflowResponse {
 
 export type WorkflowWatchResult = WatchEvent & { runId: string };
 
-export type WorkflowRunResult = WorkflowResult<any, any>;
+export type WorkflowRunResult = WorkflowResult<any, any, any>;
 export interface UpsertVectorParams {
   indexName: string;
   vectors: number[][];
@@ -236,6 +283,12 @@ export interface GetMemoryThreadParams {
   resourceId: string;
   agentId: string;
 }
+
+export interface GetMemoryConfigParams {
+  agentId: string;
+}
+
+export type GetMemoryConfigResponse = MemoryConfig;
 
 export interface GetNetworkMemoryThreadParams {
   resourceId: string;
@@ -353,22 +406,6 @@ export interface GetTelemetryParams {
   toDate?: Date;
 }
 
-export interface GetNetworkResponse {
-  id: string;
-  name: string;
-  instructions: string;
-  agents: Array<{
-    name: string;
-    provider: string;
-    modelId: string;
-  }>;
-  routingModel: {
-    provider: string;
-    modelId: string;
-  };
-  state?: Record<string, any>;
-}
-
 export interface GetVNextNetworkResponse {
   id: string;
   name: string;
@@ -431,7 +468,7 @@ export interface LoopVNextNetworkResponse {
     isComplete?: boolean | undefined;
     completionReason?: string | undefined;
   };
-  steps: WorkflowResult<any, any>['steps'];
+  steps: WorkflowResult<any, any, any>['steps'];
 }
 
 export interface McpServerListResponse {
@@ -504,4 +541,27 @@ export type GetScorerResponse = MastraScorerEntry & {
 
 export interface GetScorersResponse {
   scorers: Array<GetScorerResponse>;
+}
+
+// Template installation types
+export interface TemplateInstallationRequest {
+  /** Template repository URL or slug */
+  repo: string;
+  /** Git ref (branch/tag/commit) to install from */
+  ref?: string;
+  /** Template slug for identification */
+  slug?: string;
+  /** Target project path */
+  targetPath?: string;
+  /** Environment variables for template */
+  variables?: Record<string, string>;
+}
+
+export interface GetAITraceResponse {
+  trace: AITraceRecord;
+}
+
+export interface GetAITracesResponse {
+  spans: AISpanRecord[];
+  pagination: PaginationInfo;
 }

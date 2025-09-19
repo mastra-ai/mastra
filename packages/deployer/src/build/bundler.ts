@@ -2,20 +2,34 @@ import alias from '@rollup/plugin-alias';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
+import esmShim from '@rollup/plugin-esm-shim';
 import { fileURLToPath } from 'node:url';
-import { rollup, type InputOptions, type OutputOptions } from 'rollup';
+import { rollup, type InputOptions, type OutputOptions, type Plugin } from 'rollup';
 import { esbuild } from './plugins/esbuild';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
-import type { analyzeBundle } from './analyze';
+import { analyzeBundle } from './analyze';
 import { removeDeployer } from './plugins/remove-deployer';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
+import { join } from 'node:path';
 
 export async function getInputOptions(
   entryFile: string,
   analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
   platform: 'node' | 'browser',
   env: Record<string, string> = { 'process.env.NODE_ENV': JSON.stringify('production') },
-  { sourcemap = false }: { sourcemap?: boolean } = {},
+  {
+    sourcemap = false,
+    isDev = false,
+    projectRoot,
+    workspaceRoot = undefined,
+    enableEsmShim = true,
+  }: {
+    sourcemap?: boolean;
+    isDev?: boolean;
+    workspaceRoot?: string;
+    projectRoot: string;
+    enableEsmShim?: boolean;
+  },
 ): Promise<InputOptions> {
   let nodeResolvePlugin =
     platform === 'node'
@@ -52,8 +66,7 @@ export async function getInputOptions(
     plugins: [
       {
         name: 'alias-optimized-deps',
-        // @ts-ignore
-        resolveId(id) {
+        resolveId(id: string) {
           if (!analyzedBundleInfo.dependencies.has(id)) {
             return null;
           }
@@ -66,13 +79,15 @@ export async function getInputOptions(
             };
           }
 
+          const filename = analyzedBundleInfo.dependencies.get(id)!;
+          // also add projectRoot
+          const resolvedPath = join(workspaceRoot || projectRoot, filename);
           return {
-            id: '.mastra/.build/' + analyzedBundleInfo.dependencies.get(id)!,
-            external: false,
+            id: resolvedPath,
+            external: isDev,
           };
         },
-      },
-      tsConfigPaths(),
+      } satisfies Plugin,
       alias({
         entries: [
           {
@@ -93,6 +108,7 @@ export async function getInputOptions(
           { find: /^\#mastra$/, replacement: normalizedEntryFile },
         ],
       }),
+      tsConfigPaths(),
       {
         name: 'tools-rewriter',
         resolveId(id: string) {
@@ -103,7 +119,7 @@ export async function getInputOptions(
             };
           }
         },
-      },
+      } satisfies Plugin,
       esbuild({
         platform,
         define: env,
@@ -116,6 +132,7 @@ export async function getInputOptions(
           return externals.includes(id);
         },
       }),
+      enableEsmShim ? esmShim() : undefined,
       nodeResolvePlugin,
       // for debugging
       // {

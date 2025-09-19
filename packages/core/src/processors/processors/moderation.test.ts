@@ -2,6 +2,8 @@ import { MockLanguageModelV1 } from 'ai/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import type { ChunkType } from '../../stream';
+import { ChunkFrom } from '../../stream/types';
 import type { ModerationResult } from './moderation';
 import { ModerationProcessor } from './moderation';
 
@@ -572,7 +574,12 @@ describe('ModerationProcessor', () => {
         throw new TripWire('Content flagged');
       });
 
-      const part = { type: 'text-delta' as const, textDelta: 'Flagged content' };
+      const part: ChunkType = {
+        type: 'text-delta' as const,
+        payload: { text: 'Flagged content', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
       const streamParts: any[] = []; // Empty context
 
       // Should attempt to moderate the current part and abort
@@ -598,11 +605,21 @@ describe('ModerationProcessor', () => {
 
       const mockAbort = vi.fn();
 
-      const previousChunks = [
-        { type: 'text-delta' as const, textDelta: 'Previous content ' },
-        { type: 'text-delta' as const, textDelta: 'more context ' },
+      const previousChunks: ChunkType[] = [
+        {
+          type: 'text-delta' as const,
+          payload: { text: 'Previous content ', id: '1' },
+          runId: '1',
+          from: ChunkFrom.AGENT,
+        },
+        { type: 'text-delta' as const, payload: { text: 'more context ', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
       ];
-      const currentChunk = { type: 'text-delta' as const, textDelta: 'current part' };
+      const currentChunk: ChunkType = {
+        type: 'text-delta' as const,
+        payload: { text: 'current part', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
 
       const result = await moderator.processOutputStream({
         part: currentChunk,
@@ -625,7 +642,12 @@ describe('ModerationProcessor', () => {
 
       const mockAbort = vi.fn();
 
-      const objectChunk = { type: 'object' as const, object: { key: 'value' } };
+      const objectChunk: ChunkType = {
+        type: 'object' as const,
+        object: { key: 'value' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
 
       const result = await moderator.processOutputStream({
         part: objectChunk,
@@ -649,7 +671,12 @@ describe('ModerationProcessor', () => {
 
       const mockAbort = vi.fn();
 
-      const currentChunk = { type: 'text-delta' as const, textDelta: 'Safe content' };
+      const currentChunk: ChunkType = {
+        type: 'text-delta' as const,
+        payload: { text: 'Safe content', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
       const streamParts = [currentChunk]; // streamParts includes the current part
 
       const result = await moderator.processOutputStream({

@@ -82,42 +82,6 @@ Strategies available:
 - `filter`: Remove messages containing PII
 - `redact`: Replace PII with placeholder values
 
-### `StructuredOutputProcessor`
-
-This processor converts unstructured LLM text responses into structured data using an internal agent. It preserves the original text while adding structured data to the response metadata as well as to result.object.
-
-```typescript copy showLineNumbers {5-15}
-import { StructuredOutputProcessor } from "@mastra/core/processors";
-import { z } from "zod";
-
-const agent = new Agent({
-  outputProcessors: [
-    new StructuredOutputProcessor({
-      schema: z.object({
-        sentiment: z.enum(['positive', 'negative', 'neutral']),
-        confidence: z.number().min(0).max(1),
-        topics: z.array(z.string()),
-      }),
-      model: openai("gpt-4o-mini"),
-      errorStrategy: 'warn', // Log warnings but continue on errors
-      instructions: 'Analyze the sentiment and extract key topics from the response',
-    }),
-  ],
-});
-
-const result = await agent.generate("Some conversational text")
-
-console.log(result.object) // { sentiment: "positive", confidence: 0.6, topics: ["foo", "bar"] }
-```
-
-Available options:
-- `schema`: Zod schema defining the expected structured output (required)
-- `model`: Language model for the internal structuring agent (required)
-- `errorStrategy`: Strategy when parsing or validation fails ('strict' | 'warn' | 'fallback', default: 'strict')
-- `fallbackValue`: Fallback value when errorStrategy is 'fallback'
-- `instructions`: Custom instructions for the structuring agent
-
-The structured data is stored in `result.object` and the original text is preserved in `result.text`.
 
 ### `BatchPartsProcessor`
 
@@ -199,21 +163,15 @@ You can chain multiple output processors. They execute sequentially in the order
 ```typescript copy showLineNumbers {9-18}
 import { Agent } from "@mastra/core/agent";
 import { 
-  UnicodeNormalizer, 
   ModerationProcessor, 
-  PromptInjectionDetector,
   PIIDetector 
 } from "@mastra/core/processors";
 
 const secureAgent = new Agent({
   outputProcessors: [
-    // 1. Normalize text first
-    new UnicodeNormalizer({ stripControlChars: true }),
-    // 2. Check for security threats
-    new PromptInjectionDetector({ model: openai("gpt-4.1-nano") }),
-    // 3. Moderate content
+    // 1. Check for security threats
     new ModerationProcessor({ model: openai("gpt-4.1-nano") }),
-    // 4. Handle PII last
+    // 2. Handle PII
     new PIIDetector({ model: openai("gpt-4.1-nano"), strategy: 'redact' }),
   ],
 });
@@ -226,40 +184,34 @@ You can create custom output processors by implementing the `Processor` interfac
 ### Streaming Output Processor
 
 ```typescript copy showLineNumbers {4-25}
-import type { Processor, MastraMessageV2, TripWire } from "@mastra/core/processors";
-import type { TextStreamPart, ObjectStreamPart } from 'ai';
+import type { Processor, MastraMessageV2 } from "@mastra/core/processors";
+import type { ChunkType } from "@mastra/core/stream";
 
 class ResponseLengthLimiter implements Processor {
-  readonly name = 'response-length-limiter-and-lower-case-results';
+  readonly name = 'response-length-limiter';
   
   constructor(private maxLength: number = 1000) {}
 
-  async processOutputStream({ chunk, streamParts, state, abort }: { // will run on every stream part emitted from the LLM
-    chunk: TextStreamPart<any> | ObjectStreamPart<any>;
-    streamParts: (TextStreamPart<any> | ObjectStreamPart<any>)[];
+  async processOutputStream({ part, streamParts, state, abort }: {
+    part: ChunkType;
+    streamParts: ChunkType[];
     state: Record<string, any>;
     abort: (reason?: string) => never;
-  }): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null> {
+  }): Promise<ChunkType | null | undefined> {
     // Track cumulative length in state, each processor gets its own state
     if (!state.cumulativeLength) {
       state.cumulativeLength = 0;
     }
 
-    const shouldEmitChunk = chunk?.textDelta?.includes('foo');
-    
-    if (chunk.type === 'text-delta') {
-      state.cumulativeLength += chunk.textDelta.length;
+    if (part.type === 'text-delta') {
+      state.cumulativeLength += part.payload.text.length;
       
       if (state.cumulativeLength > this.maxLength) {
         abort(`Response too long: ${state.cumulativeLength} characters (max: ${this.maxLength})`);
       }
     }
 
-    if (shouldEmitChunk) {
-      return chunk; // Emit the chunk
-    } else {
-      return null; // Emit nothing
-    }
+    return part; // Emit the part
   }
 }
 ```
@@ -267,7 +219,7 @@ class ResponseLengthLimiter implements Processor {
 ### Final Result Processor
 
 ```typescript copy showLineNumbers {4-19}
-import type { Processor, MastraMessageV2, TripWire } from "@mastra/core/processors";
+import type { Processor, MastraMessageV2 } from "@mastra/core/processors";
 
 class ResponseValidator implements Processor {
   readonly name = 'response-validator';
@@ -299,9 +251,9 @@ class ResponseValidator implements Processor {
 ```
 
 When creating custom output processors:
-- Always return the processed data (chunks or messages)
+- Always return the processed data (parts or messages)
 - Use `abort(reason)` to terminate processing early. Abort is used to simulate blocking a response. Errors thrown with `abort` will be an instance of TripWire.
-- For streaming processors, return `null` or `undefined` to skip emitting a chunk
+- For streaming processors, return `null` or `undefined` to skip emitting a part
 - Keep processors focused on a single responsibility
 - If using an agent inside your processor, use a fast model, limit the size of the response from it as much as possible, and make the system prompt as concise as possible.
 
@@ -315,10 +267,10 @@ const result = await agent.generate('Hello');
 console.log(result.text); // Processed text
 console.log(result.object); // Structured data if applicable
 
-// Processors also run during streamVNext() for each chunk
+// Processors also run during streamVNext() for each part
 const stream = await agent.streamVNext('Hello');
-for await (const chunk of stream) {
-  console.log(chunk); // Processed chunks
+for await (const part of stream) {
+  console.log(part); // Processed parts
 }
 ```
 
@@ -342,9 +294,9 @@ const stream = await agent.streamVNext('Hello', {
 });
 ```
 
-### Structured Output with Better DX
+### Structured Output Processor
 
-For better developer experience with structured output, you can use the `structuredOutput` option:
+To use the StructuredOutputProcessor, you should use the `structuredOutput` option:
 
 ```typescript copy showLineNumbers
 import { z } from "zod";

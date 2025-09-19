@@ -71,6 +71,7 @@ export const GET = handle(app);
 export const POST = handle(app);
 export const PUT = handle(app);
 export const DELETE = handle(app);
+export const PATCH = handle(app);
 export const OPTIONS = handle(app);
 export const HEAD = handle(app);
 `;
@@ -91,11 +92,15 @@ export const HEAD = handle(app);
     );
   }
 
-  async bundle(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
+  async bundle(
+    entryFile: string,
+    outputDirectory: string,
+    { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string },
+  ): Promise<void> {
     const result = await this._bundle(
       this.getEntry(),
       entryFile,
-      outputDirectory,
+      { outputDirectory, projectRoot },
       toolsPaths,
       join(outputDirectory, this.outputDir),
     );

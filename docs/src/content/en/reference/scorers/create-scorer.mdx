@@ -79,7 +79,7 @@ This function returns a scorer builder that you can chain step methods onto. See
 For better type inference and IntelliSense support, you can specify input/output types when creating scorers:
 
 ```typescript
-import { createScorer, ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core';
+import { createScorer, ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scorers';
 
 // For agent evaluation with full type safety
 const agentScorer = createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({

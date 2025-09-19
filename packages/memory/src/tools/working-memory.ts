@@ -1,14 +1,14 @@
-import type { MemoryConfig } from '@mastra/core';
-import { createTool } from '@mastra/core';
+import type { MemoryConfig } from '@mastra/core/memory';
+import { createTool } from '@mastra/core/tools';
 import { convertSchemaToZod } from '@mastra/schema-compat';
 import type { Schema } from 'ai';
 import { z, ZodObject } from 'zod';
-import type { ZodTypeAny } from 'zod';
+import type { ZodType } from 'zod';
 
 export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
   const schema = memoryConfig?.workingMemory?.schema;
 
-  let inputSchema: ZodTypeAny = z.object({
+  let inputSchema: ZodType = z.object({
     memory: z
       .string()
       .describe(`The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.`),
@@ -19,9 +19,9 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
       memory:
         schema instanceof ZodObject
           ? schema
-          : convertSchemaToZod({ jsonSchema: schema } as Schema).describe(
+          : (convertSchemaToZod({ jsonSchema: schema } as Schema).describe(
               `The JSON formatted working memory content to store.`,
-            ),
+            ) as ZodObject<any>),
     });
   }
 

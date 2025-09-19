@@ -3,9 +3,10 @@ import { bodyLimit } from 'hono/body-limit';
 import { describeRoute } from 'hono-openapi';
 import type { BodyLimitOptions } from '../../../types';
 import { generateSystemPromptHandler } from '../../prompt';
-import { executeAgentToolHandler } from '../tools/handlers';
+import { executeAgentToolHandler, getAgentToolHandler } from '../tools/handlers';
 import {
   generateHandler,
+  generateVNextHandler,
   getAgentByIdHandler,
   getAgentsHandler,
   getEvalsByAgentIdHandler,
@@ -14,6 +15,13 @@ import {
   streamGenerateHandler,
   streamVNextGenerateHandler,
   updateAgentModelHandler,
+  vNextBodyOptions,
+  deprecatedStreamVNextHandler,
+  streamVNextUIMessageHandler,
+  streamGenerateLegacyHandler,
+  generateLegacyHandler,
+  streamNetworkHandler,
+  sharedBodyOptions,
 } from './handlers';
 import { getListenerHandler, getSpeakersHandler, speakHandler, listenHandler } from './voice';
 
@@ -104,6 +112,58 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
   );
 
   router.post(
+    '/:agentId/generate-legacy',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Generate a response from an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                messages: {
+                  type: 'array',
+                  items: { type: 'object' },
+                },
+                threadId: { type: 'string' },
+                resourceId: { type: 'string', description: 'The resource ID for the conversation' },
+                resourceid: {
+                  type: 'string',
+                  description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
+                  deprecated: true,
+                },
+                runId: { type: 'string' },
+                output: { type: 'object' },
+              },
+              required: ['messages'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Generated response',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    generateLegacyHandler,
+  );
+
+  router.post(
     '/:agentId/generate',
     bodyLimit(bodyLimitOptions),
     describeRoute({
@@ -153,6 +213,164 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     generateHandler,
+  );
+
+  router.post(
+    '/:agentId/network',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Execute an agent as a Network',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: sharedBodyOptions,
+              required: ['messages'],
+            },
+          },
+        },
+      },
+    }),
+    streamNetworkHandler,
+  );
+
+  router.post(
+    '/:agentId/generate/vnext',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Generate a response from an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: vNextBodyOptions,
+              required: ['messages'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Generated response',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    generateVNextHandler,
+  );
+
+  router.post(
+    '/:agentId/stream/vnext',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Generate a response from an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: vNextBodyOptions,
+              required: ['messages'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Generated response',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    streamVNextGenerateHandler,
+  );
+
+  router.post(
+    '/:agentId/stream-legacy',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Stream a response from an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                messages: {
+                  type: 'array',
+                  items: { type: 'object' },
+                },
+                threadId: { type: 'string' },
+                resourceId: { type: 'string', description: 'The resource ID for the conversation' },
+                resourceid: {
+                  type: 'string',
+                  description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
+                  deprecated: true,
+                },
+                runId: { type: 'string' },
+                output: { type: 'object' },
+              },
+              required: ['messages'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Streamed response',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    streamGenerateLegacyHandler,
   );
 
   router.post(
@@ -211,8 +429,9 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
     '/:agentId/streamVNext',
     bodyLimit(bodyLimitOptions),
     describeRoute({
-      description: 'Stream a response from an agent using the VNext streaming API',
+      description: '[DEPRECATED] This endpoint is deprecated. Please use /stream instead.',
       tags: ['agents'],
+      deprecated: true,
       parameters: [
         {
           name: 'agentId',
@@ -262,6 +481,54 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
       responses: {
+        410: {
+          description: 'Endpoint deprecated',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  error: { type: 'string' },
+                  message: { type: 'string' },
+                  deprecated_endpoint: { type: 'string' },
+                  replacement_endpoint: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    deprecatedStreamVNextHandler,
+  );
+
+  router.post(
+    '/:agentId/stream/vnext/ui',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Stream a response from an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: vNextBodyOptions,
+              required: ['messages'],
+            },
+          },
+        },
+      },
+      responses: {
         200: {
           description: 'Streamed response',
         },
@@ -270,7 +537,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    streamVNextGenerateHandler,
+    streamVNextUIMessageHandler,
   );
 
   router.post(
@@ -739,6 +1006,37 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     listenHandler,
+  );
+
+  router.get(
+    '/:agentId/tools/:toolId',
+    describeRoute({
+      description: 'Get agent tool by ID',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'toolId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Tool details',
+        },
+        404: {
+          description: 'Tool or agent not found',
+        },
+      },
+    }),
+    getAgentToolHandler,
   );
 
   router.post(

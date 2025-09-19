@@ -1,3 +1,4 @@
+import { Searchbar } from '@/components/ui/searchbar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
@@ -17,8 +18,6 @@ export interface ToolListProps {
   isLoading: boolean;
   tools: Record<string, GetToolResponse>;
   agents: Record<string, GetAgentResponse>;
-  computeLink: (toolId: string, agentId?: string) => string;
-  computeAgentLink: (toolId: string, agentId: string) => string;
 }
 
 interface ToolWithAgents {
@@ -27,7 +26,7 @@ interface ToolWithAgents {
   agents: Array<{ id: string; name: string }>;
 }
 
-export const ToolList = ({ tools, agents, isLoading, computeLink, computeAgentLink }: ToolListProps) => {
+export const ToolList = ({ tools, agents, isLoading }: ToolListProps) => {
   const toolsWithAgents = useMemo(() => prepareAgents(tools, agents), [tools, agents]);
 
   if (isLoading)
@@ -37,27 +36,20 @@ export const ToolList = ({ tools, agents, isLoading, computeLink, computeAgentLi
       </div>
     );
 
-  return (
-    <ToolListInner toolsWithAgents={toolsWithAgents} computeLink={computeLink} computeAgentLink={computeAgentLink} />
-  );
+  return <ToolListInner toolsWithAgents={toolsWithAgents} />;
 };
 
-const ToolListInner = ({
-  toolsWithAgents,
-  computeLink,
-  computeAgentLink,
-}: {
+interface ToolListInnerProps {
   toolsWithAgents: ToolWithAgents[];
-  computeLink: (toolId: string, agentId?: string) => string;
-  computeAgentLink: (toolId: string, agentId: string) => string;
-}) => {
+}
+
+const ToolListInner = ({ toolsWithAgents }: ToolListInnerProps) => {
   const [filteredTools, setFilteredTools] = useState<ToolWithAgents[]>(toolsWithAgents);
   const [value, setValue] = useState('');
 
   if (filteredTools.length === 0 && !value) return <ToolListEmpty />;
 
-  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+  const handleSearch = (value: string) => {
     setValue(value);
 
     startTransition(() => {
@@ -79,19 +71,7 @@ const ToolListInner = ({
   return (
     <div>
       <div className="max-w-5xl w-full mx-auto px-4 pt-8">
-        <div className="px-4 flex items-center gap-2 rounded-lg bg-surface5 focus-within:ring-2 focus-within:ring-accent3">
-          <Icon>
-            <SearchIcon />
-          </Icon>
-
-          <input
-            type="text"
-            placeholder="Search for a tool"
-            className="w-full py-2 bg-transparent text-icon3 focus:text-icon6 placeholder:text-icon3 outline-none"
-            value={value}
-            onChange={handleSearch}
-          />
-        </div>
+        <Searchbar onSearch={handleSearch} label="Search for a tool" placeholder="Search for a tool" />
 
         {filteredTools.length === 0 && (
           <Txt as="p" className="text-icon3 py-2">
@@ -102,7 +82,7 @@ const ToolListInner = ({
 
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 max-w-5xl mx-auto py-8">
         {filteredTools.map(tool => (
-          <ToolEntity key={tool.id} tool={tool} computeLink={computeLink} computeAgentLink={computeAgentLink} />
+          <ToolEntity key={tool.id} tool={tool} />
         ))}
       </div>
     </div>
@@ -111,13 +91,11 @@ const ToolListInner = ({
 
 interface ToolEntityProps {
   tool: ToolWithAgents;
-  computeLink: (toolId: string, agentId?: string) => string;
-  computeAgentLink: (toolId: string, agentId: string) => string;
 }
 
-const ToolEntity = ({ tool, computeLink, computeAgentLink }: ToolEntityProps) => {
+const ToolEntity = ({ tool }: ToolEntityProps) => {
   const linkRef = useRef<HTMLAnchorElement>(null);
-  const { Link } = useLinkComponent();
+  const { Link, paths } = useLinkComponent();
 
   return (
     <Entity onClick={() => linkRef.current?.click()}>
@@ -127,7 +105,7 @@ const ToolEntity = ({ tool, computeLink, computeAgentLink }: ToolEntityProps) =>
 
       <EntityContent>
         <EntityName>
-          <Link ref={linkRef} href={computeLink(tool.id, tool.agents[0]?.id)}>
+          <Link ref={linkRef} href={paths.toolLink(tool.id)}>
             {tool.id}
           </Link>
         </EntityName>
@@ -137,7 +115,7 @@ const ToolEntity = ({ tool, computeLink, computeAgentLink }: ToolEntityProps) =>
           {tool.agents.map(agent => {
             return (
               <Link
-                href={computeAgentLink(tool.id, agent.id)}
+                href={paths.agentToolLink(agent.id, tool.id)}
                 onClick={e => e.stopPropagation()}
                 key={agent.id}
                 className="group/link"

@@ -16,10 +16,10 @@ LLM CONTEXT: This Tabs component showcases different vector database implementat
 Each tab demonstrates the setup and configuration for a specific vector database provider.
 The tabs show consistent API patterns across different databases, helping users understand how to switch between providers.
 Each tab includes import statements, initialization code, and basic operations (createIndex, upsert) for that specific database.
-The providers include Pg Vector, Pinecone, Qdrant, Chroma, Astra, LibSQL, Upstash, Cloudflare, MongoDB, OpenSearch, and Couchbase.
+The providers include Pg Vector, Pinecone, Qdrant, Chroma, Astra, LibSQL, Upstash, Cloudflare, MongoDB, OpenSearch, Couchbase and S3 Vectors.
 */}
 
-<Tabs items={['MongoDB', 'Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'OpenSearch', 'Couchbase', 'LanceDB']}>
+<Tabs items={['MongoDB', 'Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'OpenSearch', 'Couchbase', 'LanceDB', 'S3 Vectors']}>
   <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
     import { MongoDBVector } from '@mastra/mongodb'
@@ -291,6 +291,30 @@ await store.upsert({
   LanceDB is an embedded vector database built on the Lance columnar format, suitable for local development or cloud deployment.
   For detailed setup instructions and best practices, see the [official LanceDB documentation](https://lancedb.github.io/lancedb/).
 </Tabs.Tab>
+<Tabs.Tab>
+```ts filename="vector-store.ts" showLineNumbers copy
+import { S3Vectors } from "@mastra/s3vectors";
+
+const store = new S3Vectors({
+  vectorBucketName: "my-vector-bucket",
+  clientConfig: {
+    region: "us-east-1",
+  },
+  nonFilterableMetadataKeys: ["content"],
+});
+
+await store.createIndex({
+  indexName: "my-index",
+  dimension: 1536,
+});
+await store.upsert({
+  indexName: "my-index",
+  vectors: embeddings,
+  metadata: chunks.map(chunk => ({ text: chunk.text })),
+});
+```
+</Tabs.Tab>
+
 </Tabs>
 
 ## Using Vector Storage
@@ -328,7 +352,7 @@ This helps users understand the constraints and avoid naming conflicts when crea
 The tabs provide examples of valid and invalid names to clarify the rules for each database.
 */}
 
-<Tabs items={['MongoDB', 'Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'OpenSearch']}>
+<Tabs items={['MongoDB', 'Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'OpenSearch', 'S3 Vectors']}>
   <Tabs.Tab>
     Collection (index) names must:
     - Start with a letter or underscore
@@ -419,6 +443,18 @@ The tabs provide examples of valid and invalid names to clarify the rules for ea
     - Example: `my-index-123` is valid
     - Example: `My_Index` is not valid (contains uppercase letters)
     - Example: `_myindex` is not valid (begins with underscore)
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Index names must:
+    - Be unique within the same vector bucket
+    - Be 3–63 characters long
+    - Use only lowercase letters (`a–z`), numbers (`0–9`), hyphens (`-`), and dots (`.`)
+    - Begin and end with a letter or number
+    - Example: `my-index.123` is valid
+    - Example: `my_index` is not valid (contains underscore)
+    - Example: `-myindex` is not valid (begins with hyphen)
+    - Example: `myindex-` is not valid (ends with hyphen)
+    - Example: `MyIndex` is not valid (contains uppercase letters)
   </Tabs.Tab>
 </Tabs>
 

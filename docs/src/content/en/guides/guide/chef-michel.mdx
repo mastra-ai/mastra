@@ -6,22 +6,26 @@ description: Guide on creating a Chef Assistant agent in Mastra to help users co
 import { Steps } from "nextra/components";
 import YouTube from "@/components/youtube";
 
-# Agents Guide: Building a Chef Assistant
+# Building an AI Chef Assistant
 
-In this guide, we'll walk through creating a "Chef Assistant" agent that helps users cook meals with available ingredients.
+In this guide, you'll create a "Chef Assistant" agent that helps users cook meals with available ingredients.
+
+You'll learn how to create the agent and register it with Mastra. Next, you'll interact with the agent through your terminal and get to know different response formats. Lastly, you'll access the agent through Mastra's local API endpoints.
 
 <YouTube id="_tZhOqHCrF0" />
 
 ## Prerequisites
 
-- Node.js installed
-- Mastra installed: `npm install @mastra/core@latest`
+- Node.js `v20.0` or later installed
+- An API key from a supported [Model Provider](/docs/getting-started/model-providers)
+- An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
----
+## Creating the Agent
 
-## Create the Agent
+To create an agent in Mastra use the `Agent` class to define it and then register it with Mastra.
 
 <Steps>
+
 ### Define the Agent
 
 Create a new file `src/mastra/agents/chefAgent.ts` and define your agent:
@@ -39,25 +43,12 @@ export const chefAgent = new Agent({
 });
 ```
 
----
+### Register the Agent with Mastra
 
-## Set Up Environment Variables
+In your `src/mastra/index.ts` file, register the agent:
 
-Create a `.env` file in your project root and add your OpenAI API key:
-
-```bash filename=".env" copy
-OPENAI_API_KEY=your_openai_api_key
-```
-
----
-
-## Register the Agent with Mastra
-
-In your main file, register the agent:
-
-```ts copy filename="src/mastra/index.ts"
+```ts copy filename="src/mastra/index.ts" {2, 5}
 import { Mastra } from "@mastra/core";
-
 import { chefAgent } from "./agents/chefAgent";
 
 export const mastra = new Mastra({
@@ -65,16 +56,21 @@ export const mastra = new Mastra({
 });
 ```
 
----
-
 </Steps >
 
 ## Interacting with the Agent
 
+Depending on your requirements you can interact and get responses from the agent in different formats. In the following steps you'll learn how to generate, stream, and get structured output.
+
 <Steps>
+
 ### Generating Text Responses
 
+Create a new file `src/index.ts` and add a `main()` function to it. Inside, craft a query to ask the agent and log its response.
+
 ```ts copy filename="src/index.ts"
+import { chefAgent } from "./mastra/agents/chefAgent";
+
 async function main() {
   const query =
     "In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?";
@@ -87,13 +83,13 @@ async function main() {
 main();
 ```
 
-Run the script:
+Afterwards, run the script:
 
 ```bash copy
 npx bun src/index.ts
 ```
 
-Output:
+You should get an output similar to this:
 
 ```
 Query: In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?
@@ -101,11 +97,13 @@ Query: In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some
 👨‍🍳 Chef Michel: You can make a delicious pasta al pomodoro! Here's how...
 ```
 
----
-
 ### Streaming Responses
 
+In the previous example you might have waited a bit for the response without any sign of progress. To show the agent's output as it creates it you should instead stream its response to the terminal.
+
 ```ts copy filename="src/index.ts"
+import { chefAgent } from "./mastra/agents/chefAgent";
+
 async function main() {
   const query =
     "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
@@ -125,7 +123,13 @@ async function main() {
 main();
 ```
 
-Output:
+Afterwards, run the script again:
+
+```bash copy
+npx bun src/index.ts
+```
+
+You should get an output similar to the one below. This time though you can read it line by line instead of one large block.
 
 ```
 Query: Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.
@@ -136,11 +140,14 @@ Great! You can make a comforting chicken curry...
 ✅ Recipe complete!
 ```
 
----
-
 ### Generating a Recipe with Structured Data
 
+Instead of showing the agent's response to a human you might want to pass it along to another part of your code. For these instances your agent should return [structured output](../../docs/agents/overview.mdx#4-structured-output).
+
+Change your `src/index.ts` to the following:
+
 ```ts copy filename="src/index.ts"
+import { chefAgent } from "./mastra/agents/chefAgent";
 import { z } from "zod";
 
 async function main() {
@@ -169,7 +176,7 @@ async function main() {
 main();
 ```
 
-Output:
+After running the script again you should get an output similar to this:
 
 ```
 Query: I want to make lasagna, can you generate a lasagna recipe for me?
@@ -188,11 +195,11 @@ Query: I want to make lasagna, can you generate a lasagna recipe for me?
 }
 ```
 
----
-
 </Steps >
 
 ## Running the Agent Server
+
+Learn how to interact with your agent through Mastra's API.
 
 <Steps>
 
@@ -204,7 +211,7 @@ You can run your agent as a service using the `mastra dev` command:
 mastra dev
 ```
 
-This will start a server exposing endpoints to interact with your registered agents.
+This will start a server exposing endpoints to interact with your registered agents. Within the [playground](../../docs/server-db/local-dev-playground.mdx) you can test your agent through a UI.
 
 ### Accessing the Chef Assistant API
 

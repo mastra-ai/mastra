@@ -357,6 +357,8 @@ export class MemoryMSSQL extends MemoryStorage {
     selectBy: StorageGetMessagesArg['selectBy'];
     orderByStatement: string;
   }) {
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
     const include = selectBy?.include;
     if (!include) return null;
 
@@ -448,11 +450,14 @@ export class MemoryMSSQL extends MemoryStorage {
       format?: 'v1' | 'v2';
     },
   ): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    const { threadId, format, selectBy } = args;
+    const { threadId, resourceId, format, selectBy } = args;
+
     const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId`;
     const orderByStatement = `ORDER BY [seq_id] DESC`;
     const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
     try {
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
       let rows: any[] = [];
       const include = selectBy?.include || [];
       if (include?.length) {
@@ -494,6 +499,67 @@ export class MemoryMSSQL extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             threadId,
+            resourceId: resourceId ?? '',
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException(mastraError);
+      return [];
+    }
+  }
+
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format: 'v1';
+  }): Promise<MastraMessageV1[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v2';
+  }): Promise<MastraMessageV2[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    if (messageIds.length === 0) return [];
+
+    const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId`;
+    const orderByStatement = `ORDER BY [seq_id] DESC`;
+    try {
+      let rows: any[] = [];
+      let query = `${selectStatement} FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })} WHERE [id] IN (${messageIds.map((_, i) => `@id${i}`).join(', ')})`;
+      const request = this.pool.request();
+      messageIds.forEach((id, i) => request.input(`id${i}`, id));
+
+      query += ` ${orderByStatement}`;
+      const result = await request.query(query);
+      const remainingRows = result.recordset || [];
+      rows.push(...remainingRows);
+      rows.sort((a, b) => {
+        const timeDiff = a.seq_id - b.seq_id;
+        return timeDiff;
+      });
+      rows = rows.map(({ seq_id, ...rest }) => rest);
+      if (format === `v1`) return this._parseAndFormatMessages(rows, format);
+      return this._parseAndFormatMessages(rows, `v2`);
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_MESSAGES_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            messageIds: JSON.stringify(messageIds),
           },
         },
         error,
@@ -509,19 +575,12 @@ export class MemoryMSSQL extends MemoryStorage {
       format?: 'v1' | 'v2';
     },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, selectBy } = args;
-    const { page = 0, perPage: perPageInput } = selectBy?.pagination || {};
-    const orderByStatement = `ORDER BY [seq_id] DESC`;
-    let messages: any[] = [];
-    if (selectBy?.include?.length) {
-      const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
-      if (includeMessages) {
-        messages.push(...includeMessages);
-      }
-    }
+    const { threadId, resourceId, format, selectBy } = args;
+    const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
+
     try {
-      const { threadId, format, selectBy } = args;
-      const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
       const fromDate = dateRange?.start;
       const toDate = dateRange?.end;
 
@@ -602,6 +661,7 @@ export class MemoryMSSQL extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             threadId,
+            resourceId: resourceId ?? '',
             page,
           },
         },

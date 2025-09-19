@@ -11,7 +11,6 @@ export const startDevServer = async (args: any) => {
   if (args?.port) {
     logger.warn('The --port option is deprecated. Use the server key in the Mastra instance instead.');
   }
-
   dev({
     port: args?.port ? parseInt(args.port) : null,
     dir: args?.dir,
@@ -21,6 +20,7 @@ export const startDevServer = async (args: any) => {
     inspect: args?.inspect && !args?.inspectBrk,
     inspectBrk: args?.inspectBrk,
     customArgs: args?.customArgs ? args.customArgs.split(',') : [],
+    https: args?.https,
   }).catch(err => {
     logger.error(err.message);
   });

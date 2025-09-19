@@ -1,0 +1,49 @@
+---
+title: "Reference: Mastra.getMCPServer() | Core | Mastra Docs"
+description: "Documentation for the `Mastra.getMCPServer()` method in Mastra, which retrieves a specific MCP server instance by ID and optional version."
+---
+
+# Mastra.getMCPServer()
+
+The `.getMCPServer()` method is used to retrieve a specific MCP server instance by its logical ID and optional version. If a version is provided, it attempts to find the server with that exact logical ID and version. If no version is provided, it returns the server with the specified logical ID that has the most recent releaseDate.
+
+## Usage example
+
+```typescript copy
+mastra.getMCPServer("1.2.0");
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "serverId",
+      type: "string",
+      description: "The logical ID of the MCP server to retrieve. Should match the `id` property of the MCPServer instance.",
+    },
+    {
+      name: "version",
+      type: "string",
+      description: "Optional specific version of the MCP server to retrieve. If not provided, returns the server with the most recent releaseDate.",
+      optional: true,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "server",
+      type: "MCPServerBase | undefined",
+      description: "The MCP server instance with the specified ID and version, or undefined if not found or if the specific version is not found.",
+    },
+  ]}
+/>
+
+## Related
+
+- [MCP overview](../../docs/tools-mcp/mcp-overview.mdx)
+- [MCP server reference](../../reference/tools/mcp-server.mdx)

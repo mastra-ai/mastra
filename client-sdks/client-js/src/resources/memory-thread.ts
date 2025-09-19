@@ -1,4 +1,4 @@
-import type { StorageThreadType } from '@mastra/core';
+import type { StorageThreadType } from '@mastra/core/memory';
 
 import type {
   GetMemoryThreadMessagesResponse,

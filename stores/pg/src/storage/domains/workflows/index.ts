@@ -1,6 +1,6 @@
-import type { WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
+import type { StepResult, WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
 import { getTableName } from '../utils';
@@ -45,23 +45,62 @@ export class WorkflowsPG extends WorkflowsStorage {
     this.schema = schema;
   }
 
+  updateWorkflowResults(
+    {
+      // workflowName,
+      // runId,
+      // stepId,
+      // result,
+      // runtimeContext,
+    }: {
+      workflowName: string;
+      runId: string;
+      stepId: string;
+      result: StepResult<any, any, any, any>;
+      runtimeContext: Record<string, any>;
+    },
+  ): Promise<Record<string, StepResult<any, any, any, any>>> {
+    throw new Error('Method not implemented.');
+  }
+  updateWorkflowState(
+    {
+      // workflowName,
+      // runId,
+      // opts,
+    }: {
+      workflowName: string;
+      runId: string;
+      opts: {
+        status: string;
+        result?: StepResult<any, any, any, any>;
+        error?: string;
+        suspendedPaths?: Record<string, number[]>;
+        waitingPaths?: Record<string, number[]>;
+      };
+    },
+  ): Promise<WorkflowRunState | undefined> {
+    throw new Error('Method not implemented.');
+  }
+
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
     try {
       const now = new Date().toISOString();
       await this.client.none(
-        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} (workflow_name, run_id, snapshot, "createdAt", "updatedAt")
-                 VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
+                 VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
-                 SET snapshot = $3, "updatedAt" = $5`,
-        [workflowName, runId, JSON.stringify(snapshot), now, now],
+                 SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
+        [workflowName, runId, resourceId, JSON.stringify(snapshot), now, now],
       );
     } catch (error) {
       throw new MastraError(

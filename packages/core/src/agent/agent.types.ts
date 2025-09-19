@@ -1,160 +1,153 @@
-import type { LanguageModelV1ProviderMetadata } from '@ai-sdk/provider';
-import type { IDGenerator, Message, TelemetrySettings } from 'ai';
-import type { z, ZodSchema } from 'zod';
-import type { CoreMessage } from '../llm';
+import type { TelemetrySettings } from 'ai';
+import type { ModelMessage, ToolChoice } from 'ai-v5';
+import type { TracingContext, TracingOptions } from '../ai-tracing';
+import type { SystemMessage } from '../llm';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { InputProcessor, OutputProcessor } from '../processors';
 import type { RuntimeContext } from '../runtime-context';
-import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions, InstructionsInput } from './types';
+import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
+import type { OutputSchema } from '../stream/base/schema';
+import type { ChunkType } from '../stream/types';
+import type { MessageListInput } from './message-list';
+import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions } from './types';
 
-export type CallSettings = {
-  /**
-Maximum number of tokens to generate.
-   */
-  maxTokens?: number;
-  /**
-Temperature setting. This is a number between 0 (almost no randomness) and
-1 (very random).
-
-It is recommended to set either `temperature` or `topP`, but not both.
-
-@default 0
-   */
-  temperature?: number;
-  /**
-Nucleus sampling. This is a number between 0 and 1.
-
-E.g. 0.1 would mean that only tokens with the top 10% probability mass
-are considered.
-
-It is recommended to set either `temperature` or `topP`, but not both.
-   */
-  topP?: number;
-  /**
-Only sample from the top K options for each subsequent token.
-
-Used to remove "long tail" low probability responses.
-Recommended for advanced use cases only. You usually only need to use temperature.
-   */
-  topK?: number;
-  /**
-Presence penalty setting. It affects the likelihood of the model to
-repeat information that is already in the prompt.
-
-The presence penalty is a number between -1 (increase repetition)
-and 1 (maximum penalty, decrease repetition). 0 means no penalty.
-   */
-  presencePenalty?: number;
-  /**
-Frequency penalty setting. It affects the likelihood of the model
-to repeatedly use the same words or phrases.
-
-The frequency penalty is a number between -1 (increase repetition)
-and 1 (maximum penalty, decrease repetition). 0 means no penalty.
-   */
-  frequencyPenalty?: number;
-  /**
-Stop sequences.
-If set, the model will stop generating text when one of the stop sequences is generated.
-Providers may have limits on the number of stop sequences.
-   */
-  stopSequences?: string[];
-  /**
-The seed (integer) to use for random sampling. If set and supported
-by the model, calls will generate deterministic results.
-   */
-  seed?: number;
-  /**
-Maximum number of retries. Set to 0 to disable retries.
-
-@default 2
-   */
-  maxRetries?: number;
-  /**
-Abort signal.
-   */
-  abortSignal?: AbortSignal;
-  /**
-Additional HTTP headers to be sent with the request.
-Only applicable for HTTP-based providers.
-   */
-  headers?: Record<string, string | undefined>;
-};
-
-type Prompt = {
-  /**
-System message to include in the prompt. Can be used with `prompt` or `messages`.
-   */
-  system?: string;
-  /**
-A simple text prompt. You can either use `prompt` or `messages` but not both.
- */
-  prompt?: string;
-  /**
-A list of messages. You can either use `prompt` or `messages` but not both.
-   */
-  messages?: Array<CoreMessage> | Array<Omit<Message, 'id'>>;
-};
-
-/**
- * Options for streaming responses with an agent
- * @template OUTPUT - The schema type for structured output (Zod schema)
- */
-export type AgentVNextStreamOptions<
-  Output extends ZodSchema | undefined = undefined,
-  StructuredOutput extends ZodSchema | undefined = undefined,
-> = {
-  /** Optional instructions to override the agent's default instructions */
-  instructions?: InstructionsInput;
-  /** Additional tool sets that can be used for this generation */
-  toolsets?: ToolsetsInput;
-  clientTools?: ToolsInput;
-  /** Additional context messages to include */
-  context?: CoreMessage[];
-  /** New memory options (preferred) */
+export type MultiPrimitiveExecutionOptions = {
+  /** Memory configuration for conversation persistence and retrieval */
   memory?: AgentMemoryOption;
-  /** Unique ID for this generation run */
+  /** Unique identifier for this execution run */
   runId?: string;
-  /** Callback fired when streaming completes */
-  onFinish?: StreamTextOnFinishCallback<any>;
-  /** Callback fired after each generation step completes */
-  onStepFinish?: StreamTextOnStepFinishCallback<any>;
-  /** Controls how tools are selected during generation */
-  toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
-  /** Telemetry settings */
-  telemetry?: TelemetrySettings;
-  /** RuntimeContext for dependency injection */
-  runtimeContext?: RuntimeContext;
-  /** Generate a unique ID for each message. */
-  experimental_generateMessageId?: IDGenerator;
-  /**
-    Additional provider-specific options. They are passed through
-    to the provider from the AI SDK and enable provider-specific
-    functionality that can be fully encapsulated in the provider.
-   */
-  providerOptions?: LanguageModelV1ProviderMetadata;
 
-  /** Whether to save messages incrementally on step finish */
-  savePerStep?: boolean;
-  /** Input processors to use for this stream call (overrides agent's default) */
-  inputProcessors?: InputProcessor[];
-  /** Output processors to use for this stream call (overrides agent's default) */
-  outputProcessors?: OutputProcessor[];
+  /** Runtime context containing dynamic configuration and state */
+  runtimeContext?: RuntimeContext;
+
+  /** Maximum number of steps to run */
+  maxSteps?: number;
+
+  /** AI tracing context for span hierarchy and metadata */
+  tracingContext?: TracingContext;
+
+  /** Model-specific settings like temperature, maxTokens, topP, etc. */
+  modelSettings?: LoopOptions['modelSettings'];
+
+  telemetry?: TelemetrySettings;
+};
+
+export type AgentExecutionOptions<
+  OUTPUT extends OutputSchema = undefined,
+  FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
+> = {
   /**
-   * Structured output configuration using StructuredOutputProcessor.
-   * This provides better DX than manually creating the processor.
+   * Determines the output stream format. Use 'mastra' for Mastra's native format (default) or 'aisdk' for AI SDK v5 compatibility.
+   * @default 'mastra'
    */
-  structuredOutput?: StructuredOutput extends z.ZodTypeAny ? StructuredOutputOptions<StructuredOutput> : never;
-} & CallSettings &
-  Prompt &
-  (Output extends undefined
-    ? {
-        experimental_output?: StructuredOutput;
-        maxSteps?: number;
-        output?: never;
-      }
-    : {
-        output: Output;
-        experimental_output?: never;
-        maxSteps?: never;
-      });
+  format?: FORMAT;
+
+  /** Custom instructions that override the agent's default instructions for this execution */
+  instructions?: string;
+
+  /** Custom system message to include in the prompt */
+  system?: SystemMessage;
+
+  /** Additional context messages to provide to the agent */
+  context?: ModelMessage[];
+
+  /** Memory configuration for conversation persistence and retrieval */
+  memory?: AgentMemoryOption;
+
+  /** Unique identifier for this execution run */
+  runId?: string;
+
+  /** Save messages incrementally after each stream step completes (default: false). */
+  savePerStep?: boolean;
+
+  /** Runtime context containing dynamic configuration and state */
+  runtimeContext?: RuntimeContext;
+
+  /** @deprecated Use memory.resource instead. Identifier for the resource/user */
+  resourceId?: string;
+  /** @deprecated Use memory.thread instead. Thread identifier for conversation continuity */
+  threadId?: string;
+
+  /** Telemetry collection settings for observability */
+  telemetry?: TelemetrySettings;
+
+  /** Maximum number of steps to run */
+  maxSteps?: number;
+
+  /** Conditions for stopping execution (e.g., step count, token limit) */
+  stopWhen?: LoopOptions['stopWhen'];
+
+  /** Provider-specific options passed to the language model */
+  providerOptions?: LoopOptions['providerOptions'];
+
+  /** Callback fired after each execution step. Type varies by format */
+  onStepFinish?: FORMAT extends 'aisdk' ? StreamTextOnStepFinishCallback<any> : LoopConfig['onStepFinish'];
+  /** Callback fired when execution completes. Type varies by format */
+  onFinish?: FORMAT extends 'aisdk' ? StreamTextOnFinishCallback<any> : LoopConfig['onFinish'];
+
+  /** Callback fired for each streaming chunk received */
+  onChunk?: LoopConfig['onChunk'];
+  /** Callback fired when an error occurs during streaming */
+  onError?: LoopConfig['onError'];
+  /** Callback fired when streaming is aborted */
+  onAbort?: LoopConfig['onAbort'];
+  /** Tools that are active for this execution */
+  activeTools?: LoopConfig['activeTools'];
+  /** Signal to abort the streaming operation */
+  abortSignal?: LoopConfig['abortSignal'];
+
+  /** Input processors to use for this execution (overrides agent's default) */
+  inputProcessors?: InputProcessor[];
+  /** Output processors to use for this execution (overrides agent's default) */
+  outputProcessors?: OutputProcessor[];
+
+  /** Additional tool sets that can be used for this execution */
+  toolsets?: ToolsetsInput;
+  /** Client-side tools available during execution */
+  clientTools?: ToolsInput;
+  /** Tool selection strategy: 'auto', 'none', 'required', or specific tools */
+  toolChoice?: ToolChoice<any>;
+
+  /** Model-specific settings like temperature, maxTokens, topP, etc. */
+  modelSettings?: LoopOptions['modelSettings'];
+
+  /** Evaluation scorers to run on the execution results */
+  scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+  /** Whether to return detailed scoring data in the response */
+  returnScorerData?: boolean;
+  /** AI tracing context for span hierarchy and metadata */
+  tracingContext?: TracingContext;
+  /** AI tracing options for starting new traces */
+  tracingOptions?: TracingOptions;
+
+  /** Callback function called before each step of multi-step execution */
+  prepareStep?: PrepareStepFunction<any>;
+} & OutputOptions<OUTPUT>;
+
+type OutputOptions<OUTPUT extends OutputSchema = undefined> =
+  | {
+      /**
+       * Schema for structured output generation (Zod schema or JSON Schema)
+       * @deprecated Use `structuredOutput` instead. The `output` property will be removed in a future version.
+       */
+      output?: OUTPUT;
+      structuredOutput?: never;
+    }
+  | {
+      /** Structured output generation with enhanced developer experience  */
+      structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
+      output?: never;
+    };
+
+export type InnerAgentExecutionOptions<
+  OUTPUT extends OutputSchema = undefined,
+  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
+> = AgentExecutionOptions<OUTPUT, FORMAT> & {
+  writableStream?: WritableStream<ChunkType>;
+  messages: MessageListInput;
+  methodType: 'generate' | 'stream' | 'streamVNext';
+  /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
+  model?: MastraLanguageModel;
+};

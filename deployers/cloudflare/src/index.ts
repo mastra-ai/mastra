@@ -162,8 +162,14 @@ export class CloudflareDeployer extends Deployer {
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: (string | string[])[],
+    { enableSourcemap = false }: { enableSourcemap?: boolean } = {},
   ) {
-    const inputOptions = await super.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo, toolsPaths);
+    const inputOptions = await super.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo, toolsPaths, {
+      enableSourcemap,
+      enableEsmShim: false,
+    });
+
+    const hasPostgresStore = (await this.deps.checkDependencies(['@mastra/pg'])) === `ok`;
 
     if (Array.isArray(inputOptions.plugins)) {
       inputOptions.plugins = [
@@ -174,16 +180,23 @@ process.versions.node = '${process.versions.node}';
       `,
         }),
         ...inputOptions.plugins,
-        postgresStoreInstanceChecker(),
         mastraInstanceWrapper(mastraEntryFile),
       ];
+
+      if (hasPostgresStore) {
+        inputOptions.plugins.push(postgresStoreInstanceChecker());
+      }
     }
 
     return inputOptions;
   }
 
-  async bundle(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths);
+  async bundle(
+    entryFile: string,
+    outputDirectory: string,
+    { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string },
+  ): Promise<void> {
+    return this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot, enableEsmShim: false }, toolsPaths);
   }
 
   async deploy(): Promise<void> {
@@ -201,7 +214,7 @@ process.versions.node = '${process.versions.node}';
 
     if (hasLibsql) {
       this.logger.error(
-        'Cloudflare Deployer does not support @libsql/client(which may have been installed by @mastra/libsql) as a dependency. Please use Cloudflare D1 instead @mastra/cloudflare-d1',
+        'Cloudflare Deployer does not support @libsql/client (which may have been installed by @mastra/libsql) as a dependency. Please use Cloudflare D1 instead: @mastra/cloudflare-d1.',
       );
       process.exit(1);
     }

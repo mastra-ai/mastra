@@ -1,3 +1,4 @@
+import { Agent } from '@mastra/core/agent';
 import type { MastraLanguageModel } from '@mastra/core/agent';
 import { defaultTitleCombinePromptTemplate, defaultTitleExtractorPromptTemplate, PromptTemplate } from '../prompts';
 import type { TitleCombinePrompt, TitleExtractorPrompt } from '../prompts';
@@ -110,30 +111,38 @@ export class TitleExtractor extends BaseExtractor {
     for (const [key, nodes] of Object.entries(nodesByDocument)) {
       const titleCandidates = await this.getTitlesCandidates(nodes);
       const combinedTitles = titleCandidates.join(', ');
-      const completion = await this.llm.doGenerate({
-        inputFormat: 'messages',
-        mode: { type: 'regular' },
-        prompt: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: this.combineTemplate.format({
-                  context: combinedTitles,
-                }),
-              },
-            ],
-          },
-        ],
-      });
 
       let title = '';
-      if (typeof completion.text === 'string') {
-        title = completion.text.trim();
+
+      if (this.llm.specificationVersion === 'v2') {
+        const miniAgent = new Agent({
+          model: this.llm,
+          name: 'title-extractor',
+          instructions:
+            'You are a title extractor. You are given a list of nodes and you need to extract the title from the nodes.',
+        });
+        const result = await miniAgent.generateVNext(
+          [{ role: 'user', content: this.combineTemplate.format({ context: combinedTitles }) }],
+          { format: 'mastra' },
+        );
+        title = result.text;
       } else {
-        console.warn('Title extraction LLM output was not a string:', completion.text);
+        const miniAgent = new Agent({
+          model: this.llm,
+          name: 'title-extractor',
+          instructions:
+            'You are a title extractor. You are given a list of nodes and you need to extract the title from the nodes.',
+        });
+        const result = await miniAgent.generate([
+          { role: 'user', content: this.combineTemplate.format({ context: combinedTitles }) },
+        ]);
+        title = result.text;
       }
+
+      if (!title) {
+        console.warn('Title extraction LLM output returned empty');
+      }
+
       titlesByDocument[key] = title;
     }
 
@@ -141,31 +150,34 @@ export class TitleExtractor extends BaseExtractor {
   }
 
   private async getTitlesCandidates(nodes: BaseNode[]): Promise<string[]> {
-    const titleJobs = nodes.map(async node => {
-      const completion = await this.llm.doGenerate({
-        inputFormat: 'messages',
-        mode: { type: 'regular' },
-        prompt: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: this.nodeTemplate.format({
-                  context: node.getContent(),
-                }),
-              },
-            ],
-          },
-        ],
-      });
+    const miniAgent = new Agent({
+      model: this.llm,
+      name: 'titles-candidates-extractor',
+      instructions:
+        'You are a titles candidates extractor. You are given a list of nodes and you need to extract the titles candidates from the nodes.',
+    });
 
-      if (typeof completion.text === 'string') {
-        return completion.text.trim();
+    const titleJobs = nodes.map(async node => {
+      let completion: string;
+      if (this.llm.specificationVersion === 'v2') {
+        const result = await miniAgent.generateVNext(
+          [{ role: 'user', content: this.nodeTemplate.format({ context: node.getContent() }) }],
+          { format: 'mastra' },
+        );
+        completion = result.text;
       } else {
-        console.warn('Title candidate extraction LLM output was not a string:', completion.text);
+        const result = await miniAgent.generate([
+          { role: 'user', content: this.nodeTemplate.format({ context: node.getContent() }) },
+        ]);
+        completion = result.text;
+      }
+
+      if (!completion) {
+        console.warn('Title candidate extraction LLM output returned empty');
         return '';
       }
+
+      return completion.trim();
     });
 
     return await Promise.all(titleJobs);

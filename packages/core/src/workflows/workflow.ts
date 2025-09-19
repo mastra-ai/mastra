@@ -6,124 +6,41 @@ import { z } from 'zod';
 import type { Mastra, WorkflowRun } from '..';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
-import type { AnyAISpan } from '../ai-tracing';
+import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
+import type { TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
 import type { MastraScorers } from '../scores';
-import { runScorer } from '../scores/hooks';
 import { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
 import type { ChunkType } from '../stream/types';
+import { ChunkFrom } from '../stream/types';
 import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import { EMITTER_SYMBOL } from './constants';
+import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
-import type { ExecuteFunction, ExecuteFunctionParams, Step } from './step';
+import type { ExecuteFunction, Step } from './step';
 import type {
+  DefaultEngineType,
   DynamicMapping,
   ExtractSchemaFromStep,
   ExtractSchemaType,
   PathsToStringProps,
+  SerializedStep,
+  SerializedStepFlowEntry,
+  StepFlowEntry,
   StepResult,
   StepsRecord,
+  StepWithComponent,
   StreamEvent,
   WatchEvent,
+  WorkflowConfig,
+  WorkflowOptions,
+  WorkflowResult,
   WorkflowRunState,
 } from './types';
-
-export type DefaultEngineType = {};
-
-export type StepFlowEntry<TEngineType = DefaultEngineType> =
-  | { type: 'step'; step: Step }
-  | { type: 'sleep'; id: string; duration?: number; fn?: ExecuteFunction<any, any, any, any, TEngineType> }
-  | { type: 'sleepUntil'; id: string; date?: Date; fn?: ExecuteFunction<any, any, any, any, TEngineType> }
-  | { type: 'waitForEvent'; event: string; step: Step; timeout?: number }
-  | {
-      type: 'parallel';
-      steps: StepFlowEntry[];
-    }
-  | {
-      type: 'conditional';
-      steps: StepFlowEntry[];
-      conditions: ExecuteFunction<any, any, any, any, TEngineType>[];
-      serializedConditions: { id: string; fn: string }[];
-    }
-  | {
-      type: 'loop';
-      step: Step;
-      condition: ExecuteFunction<any, any, any, any, TEngineType>;
-      serializedCondition: { id: string; fn: string };
-      loopType: 'dowhile' | 'dountil';
-    }
-  | {
-      type: 'foreach';
-      step: Step;
-      opts: {
-        concurrency: number;
-      };
-    };
-
-export type SerializedStep<TEngineType = DefaultEngineType> = Pick<
-  Step<any, any, any, any, any, TEngineType>,
-  'id' | 'description'
-> & {
-  component?: string;
-  serializedStepFlow?: SerializedStepFlowEntry[];
-  mapConfig?: string;
-};
-
-export type SerializedStepFlowEntry =
-  | {
-      type: 'step';
-      step: SerializedStep;
-    }
-  | {
-      type: 'sleep';
-      id: string;
-      duration?: number;
-      fn?: string;
-    }
-  | {
-      type: 'sleepUntil';
-      id: string;
-      date?: Date;
-      fn?: string;
-    }
-  | {
-      type: 'waitForEvent';
-      event: string;
-      step: SerializedStep;
-      timeout?: number;
-    }
-  | {
-      type: 'parallel';
-      steps: SerializedStepFlowEntry[];
-    }
-  | {
-      type: 'conditional';
-      steps: SerializedStepFlowEntry[];
-      serializedConditions: { id: string; fn: string }[];
-    }
-  | {
-      type: 'loop';
-      step: SerializedStep;
-      serializedCondition: { id: string; fn: string };
-      loopType: 'dowhile' | 'dountil';
-    }
-  | {
-      type: 'foreach';
-      step: SerializedStep;
-      opts: {
-        concurrency: number;
-      };
-    };
-
-export type StepWithComponent = Step<string, any, any, any, any, any> & {
-  component?: string;
-  steps?: Record<string, StepWithComponent>;
-};
 
 export function mapVariable<TStep extends Step<string, any, any, any, any, any>>({
   step,
@@ -233,61 +150,6 @@ export function createStep<
     | Agent<any, any, any>
     | ToolStep<TStepInput, TStepOutput, any>,
 ): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType> {
-  const wrapExecute = (
-    execute: ExecuteFunction<
-      z.infer<TStepInput>,
-      z.infer<TStepOutput>,
-      z.infer<TResumeSchema>,
-      z.infer<TSuspendSchema>,
-      DefaultEngineType
-    >,
-  ) => {
-    return async (
-      executeParams: ExecuteFunctionParams<
-        z.infer<TStepInput>,
-        z.infer<TResumeSchema>,
-        z.infer<TSuspendSchema>,
-        DefaultEngineType
-      >,
-    ) => {
-      const executeResult = await execute(executeParams);
-
-      if (params instanceof Agent || params instanceof Tool) {
-        return executeResult;
-      }
-
-      let scorersToUse = params.scorers;
-
-      if (typeof scorersToUse === 'function') {
-        scorersToUse = await scorersToUse({
-          runtimeContext: executeParams.runtimeContext,
-        });
-      }
-
-      if (scorersToUse && Object.keys(scorersToUse || {}).length > 0) {
-        for (const [id, scorerObject] of Object.entries(scorersToUse || {})) {
-          runScorer({
-            scorerId: id,
-            scorerObject: scorerObject,
-            runId: executeParams.runId,
-            input: [executeParams.inputData],
-            output: executeResult,
-            runtimeContext: executeParams.runtimeContext,
-            entity: {
-              id: executeParams.workflowId,
-              stepId: params.id,
-            },
-            structuredOutput: true,
-            source: 'LIVE',
-            entityType: 'WORKFLOW',
-          });
-        }
-      }
-
-      return executeResult;
-    };
-  };
-
   if (params instanceof Agent) {
     return {
       id: params.name,
@@ -301,7 +163,15 @@ export function createStep<
       outputSchema: z.object({
         text: z.string(),
       }),
-      execute: wrapExecute(async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext, abortSignal, abort }) => {
+      execute: async ({
+        inputData,
+        [EMITTER_SYMBOL]: emitter,
+        [STREAM_FORMAT_SYMBOL]: streamFormat,
+        runtimeContext,
+        abortSignal,
+        abort,
+        writer,
+      }) => {
         let streamPromise = {} as {
           promise: Promise<string>;
           resolve: (value: string) => void;
@@ -316,55 +186,64 @@ export function createStep<
           name: params.name,
           args: inputData,
         };
-        await emitter.emit('watch-v2', {
-          type: 'tool-call-streaming-start',
-          ...toolData,
-        });
-        const { fullStream } = await params.stream(inputData.prompt, {
-          // resourceId: inputData.resourceId,
-          // threadId: inputData.threadId,
-          runtimeContext,
-          onFinish: result => {
-            streamPromise.resolve(result.text);
-          },
-          abortSignal,
-        });
+
+        // TODO: add support for format, if format is undefined use stream, else streamVNext
+        let stream: ReadableStream<any>;
+
+        if (streamFormat === 'aisdk') {
+          const { fullStream } = await params.stream(inputData.prompt, {
+            // resourceId: inputData.resourceId,
+            // threadId: inputData.threadId,
+            runtimeContext,
+            onFinish: result => {
+              streamPromise.resolve(result.text);
+            },
+            abortSignal,
+          });
+
+          stream = fullStream as any;
+
+          await emitter.emit('watch-v2', {
+            type: 'tool-call-streaming-start',
+            ...(toolData ?? {}),
+          });
+          for await (const chunk of stream) {
+            if (chunk.type === 'text-delta') {
+              await emitter.emit('watch-v2', {
+                type: 'tool-call-delta',
+                ...(toolData ?? {}),
+                argsTextDelta: chunk.textDelta,
+              });
+            }
+          }
+          await emitter.emit('watch-v2', {
+            type: 'tool-call-streaming-finish',
+            ...(toolData ?? {}),
+          });
+        } else {
+          const modelOutput = await params.streamVNext(inputData.prompt, {
+            runtimeContext,
+            onFinish: result => {
+              streamPromise.resolve(result.text);
+            },
+            // abortSignal,
+          });
+
+          stream = modelOutput.fullStream;
+
+          for await (const chunk of stream) {
+            await writer.write(chunk as any);
+          }
+        }
 
         if (abortSignal.aborted) {
           return abort();
         }
 
-        for await (const chunk of fullStream) {
-          switch (chunk.type) {
-            case 'text-delta':
-              await emitter.emit('watch-v2', {
-                type: 'tool-call-delta',
-                ...toolData,
-                argsTextDelta: chunk.textDelta,
-              });
-              break;
-
-            case 'step-start':
-            case 'step-finish':
-            case 'finish':
-              break;
-
-            case 'tool-call':
-            case 'tool-result':
-            case 'tool-call-streaming-start':
-            case 'tool-call-delta':
-            case 'source':
-            case 'file':
-            default:
-              await emitter.emit('watch-v2', chunk);
-              break;
-          }
-        }
-
         return {
           text: await streamPromise.promise,
         };
-      }),
+      },
     };
   }
 
@@ -379,13 +258,14 @@ export function createStep<
       id: params.id,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
-      execute: wrapExecute(async ({ inputData, mastra, runtimeContext }) => {
+      execute: async ({ inputData, mastra, runtimeContext, tracingContext }) => {
         return params.execute({
           context: inputData,
           mastra,
           runtimeContext,
+          tracingContext,
         });
-      }),
+      },
     };
   }
 
@@ -398,7 +278,7 @@ export function createStep<
     suspendSchema: params.suspendSchema,
     scorers: params.scorers,
     retries: params.retries,
-    execute: wrapExecute(params.execute),
+    execute: params.execute.bind(params),
   };
 }
 
@@ -462,69 +342,6 @@ export function cloneWorkflow<
   return wf;
 }
 
-export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<string, any, any>[]> =
-  | {
-      status: 'success';
-      result: z.infer<TOutput>;
-      steps: {
-        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-          ? StepResult<unknown, unknown, unknown, unknown>
-          : StepResult<
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
-            >;
-      };
-    }
-  | {
-      status: 'failed';
-      steps: {
-        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-          ? StepResult<unknown, unknown, unknown, unknown>
-          : StepResult<
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
-            >;
-      };
-      error: Error;
-    }
-  | {
-      status: 'suspended';
-      steps: {
-        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-          ? StepResult<unknown, unknown, unknown, unknown>
-          : StepResult<
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
-            >;
-      };
-      suspended: [string[], ...string[][]];
-    };
-
-export type WorkflowConfig<
-  TWorkflowId extends string = string,
-  TInput extends z.ZodType<any> = z.ZodType<any>,
-  TOutput extends z.ZodType<any> = z.ZodType<any>,
-  TSteps extends Step<string, any, any, any, any, any>[] = Step<string, any, any, any, any, any>[],
-> = {
-  mastra?: Mastra;
-  id: TWorkflowId;
-  description?: string | undefined;
-  inputSchema: TInput;
-  outputSchema: TOutput;
-  executionEngine?: ExecutionEngine;
-  steps?: TSteps;
-  retryConfig?: {
-    attempts?: number;
-    delay?: number;
-  };
-};
-
 export class Workflow<
     TEngineType = any,
     TSteps extends Step<string, any, any, any, any, TEngineType>[] = Step<string, any, any, any, any, TEngineType>[],
@@ -546,7 +363,8 @@ export class Workflow<
   protected serializedStepFlow: SerializedStepFlowEntry[];
   protected executionEngine: ExecutionEngine;
   protected executionGraph: ExecutionGraph;
-  protected retryConfig: {
+  readonly options?: WorkflowOptions;
+  public retryConfig: {
     attempts?: number;
     delay?: number;
   };
@@ -564,6 +382,7 @@ export class Workflow<
     executionEngine,
     retryConfig,
     steps,
+    options,
   }: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
@@ -577,10 +396,14 @@ export class Workflow<
     this.#mastra = mastra;
     this.steps = {};
     this.stepDefs = steps;
+    this.options = options;
 
     if (!executionEngine) {
       // TODO: this should be configured using the Mastra class instance that's passed in
-      this.executionEngine = new DefaultExecutionEngine({ mastra: this.#mastra });
+      this.executionEngine = new DefaultExecutionEngine({
+        mastra: this.#mastra,
+        options: { tracingPolicy: options?.tracingPolicy },
+      });
     } else {
       this.executionEngine = executionEngine;
     }
@@ -620,8 +443,8 @@ export class Workflow<
    * @param step The step to add to the workflow
    * @returns The workflow instance for chaining
    */
-  then<TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodType<any>>(
-    step: Step<TStepId, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
+  then<TStepId extends string, TSchemaOut extends z.ZodType<any>>(
+    step: Step<TStepId, TPrevSchema, TSchemaOut, any, any, TEngineType>,
   ) {
     this.stepFlow.push({ type: 'step', step: step as any });
     this.serializedStepFlow.push({
@@ -740,7 +563,7 @@ export class Workflow<
         }
       | ExecuteFunction<z.infer<TPrevSchema>, any, any, any, TEngineType>,
     stepOptions?: { id?: string | null },
-  ) {
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, any> {
     // Create an implicit step that handles the mapping
     if (typeof mappingConfig === 'function') {
       // @ts-ignore
@@ -826,7 +649,7 @@ export class Workflow<
             if (typeof value === 'object' && value !== null) {
               value = value[part];
             } else {
-              throw new Error(`Invalid path ${m.path} in step ${m.step.id}`);
+              throw new Error(`Invalid path ${m.path} in step ${m?.step?.id ?? 'initData'}`);
             }
           }
 
@@ -1051,48 +874,37 @@ export class Workflow<
   }
 
   /**
-   * Creates a new workflow run instance
-   * @param options Optional configuration for the run
-   * @returns A Run instance that can be used to execute the workflow
+   * @deprecated Use createRunAsync() instead.
+   * @throws {Error} Always throws an error directing users to use createRunAsync()
    */
-  createRun(options?: { runId?: string }): Run<TEngineType, TSteps, TInput, TOutput> {
-    if (this.stepFlow.length === 0) {
-      throw new Error(
-        'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
-      );
-    }
-    if (!this.executionGraph.steps) {
-      throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
-    }
-    const runIdToUse = options?.runId || this.#mastra?.generateId() || randomUUID();
-
-    // Return a new Run instance with object parameters
-    const run =
-      this.#runs.get(runIdToUse) ??
-      new Run({
-        workflowId: this.id,
-        runId: runIdToUse,
-        executionEngine: this.executionEngine,
-        executionGraph: this.executionGraph,
-        mastra: this.#mastra,
-        retryConfig: this.retryConfig,
-        serializedStepGraph: this.serializedStepGraph,
-        cleanup: () => this.#runs.delete(runIdToUse),
-      });
-
-    this.#runs.set(runIdToUse, run);
-
-    this.mastra?.getLogger().warn('createRun() is deprecated. Use createRunAsync() instead.');
-
-    return run;
+  createRun(_options?: {
+    runId?: string;
+    resourceId?: string;
+    disableScorers?: boolean;
+  }): Run<TEngineType, TSteps, TInput, TOutput> {
+    throw new Error(
+      'createRun() has been deprecated. ' +
+        'Please use createRunAsync() instead.\n\n' +
+        'Migration guide:\n' +
+        '  Before: const run = workflow.createRun();\n' +
+        '  After:  const run = await workflow.createRunAsync();\n\n' +
+        'Note: createRunAsync() is an async method, so make sure your calling function is async.',
+    );
   }
 
   /**
    * Creates a new workflow run instance and stores a snapshot of the workflow in the storage
    * @param options Optional configuration for the run
+   * @param options.runId Optional custom run ID, defaults to a random UUID
+   * @param options.resourceId Optional resource ID to associate with this run
+   * @param options.disableScorers Optional flag to disable scorers for this run
    * @returns A Run instance that can be used to execute the workflow
    */
-  async createRunAsync(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TInput, TOutput>> {
+  async createRunAsync(options?: {
+    runId?: string;
+    resourceId?: string;
+    disableScorers?: boolean;
+  }): Promise<Run<TEngineType, TSteps, TInput, TOutput>> {
     if (this.stepFlow.length === 0) {
       throw new Error(
         'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
@@ -1109,22 +921,26 @@ export class Workflow<
       new Run({
         workflowId: this.id,
         runId: runIdToUse,
+        resourceId: options?.resourceId,
         executionEngine: this.executionEngine,
         executionGraph: this.executionGraph,
         mastra: this.#mastra,
         retryConfig: this.retryConfig,
         serializedStepGraph: this.serializedStepGraph,
+        disableScorers: options?.disableScorers,
         cleanup: () => this.#runs.delete(runIdToUse),
+        tracingPolicy: this.options?.tracingPolicy,
       });
 
     this.#runs.set(runIdToUse, run);
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse);
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
     if (!workflowSnapshotInStorage) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
+        resourceId: options?.resourceId,
         snapshot: {
           runId: runIdToUse,
           status: 'pending',
@@ -1133,6 +949,7 @@ export class Workflow<
           activePaths: [],
           serializedStepGraph: this.serializedStepGraph,
           suspendedPaths: {},
+          waitingPaths: {},
           result: undefined,
           error: undefined,
           // @ts-ignore
@@ -1172,7 +989,10 @@ export class Workflow<
     return scorers;
   }
 
+  // This method should only be called internally for nested workflow execution, as well as from mastra server handlers
+  // To run a workflow use `.createRunAsync` and then `.start` or `.resume`
   async execute({
+    runId,
     inputData,
     resumeData,
     suspend,
@@ -1183,8 +1003,10 @@ export class Workflow<
     abort,
     abortSignal,
     runCount,
-    parentAISpan,
+    tracingContext,
+    writer,
   }: {
+    runId?: string;
     inputData: z.infer<TInput>;
     resumeData?: any;
     getStepResult<T extends Step<any, any, any, any, any, TEngineType>>(
@@ -1204,12 +1026,13 @@ export class Workflow<
     bail: (result: any) => any;
     abort: () => any;
     runCount?: number;
-    parentAISpan?: AnyAISpan;
+    tracingContext?: TracingContext;
+    writer?: WritableStream<ChunkType>;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
 
     const isResume = !!(resume?.steps && resume.steps.length > 0);
-    const run = isResume ? await this.createRunAsync({ runId: resume.runId }) : await this.createRunAsync();
+    const run = isResume ? await this.createRunAsync({ runId: resume.runId }) : await this.createRunAsync({ runId });
     const nestedAbortCb = () => {
       abort();
     };
@@ -1231,8 +1054,8 @@ export class Workflow<
     }
 
     const res = isResume
-      ? await run.resume({ resumeData, step: resume.steps as any, runtimeContext, parentAISpan })
-      : await run.start({ inputData, runtimeContext, parentAISpan });
+      ? await run.resume({ resumeData, step: resume.steps as any, runtimeContext, tracingContext })
+      : await run.start({ inputData, runtimeContext, tracingContext, writableStream: writer });
     unwatch();
     unwatchV2();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
@@ -1291,7 +1114,61 @@ export class Workflow<
     );
   }
 
-  async getWorkflowRunExecutionResult(runId: string): Promise<WatchEvent['payload']['workflowState'] | null> {
+  protected async getWorkflowRunSteps({ runId, workflowId }: { runId: string; workflowId: string }) {
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
+      this.logger.debug('Cannot get workflow run steps. Mastra storage is not initialized');
+      return {};
+    }
+
+    const run = await storage.getWorkflowRunById({ runId, workflowName: workflowId });
+
+    let snapshot: WorkflowRunState | string = run?.snapshot!;
+
+    if (!snapshot) {
+      return {};
+    }
+
+    if (typeof snapshot === 'string') {
+      // this occurs whenever the parsing of snapshot fails in storage
+      try {
+        snapshot = JSON.parse(snapshot);
+      } catch (e) {
+        this.logger.debug('Cannot get workflow run execution result. Snapshot is not a valid JSON string', e);
+        return {};
+      }
+    }
+
+    const { serializedStepGraph, context } = snapshot as WorkflowRunState;
+    const { input, ...steps } = context;
+
+    let finalSteps = {} as Record<string, StepResult<any, any, any, any>>;
+
+    for (const step of Object.keys(steps)) {
+      const stepGraph = serializedStepGraph.find(stepGraph => (stepGraph as any)?.step?.id === step);
+      finalSteps[step] = steps[step] as StepResult<any, any, any, any>;
+      if (stepGraph && (stepGraph as any)?.step?.component === 'WORKFLOW') {
+        const nestedSteps = await this.getWorkflowRunSteps({ runId, workflowId: step });
+        if (nestedSteps) {
+          const updatedNestedSteps = Object.entries(nestedSteps).reduce(
+            (acc, [key, value]) => {
+              acc[`${step}.${key}`] = value as StepResult<any, any, any, any>;
+              return acc;
+            },
+            {} as Record<string, StepResult<any, any, any, any>>,
+          );
+          finalSteps = { ...finalSteps, ...updatedNestedSteps };
+        }
+      }
+    }
+
+    return finalSteps;
+  }
+
+  async getWorkflowRunExecutionResult(
+    runId: string,
+    withNestedWorkflows: boolean = true,
+  ): Promise<WatchEvent['payload']['workflowState'] | null> {
     const storage = this.#mastra?.getStorage();
     if (!storage) {
       this.logger.debug('Cannot get workflow run execution result. Mastra storage is not initialized');
@@ -1316,12 +1193,16 @@ export class Workflow<
       }
     }
 
+    const fullSteps = withNestedWorkflows
+      ? await this.getWorkflowRunSteps({ runId, workflowId: this.id })
+      : (snapshot as WorkflowRunState).context;
+
     return {
       status: (snapshot as WorkflowRunState).status,
       result: (snapshot as WorkflowRunState).result,
       error: (snapshot as WorkflowRunState).error,
       payload: (snapshot as WorkflowRunState).context?.input,
-      steps: (snapshot as WorkflowRunState).context as any,
+      steps: fullSteps as any,
     };
   }
 }
@@ -1329,6 +1210,7 @@ export class Workflow<
 /**
  * Represents a workflow run that can be executed
  */
+
 export class Run<
   TEngineType = any,
   TSteps extends Step<string, any, any, any, any, TEngineType>[] = Step<string, any, any, any, any, TEngineType>[],
@@ -1346,6 +1228,21 @@ export class Run<
    * Unique identifier for this run
    */
   readonly runId: string;
+
+  /**
+   * Unique identifier for the resource this run is associated with
+   */
+  readonly resourceId?: string;
+
+  /**
+   * Whether to disable scorers for this run
+   */
+  readonly disableScorers?: boolean;
+
+  /**
+   * Options around how to trace this run
+   */
+  readonly tracingPolicy?: TracingPolicy;
 
   /**
    * Internal state of the workflow run
@@ -1372,8 +1269,15 @@ export class Run<
    */
   #mastra?: Mastra;
 
+  #observerHandlers: (() => void)[] = [];
+
+  get mastra() {
+    return this.#mastra;
+  }
+
   protected closeStreamAction?: () => Promise<void>;
-  protected executionResults?: Promise<WorkflowResult<TOutput, TSteps>>;
+  protected activeStream?: MastraWorkflowStream<TInput, TOutput, TSteps>;
+  protected executionResults?: Promise<WorkflowResult<TInput, TOutput, TSteps>>;
 
   protected cleanup?: () => void;
 
@@ -1385,6 +1289,7 @@ export class Run<
   constructor(params: {
     workflowId: string;
     runId: string;
+    resourceId?: string;
     executionEngine: ExecutionEngine;
     executionGraph: ExecutionGraph;
     mastra?: Mastra;
@@ -1394,9 +1299,12 @@ export class Run<
     };
     cleanup?: () => void;
     serializedStepGraph: SerializedStepFlowEntry[];
+    disableScorers?: boolean;
+    tracingPolicy?: TracingPolicy;
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
+    this.resourceId = params.resourceId;
     this.serializedStepGraph = params.serializedStepGraph;
     this.executionEngine = params.executionEngine;
     this.executionGraph = params.executionGraph;
@@ -1404,6 +1312,8 @@ export class Run<
     this.emitter = new EventEmitter();
     this.retryConfig = params.retryConfig;
     this.cleanup = params.cleanup;
+    this.disableScorers = params.disableScorers;
+    this.tracingPolicy = params.tracingPolicy;
   }
 
   public get abortController(): AbortController {
@@ -1425,25 +1335,42 @@ export class Run<
     this.emitter.emit(`user-event-${event}`, data);
   }
 
-  /**
-   * Starts the workflow execution with the provided input
-   * @param input The input data for the workflow
-   * @returns A promise that resolves to the workflow output
-   */
-  async start({
+  protected async _start({
     inputData,
     runtimeContext,
     writableStream,
-    parentAISpan,
+    tracingContext,
+    tracingOptions,
+    format,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
-    parentAISpan?: AnyAISpan;
-  }): Promise<WorkflowResult<TOutput, TSteps>> {
-    const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+    format?: 'aisdk' | 'mastra' | undefined;
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
+    // note: this span is ended inside this.executionEngine.execute()
+    const workflowAISpan = getOrCreateSpan({
+      type: AISpanType.WORKFLOW_RUN,
+      name: `workflow run: '${this.workflowId}'`,
+      input: inputData,
+      attributes: {
+        workflowId: this.workflowId,
+      },
+      tracingPolicy: this.tracingPolicy,
+      tracingOptions,
+      tracingContext,
+      runtimeContext,
+    });
+
+    const traceId = getValidTraceId(workflowAISpan);
+
+    const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
+      resourceId: this.resourceId,
+      disableScorers: this.disableScorers,
       graph: this.executionGraph,
       serializedStepGraph: this.serializedStepGraph,
       input: inputData,
@@ -1465,14 +1392,44 @@ export class Run<
       runtimeContext: runtimeContext ?? new RuntimeContext(),
       abortController: this.abortController,
       writableStream,
-      parentAISpan,
+      workflowAISpan,
+      format,
     });
 
     if (result.status !== 'suspended') {
       this.cleanup?.();
     }
 
+    result.traceId = traceId;
     return result;
+  }
+
+  /**
+   * Starts the workflow execution with the provided input
+   * @param input The input data for the workflow
+   * @returns A promise that resolves to the workflow output
+   */
+  async start({
+    inputData,
+    runtimeContext,
+    writableStream,
+    tracingContext,
+    tracingOptions,
+  }: {
+    inputData?: z.infer<TInput>;
+    runtimeContext?: RuntimeContext;
+    writableStream?: WritableStream<ChunkType>;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
+    return this._start({
+      inputData,
+      runtimeContext,
+      writableStream,
+      tracingContext,
+      tracingOptions,
+      format: 'aisdk',
+    });
   }
 
   /**
@@ -1480,26 +1437,52 @@ export class Run<
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
+  stream({
+    inputData,
+    runtimeContext,
+    onChunk,
+    tracingContext,
+  }: {
+    inputData?: z.infer<TInput>;
+    runtimeContext?: RuntimeContext;
+    tracingContext?: TracingContext;
+    onChunk?: (chunk: StreamEvent) => Promise<unknown>;
+  } = {}): {
     stream: ReadableStream<StreamEvent>;
-    getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
+    getWorkflowState: () => Promise<WorkflowResult<TInput, TOutput, TSteps>>;
   } {
+    if (this.closeStreamAction) {
+      return {
+        stream: this.observeStream().stream,
+        getWorkflowState: () => this.executionResults!,
+      };
+    }
+
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
     const writer = writable.getWriter();
     const unwatch = this.watch(async event => {
       try {
+        const e: any = {
+          ...event,
+          type: event.type.replace('workflow-', ''),
+        };
         // watch-v2 events are data stream events, so we need to cast them to the correct type
-        await writer.write(event as any);
+        await writer.write(e as any);
+        if (onChunk) {
+          await onChunk(e as any);
+        }
       } catch {}
     }, 'watch-v2');
 
     this.closeStreamAction = async () => {
       this.emitter.emit('watch-v2', {
-        type: 'finish',
+        type: 'workflow-finish',
         payload: { runId: this.runId },
       });
       unwatch();
+      await Promise.all(this.#observerHandlers.map(handler => handler()));
+      this.#observerHandlers = [];
 
       try {
         await writer.close();
@@ -1511,10 +1494,15 @@ export class Run<
     };
 
     this.emitter.emit('watch-v2', {
-      type: 'start',
+      type: 'workflow-start',
       payload: { runId: this.runId },
     });
-    this.executionResults = this.start({ inputData, runtimeContext }).then(result => {
+    this.executionResults = this._start({
+      inputData,
+      runtimeContext,
+      format: 'aisdk',
+      tracingContext,
+    }).then(result => {
       if (result.status !== 'suspended') {
         this.closeStreamAction?.().catch(() => {});
       }
@@ -1529,16 +1517,112 @@ export class Run<
   }
 
   /**
+   * Observe the workflow stream
+   * @returns A readable stream of the workflow events
+   */
+  observeStream(): {
+    stream: ReadableStream<StreamEvent>;
+  } {
+    const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
+
+    const writer = writable.getWriter();
+    const unwatch = this.watch(async event => {
+      try {
+        const e: any = {
+          ...event,
+          type: event.type.replace('workflow-', ''),
+        };
+        // watch-v2 events are data stream events, so we need to cast them to the correct type
+        await writer.write(e as any);
+      } catch {}
+    }, 'watch-v2');
+
+    this.#observerHandlers.push(async () => {
+      unwatch();
+      try {
+        await writer.close();
+      } catch (err) {
+        console.error('Error closing stream:', err);
+      } finally {
+        writer.releaseLock();
+      }
+    });
+
+    return {
+      stream: readable,
+    };
+  }
+
+  /**
+   * Observe the workflow stream
+   * @returns A readable stream of the workflow events
+   */
+  observeStreamVNext(): {
+    stream: ReadableStream<StreamEvent>;
+  } {
+    const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
+
+    const writer = writable.getWriter();
+    const unwatch = this.watch(async event => {
+      try {
+        // watch-v2 events are data stream events, so we need to cast them to the correct type
+        await writer.write(event as any);
+      } catch {}
+    }, 'watch-v2');
+
+    this.#observerHandlers.push(async () => {
+      unwatch();
+      try {
+        await writer.close();
+      } catch (err) {
+        console.error('Error closing stream:', err);
+      } finally {
+        writer.releaseLock();
+      }
+    });
+
+    return {
+      stream: readable,
+    };
+  }
+
+  async streamAsync({
+    inputData,
+    runtimeContext,
+  }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): Promise<{
+    stream: ReadableStream<StreamEvent>;
+    getWorkflowState: () => Promise<WorkflowResult<TInput, TOutput, TSteps>>;
+  }> {
+    return this.stream({ inputData, runtimeContext });
+  }
+
+  /**
    * Starts the workflow execution with the provided input as a stream
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  streamVNext({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}) {
+  streamVNext({
+    inputData,
+    runtimeContext,
+    tracingContext,
+    format,
+    closeOnSuspend = true,
+  }: {
+    inputData?: z.infer<TInput>;
+    runtimeContext?: RuntimeContext;
+    tracingContext?: TracingContext;
+    format?: 'aisdk' | 'mastra' | undefined;
+    closeOnSuspend?: boolean;
+  } = {}): MastraWorkflowStream<TInput, TOutput, TSteps> {
+    if (this.closeStreamAction && this.activeStream) {
+      return this.activeStream;
+    }
+
     this.closeStreamAction = async () => {};
 
-    return new MastraWorkflowStream({
+    this.activeStream = new MastraWorkflowStream<TInput, TOutput, TSteps>({
       run: this,
-      createStream: writer => {
+      createStream: () => {
         const { readable, writable } = new TransformStream<ChunkType, ChunkType>({
           transform(chunk, controller) {
             controller.enqueue(chunk);
@@ -1556,7 +1640,8 @@ export class Run<
           }
           isWriting = true;
 
-          let watchWriter = writer.getWriter();
+          let watchWriter = writable.getWriter();
+
           try {
             for (const chunk of chunkToWrite) {
               await watchWriter.write(chunk);
@@ -1569,32 +1654,16 @@ export class Run<
           setImmediate(tryWrite);
         };
 
-        const unwatch = this.watch(async ({ type, payload }) => {
-          let newPayload: Record<string, any> = payload;
-
-          //@ts-ignore
-          if (type === 'step-start') {
-            const { payload: args, id, ...rest } = newPayload;
-            newPayload = {
-              args,
-              ...rest,
-            };
-            //@ts-ignore
-          } else if (type === 'step-result') {
-            const { output, id, ...rest } = newPayload;
-            newPayload = {
-              result: output,
-              ...rest,
-            };
-          }
-
+        // TODO: fix this, watch-v2 doesn't have a type
+        // @ts-ignore
+        const unwatch = this.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
           buffer.push({
             type,
             runId: this.runId,
-            from: 'WORKFLOW',
+            from,
             payload: {
               stepName: (payload as unknown as { id: string }).id,
-              ...newPayload,
+              ...payload,
             },
           });
 
@@ -1611,8 +1680,18 @@ export class Run<
           }
         };
 
-        const executionResults = this.start({ inputData, runtimeContext, writableStream: writable }).then(result => {
-          if (result.status !== 'suspended') {
+        const executionResults = this._start({
+          inputData,
+          runtimeContext,
+          tracingContext,
+          writableStream: writable,
+          format,
+        }).then(result => {
+          if (closeOnSuspend) {
+            // always close stream, even if the workflow is suspended
+            // this will trigger a finish event with workflow status set to suspended
+            this.closeStreamAction?.().catch(() => {});
+          } else if (result.status !== 'suspended') {
             this.closeStreamAction?.().catch(() => {});
           }
 
@@ -1623,6 +1702,116 @@ export class Run<
         return readable;
       },
     });
+
+    return this.activeStream;
+  }
+
+  /**
+   * Resumes the workflow execution with the provided input as a stream
+   * @param input The input data for the workflow
+   * @returns A promise that resolves to the workflow output
+   */
+  resumeStreamVNext({
+    step,
+    resumeData,
+    runtimeContext,
+    tracingContext,
+    format,
+  }: {
+    resumeData?: z.infer<TInput>;
+    step?:
+      | Step<string, any, any, any, any, TEngineType>
+      | [...Step<string, any, any, any, any, TEngineType>[], Step<string, any, any, any, any, TEngineType>]
+      | string
+      | string[];
+    runtimeContext?: RuntimeContext;
+    tracingContext?: TracingContext;
+    format?: 'aisdk' | 'mastra' | undefined;
+  } = {}) {
+    this.closeStreamAction = async () => {};
+
+    this.activeStream = new MastraWorkflowStream({
+      run: this,
+      createStream: () => {
+        const { readable, writable } = new TransformStream<ChunkType, ChunkType>({
+          transform(chunk, controller) {
+            controller.enqueue(chunk);
+          },
+        });
+
+        let buffer: ChunkType[] = [];
+        let isWriting = false;
+        const tryWrite = async () => {
+          const chunkToWrite = buffer;
+          buffer = [];
+
+          if (chunkToWrite.length === 0 || isWriting) {
+            return;
+          }
+          isWriting = true;
+
+          let watchWriter = writable.getWriter();
+
+          try {
+            for (const chunk of chunkToWrite) {
+              await watchWriter.write(chunk);
+            }
+          } finally {
+            watchWriter.releaseLock();
+          }
+          isWriting = false;
+
+          setImmediate(tryWrite);
+        };
+
+        // TODO: fix this, watch-v2 doesn't have a type
+        // @ts-ignore
+        const unwatch = this.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
+          buffer.push({
+            type,
+            runId: this.runId,
+            from,
+            payload: {
+              stepName: (payload as unknown as { id: string }).id,
+              ...payload,
+            },
+          });
+
+          await tryWrite();
+        }, 'watch-v2');
+
+        this.closeStreamAction = async () => {
+          unwatch();
+
+          try {
+            await writable.close();
+          } catch (err) {
+            console.error('Error closing stream:', err);
+          }
+        };
+
+        const executionResults = this._resume({
+          resumeData,
+          step,
+          runtimeContext,
+          tracingContext,
+          writableStream: writable,
+          format,
+          isVNext: true,
+        }).then(result => {
+          // always close stream, even if the workflow is suspended
+          // this will trigger a finish event with workflow status set to suspended
+          this.closeStreamAction?.().catch(() => {});
+
+          return result;
+        });
+        this.executionResults = executionResults;
+
+        return readable;
+      },
+    });
+
+    return this.activeStream;
   }
 
   watch(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): () => void {
@@ -1688,6 +1877,10 @@ export class Run<
     };
   }
 
+  async watchAsync(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): Promise<() => void> {
+    return this.watch(cb, type);
+  }
+
   async resume<TResumeSchema extends z.ZodType<any>>(params: {
     resumeData?: z.infer<TResumeSchema>;
     step?:
@@ -1697,8 +1890,28 @@ export class Run<
       | string[];
     runtimeContext?: RuntimeContext;
     runCount?: number;
-    parentAISpan?: AnyAISpan;
-  }): Promise<WorkflowResult<TOutput, TSteps>> {
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+    writableStream?: WritableStream<ChunkType>;
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
+    return this._resume(params);
+  }
+
+  protected async _resume<TResumeSchema extends z.ZodType<any>>(params: {
+    resumeData?: z.infer<TResumeSchema>;
+    step?:
+      | Step<string, any, any, TResumeSchema, any, TEngineType>
+      | [...Step<string, any, any, any, any, TEngineType>[], Step<string, any, any, TResumeSchema, any, TEngineType>]
+      | string
+      | string[];
+    runtimeContext?: RuntimeContext;
+    runCount?: number;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+    writableStream?: WritableStream<ChunkType>;
+    format?: 'aisdk' | 'mastra' | undefined;
+    isVNext?: boolean;
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
@@ -1784,8 +1997,24 @@ export class Run<
       }
     });
 
+    // note: this span is ended inside this.executionEngine.execute()
+    const workflowAISpan = getOrCreateSpan({
+      type: AISpanType.WORKFLOW_RUN,
+      name: `workflow run: '${this.workflowId}'`,
+      input: params.resumeData,
+      attributes: {
+        workflowId: this.workflowId,
+      },
+      tracingPolicy: this.tracingPolicy,
+      tracingOptions: params.tracingOptions,
+      tracingContext: params.tracingContext,
+      runtimeContext: runtimeContextToUse,
+    });
+
+    const traceId = getValidTraceId(workflowAISpan);
+
     const executionResultPromise = this.executionEngine
-      .execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
+      .execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
         runId: this.runId,
         graph: this.executionGraph,
@@ -1798,6 +2027,7 @@ export class Run<
           // @ts-ignore
           resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
         },
+        format: params.format,
         emitter: {
           emit: (event: string, data: any) => {
             this.emitter.emit(event, data);
@@ -1815,13 +2045,13 @@ export class Run<
         },
         runtimeContext: runtimeContextToUse,
         abortController: this.abortController,
-        parentAISpan: params.parentAISpan,
+        workflowAISpan,
       })
       .then(result => {
-        if (result.status !== 'suspended') {
+        if (!params.isVNext && result.status !== 'suspended') {
           this.closeStreamAction?.().catch(() => {});
         }
-
+        result.traceId = traceId;
         return result;
       });
 
@@ -1854,7 +2084,7 @@ export class Run<
    * @access private
    * @returns The execution results of the workflow run
    */
-  _getExecutionResults() {
+  _getExecutionResults(): Promise<WorkflowResult<TInput, TOutput, TSteps>> | undefined {
     return this.executionResults;
   }
 }

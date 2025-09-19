@@ -1,13 +1,15 @@
 import { generateId } from 'ai-v5';
 import type { ToolSet } from 'ai-v5';
+import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { ConsoleLogger } from '../logger';
 import { MastraModelOutput } from '../stream/base/output';
+import type { OutputSchema } from '../stream/base/schema';
 import { getRootSpan } from './telemetry';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
-import { workflowLoopStream } from './workflow/stream';
+import { workflowLoopStream } from './workflows/stream';
 
-export function loop<Tools extends ToolSet = ToolSet>({
-  model,
+export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>({
+  models,
   logger,
   runId,
   idGenerator,
@@ -17,13 +19,30 @@ export function loop<Tools extends ToolSet = ToolSet>({
   modelSettings,
   tools,
   _internal,
+  mode = 'stream',
+  outputProcessors,
+  returnScorerData,
+  llmAISpan,
   ...rest
-}: LoopOptions<Tools>) {
+}: LoopOptions<Tools, OUTPUT>) {
   let loggerToUse =
     logger ||
     new ConsoleLogger({
       level: 'debug',
     });
+
+  if (models.length === 0 || !models[0]) {
+    const mastraError = new MastraError({
+      id: 'LOOP_MODELS_EMPTY',
+      domain: ErrorDomain.LLM,
+      category: ErrorCategory.USER,
+    });
+    loggerToUse.trackException(mastraError);
+    loggerToUse.error(mastraError.toString());
+    throw mastraError;
+  }
+
+  const firstModel = models[0];
 
   let runIdToUse = runId;
 
@@ -40,10 +59,10 @@ export function loop<Tools extends ToolSet = ToolSet>({
   let startTimestamp = internalToUse.now?.();
 
   const { rootSpan } = getRootSpan({
-    operationId: `mastra.stream`,
+    operationId: mode === 'stream' ? `mastra.stream` : `mastra.generate`,
     model: {
-      modelId: model.modelId,
-      provider: model.provider,
+      modelId: firstModel.model.modelId,
+      provider: firstModel.model.provider,
     },
     modelSettings,
     headers: modelSettings?.headers ?? rest.headers,
@@ -59,18 +78,20 @@ export function loop<Tools extends ToolSet = ToolSet>({
   });
 
   const { rootSpan: modelStreamSpan } = getRootSpan({
-    operationId: `mastra.stream.aisdk.doStream`,
+    operationId: `mastra.${mode}.aisdk.doStream`,
     model: {
-      modelId: model.modelId,
-      provider: model.provider,
+      modelId: firstModel.model.modelId,
+      provider: firstModel.model.provider,
     },
     modelSettings,
     headers: modelSettings?.headers ?? rest.headers,
     telemetry_settings,
   });
 
-  const workflowLoopProps: LoopRun<Tools> = {
-    model,
+  const messageId = rest.experimental_generateMessageId?.() || internalToUse.generateId?.();
+
+  const workflowLoopProps: LoopRun<Tools, OUTPUT> = {
+    models,
     runId: runIdToUse,
     logger: loggerToUse,
     startTimestamp: startTimestamp!,
@@ -80,19 +101,24 @@ export function loop<Tools extends ToolSet = ToolSet>({
     tools,
     modelStreamSpan,
     telemetry_settings,
+    modelSettings,
+    outputProcessors,
+    llmAISpan,
+    messageId: messageId!,
     ...rest,
   };
 
-  const streamFn = workflowLoopStream(workflowLoopProps);
+  const stream = workflowLoopStream(workflowLoopProps);
 
   return new MastraModelOutput({
     model: {
-      modelId: model.modelId,
-      provider: model.provider,
-      version: model.specificationVersion,
+      modelId: firstModel.model.modelId,
+      provider: firstModel.model.provider,
+      version: firstModel.model.specificationVersion,
     },
-    stream: streamFn,
+    stream,
     messageList,
+    messageId: messageId!,
     options: {
       runId: runIdToUse!,
       telemetry_settings,
@@ -101,7 +127,11 @@ export function loop<Tools extends ToolSet = ToolSet>({
       onFinish: rest.options?.onFinish,
       onStepFinish: rest.options?.onStepFinish,
       includeRawChunks: !!includeRawChunks,
-      objectOptions: rest.objectOptions,
+      output: rest.output,
+      outputProcessors,
+      outputProcessorRunnerMode: 'result',
+      returnScorerData,
+      tracingContext: { currentSpan: llmAISpan },
     },
   });
 }

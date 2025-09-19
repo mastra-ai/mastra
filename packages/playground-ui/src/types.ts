@@ -32,6 +32,9 @@ export interface ModelSettings {
   instructions?: string;
   providerOptions?: Record<string, unknown>;
   chatWithGenerate?: boolean;
+  chatWithGenerateVNext?: boolean;
+  chatWithStreamVNext?: boolean;
+  chatWithNetwork?: boolean;
 }
 
 export interface AgentSettingsType {
@@ -41,6 +44,7 @@ export interface AgentSettingsType {
 export interface ChatProps {
   agentId: string;
   agentName?: string;
+  modelVersion?: string;
   threadId?: string;
   initialMessages?: Message[];
   memory?: boolean;
@@ -93,6 +97,13 @@ export type RefinedTrace = {
   status: SpanStatus;
   trace: Span[];
   runId?: string;
+};
+
+export type StreamChunk = {
+  type: string;
+  payload: any;
+  runId: string;
+  from: 'AGENT' | 'WORKFLOW';
 };
 
 export * from './domains/traces/types';

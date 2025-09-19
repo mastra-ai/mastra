@@ -1,0 +1,104 @@
+---
+title: "リファレンス: キーワードカバレッジ | スコアラー | Mastra Docs"
+description: "入力から重要なキーワードをLLM出力がどの程度カバーしているかを評価するMastraのキーワードカバレッジスコアラーのドキュメント。"
+---
+
+
+
+# Keyword Coverage Scorer
+
+`createKeywordCoverageScorer()`関数は、LLMの出力が入力からの重要なキーワードをどの程度カバーしているかを評価します。一般的な単語やストップワードを無視しながら、キーワードの存在とマッチを分析します。
+
+使用例については、[Keyword Coverage Examples](/examples/scorers/keyword-coverage)を参照してください。
+
+
+
+## Parameters
+
+`createKeywordCoverageScorer()`関数はオプションを受け取りません。
+
+この関数はMastraScorerクラスのインスタンスを返します。`.run()`メソッドとその入力/出力の詳細については、[MastraScorer reference](./mastra-scorer)を参照してください。
+
+
+
+## .run() の戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "実行のID（任意）。",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "object",
+      description: "抽出されたキーワードを含むオブジェクト: { referenceKeywords: Set<string>, responseKeywords: Set<string> }",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description: "キーワードカバレッジを含むオブジェクト: { totalKeywords: number, matchedKeywords: number }",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "一致したキーワードの割合を表すカバレッジスコア（0-1）。",
+    },
+  ]}
+/>
+
+
+
+## スコアリング詳細
+
+スコアラーは以下の機能を使用してキーワードをマッチングし、キーワードカバレッジを評価します：
+
+- 一般的な単語とストップワードのフィルタリング（例：「the」、「a」、「and」）
+- 大文字小文字を区別しないマッチング
+- 単語形式の変化への対応
+- 技術用語と複合語の特別な処理
+
+### スコアリングプロセス
+
+1. 入力と出力からキーワードを処理：
+   - 一般的な単語とストップワードを除外
+   - 大文字小文字と単語形式を正規化
+   - 特別な用語と複合語を処理
+2. キーワードカバレッジを計算：
+   - テキスト間でキーワードをマッチング
+   - 成功したマッチ数をカウント
+   - カバレッジ比率を計算
+
+最終スコア：`(matched_keywords / total_keywords) * scale`
+
+### スコアの解釈
+
+（0からscale、デフォルト0-1）
+
+- 1.0：完璧なキーワードカバレッジ
+- 0.7-0.9：ほとんどのキーワードが存在する良好なカバレッジ
+- 0.4-0.6：一部のキーワードが欠けている中程度のカバレッジ
+- 0.1-0.3：多くのキーワードが欠けている不十分なカバレッジ
+- 0.0：キーワードマッチなし
+
+
+
+## 特殊なケース
+
+スコアラーはいくつかの特殊なケースを処理します：
+
+- 空の入力/出力：両方が空の場合は1.0のスコアを返し、片方のみが空の場合は0.0を返します
+- 単一の単語：単一のキーワードとして扱われます
+- 技術用語：複合技術用語を保持します（例：「React.js」、「machine learning」）
+- 大文字小文字の違い：「JavaScript」は「javascript」とマッチします
+- 一般的な単語：意味のあるキーワードに焦点を当てるため、スコアリングでは無視されます
+
+
+
+## 関連項目
+
+- [完全性スコアラー](./completeness)
+- [コンテンツ類似性スコアラー](./content-similarity)
+- [回答関連性スコアラー](./answer-relevancy)
+- [テキスト差異スコアラー](./textual-difference)

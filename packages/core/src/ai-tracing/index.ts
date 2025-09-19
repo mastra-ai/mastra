@@ -3,10 +3,11 @@
  */
 
 // Core types and interfaces
-export * from './default';
+export * from './spans';
+export * from './tracers';
 export * from './types';
 export * from './registry';
 export * from './utils';
-
-// Abstract base class
-export { MastraAITracing } from './base';
+export * from './context';
+export * from './exporters';
+export * from './span_processors';

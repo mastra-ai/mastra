@@ -186,11 +186,10 @@ The options documented below are passed directly at the top level of the configu
 <PropertiesTable
   content={[
     {
-      name: "separator",
-      type: "string",
+      name: "separators",
+      type: "string[]",
       isOptional: true,
-      defaultValue: "\\n\\n",
-      description: "Character(s) to split on. Defaults to double newline for text content.",
+      description: "Array of separators to try in order of preference. The strategy will attempt to split on the first separator, then fall back to subsequent ones.",
     },
     {
       name: "isSeparatorRegex",

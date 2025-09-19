@@ -1,0 +1,35 @@
+---
+title: "リファレンス: Mastra.getTelemetry() | Core | Mastra ドキュメント"
+description: "Mastra の `Mastra.getTelemetry()` メソッドのドキュメント。構成済みのテレメトリーインスタンスを取得します。"
+---
+
+# Mastra.getTelemetry()
+
+`.getTelemetry()` メソッドは、Mastra インスタンスで構成済みのテレメトリインスタンスを取得するために使用します。
+
+## 使い方の例
+
+```typescript copy
+mastra.getTelemetry();
+```
+
+## パラメータ
+
+このメソッドは引数を受け取りません。
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "telemetry",
+      type: "Telemetry | undefined",
+      description: "すべてのコンポーネントでのトレースと可観測性に使用される、設定済みの Telemetry インスタンス。Telemetry が設定されていない場合は undefined。",
+    },
+  ]}
+/>
+
+## 関連情報
+
+- [AI トレーシング](../../docs/observability/ai-tracing.mdx)
+- [テレメトリ リファレンス](../../reference/observability/otel-config.mdx)

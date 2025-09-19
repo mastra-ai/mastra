@@ -1,3 +1,4 @@
+import { Agent } from '@mastra/core/agent';
 import type { MastraLanguageModel } from '@mastra/core/agent';
 import { PromptTemplate, defaultSummaryPrompt } from '../prompts';
 import type { SummaryPrompt } from '../prompts';
@@ -68,22 +69,25 @@ export class SummaryExtractor extends BaseExtractor {
       context,
     });
 
-    const result = await this.llm.doGenerate({
-      inputFormat: 'messages',
-      mode: { type: 'regular' },
-      prompt: [
-        {
-          role: 'user',
-          content: [{ type: 'text', text: prompt }],
-        },
-      ],
+    const miniAgent = new Agent({
+      model: this.llm,
+      name: 'summary-extractor',
+      instructions:
+        'You are a summary extractor. You are given a node and you need to extract the summary from the node.',
     });
 
     let summary = '';
-    if (typeof result.text === 'string') {
-      summary = result.text.trim();
+    if (this.llm.specificationVersion === 'v2') {
+      const result = await miniAgent.generateVNext([{ role: 'user', content: prompt }], { format: 'mastra' });
+      summary = result.text;
     } else {
-      console.warn('Summary extraction LLM output was not a string:', result.text);
+      const result = await miniAgent.generate([{ role: 'user', content: prompt }]);
+      summary = result.text;
+    }
+
+    if (!summary) {
+      console.warn('Summary extraction LLM output returned empty');
+      return '';
     }
 
     return summary.replace(STRIP_REGEX, '');

@@ -1,6 +1,6 @@
-import type { AbstractAgent } from '@ag-ui/client';
+import type { AITraceRecord, AITracesPaginatedArg, WorkflowInfo } from '@mastra/core';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
-import { AGUIAdapter } from './adapters/agui';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import {
   Agent,
   MemoryThread,
@@ -8,10 +8,11 @@ import {
   Workflow,
   Vector,
   BaseResource,
-  Network,
   A2A,
   MCPTool,
   LegacyWorkflow,
+  AgentBuilder,
+  Observability,
 } from './resources';
 import { NetworkMemoryThread } from './resources/network-memory-thread';
 import { VNextNetwork } from './resources/vNextNetwork';
@@ -25,7 +26,6 @@ import type {
   GetLogsResponse,
   GetMemoryThreadParams,
   GetMemoryThreadResponse,
-  GetNetworkResponse,
   GetTelemetryParams,
   GetTelemetryResponse,
   GetToolResponse,
@@ -46,38 +46,36 @@ import type {
   GetScoresByEntityIdParams,
   SaveScoreParams,
   SaveScoreResponse,
+  GetAITracesResponse,
+  GetMemoryConfigParams,
+  GetMemoryConfigResponse,
+  GetMemoryThreadMessagesResponse,
 } from './types';
+import { base64RuntimeContext, parseClientRuntimeContext } from './utils';
 
 export class MastraClient extends BaseResource {
+  private observability: Observability;
   constructor(options: ClientOptions) {
     super(options);
+    this.observability = new Observability(options);
   }
 
   /**
    * Retrieves all available agents
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing map of agent IDs to agent details
    */
-  public getAgents(): Promise<Record<string, GetAgentResponse>> {
-    return this.request('/api/agents');
-  }
+  public getAgents(runtimeContext?: RuntimeContext | Record<string, any>): Promise<Record<string, GetAgentResponse>> {
+    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
 
-  public async getAGUI({ resourceId }: { resourceId: string }): Promise<Record<string, AbstractAgent>> {
-    const agents = await this.getAgents();
+    const searchParams = new URLSearchParams();
 
-    return Object.entries(agents).reduce(
-      (acc, [agentId]) => {
-        const agent = this.getAgent(agentId);
+    if (runtimeContextParam) {
+      searchParams.set('runtimeContext', runtimeContextParam);
+    }
 
-        acc[agentId] = new AGUIAdapter({
-          agentId,
-          agent,
-          resourceId,
-        });
-
-        return acc;
-      },
-      {} as Record<string, AbstractAgent>,
-    );
+    const queryString = searchParams.toString();
+    return this.request(`/api/agents${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -99,6 +97,15 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Retrieves memory config for a resource
+   * @param params - Parameters containing the resource ID
+   * @returns Promise containing array of memory threads
+   */
+  public getMemoryConfig(params: GetMemoryConfigParams): Promise<GetMemoryConfigResponse> {
+    return this.request(`/api/memory/config?agentId=${params.agentId}`);
+  }
+
+  /**
    * Creates a new memory thread
    * @param params - Parameters for creating the memory thread
    * @returns Promise containing the created memory thread
@@ -114,6 +121,33 @@ export class MastraClient extends BaseResource {
    */
   public getMemoryThread(threadId: string, agentId: string) {
     return new MemoryThread(this.options, threadId, agentId);
+  }
+
+  public getThreadMessages(
+    threadId: string,
+    opts: { agentId?: string; networkId?: string } = {},
+  ): Promise<GetMemoryThreadMessagesResponse> {
+    let url = '';
+    if (opts.agentId) {
+      url = `/api/memory/threads/${threadId}/messages?agentId=${opts.agentId}`;
+    } else if (opts.networkId) {
+      url = `/api/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}`;
+    }
+    return this.request(url);
+  }
+
+  public deleteThread(
+    threadId: string,
+    opts: { agentId?: string; networkId?: string } = {},
+  ): Promise<{ success: boolean; message: string }> {
+    let url = '';
+
+    if (opts.agentId) {
+      url = `/api/memory/threads/${threadId}?agentId=${opts.agentId}`;
+    } else if (opts.networkId) {
+      url = `/api/memory/network/threads/${threadId}?networkId=${opts.networkId}`;
+    }
+    return this.request(url, { method: 'DELETE' });
   }
 
   /**
@@ -185,10 +219,20 @@ export class MastraClient extends BaseResource {
 
   /**
    * Retrieves all available tools
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing map of tool IDs to tool details
    */
-  public getTools(): Promise<Record<string, GetToolResponse>> {
-    return this.request('/api/tools');
+  public getTools(runtimeContext?: RuntimeContext | Record<string, any>): Promise<Record<string, GetToolResponse>> {
+    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
+
+    const searchParams = new URLSearchParams();
+
+    if (runtimeContextParam) {
+      searchParams.set('runtimeContext', runtimeContextParam);
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/tools${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -219,10 +263,22 @@ export class MastraClient extends BaseResource {
 
   /**
    * Retrieves all available workflows
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing map of workflow IDs to workflow details
    */
-  public getWorkflows(): Promise<Record<string, GetWorkflowResponse>> {
-    return this.request('/api/workflows');
+  public getWorkflows(
+    runtimeContext?: RuntimeContext | Record<string, any>,
+  ): Promise<Record<string, GetWorkflowResponse>> {
+    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
+
+    const searchParams = new URLSearchParams();
+
+    if (runtimeContextParam) {
+      searchParams.set('runtimeContext', runtimeContextParam);
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/workflows${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -232,6 +288,22 @@ export class MastraClient extends BaseResource {
    */
   public getWorkflow(workflowId: string) {
     return new Workflow(this.options, workflowId);
+  }
+
+  /**
+   * Gets all available agent builder actions
+   * @returns Promise containing map of action IDs to action details
+   */
+  public getAgentBuilderActions(): Promise<Record<string, WorkflowInfo>> {
+    return this.request('/api/agent-builder/');
+  }
+
+  /**
+   * Gets an agent builder instance for executing agent-builder workflows
+   * @returns AgentBuilder instance
+   */
+  public getAgentBuilderAction(actionId: string) {
+    return new AgentBuilder(this.options, actionId);
   }
 
   /**
@@ -391,28 +463,11 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Retrieves all available networks
-   * @returns Promise containing map of network IDs to network details
-   */
-  public getNetworks(): Promise<Array<GetNetworkResponse>> {
-    return this.request('/api/networks');
-  }
-
-  /**
    * Retrieves all available vNext networks
    * @returns Promise containing map of vNext network IDs to vNext network details
    */
   public getVNextNetworks(): Promise<Array<GetVNextNetworkResponse>> {
     return this.request('/api/networks/v-next');
-  }
-
-  /**
-   * Gets a network instance by ID
-   * @param networkId - ID of the network to retrieve
-   * @returns Network instance
-   */
-  public getNetwork(networkId: string) {
-    return new Network(this.options, networkId);
   }
 
   /**
@@ -627,5 +682,13 @@ export class MastraClient extends BaseResource {
    */
   getModelProviders(): Promise<string[]> {
     return this.request(`/api/model-providers`);
+  }
+
+  getAITrace(traceId: string): Promise<AITraceRecord> {
+    return this.observability.getTrace(traceId);
+  }
+
+  getAITraces(params: AITracesPaginatedArg): Promise<GetAITracesResponse> {
+    return this.observability.getTraces(params);
   }
 }

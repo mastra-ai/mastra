@@ -15,14 +15,15 @@ import type {
   StreamTextOnFinishCallback,
   StreamObjectOnFinishCallback,
 } from 'ai';
+import type { SystemModelMessage } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
-import type { MastraLanguageModel } from '../agent/types';
-import type { AISpan, AISpanType } from '../ai-tracing';
+import type { TracingContext } from '../ai-tracing';
 import type { Run } from '../run/types';
 import type { RuntimeContext } from '../runtime-context';
 import type { CoreTool } from '../tools/types';
+import type { MastraLanguageModel } from './model/shared.types';
 
 export type LanguageModel = MastraLanguageModel;
 
@@ -80,6 +81,14 @@ export type { TripwireProperties } from './model/shared.types';
 
 export type OutputType = StructuredOutput | ZodSchema | JSONSchema7 | undefined;
 
+export type SystemMessage =
+  | string
+  | string[]
+  | CoreSystemMessage
+  | SystemModelMessage
+  | CoreSystemMessage[]
+  | SystemModelMessage[];
+
 type GenerateTextOptions = Parameters<typeof generateText>[0];
 type StreamTextOptions = Parameters<typeof streamText>[0];
 type GenerateObjectOptions = Parameters<typeof generateObject>[0];
@@ -109,7 +118,7 @@ type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = unde
   threadId?: string;
   resourceId?: string;
   runtimeContext: RuntimeContext;
-  agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
+  tracingContext: TracingContext;
 } & Run;
 
 export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {

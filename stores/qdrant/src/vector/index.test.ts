@@ -1,7 +1,7 @@
 // To setup a Qdrant server, run:
 // docker run -p 6333:6333 qdrant/qdrant
 import { createVectorTestSuite } from '@internal/storage-test-utils';
-import type { QueryResult } from '@mastra/core';
+import type { QueryResult } from '@mastra/core/vector';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
 
 import type { QdrantVectorFilter } from './filter';
