@@ -15,7 +15,7 @@ import { convertToCoreMessage, normalizeError, createSuccessResponse, createErro
 import type { InMemoryTaskStore } from '../a2a/store';
 import { applyUpdateToTask, createTaskContext, loadOrCreateTask } from '../a2a/tasks';
 import type { Context } from '../types';
-import { systemMessageToString } from '../utils';
+import { convertInstructionsToString } from '../utils';
 
 const messageSendParamsSchema = z.object({
   message: z.object({
@@ -70,7 +70,7 @@ export async function getAgentCardByIdHandler({
   // Extract agent information to create the AgentCard
   const agentCard: AgentCard = {
     name: agent.id || agentId,
-    description: systemMessageToString(instructions),
+    description: convertInstructionsToString(instructions),
     url: executionUrl,
     provider,
     version,

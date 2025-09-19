@@ -126,7 +126,7 @@ export class WorkflowRegistry {
   }
 }
 
-export function systemMessageToString(message: SystemMessage): string {
+export function convertInstructionsToString(message: SystemMessage): string {
   if (!message) {
     return '';
   }
