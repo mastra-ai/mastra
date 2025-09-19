@@ -5,6 +5,7 @@ import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy 
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
+  CoreSystemMessage,
   DefaultLLMStreamOptions,
   DefaultLLMStreamObjectOptions,
   DefaultLLMTextObjectOptions,
@@ -118,7 +119,7 @@ export type AgentGenerateOptions<
   EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = {
   /** Optional instructions to override the agent's default instructions */
-  instructions?: string;
+  instructions?: SystemMessage;
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
@@ -202,7 +203,7 @@ export type AgentStreamOptions<
   EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = {
   /** Optional instructions to override the agent's default instructions */
-  instructions?: string;
+  instructions?: SystemMessage;
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;

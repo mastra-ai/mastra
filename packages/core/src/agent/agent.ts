@@ -567,6 +567,24 @@ export class Agent<
     return this.#instructions;
   }
 
+  #convertInstructionsToString(instructions: SystemMessage): string {
+    if (typeof instructions === 'string') {
+      return instructions;
+    }
+
+    // Handle single CoreSystemMessage or array
+    const messages = Array.isArray(instructions) ? instructions : [instructions];
+
+    // Extract text content from messages - CoreSystemMessage only has string content
+    const textParts: string[] = [];
+    for (const msg of messages) {
+      const content = typeof msg === 'string' ? msg : msg.content;
+      textParts.push(content);
+    }
+
+    return textParts.join('\n\n');
+  }
+
   public getDescription(): string {
     return this.#description ?? '';
   }
@@ -1918,7 +1936,7 @@ export class Agent<
     tracingContext,
     tracingOptions,
   }: {
-    instructions: string;
+    instructions: SystemMessage;
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
     resourceId?: string;
@@ -1948,7 +1966,7 @@ export class Agent<
           },
           attributes: {
             agentId: this.id,
-            instructions,
+            instructions: this.#convertInstructionsToString(instructions),
             availableTools: [
               ...(toolsets ? Object.keys(toolsets) : []),
               ...(clientTools ? Object.keys(clientTools) : []),
@@ -2009,10 +2027,7 @@ export class Agent<
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
-          .addSystem({
-            role: 'system',
-            content: instructions || `${this.instructions}.`,
-          })
+          .addSystem(instructions || (await this.getInstructions({ runtimeContext })))
           .add(context || [], 'context');
 
         if (!memory || (!threadId && !resourceId)) {
@@ -2187,7 +2202,7 @@ export class Agent<
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
-          .addSystem(instructions || `${this.instructions}.`)
+          .addSystem(instructions || (await this.getInstructions({ runtimeContext })))
           .addSystem(memorySystemMessage)
           .addSystem(systemMessages)
           .add(context || [], 'context')
@@ -2397,7 +2412,7 @@ export class Agent<
           messageList,
           runId,
           outputText,
-          instructions,
+          instructions: this.#convertInstructionsToString(instructions),
           runtimeContext,
           structuredOutput,
           overrideScorers,
@@ -3076,7 +3091,7 @@ export class Agent<
       agentAISpan: agentAISpan!,
       methodType,
       format: format as FORMAT,
-      instructions,
+      instructions: this.#convertInstructionsToString(instructions),
       memoryConfig,
       memory,
       saveQueueManager,
