@@ -20,7 +20,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
     useWorkingMemory();
 
   // Get memory config to check if working memory is enabled
-  const { config } = useMemoryConfig(agentId);
+  const { data: config } = useMemoryConfig(agentId);
 
   // Check if working memory is enabled
   const isWorkingMemoryEnabled = config?.workingMemory?.enabled;

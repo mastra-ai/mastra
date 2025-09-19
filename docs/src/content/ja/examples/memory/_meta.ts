@@ -1,11 +1,10 @@
 const meta = {
-  "working-memory-basic": "ワーキングメモリ（基本）",
+  "working-memory-basic": "基本のワーキングメモリ",
   "working-memory-template": "テンプレート対応メモリ",
   "working-memory-schema": "スキーマ対応メモリ",
   "memory-processors": "メモリプロセッサー",
-  "memory-with-libsql": "LibSQL 対応メモリ",
-  "memory-with-pg": "PostgreSQL 対応メモリ",
-  "memory-with-upstash": "Upstash 対応メモリ",
-  "memory-with-mem0": "Mem0 対応メモリ",
+  "memory-with-libsql": "LibSQL を用いたメモリ",
+  "memory-with-pg": "PostgreSQL を用いたメモリ",
+  "memory-with-upstash": "Upstash を用いたメモリ",
 };
 export default meta;

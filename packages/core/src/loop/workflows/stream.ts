@@ -6,10 +6,7 @@ import { ChunkFrom } from '../../stream/types';
 import type { LoopRun } from '../types';
 import { createAgenticLoopWorkflow } from './agentic-loop';
 
-export function workflowLoopStream<
-  Tools extends ToolSet = ToolSet,
-  OUTPUT extends OutputSchema | undefined = undefined,
->({
+export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>({
   telemetry_settings,
   models,
   toolChoice,

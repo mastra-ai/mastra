@@ -253,7 +253,7 @@ export const useStreamWorkflow = () => {
         runtimeContext.set(key as keyof RuntimeContext, value);
       });
       const workflow = client.getWorkflow(workflowId);
-      const stream = await workflow.streamVNext({ runId, inputData, runtimeContext });
+      const stream = await workflow.streamVNext({ runId, inputData, runtimeContext, closeOnSuspend: false });
 
       if (!stream) throw new Error('No stream returned');
 

@@ -7,6 +7,7 @@ import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { myWorkflow } from './workflows';
 import { chefModelV2Agent, networkAgent } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/scores';
+import { myWorkflowX } from './workflows/other';
 
 const storage = new LibSQLStore({
   url: 'file:./mastra.db',
@@ -35,7 +36,7 @@ export const mastra = new Mastra({
     myMcpServer,
     myMcpServerTwo,
   },
-  workflows: { myWorkflow },
+  workflows: { myWorkflow, myWorkflowX },
   bundler: {
     sourcemap: true,
   },

@@ -1,36 +1,31 @@
 ---
-title: "ストリーミング概要 | Streaming | Mastra"
-description: "Mastra のストリーミングは、エージェントおよびワークフローからのリアルタイムの段階的な応答を可能にし、AI 生成コンテンツの生成と同時に即時のフィードバックを提供します。"
+title: "ストリーミングの概要 | Streaming | Mastra"
+description: "Mastra のストリーミングは、エージェントおよびワークフローからのリアルタイムかつ逐次的な応答を可能にし、AI 生成コンテンツの生成に合わせて即時にフィードバックを提供します。"
 ---
 
 import { StreamVNextCallout } from "@/components/streamVNext-callout.tsx"
-
 
 
 # ストリーミング概要
 
 <StreamVNextCallout />
 
-Mastra はエージェントやワークフローからのリアルタイムなストリーミング応答をサポートしており、完了を待たずに生成と同時に出力を確認できます。これは、チャット、長文コンテンツ、複数ステップのワークフロー、あるいは即時のフィードバックが重要なあらゆる場面で有用です。
-
-
+Mastra はエージェントやワークフローからのリアルタイムなストリーミング応答をサポートしており、完了を待たずに生成と同時に出力を確認できます。これは、チャット、長文コンテンツ、マルチステップのワークフローなど、即時のフィードバックが重要なあらゆる場面で有用です。
 
 ## はじめに
 
-Mastra は現在、2 つのストリーミング方式をサポートしています。このページでは `streamVNext()` の使い方を説明します。
+Mastra は現在 2 つのストリーミング方式をサポートしており、このページでは `streamVNext()` の使い方を説明します。
 
 1. **`.stream()`**: 現行の安定版 API。**AI SDK v4**（`LanguageModelV1`）に対応。
 2. **`.streamVNext()`**: 実験的な API。**AI SDK v5**（`LanguageModelV2`）に対応。
 
-
-
 ## エージェントでのストリーミング
 
-シンプルなプロンプトには単一の文字列を、複数のコンテキストを渡す場合は文字列の配列を、役割や会話の流れを厳密に制御する場合は `role` と `content` を持つメッセージオブジェクトの配列を渡せます。
+シンプルなプロンプトには単一の文字列を渡し、複数のコンテキストを提供する場合は文字列の配列を、役割や会話の流れを厳密に制御したい場合は `role` と `content` を含むメッセージオブジェクトの配列を渡せます。
 
-### `Agent.streamVNext()` の使用
+### `Agent.streamVNext()`の使用
 
-`textStream` はレスポンスを生成しながらチャンクに分割し、すべてが一度に届くのではなく段階的に出力をストリーミングします。`for await` ループで `textStream` を反復処理し、各チャンクを確認します。
+`textStream` はレスポンス生成中の出力をチャンクに分割し、結果が一度に届くのではなく段階的にストリーミングされるようにします。`for await` ループで `textStream` を反復処理し、各チャンクを確認します。
 
 ```typescript {3,7} showLineNumbers copy
 const testAgent = mastra.getAgent("testAgent");
@@ -48,30 +43,29 @@ for await (const chunk of stream.textStream) {
 
 ### `Agent.streamVNext()` の出力
 
-出力は、エージェントが生成したレスポンスをストリーミングします。
+この出力は、エージェントが生成した応答をストリーミングします。
 
 ```text
-Of course!
-To help you organize your day effectively, I need a bit more information.
-Here are some questions to consider:
+もちろんです！
+一日を効率的に計画するために、もう少し情報が必要です。
+ご検討いただきたい質問は次のとおりです：
 ...
 ```
 
-
-
 ## エージェントストリームのプロパティ
 
-エージェントストリームでは、各種の応答プロパティにアクセスできます：
+エージェントストリームでは、さまざまなレスポンスのプロパティにアクセスできます:
 
-- **`stream.textStream`**: テキストのチャンクを順次出力する読み取り可能なストリーム。
-- **`stream.text`**: 完全なテキスト応答に解決される Promise。
+- **`stream.textStream`**: テキストのチャンクを出力する読み取り可能なストリーム。
+- **`stream.text`**: 完全なテキストレスポンスに解決されるPromise。
 - **`stream.finishReason`**: エージェントがストリーミングを終了した理由。
 - **`stream.usage`**: トークン使用量に関する情報。
 
+### AI SDK v5 の互換性
 
-### AI SDK v5 互換性
+AI SDK v5 では、モデルプロバイダーに `LanguageModelV2` が使用されます。AI SDK v4 のモデルを使用しているというエラーが表示される場合は、モデルパッケージを次のメジャーバージョンにアップグレードしてください。
 
-AI SDK v5 と統合するには、`format` を 'aisdk' に指定して `AISDKV5OutputStream` を取得します：
+AI SDK v5 と連携するには、`format` を 'aisdk' に指定して `AISDKV5OutputStream` を取得します:
 
 ```typescript {5} showLineNumbers copy
 const testAgent = mastra.getAgent("testAgent");
@@ -86,11 +80,9 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-
-
 ## ワークフローでのストリーミング
 
-ワークフローからのストリーミングは、増分的なテキストチャンクではなく、実行ライフサイクルを記述する構造化イベントのシーケンスを返します。このイベントベースの形式により、`.createRunAsync()` で実行を作成すると、ワークフローの進行状況をリアルタイムに追跡し、反応できるようになります。
+ワークフローからのストリーミングでは、増分的なテキストチャンクではなく、実行のライフサイクルを記述する構造化イベントの連なりが返されます。このイベントベースの形式により、`.createRunAsync()` を使用して実行が作成されると、ワークフローの進行状況をリアルタイムで追跡し、反応できるようになります。
 
 ### `Run.streamVNext()` の使用
 
@@ -114,7 +106,7 @@ for await (const chunk of stream) {
 
 ### `Run.streamVNext()` の出力
 
-実験的な API のイベント構造にはトップレベルに `runId` と `from` が含まれており、ペイロードを掘り下げなくてもワークフロー実行を識別・追跡しやすくなっています。
+実験的な API のイベント構造では、トップレベルに `runId` と `from` が含まれており、ペイロードを覗かなくてもワークフローの実行を特定・追跡しやすくなります。
 
 ```typescript
 // ...
@@ -132,20 +124,16 @@ for await (const chunk of stream) {
 }
 ```
 
+## ワークフローストリームのプロパティ
 
-
-## ワークフロー ストリームのプロパティ
-
-ワークフロー ストリームでは、各種レスポンスプロパティにアクセスできます。
+ワークフローストリームでは、各種のレスポンスプロパティにアクセスできます:
 
 - **`stream.status`**: ワークフロー実行のステータス。
 - **`stream.result`**: ワークフロー実行の結果。
-- **`stream.usage`**: ワークフロー実行におけるトークン使用量の合計。
+- **`stream.usage`**: ワークフロー実行におけるトークンの合計使用量。
 
+## 関連
 
-
-## 関連情報
-
-- [イベントのストリーミング](./events.mdx)
+- [ストリーミングイベント](./events.mdx)
 - [エージェントの使用](../agents/overview.mdx)
 - [ワークフローの概要](../workflows/overview.mdx)

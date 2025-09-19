@@ -10,7 +10,7 @@ export default function Scorers() {
         <HeaderTitle>Scorers</HeaderTitle>
       </Header>
 
-      <ScorersTable isLoading={isLoading} scorers={scorers} computeScorerLink={scorerId => `/scorers/${scorerId}`} />
+      <ScorersTable isLoading={isLoading} scorers={scorers} />
     </MainContentLayout>
   );
 }

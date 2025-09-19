@@ -1,8 +1,10 @@
-import type z from 'zod';
+import type { ZodTypeAny } from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import type { StructuredOutputOptions } from '../../agent/types';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { OutputSchema } from '../../stream';
+import type { InferSchemaOutput } from '../../stream/base/schema';
 import type { Processor } from '../index';
 
 export type { StructuredOutputOptions } from '../../agent/types';
@@ -19,15 +21,15 @@ export type { StructuredOutputOptions } from '../../agent/types';
  * - Configurable error handling strategies
  * - Automatic instruction generation based on schema
  */
-export class StructuredOutputProcessor<S extends z.ZodTypeAny> implements Processor {
+export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements Processor {
   readonly name = 'structured-output';
 
-  public schema: S;
+  public schema: OUTPUT;
   private structuringAgent: Agent;
   private errorStrategy: 'strict' | 'warn' | 'fallback';
-  private fallbackValue?: z.infer<S>;
+  private fallbackValue?: InferSchemaOutput<OUTPUT>;
 
-  constructor(options: StructuredOutputOptions<S>, fallbackModel?: MastraLanguageModel) {
+  constructor(options: StructuredOutputOptions<OUTPUT>, fallbackModel?: MastraLanguageModel) {
     this.schema = options.schema;
     this.errorStrategy = options.errorStrategy ?? 'strict';
     this.fallbackValue = options.fallbackValue;
@@ -78,7 +80,7 @@ export class StructuredOutputProcessor<S extends z.ZodTypeAny> implements Proces
             });
           } else {
             structuredResult = await this.structuringAgent.generate(prompt, {
-              output: schema,
+              output: schema as ZodTypeAny,
             });
           }
 

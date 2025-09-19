@@ -18,11 +18,12 @@ Mastra は `RuntimeContext` を提供します。これは、実行時の変数�
 
 ## エージェントでの `runtimeContext` の使用
 
-エージェントは `instructions` パラメータ経由で `runtimeContext` にアクセスし、`runtimeContext.get()` で変数を取得できます。これにより、基盤の実装を変更せずに、ユーザー入力や外部設定に応じてエージェントの挙動を動的に調整できます。
+エージェントは `instructions` パラメータ経由で `runtimeContext` にアクセスし、`runtimeContext.get()` を使って変数を取得できます。これにより、基盤となる実装を変更せずに、ユーザー入力や外部設定に応じてエージェントの挙動を動的に適応させられます。
 
-```typescript {6-7,14} filename="src/mastra/agents/test-weather-agent.ts" showLineNumbers copy
+```typescript {7-8,15} filename="src/mastra/agents/test-weather-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
+import { testWeatherTool } from "../tools/test-weather-tool";
 
 export const testWeatherAgent = new Agent({
   name: "test-weather-agent",
@@ -38,23 +39,60 @@ export const testWeatherAgent = new Agent({
     - If no city is mentioned, ask for a city name
     `;
   },
-  model: openai("gpt-4o-mini")
+  model: openai("gpt-4o-mini"),
+  tools: { testWeatherTool }
+});
+```
+
+### ツールの例
+
+このツールは `WeatherRuntimeContext` 型をエクスポートします。これは、`RuntimeContext` を使用する任意の場所で、実行時の設定へ型安全にアクセスするために利用できます。
+
+```typescript {4-6} filename="src/mastra/tools/test-weather-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export type WeatherRuntimeContext = {
+  "temperature-unit": "celsius" | "fahrenheit";
+};
+
+export const testWeatherTool = createTool({
+  id: "test-weather-tool",
+  description: "指定した場所の天気を取得します",
+  inputSchema: z.object({
+    location: z.string()
+  }),
+  outputSchema: z.object({
+    metric: z.string(),
+    temperature: z.number(),
+    weather: z.string()
+  }),
+  execute: async ({ context, runtimeContext }) => {
+    const { location } = context;
+    const unit = runtimeContext.get("temperature-unit") as WeatherRuntimeContext["temperature-unit"];
+
+    const temperature = 30;
+    const weather = "Sunny";
+
+    return {
+      metric: unit === "celsius" ? "°C" : "°F",
+      temperature,
+      weather
+    };
+  }
 });
 ```
 
 ### 使用例
 
-この例では、`runtimeContext.set()` を使って `temperature-unit` を **celsius** または **fahrenheit** に設定し、エージェントが適切な単位で気温を返せるようにします。
+この例では、`runtimeContext.set()` を使用して `temperature-unit` を **celsius** または **fahrenheit** に設定し、エージェントが適切な単位で気温を返すようにします。
 
-```typescript {12} filename="src/test-weather-agent.ts" showLineNumbers copy
+```typescript {9, 12} filename="src/test-weather-agent.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 import { RuntimeContext } from "@mastra/core/runtime-context";
+import { WeatherRuntimeContext } from "./mastra/tools/test-weather-tool";
 
 const agent = mastra.getAgent("testWeatherAgent");
-
-export type WeatherRuntimeContext = {
-  "temperature-unit": "celsius" | "fahrenheit";
-};
 
 const runtimeContext = new RuntimeContext<WeatherRuntimeContext>();
 
@@ -67,18 +105,15 @@ const response = await agent.generate("What's the weather in London?", {
 console.log(response.text);
 ```
 
-## サーバーミドルウェアで `runtimeContext` にアクセスする
+## サーバー・ミドルウェアでの `runtimeContext` へのアクセス
 
-サーバーミドルウェア内でリクエストから情報を抽出し、`runtimeContext` を動的に設定できます。次の例では、ユーザーのロケールに応じた応答になるよう、Cloudflare の `CF-IPCountry` ヘッダーに基づいて `temperature-unit` を設定しています。
+リクエストから情報を抽出して、サーバー・ミドルウェア内で動的に `runtimeContext` を設定できます。次の例では、Cloudflare の `CF-IPCountry` ヘッダーに基づいて `temperature-unit` を設定し、ユーザーのロケールに合ったレスポンスになるようにしています。
 
-```typescript {2,12-21} filename="src/mastra/index.ts" showLineNumbers copy
+```typescript {2,4,9-18} filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { RuntimeContext } from "@mastra/core/runtime-context";
 import { testWeatherAgent } from "./agents/test-weather-agent";
-
-type WeatherRuntimeContext = {
-  "temperature-unit": "celsius" | "fahrenheit";
-};
+import { WeatherRuntimeContext } from "./mastra/tools/test-weather-tool";
 
 export const mastra = new Mastra({
   agents: { testWeatherAgent },

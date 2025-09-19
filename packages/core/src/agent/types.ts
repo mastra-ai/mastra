@@ -1,6 +1,6 @@
 import type { GenerateTextOnStepFinishCallback, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema, ZodTypeAny } from 'zod';
+import type { z, ZodSchema } from 'zod';
 import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
 import type { Metric } from '../eval';
 import type {
@@ -23,6 +23,8 @@ import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import type { RuntimeContext } from '../runtime-context';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
+import type { OutputSchema } from '../stream';
+import type { InferSchemaOutput } from '../stream/base/schema';
 import type { ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
@@ -40,13 +42,13 @@ export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool |
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
-type FallbackFields<S extends ZodTypeAny> =
+type FallbackFields<OUTPUT extends OutputSchema = undefined> =
   | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
-  | { errorStrategy: 'fallback'; fallbackValue: z.infer<S> };
+  | { errorStrategy: 'fallback'; fallbackValue: InferSchemaOutput<OUTPUT> };
 
-export type StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny> = {
+export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   /** Zod schema to validate the output against */
-  schema: S;
+  schema: OUTPUT;
 
   /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
   model?: MastraLanguageModel;
@@ -56,7 +58,7 @@ export type StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny> = {
    * If not provided, will generate instructions based on the schema.
    */
   instructions?: string;
-} & FallbackFields<S>;
+} & FallbackFields<OUTPUT>;
 
 export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;

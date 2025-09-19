@@ -13,7 +13,7 @@ function Agents() {
       </Header>
 
       <MainContentContent isCentered={!isLoading && Object.keys(agents || {}).length === 0}>
-        <AgentsTable agents={agents} isLoading={isLoading} computeLink={agentId => `/agents/${agentId}/chat/new`} />
+        <AgentsTable agents={agents} isLoading={isLoading} />
       </MainContentContent>
     </MainContentLayout>
   );

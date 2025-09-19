@@ -71,15 +71,14 @@ type WorkingMemoryNone = BaseWorkingMemory & {
 
 export type WorkingMemory = TemplateWorkingMemory | SchemaWorkingMemory | WorkingMemoryNone;
 
+export type SemanticRecall = {
+  topK: number;
+  messageRange: number | { before: number; after: number };
+  scope?: 'thread' | 'resource';
+};
 export type MemoryConfig = {
   lastMessages?: number | false;
-  semanticRecall?:
-    | boolean
-    | {
-        topK: number;
-        messageRange: number | { before: number; after: number };
-        scope?: 'thread' | 'resource';
-      };
+  semanticRecall?: boolean | SemanticRecall;
   workingMemory?: WorkingMemory;
   threads?: {
     generateTitle?:

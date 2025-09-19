@@ -15,12 +15,7 @@ function Workflows() {
       </Header>
 
       <MainContentContent isCentered={isEmpty}>
-        <WorkflowTable
-          workflows={workflows}
-          legacyWorkflows={legacyWorkflows}
-          isLoading={isLoading}
-          computeLink={workflowId => `/workflows/${workflowId}/graph`}
-        />
+        <WorkflowTable workflows={workflows} legacyWorkflows={legacyWorkflows} isLoading={isLoading} />
       </MainContentContent>
     </MainContentLayout>
   );

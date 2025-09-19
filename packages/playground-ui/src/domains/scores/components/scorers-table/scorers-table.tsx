@@ -17,11 +17,10 @@ import { useLinkComponent } from '@/lib/framework';
 export interface ScorersTableProps {
   scorers: Record<string, GetScorerResponse>;
   isLoading: boolean;
-  computeScorerLink: (scorerId: string) => string;
 }
 
-export function ScorersTable({ scorers, isLoading, computeScorerLink }: ScorersTableProps) {
-  const { navigate } = useLinkComponent();
+export function ScorersTable({ scorers, isLoading }: ScorersTableProps) {
+  const { navigate, paths } = useLinkComponent();
   const scorersData: ScorerTableData[] = useMemo(
     () =>
       Object.keys(scorers).map(key => {
@@ -63,7 +62,7 @@ export function ScorersTable({ scorers, isLoading, computeScorerLink }: ScorersT
         </Thead>
         <Tbody>
           {rows.map(row => (
-            <Row key={row.id} onClick={() => navigate(computeScorerLink(row.original.id))}>
+            <Row key={row.id} onClick={() => navigate(paths.scorerLink(row.original.id))}>
               {row.getVisibleCells().map(cell => (
                 <React.Fragment key={cell.id}>
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
