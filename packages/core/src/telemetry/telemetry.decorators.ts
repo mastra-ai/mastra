@@ -7,8 +7,15 @@ import { hasActiveTelemetry, getBaggageValues } from './utility';
 interface StreamFinishData {
   text?: string;
   usage?: {
+    // AI SDK v5 format (VNext paths)
+    inputTokens?: number;
+    outputTokens?: number;
+    reasoningTokens?: number;
+    cachedInputTokens?: number;
+    // Legacy format (backward compatibility)
     promptTokens?: number;
     completionTokens?: number;
+    // Common fields
     totalTokens?: number;
   };
   finishReason?: string;
@@ -68,7 +75,6 @@ function enhanceStreamingArgumentsWithTelemetry(
         span.setStatus({ code: SpanStatusCode.OK });
         span.end();
       } catch (error) {
-        debugger;
         console.warn('Telemetry capture failed:', error);
         span.setAttribute(`${spanName}.result`, '[Telemetry Capture Error]');
         span.setStatus({ code: SpanStatusCode.ERROR });

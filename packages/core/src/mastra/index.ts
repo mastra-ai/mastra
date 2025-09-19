@@ -2,6 +2,8 @@ import type { Agent } from '../agent';
 import { getAllAITracing, setupAITracing, shutdownAITracingRegistry } from '../ai-tracing';
 import type { ObservabilityRegistryConfig } from '../ai-tracing';
 import type { BundlerConfig } from '../bundler/types';
+import { InMemoryServerCache } from '../cache';
+import type { MastraServerCache } from '../cache';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import { EventEmitterPubSub } from '../events/event-emitter';
@@ -30,7 +32,10 @@ import { createOnScorerHook } from './hooks';
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
-  TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
+  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any>> = Record<
+    string,
+    Workflow<any, any, any, any, any, any>
+  >,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
@@ -84,7 +89,10 @@ export interface Config<
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
-  TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
+  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any>> = Record<
+    string,
+    Workflow<any, any, any, any, any, any>
+  >,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
@@ -116,6 +124,8 @@ export class Mastra<
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
+  // This is only used internally for server handlers that require temporary persistence
+  #serverCache: MastraServerCache;
 
   /**
    * @deprecated use getTelemetry() instead
@@ -192,6 +202,13 @@ export class Mastra<
         path: m.path || '/api/*',
       }));
     }
+
+    /*
+    Server Cache
+    */
+
+    // This is only used internally for server handlers that require temporary persistence
+    this.#serverCache = new InMemoryServerCache();
 
     /*
     Events
@@ -890,6 +907,10 @@ do:
     return this.#serverMiddleware;
   }
 
+  public getServerCache() {
+    return this.#serverCache;
+  }
+
   public setServerMiddleware(serverMiddleware: Middleware | Middleware[]) {
     if (typeof serverMiddleware === 'function') {
       this.#serverMiddleware = [
@@ -1164,5 +1185,10 @@ do:
     await this.stopEventEngine();
 
     this.#logger?.info('Mastra shutdown completed');
+  }
+
+  // This method is only used internally for server hnadlers that require temporary persistence
+  public get serverCache() {
+    return this.#serverCache;
   }
 }

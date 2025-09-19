@@ -11,7 +11,13 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
-import type { AiMessageType, MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type {
+  AiMessageType,
+  MastraMessageV1,
+  MastraMessageV2,
+  MemoryConfig,
+  StorageThreadType,
+} from '@mastra/core/memory';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
 import type {
@@ -106,24 +112,29 @@ export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefin
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
 >;
 
-export type StreamVNextParams<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-> = {
+export type StreamVNextParams<OUTPUT extends OutputSchema = undefined> = {
   messages: MessageListInput;
   output?: OUTPUT;
   runtimeContext?: RuntimeContext | Record<string, any>;
   clientTools?: ToolsInput;
-  // Can't serialize the model, so we need to omit it, falls back to agent's model
-  structuredOutput?: STRUCTURED_OUTPUT extends ZodSchema
-    ? Omit<StructuredOutputOptions<STRUCTURED_OUTPUT>, 'model'>
-    : never;
-} & WithoutMethods<
-  Omit<
-    AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT>,
-    'output' | 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
-  >
->;
+} & OutputOptions<OUTPUT> &
+  WithoutMethods<
+    Omit<
+      AgentExecutionOptions<OUTPUT>,
+      'output' | 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
+    >
+  >;
+
+type OutputOptions<OUTPUT extends OutputSchema = undefined> =
+  | {
+      output?: OUTPUT;
+      structuredOutput?: never;
+    }
+  | {
+      // Can't serialize the model, so we need to omit it, falls back to agent's model
+      structuredOutput?: Omit<StructuredOutputOptions<OUTPUT>, 'model'>;
+      output?: never;
+    };
 
 export type UpdateModelParams = {
   modelId: string;
@@ -207,7 +218,7 @@ export interface GetWorkflowResponse {
 
 export type WorkflowWatchResult = WatchEvent & { runId: string };
 
-export type WorkflowRunResult = WorkflowResult<any, any>;
+export type WorkflowRunResult = WorkflowResult<any, any, any>;
 export interface UpsertVectorParams {
   indexName: string;
   vectors: number[][];
@@ -272,6 +283,12 @@ export interface GetMemoryThreadParams {
   resourceId: string;
   agentId: string;
 }
+
+export interface GetMemoryConfigParams {
+  agentId: string;
+}
+
+export type GetMemoryConfigResponse = MemoryConfig;
 
 export interface GetNetworkMemoryThreadParams {
   resourceId: string;
@@ -451,7 +468,7 @@ export interface LoopVNextNetworkResponse {
     isComplete?: boolean | undefined;
     completionReason?: string | undefined;
   };
-  steps: WorkflowResult<any, any>['steps'];
+  steps: WorkflowResult<any, any, any>['steps'];
 }
 
 export interface McpServerListResponse {

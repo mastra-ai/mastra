@@ -192,7 +192,7 @@ export class InngestRun<
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
-  }): Promise<WorkflowResult<TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     await this.#mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
@@ -243,7 +243,7 @@ export class InngestRun<
       | string
       | string[];
     runtimeContext?: RuntimeContext;
-  }): Promise<WorkflowResult<TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     const p = this._resume(params).then(result => {
       if (result.status !== 'suspended') {
         this.closeStreamAction?.().catch(() => {});
@@ -264,7 +264,7 @@ export class InngestRun<
       | string
       | string[];
     runtimeContext?: RuntimeContext;
-  }): Promise<WorkflowResult<TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
     );
@@ -331,7 +331,7 @@ export class InngestRun<
 
   stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
     stream: ReadableStream<StreamEvent>;
-    getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
+    getWorkflowState: () => Promise<WorkflowResult<TInput, TOutput, TSteps>>;
   } {
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
@@ -578,7 +578,7 @@ export class InngestWorkflow<
         };
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt);
-        const result = await engine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
+        const result = await engine.execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
           workflowId: this.id,
           runId,
           resourceId,
@@ -1331,7 +1331,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
     if (step instanceof InngestWorkflow) {
       const isResume = !!resume?.steps?.length;
-      let result: WorkflowResult<any, any>;
+      let result: WorkflowResult<any, any, any>;
       let runId: string;
       if (isResume) {
         // @ts-ignore

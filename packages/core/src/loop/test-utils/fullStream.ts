@@ -146,20 +146,16 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             },
             "type": "finish-step",
             "usage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
           },
           {
             "finishReason": "stop",
             "totalUsage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
             "type": "finish",
@@ -273,20 +269,16 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             },
             "type": "finish-step",
             "usage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
           },
           {
             "finishReason": "stop",
             "totalUsage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
             "type": "finish",
@@ -486,20 +478,16 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             },
             "type": "finish-step",
             "usage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
           },
           {
             "finishReason": "stop",
             "totalUsage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
             "type": "finish",
@@ -585,20 +573,16 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             },
             "type": "finish-step",
             "usage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
           },
           {
             "finishReason": "stop",
             "totalUsage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
             "type": "finish",
@@ -676,20 +660,16 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             },
             "type": "finish-step",
             "usage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
           },
           {
             "finishReason": "stop",
             "totalUsage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
             "type": "finish",
@@ -800,20 +780,16 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             },
             "type": "finish-step",
             "usage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
           },
           {
             "finishReason": "stop",
             "totalUsage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
             "type": "finish",
@@ -1149,7 +1125,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
           tool1: tool({
             inputSchema: z.object({ value: z.string() }),
             execute: async (input, options) => {
-              console.log('TOOL 1', input, options);
+              console.info('TOOL 1', input, options);
 
               expect(input).toStrictEqual({ value: 'value' });
               expect(options.messages).toStrictEqual([
@@ -1321,20 +1297,16 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             },
             "type": "finish-step",
             "usage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
           },
           {
             "finishReason": "stop",
             "totalUsage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
             "type": "finish",

@@ -21,7 +21,7 @@ import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 
-type ProcessOutputStreamOptions<OUTPUT extends OutputSchema | undefined = undefined> = {
+type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   model: LanguageModelV2;
   tools?: ToolSet;
   messageId: string;
@@ -38,7 +38,7 @@ type ProcessOutputStreamOptions<OUTPUT extends OutputSchema | undefined = undefi
   };
 };
 
-async function processOutputStream<OUTPUT extends OutputSchema | undefined = undefined>({
+async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
   tools,
   messageId,
   messageList,
@@ -385,7 +385,7 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
         } catch (err) {
           attempt++;
 
-          console.error(`Error in model ${modelConfig.model.modelId}, attempt ${attempt}`, err);
+          console.error(`Error executing model ${modelConfig.model.modelId}, attempt ${attempt}====`, err);
 
           // If we've exhausted all retries for this model, break and try the next model
           if (attempt > maxRetries) {
@@ -399,10 +399,7 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
   };
 }
 
-export function createLLMExecutionStep<
-  Tools extends ToolSet = ToolSet,
-  OUTPUT extends OutputSchema | undefined = undefined,
->({
+export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>({
   models,
   _internal,
   messageId,
@@ -585,7 +582,7 @@ export function createLLMExecutionStep<
             },
           });
         } catch (error) {
-          console.log('Error in LLM Execution Step', error);
+          console.error('Error in LLM Execution Step', error);
           if (isAbortError(error) && options?.abortSignal?.aborted) {
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],

@@ -26,9 +26,6 @@ importers:
       '@ai-sdk/react':
         specifier: ^1.2.1
         version: 1.2.12(react@19.1.1)(zod@3.25.76)
-      '@mastra/core':
-        specifier: link:../../core
-        version: link:../../core
       '@mastra/fastembed':
         specifier: link:../../fastembed
         version: link:../../fastembed
@@ -51,14 +48,17 @@ importers:
         specifier: ^0.4.0
         version: 0.4.0
       zod:
-        specifier: ^3.24.3
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@faker-js/faker':
-        specifier: ^9.6.0
+        specifier: ^9.9.0
         version: 9.9.0
+      '@mastra/core':
+        specifier: link:../../core
+        version: link:../../core
       '@testing-library/react':
-        specifier: ^16.2.0
+        specifier: ^16.3.0
         version: 16.3.0(@testing-library/dom@10.4.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       '@types/json-schema':
         specifier: ^7.0.15
@@ -70,13 +70,13 @@ importers:
         specifier: ^4.2.2
         version: 4.3.19(react@19.1.1)(zod@3.25.76)
       jsdom:
-        specifier: ^26.0.0
+        specifier: ^26.1.0
         version: 26.1.0
       mastra:
         specifier: link:../../cli
         version: link:../../cli
       next:
-        specifier: ^15.2.4
+        specifier: ^15.5.3
         version: 15.5.3(@opentelemetry/api@1.9.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       react:
         specifier: ^19.1.0
