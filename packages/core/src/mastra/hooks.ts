@@ -31,10 +31,6 @@ export function createOnScorerHook(mastra: Mastra) {
       let input = hookData.input;
       let output = hookData.output;
 
-      if (entityType !== 'AGENT') {
-        output = { object: hookData.output };
-      }
-
       const { structuredOutput, ...rest } = hookData;
 
       const runResult = await scorerToUse.scorer.run({
@@ -80,19 +76,29 @@ export async function validateAndSaveScore(storage: MastraStorage, payload: unkn
   await storage?.saveScore(payloadToSave);
 }
 
-async function findScorer(mastra: Mastra, entityId: string, entityType: string, scorerId: string) {
+async function findScorer(mastra: Mastra, entityId: string, entityType: string, scorerName: string) {
   let scorerToUse;
   if (entityType === 'AGENT') {
     const scorers = await mastra.getAgentById(entityId).getScorers();
-    scorerToUse = scorers[scorerId];
+    for (const [id, scorer] of Object.entries(scorers)) {
+      if (scorer.scorer.name === scorerName) {
+        scorerToUse = scorer;
+        break;
+      }
+    }
   } else if (entityType === 'WORKFLOW') {
     const scorers = await mastra.getWorkflowById(entityId).getScorers();
-    scorerToUse = scorers[scorerId];
+    for (const [id, scorer] of Object.entries(scorers)) {
+      if (scorer.scorer.name === scorerName) {
+        scorerToUse = scorer;
+        break;
+      }
+    }
   }
 
   // Fallback to mastra-registered scorer
   if (!scorerToUse) {
-    const mastraRegisteredScorer = mastra.getScorerByName(scorerId);
+    const mastraRegisteredScorer = mastra.getScorerByName(scorerName);
     scorerToUse = mastraRegisteredScorer ? { scorer: mastraRegisteredScorer } : undefined;
   }
 
