@@ -11,18 +11,26 @@ export interface ScorersDropdownProps {
   trace: AISpanRecord;
   spanId?: string;
   onScorerTriggered: (scorerName: string, traceId: string, spanId?: string) => void;
+  entityType?: string;
 }
 
-export const ScorersDropdown = ({ trace, spanId, onScorerTriggered }: ScorersDropdownProps) => {
+export const ScorersDropdown = ({ trace, spanId, onScorerTriggered, entityType }: ScorersDropdownProps) => {
   const { data: scorers = {}, isLoading } = useScorers();
   const { mutate: triggerScorer, isPending } = useTriggerScorer(onScorerTriggered);
 
-  const scorerList = Object.entries(scorers).map(([key, scorer]) => ({
+  let scorerList = Object.entries(scorers).map(([key, scorer]) => ({
     id: key,
     name: scorer.scorer.config.name,
     description: scorer.scorer.config.description,
     isRegistered: scorer.isRegistered,
+    type: scorer.scorer.config.type,
   }));
+
+  if (entityType === 'Agent' && !spanId) {
+    scorerList = scorerList.filter(scorer => scorer.type === 'agent');
+  } else {
+    scorerList = scorerList.filter(scorer => scorer.type !== 'agent');
+  }
 
   const isWaiting = isPending || isLoading;
 

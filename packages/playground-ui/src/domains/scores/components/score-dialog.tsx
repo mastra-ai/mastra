@@ -58,11 +58,15 @@ export function ScoreDialog({
                   value: <Link href={computeTraceLink(score?.traceId)}>{score?.traceId}</Link>,
                   key: 'traceId',
                 },
-                {
-                  label: 'Span ID',
-                  value: <Link href={computeTraceLink(score?.traceId, score?.spanId)}>{score?.spanId}</Link>,
-                  key: 'spanId',
-                },
+                ...(score?.spanId
+                  ? [
+                      {
+                        label: 'Span ID',
+                        value: <Link href={computeTraceLink(score?.traceId, score?.spanId)}>{score?.spanId}</Link>,
+                        key: 'spanId',
+                      },
+                    ]
+                  : []),
               ]}
               LinkComponent={Link}
             />
