@@ -523,8 +523,45 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     await mutex.runExclusive(async () => {
       const { tableName, vectorIndexName } = this.getTableName(indexName);
 
-      if (this.createdIndexes.has(indexName)) {
+      // Try to get existing index info to check if configuration has changed
+      let existingIndexInfo: PGIndexStats | null = null;
+      let dimension = 0;
+      try {
+        existingIndexInfo = await this.getIndexInfo({ indexName });
+        dimension = existingIndexInfo.dimension;
+
+        // Check if the existing index matches what we want to create
+        const desiredType = indexConfig.type || 'ivfflat';
+        const configMatches =
+          existingIndexInfo.metric === metric &&
+          existingIndexInfo.type === desiredType &&
+          (desiredType === 'hnsw'
+            ? existingIndexInfo.config.m === (indexConfig.hnsw?.m ?? 8) &&
+              existingIndexInfo.config.efConstruction === (indexConfig.hnsw?.efConstruction ?? 32)
+            : desiredType === 'flat'
+              ? existingIndexInfo.type === 'flat' // For flat, just check type matches
+              : desiredType === 'ivfflat' && indexConfig.ivf?.lists
+                ? existingIndexInfo.config.lists === indexConfig.ivf.lists
+                : true); // If ivfflat without specified lists, don't force recreation
+
+        if (configMatches) {
+          this.logger?.debug(`Index ${vectorIndexName} already exists with same configuration, skipping recreation`);
+          // Update cache with the existing configuration
+          const cacheKey = await this.getIndexCacheKey({
+            indexName,
+            dimension,
+            type: existingIndexInfo.type,
+            metric: existingIndexInfo.metric,
+          });
+          this.createdIndexes.set(indexName, cacheKey);
+          return;
+        }
+
+        // Configuration changed, need to rebuild
+        this.logger?.info(`Index ${vectorIndexName} configuration changed, rebuilding index`);
         await client.query(`DROP INDEX IF EXISTS ${vectorIndexName}`);
+      } catch {
+        this.logger?.debug(`Index ${indexName} doesn't exist yet, will create it`);
       }
 
       if (indexConfig.type === 'flat') {
