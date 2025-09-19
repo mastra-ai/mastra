@@ -71,15 +71,12 @@ export function AgentInformation({ agentId }: { agentId: string }) {
             {isLoading && <Skeleton className="h-full" />}
             {agent && (
               <AgentMetadata
+                agentId={agentId}
                 agent={agent}
                 updateModel={updateModel}
                 modelProviders={modelProviders || []}
                 hasMemoryEnabled={Boolean(memory?.result)}
-                computeAgentLink={() => `/agents/${agentId}`}
-                computeToolLink={tool => `/tools/${agentId}/${tool.id}`}
-                computeWorkflowLink={workflowId => `/workflows/${workflowId}/graph`}
                 promptSlot={<AgentPromptEnhancer agentId={agentId} />}
-                computeScorerLink={(scorerId: string) => `/scorers/${scorerId}`}
               />
             )}
           </TabContent>

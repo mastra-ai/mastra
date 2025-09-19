@@ -1,6 +1,4 @@
-import { v4 as uuid } from '@lukeed/uuid';
-import { useNavigate } from 'react-router';
-import { ChatThreads } from '@mastra/playground-ui';
+import { ChatThreads, useLinkComponent } from '@mastra/playground-ui';
 
 import { useDeleteThread } from '@/hooks/use-memory';
 import { StorageThreadType } from '@mastra/core/memory';
@@ -17,19 +15,19 @@ export function AgentSidebar({
   isLoading: boolean;
 }) {
   const { mutateAsync } = useDeleteThread();
-  const navigate = useNavigate();
+  const { paths, navigate } = useLinkComponent();
 
   const handleDelete = async (deleteId: string) => {
     await mutateAsync({ threadId: deleteId!, agentId });
     if (deleteId === threadId) {
-      navigate(`/agents/${agentId}/chat/${uuid()}`);
+      navigate(paths.agentNewThreadLink(agentId));
     }
   };
 
   return (
     <ChatThreads
-      computeNewThreadLink={() => `/agents/${agentId}/chat/${uuid()}`}
-      computeThreadLink={threadId => `/agents/${agentId}/chat/${threadId}`}
+      resourceId={agentId}
+      resourceType={'agent'}
       threads={threads || []}
       isLoading={isLoading}
       threadId={threadId}
