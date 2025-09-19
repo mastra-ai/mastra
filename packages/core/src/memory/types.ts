@@ -94,20 +94,20 @@ export type VectorIndexConfig = {
   };
 };
 
+export type SemanticRecall = {
+  topK: number;
+  messageRange: number | { before: number; after: number };
+  scope?: 'thread' | 'resource';
+  /**
+   * Vector index configuration (PostgreSQL/pgvector specific).
+   * Other vector stores will use their default index configurations.
+   */
+  indexConfig?: VectorIndexConfig;
+};
+
 export type MemoryConfig = {
   lastMessages?: number | false;
-  semanticRecall?:
-    | boolean
-    | {
-        topK: number;
-        messageRange: number | { before: number; after: number };
-        scope?: 'thread' | 'resource';
-        /**
-         * Vector index configuration (PostgreSQL/pgvector specific).
-         * Other vector stores will use their default index configurations.
-         */
-        indexConfig?: VectorIndexConfig;
-      };
+  semanticRecall?: boolean | SemanticRecall;
   workingMemory?: WorkingMemory;
   threads?: {
     generateTitle?:
