@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",
-    "@composio/core": "^0.1.51",
+    "@composio/core": "^0.1.52",
     "@composio/mastra": "^0.1.49",
     "@mastra/core": "^0.16.3",
     "@mastra/fastembed": "^0.10.5",
