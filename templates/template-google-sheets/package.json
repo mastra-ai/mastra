@@ -19,7 +19,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",
     "@composio/core": "^0.1.51",
-    "@composio/mastra": "^0.1.49",
+    "@composio/mastra": "^0.1.53",
     "@mastra/core": "^0.16.3",
     "@mastra/fastembed": "^0.10.5",
     "@mastra/libsql": "^0.14.1",
