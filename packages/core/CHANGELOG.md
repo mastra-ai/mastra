@@ -1,5 +1,35 @@
 # @mastra/core
 
+## 0.17.2-alpha.0
+
+### Patch Changes
+
+- fix: result object type inference when using structuredOutput and unify output/structuredOutput types with single OUTPUT generic ([#7969](https://github.com/mastra-ai/mastra/pull/7969))
+
+- Fix selection of agent method based on model version ([#8001](https://github.com/mastra-ai/mastra/pull/8001))
+
+- Get rid off swr one for all ([#7931](https://github.com/mastra-ai/mastra/pull/7931))
+
+## 0.17.1
+
+### Patch Changes
+
+- Refactor agent.#execute fn workflow to make code easier to follow. ([#7964](https://github.com/mastra-ai/mastra/pull/7964))
+
+- fix workflow resuming issue in the playground ([#7988](https://github.com/mastra-ai/mastra/pull/7988))
+
+- feat: Add system option support to VNext methods ([#7925](https://github.com/mastra-ai/mastra/pull/7925))
+
+## 0.17.1-alpha.0
+
+### Patch Changes
+
+- Refactor agent.#execute fn workflow to make code easier to follow. ([#7964](https://github.com/mastra-ai/mastra/pull/7964))
+
+- fix workflow resuming issue in the playground ([#7988](https://github.com/mastra-ai/mastra/pull/7988))
+
+- feat: Add system option support to VNext methods ([#7925](https://github.com/mastra-ai/mastra/pull/7925))
+
 ## 0.17.0
 
 ### Minor Changes

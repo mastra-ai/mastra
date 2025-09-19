@@ -187,10 +187,9 @@ export function createStep<
           args: inputData,
         };
 
-        // TODO: add support for format, if format is undefined use stream, else streamVNext
         let stream: ReadableStream<any>;
 
-        if (streamFormat === 'aisdk') {
+        if ((await params.getModel()).specificationVersion === 'v1') {
           const { fullStream } = await params.stream(inputData.prompt, {
             // resourceId: inputData.resourceId,
             // threadId: inputData.threadId,
@@ -200,9 +199,20 @@ export function createStep<
             },
             abortSignal,
           });
-
           stream = fullStream as any;
+        } else {
+          const modelOutput = await params.streamVNext(inputData.prompt, {
+            runtimeContext,
+            onFinish: result => {
+              streamPromise.resolve(result.text);
+            },
+            abortSignal,
+          });
 
+          stream = modelOutput.fullStream;
+        }
+
+        if (streamFormat === 'aisdk') {
           await emitter.emit('watch-v2', {
             type: 'tool-call-streaming-start',
             ...(toolData ?? {}),
@@ -221,16 +231,6 @@ export function createStep<
             ...(toolData ?? {}),
           });
         } else {
-          const modelOutput = await params.streamVNext(inputData.prompt, {
-            runtimeContext,
-            onFinish: result => {
-              streamPromise.resolve(result.text);
-            },
-            // abortSignal,
-          });
-
-          stream = modelOutput.fullStream;
-
           for await (const chunk of stream) {
             await writer.write(chunk as any);
           }
@@ -443,8 +443,8 @@ export class Workflow<
    * @param step The step to add to the workflow
    * @returns The workflow instance for chaining
    */
-  then<TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodType<any>>(
-    step: Step<TStepId, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
+  then<TStepId extends string, TSchemaOut extends z.ZodType<any>>(
+    step: Step<TStepId, TPrevSchema, TSchemaOut, any, any, TEngineType>,
   ) {
     this.stepFlow.push({ type: 'step', step: step as any });
     this.serializedStepFlow.push({
@@ -1606,11 +1606,13 @@ export class Run<
     runtimeContext,
     tracingContext,
     format,
+    closeOnSuspend = true,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     format?: 'aisdk' | 'mastra' | undefined;
+    closeOnSuspend?: boolean;
   } = {}): MastraWorkflowStream<TInput, TOutput, TSteps> {
     if (this.closeStreamAction && this.activeStream) {
       return this.activeStream;
@@ -1685,9 +1687,13 @@ export class Run<
           writableStream: writable,
           format,
         }).then(result => {
-          // always close stream, even if the workflow is suspended
-          // this will trigger a finish event with workflow status set to suspended
-          this.closeStreamAction?.().catch(() => {});
+          if (closeOnSuspend) {
+            // always close stream, even if the workflow is suspended
+            // this will trigger a finish event with workflow status set to suspended
+            this.closeStreamAction?.().catch(() => {});
+          } else if (result.status !== 'suspended') {
+            this.closeStreamAction?.().catch(() => {});
+          }
 
           return result;
         });
@@ -1713,7 +1719,11 @@ export class Run<
     format,
   }: {
     resumeData?: z.infer<TInput>;
-    step?: Step<string, any, any, any, any, TEngineType>;
+    step?:
+      | Step<string, any, any, any, any, TEngineType>
+      | [...Step<string, any, any, any, any, TEngineType>[], Step<string, any, any, any, any, TEngineType>]
+      | string
+      | string[];
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     format?: 'aisdk' | 'mastra' | undefined;
