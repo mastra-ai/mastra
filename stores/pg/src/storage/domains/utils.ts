@@ -1,6 +1,6 @@
+import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { PaginationArgs, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { TABLE_SCHEMAS } from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
 
 export function getSchemaName(schema?: string) {
   return schema ? `"${parseSqlIdentifier(schema, 'schema name')}"` : undefined;
