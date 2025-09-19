@@ -34,16 +34,22 @@ const supportAgent = new Agent({
 
     Always respond in ${language} language.`;
     
-    // Or return a system message object
+    // Alternative: Return a system message object with provider options
     // return {
     //   role: "system",
-    //   content: `You are a customer support agent...`
+    //   content: `You are a customer support agent for ${userTier} tier...`,
+    //   providerOptions: {
+    //     openai: { 
+    //       reasoning_effort: userTier === "enterprise" ? "high" : "medium"
+    //     }
+    //   }
     // };
     
-    // Or return an array of system messages
+    // Alternative: Return an array of system messages for modular instructions
     // return [
     //   { role: "system", content: "You are a customer support agent." },
-    //   { role: "system", content: `User is on ${userTier} tier.` }
+    //   { role: "system", content: `User is on ${userTier} tier.` },
+    //   { role: "system", content: `Respond in ${language} language.` }
     // ];
   },
 

@@ -90,6 +90,16 @@ instructions: [
   { role: "system", content: "You are a helpful assistant." },
   { role: "system", content: "You have expertise in TypeScript." }
 ]
+
+// With provider-specific options (e.g., caching, reasoning)
+instructions: {
+  role: "system",
+  content: "You are an expert code reviewer. Analyze code for bugs, performance issues, and best practices.",
+  providerOptions: {
+    openai: { reasoning_effort: "high" },
+    anthropic: { cache_control: { type: "ephemeral" } }
+  }
+}
 ```
 
 > See [Agent](../../reference/agents/agent.mdx) for more information.
