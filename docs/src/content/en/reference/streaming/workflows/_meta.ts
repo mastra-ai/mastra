@@ -1,7 +1,7 @@
 const meta = {
   stream: ".stream()",
-  streamVNext: ".streamVNext()",
-  resumeStreamVNext: ".resumeStreamVNext()",
+  streamLegacy: ".streamLegacy() (Legacy)",
+  resumeStream: ".resumeStream()",
 };
 
 export default meta;

@@ -3,7 +3,7 @@ import { Tag } from "@/components/tag";
 const meta = {
   agent: "Agent",
   generate: ".generate()",
-  generateVNext: <Tag text="experimental">.generateVNext()</Tag>,
+  generateLegacy: ".generateLegacy() (Legacy)",
   "migration-guide": "Migration Guide",
   network: <Tag text="experimental">.network()</Tag>,
   listAgents: ".listAgents()",

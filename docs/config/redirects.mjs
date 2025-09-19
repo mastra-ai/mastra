@@ -813,4 +813,25 @@ export const redirectList = [
     destination: "/:locale/reference/agents/network",
     permanent: true,
   },
+  // VNext to new standard methods redirects
+  {
+    source: "/:locale/reference/agents/generateVNext",
+    destination: "/:locale/reference/agents/generate",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/streaming/agents/streamVNext",
+    destination: "/:locale/reference/streaming/agents/stream",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/run-methods/streamVNext",
+    destination: "/:locale/reference/workflows/run-methods/stream",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/streaming/workflows/streamVNext",
+    destination: "/:locale/reference/streaming/workflows/stream",
+    permanent: true,
+  },
 ];
