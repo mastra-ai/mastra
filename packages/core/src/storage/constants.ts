@@ -138,7 +138,7 @@ export const AI_SPAN_SCHEMA: Record<string, StorageColumn> = {
   parentSpanId: { type: 'text', nullable: true },
   name: { type: 'text', nullable: false },
   scope: { type: 'jsonb', nullable: true }, // Mastra package info {"core-version": "0.1.0"}
-  spanType: { type: 'integer', nullable: false }, // WORKFLOW_RUN, WORKFLOW_STEP, AGENT_RUN, AGENT_STEP, TOOL_RUN, TOOL_STEP, etc.
+  spanType: { type: 'text', nullable: false }, // WORKFLOW_RUN, WORKFLOW_STEP, AGENT_RUN, AGENT_STEP, TOOL_RUN, TOOL_STEP, etc.
   attributes: { type: 'jsonb', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
   links: { type: 'jsonb', nullable: true },

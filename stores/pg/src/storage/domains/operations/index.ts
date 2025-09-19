@@ -6,6 +6,8 @@ import {
   TABLE_MESSAGES,
   TABLE_TRACES,
   TABLE_EVALS,
+  TABLE_AI_SPANS,
+  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
   StorageColumn,
@@ -26,6 +28,7 @@ export class StoreOperationsPG extends StoreOperations {
   public schemaName?: string;
   private setupSchemaPromise: Promise<void> | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
+
 
   constructor({ client, schemaName }: { client: IDatabase<{}>; schemaName?: string }) {
     super();
@@ -112,7 +115,17 @@ export class StoreOperationsPG extends StoreOperations {
 
       const schemaName = getSchemaName(this.schemaName);
       const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
-      const values = Object.values(record);
+      const values = Object.entries(record).map(([key, value]) => {
+        // Get the schema for this table to determine column types
+        const schema = TABLE_SCHEMAS[tableName];
+        const columnSchema = schema?.[key];
+
+        // If the column is JSONB and the value is an object/array, stringify it
+        if (columnSchema?.type === 'jsonb' && value !== null && typeof value === 'object') {
+          return JSON.stringify(value);
+        }
+        return value;
+      });
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
 
       await this.client.none(
@@ -342,13 +355,43 @@ export class StoreOperationsPG extends StoreOperations {
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     try {
-      await this.client.query('BEGIN');
-      for (const record of records) {
-        await this.insert({ tableName, record });
-      }
-      await this.client.query('COMMIT');
+      const schemaName = getSchemaName(this.schemaName);
+      const tableNameWithSchema = getTableName({ indexName: tableName, schemaName });
+
+      await this.client.tx(async t => {
+        for (const record of records) {
+          // Add timestamp columns if needed
+          if (record.createdAt) {
+            record.createdAtZ = record.createdAt;
+          }
+          if (record.created_at) {
+            record.created_atZ = record.created_at;
+          }
+          if (record.updatedAt) {
+            record.updatedAtZ = record.updatedAt;
+          }
+
+          const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
+          const values = Object.entries(record).map(([key, value]) => {
+            // Get the schema for this table to determine column types
+            const schema = TABLE_SCHEMAS[tableName];
+            const columnSchema = schema?.[key];
+
+            // If the column is JSONB and the value is an object/array, stringify it
+            if (columnSchema?.type === 'jsonb' && value !== null && typeof value === 'object') {
+              return JSON.stringify(value);
+            }
+            return value;
+          });
+          const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+
+          await t.none(
+            `INSERT INTO ${tableNameWithSchema} (${columns.map(c => `"${c}"`).join(', ')}) VALUES (${placeholders})`,
+            values,
+          );
+        }
+      });
     } catch (error) {
-      await this.client.query('ROLLBACK');
       throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_BATCH_INSERT_FAILED',
@@ -635,6 +678,27 @@ export class StoreOperationsPG extends StoreOperations {
           table: TABLE_EVALS,
           columns: ['agent_name', 'created_at DESC'],
         },
+        // AI Spans indexes for optimal trace querying
+        {
+          name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
+          table: TABLE_AI_SPANS,
+          columns: ['traceId', 'startedAt DESC'],
+        },
+        {
+          name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
+          table: TABLE_AI_SPANS,
+          columns: ['parentSpanId', 'startedAt DESC'],
+        },
+        {
+          name: `${schemaPrefix}mastra_ai_spans_name_idx`,
+          table: TABLE_AI_SPANS,
+          columns: ['name'],
+        },
+        {
+          name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
+          table: TABLE_AI_SPANS,
+          columns: ['spanType', 'startedAt DESC'],
+        },
       ];
 
       for (const indexOptions of indexes) {
@@ -723,6 +787,196 @@ export class StoreOperationsPG extends StoreOperations {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             indexName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Update a single record in the database
+   */
+  async update({
+    tableName,
+    keys,
+    data,
+  }: {
+    tableName: TABLE_NAMES;
+    keys: Record<string, any>;
+    data: Record<string, any>;
+  }): Promise<void> {
+    try {
+      const setColumns: string[] = [];
+      const setValues: any[] = [];
+      let paramIndex = 1;
+
+      // Build SET clause
+      Object.entries(data).forEach(([key, value]) => {
+        const parsedKey = parseSqlIdentifier(key, 'column name');
+        setColumns.push(`"${parsedKey}" = $${paramIndex++}`);
+
+        // Handle Date objects
+        if (value instanceof Date) {
+          setValues.push(value.toISOString());
+        } else if (typeof value === 'object' && value !== null) {
+          setValues.push(JSON.stringify(value));
+        } else {
+          setValues.push(value);
+        }
+      });
+
+      // Build WHERE clause
+      const whereConditions: string[] = [];
+      const whereValues: any[] = [];
+
+      Object.entries(keys).forEach(([key, value]) => {
+        const parsedKey = parseSqlIdentifier(key, 'column name');
+        whereConditions.push(`"${parsedKey}" = $${paramIndex++}`);
+        whereValues.push(value);
+      });
+
+      const tableName_ = getTableName({
+        indexName: tableName,
+        schemaName: getSchemaName(this.schemaName),
+      });
+
+      const sql = `UPDATE ${tableName_} SET ${setColumns.join(', ')} WHERE ${whereConditions.join(' AND ')}`;
+      const values = [...setValues, ...whereValues];
+
+      await this.client.none(sql, values);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_UPDATE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Update multiple records in a single batch transaction
+   */
+  async batchUpdate({
+    tableName,
+    updates,
+  }: {
+    tableName: TABLE_NAMES;
+    updates: Array<{
+      keys: Record<string, any>;
+      data: Record<string, any>;
+    }>;
+  }): Promise<void> {
+    try {
+      await this.client.tx(async t => {
+        for (const update of updates) {
+          const setColumns: string[] = [];
+          const setValues: any[] = [];
+          let paramIndex = 1;
+
+          // Build SET clause
+          Object.entries(update.data).forEach(([key, value]) => {
+            const parsedKey = parseSqlIdentifier(key, 'column name');
+            setColumns.push(`"${parsedKey}" = $${paramIndex++}`);
+
+            // Handle Date objects
+            if (value instanceof Date) {
+              setValues.push(value.toISOString());
+            } else if (typeof value === 'object' && value !== null) {
+              setValues.push(JSON.stringify(value));
+            } else {
+              setValues.push(value);
+            }
+          });
+
+          // Build WHERE clause
+          const whereConditions: string[] = [];
+          const whereValues: any[] = [];
+
+          Object.entries(update.keys).forEach(([key, value]) => {
+            const parsedKey = parseSqlIdentifier(key, 'column name');
+            whereConditions.push(`"${parsedKey}" = $${paramIndex++}`);
+            whereValues.push(value);
+          });
+
+          const tableName_ = getTableName({
+            indexName: tableName,
+            schemaName: getSchemaName(this.schemaName),
+          });
+
+          const sql = `UPDATE ${tableName_} SET ${setColumns.join(', ')} WHERE ${whereConditions.join(' AND ')}`;
+          const values = [...setValues, ...whereValues];
+
+          await t.none(sql, values);
+        }
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_BATCH_UPDATE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+            numberOfRecords: updates.length,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Delete multiple records by keys
+   */
+  async batchDelete({
+    tableName,
+    keys,
+  }: {
+    tableName: TABLE_NAMES;
+    keys: Record<string, any>[];
+  }): Promise<void> {
+    try {
+      if (keys.length === 0) {
+        return;
+      }
+
+      const tableName_ = getTableName({
+        indexName: tableName,
+        schemaName: getSchemaName(this.schemaName),
+      });
+
+      await this.client.tx(async t => {
+        for (const keySet of keys) {
+          const conditions: string[] = [];
+          const values: any[] = [];
+          let paramIndex = 1;
+
+          Object.entries(keySet).forEach(([key, value]) => {
+            const parsedKey = parseSqlIdentifier(key, 'column name');
+            conditions.push(`"${parsedKey}" = $${paramIndex++}`);
+            values.push(value);
+          });
+
+          const sql = `DELETE FROM ${tableName_} WHERE ${conditions.join(' AND ')}`;
+          await t.none(sql, values);
+        }
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_BATCH_DELETE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+            numberOfRecords: keys.length,
           },
         },
         error,
