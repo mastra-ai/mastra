@@ -67,7 +67,6 @@
     "shiki": "^1.29.2",
     "sonner": "^1.7.4",
     "superjson": "^2.2.2",
-    "swr": "^2.3.6",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
     "use-debounce": "^10.0.6",
