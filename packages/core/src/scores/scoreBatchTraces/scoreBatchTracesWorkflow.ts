@@ -63,7 +63,7 @@ const getTraceStep = createStep({
       return;
     }
 
-    pMap(
+    await pMap(
       inputData.targets,
       async target => {
         try {
@@ -153,7 +153,7 @@ export async function runScorerOnTarget({
 
 async function validateAndSaveScore({ storage, scorerResult }: { storage: MastraStorage; scorerResult: ScorerRun }) {
   const payloadToSave = saveScorePayloadSchema.parse(scorerResult);
-  const result = await storage?.saveScore(payloadToSave);
+  const result = await storage.saveScore(payloadToSave);
   return result.score;
 }
 

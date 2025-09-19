@@ -136,7 +136,7 @@ function extractInputMessages(agentSpan: AISpanRecord): TransformedUIMessage[] {
  * Extract system messages from LLM span
  */
 function extractSystemMessages(llmSpan: AISpanRecord): Array<{ role: 'system'; content: string }> {
-  return llmSpan.input.messages
+  return (llmSpan.input?.messages || [])
     .filter((msg: any) => msg.role === 'system')
     .map((msg: any) => ({
       role: 'system' as const,
@@ -149,7 +149,7 @@ function extractSystemMessages(llmSpan: AISpanRecord): Array<{ role: 'system'; c
  * Excludes system messages and the current input message
  */
 function extractRememberedMessages(llmSpan: AISpanRecord, currentInputContent: string): TransformedUIMessage[] {
-  const messages = llmSpan.input.messages
+  const messages = (llmSpan.input?.messages || [])
     .filter((msg: any) => msg.role !== 'system')
     .filter((msg: any) => normalizeMessageContent(msg.content) !== currentInputContent);
 
