@@ -83,20 +83,6 @@ import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 
-/**
- * Helper function to convert SystemMessage to string for backward compatibility
- * Used for legacy methods that expect string instructions (e.g., voice, telemetry)
- */
-function systemMessageToString(message: SystemMessage): string {
-  if (typeof message === 'string') {
-    return message;
-  } else if (Array.isArray(message)) {
-    return message.map(m => (typeof m === 'string' ? m : m.content)).join('\n');
-  } else {
-    return message.content;
-  }
-}
-
 function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
   if (value instanceof Promise) {
     return value.then(cb);
@@ -494,7 +480,7 @@ export class Agent<
       const voice = this.#voice;
       voice?.addTools(await this.getTools({ runtimeContext }));
       const instructions = await this.getInstructions({ runtimeContext });
-      voice?.addInstructions(systemMessageToString(instructions));
+      voice?.addInstructions(this.#convertInstructionsToString(instructions));
       return voice;
     } else {
       return new DefaultVoice();
@@ -567,22 +553,22 @@ export class Agent<
     return this.#instructions;
   }
 
+  /**
+   * Helper function to convert SystemMessage to string for backward compatibility
+   * Used for legacy methods that expect string instructions (e.g., voice, telemetry)
+   */
   #convertInstructionsToString(instructions: SystemMessage): string {
     if (typeof instructions === 'string') {
       return instructions;
     }
 
-    // Handle single CoreSystemMessage or array
-    const messages = Array.isArray(instructions) ? instructions : [instructions];
-
-    // Extract text content from messages - CoreSystemMessage only has string content
-    const textParts: string[] = [];
-    for (const msg of messages) {
-      const content = typeof msg === 'string' ? msg : msg.content;
-      textParts.push(content);
+    if (Array.isArray(instructions)) {
+      // Handle array of messages (strings or objects)
+      return instructions.map(msg => (typeof msg === 'string' ? msg : msg.content)).join('\n\n');
     }
 
-    return textParts.join('\n\n');
+    // Handle single message object
+    return instructions.content;
   }
 
   public getDescription(): string {
@@ -2489,7 +2475,7 @@ export class Agent<
           runId: runIdToUse,
           metric,
           agentName,
-          instructions: systemMessageToString(instructions),
+          instructions: this.#convertInstructionsToString(instructions),
         });
       }
     }
@@ -2775,7 +2761,7 @@ export class Agent<
 
     const { before, after } = this.__primitive({
       messages,
-      instructions: systemMessageToString(instructions),
+      instructions: this.#convertInstructionsToString(instructions),
       context,
       thread: threadFromArgs,
       memoryConfig,
@@ -3013,7 +2999,7 @@ export class Agent<
       input: options.messages,
       attributes: {
         agentId: this.id,
-        instructions: systemMessageToString(instructions),
+        instructions: this.#convertInstructionsToString(instructions),
       },
       metadata: {
         runId,
