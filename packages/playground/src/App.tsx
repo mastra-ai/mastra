@@ -1,3 +1,4 @@
+import { v4 as uuid } from '@lukeed/uuid';
 import { Routes, Route, BrowserRouter, Outlet, useNavigate } from 'react-router';
 
 import { Layout } from '@/components/layout';
@@ -46,9 +47,13 @@ const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
   agentsLink: () => `/agents`,
+  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/${uuid()}`,
+  agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/chat/${threadId}`,
   workflowsLink: () => `/workflows`,
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
   networkLink: (networkId: string) => `/networks/v-next/${networkId}/chat`,
+  networkNewThreadLink: (networkId: string) => `/networks/v-next/${networkId}/chat/${uuid()}`,
+  networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
 };
 

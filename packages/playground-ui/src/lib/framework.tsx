@@ -17,11 +17,15 @@ type LinkComponentPaths = {
   agentLink: (agentId: string) => string;
   agentsLink: () => string;
   agentToolLink: (agentId: string, toolId: string) => string;
+  agentThreadLink: (agentId: string, threadId: string) => string;
+  agentNewThreadLink: (agentId: string) => string;
 
   workflowsLink: () => string;
   workflowLink: (workflowId: string) => string;
 
   networkLink: (networkId: string) => string;
+  networkNewThreadLink: (networkId: string) => string;
+  networkThreadLink: (networkId: string, threadId: string) => string;
 
   scorerLink: (scorerId: string) => string;
 };
@@ -37,9 +41,13 @@ const LinkComponentContext = createContext<{
     agentLink: () => '',
     agentsLink: () => '',
     agentToolLink: () => '',
+    agentThreadLink: () => '',
+    agentNewThreadLink: () => '',
     workflowsLink: () => '',
     workflowLink: () => '',
     networkLink: () => '',
+    networkNewThreadLink: () => '',
+    networkThreadLink: () => '',
     scorerLink: () => '',
   },
 });
