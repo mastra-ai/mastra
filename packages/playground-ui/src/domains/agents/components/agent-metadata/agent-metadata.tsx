@@ -32,7 +32,7 @@ export const AgentMetadataNetworkList = ({ agents }: AgentMetadataNetworkListPro
   const { Link, paths } = useLinkComponent();
 
   if (agents.length === 0) {
-    return <AgentMetadataListEmpty>No tools</AgentMetadataListEmpty>;
+    return <AgentMetadataListEmpty>No agents</AgentMetadataListEmpty>;
   }
 
   return (
