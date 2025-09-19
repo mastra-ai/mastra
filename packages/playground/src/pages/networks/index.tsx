@@ -13,13 +13,7 @@ function Networks() {
       </Header>
 
       <MainContentContent isCentered={isEmpty && !isVNextLoading}>
-        <NetworkTable
-          networks={vNextNetworks}
-          isLoading={isVNextLoading}
-          computeLink={(networkId: string) => {
-            return `/networks/v-next/${networkId}/chat`;
-          }}
-        />
+        <NetworkTable networks={vNextNetworks} isLoading={isVNextLoading} />
       </MainContentContent>
     </MainContentLayout>
   );
