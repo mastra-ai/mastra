@@ -65,7 +65,11 @@ export const handleStreamChunk = async ({
 
     case 'tool-output': {
       if (chunk.payload.output?.type.startsWith('workflow-')) {
-        handleWorkflowChunk({ workflowChunk: chunk.payload.output, setMessages, entityName: chunk.payload.toolName });
+        handleWorkflowChunk({
+          workflowChunk: chunk.payload.output,
+          setMessages,
+          entityName: chunk.payload.toolName || 'unknown',
+        });
       }
 
       break;
@@ -195,7 +199,7 @@ export const handleStreamChunk = async ({
     }
 
     case 'finish': {
-      handleFinishReason(chunk.payload.finishReason);
+      handleFinishReason(chunk.payload.stepResult.reason);
       break;
     }
 

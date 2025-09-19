@@ -12,6 +12,8 @@ import type {
   DynamicToolCall,
   StaticToolResult,
   DynamicToolResult,
+  UIMessage,
+  StepResult,
 } from 'ai-v5';
 import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
@@ -137,7 +139,12 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     usage: new DelayedPromise<LanguageModelUsage>(),
     warnings: new DelayedPromise<LanguageModelV2CallWarning[]>(),
     providerMetadata: new DelayedPromise<SharedV2ProviderMetadata | undefined>(),
-    response: new DelayedPromise<{ headers?: Record<string, string> } & Record<string, unknown>>(),
+    response: new DelayedPromise<{
+      headers?: Record<string, string>;
+      messages?: StepResult<ToolSet>['response']['messages'];
+      uiMessages?: UIMessage[];
+      [key: string]: unknown;
+    }>(),
     request: new DelayedPromise<{ body?: unknown } | LanguageModelRequestMetadata>(),
     text: new DelayedPromise<string>(),
     reasoning: new DelayedPromise<

@@ -82,24 +82,27 @@ export interface FilePayload {
   providerMetadata?: SharedV2ProviderMetadata;
 }
 
-export interface ToolCallPayload {
+export interface ToolCallPayload<TArgs = unknown, TOutput = unknown> {
   toolCallId: string;
   toolName: string;
-  args?: Record<string, unknown>;
+  args?: TArgs;
   providerExecuted?: boolean;
   providerMetadata?: SharedV2ProviderMetadata;
-  output?: unknown;
+  output?: TOutput;
 }
 
-export interface ToolResultPayload {
+export interface ToolResultPayload<TResult = unknown, TArgs = unknown> {
   toolCallId: string;
   toolName: string;
-  result: unknown;
+  result: TResult;
   isError?: boolean;
   providerExecuted?: boolean;
   providerMetadata?: SharedV2ProviderMetadata;
-  args?: Record<string, unknown>;
+  args?: TArgs;
 }
+
+export type DynamicToolCallPayload = ToolCallPayload<any, any>;
+export type DynamicToolResultPayload = ToolResultPayload<any, any>;
 
 interface ToolCallInputStreamingStartPayload {
   toolCallId: string;
@@ -221,10 +224,14 @@ interface RedactedReasoningPayload {
   providerMetadata?: SharedV2ProviderMetadata;
 }
 
-interface ToolOutputPayload {
-  output: unknown;
+interface ToolOutputPayload<TOutput = unknown> {
+  output: TOutput; // Tool outputs can be any shape, including nested workflow chunks
+  toolCallId: string;
+  toolName?: string;
   [key: string]: unknown;
 }
+
+type DynamicToolOutputPayload = ToolOutputPayload<any>;
 
 // Define a specific type for nested workflow outputs
 type NestedWorkflowOutput = {
@@ -325,10 +332,14 @@ interface WorkflowExecutionEndPayload {
 }
 
 interface ToolExecutionStartPayload {
-  args: Record<string, unknown>;
-  toolName: string;
+  args: Record<string, unknown> & {
+    toolName?: string;
+    toolCallId?: string;
+    args?: unknown; // The actual tool arguments are nested here
+    // Other inputData fields spread here
+    [key: string]: unknown;
+  };
   runId: string;
-  toolCallId: string;
 }
 
 interface ToolExecutionEndPayload {
@@ -377,7 +388,8 @@ export type NetworkChunkType =
   | (BaseChunkType & { type: `agent-execution-event-${string}`; payload: unknown })
   | (BaseChunkType & { type: `workflow-execution-event-${string}`; payload: unknown });
 
-export type ChunkType<OUTPUT extends OutputSchema = undefined> =
+// Strongly typed chunk type (currently only OUTPUT is strongly typed, tools use dynamic types)
+export type TypedChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'response-metadata'; payload: ResponseMetadataPayload })
   | (BaseChunkType & { type: 'text-start'; payload: TextStartPayload })
   | (BaseChunkType & { type: 'text-delta'; payload: TextDeltaPayload })
@@ -389,8 +401,8 @@ export type ChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'redacted-reasoning'; payload: RedactedReasoningPayload })
   | (BaseChunkType & { type: 'source'; payload: SourcePayload })
   | (BaseChunkType & { type: 'file'; payload: FilePayload })
-  | (BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload })
-  | (BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload })
+  | (BaseChunkType & { type: 'tool-call'; payload: DynamicToolCallPayload })
+  | (BaseChunkType & { type: 'tool-result'; payload: DynamicToolResultPayload })
   | (BaseChunkType & { type: 'tool-call-input-streaming-start'; payload: ToolCallInputStreamingStartPayload })
   | (BaseChunkType & { type: 'tool-call-delta'; payload: ToolCallDeltaPayload })
   | (BaseChunkType & { type: 'tool-call-input-streaming-end'; payload: ToolCallInputStreamingEndPayload })
@@ -406,13 +418,16 @@ export type ChunkType<OUTPUT extends OutputSchema = undefined> =
       type: 'object';
       object: PartialSchemaOutput<OUTPUT>;
     })
-  | (BaseChunkType & { type: 'tool-output'; payload: ToolOutputPayload })
+  | (BaseChunkType & { type: 'tool-output'; payload: DynamicToolOutputPayload })
   | (BaseChunkType & { type: 'step-output'; payload: StepOutputPayload })
   | (BaseChunkType & { type: 'workflow-step-output'; payload: StepOutputPayload })
   | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
   | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload })
   | (BaseChunkType & WorkflowStreamEvent)
   | NetworkChunkType;
+
+// Default ChunkType for backward compatibility using dynamic (any) tool types
+export type ChunkType<OUTPUT extends OutputSchema = undefined> = TypedChunkType<OUTPUT>;
 
 export interface LanguageModelV2StreamResult {
   stream: ReadableStream<LanguageModelV2StreamPart>;
