@@ -46,37 +46,50 @@ const getTraceStep = createStep({
       return;
     }
 
+    let scorer: MastraScorer | undefined;
     try {
-      const scorer = mastra.getScorerByName(inputData.scorerName);
-      pMap(
-        inputData.targets,
-        async target => {
-          try {
-            await runScorerOnTarget({ storage, scorer, target, tracingContext });
-          } catch (error) {
-            const mastraError = new MastraError(
-              {
-                id: 'MASTRA_SCORER_FAILED_TO_RUN_SCORER_ON_TRACE',
-                domain: ErrorDomain.SCORER,
-                category: ErrorCategory.SYSTEM,
-                text: `Failed to run scorer ${scorer.name}`,
-                details: {
-                  scorerName: scorer.name,
-                  spanId: target.spanId || '',
-                  traceId: target.traceId,
-                },
-              },
-              error,
-            );
-            logger?.error(mastraError.toString());
-            logger?.trackException(mastraError);
-          }
-        },
-        { concurrency: 3 },
-      );
+      scorer = mastra.getScorerByName(inputData.scorerName);
     } catch (error) {
-      logger?.error(`Failed to run trace scoring: ${error}`);
+      const mastraError = new MastraError({
+        id: 'MASTRA_SCORER_NOT_FOUND_FOR_TRACE_SCORING',
+        domain: ErrorDomain.SCORER,
+        category: ErrorCategory.SYSTEM,
+        text: `Scorer not found for trace scoring`,
+        details: {
+          scorerName: inputData.scorerName,
+        },
+      });
+      logger?.error(mastraError.toString());
+      logger?.trackException(mastraError);
+      return;
     }
+
+    pMap(
+      inputData.targets,
+      async target => {
+        try {
+          await runScorerOnTarget({ storage, scorer, target, tracingContext });
+        } catch (error) {
+          const mastraError = new MastraError(
+            {
+              id: 'MASTRA_SCORER_FAILED_TO_RUN_SCORER_ON_TRACE',
+              domain: ErrorDomain.SCORER,
+              category: ErrorCategory.SYSTEM,
+              text: `Failed to run scorer ${scorer.name}`,
+              details: {
+                scorerName: scorer.name,
+                spanId: target.spanId || '',
+                traceId: target.traceId,
+              },
+            },
+            error,
+          );
+          logger?.error(mastraError.toString());
+          logger?.trackException(mastraError);
+        }
+      },
+      { concurrency: 3 },
+    );
   },
 });
 
