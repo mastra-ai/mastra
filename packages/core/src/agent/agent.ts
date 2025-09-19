@@ -11,7 +11,6 @@ import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
-import type { SystemMessage } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
 import type {
   GenerateObjectWithMessagesArgs,
@@ -554,10 +553,10 @@ export class Agent<
   }
 
   /**
-   * Helper function to convert SystemMessage to string for backward compatibility
+   * Helper function to convert agent instructions to string for backward compatibility
    * Used for legacy methods that expect string instructions (e.g., voice, telemetry)
    */
-  #convertInstructionsToString(instructions: SystemMessage): string {
+  #convertInstructionsToString(instructions: AgentInstructions): string {
     if (typeof instructions === 'string') {
       return instructions;
     }
@@ -1922,7 +1921,7 @@ export class Agent<
     tracingContext,
     tracingOptions,
   }: {
-    instructions: SystemMessage;
+    instructions: AgentInstructions;
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
     resourceId?: string;
@@ -2398,7 +2397,7 @@ export class Agent<
           messageList,
           runId,
           outputText,
-          instructions: this.#convertInstructionsToString(instructions),
+          instructions,
           runtimeContext,
           structuredOutput,
           overrideScorers,
@@ -2450,7 +2449,7 @@ export class Agent<
     messageList: MessageList;
     runId: string;
     outputText: string;
-    instructions: SystemMessage;
+    instructions: AgentInstructions;
     runtimeContext: RuntimeContext;
     structuredOutput?: boolean;
     overrideScorers?:
@@ -2761,7 +2760,7 @@ export class Agent<
 
     const { before, after } = this.__primitive({
       messages,
-      instructions: this.#convertInstructionsToString(instructions),
+      instructions,
       context,
       thread: threadFromArgs,
       memoryConfig,
@@ -3077,7 +3076,7 @@ export class Agent<
       agentAISpan: agentAISpan!,
       methodType,
       format: format as FORMAT,
-      instructions: this.#convertInstructionsToString(instructions),
+      instructions,
       memoryConfig,
       memory,
       saveQueueManager,

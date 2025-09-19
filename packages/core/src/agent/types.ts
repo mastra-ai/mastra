@@ -5,7 +5,6 @@ import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy 
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
-  CoreSystemMessage,
   DefaultLLMStreamOptions,
   DefaultLLMStreamObjectOptions,
   DefaultLLMTextObjectOptions,
