@@ -3,6 +3,7 @@ const meta = {
   clerk: "Clerk",
   supabase: "Supabase",
   firebase: "Firebase",
+  workos: "WorkOS",
 };
 
 export default meta;
