@@ -238,4 +238,157 @@ describe('Memory with PostgresStore Integration', () => {
       expect(result2.messages, 'perPage larger than total should return all 3 messages').toHaveLength(3);
     });
   });
+
+  describe('PostgreSQL Vector Index Configuration', () => {
+    it('should support HNSW index configuration', async () => {
+      const hnswMemory = new Memory({
+        storage: new PostgresStore(config),
+        vector: new PgVector({ connectionString }),
+        embedder: fastembed,
+        options: {
+          lastMessages: 5,
+          semanticRecall: {
+            topK: 3,
+            messageRange: 2,
+            indexConfig: {
+              type: 'hnsw',
+              metric: 'inner',
+              hnsw: {
+                m: 16,
+                efConstruction: 64,
+              },
+            },
+          },
+        },
+      });
+
+      const threadId = randomUUID();
+      const resourceId = randomUUID();
+
+      // Save a message to trigger index creation
+      await hnswMemory.saveMessages({
+        messages: [
+          {
+            id: randomUUID(),
+            content: 'Test message for HNSW index',
+            role: 'user',
+            createdAt: new Date(),
+            threadId,
+            resourceId,
+            type: 'text',
+          },
+        ],
+      });
+
+      // Query to verify the index works
+      const result = await hnswMemory.query({
+        threadId,
+        resourceId,
+        selectBy: {
+          vectorSearchString: 'HNSW test',
+        },
+      });
+
+      expect(result.messages).toBeDefined();
+    });
+
+    it('should support IVFFlat index configuration with custom lists', async () => {
+      const ivfflatMemory = new Memory({
+        storage: new PostgresStore(config),
+        vector: new PgVector({ connectionString }),
+        embedder: fastembed,
+        options: {
+          lastMessages: 5,
+          semanticRecall: {
+            topK: 2,
+            messageRange: 1,
+            indexConfig: {
+              type: 'ivfflat',
+              metric: 'cosine',
+              ivf: {
+                lists: 500,
+              },
+            },
+          },
+        },
+      });
+
+      const threadId = randomUUID();
+      const resourceId = randomUUID();
+
+      // Save a message to trigger index creation
+      await ivfflatMemory.saveMessages({
+        messages: [
+          {
+            id: randomUUID(),
+            content: 'Test message for IVFFlat index',
+            role: 'user',
+            createdAt: new Date(),
+            threadId,
+            resourceId,
+            type: 'text',
+          },
+        ],
+      });
+
+      // Query to verify the index works
+      const result = await ivfflatMemory.query({
+        threadId,
+        resourceId,
+        selectBy: {
+          vectorSearchString: 'IVFFlat test',
+        },
+      });
+
+      expect(result.messages).toBeDefined();
+    });
+
+    it('should support flat (no index) configuration', async () => {
+      const flatMemory = new Memory({
+        storage: new PostgresStore(config),
+        vector: new PgVector({ connectionString }),
+        embedder: fastembed,
+        options: {
+          lastMessages: 5,
+          semanticRecall: {
+            topK: 2,
+            messageRange: 1,
+            indexConfig: {
+              type: 'flat',
+              metric: 'euclidean',
+            },
+          },
+        },
+      });
+
+      const threadId = randomUUID();
+      const resourceId = randomUUID();
+
+      // Save a message to trigger index creation
+      await flatMemory.saveMessages({
+        messages: [
+          {
+            id: randomUUID(),
+            content: 'Test message for flat scan',
+            role: 'user',
+            createdAt: new Date(),
+            threadId,
+            resourceId,
+            type: 'text',
+          },
+        ],
+      });
+
+      // Query to verify the index works
+      const result = await flatMemory.query({
+        threadId,
+        resourceId,
+        selectBy: {
+          vectorSearchString: 'flat scan test',
+        },
+      });
+
+      expect(result.messages).toBeDefined();
+    });
+  });
 });

@@ -531,15 +531,18 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         dimension = existingIndexInfo.dimension;
 
         // Check if the existing index matches what we want to create
+        const desiredType = indexConfig.type || 'ivfflat';
         const configMatches =
           existingIndexInfo.metric === metric &&
-          existingIndexInfo.type === (indexConfig.type || 'ivfflat') &&
-          (indexConfig.type === 'hnsw'
+          existingIndexInfo.type === desiredType &&
+          (desiredType === 'hnsw'
             ? existingIndexInfo.config.m === (indexConfig.hnsw?.m ?? 8) &&
               existingIndexInfo.config.efConstruction === (indexConfig.hnsw?.efConstruction ?? 32)
-            : indexConfig.type === 'flat'
-              ? true // flat has no additional config
-              : existingIndexInfo.config.lists === (indexConfig.ivf?.lists || existingIndexInfo.config.lists));
+            : desiredType === 'flat'
+              ? existingIndexInfo.type === 'flat' // For flat, just check type matches
+              : desiredType === 'ivfflat' && indexConfig.ivf?.lists
+                ? existingIndexInfo.config.lists === indexConfig.ivf.lists
+                : true); // If ivfflat without specified lists, don't force recreation
 
         if (configMatches) {
           this.logger?.debug(`Index ${vectorIndexName} already exists with same configuration, skipping recreation`);
