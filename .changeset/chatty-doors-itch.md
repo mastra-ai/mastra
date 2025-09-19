@@ -1,6 +1,6 @@
 ---
-"@mastra/core": minor
-"@mastra/server": patch
+'@mastra/core': minor
+'@mastra/server': patch
 ---
 
 Allow agent instructions to accept SystemMessage types
