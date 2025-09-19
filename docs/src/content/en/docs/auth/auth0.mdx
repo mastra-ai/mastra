@@ -61,8 +61,8 @@ export const mastra = new Mastra({
   // ..
   server: {
     experimental_auth: new MastraAuthAuth0({
-      domain: 'your-tenant.auth0.com',
-      audience: 'your-api-identifier'
+      domain: process.env.AUTH0_DOMAIN,
+      audience: process.env.AUTH0_AUDIENCE
     }),
   },
 });
