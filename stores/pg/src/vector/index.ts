@@ -560,7 +560,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         // Configuration changed, need to rebuild
         this.logger?.info(`Index ${vectorIndexName} configuration changed, rebuilding index`);
         await client.query(`DROP INDEX IF EXISTS ${vectorIndexName}`);
-      } catch (error) {
+      } catch {
         this.logger?.debug(`Index ${indexName} doesn't exist yet, will create it`);
       }
 

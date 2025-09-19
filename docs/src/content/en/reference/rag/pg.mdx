@@ -500,14 +500,6 @@ try {
 
 ## Index Configuration Guide
 
-### Choosing the Right Index Type
-
-| Index Type | Best For | Build Time | Query Speed | Memory | Accuracy |
-|------------|----------|------------|-------------|---------|----------|
-| **Flat** | <1K vectors, 100% accuracy needed | None | Slow (linear) | Minimal | 100% |
-| **IVFFlat** | 10K-1M vectors, balanced performance | Minutes | Fast | Moderate | 95-99% |
-| **HNSW** | 100K+ vectors, fastest queries | Hours | Very Fast | High (2-3x) | ~99% |
-
 ### Performance Optimization
 
 #### IVFFlat Tuning
@@ -525,11 +517,6 @@ try {
   - 64-128: Slower build, better quality
   - 128-256: Slowest build, best quality
 
-#### Distance Metric Selection
-- **cosine**: Best for text embeddings where direction matters more than magnitude
-- **inner**: Optimal for normalized embeddings (OpenAI, Cohere)
-- **euclidean**: For unnormalized embeddings where magnitude matters
-
 ### Index Recreation Behavior
 
 The system automatically detects configuration changes and only rebuilds indexes when necessary:
@@ -543,7 +530,6 @@ The system automatically detects configuration changes and only rebuilds indexes
 - **Use HNSW** when you need the fastest possible queries and can afford memory
 - **Monitor index performance** using `describeIndex()` to track usage
 - **Set appropriate lists/m values** based on your dataset size
-- **Choose the right metric** for your embedding model (inner for OpenAI)
 - Rebuild indexes periodically to maintain efficiency, especially after significant data changes
 
 ## Direct Pool Access
