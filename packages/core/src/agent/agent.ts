@@ -174,7 +174,7 @@ export class Agent<
   #workflows?: DynamicArgument<Record<string, Workflow>>;
   #defaultGenerateOptions: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptions: DynamicArgument<AgentStreamOptions>;
-  #defaultVNextStreamOptions: DynamicArgument<AgentExecutionOptions<any, any>>;
+  #defaultVNextStreamOptions: DynamicArgument<AgentExecutionOptions<any>>;
   #tools: DynamicArgument<TTools>;
   evals: TMetrics;
   #scorers: DynamicArgument<MastraScorers>;
@@ -627,19 +627,16 @@ export class Agent<
     });
   }
 
-  public getDefaultVNextStreamOptions<
-    Output extends ZodSchema | undefined,
-    StructuredOutput extends ZodSchema | undefined,
-  >({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
-    | AgentExecutionOptions<Output, StructuredOutput>
-    | Promise<AgentExecutionOptions<Output, StructuredOutput>> {
+  public getDefaultVNextStreamOptions<OUTPUT extends OutputSchema = undefined>({
+    runtimeContext = new RuntimeContext(),
+  }: { runtimeContext?: RuntimeContext } = {}): AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>> {
     if (typeof this.#defaultVNextStreamOptions !== 'function') {
-      return this.#defaultVNextStreamOptions as AgentExecutionOptions<Output, StructuredOutput>;
+      return this.#defaultVNextStreamOptions as AgentExecutionOptions<OUTPUT>;
     }
 
     const result = this.#defaultVNextStreamOptions({ runtimeContext, mastra: this.#mastra }) as
-      | AgentExecutionOptions<Output, StructuredOutput>
-      | Promise<AgentExecutionOptions<Output, StructuredOutput>>;
+      | AgentExecutionOptions<OUTPUT>
+      | Promise<AgentExecutionOptions<OUTPUT>>;
 
     return resolveMaybePromise(result, options => {
       if (!options) {
@@ -2971,10 +2968,11 @@ export class Agent<
     return finalOnFinish;
   }
 
-  async #execute<
-    OUTPUT extends OutputSchema | undefined = undefined,
-    FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-  >({ methodType, format = 'mastra', ...options }: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
+  async #execute<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' | undefined = undefined>({
+    methodType,
+    format = 'mastra',
+    ...options
+  }: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
     const runtimeContext = options.runtimeContext || new RuntimeContext();
     const threadFromArgs = resolveThreadIdFromArgs({ threadId: options.threadId, memory: options.memory });
 
@@ -3298,13 +3296,9 @@ export class Agent<
     });
   }
 
-  async generateVNext<
-    OUTPUT extends OutputSchema | undefined = undefined,
-    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-    FORMAT extends 'aisdk' | 'mastra' = 'mastra',
-  >(
+  async generateVNext<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' = 'mastra'>(
     messages: MessageListInput,
-    options?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
+    options?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<
     FORMAT extends 'aisdk'
       ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
@@ -3331,21 +3325,37 @@ export class Agent<
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
   }
 
-  async streamVNext<
-    OUTPUT extends OutputSchema | undefined = undefined,
-    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
-  >(
+  async streamVNext<OUTPUT extends OutputSchema = undefined, FORMAT extends 'mastra' | 'aisdk' | undefined = undefined>(
     messages: MessageListInput,
-    streamOptions?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
+    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
     const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
       runtimeContext: streamOptions?.runtimeContext,
     });
 
+    if (
+      (defaultStreamOptions.structuredOutput && defaultStreamOptions.output) ||
+      (streamOptions?.structuredOutput && streamOptions.output)
+    ) {
+      throw new MastraError({
+        id: 'AGENT_STREAM_VNEXT_STRUCTURED_OUTPUT_AND_OUTPUT_PROVIDED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'structuredOutput and output cannot be provided at the same time',
+      });
+    }
+
+    // If streamOptions has either output or structuredOutput, remove both from defaultStreamOptions
+    // to ensure streamOptions takes precedence and avoid union type conflicts
+    let adjustedDefaultStreamOptions = { ...defaultStreamOptions };
+    if (streamOptions?.structuredOutput || streamOptions?.output) {
+      const { output, structuredOutput, ...restDefaultOptions } = adjustedDefaultStreamOptions;
+      adjustedDefaultStreamOptions = restDefaultOptions as typeof defaultStreamOptions;
+    }
+
     let mergedStreamOptions = {
-      ...defaultStreamOptions,
-      ...streamOptions,
+      ...adjustedDefaultStreamOptions,
+      ...(streamOptions ?? {}),
       onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
 
@@ -3358,10 +3368,11 @@ export class Agent<
         modelOverride = mergedStreamOptions.structuredOutput.model;
       }
 
+      // assign structuredOutput.schema to output when maxSteps is explicitly set to 1
+      const { structuredOutput, ...optionsWithoutStructuredOutput } = mergedStreamOptions;
       mergedStreamOptions = {
-        ...mergedStreamOptions,
-        output: mergedStreamOptions.structuredOutput.schema as OUTPUT,
-        structuredOutput: undefined, // Remove structuredOutput to avoid confusion downstream
+        ...optionsWithoutStructuredOutput,
+        output: structuredOutput.schema as OUTPUT,
       };
     }
 
@@ -3389,12 +3400,14 @@ export class Agent<
       });
     }
 
-    const result = await this.#execute({
+    const executeOptions = {
       ...mergedStreamOptions,
       messages,
       methodType: 'streamVNext',
       model: modelOverride,
-    });
+    } as InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+
+    const result = await this.#execute(executeOptions);
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {

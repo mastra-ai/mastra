@@ -9,23 +9,16 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Txt } from '@/ds/components/Txt/Txt';
 
 export interface ChatThreadsProps {
-  computeNewThreadLink: () => string;
-  computeThreadLink: (threadId: string) => string;
   threads: StorageThreadType[];
   isLoading: boolean;
   threadId: string;
   onDelete: (threadId: string) => void;
+  resourceId: string;
+  resourceType: 'agent' | 'network';
 }
 
-export const ChatThreads = ({
-  computeNewThreadLink,
-  computeThreadLink,
-  threads,
-  isLoading,
-  threadId,
-  onDelete,
-}: ChatThreadsProps) => {
-  const { Link } = useLinkComponent();
+export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId, resourceType }: ChatThreadsProps) => {
+  const { Link, paths } = useLinkComponent();
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   if (isLoading) {
@@ -34,12 +27,15 @@ export const ChatThreads = ({
 
   const reverseThreads = [...threads].reverse();
 
+  const newThreadLink =
+    resourceType === 'agent' ? paths.agentNewThreadLink(resourceId) : paths.networkNewThreadLink(resourceId);
+
   return (
     <div className="overflow-y-auto h-full w-full">
       <Threads>
         <ThreadList>
           <ThreadItem>
-            <ThreadLink as={Link} to={computeNewThreadLink()}>
+            <ThreadLink as={Link} to={newThreadLink}>
               <span className="text-accent1 flex items-center gap-4">
                 <Icon className="bg-surface4 rounded-lg" size="lg">
                   <Plus />
@@ -58,9 +54,14 @@ export const ChatThreads = ({
           {reverseThreads.map(thread => {
             const isActive = thread.id === threadId;
 
+            const threadLink =
+              resourceType === 'agent'
+                ? paths.agentThreadLink(resourceId, thread.id)
+                : paths.networkThreadLink(resourceId, thread.id);
+
             return (
               <ThreadItem isActive={isActive} key={thread.id}>
-                <ThreadLink as={Link} to={computeThreadLink(thread.id)}>
+                <ThreadLink as={Link} to={threadLink}>
                   <ThreadTitle title={thread.title} />
                   <span>{formatDay(thread.createdAt)}</span>
                 </ThreadLink>

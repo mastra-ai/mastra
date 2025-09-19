@@ -22,7 +22,7 @@
     "CHANGELOG.md"
   ],
   "peerDependencies": {
-    "@mastra/core": ">=0.15.3-0 <0.18.0-0",
+    "@mastra/core": ">=0.17.2-0 <0.18.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
@@ -34,7 +34,7 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "scripts": {
     "lint": "eslint .",

@@ -1,18 +1,17 @@
 import { randomUUID } from 'crypto';
-import type { Tool } from 'ai';
 import type { AISpan, AISpanType } from '../../../ai-tracing';
 import type { SystemMessage } from '../../../llm';
 import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
-import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
+import type { MemoryConfig } from '../../../memory/types';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { RuntimeContext } from '../../../runtime-context';
 import { ChunkFrom } from '../../../stream';
 import type { OutputSchema } from '../../../stream/base/schema';
+import type { ChunkType } from '../../../stream/types';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
-import type { MessageList } from '../../message-list';
 import type { SaveQueueManager } from '../../save-queue';
-import type { AgentCapabilities } from './types';
+import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
 
 interface MapResultsStepOptions<
   OUTPUT extends OutputSchema | undefined = undefined,
@@ -45,15 +44,18 @@ export function createMapResultsStep<
   agentAISpan,
   instructions,
 }: MapResultsStepOptions<OUTPUT, FORMAT>) {
-  return async ({ inputData, bail }: any) => {
-    const toolsData = inputData['prepare-tools-step'] as { convertedTools: Record<string, Tool> };
-    const memoryData = inputData['prepare-memory-step'] as {
-      threadExists: boolean;
-      thread?: StorageThreadType;
-      messageList?: MessageList;
-      tripwire?: boolean;
-      tripwireReason?: string;
+  return async ({
+    inputData,
+    bail,
+  }: {
+    inputData: {
+      'prepare-tools-step': PrepareToolsStepOutput;
+      'prepare-memory-step': PrepareMemoryStepOutput;
     };
+    bail: <T>(value: T) => T;
+  }) => {
+    const toolsData = inputData['prepare-tools-step'];
+    const memoryData = inputData['prepare-memory-step'];
 
     const result = {
       ...options,
@@ -104,21 +106,21 @@ export function createMapResultsStep<
         textStream: (async function* () {
           // Empty async generator - yields nothing
         })(),
-        fullStream: new globalThis.ReadableStream({
-          start(controller: any) {
+        fullStream: new globalThis.ReadableStream<ChunkType>({
+          start(controller) {
             controller.enqueue({
               type: 'tripwire',
               runId: result.runId,
               from: ChunkFrom.AGENT,
               payload: {
-                tripwireReason: result.tripwireReason,
+                tripwireReason: result.tripwireReason || '',
               },
             });
             controller.close();
           },
         }),
         objectStream: new globalThis.ReadableStream({
-          start(controller: any) {
+          start(controller) {
             controller.close();
           },
         }),
@@ -195,7 +197,7 @@ export function createMapResultsStep<
           try {
             const outputText = messageList.get.all
               .core()
-              .map((m: any) => m.content)
+              .map(m => m.content)
               .join('\n');
 
             await capabilities.executeOnFinish({

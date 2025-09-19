@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "6.2.1-alpha.0",
+  "version": "6.2.1",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -102,15 +102,14 @@
     "shiki": "^1.29.2",
     "sonner": "^2.0.5",
     "superjson": "^2.2.2",
-    "swr": "^2.3.6",
     "tailwindcss-animate": "^1.0.7",
     "unified": "^11.0.5",
     "use-debounce": "^10.0.6",
-    "zod": "^4.1.5",
+    "zod": "^4.1.8",
     "zustand": "^5.0.8"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.17.0-0 <0.18.0-0",
+    "@mastra/core": ">=0.17.2-0 <0.18.0-0",
     "lucide-react": "^0.474.0",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
@@ -119,7 +118,7 @@
   "devDependencies": {
     "@mastra/core": "workspace:*",
     "@storybook/addon-docs": "^9.1.5",
-    "@storybook/react-vite": "^9.1.5",
+    "@storybook/react-vite": "^9.1.6",
     "@types/node": "^20.19.0",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
