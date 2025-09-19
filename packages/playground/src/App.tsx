@@ -27,7 +27,12 @@ import MCPServerToolExecutor from './pages/mcps/tool';
 
 import { McpServerPage } from './pages/mcps/[serverId]';
 
-import { LinkComponentProvider, MastraClientProvider, PlaygroundQueryClient } from '@mastra/playground-ui';
+import {
+  LinkComponentProvider,
+  LinkComponentProviderProps,
+  MastraClientProvider,
+  PlaygroundQueryClient,
+} from '@mastra/playground-ui';
 import VNextNetwork from './pages/networks/network/v-next';
 import { NavigateTo } from './lib/react-router';
 import { Link } from './lib/framework';
@@ -37,6 +42,11 @@ import Observability from './pages/observability';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
 
+const paths: LinkComponentProviderProps['paths'] = {
+  agentLink: (agentId: string) => `/agents/${agentId}`,
+  agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
+};
+
 const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
   const frameworkNavigate = (path: string) => {
@@ -44,7 +54,7 @@ const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <LinkComponentProvider Link={Link} navigate={frameworkNavigate}>
+    <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
       {children}
     </LinkComponentProvider>
   );

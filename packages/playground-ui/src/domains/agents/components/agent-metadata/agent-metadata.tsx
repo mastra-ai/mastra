@@ -3,7 +3,7 @@ import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
 import { providerMapToIcon } from '../provider-map-icon';
 import { useLinkComponent } from '@/lib/framework';
-import { GetAgentResponse, GetScorerResponse, GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
+import { GetAgentResponse, GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
 import { AgentMetadataSection } from './agent-metadata-section';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
 import { AgentMetadataWrapper } from './agent-metadata-wrapper';
@@ -19,7 +19,6 @@ export interface AgentMetadataProps {
   agent: GetAgentResponse;
   promptSlot: ReactNode;
   hasMemoryEnabled: boolean;
-  computeAgentLink: (agent: { id: string; name: string }) => string;
   computeToolLink: (tool: GetToolResponse) => string;
   computeWorkflowLink: (workflowId: string, workflow: GetWorkflowResponse) => string;
   computeScorerLink: (scorerId: string) => string;
@@ -29,11 +28,10 @@ export interface AgentMetadataProps {
 
 export interface AgentMetadataNetworkListProps {
   agents: { id: string; name: string }[];
-  computeAgentLink: (agent: { id: string; name: string }) => string;
 }
 
-export const AgentMetadataNetworkList = ({ agents, computeAgentLink }: AgentMetadataNetworkListProps) => {
-  const { Link } = useLinkComponent();
+export const AgentMetadataNetworkList = ({ agents }: AgentMetadataNetworkListProps) => {
+  const { Link, paths } = useLinkComponent();
 
   if (agents.length === 0) {
     return <AgentMetadataListEmpty>No tools</AgentMetadataListEmpty>;
@@ -43,7 +41,7 @@ export const AgentMetadataNetworkList = ({ agents, computeAgentLink }: AgentMeta
     <AgentMetadataList>
       {agents.map(agent => (
         <AgentMetadataListItem key={agent.id}>
-          <Link href={computeAgentLink(agent)}>
+          <Link href={paths.agentLink(agent.id)}>
             <Badge variant="success" icon={<AgentIcon />}>
               {agent.name}
             </Badge>
@@ -58,7 +56,6 @@ export const AgentMetadata = ({
   agent,
   promptSlot,
   hasMemoryEnabled,
-  computeAgentLink,
   computeToolLink,
   computeWorkflowLink,
   computeScorerLink,
@@ -127,7 +124,7 @@ export const AgentMetadata = ({
             title: 'Agents documentation',
           }}
         >
-          <AgentMetadataNetworkList agents={networkAgents} computeAgentLink={computeAgentLink} />
+          <AgentMetadataNetworkList agents={networkAgents} />
         </AgentMetadataSection>
       )}
 

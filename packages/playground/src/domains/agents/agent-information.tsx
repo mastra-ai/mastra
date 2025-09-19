@@ -75,7 +75,6 @@ export function AgentInformation({ agentId }: { agentId: string }) {
                 updateModel={updateModel}
                 modelProviders={modelProviders || []}
                 hasMemoryEnabled={Boolean(memory?.result)}
-                computeAgentLink={() => `/agents/${agentId}`}
                 computeToolLink={tool => `/tools/${agentId}/${tool.id}`}
                 computeWorkflowLink={workflowId => `/workflows/${workflowId}/graph`}
                 promptSlot={<AgentPromptEnhancer agentId={agentId} />}
