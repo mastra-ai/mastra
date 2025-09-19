@@ -563,11 +563,20 @@ export class Agent<
 
     if (Array.isArray(instructions)) {
       // Handle array of messages (strings or objects)
-      return instructions.map(msg => (typeof msg === 'string' ? msg : msg.content)).join('\n\n');
+      return instructions
+        .map(msg => {
+          if (typeof msg === 'string') {
+            return msg;
+          }
+          // Safely extract content from message objects
+          return typeof msg.content === 'string' ? msg.content : '';
+        })
+        .filter(content => content) // Remove empty strings
+        .join('\n\n');
     }
 
-    // Handle single message object
-    return instructions.content;
+    // Handle single message object - safely extract content
+    return typeof instructions.content === 'string' ? instructions.content : '';
   }
 
   public getDescription(): string {
