@@ -18,6 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       exited_prerelease: ${{ steps.exit-prerelease-mode.outputs.executed }}
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - uses: actions/create-github-app-token@v1
@@ -107,6 +110,8 @@ jobs:
       - name: Publish packages
         if: ${{ !inputs.dry_run }}
         run: pnpm publish -r --access public
+        env:
+          NPM_CONFIG_PROVENANCE: true
 
       - name: Updated alpha versions
         if: ${{ !inputs.dry_run }}
