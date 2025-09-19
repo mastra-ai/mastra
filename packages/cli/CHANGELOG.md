@@ -1,5 +1,18 @@
 # mastra
 
+## 0.13.2-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#8007](https://github.com/mastra-ai/mastra/pull/8007))
+  - Updated dependency [`fs-extra@^11.3.2` ↗︎](https://www.npmjs.com/package/fs-extra/v/11.3.2) (from `^11.3.1`, in `dependencies`)
+
+- show the tool-output stream in the playground for streamVNext ([#7983](https://github.com/mastra-ai/mastra/pull/7983))
+
+- Updated dependencies [[`288745a`](https://github.com/mastra-ai/mastra/commit/288745a19aa9557db3ab3c877d667ff59f14d79c), [`c45298a`](https://github.com/mastra-ai/mastra/commit/c45298a0a0791db35cf79f1199d77004da0704cb)]:
+  - @mastra/deployer@0.17.2-alpha.1
+  - @mastra/core@0.17.2-alpha.1
+
 ## 0.13.2-alpha.0
 
 ### Patch Changes
