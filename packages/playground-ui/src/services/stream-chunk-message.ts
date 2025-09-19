@@ -70,6 +70,46 @@ export const handleStreamChunk = async ({
           setMessages,
           entityName: chunk.payload.toolName || 'unknown',
         });
+      } else {
+        setMessages(currentConversation => {
+          // Get the last message (should be the assistant's message)
+          const lastMessage = currentConversation[currentConversation.length - 1];
+
+          // Only process if the last message is from the assistant and has content array
+          if (lastMessage && lastMessage.role === 'assistant' && Array.isArray(lastMessage.content)) {
+            // Find the tool call content part that this result belongs to
+            const updatedContent = lastMessage.content.map(part => {
+              if (
+                typeof part === 'object' &&
+                part.type === 'tool-call' &&
+                part.toolCallId === chunk.payload.toolCallId
+              ) {
+                const existingToolOutput = part.args?.__mastraMetadata?.toolOutput || [];
+
+                return {
+                  ...part,
+                  args: {
+                    ...part.args,
+                    __mastraMetadata: {
+                      ...part.args?.__mastraMetadata,
+                      toolOutput: [...existingToolOutput, chunk?.payload?.output],
+                    },
+                  },
+                };
+              }
+              return part;
+            });
+
+            // Create a new message with the updated content
+            const updatedMessage: ThreadMessageLike = {
+              ...lastMessage,
+              content: updatedContent,
+            };
+            // Replace the last message with the updated one
+            return [...currentConversation.slice(0, -1), updatedMessage];
+          }
+          return currentConversation;
+        });
       }
 
       break;

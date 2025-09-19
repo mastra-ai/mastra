@@ -3081,11 +3081,10 @@ export class Agent<
       steps: result.steps.map(s => {
         return {
           stepType: s.stepType,
-          text: result.text,
-          object: result.object,
-          toolResults: result.toolResults,
-          toolCalls: result.toolCalls,
-          usage: result.usage,
+          text: s.text,
+          toolResults: s.toolResults,
+          toolCalls: s.toolCalls,
+          usage: s.usage,
         };
       }),
     };

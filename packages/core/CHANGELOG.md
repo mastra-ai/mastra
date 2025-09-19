@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 0.17.2-alpha.0
+
+### Patch Changes
+
+- fix: result object type inference when using structuredOutput and unify output/structuredOutput types with single OUTPUT generic ([#7969](https://github.com/mastra-ai/mastra/pull/7969))
+
+- Fix selection of agent method based on model version ([#8001](https://github.com/mastra-ai/mastra/pull/8001))
+
+- Get rid off swr one for all ([#7931](https://github.com/mastra-ai/mastra/pull/7931))
+
 ## 0.17.1
 
 ### Patch Changes
