@@ -8,6 +8,7 @@ import { transformTraceToScorerInput, transformTraceToScorerOutput } from './tra
 import type { ScoreRowData, ScoringEntityType } from '../types';
 import { saveScorePayloadSchema } from '../types';
 import type { IMastraLogger } from '../../logger';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 
 const getTraceStep = createStep({
   id: '__process-trace-scoring',
@@ -22,56 +23,70 @@ const getTraceStep = createStep({
   }),
   outputSchema: z.any(),
   execute: async ({ inputData, tracingContext, mastra }) => {
-    const storage = mastra.getStorage();
-    if (!storage) {
-      throw new Error('Storage not found');
-    }
-
     const logger = mastra.getLogger();
     if (!logger) {
-      throw new Error('Logger not found');
+      console.warn(
+        '[ScoreBatchTracesWorkflow] Logger not initialized: no debug or error logs will be recorded for scoring traces.',
+      );
     }
 
-    const scorer = mastra.getScorerByName(inputData.scorerName);
-    await batchRunScorersOnTargets({ storage, logger, scorer, targets: inputData.targets, tracingContext });
+    const storage = mastra.getStorage();
+    if (!storage) {
+      const mastraError = new MastraError({
+        id: 'MASTRA_STORAGE_NOT_FOUND_FOR_TRACE_SCORING',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Storage not found for trace scoring',
+        details: {
+          scorerName: inputData.scorerName,
+        },
+      });
+      logger?.error(mastraError.toString());
+      logger?.trackException(mastraError);
+      return;
+    }
+
+    try {
+      const scorer = mastra.getScorerByName(inputData.scorerName);
+      pMap(
+        inputData.targets,
+        async target => {
+          try {
+            await runScorerOnTarget({ storage, scorer, target, tracingContext });
+          } catch (error) {
+            const mastraError = new MastraError(
+              {
+                id: 'MASTRA_SCORER_FAILED_TO_RUN_SCORER_ON_TRACE',
+                domain: ErrorDomain.SCORER,
+                category: ErrorCategory.SYSTEM,
+                text: `Failed to run scorer ${scorer.name}`,
+                details: {
+                  scorerName: scorer.name,
+                  spanId: target.spanId || '',
+                  traceId: target.traceId,
+                },
+              },
+              error,
+            );
+            logger?.error(mastraError.toString());
+            logger?.trackException(mastraError);
+          }
+        },
+        { concurrency: 3 },
+      );
+    } catch (error) {
+      logger?.error(`Failed to run trace scoring: ${error}`);
+    }
   },
 });
 
-async function batchRunScorersOnTargets({
+export async function runScorerOnTarget({
   storage,
-  logger,
-  scorer,
-  targets,
-  tracingContext,
-}: {
-  storage: MastraStorage;
-  logger: IMastraLogger;
-  scorer: MastraScorer;
-  targets: { traceId: string; spanId?: string }[];
-  tracingContext: TracingContext;
-}) {
-  pMap(
-    targets,
-    async target => {
-      try {
-        await runScorerOnTarget({ storage, logger, scorer, target, tracingContext });
-      } catch (error) {
-        logger?.error(`Failed to save score for trace ${target.traceId} and span ${target.spanId}: ${error}`);
-      }
-    },
-    { concurrency: 3 },
-  );
-}
-
-async function runScorerOnTarget({
-  storage,
-  logger,
   scorer,
   target,
   tracingContext,
 }: {
   storage: MastraStorage;
-  logger: IMastraLogger;
   scorer: MastraScorer;
   target: { traceId: string; spanId?: string };
   tracingContext: TracingContext;
@@ -80,8 +95,7 @@ async function runScorerOnTarget({
   const trace = await storage.getAITrace(target.traceId);
 
   if (!trace) {
-    logger?.warn(`Trace ${target.traceId} not found for scoring`);
-    return;
+    throw new Error(`Trace not found for scoring, traceId: ${target.traceId}`);
   }
 
   let span: AISpanRecord | undefined;
@@ -92,8 +106,9 @@ async function runScorerOnTarget({
   }
 
   if (!span) {
-    logger?.warn(`No span found for span ${target.spanId}`);
-    return;
+    throw new Error(
+      `Span not found for scoring, traceId: ${target.traceId}, spanId: ${target.spanId ?? 'Not provided'}`,
+    );
   }
 
   const scorerRun = buildScorerRun({
@@ -103,13 +118,7 @@ async function runScorerOnTarget({
     targetSpan: span,
   });
 
-  let result;
-  try {
-    result = await scorer.run(scorerRun);
-  } catch (error) {
-    throw new Error(`Failed to run scorer ${scorer.name} for span ${span.spanId}: ${error}`);
-  }
-
+  const result = await scorer.run(scorerRun);
   const traceId = `${target.traceId}${target.spanId ? `-${target.spanId}` : ''}`;
   const scorerResult = {
     ...result,

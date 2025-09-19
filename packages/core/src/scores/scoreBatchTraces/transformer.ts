@@ -2,96 +2,24 @@ import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../types';
 
 // Use the actual UIMessageWithMetadata type instead of our own
 import type { UIMessageWithMetadata } from '../../agent';
+import { AISpanType, type AISpan, type BaseAISpan } from '../../ai-tracing';
+import type { AISpanRecord, AITraceRecord } from '../../storage';
+import type { ToolInvocation } from 'ai';
 
-interface MessagePart {
-  type: 'text' | 'tool-invocation';
-  text?: string;
-  toolInvocation?: ToolInvocation;
-}
-
-interface ToolInvocation {
-  state: 'result';
-  toolCallId: string;
-  toolName: string;
-  args: Record<string, any>;
-  result: any;
-}
-
-// Span type definitions based on trace structure
-interface BaseSpan {
-  traceId: string;
-  spanId: string;
-  parentSpanId: string | null;
-  name: string;
-  spanType: 'agent_run' | 'llm_generation' | 'tool_call';
-  startedAt: string;
-  endedAt?: string;
-  input?: any;
-  output?: any;
-  attributes?: any;
-  metadata?: any;
-}
-
-interface AgentRunSpan extends BaseSpan {
-  spanType: 'agent_run';
-  input: Array<{ role: string; content: string }> | string;
-  output: { text: string; files: any[] };
-  attributes: {
-    agentId: string;
-    instructions: string;
-    availableTools?: string[];
-  };
-}
-
-interface LLMGenerationSpan extends BaseSpan {
-  spanType: 'llm_generation';
-  input: {
-    messages: Array<{
-      role: string;
-      content: string | Array<{ type: string; text: string }>;
-    }>;
-  };
-  output: {
-    text: string;
-    reasoning: any[];
-    files: any[];
-    sources: any[];
-    warnings: any[];
-  };
-}
-
-interface ToolCallSpan extends BaseSpan {
-  spanType: 'tool_call';
-  input: Record<string, any>;
-  output: Record<string, any>;
-  attributes: {
-    toolId: string;
-    toolDescription: string;
-    toolType: string;
-  };
-}
-
-type Span = AgentRunSpan | LLMGenerationSpan | ToolCallSpan;
-
-interface Trace {
-  traceId: string;
-  spans: Span[];
-}
-
-// Span tree structure for efficient lookups
+// // Span tree structure for efficient lookups
 interface SpanTree {
-  spanMap: Map<string, Span>;
-  childrenMap: Map<string, Span[]>;
-  rootSpans: Span[];
+  spanMap: Map<string, AISpanRecord>;
+  childrenMap: Map<string, AISpanRecord[]>;
+  rootSpans: AISpanRecord[];
 }
 
 /**
  * Build a hierarchical span tree with efficient lookup maps
  */
-function buildSpanTree(spans: Span[]): SpanTree {
-  const spanMap = new Map<string, Span>();
-  const childrenMap = new Map<string, Span[]>();
-  const rootSpans: Span[] = [];
+export function buildSpanTree(spans: AISpanRecord[]): SpanTree {
+  const spanMap = new Map<string, AISpanRecord>();
+  const childrenMap = new Map<string, AISpanRecord[]>();
+  const rootSpans: AISpanRecord[] = [];
 
   // First pass: build span map
   for (const span of spans) {
@@ -130,7 +58,11 @@ function generateSyntheticId(prefix: string, index: number): string {
 /**
  * Extract children spans of a specific type
  */
-function getChildrenOfType<T extends Span>(spanTree: SpanTree, parentSpanId: string, spanType: T['spanType']): T[] {
+function getChildrenOfType<T extends AISpanRecord>(
+  spanTree: SpanTree,
+  parentSpanId: string,
+  spanType: AISpanType,
+): T[] {
   const children = spanTree.childrenMap.get(parentSpanId) || [];
   return children.filter(span => span.spanType === spanType) as T[];
 }
@@ -155,7 +87,7 @@ function normalizeMessageContent(content: string | Array<{ type: string; text: s
 function convertToUIMessage(
   message: { role: string; content: string | Array<{ type: string; text: string }> },
   id: string,
-  createdAt: string,
+  createdAt: Date,
 ): UIMessageWithMetadata {
   const content = normalizeMessageContent(message.content);
 
@@ -177,7 +109,7 @@ function convertToUIMessage(
 /**
  * Extract input messages from agent run span
  */
-function extractInputMessages(agentSpan: AgentRunSpan): UIMessageWithMetadata[] {
+function extractInputMessages(agentSpan: AISpanRecord): UIMessageWithMetadata[] {
   const input = agentSpan.input;
 
   // Handle different input formats
@@ -213,10 +145,10 @@ function extractInputMessages(agentSpan: AgentRunSpan): UIMessageWithMetadata[] 
 /**
  * Extract system messages from LLM span
  */
-function extractSystemMessages(llmSpan: LLMGenerationSpan): Array<{ role: 'system'; content: string }> {
+function extractSystemMessages(llmSpan: AISpanRecord): Array<{ role: 'system'; content: string }> {
   return llmSpan.input.messages
-    .filter(msg => msg.role === 'system')
-    .map(msg => ({
+    .filter((msg: any) => msg.role === 'system')
+    .map((msg: any) => ({
       role: 'system' as const,
       content: normalizeMessageContent(msg.content),
     }));
@@ -226,12 +158,12 @@ function extractSystemMessages(llmSpan: LLMGenerationSpan): Array<{ role: 'syste
  * Extract conversation history (remembered messages) from LLM span
  * Excludes system messages and the current input message
  */
-function extractRememberedMessages(llmSpan: LLMGenerationSpan, currentInputContent: string): UIMessageWithMetadata[] {
+function extractRememberedMessages(llmSpan: AISpanRecord, currentInputContent: string): UIMessageWithMetadata[] {
   const messages = llmSpan.input.messages
-    .filter(msg => msg.role !== 'system')
-    .filter(msg => normalizeMessageContent(msg.content) !== currentInputContent);
+    .filter((msg: any) => msg.role !== 'system')
+    .filter((msg: any) => normalizeMessageContent(msg.content) !== currentInputContent);
 
-  return messages.map((msg, index) =>
+  return messages.map((msg: any, index: number) =>
     convertToUIMessage(msg, generateSyntheticId('memory', index + 1), llmSpan.startedAt),
   );
 }
@@ -239,13 +171,13 @@ function extractRememberedMessages(llmSpan: LLMGenerationSpan, currentInputConte
 /**
  * Reconstruct tool invocations from tool call spans
  */
-function reconstructToolInvocations(spanTree: SpanTree, parentSpanId: string): ToolInvocation[] {
-  const toolSpans = getChildrenOfType<ToolCallSpan>(spanTree, parentSpanId, 'tool_call');
+function reconstructToolInvocations(spanTree: SpanTree, parentSpanId: string) {
+  const toolSpans = getChildrenOfType<AISpanRecord>(spanTree, parentSpanId, AISpanType.TOOL_CALL);
 
   return toolSpans.map((toolSpan, index) => ({
     state: 'result' as const,
     toolCallId: generateSyntheticId('call', index + 1),
-    toolName: toolSpan.attributes.toolId,
+    toolName: toolSpan.attributes?.toolId,
     args: toolSpan.input || {},
     result: toolSpan.output || {},
   }));
@@ -254,8 +186,8 @@ function reconstructToolInvocations(spanTree: SpanTree, parentSpanId: string): T
 /**
  * Create message parts array including tool invocations and text
  */
-function createMessageParts(toolInvocations: ToolInvocation[], textContent: string): MessagePart[] {
-  const parts: MessagePart[] = [];
+function createMessageParts(toolInvocations: AISpanRecord[], textContent: string) {
+  const parts: { type: 'tool-invocation' | 'text'; toolInvocation?: AISpanRecord; text?: string }[] = [];
 
   // Add tool invocation parts first (they typically happen before text response)
   for (const toolInvocation of toolInvocations) {
@@ -279,7 +211,7 @@ function createMessageParts(toolInvocations: ToolInvocation[], textContent: stri
 /**
  * Validate trace structure and throw descriptive errors
  */
-function validateTrace(trace: Trace): void {
+export function validateTrace(trace: AITraceRecord): void {
   if (!trace) {
     throw new Error('Trace is null or undefined');
   }
@@ -304,19 +236,19 @@ function validateTrace(trace: Trace): void {
 /**
  * Find the most recent LLM span that contains conversation history
  */
-function findPrimaryLLMSpan(spanTree: SpanTree, rootAgentSpan: AgentRunSpan): LLMGenerationSpan {
+function findPrimaryLLMSpan(spanTree: SpanTree, rootAgentSpan: AISpanRecord): AISpanRecord {
   // First try direct children of root agent
-  const directLLMSpans = getChildrenOfType<LLMGenerationSpan>(spanTree, rootAgentSpan.spanId, 'llm_generation');
+  const directLLMSpans = getChildrenOfType<AISpanRecord>(spanTree, rootAgentSpan.spanId, AISpanType.LLM_GENERATION);
 
   if (directLLMSpans.length > 0) {
     return directLLMSpans[directLLMSpans.length - 1]!; // Take the last (most recent) one
   }
 
   // If no direct children, search in sub-agent spans
-  const subAgentSpans = getChildrenOfType<AgentRunSpan>(spanTree, rootAgentSpan.spanId, 'agent_run');
+  const subAgentSpans = getChildrenOfType<AISpanRecord>(spanTree, rootAgentSpan.spanId, AISpanType.AGENT_RUN);
 
   for (const subAgent of subAgentSpans) {
-    const subLLMSpans = getChildrenOfType<LLMGenerationSpan>(spanTree, subAgent.spanId, 'llm_generation');
+    const subLLMSpans = getChildrenOfType<AISpanRecord>(spanTree, subAgent.spanId, AISpanType.LLM_GENERATION);
     if (subLLMSpans.length > 0) {
       return subLLMSpans[subLLMSpans.length - 1]!;
     }
@@ -328,13 +260,13 @@ function findPrimaryLLMSpan(spanTree: SpanTree, rootAgentSpan: AgentRunSpan): LL
 /**
  * Transform trace to scorer input format
  */
-function transformTraceToScorerInput(trace: Trace): ScorerRunInputForAgent {
+export function transformTraceToScorerInput(trace: AITraceRecord): ScorerRunInputForAgent {
   try {
     validateTrace(trace);
     const spanTree = buildSpanTree(trace.spans);
 
     // Find the root agent run span
-    const rootAgentSpan = spanTree.rootSpans.find(span => span.spanType === 'agent_run') as AgentRunSpan | undefined;
+    const rootAgentSpan = spanTree.rootSpans.find(span => span.spanType === 'agent_run') as AISpanRecord | undefined;
 
     if (!rootAgentSpan) {
       throw new Error('No root agent_run span found in trace');
@@ -369,13 +301,12 @@ function transformTraceToScorerInput(trace: Trace): ScorerRunInputForAgent {
 /**
  * Transform trace to scorer output format
  */
-function transformTraceToScorerOutput(trace: Trace): ScorerRunOutputForAgent {
+export function transformTraceToScorerOutput(trace: AITraceRecord): ScorerRunOutputForAgent {
   try {
     validateTrace(trace);
     const spanTree = buildSpanTree(trace.spans);
 
-    // Find the root agent run span
-    const rootAgentSpan = spanTree.rootSpans.find(span => span.spanType === 'agent_run') as AgentRunSpan | undefined;
+    const rootAgentSpan = spanTree.rootSpans.find(span => span.spanType === 'agent_run') as AISpanRecord | undefined;
 
     if (!rootAgentSpan) {
       throw new Error('No root agent_run span found in trace');
@@ -385,13 +316,10 @@ function transformTraceToScorerOutput(trace: Trace): ScorerRunOutputForAgent {
       throw new Error('Root agent span has no output');
     }
 
-    // Get tool invocations from tool call spans under the root agent
     const toolInvocations = reconstructToolInvocations(spanTree, rootAgentSpan.spanId);
 
-    // Get the final response text from the agent output
     const responseText = rootAgentSpan.output.text || '';
 
-    // Create the response message
     const responseMessage: UIMessageWithMetadata = {
       id: generateSyntheticId('response', 1),
       role: 'assistant',
@@ -400,7 +328,8 @@ function transformTraceToScorerOutput(trace: Trace): ScorerRunOutputForAgent {
       // @ts-ignore
       parts: createMessageParts(toolInvocations, responseText),
       experimental_attachments: [],
-      toolInvocations,
+      // Tool invocations are being deprecated however we need to support it for now
+      toolInvocations: toolInvocations as unknown as ToolInvocation[],
     };
 
     return [responseMessage];
@@ -410,33 +339,3 @@ function transformTraceToScorerOutput(trace: Trace): ScorerRunOutputForAgent {
     );
   }
 }
-
-export {
-  // Main transformation functions
-  transformTraceToScorerInput,
-  transformTraceToScorerOutput,
-
-  // Utility functions
-  buildSpanTree,
-  generateSyntheticId,
-  getChildrenOfType,
-  extractInputMessages,
-  extractSystemMessages,
-  extractRememberedMessages,
-  reconstructToolInvocations,
-  createMessageParts,
-  normalizeMessageContent,
-  convertToUIMessage,
-  validateTrace,
-  findPrimaryLLMSpan,
-
-  // Types
-  type Span,
-  type AgentRunSpan,
-  type LLMGenerationSpan,
-  type ToolCallSpan,
-  type Trace,
-  type SpanTree,
-  type MessagePart,
-  type ToolInvocation,
-};
