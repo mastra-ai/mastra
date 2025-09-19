@@ -61,11 +61,11 @@ importers:
         specifier: ^20.17.57
         version: 20.19.0
       '@types/react':
-        specifier: ^19.1.12
-        version: 19.1.12
+        specifier: ^19.1.13
+        version: 19.1.13
       '@types/react-dom':
         specifier: ^19.1.9
-        version: 19.1.9(@types/react@19.1.12)
+        version: 19.1.9(@types/react@19.1.13)
       eslint:
         specifier: ^9.35.0
         version: 9.35.0(jiti@1.21.7)
@@ -665,8 +665,8 @@ packages:
     peerDependencies:
       '@types/react': ^19.0.0
 
-  '@types/react@19.1.12':
-    resolution: {integrity: sha512-cMoR+FoAf/Jyq6+Df2/Z41jISvGZZ2eTlnsaJRptmZ76Caldwy1odD4xTr/gNV9VLj0AWgg/nmkevIyUfIIq5w==, tarball: https://registry.npmjs.org/@types/react/-/react-19.1.12.tgz}
+  '@types/react@19.1.13':
+    resolution: {integrity: sha512-hHkbU/eoO3EG5/MZkuFSKmYqPbSVk5byPFa3e7y/8TybHiLMACgI8seVYlicwk7H5K/rI2px9xrQp/C+AUDTiQ==, tarball: https://registry.npmjs.org/@types/react/-/react-19.1.13.tgz}
 
   '@typescript-eslint/eslint-plugin@8.31.0':
     resolution: {integrity: sha512-evaQJZ/J/S4wisevDvC1KFZkPzRetH8kYZbkgcTRyql3mcKsf+ZFDV1BVWUGTCAW5pQHoqn5gK5b8kn7ou9aFQ==, tarball: https://registry.npmjs.org/@typescript-eslint/eslint-plugin/-/eslint-plugin-8.31.0.tgz}
@@ -2809,11 +2809,11 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
-  '@types/react-dom@19.1.9(@types/react@19.1.12)':
+  '@types/react-dom@19.1.9(@types/react@19.1.13)':
     dependencies:
-      '@types/react': 19.1.12
+      '@types/react': 19.1.13
 
-  '@types/react@19.1.12':
+  '@types/react@19.1.13':
     dependencies:
       csstype: 3.1.3
 

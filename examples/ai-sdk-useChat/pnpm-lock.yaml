@@ -40,11 +40,11 @@ importers:
         specifier: ^20.17.57
         version: 20.19.0
       '@types/react':
-        specifier: ^19.1.9
-        version: 19.1.9
+        specifier: ^19.1.13
+        version: 19.1.13
       '@types/react-dom':
-        specifier: ^19.1.7
-        version: 19.1.7(@types/react@19.1.9)
+        specifier: ^19.1.9
+        version: 19.1.9(@types/react@19.1.13)
       eslint:
         specifier: ^9.35.0
         version: 9.35.0(jiti@1.21.7)
@@ -420,13 +420,13 @@ packages:
   '@types/node@20.19.0':
     resolution: {integrity: sha512-hfrc+1tud1xcdVTABC2JiomZJEklMcXYNTVtZLAeqTVWD+qL5jkHKT+1lOtqDdGxt+mB53DTtiz673vfjU8D1Q==}
 
-  '@types/react-dom@19.1.7':
-    resolution: {integrity: sha512-i5ZzwYpqjmrKenzkoLM2Ibzt6mAsM7pxB6BCIouEVVmgiqaMj1TjaK7hnA36hbW5aZv20kx7Lw6hWzPWg0Rurw==}
+  '@types/react-dom@19.1.9':
+    resolution: {integrity: sha512-qXRuZaOsAdXKFyOhRBg6Lqqc0yay13vN7KrIg4L7N4aaHN68ma9OK3NE1BoDFgFOTfM7zg+3/8+2n8rLUH3OKQ==, tarball: https://registry.npmjs.org/@types/react-dom/-/react-dom-19.1.9.tgz}
     peerDependencies:
       '@types/react': ^19.0.0
 
-  '@types/react@19.1.9':
-    resolution: {integrity: sha512-WmdoynAX8Stew/36uTSVMcLJJ1KRh6L3IZRx1PZ7qJtBqT3dYTgyDTx8H1qoRghErydW7xw9mSJ3wS//tCRpFA==}
+  '@types/react@19.1.13':
+    resolution: {integrity: sha512-hHkbU/eoO3EG5/MZkuFSKmYqPbSVk5byPFa3e7y/8TybHiLMACgI8seVYlicwk7H5K/rI2px9xrQp/C+AUDTiQ==, tarball: https://registry.npmjs.org/@types/react/-/react-19.1.13.tgz}
 
   '@typescript-eslint/eslint-plugin@8.31.0':
     resolution: {integrity: sha512-evaQJZ/J/S4wisevDvC1KFZkPzRetH8kYZbkgcTRyql3mcKsf+ZFDV1BVWUGTCAW5pQHoqn5gK5b8kn7ou9aFQ==, tarball: https://registry.npmjs.org/@typescript-eslint/eslint-plugin/-/eslint-plugin-8.31.0.tgz}
@@ -739,7 +739,7 @@ packages:
     hasBin: true
 
   csstype@3.1.3:
-    resolution: {integrity: sha512-M1uQkMl8rQK/szD0LNhtqxIPLpimGm8sOBwU7lLnCpSbTyY3yeU1Vc7l4KT5zT4s/yOxHH5O7tIuuLOCnLADRw==}
+    resolution: {integrity: sha512-M1uQkMl8rQK/szD0LNhtqxIPLpimGm8sOBwU7lLnCpSbTyY3yeU1Vc7l4KT5zT4s/yOxHH5O7tIuuLOCnLADRw==, tarball: https://registry.npmjs.org/csstype/-/csstype-3.1.3.tgz}
 
   damerau-levenshtein@1.0.8:
     resolution: {integrity: sha512-sdQSFB7+llfUcQHUQO3+B8ERRj0Oa4w9POWMI/puGtuf7gFywGmkaLCElnudfTiKZV+NvHqL0ifzdrI8Ro7ESA==, tarball: https://registry.npmjs.org/damerau-levenshtein/-/damerau-levenshtein-1.0.8.tgz}
@@ -2204,11 +2204,11 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
-  '@types/react-dom@19.1.7(@types/react@19.1.9)':
+  '@types/react-dom@19.1.9(@types/react@19.1.13)':
     dependencies:
-      '@types/react': 19.1.9
+      '@types/react': 19.1.13
 
-  '@types/react@19.1.9':
+  '@types/react@19.1.13':
     dependencies:
       csstype: 3.1.3
 
