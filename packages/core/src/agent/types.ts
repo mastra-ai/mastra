@@ -11,6 +11,7 @@ import type {
   DefaultLLMTextObjectOptions,
   DefaultLLMTextOptions,
   OutputType,
+  SystemMessage,
 } from '../llm';
 import type {
   StreamTextOnFinishCallback,
@@ -41,9 +42,10 @@ export type { Message as AiMessageType } from 'ai';
 
 export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5>;
 
-export type ToolsetsInput = Record<string, ToolsInput>;
+export type AgentInstructions = SystemMessage;
+export type DynamicAgentInstructions = DynamicArgument<AgentInstructions>;
 
-export type InstructionsInput = string | CoreSystemMessage | CoreSystemMessage[];
+export type ToolsetsInput = Record<string, ToolsInput>;
 
 type FallbackFields<OUTPUT extends OutputSchema = undefined> =
   | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
@@ -75,7 +77,7 @@ export interface AgentConfig<
   id?: TAgentId;
   name: TAgentId;
   description?: string;
-  instructions: DynamicArgument<InstructionsInput>;
+  instructions: DynamicAgentInstructions;
   model:
     | DynamicArgument<MastraLanguageModel>
     | {
@@ -117,7 +119,7 @@ export type AgentGenerateOptions<
   EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = {
   /** Optional instructions to override the agent's default instructions */
-  instructions?: InstructionsInput;
+  instructions?: SystemMessage;
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
@@ -201,7 +203,7 @@ export type AgentStreamOptions<
   EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = {
   /** Optional instructions to override the agent's default instructions */
-  instructions?: InstructionsInput;
+  instructions?: SystemMessage;
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
@@ -273,7 +275,7 @@ export type AgentStreamOptions<
 export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };
 
 export type AgentExecuteOnFinishOptions = {
-  instructions: string;
+  instructions: SystemMessage;
   runId: string;
   result: Record<string, any>;
   thread: StorageThreadType | null | undefined;

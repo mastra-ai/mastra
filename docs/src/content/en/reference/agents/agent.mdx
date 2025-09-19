@@ -15,9 +15,30 @@ The `Agent` class is the foundation for creating AI agents in Mastra. It provide
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
+// String instructions
 export const agent = new Agent({
   name: "test-agent",
   instructions: 'You are a helpful assistant that provides concise answers.',
+  model: openai("gpt-4o")
+});
+
+// System message object
+export const agent2 = new Agent({
+  name: "test-agent-2",
+  instructions: { 
+    role: "system", 
+    content: "You are an expert programmer" 
+  },
+  model: openai("gpt-4o")
+});
+
+// Array of system messages
+export const agent3 = new Agent({
+  name: "test-agent-3",
+  instructions: [
+    { role: "system", content: "You are a helpful assistant" },
+    { role: "system", content: "You have expertise in TypeScript" }
+  ],
   model: openai("gpt-4o")
 });
 ```
@@ -98,9 +119,9 @@ export const agent = new Agent({
     },
     {
       name: "instructions",
-      type: "string | CoreSystemMessage | CoreSystemMessage[] | ({ runtimeContext: RuntimeContext }) => InstructionsInput | Promise<InstructionsInput>",
+      type: "SystemMessage | ({ runtimeContext: RuntimeContext }) => SystemMessage | Promise<SystemMessage>",
       isOptional: false,
-      description: "Instructions that guide the agent's behavior. Can be a static string, single CoreSystemMessage object, array of CoreSystemMessages, or a function that returns any of these types dynamically.",
+      description: "Instructions that guide the agent's behavior. Can be a string, array of strings, system message object, array of system messages, or a function that returns any of these types dynamically. SystemMessage includes: string | string[] | CoreSystemMessage | CoreSystemMessage[] | SystemModelMessage | SystemModelMessage[]",
     },
     {
       name: "model",

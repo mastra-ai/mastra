@@ -11,6 +11,7 @@ import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
+import type { SystemMessage } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
 import type {
   GenerateObjectWithMessagesArgs,
@@ -75,11 +76,26 @@ import type {
   AgentModelManagerConfig,
   AgentCreateOptions,
   AgentExecuteOnFinishOptions,
-  InstructionsInput,
+  AgentInstructions,
+  DynamicAgentInstructions,
 } from './types';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
+
+/**
+ * Helper function to convert SystemMessage to string for backward compatibility
+ * Used for legacy methods that expect string instructions (e.g., voice, telemetry)
+ */
+function systemMessageToString(message: SystemMessage): string {
+  if (typeof message === 'string') {
+    return message;
+  } else if (Array.isArray(message)) {
+    return message.map(m => (typeof m === 'string' ? m : m.content)).join('\n');
+  } else {
+    return message.content;
+  }
+}
 
 function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
   if (value instanceof Promise) {
@@ -142,7 +158,7 @@ export class Agent<
 > extends MastraBase {
   public id: TAgentId;
   public name: TAgentId;
-  #instructions: DynamicArgument<InstructionsInput>;
+  #instructions: DynamicAgentInstructions;
   readonly #description?: string;
   model:
     | DynamicArgument<MastraLanguageModel>
@@ -478,7 +494,7 @@ export class Agent<
       const voice = this.#voice;
       voice?.addTools(await this.getTools({ runtimeContext }));
       const instructions = await this.getInstructions({ runtimeContext });
-      voice?.addInstructions(this.#convertInstructionsToString(instructions));
+      voice?.addInstructions(systemMessageToString(instructions));
       return voice;
     } else {
       return new DefaultVoice();
@@ -503,38 +519,55 @@ export class Agent<
       throw mastraError;
     }
 
+    // Throw error for non-string instructions to force migration
+    if (typeof this.#instructions !== 'string') {
+      const mastraError = new MastraError({
+        id: 'AGENT_INSTRUCTIONS_MUST_BE_STRING_FOR_DEPRECATED_GETTER',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+          instructionsType: Array.isArray(this.#instructions) ? 'array' : 'object',
+        },
+        text: 'The instructions getter is deprecated and only supports string instructions. For non-string instructions, please use getInstructions() instead.',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
+    }
+
     return this.#instructions;
   }
 
   public getInstructions({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
-    | InstructionsInput
-    | Promise<InstructionsInput> {
-    if (typeof this.#instructions !== 'function') {
-      return this.#instructions;
+    | AgentInstructions
+    | Promise<AgentInstructions> {
+    if (typeof this.#instructions === 'function') {
+      const result = this.#instructions({ runtimeContext, mastra: this.#mastra });
+      return resolveMaybePromise(result, instructions => {
+        if (!instructions) {
+          const mastraError = new MastraError({
+            id: 'AGENT_GET_INSTRUCTIONS_FUNCTION_EMPTY_RETURN',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: {
+              agentName: this.name,
+            },
+            text: 'Instructions are required to use an Agent. The function-based instructions returned an empty value.',
+          });
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
+        }
+
+        return instructions;
+      });
     }
 
-    const result = this.#instructions({ runtimeContext, mastra: this.#mastra });
-    return resolveMaybePromise(result, instructions => {
-      if (!instructions) {
-        const mastraError = new MastraError({
-          id: 'AGENT_GET_INSTRUCTIONS_FUNCTION_EMPTY_RETURN',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          details: {
-            agentName: this.name,
-          },
-          text: 'Instructions are required to use an Agent. The function-based instructions returned an empty value.',
-        });
-        this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
-        throw mastraError;
-      }
-
-      return instructions;
-    });
+    return this.#instructions;
   }
 
-  #convertInstructionsToString(instructions: InstructionsInput): string {
+  #convertInstructionsToString(instructions: SystemMessage): string {
     if (typeof instructions === 'string') {
       return instructions;
     }
@@ -545,7 +578,8 @@ export class Agent<
     // Extract text content from messages - CoreSystemMessage only has string content
     const textParts: string[] = [];
     for (const msg of messages) {
-      textParts.push(msg.content);
+      const content = typeof msg === 'string' ? msg : msg.content;
+      textParts.push(content);
     }
 
     return textParts.join('\n\n');
@@ -1902,7 +1936,7 @@ export class Agent<
     tracingContext,
     tracingOptions,
   }: {
-    instructions: InstructionsInput;
+    instructions: SystemMessage;
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
     resourceId?: string;
@@ -2430,7 +2464,7 @@ export class Agent<
     messageList: MessageList;
     runId: string;
     outputText: string;
-    instructions: string;
+    instructions: SystemMessage;
     runtimeContext: RuntimeContext;
     structuredOutput?: boolean;
     overrideScorers?:
@@ -2455,7 +2489,7 @@ export class Agent<
           runId: runIdToUse,
           metric,
           agentName,
-          instructions: instructions,
+          instructions: systemMessageToString(instructions),
         });
       }
     }
@@ -2741,7 +2775,7 @@ export class Agent<
 
     const { before, after } = this.__primitive({
       messages,
-      instructions,
+      instructions: systemMessageToString(instructions),
       context,
       thread: threadFromArgs,
       memoryConfig,
@@ -2979,7 +3013,7 @@ export class Agent<
       input: options.messages,
       attributes: {
         agentId: this.id,
-        instructions: this.#convertInstructionsToString(instructions),
+        instructions: systemMessageToString(instructions),
       },
       metadata: {
         runId,
