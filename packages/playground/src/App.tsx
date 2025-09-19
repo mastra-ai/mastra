@@ -55,7 +55,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   networkNewThreadLink: (networkId: string) => `/networks/v-next/${networkId}/chat/${uuid()}`,
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
-  toolLink: (toolId: string) => `/tools/${toolId}`,
+  toolLink: (toolId: string) => `/tools/all/${toolId}`,
 };
 
 const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
@@ -143,6 +143,7 @@ function App() {
                 >
                   <Route path="/agents" element={<Agents />} />
                   <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
+                  <Route path="/agents/:agentId/tools/:toolId" element={<AgentTool />} />
                   <Route
                     path="/agents/:agentId"
                     element={
@@ -157,7 +158,7 @@ function App() {
                     <Route path="traces" element={<AgentTracesPage />} />
                   </Route>
                   <Route path="/tools" element={<Tools />} />
-                  <Route path="/tools/:agentId/:toolId" element={<AgentTool />} />
+
                   <Route path="/tools/all/:toolId" element={<Tool />} />
                   <Route path="/mcps" element={<MCPs />} />
 
