@@ -1,10 +1,10 @@
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../types';
 
 // Use the actual UIMessageWithMetadata type instead of our own
-import type { UIMessageWithMetadata } from '../../agent';
-import { AISpanType, type AISpan, type BaseAISpan } from '../../ai-tracing';
-import type { AISpanRecord, AITraceRecord } from '../../storage';
 import type { ToolInvocation } from 'ai';
+import type { UIMessageWithMetadata } from '../../agent';
+import { AISpanType } from '../../ai-tracing';
+import type { AISpanRecord, AITraceRecord } from '../../storage';
 
 // // Span tree structure for efficient lookups
 interface SpanTree {
@@ -121,13 +121,13 @@ function extractInputMessages(agentSpan: AISpanRecord): TransformedUIMessage[] {
   }
 
   if (Array.isArray(input)) {
-    return input.map((msg, index) => convertToUIMessage(msg, agentSpan.startedAt));
+    return input.map(msg => convertToUIMessage(msg, agentSpan.startedAt));
   }
 
   // @ts-ignore
   if (input && typeof input === 'object' && Array.isArray(input.messages)) {
     // @ts-ignore
-    return input.messages.map((msg, index) => convertToUIMessage(msg, agentSpan.startedAt));
+    return input.messages.map(msg => convertToUIMessage(msg, agentSpan.startedAt));
   }
   return [];
 }
@@ -175,8 +175,6 @@ function reconstructToolInvocations(spanTree: SpanTree, parentSpanId: string) {
  */
 function createMessageParts(toolInvocations: AISpanRecord[], textContent: string) {
   const parts: { type: 'tool-invocation' | 'text'; toolInvocation?: AISpanRecord; text?: string }[] = [];
-
-  // Add tool invocation parts first (they typically happen before text response)
   for (const toolInvocation of toolInvocations) {
     parts.push({
       type: 'tool-invocation',
@@ -184,7 +182,6 @@ function createMessageParts(toolInvocations: AISpanRecord[], textContent: string
     });
   }
 
-  // Add text part
   if (textContent.trim()) {
     parts.push({
       type: 'text',

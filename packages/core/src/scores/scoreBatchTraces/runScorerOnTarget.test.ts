@@ -1,11 +1,11 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { MastraScorer, ScorerRun } from '../base';
-import type { MastraStorage, AITraceRecord, AISpanRecord } from '../../storage';
-import type { IMastraLogger } from '../../logger';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TracingContext } from '../../ai-tracing';
 import { AISpanType } from '../../ai-tracing/types';
+import type { IMastraLogger } from '../../logger';
+import type { AISpanRecord, AITraceRecord, MastraStorage } from '../../storage';
+import type { MastraScorer } from '../base';
 
-vi.mock('./transformer', () => ({
+vi.mock('./utils', () => ({
   transformTraceToScorerInput: vi.fn().mockReturnValue({ transformedInput: 'test' }),
   transformTraceToScorerOutput: vi.fn().mockReturnValue({ transformedOutput: 'test' }),
 }));
@@ -73,7 +73,7 @@ class TestContext {
     this.mockScorer = {
       name: 'test-scorer',
       description: 'Test scorer for unit tests',
-      type: 'llm', // Changed from 'agent' to avoid transformer functions
+      type: 'llm', // Changed from 'agent' to avoid utils functions
       run: vi.fn(),
     } as unknown as MastraScorer;
 

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { buildSpanTree, transformTraceToScorerInput, transformTraceToScorerOutput, validateTrace } from './transformer';
+import { buildSpanTree, transformTraceToScorerInput, transformTraceToScorerOutput, validateTrace } from './utils';
 
 /**
  * Test utilities for transformer functions - focused on maintainability

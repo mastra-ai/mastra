@@ -1,14 +1,13 @@
 import pMap from 'p-map';
 import z from 'zod';
 import { InternalSpans, type TracingContext } from '../../ai-tracing';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { AISpanRecord, AITraceRecord, MastraStorage } from '../../storage';
 import { createStep, createWorkflow } from '../../workflows/evented';
 import type { MastraScorer, ScorerRun } from '../base';
-import { transformTraceToScorerInput, transformTraceToScorerOutput } from './transformer';
-import type { ScoreRowData, ScoringEntityType } from '../types';
+import type { ScoreRowData } from '../types';
 import { saveScorePayloadSchema } from '../types';
-import type { IMastraLogger } from '../../logger';
-import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import { transformTraceToScorerInput, transformTraceToScorerOutput } from './utils';
 
 const getTraceStep = createStep({
   id: '__process-trace-scoring',
