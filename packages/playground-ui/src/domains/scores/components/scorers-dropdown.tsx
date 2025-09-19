@@ -26,9 +26,8 @@ export const ScorersDropdown = ({ trace, spanId, onScorerTriggered, entityType }
     type: scorer.scorer.config.type,
   }));
 
-  if (entityType === 'Agent' && !spanId) {
-    scorerList = scorerList.filter(scorer => scorer.type === 'agent');
-  } else {
+  // Filter out Scorers with type agent if we are not scoring on a top level agent generated span
+  if (entityType !== 'Agent' || spanId) {
     scorerList = scorerList.filter(scorer => scorer.type !== 'agent');
   }
 
