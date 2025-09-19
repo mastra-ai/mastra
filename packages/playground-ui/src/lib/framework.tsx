@@ -15,7 +15,11 @@ export type LinkComponent = ForwardRefExoticComponent<LinkComponentProps & RefAt
 
 type LinkComponentPaths = {
   agentLink: (agentId: string) => string;
+  agentsLink: () => string;
   agentToolLink: (agentId: string, toolId: string) => string;
+
+  workflowsLink: () => string;
+  workflowLink: (workflowId: string) => string;
 };
 
 const LinkComponentContext = createContext<{
@@ -27,7 +31,10 @@ const LinkComponentContext = createContext<{
   navigate: () => {},
   paths: {
     agentLink: () => '',
+    agentsLink: () => '',
     agentToolLink: () => '',
+    workflowsLink: () => '',
+    workflowLink: () => '',
   },
 });
 
