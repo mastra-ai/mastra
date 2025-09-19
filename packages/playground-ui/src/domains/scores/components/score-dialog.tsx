@@ -73,7 +73,7 @@ export function ScoreDialog({
           )}
 
           <SideDialogCodeSection
-            title={`Score: ${score?.score ? score?.score : 'n/a'}`}
+            title={`Score: ${Number.isNaN(score?.score) ? 'n/a' : score?.score}`}
             codeStr={score?.reason}
             simplified={true}
           />
