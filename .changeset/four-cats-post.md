@@ -1,4 +1,5 @@
 ---
+'@mastra/core': patch
 '@mastra/mcp-registry-registry': patch
 '@mastra/voice-google-gemini-live': patch
 '@mastra/google-cloud-pubsub': patch
