@@ -705,6 +705,10 @@ do:
     return workflow;
   }
 
+  __hasInternalWorkflow(id: string): boolean {
+    return Object.values(this.#internalMastraWorkflows).some(workflow => workflow.id === id);
+  }
+
   __getInternalWorkflow(id: string): Workflow {
     const workflow = Object.values(this.#internalMastraWorkflows).find(a => a.id === id);
     if (!workflow) {
