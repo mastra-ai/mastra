@@ -82,11 +82,14 @@
     "@mastra_evals-8007-dependencies",
     "@mastra_playground-ui-7980-dependencies",
     "@mastra_playground-ui-8019-dependencies",
+    "@mastra_rag-8011-dependencies",
+    "chatty-doors-itch",
     "create-mastra-8007-dependencies",
     "five-dodos-count",
     "large-cats-guess",
     "mastra-8007-dependencies",
     "metal-showers-push",
-    "orange-baths-buy"
+    "orange-baths-buy",
+    "thirty-camels-stand"
   ]
 }

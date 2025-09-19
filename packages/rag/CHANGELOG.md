@@ -1,5 +1,17 @@
 # @mastra/rag
 
+## 1.2.6-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#8011](https://github.com/mastra-ai/mastra/pull/8011))
+  - Updated dependency [`node-html-better-parser@^1.5.8` ↗︎](https://www.npmjs.com/package/node-html-better-parser/v/1.5.8) (from `^1.5.7`, in `dependencies`)
+
+- Update Peerdeps for packages based on core minor bump ([#8025](https://github.com/mastra-ai/mastra/pull/8025))
+
+- Updated dependencies [[`cf34503`](https://github.com/mastra-ai/mastra/commit/cf345031de4e157f29087946449e60b965e9c8a9)]:
+  - @mastra/core@0.18.0-alpha.2
+
 ## 1.2.5
 
 ### Patch Changes

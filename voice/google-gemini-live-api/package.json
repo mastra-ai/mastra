@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-google-gemini-live",
-  "version": "0.10.11",
+  "version": "0.10.12-alpha.0",
   "description": "Mastra Google Gemini Live API integration",
   "type": "module",
   "files": [

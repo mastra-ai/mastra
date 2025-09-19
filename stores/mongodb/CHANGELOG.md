@@ -1,5 +1,14 @@
 # @mastra/mongodb
 
+## 0.14.2-alpha.0
+
+### Patch Changes
+
+- Update Peerdeps for packages based on core minor bump ([#8025](https://github.com/mastra-ai/mastra/pull/8025))
+
+- Updated dependencies [[`cf34503`](https://github.com/mastra-ai/mastra/commit/cf345031de4e157f29087946449e60b965e9c8a9)]:
+  - @mastra/core@0.18.0-alpha.2
+
 ## 0.14.1
 
 ### Patch Changes

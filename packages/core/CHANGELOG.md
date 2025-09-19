@@ -1,5 +1,16 @@
 # @mastra/core
 
+## 0.18.0-alpha.2
+
+### Minor Changes
+
+- Allow agent instructions to accept SystemMessage types ([#7987](https://github.com/mastra-ai/mastra/pull/7987))
+
+  Agents can now use rich instruction formats beyond simple strings:
+  - CoreSystemMessage and SystemModelMessage objects with provider-specific options
+  - Arrays of strings or system messages
+  - Dynamic instructions returning any SystemMessage type
+
 ## 0.17.2-alpha.1
 
 ### Patch Changes

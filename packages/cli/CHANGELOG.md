@@ -1,5 +1,17 @@
 # mastra
 
+## 0.13.2-alpha.2
+
+### Patch Changes
+
+- Update Peerdeps for packages based on core minor bump ([#8025](https://github.com/mastra-ai/mastra/pull/8025))
+
+- Updated dependencies [[`cf34503`](https://github.com/mastra-ai/mastra/commit/cf345031de4e157f29087946449e60b965e9c8a9), [`5b1ee71`](https://github.com/mastra-ai/mastra/commit/5b1ee71dc3ac92383226dc1e375642ca5f9b4224)]:
+  - @mastra/core@0.18.0-alpha.2
+  - @mastra/deployer@0.18.0-alpha.2
+  - @mastra/loggers@0.10.13-alpha.0
+  - @mastra/mcp@0.13.1-alpha.0
+
 ## 0.13.2-alpha.1
 
 ### Patch Changes

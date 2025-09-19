@@ -1,5 +1,12 @@
 # @mastra/client-js
 
+## 0.13.2-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`cf34503`](https://github.com/mastra-ai/mastra/commit/cf345031de4e157f29087946449e60b965e9c8a9)]:
+  - @mastra/core@0.18.0-alpha.2
+
 ## 0.13.2-alpha.1
 
 ### Patch Changes

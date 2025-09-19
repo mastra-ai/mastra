@@ -1,6 +1,6 @@
 {
   "name": "@mastra/lance",
-  "version": "0.3.1",
+  "version": "0.3.2-alpha.0",
   "description": "Lance provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
