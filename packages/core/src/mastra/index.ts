@@ -506,7 +506,8 @@ do:
         tts: this.#tts,
         vectors: this.#vectors,
       });
-      this.#intenalMastraWorkflows[key] = workflow as Workflow<any, any, any, any, any, any>;
+      // @ts-ignore
+      this.#intenalMastraWorkflows[key] = workflow;
     });
 
     if (config?.server) {
