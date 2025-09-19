@@ -14,7 +14,7 @@ import { TraceTimeline } from './trace-timeline';
 import { TraceSpanUsage } from './trace-span-usage';
 import { useLinkComponent } from '@/lib/framework';
 import { AISpanRecord } from '@mastra/core';
-import { getTraceInfo, getSpanInfo, useTraceInfo } from './helpers';
+import { getSpanInfo, useTraceInfo } from './helpers';
 import { SpanDialog } from './span-dialog';
 import { SpanDetails } from './span-details';
 import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
