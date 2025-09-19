@@ -2052,6 +2052,302 @@ describe('Workflow', () => {
       ]);
     });
 
+    it('should be able to use an agent with v1 model as a step', async () => {
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: z.object({}),
+      });
+
+      const agent = new Agent({
+        name: 'test-agent-1',
+        instructions: 'test agent instructions"',
+        model: new MockLanguageModelV1({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-delta', textDelta: 'Paris' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { completionTokens: 10, promptTokens: 3 },
+                },
+              ],
+            }),
+
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+      });
+
+      const agent2 = new Agent({
+        name: 'test-agent-2',
+        instructions: 'test agent instructions',
+        model: new MockLanguageModelV1({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-delta', textDelta: 'London' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { completionTokens: 10, promptTokens: 3 },
+                },
+              ],
+            }),
+
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+      });
+
+      const startStep = createStep({
+        id: 'start',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: z.object({ prompt1: z.string(), prompt2: z.string() }),
+        execute: async ({ inputData }) => {
+          return {
+            prompt1: inputData.prompt1,
+            prompt2: inputData.prompt2,
+          };
+        },
+      });
+
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+        idGenerator: randomUUID,
+      });
+
+      const agentStep1 = createStep(agent);
+      const agentStep2 = createStep(agent2);
+
+      workflow
+        .then(startStep)
+        .map({
+          prompt: {
+            step: startStep,
+            path: 'prompt1',
+          },
+        })
+        .then(agentStep1)
+        .map({
+          prompt: {
+            step: startStep,
+            path: 'prompt2',
+          },
+        })
+        .then(agentStep2)
+        .commit();
+
+      const run = await workflow.createRunAsync({
+        runId: 'test-run-id',
+      });
+      const streamResult = run.streamVNext({
+        inputData: {
+          prompt1: 'Capital of France, just the name',
+          prompt2: 'Capital of UK, just the name',
+        },
+      });
+
+      const values: ChunkType[] = [];
+      for await (const value of streamResult) {
+        values.push(value);
+      }
+      const workflowEvents = values.filter(value => value.type !== 'workflow-step-output');
+      const agentEvents = values.filter(value => value.type === 'workflow-step-output');
+
+      expect(agentEvents.map(event => event?.payload?.output?.type)).toEqual([
+        'step-start',
+        'text-delta',
+        'step-finish',
+        'finish',
+        'step-start',
+        'text-delta',
+        'step-finish',
+        'finish',
+      ]);
+
+      expect(workflowEvents).toMatchObject([
+        {
+          type: 'workflow-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {},
+        },
+        {
+          type: 'workflow-step-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'start',
+            id: 'start',
+            stepCallId: expect.any(String),
+            payload: {
+              prompt1: 'Capital of France, just the name',
+              prompt2: 'Capital of UK, just the name',
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
+          },
+        },
+        {
+          type: 'workflow-step-result',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'start',
+            id: 'start',
+            stepCallId: expect.any(String),
+            status: 'success',
+            output: {
+              prompt1: 'Capital of France, just the name',
+              prompt2: 'Capital of UK, just the name',
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        {
+          type: 'workflow-step-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'mapping_mock-uuid-1',
+            id: 'mapping_mock-uuid-1',
+            stepCallId: expect.any(String),
+            payload: {
+              prompt1: 'Capital of France, just the name',
+              prompt2: 'Capital of UK, just the name',
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
+          },
+        },
+        {
+          type: 'workflow-step-result',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'mapping_mock-uuid-1',
+            id: 'mapping_mock-uuid-1',
+            stepCallId: expect.any(String),
+            status: 'success',
+            output: {
+              prompt: 'Capital of France, just the name',
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        {
+          type: 'workflow-step-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'test-agent-1',
+            id: 'test-agent-1',
+            stepCallId: expect.any(String),
+            payload: {
+              prompt: 'Capital of France, just the name',
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
+          },
+        },
+        {
+          type: 'workflow-step-result',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'test-agent-1',
+            id: 'test-agent-1',
+            stepCallId: expect.any(String),
+            status: 'success',
+            output: {},
+            endedAt: expect.any(Number),
+          },
+        },
+        {
+          type: 'workflow-step-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'mapping_mock-uuid-2',
+            id: 'mapping_mock-uuid-2',
+            stepCallId: expect.any(String),
+            payload: {},
+            startedAt: expect.any(Number),
+            status: 'running',
+          },
+        },
+        {
+          type: 'workflow-step-result',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'mapping_mock-uuid-2',
+            id: 'mapping_mock-uuid-2',
+            stepCallId: expect.any(String),
+            status: 'success',
+            output: {
+              prompt: 'Capital of UK, just the name',
+            },
+            endedAt: expect.any(Number),
+          },
+        },
+        {
+          type: 'workflow-step-start',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'test-agent-2',
+            id: 'test-agent-2',
+            stepCallId: expect.any(String),
+            payload: {
+              prompt: 'Capital of UK, just the name',
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
+          },
+        },
+        {
+          type: 'workflow-step-result',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            stepName: 'test-agent-2',
+            id: 'test-agent-2',
+            stepCallId: expect.any(String),
+            status: 'success',
+            output: {},
+            endedAt: expect.any(Number),
+          },
+        },
+        {
+          type: 'workflow-finish',
+          runId: 'test-run-id',
+          from: 'WORKFLOW',
+          payload: {
+            output: {
+              usage: {
+                inputTokens: 0,
+                outputTokens: 0,
+                totalTokens: 0,
+              },
+            },
+            metadata: {},
+          },
+        },
+      ]);
+    });
+
     it('should handle sleep waiting flow', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
       const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
