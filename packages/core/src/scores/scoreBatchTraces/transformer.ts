@@ -13,6 +13,9 @@ interface SpanTree {
   rootSpans: AISpanRecord[];
 }
 
+// Spans don't have ids, so we need to omit it from the UIMessageWithMetadata type
+type TransformedUIMessage = Omit<UIMessageWithMetadata, 'id'>;
+
 /**
  * Build a hierarchical span tree with efficient lookup maps
  */
@@ -49,13 +52,6 @@ export function buildSpanTree(spans: AISpanRecord[]): SpanTree {
 }
 
 /**
- * Generate synthetic ID for messages/tool calls since traces don't contain them
- */
-function generateSyntheticId(prefix: string, index: number): string {
-  return `${prefix}-${index}`;
-}
-
-/**
  * Extract children spans of a specific type
  */
 function getChildrenOfType<T extends AISpanRecord>(
@@ -86,13 +82,12 @@ function normalizeMessageContent(content: string | Array<{ type: string; text: s
  */
 function convertToUIMessage(
   message: { role: string; content: string | Array<{ type: string; text: string }> },
-  id: string,
   createdAt: Date,
 ): UIMessageWithMetadata {
   const content = normalizeMessageContent(message.content);
 
   return {
-    id,
+    id: '',
     role: message.role as 'user' | 'assistant' | 'system',
     content,
     createdAt: new Date(createdAt),
@@ -109,14 +104,13 @@ function convertToUIMessage(
 /**
  * Extract input messages from agent run span
  */
-function extractInputMessages(agentSpan: AISpanRecord): UIMessageWithMetadata[] {
+function extractInputMessages(agentSpan: AISpanRecord): TransformedUIMessage[] {
   const input = agentSpan.input;
 
   // Handle different input formats
   if (typeof input === 'string') {
     return [
       {
-        id: generateSyntheticId('input', 1),
         role: 'user',
         content: input,
         createdAt: new Date(agentSpan.startedAt),
@@ -127,17 +121,13 @@ function extractInputMessages(agentSpan: AISpanRecord): UIMessageWithMetadata[] 
   }
 
   if (Array.isArray(input)) {
-    return input.map((msg, index) =>
-      convertToUIMessage(msg, generateSyntheticId('input', index + 1), agentSpan.startedAt),
-    );
+    return input.map((msg, index) => convertToUIMessage(msg, agentSpan.startedAt));
   }
 
   // @ts-ignore
   if (input && typeof input === 'object' && Array.isArray(input.messages)) {
     // @ts-ignore
-    return input.messages.map((msg, index) =>
-      convertToUIMessage(msg, generateSyntheticId('input', index + 1), agentSpan.startedAt),
-    );
+    return input.messages.map((msg, index) => convertToUIMessage(msg, agentSpan.startedAt));
   }
   return [];
 }
@@ -158,14 +148,12 @@ function extractSystemMessages(llmSpan: AISpanRecord): Array<{ role: 'system'; c
  * Extract conversation history (remembered messages) from LLM span
  * Excludes system messages and the current input message
  */
-function extractRememberedMessages(llmSpan: AISpanRecord, currentInputContent: string): UIMessageWithMetadata[] {
+function extractRememberedMessages(llmSpan: AISpanRecord, currentInputContent: string): TransformedUIMessage[] {
   const messages = llmSpan.input.messages
     .filter((msg: any) => msg.role !== 'system')
     .filter((msg: any) => normalizeMessageContent(msg.content) !== currentInputContent);
 
-  return messages.map((msg: any, index: number) =>
-    convertToUIMessage(msg, generateSyntheticId('memory', index + 1), llmSpan.startedAt),
-  );
+  return messages.map((msg: any) => convertToUIMessage(msg, llmSpan.startedAt));
 }
 
 /**
@@ -174,9 +162,8 @@ function extractRememberedMessages(llmSpan: AISpanRecord, currentInputContent: s
 function reconstructToolInvocations(spanTree: SpanTree, parentSpanId: string) {
   const toolSpans = getChildrenOfType<AISpanRecord>(spanTree, parentSpanId, AISpanType.TOOL_CALL);
 
-  return toolSpans.map((toolSpan, index) => ({
+  return toolSpans.map(toolSpan => ({
     state: 'result' as const,
-    toolCallId: generateSyntheticId('call', index + 1),
     toolName: toolSpan.attributes?.toolId,
     args: toolSpan.input || {},
     result: toolSpan.output || {},
@@ -286,8 +273,9 @@ export function transformTraceToScorerInput(trace: AITraceRecord): ScorerRunInpu
     const rememberedMessages = extractRememberedMessages(primaryLLMSpan, currentInputContent);
 
     return {
-      inputMessages,
-      rememberedMessages,
+      // We do not keep track of the tool call ids in traces, so we need to cast to UIMessageWithMetadata
+      inputMessages: inputMessages as UIMessageWithMetadata[],
+      rememberedMessages: rememberedMessages as UIMessageWithMetadata[],
       systemMessages,
       taggedSystemMessages: {}, // Not available in traces
     };
@@ -320,8 +308,7 @@ export function transformTraceToScorerOutput(trace: AITraceRecord): ScorerRunOut
 
     const responseText = rootAgentSpan.output.text || '';
 
-    const responseMessage: UIMessageWithMetadata = {
-      id: generateSyntheticId('response', 1),
+    const responseMessage: TransformedUIMessage = {
       role: 'assistant',
       content: responseText,
       createdAt: new Date(rootAgentSpan.endedAt || rootAgentSpan.startedAt),
@@ -332,7 +319,8 @@ export function transformTraceToScorerOutput(trace: AITraceRecord): ScorerRunOut
       toolInvocations: toolInvocations as unknown as ToolInvocation[],
     };
 
-    return [responseMessage];
+    // We do not keep track of the tool call ids in traces, so we need to cast to UIMessageWithMetadata
+    return [responseMessage as UIMessageWithMetadata];
   } catch (error) {
     throw new Error(
       `Failed to transform trace to scorer output: ${error instanceof Error ? error.message : 'Unknown error'}`,

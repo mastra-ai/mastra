@@ -300,7 +300,6 @@ describe('Transformer Functions', () => {
       expect(result.inputMessages).toHaveLength(1);
       expect(result.inputMessages[0]?.content).toBe('Hello, how are you?');
       expect(result.inputMessages[0]?.role).toBe('user');
-      expect(result.inputMessages[0]?.id).toMatch(/^input-/);
     });
 
     it('should extract system messages correctly', () => {
@@ -360,7 +359,6 @@ describe('Transformer Functions', () => {
       expect(result).toHaveLength(1);
       expect(result[0]?.role).toBe('assistant');
       expect(result[0]?.content).toBe('I am doing well, thank you!');
-      expect(result[0]?.id).toMatch(/^response-/);
     });
 
     it('should include tool invocations in response', () => {
