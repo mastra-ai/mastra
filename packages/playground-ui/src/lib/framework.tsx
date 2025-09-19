@@ -28,6 +28,8 @@ type LinkComponentPaths = {
   networkThreadLink: (networkId: string, threadId: string) => string;
 
   scorerLink: (scorerId: string) => string;
+
+  toolLink: (toolId: string) => string;
 };
 
 const LinkComponentContext = createContext<{
@@ -49,6 +51,7 @@ const LinkComponentContext = createContext<{
     networkNewThreadLink: () => '',
     networkThreadLink: () => '',
     scorerLink: () => '',
+    toolLink: () => '',
   },
 });
 

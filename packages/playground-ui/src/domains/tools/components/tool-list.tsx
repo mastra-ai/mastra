@@ -11,14 +11,13 @@ import { ToolCoinIcon } from '@/ds/icons/ToolCoinIcon';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { useLinkComponent } from '@/lib/framework';
 import { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
-
+import { SearchIcon } from 'lucide-react';
 import { startTransition, useMemo, useRef, useState } from 'react';
 
 export interface ToolListProps {
   isLoading: boolean;
   tools: Record<string, GetToolResponse>;
   agents: Record<string, GetAgentResponse>;
-  computeLink: (toolId: string, agentId?: string) => string;
 }
 
 interface ToolWithAgents {
@@ -27,7 +26,7 @@ interface ToolWithAgents {
   agents: Array<{ id: string; name: string }>;
 }
 
-export const ToolList = ({ tools, agents, isLoading, computeLink }: ToolListProps) => {
+export const ToolList = ({ tools, agents, isLoading }: ToolListProps) => {
   const toolsWithAgents = useMemo(() => prepareAgents(tools, agents), [tools, agents]);
 
   if (isLoading)
@@ -37,15 +36,14 @@ export const ToolList = ({ tools, agents, isLoading, computeLink }: ToolListProp
       </div>
     );
 
-  return <ToolListInner toolsWithAgents={toolsWithAgents} computeLink={computeLink} />;
+  return <ToolListInner toolsWithAgents={toolsWithAgents} />;
 };
 
 interface ToolListInnerProps {
   toolsWithAgents: ToolWithAgents[];
-  computeLink: (toolId: string, agentId?: string) => string;
 }
 
-const ToolListInner = ({ toolsWithAgents, computeLink }: ToolListInnerProps) => {
+const ToolListInner = ({ toolsWithAgents }: ToolListInnerProps) => {
   const [filteredTools, setFilteredTools] = useState<ToolWithAgents[]>(toolsWithAgents);
   const [value, setValue] = useState('');
 
@@ -84,7 +82,7 @@ const ToolListInner = ({ toolsWithAgents, computeLink }: ToolListInnerProps) => 
 
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 max-w-5xl mx-auto py-8">
         {filteredTools.map(tool => (
-          <ToolEntity key={tool.id} tool={tool} computeLink={computeLink} />
+          <ToolEntity key={tool.id} tool={tool} />
         ))}
       </div>
     </div>
@@ -93,10 +91,9 @@ const ToolListInner = ({ toolsWithAgents, computeLink }: ToolListInnerProps) => 
 
 interface ToolEntityProps {
   tool: ToolWithAgents;
-  computeLink: (toolId: string, agentId?: string) => string;
 }
 
-const ToolEntity = ({ tool, computeLink }: ToolEntityProps) => {
+const ToolEntity = ({ tool }: ToolEntityProps) => {
   const linkRef = useRef<HTMLAnchorElement>(null);
   const { Link, paths } = useLinkComponent();
 
@@ -108,7 +105,7 @@ const ToolEntity = ({ tool, computeLink }: ToolEntityProps) => {
 
       <EntityContent>
         <EntityName>
-          <Link ref={linkRef} href={computeLink(tool.id, tool.agents[0]?.id)}>
+          <Link ref={linkRef} href={paths.toolLink(tool.id)}>
             {tool.id}
           </Link>
         </EntityName>
