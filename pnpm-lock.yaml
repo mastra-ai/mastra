@@ -2389,8 +2389,8 @@ importers:
         specifier: ^1.0.20
         version: 1.0.21
       node-html-better-parser:
-        specifier: ^1.5.7
-        version: 1.5.7
+        specifier: ^1.5.8
+        version: 1.5.8
       pathe:
         specifier: ^2.0.3
         version: 2.0.3
@@ -13849,8 +13849,8 @@ packages:
     engines: {node: '>= 10.12.0'}
     hasBin: true
 
-  node-html-better-parser@1.5.7:
-    resolution: {integrity: sha512-ZV4QcqArbGtCIhU/AtlKbEI8/BOGopTd88kjU8s6ApNh/fUnemgE1tRn20jhEU7W4Lnn9732Hxsd8WpQfqi/lw==}
+  node-html-better-parser@1.5.8:
+    resolution: {integrity: sha512-t/wAKvaTSKco43X+yf9+76RiMt18MtMmzd4wc7rKj+fWav6DV4ajDEKdWlLzSE8USDF5zr/06uGj0Wr/dGAFtw==}
 
   node-ical@0.20.1:
     resolution: {integrity: sha512-NrXgzDJd6XcyX9kDMJVA3xYCZmntY7ghA2BOdBeYr3iu8tydHOAb+68jPQhF9V2CRQ0/386X05XhmLzQUN0+Hw==}
@@ -20665,7 +20665,7 @@ snapshots:
       big.js: 7.0.1
       cohere-ai: 7.17.1(encoding@0.1.13)
       js-tiktoken: 1.0.21
-      node-html-better-parser: 1.5.7
+      node-html-better-parser: 1.5.8
       pathe: 2.0.3
       zeroentropy: 0.1.0-alpha.6(encoding@0.1.13)
       zod: 3.25.76
@@ -28978,7 +28978,7 @@ snapshots:
       - supports-color
     optional: true
 
-  node-html-better-parser@1.5.7:
+  node-html-better-parser@1.5.8:
     dependencies:
       html-entities: 2.6.0
 
