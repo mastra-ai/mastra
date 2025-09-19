@@ -2465,6 +2465,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../_types-builder
       '@types/json-schema':
         specifier: ^7.0.15
         version: 7.0.15
