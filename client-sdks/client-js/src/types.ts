@@ -11,7 +11,13 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
-import type { AiMessageType, MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type {
+  AiMessageType,
+  MastraMessageV1,
+  MastraMessageV2,
+  MemoryConfig,
+  StorageThreadType,
+} from '@mastra/core/memory';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
 import type {
@@ -277,6 +283,12 @@ export interface GetMemoryThreadParams {
   resourceId: string;
   agentId: string;
 }
+
+export interface GetMemoryConfigParams {
+  agentId: string;
+}
+
+export type GetMemoryConfigResponse = MemoryConfig;
 
 export interface GetNetworkMemoryThreadParams {
   resourceId: string;
