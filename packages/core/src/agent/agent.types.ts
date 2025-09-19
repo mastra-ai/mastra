@@ -11,7 +11,7 @@ import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scor
 import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
 import type { MessageListInput } from './message-list';
-import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions } from './types';
+import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions, InstructionsInput } from './types';
 
 export type MultiPrimitiveExecutionOptions = {
   /** Memory configuration for conversation persistence and retrieval */
@@ -45,7 +45,7 @@ export type AgentExecutionOptions<
   format?: FORMAT;
 
   /** Custom instructions that override the agent's default instructions for this execution */
-  instructions?: string;
+  instructions?: InstructionsInput;
 
   /** Custom system message to include in the prompt */
   system?: SystemMessage;
