@@ -439,6 +439,7 @@ export interface CreateSpanOptions<TType extends AISpanType> extends CreateBaseO
   parent?: AnyAISpan;
   /** Is an event span? */
   isEvent?: boolean;
+  isInternal?: boolean;
 }
 
 /**
@@ -548,6 +549,8 @@ export interface TracingOptions {
 export interface TracingContext {
   /** Current AI span for creating child spans and adding metadata */
   currentSpan?: AnyAISpan;
+  /** Is an internal span? (spans internal to the operation of mastra) */
+  isInternal?: boolean;
 }
 
 /**

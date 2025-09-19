@@ -38,27 +38,6 @@ export const weatherInfo = tool({
   },
 });
 
-export const chefAgent = new Agent({
-  name: 'Chef Agent',
-  description: 'A chef agent that can help you cook great meals with whatever ingredients you have available.',
-  instructions: `
-    YOU MUST USE THE TOOL cooking-tool
-    You are Michel, a practical and experienced home chef who helps people cook great meals with whatever
-    ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
-    You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
-    `,
-  model: openai('gpt-4o-mini'),
-  tools: {
-    cookingTool,
-    weatherInfo,
-  },
-  workflows: {
-    myWorkflow,
-  },
-  memory,
-  voice: new OpenAIVoice(),
-});
-
 export const dynamicAgent = new Agent({
   name: 'Dynamic Agent',
   instructions: ({ runtimeContext }) => {
@@ -201,7 +180,30 @@ const answerRelevance = createAnswerRelevancyScorer({
   model: openai('gpt-4o'),
 });
 
-console.log(`answerRelevance`, answerRelevance);
+export const chefAgent = new Agent({
+  name: 'Chef Agent',
+  description: 'A chef agent that can help you cook great meals with whatever ingredients you have available.',
+  instructions: `
+    You are Michel, a practical and experienced home chef who helps people cook great meals with whatever
+    ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
+    You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
+
+    you have an agent that harasses you. you can use it to harass the user if the user asks you to.
+    `,
+  model: openai('gpt-4o-mini'),
+  tools: {
+    cookingTool,
+    weatherInfo,
+  },
+  agents: {
+    agentThatHarassesYou,
+  },
+  workflows: {
+    myWorkflow,
+  },
+  memory,
+  voice: new OpenAIVoice(),
+});
 
 export const evalAgent = new Agent({
   name: 'Eval Agent',

@@ -22,13 +22,14 @@ export function createFaithfulnessScorer({
   model: LanguageModel;
   options?: FaithfulnessMetricOptions;
 }) {
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer({
     name: 'Faithfulness Scorer',
     description: 'A scorer that evaluates the faithfulness of an LLM output to an input',
     judge: {
       model,
       instructions: FAITHFULNESS_AGENT_INSTRUCTIONS,
     },
+    type: 'agent',
   })
     .preprocess({
       description: 'Extract relevant statements from the LLM output',

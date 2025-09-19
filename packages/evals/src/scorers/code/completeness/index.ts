@@ -74,10 +74,11 @@ function calculateCoverage({ original, simplified }: { original: string[]; simpl
 }
 
 export function createCompletenessScorer() {
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer({
     name: 'Completeness',
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
+    type: 'agent',
   })
     .preprocess(async ({ run }) => {
       const isInputInvalid =

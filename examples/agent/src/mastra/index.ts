@@ -14,8 +14,8 @@ const storage = new LibSQLStore({
 });
 
 const testScorer = createScorer({
-  name: 'scorer1',
-  description: 'Scorer 1',
+  name: 'scorer hello',
+  description: 'Scorer hello',
 }).generateScore(() => {
   return 1;
 });
@@ -50,6 +50,9 @@ export const mastra = new Mastra({
   ],
   scorers: {
     testScorer,
+  },
+  observability: {
+    default: { enabled: true },
   },
   // telemetry: {
   //   enabled: false,

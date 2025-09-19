@@ -76,9 +76,10 @@ export function createToolCallAccuracyScorerCode(options: ToolCallAccuracyOption
       : `Evaluates whether the LLM selected the correct tool (${expectedTool}) from the available tools`;
   };
 
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer({
     name: 'Tool Call Accuracy',
     description: getDescription(),
+    type: 'agent',
   })
     .preprocess(async ({ run }) => {
       const isInputInvalid = !run.input || !run.input.inputMessages || run.input.inputMessages.length === 0;

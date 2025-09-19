@@ -1066,10 +1066,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     if (!disableScorers && scorersToUse && Object.keys(scorersToUse || {}).length > 0) {
       for (const [id, scorerObject] of Object.entries(scorersToUse || {})) {
         runScorer({
-          scorerId: id,
+          scorerId: scorerObject.name,
           scorerObject: scorerObject,
           runId: runId,
-          input: [input],
+          input: input,
           output: output,
           runtimeContext,
           entity: {

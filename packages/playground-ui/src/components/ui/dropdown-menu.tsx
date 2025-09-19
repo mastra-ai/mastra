@@ -1,7 +1,9 @@
 'use client';
 
+import { Icon } from '@/ds/icons/Icon';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
-import { useVirtualizer } from '@tanstack/react-virtual';
+
+import clsx from 'clsx';
 import { Check, ChevronDown, Circle } from 'lucide-react';
 import * as React from 'react';
 
@@ -18,12 +20,10 @@ const DropdownMenuSub = DropdownMenuPrimitive.Sub;
 const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup;
 
 const DropdownMenuTrigger = React.forwardRef<
-  React.ElementRef<typeof DropdownMenuPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Trigger> & {
-    inset?: boolean;
-  }
->(({ className, inset, children, ...props }, ref) => (
-  <DropdownMenuPrimitive.Trigger ref={ref} className={cn(className)} {...props}>
+  React.ComponentRef<typeof DropdownMenuPrimitive.Trigger>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Trigger>
+>(({ className, children, ...props }, ref) => (
+  <DropdownMenuPrimitive.Trigger ref={ref} className={cn('cursor-pointer focus-visible:rounded', className)} {...props}>
     {children}
   </DropdownMenuPrimitive.Trigger>
 ));
@@ -57,7 +57,7 @@ const DropdownMenuSubContent = React.forwardRef<
   <DropdownMenuPrimitive.SubContent
     ref={ref}
     className={cn(
-      'popover-backdrop-filter popover-background popover-border popover-shadow popover-foreground data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 z-50 min-w-[8rem] overflow-auto overflow-x-hidden rounded-md p-1',
+      'popover-background data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 z-50 min-w-[8rem] overflow-auto overflow-x-hidden rounded-none p-1',
       className,
     )}
     {...props}
@@ -76,9 +76,8 @@ const DropdownMenuContent = React.forwardRef<
       <DropdownMenuPrimitive.Content
         ref={ref}
         sideOffset={sideOffset}
-        className={cn(
-          //not sure where these classes are coming from
-          'popover-backdrop-filter bg-mastra-bg-2 popover-border popover-shadow popover-foreground data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 z-50 min-w-[8rem] overflow-auto overflow-x-hidden rounded-md p-1',
+        className={clsx(
+          'data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 bg-surface2 text-icon3 border-sm border-border1 z-50 min-w-[8rem] overflow-auto rounded-md p-1 shadow-md',
           className,
         )}
         {...props}
@@ -97,7 +96,7 @@ const DropdownMenuItem = React.forwardRef<
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
-      'focus:text-accent-foreground relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-[0.8125rem] transition-colors focus:bg-[#66686A]/20 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>span]:truncate',
+      'focus:text-accent-foreground relative flex cursor-default cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 font-sans text-[0.8125rem] transition-colors focus:bg-[#66686A]/20 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>span]:truncate',
       inset && 'pl-8',
       className,
     )}
@@ -113,17 +112,19 @@ const DropdownMenuCheckboxItem = React.forwardRef<
   <DropdownMenuPrimitive.CheckboxItem
     ref={ref}
     className={cn(
-      'focus:bg-accent focus:text-accent-foreground relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'focus:bg-accent focus:text-accent-foreground relative flex w-full cursor-default cursor-pointer select-none items-center gap-4 rounded-sm px-2 py-1.5 text-sm transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       className,
     )}
     checked={checked}
     {...props}
   >
-    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
-      <DropdownMenuPrimitive.ItemIndicator>
-        <Check className="h-2 w-2 fill-current" />
-      </DropdownMenuPrimitive.ItemIndicator>
-    </span>
+    <div className="border-sm border-border1 flex h-4 w-4 items-center justify-center rounded-sm">
+      {checked && (
+        <Icon size="sm">
+          <Check />
+        </Icon>
+      )}
+    </div>
     {children}
   </DropdownMenuPrimitive.CheckboxItem>
 ));
@@ -136,7 +137,7 @@ const DropdownMenuRadioItem = React.forwardRef<
   <DropdownMenuPrimitive.RadioItem
     ref={ref}
     className={cn(
-      'focus:bg-accent focus:text-accent-foreground relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'focus:text-accent-foreground relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm transition-colors focus:bg-[#66686A]/20 data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       className,
     )}
     {...props}
@@ -206,52 +207,6 @@ function Dropdown({
   );
 }
 
-type VirtualizedDropdownItemsProps<T> = React.HTMLAttributes<HTMLButtonElement> & {
-  itemsCount: number;
-  items: T[];
-  renderItem: (item: T) => React.ReactNode;
-};
-
-function VirtualizedDropdownItems<T>({ itemsCount, items, renderItem, ...props }: VirtualizedDropdownItemsProps<T>) {
-  const parentRef = React.useRef(null);
-
-  const dropdownVirtualizer = useVirtualizer({
-    count: itemsCount,
-    estimateSize: () => 35,
-    getScrollElement: () => parentRef.current,
-    overscan: 5,
-    measureElement:
-      typeof window !== 'undefined' && navigator.userAgent.indexOf('Firefox') === -1
-        ? element => element?.getBoundingClientRect().height
-        : undefined,
-  });
-
-  return (
-    <div ref={parentRef} className="h-64 overflow-auto">
-      <div
-        className="relative w-full overflow-auto"
-        style={{
-          height: `${dropdownVirtualizer.getTotalSize()}px`,
-        }}
-      >
-        {dropdownVirtualizer?.getVirtualItems().map((item, idx) => (
-          <button
-            key={item.index}
-            className="text-accent-foreground absolute left-0 top-0 flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-[0.8125rem] transition-colors hover:bg-[#66686A]/20 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>span]:truncate"
-            style={{
-              height: `${item.size}px`,
-              transform: `translateY(${item.start}px)`,
-            }}
-            {...props}
-          >
-            {renderItem(items[idx])}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 Dropdown.Trigger = DropdownMenuTrigger;
 Dropdown.Content = DropdownMenuContent;
 Dropdown.Group = DropdownMenuGroup;
@@ -266,6 +221,5 @@ Dropdown.Sub = DropdownMenuSub;
 Dropdown.SubContent = DropdownMenuSubContent;
 Dropdown.SubTrigger = DropdownMenuSubTrigger;
 Dropdown.RadioGroup = DropdownMenuRadioGroup;
-Dropdown.VirtualizedItems = VirtualizedDropdownItems;
 
 export { Dropdown };

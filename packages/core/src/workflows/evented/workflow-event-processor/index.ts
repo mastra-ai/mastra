@@ -1175,9 +1175,14 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    const workflow = workflowData.parentWorkflow
-      ? getNestedWorkflow(this.mastra, workflowData.parentWorkflow)
-      : this.mastra.getWorkflow(workflowData.workflowId);
+    let workflow;
+    try {
+      workflow = workflowData.parentWorkflow
+        ? getNestedWorkflow(this.mastra, workflowData.parentWorkflow)
+        : this.mastra.getWorkflow(workflowData.workflowId);
+    } catch (e) {
+      workflow = this.mastra.__getInternalWorkflow(workflowData.workflowId);
+    }
 
     if (!workflow) {
       return this.errorWorkflow(
