@@ -6,8 +6,6 @@ import type {
   DynamicToolCall,
   DynamicToolResult,
 } from 'ai-v5';
-import type { StepBufferItem } from '../../types';
-
 export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOLS> {
   readonly content: StepResult<TOOLS>['content'];
   readonly finishReason: StepResult<TOOLS>['finishReason'];
@@ -16,7 +14,7 @@ export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOL
   readonly request: StepResult<TOOLS>['request'];
   readonly response: StepResult<TOOLS>['response'];
   readonly providerMetadata: StepResult<TOOLS>['providerMetadata'];
-
+  
   constructor({
     content,
     finishReason,
@@ -89,20 +87,4 @@ export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOL
   get dynamicToolResults() {
     return this.toolResults.filter((toolResult): toolResult is DynamicToolResult => toolResult.dynamic === true);
   }
-}
-
-export function transformSteps<TOOLS extends ToolSet = ToolSet>({ steps }: { steps: StepBufferItem<TOOLS>[] }): DefaultStepResult<TOOLS>[] {
-  return steps.map(step => {
-    if (!step.response) throw new Error(`No step response found while transforming steps but one was expected.`);
-    if (!step.request) throw new Error(`No step request found while transforming steps but one was expected.`);
-    return new DefaultStepResult({
-      content: step.content,
-      warnings: step.warnings ?? [],
-      providerMetadata: step.providerMetadata,
-      finishReason: step.finishReason || 'unknown',
-      response: step.response,
-      request: step.request,
-      usage: step.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-    });
-  });
 }

@@ -9,7 +9,8 @@ import type {
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider-v5';
 import type { LanguageModelRequestMetadata } from 'ai';
-import type { CoreMessage, StepResult, ToolSet, UIMessage } from 'ai-v5';
+import type { ModelMessage, StepResult, ToolSet, UIMessage } from 'ai-v5';
+import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { WorkflowStreamEvent } from '../workflows/types';
 import type { OutputSchema, PartialSchemaOutput } from './base/schema';
 
@@ -85,10 +86,11 @@ export interface FilePayload {
 export interface ToolCallPayload<TArgs = unknown, TOutput = unknown> {
   toolCallId: string;
   toolName: string;
-  args?: TArgs;
+  input?: TArgs;
   providerExecuted?: boolean;
   providerMetadata?: SharedV2ProviderMetadata;
   output?: TOutput;
+  dynamic?: boolean;
 }
 
 export interface ToolResultPayload<TResult = unknown, TArgs = unknown> {
@@ -98,7 +100,8 @@ export interface ToolResultPayload<TResult = unknown, TArgs = unknown> {
   isError?: boolean;
   providerExecuted?: boolean;
   providerMetadata?: SharedV2ProviderMetadata;
-  args?: TArgs;
+  input?: TArgs;
+  dynamic?: boolean;
 }
 
 export type DynamicToolCallPayload = ToolCallPayload<any, any>;
@@ -140,9 +143,9 @@ interface FinishPayload {
     [key: string]: unknown;
   };
   messages: {
-    all: CoreMessage[];
-    user: CoreMessage[];
-    nonUser: CoreMessage[];
+    all: ModelMessage[];
+    user: ModelMessage[];
+    nonUser: AIV5ResponseMessage[];
   };
   [key: string]: unknown;
 }
@@ -191,9 +194,9 @@ export interface StepFinishPayload {
     [key: string]: unknown;
   };
   messages?: {
-    all: CoreMessage[];
-    user: CoreMessage[];
-    nonUser: CoreMessage[];
+    all: ModelMessage[];
+    user: ModelMessage[];
+    nonUser: AIV5ResponseMessage[];
   };
   [key: string]: unknown;
 }
@@ -401,8 +404,8 @@ export type TypedChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'redacted-reasoning'; payload: RedactedReasoningPayload })
   | (BaseChunkType & { type: 'source'; payload: SourcePayload })
   | (BaseChunkType & { type: 'file'; payload: FilePayload })
-  | (BaseChunkType & { type: 'tool-call'; payload: DynamicToolCallPayload })
-  | (BaseChunkType & { type: 'tool-result'; payload: DynamicToolResultPayload })
+  | (BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload })
+  | (BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload })
   | (BaseChunkType & { type: 'tool-call-input-streaming-start'; payload: ToolCallInputStreamingStartPayload })
   | (BaseChunkType & { type: 'tool-call-delta'; payload: ToolCallDeltaPayload })
   | (BaseChunkType & { type: 'tool-call-input-streaming-end'; payload: ToolCallInputStreamingEndPayload })
@@ -463,7 +466,7 @@ export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: To
 export interface StepBufferItem<TOOLS extends ToolSet = ToolSet>
   extends Omit<StepResult<TOOLS>, 'sources' | 'files' | 'toolCalls' | 'toolResults' | 'response'> {
   // Our custom properties
-  stepType: 'initial' | 'tool-result';
+  stepType?: 'initial' | 'tool-result';
   isContinued?: boolean;
 
   // Keep original Mastra chunk format for these
@@ -485,7 +488,6 @@ export interface BufferedByStep {
   files: FileChunk[];
   toolCalls: ToolCallChunk[];
   toolResults: ToolResultChunk[];
-  msgCount: number;
 }
 
 export type ExecuteStreamModelManager<T> = (

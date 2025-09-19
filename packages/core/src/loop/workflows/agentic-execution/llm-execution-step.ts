@@ -297,7 +297,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
             totalUsage: chunk.payload.totalUsage,
             headers: responseFromModel.rawResponse?.headers,
             messageId,
-            isContinued: !['stop', 'error'].includes(chunk.payload.reason as string),
+            isContinued: !['stop', 'error'].includes(chunk.payload.stepResult.reason),
             request: responseFromModel.request,
           },
         });
@@ -734,6 +734,8 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
         user: messageList.get.input.aiV5.model(),
         nonUser: messageList.get.response.aiV5.model(),
       };
+
+      console.log('llm-execution-step messages.nonUser:', JSON.stringify(messages.nonUser, null, 2));
 
       return {
         messageId,

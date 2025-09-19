@@ -1,19 +1,21 @@
 import type { ReadableStream } from 'stream/web';
 import { TransformStream } from 'stream/web';
-import type { SharedV2ProviderMetadata, LanguageModelV2CallWarning } from '@ai-sdk/provider-v5';
+import type { SharedV2ProviderMetadata, LanguageModelV2CallWarning, LanguageModelV2Source } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
 import { consumeStream } from 'ai-v5';
+import type { GeneratedFile, StreamTextOnFinishCallback, TypedToolCall, TypedToolResult } from 'ai-v5';
 import type {
   FinishReason,
   TelemetrySettings,
   ToolSet,
   LanguageModelRequestMetadata,
+  LanguageModelUsage,
   StaticToolCall,
   DynamicToolCall,
   StaticToolResult,
   DynamicToolResult,
   UIMessage,
-  StepResult,
+  StepResult
 } from 'ai-v5';
 import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
@@ -28,21 +30,19 @@ import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scor
 import { DelayedPromise } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
-import { transformSteps } from '../aisdk/v5/output-helpers';
-import type { DefaultStepResult } from '../aisdk/v5/output-helpers';
+import { transformSteps, type DefaultStepResult } from '../aisdk/v5/output-helpers';
 import type {
-  BufferedByStep,
   ChunkType,
   StepBufferItem,
   SourceChunk,
   FileChunk,
   ToolCallChunk,
   ToolResultChunk,
-  ToolCallPayload,
 } from '../types';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
+import type { ReasoningPart } from '@ai-sdk/provider-utils-v5';
 
 export interface LanguageModelUsage {
   inputTokens?: number;
@@ -70,15 +70,51 @@ type MastraOnStepFinishCallback = (
   event: StepBufferItem & { model?: { modelId?: string; provider?: string; version: string } },
 ) => Promise<void> | void;
 
+
+// type MastraOnFinishCallbackArgs = Omit<StepBufferItem, 'toolCalls' | 'toolResults'> & {
+//   steps: DefaultStepResult<ToolSet>[]; // Use our DefaultStepResult type from output-helpers
+//   totalUsage: LanguageModelUsage;
+//   model?: { modelId?: string; provider?: string; version: string };
+//   error?: Error | string | { message: string; stack: string };
+//   object?: unknown;
+//   usage: LanguageModelUsage;
+//   // Keep raw chunks for now, can transform later if needed
+//   toolCalls: ToolCallChunk[];
+//   toolResults: ToolResultChunk[];
+//   dynamicToolCalls: ToolCallChunk[];
+//   dynamicToolResults: ToolResultChunk[];
+//   staticToolCalls: ToolCallChunk[];
+//   staticToolResults: ToolResultChunk[];
+// }
+
+type MastraOnFinishCallbackArgs<OUTPUT extends OutputSchema = undefined> = Omit<Parameters<StreamTextOnFinishCallback<ToolSet>>[0], 'toolCalls' | 'toolResults' | 'dynamicToolCalls' | 'dynamicToolResults' | 'staticToolCalls' | 'staticToolResults' | 'files' | 'sources'> & {
+  error?: Error | string | { message: string; stack: string };
+  object?: InferSchemaOutput<OUTPUT>;
+  toolCalls: ToolCallChunk[];
+  toolResults: ToolResultChunk[];
+  dynamicToolCalls: ToolCallChunk[];
+  dynamicToolResults: ToolResultChunk[];
+  staticToolCalls: ToolCallChunk[];
+  staticToolResults: ToolResultChunk[];
+  files: FileChunk[];
+  sources: SourceChunk[];
+  finishReason: FinishReason | string | undefined;
+  usage: LanguageModelUsage;
+  warnings: LanguageModelV2CallWarning[];
+  request: LanguageModelRequestMetadata;
+  response: {
+    headers?: Record<string, string>;
+    messages?: StepResult<ToolSet>['response']['messages'];
+    uiMessages?: UIMessage[];
+    [key: string]: unknown;
+  };
+  reasoningText: string | undefined;
+  providerMetadata: SharedV2ProviderMetadata | undefined;
+}
+
 // For onFinish, we pass a similar structure but with additional properties
 type MastraOnFinishCallback = (
-  event: StepBufferItem & {
-    steps: DefaultStepResult<ToolSet>[]; // Use our DefaultStepResult type from output-helpers
-    totalUsage: LanguageModelUsage;
-    model?: { modelId?: string; provider?: string; version: string };
-    error?: Error | string | { message: string; stack: string };
-    object?: unknown;
-  },
+  event: MastraOnFinishCallbackArgs,
 ) => Promise<void> | void;
 
 type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
@@ -95,28 +131,69 @@ type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   returnScorerData?: boolean;
   tracingContext?: TracingContext;
 };
+
+type BufferedByStep = {
+  toolCalls: ToolCallChunk[];
+  toolResults: ToolResultChunk[];
+  dynamicToolCalls: ToolCallChunk[];
+  dynamicToolResults: ToolResultChunk[];
+  staticToolCalls: ToolCallChunk[];
+  staticToolResults: ToolResultChunk[];
+  files: FileChunk[];
+  sources: SourceChunk[];
+  text: string;
+  reasoning: ReasoningPart[];
+  content: AIV5Type.StepResult<ToolSet>['content'];
+  finishReason?: FinishReason | string;
+  usage: LanguageModelUsage;
+  warnings: LanguageModelV2CallWarning[];
+  request: LanguageModelRequestMetadata;
+  response: {
+    headers?: Record<string, string>;
+    messages?: StepResult<ToolSet>['response']['messages'];
+    [key: string]: unknown;
+    uiMessages: UIMessage[];
+  };
+  reasoningText: string | undefined;
+  providerMetadata: SharedV2ProviderMetadata | undefined;
+};
+
+const emptyBufferedByStep: BufferedByStep = {
+  text: '',
+  reasoning: [],
+  sources: [],
+  files: [],
+  toolCalls: [],
+  toolResults: [],
+  dynamicToolCalls: [],
+  dynamicToolResults: [],
+  staticToolCalls: [],
+  staticToolResults: [],
+  content: [],
+  usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+  warnings: [],
+  request: {},
+  response: {
+    id: '',
+    timestamp: new Date(),
+    modelId: '',
+    messages: [],
+    uiMessages: [],
+  },
+  reasoningText: '',
+  providerMetadata: undefined,
+}
+
 export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
   #aisdkv5: AISDKV5OutputStream<OUTPUT>;
   #error: Error | string | { message: string; stack: string } | undefined;
   #baseStream: ReadableStream<ChunkType<OUTPUT>>;
-  #bufferedSteps: StepBufferItem[] = [];
+  #bufferedSteps: BufferedByStep[] = [];
   #bufferedReasoningDetails: Record<
     string,
-    {
-      type: string;
-      text: string;
-      providerMetadata: SharedV2ProviderMetadata;
-    }
+    ReasoningPart
   > = {};
-  #bufferedByStep: BufferedByStep = {
-    text: '',
-    reasoning: '',
-    sources: [],
-    files: [],
-    toolCalls: [],
-    toolResults: [],
-    msgCount: 0,
-  };
+  #bufferedByStep: BufferedByStep = emptyBufferedByStep;
   #bufferedText: string[] = [];
   #bufferedTextChunks: Record<string, string[]> = {};
   #bufferedSources: SourceChunk[] = [];
@@ -129,7 +206,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   #warnings: LanguageModelV2CallWarning[] = [];
   #finishReason: FinishReason | string | undefined;
   #request: Record<string, unknown> | undefined;
-  #usageCount: LanguageModelUsage = {};
+  #usageCount: LanguageModelUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
   #tripwire = false;
   #tripwireReason = '';
 
@@ -147,19 +224,13 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     }>(),
     request: new DelayedPromise<{ body?: unknown } | LanguageModelRequestMetadata>(),
     text: new DelayedPromise<string>(),
-    reasoning: new DelayedPromise<
-      {
-        type: string;
-        text: string;
-        providerMetadata: SharedV2ProviderMetadata;
-      }[]
-    >(),
+    reasoning: new DelayedPromise<ReasoningPart[]>(),
     reasoningText: new DelayedPromise<string | undefined>(),
     sources: new DelayedPromise<SourceChunk[]>(),
     files: new DelayedPromise<FileChunk[]>(),
     toolCalls: new DelayedPromise<ToolCallChunk[]>(),
     toolResults: new DelayedPromise<ToolResultChunk[]>(),
-    steps: new DelayedPromise<StepBufferItem[]>(),
+    steps: new DelayedPromise<DefaultStepResult<ToolSet>[]>(),
     totalUsage: new DelayedPromise<LanguageModelUsage>(),
     content: new DelayedPromise<AIV5Type.StepResult<ToolSet>['content']>(),
   };
@@ -300,18 +371,18 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#bufferedReasoningDetails[chunk.payload.id] = {
                 type: 'reasoning',
                 text: '',
-                providerMetadata: chunk.payload.providerMetadata || {},
+                providerOptions: chunk.payload.providerMetadata || {},
               };
               break;
             case 'reasoning-delta': {
               self.#bufferedReasoning.push(chunk.payload.text);
-              self.#bufferedByStep.reasoning += chunk.payload.text;
+              self.#bufferedByStep.reasoning.push({ type: 'reasoning', text: chunk.payload.text });
 
               const bufferedReasoning = self.#bufferedReasoningDetails[chunk.payload.id];
               if (bufferedReasoning) {
                 bufferedReasoning.text += chunk.payload.text;
                 if (chunk.payload.providerMetadata) {
-                  bufferedReasoning.providerMetadata = chunk.payload.providerMetadata;
+                  bufferedReasoning.providerOptions = chunk.payload.providerMetadata;
                 }
               }
 
@@ -320,16 +391,17 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
             case 'reasoning-end': {
               const bufferedReasoning = self.#bufferedReasoningDetails[chunk.payload.id];
               if (chunk.payload.providerMetadata && bufferedReasoning) {
-                bufferedReasoning.providerMetadata = chunk.payload.providerMetadata;
+                bufferedReasoning.providerOptions = chunk.payload.providerMetadata;
               }
               break;
             }
             case 'tool-call':
               self.#toolCalls.push(chunk);
               self.#bufferedByStep.toolCalls.push(chunk);
-              // Check if the tool call has nested output with usage information
               const toolCallPayload = chunk.payload;
+              // @ts-ignore TODO: What does this mean??? Why is there a nested output, what is the type supposed to be
               if (toolCallPayload?.output?.from === 'AGENT' && toolCallPayload?.output?.type === 'finish') {
+                // @ts-ignore TODO: What does this mean??? Why is there a nested output, what is the type supposed to be
                 const finishPayload = toolCallPayload.output.payload;
                 if (finishPayload?.usage) {
                   self.updateUsageCount(finishPayload.usage);
@@ -337,11 +409,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               }
               break;
             case 'tool-result':
-              self.#toolResults.push(chunk as ToolResultChunk);
-              self.#bufferedByStep.toolResults.push(chunk as ToolResultChunk);
+              self.#toolResults.push(chunk);
+              self.#bufferedByStep.toolResults.push(chunk);
               break;
             case 'step-finish': {
-              self.updateUsageCount(chunk.payload.output.usage as Record<string, number>);
+              self.updateUsageCount(chunk.payload.output.usage);
               // chunk.payload.totalUsage = self.totalUsage;
               self.#warnings = chunk.payload.stepResult.warnings || [];
 
@@ -351,11 +423,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
 
-              const stepResult: StepBufferItem = {
-                // Our custom properties
-                stepType: self.#bufferedSteps.length === 0 ? 'initial' : 'tool-result',
-                isContinued: chunk.payload.stepResult.isContinued,
-
+              const stepResult: BufferedByStep = {
                 // Keep original Mastra chunk format
                 sources: self.#bufferedByStep.sources,
                 files: self.#bufferedByStep.files,
@@ -365,27 +433,27 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 // StepResult properties (minus the ones we're overriding)
                 content: messageList.get.response.aiV5.modelContent(-1),
                 text: self.#bufferedByStep.text,
-                reasoning: self.#bufferedReasoning.map(text => ({ type: 'reasoning' as const, text })), // Convert string array to ReasoningPart array
-                reasoningText: self.#bufferedByStep.reasoning || undefined,
+                reasoningText: self.#bufferedReasoning.map(text => text).join(''),
+                reasoning: self.#bufferedByStep.reasoning,
                 // Compute these from the content array like DefaultStepResult does
                 get staticToolCalls() {
-                  return this.content.filter(
-                    (part): part is StaticToolCall<ToolSet> => part.type === 'tool-call' && part.dynamic === false,
+                  return self.#bufferedByStep.toolCalls.filter(
+                    (part) => part.type === 'tool-call' && part.payload?.dynamic === false,
                   );
                 },
                 get dynamicToolCalls() {
-                  return this.content.filter(
-                    (part): part is DynamicToolCall => part.type === 'tool-call' && part.dynamic === true,
+                  return self.#bufferedByStep.toolCalls.filter(
+                    (part) => part.type === 'tool-call' && part.payload?.dynamic === true,
                   );
                 },
                 get staticToolResults() {
-                  return this.content.filter(
-                    (part): part is StaticToolResult<ToolSet> => part.type === 'tool-result' && part.dynamic === false,
+                  return self.#bufferedByStep.toolResults.filter(
+                    (part) => part.type === 'tool-result' && part.payload?.dynamic === false,
                   );
                 },
                 get dynamicToolResults() {
-                  return this.content.filter(
-                    (part): part is DynamicToolResult => part.type === 'tool-result' && part.dynamic === true,
+                  return self.#bufferedByStep.toolResults.filter(
+                    (part) => part.type === 'tool-result' && part.payload?.dynamic === true,
                   );
                 },
                 finishReason: chunk.payload.stepResult.reason,
@@ -398,11 +466,13 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   modelId:
                     (chunk.payload.metadata?.modelId as string) || (chunk.payload.metadata?.model as string) || '',
                   ...otherMetadata,
-                  messages: messageList.get.response.aiV5.model(),
+                  // Clone messages to prevent mutation when the chunk is modified later
+                  messages: chunk.payload.messages?.nonUser || [],
                   uiMessages: messageList.get.response.aiV5.ui(),
                 },
                 providerMetadata: providerMetadata,
               };
+
 
               await options?.onStepFinish?.({
                 ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
@@ -411,15 +481,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               self.#bufferedSteps.push(stepResult);
 
-              self.#bufferedByStep = {
-                text: '',
-                reasoning: '',
-                sources: [],
-                files: [],
-                toolCalls: [],
-                toolResults: [],
-                msgCount: chunk.payload.messages?.all.length || 0,
-              };
+              self.#bufferedByStep = { ...emptyBufferedByStep};
 
               break;
             }
@@ -582,19 +644,39 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               const baseFinishStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
 
               if (baseFinishStep) {
-                const { stepType: _stepType, isContinued: _isContinued } = baseFinishStep;
-
-                const onFinishPayload = {
+                const onFinishPayload: MastraOnFinishCallbackArgs<OUTPUT> = {
                   // StepResult properties from baseFinishStep
-                  ...baseFinishStep,
-
-                  // Override/additional properties for the finish event
-                  steps: transformSteps({ steps: self.#bufferedSteps }), // Convert to DefaultStepResult[]
+                  providerMetadata: baseFinishStep.providerMetadata,
+                  text: baseFinishStep.text,
+                  warnings: baseFinishStep.warnings ?? [],
+                  finishReason: chunk.payload.stepResult.reason,
+                  content: messageList.get.response.aiV5.stepContent(),
+                  request: await self.request,
+                  error: self.error,
+                  reasoning: await self.reasoning,
+                  reasoningText: await self.reasoningText,
+                  sources: await self.sources,
+                  files: await self.files,
+                  steps: self.#bufferedSteps,
+                  response: { ...(await self.response), ...baseFinishStep.response, messages: messageList.get.response.aiV5.model() },
+                  usage: chunk.payload.output.usage,
                   totalUsage: self.#getTotalUsage(),
-
+                  toolCalls: await self.toolCalls,
+                  toolResults: await self.toolResults,
+                  staticToolCalls: (await self.toolCalls).filter(
+                    (toolCall) => toolCall?.payload?.dynamic === false,
+                  ),
+                  staticToolResults: (await self.toolResults).filter(
+                    (toolResult) => toolResult?.payload?.dynamic === false,
+                  ),
+                  dynamicToolCalls: (await self.toolCalls).filter(
+                    (toolCall) => toolCall?.payload?.dynamic === true,
+                  ),
+                  dynamicToolResults: (await self.toolResults).filter(
+                    (toolResult) => toolResult?.payload?.dynamic === true,
+                  ),
                   // Custom properties (not part of standard callback)
                   ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
-                  error: self.error,
                   object:
                     self.#delayedPromises.object.status.type === 'resolved'
                       ? self.#delayedPromises.object.status.value
@@ -660,9 +742,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                             ?.map(toolCall => {
                               return {
                                 type: 'tool-call',
-                                toolCallId: toolCall.payload.toolCallId,
-                                args: toolCall.payload.args,
-                                toolName: toolCall.payload.toolName,
+                                toolCallId: toolCall.payload?.toolCallId,
+                                input: toolCall.payload?.input,
+                                toolName: toolCall.payload?.toolName,
                               };
                             })
                             .filter(Boolean),

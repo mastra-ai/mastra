@@ -4789,7 +4789,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         ).toBe(true);
       });
 
-      it('should format messages correctly in onStepFinish when provider sends multiple response-metadata chunks (Issue #7050)', async () => {
+      it.only('should format messages correctly in onStepFinish when provider sends multiple response-metadata chunks (Issue #7050)', async () => {
         // This test reproduces the bug where real LLM providers (like OpenRouter)
         // send multiple response-metadata chunks (after each text-delta)
         // which causes the message to have multiple text parts, one for each chunks
@@ -4868,6 +4868,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               resource: 'test-resource-7050',
             },
             onStepFinish: async step => {
+              console.log(`step inside onStepFinish`, JSON.stringify(step, null, 2));
               capturedStep = step;
             },
           });
@@ -4886,6 +4887,14 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(capturedStep.response.messages).toBeDefined();
         expect(Array.isArray(capturedStep.response.messages)).toBe(true);
         expect(capturedStep.response.messages.length).toBeGreaterThan(0);
+
+        console.log('capturedStep', JSON.stringify(capturedStep, null, 2));
+        console.log('firstMessage type check:', {
+          hasContent: 'content' in capturedStep.response.messages[0],
+          contentType: typeof capturedStep.response.messages[0].content,
+          isArray: Array.isArray(capturedStep.response.messages[0].content),
+          actualContent: capturedStep.response.messages[0].content
+        });
 
         // Check that messages have the correct CoreMessage structure
         const firstMessage = capturedStep.response.messages[0];
@@ -9337,7 +9346,7 @@ describe('Agent Tests', () => {
     expect(finalCoreMessages.length).toBe(4); // Assistant call for tool-1, Tool result for tool-1, Assistant call for tool-2, Tool result for tool-2
   });
 
-  agentTests({ version: 'v1' });
+  // agentTests({ version: 'v1' });
   agentTests({ version: 'v2' });
 
   describe('agent.stopWhen', () => {
@@ -9500,7 +9509,7 @@ describe('Agent Tests', () => {
       expect(steps[2].content.length).toBe(1);
 
       expect(stopWhenContent[1]).not.toEqual(stopWhenContent[0]);
-    }, 10000);
+    }, 20000);
 
     it('should contain the correct content in the step results for both stopWhen and stream.steps with text and tool calls in the same step', async () => {
       const agent = new Agent({

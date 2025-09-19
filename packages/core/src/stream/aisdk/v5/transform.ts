@@ -4,7 +4,8 @@ import type {
   LanguageModelV2Usage,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
-import type { CoreMessage, ObjectStreamPart, TextStreamPart, ToolSet } from 'ai-v5';
+import type { ModelMessage, ObjectStreamPart, TextStreamPart, ToolSet } from 'ai-v5';
+import type { AIV5ResponseMessage } from '../../../agent/message-list';
 import type { ChunkType } from '../../types';
 import { ChunkFrom } from '../../types';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './file';
@@ -17,9 +18,9 @@ export type StreamPart =
       usage: LanguageModelV2Usage;
       providerMetadata: SharedV2ProviderMetadata;
       messages: {
-        all: CoreMessage[];
-        user: CoreMessage[];
-        nonUser: CoreMessage[];
+        all: ModelMessage[];
+        user: ModelMessage[];
+        nonUser: AIV5ResponseMessage[];
       };
     };
 
@@ -455,7 +456,7 @@ export function convertMastraChunkToAISDKv5({
         response: {
           id: chunk.payload.id || '',
           timestamp: new Date(),
-          modelId: (rest.modelId as string) || (rest.model as string) || '',
+          modelId: (rest.modelId as string) || '',
           ...rest,
         },
         usage: chunk.payload.output.usage,

@@ -147,6 +147,9 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
           messages: typedInputData.messages,
         };
 
+        console.log('typedInputData.messages', JSON.stringify(typedInputData.messages, null, 2));
+        console.log('agentic-loop messages.nonUser:', JSON.stringify(typedInputData.messages?.nonUser, null, 2));
+
         controller.enqueue({
           type: 'step-finish',
           runId,
