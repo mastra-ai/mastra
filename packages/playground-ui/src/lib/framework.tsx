@@ -20,6 +20,8 @@ type LinkComponentPaths = {
 
   workflowsLink: () => string;
   workflowLink: (workflowId: string) => string;
+
+  networkLink: (networkId: string) => string;
 };
 
 const LinkComponentContext = createContext<{
@@ -35,6 +37,7 @@ const LinkComponentContext = createContext<{
     agentToolLink: () => '',
     workflowsLink: () => '',
     workflowLink: () => '',
+    networkLink: () => '',
   },
 });
 

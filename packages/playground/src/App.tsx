@@ -48,6 +48,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   agentsLink: () => `/agents`,
   workflowsLink: () => `/workflows`,
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
+  networkLink: (networkId: string) => `/networks/v-next/${networkId}/chat`,
 };
 
 const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
