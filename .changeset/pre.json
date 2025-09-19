@@ -74,5 +74,10 @@
     "@mastra/voice-speechify": "0.11.5",
     "@mastra/inngest": "0.14.0"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_playground-ui-7980-dependencies",
+    "five-dodos-count",
+    "large-cats-guess",
+    "orange-baths-buy"
+  ]
 }
