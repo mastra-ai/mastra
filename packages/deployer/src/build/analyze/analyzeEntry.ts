@@ -1,5 +1,6 @@
 import { noopLogger, type IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
+import nodeResolve from '@rollup/plugin-node-resolve';
 import json from '@rollup/plugin-json';
 import virtual from '@rollup/plugin-virtual';
 import { fileURLToPath } from 'node:url';
@@ -39,6 +40,11 @@ function getInputPlugins(
 
   plugins.push(
     ...[
+      nodeResolve({
+        preferBuiltins: true,
+        extensions: ['.mjs', '.js', '.ts', '.json'],
+        exportConditions: ['node'],
+      }),
       tsConfigPaths(),
       {
         name: 'custom-alias-resolver',
