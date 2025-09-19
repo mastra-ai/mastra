@@ -23,7 +23,6 @@ import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
 import type {
   AITraceRecord,
   AISpanRecord,
-  LegacyWorkflowRuns,
   StorageGetMessagesArg,
   PaginationInfo,
   WorkflowRun,
@@ -32,11 +31,7 @@ import type {
 import type { OutputSchema } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
 import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
-import type {
-  StepAction,
-  StepGraph,
-  LegacyWorkflowRunResult as CoreLegacyWorkflowRunResult,
-} from '@mastra/core/workflows/legacy';
+
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
@@ -155,15 +150,6 @@ export interface GetToolResponse {
   outputSchema: string;
 }
 
-export interface GetLegacyWorkflowResponse {
-  name: string;
-  triggerSchema: string;
-  steps: Record<string, StepAction<any, any, any, any>>;
-  stepGraph: StepGraph;
-  stepSubscriberGraph: Record<string, StepGraph>;
-  workflowId?: string;
-}
-
 export interface GetWorkflowRunsParams {
   fromDate?: Date;
   toDate?: Date;
@@ -172,20 +158,11 @@ export interface GetWorkflowRunsParams {
   resourceId?: string;
 }
 
-export type GetLegacyWorkflowRunsResponse = LegacyWorkflowRuns;
-
 export type GetWorkflowRunsResponse = WorkflowRuns;
 
 export type GetWorkflowRunByIdResponse = WorkflowRun;
 
 export type GetWorkflowRunExecutionResultResponse = WatchEvent['payload']['workflowState'];
-
-export type LegacyWorkflowRunResult = {
-  activePaths: Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>;
-  results: CoreLegacyWorkflowRunResult<any, any, any>['results'];
-  timestamp: number;
-  runId: string;
-};
 
 export interface GetWorkflowResponse {
   name: string;

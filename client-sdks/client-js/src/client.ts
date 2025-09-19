@@ -10,7 +10,6 @@ import {
   BaseResource,
   A2A,
   MCPTool,
-  LegacyWorkflow,
   AgentBuilder,
   Observability,
 } from './resources';
@@ -34,7 +33,6 @@ import type {
   SaveMessageToMemoryResponse,
   McpServerListResponse,
   McpServerToolListResponse,
-  GetLegacyWorkflowResponse,
   GetVNextNetworkResponse,
   GetNetworkMemoryThreadParams,
   CreateNetworkMemoryThreadParams,
@@ -242,23 +240,6 @@ export class MastraClient extends BaseResource {
    */
   public getTool(toolId: string) {
     return new Tool(this.options, toolId);
-  }
-
-  /**
-   * Retrieves all available legacy workflows
-   * @returns Promise containing map of legacy workflow IDs to legacy workflow details
-   */
-  public getLegacyWorkflows(): Promise<Record<string, GetLegacyWorkflowResponse>> {
-    return this.request('/api/workflows/legacy');
-  }
-
-  /**
-   * Gets a legacy workflow instance by ID
-   * @param workflowId - ID of the legacy workflow to retrieve
-   * @returns Legacy Workflow instance
-   */
-  public getLegacyWorkflow(workflowId: string) {
-    return new LegacyWorkflow(this.options, workflowId);
   }
 
   /**

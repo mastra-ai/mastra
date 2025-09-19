@@ -88,16 +88,11 @@ export default function Scorer() {
       };
     }) || [];
 
-  const legacyWorkflows = workflows?.[0] || {};
-  const currentWorkflows = workflows?.[1] || {};
-
   const scorerWorkflows =
     scorer?.workflowIds.map(workflowId => {
       return {
         name: workflowId,
-        id: Object.entries({ ...legacyWorkflows, ...currentWorkflows }).find(
-          ([_, value]) => value.name === workflowId,
-        )?.[0],
+        id: Object.entries(workflows || {}).find(([_, value]) => value.name === workflowId)?.[0],
       };
     }) || [];
 
