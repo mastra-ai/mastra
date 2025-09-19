@@ -465,12 +465,12 @@ export const tools = [${toolsExports.join(', ')}]`,
       this.logger.info('Done copying public files');
 
       this.logger.info('Copying .npmrc file');
-      await this.copyDOTNPMRC({ outputDirectory });
+      await this.copyDOTNPMRC({ outputDirectory, rootDir: projectRoot });
 
       this.logger.info('Done copying .npmrc file');
 
       this.logger.info('Installing dependencies');
-      await this.installDependencies(outputDirectory);
+      await this.installDependencies(outputDirectory, projectRoot);
 
       this.logger.info('Done installing dependencies');
     } catch (error) {
