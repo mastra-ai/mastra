@@ -328,15 +328,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#toolCalls.push(chunk);
               self.#bufferedByStep.toolCalls.push(chunk);
               // Check if the tool call has nested output with usage information
-              const toolCallPayload = chunk.payload as ToolCallPayload & {
-                output?: {
-                  from: string;
-                  type: string;
-                  payload?: {
-                    usage?: Record<string, number>;
-                  };
-                };
-              };
+              const toolCallPayload = chunk.payload;
               if (toolCallPayload?.output?.from === 'AGENT' && toolCallPayload?.output?.type === 'finish') {
                 const finishPayload = toolCallPayload.output.payload;
                 if (finishPayload?.usage) {
