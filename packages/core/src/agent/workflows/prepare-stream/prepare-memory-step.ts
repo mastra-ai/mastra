@@ -21,21 +21,14 @@ import { prepareMemoryStepOutputSchema } from './schema';
 function addSystemMessage(messageList: MessageList, content: SystemMessage | undefined, tag?: string): void {
   if (!content) return;
 
-  if (typeof content === 'string') {
-    // Handle string system message
-    messageList.addSystem(content, tag);
-  } else if (Array.isArray(content)) {
-    // Handle array of system messages (strings or message objects)
+  if (Array.isArray(content)) {
+    // Handle array of system messages
     for (const msg of content) {
-      if (typeof msg === 'string') {
-        messageList.addSystem(msg, tag);
-      } else if ('content' in msg && msg.content) {
-        messageList.addSystem(msg.content, tag);
-      }
+      messageList.addSystem(msg, tag);
     }
-  } else if ('content' in content && content.content) {
-    // Handle single CoreSystemMessage or SystemModelMessage
-    messageList.addSystem(content.content, tag);
+  } else {
+    // Handle string, CoreSystemMessage, or SystemModelMessage
+    messageList.addSystem(content, tag);
   }
 }
 

@@ -4401,6 +4401,59 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         providerOptions: { openai: { temperature: 0.9 } },
       });
     });
+
+    it('should preserve provider options when building message list', async () => {
+      // This test verifies that provider options (like Anthropic caching) are preserved
+      // when instructions are added to the message list
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: {
+          role: 'system',
+          content: 'You are a helpful assistant with caching.',
+          providerOptions: {
+            anthropic: { cacheControl: { type: 'ephemeral' } },
+          },
+        } as SystemModelMessage,
+        model: dummyModel,
+      });
+
+      // Spy on MessageList.addSystem to capture what's being added
+      const addSystemSpy = vi.spyOn(MessageList.prototype, 'addSystem');
+
+      if (version === 'v2') {
+        try {
+          // This will trigger the message list building
+          await agent.generateVNext('Hello');
+
+          // Check all addSystem calls
+          const systemMessageCalls = addSystemSpy.mock.calls.filter(call => {
+            const msg = call[0];
+            return typeof msg === 'object' && msg !== null && 'role' in msg && msg.role === 'system';
+          });
+
+          // Find calls that have provider options
+          const messagesWithProviderOptions = systemMessageCalls
+            .map(call => call[0])
+            .filter((msg): msg is SystemModelMessage => {
+              return (
+                typeof msg === 'object' && msg !== null && 'providerOptions' in msg && msg.providerOptions !== undefined
+              );
+            });
+
+          // Verify provider options are preserved
+          expect(messagesWithProviderOptions.length).toBeGreaterThan(0);
+          expect(messagesWithProviderOptions?.[0]?.providerOptions).toEqual({
+            anthropic: { cacheControl: { type: 'ephemeral' } },
+          });
+        } finally {
+          // Restore the spy
+          addSystemSpy.mockRestore();
+        }
+      } else {
+        // Skip for v1
+        expect(true).toBe(true);
+      }
+    });
   });
 
   describe(`${version} - Agent save message parts`, () => {
