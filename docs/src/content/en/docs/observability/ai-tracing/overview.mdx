@@ -1,0 +1,370 @@
+---
+title: "AI Tracing | Observability | Mastra Docs"
+description: "Set up AI tracing for Mastra applications"
+---
+
+import { Callout } from "nextra/components";
+
+# AI Tracing
+
+AI Tracing provides specialized monitoring and debugging for the AI-related operations in your application. When enabled, Mastra automatically creates traces for agent runs, LLM generations, tool calls, and workflow steps with AI-specific context and metadata.
+
+Unlike traditional application tracing, AI Tracing focuses specifically on understanding your AI pipeline — capturing token usage, model parameters, tool execution details, and conversation flows. This makes it easier to debug issues, optimize performance, and understand how your AI systems behave in production.
+
+## How It Works
+
+AI Traces are created by:
+
+- **Configure exporters** → send trace data to observability platforms
+- **Set sampling strategies** → control which traces are collected
+- **Run agents and workflows** → Mastra auto-instruments them with AI Tracing
+
+## Configuration
+
+### Basic Config
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  // ... other config
+  observability: {
+    default: { enabled: true }, // Enables DefaultExporter and CloudExporter
+  },
+  storage: new LibSQLStore({
+    url: "file:./mastra.db", // Storage is required for tracing
+  }),
+});
+```
+
+When enabled, the default configuration automatically includes:
+- **Service Name**: `"mastra"`
+- **Sampling**: `"always"`- Sample (100% of traces)
+- **Exporters**:
+  - `DefaultExporter` - Persists traces to your configured storage
+  - `CloudExporter` - Sends traces to Mastra Cloud (requires `MASTRA_CLOUD_ACCESS_TOKEN`)
+- **Processors**: `SensitiveDataFilter` - Automatically redacts sensitive fields
+
+### Expanded Basic Config
+
+This default configuration is a minimal helper that equates to this more verbose configuration:
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+import { CloudExporter, DefaultExporter, SensitiveDataFilter } from '@mastra/core/ai-tracing';
+
+export const mastra = new Mastra({
+  // ... other config
+  observability: {
+    config: {
+      default: {
+        serviceName: "mastra",
+        sampling: { type: 'always' },
+        processors: [
+          new SensitiveDataFilter(),
+        ],
+        exporters: [
+          new CloudExporter(),
+          new DefaultExporter(),
+        ],
+      }
+    }
+  },
+  storage: new LibSQLStore({
+    url: "file:./mastra.db", // Storage is required for tracing
+  }),
+});
+```
+
+
+## Exporters
+
+Exporters determine where your AI trace data is sent and how it's stored. Choosing the right exporters allows you to integrate with your existing observability stack, comply with data residency requirements, and optimize for cost and performance. You can use multiple exporters simultaneously to send the same trace data to different destinations — for example, storing detailed traces locally for debugging while sending sampled data to a cloud provider for production monitoring.
+
+### Internal Exporters
+
+Mastra provides two built-in exporters that work out of the box:
+
+- **[DefaultExporter](/docs/observability/ai-tracing/exporters/default)** - Persists traces to your configured storage for local development and playground access
+- **[CloudExporter](/docs/observability/ai-tracing/exporters/cloud)** - Sends traces to Mastra Cloud for production monitoring and team collaboration
+
+
+
+### External Exporters
+
+In addition to the internal exporters, Mastra supports integration with popular observability platforms. These exporters allow you to leverage your existing monitoring infrastructure and take advantage of platform-specific features like alerting, dashboards, and correlation with other application metrics.
+
+| Provider | Status | Documentation | Examples | API Reference |
+|------|------|------|-----|------|
+| [Langfuse](https://langfuse.com/) | Beta | [Setup Guide](/docs/observability/ai-tracing/exporters/langfuse) | [Integration Example](/examples/observability/langfuse-integration) | |
+| [Braintrust](https://www.braintrust.dev/) | Beta | [Setup Guide](/docs/observability/ai-tracing/exporters/braintrust) | | |
+| [OpenTelemetry](https://opentelemetry.io/) | Coming Soon | | | |
+
+## Sampling Strategies
+
+Sampling allows you to control which traces are collected, helping you balance between observability needs and resource costs. In production environments with high traffic, collecting every trace can be expensive and unnecessary. Sampling strategies let you capture a representative subset of traces while ensuring you don't miss critical information about errors or important operations.
+
+Mastra supports four sampling strategies:
+
+### Always Sample
+Collects 100% of traces. Best for development, debugging, or low-traffic scenarios where you need complete visibility.
+
+```ts
+sampling: { type: 'always' }
+```
+
+### Never Sample
+Disables tracing entirely. Useful for specific environments where tracing adds no value or when you need to temporarily disable tracing without removing configuration.
+
+```ts
+sampling: { type: 'never' }
+```
+
+### Ratio-Based Sampling
+Randomly samples a percentage of traces. Ideal for production environments where you want statistical insights without the cost of full tracing. The probability value ranges from 0 (no traces) to 1 (all traces).
+
+```ts
+sampling: {
+  type: 'ratio',
+  probability: 0.1  // Sample 10% of traces
+}
+```
+
+### Custom Sampling
+Implements your own sampling logic based on runtime context, metadata, or business rules. Perfect for complex scenarios like sampling based on user tier, request type, or error conditions.
+
+```ts
+sampling: {
+  type: 'custom',
+  sampler: (options) => {
+    // Sample all error traces
+    if (options?.metadata?.isError) return true;
+
+    // Sample premium users at higher rate
+    if (options?.metadata?.userTier === 'premium') {
+      return Math.random() < 0.5; // 50% sampling
+    }
+
+    // Default 1% sampling for others
+    return Math.random() < 0.01;
+  }
+}
+```
+
+### Complete Example
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      production: {
+        serviceName: 'my-service',
+        // Sample 10% of traces
+        sampling: {
+          type: 'ratio',
+          probability: 0.1
+        },
+        exporters: [langfuseExporter],
+      },
+      debug: {
+        serviceName: 'my-service-debug',
+        // Always sample in debug mode
+        sampling: { type: 'always' },
+        exporters: [new DefaultExporter()],
+      },
+    },
+  },
+});
+```
+
+## Multi-Environment Configuration
+
+Complex applications often require different tracing configurations for different scenarios. You might want detailed traces with full sampling during development, sampled traces sent to external providers in production, and specialized configurations for specific features or customer segments. The `configSelector` function enables dynamic configuration selection at runtime, allowing you to route traces based on request context, environment variables, feature flags, or any custom logic.
+
+This approach is particularly valuable when:
+- Running A/B tests with different observability requirements
+- Providing enhanced debugging for specific customers or support cases
+- Gradually rolling out new tracing providers without affecting existing monitoring
+- Optimizing costs by using different sampling rates for different request types
+- Maintaining separate trace streams for compliance or data residency requirements
+
+### Dynamic Configuration Selection
+
+Use `configSelector` to choose the appropriate tracing configuration based on runtime context:
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    default: { enabled: true }, // Provides 'default' instance
+    configs: {
+      langfuse: {
+        serviceName: 'langfuse-service',
+        exporters: [langfuseExporter],
+      },
+      braintrust: {
+        serviceName: 'braintrust-service',
+        exporters: [braintrustExporter],
+      },
+      debug: {
+        serviceName: 'debug-service',
+        sampling: { type: 'always' },
+        exporters: [new DefaultExporter()],
+      },
+    },
+    configSelector: (context, availableTracers) => {
+      // Use debug config for support requests
+      if (context.runtimeContext?.get('supportMode')) {
+        return 'debug';
+      }
+
+      // Route specific customers to different providers
+      const customerId = context.runtimeContext?.get('customerId');
+      if (customerId && premiumCustomers.includes(customerId)) {
+        return 'braintrust';
+      }
+
+      // Route specific requests to langfuse
+      if (context.runtimeContext?.get('useExternalTracing')) {
+        return 'langfuse';
+      }
+
+      return 'default';
+    },
+  },
+});
+```
+
+### Environment-Based Configuration
+
+A common pattern is to select configurations based on deployment environment:
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      development: {
+        serviceName: 'my-service-dev',
+        sampling: { type: 'always' },
+        exporters: [new DefaultExporter()],
+      },
+      staging: {
+        serviceName: 'my-service-staging',
+        sampling: { type: 'ratio', probability: 0.5 },
+        exporters: [langfuseExporter],
+      },
+      production: {
+        serviceName: 'my-service-prod',
+        sampling: { type: 'ratio', probability: 0.01 },
+        exporters: [cloudExporter, langfuseExporter],
+      },
+    },
+    configSelector: (context, availableTracers) => {
+      const env = process.env.NODE_ENV || 'development';
+      return env;
+    },
+  },
+});
+```
+
+## Adding Custom Metadata
+
+Add context to your traces for better debugging:
+
+```ts showLineNumbers copy
+execute: async ({ inputData, tracingContext }) => {
+  const response = await fetch(inputData.endpoint);
+
+  // Add custom metadata to the current span
+  tracingContext.currentSpan?.update({
+    metadata: {
+      apiStatusCode: response.status,
+      endpoint: inputData.endpoint,
+    }
+  });
+
+  return await response.json();
+}
+```
+
+## Creating Child Spans
+
+Track specific operations within your workflow steps or tools:
+
+```ts showLineNumbers copy
+execute: async ({ input, tracingContext }) => {
+  // Create a child span for detailed tracking
+  const querySpan = tracingContext.currentSpan?.createChildSpan({
+    type: 'generic',
+    name: 'database-query',
+    input: { query: input.query }
+  });
+
+  try {
+    const results = await db.query(input.query);
+    querySpan?.end({
+      output: results.data,
+      metadata: { rowsReturned: results.length }
+    });
+    return results;
+  } catch (error) {
+    querySpan?.error({ error });
+    throw error;
+  }
+}
+```
+
+## Sensitive Data Protection
+
+The `SensitiveDataFilter` processor is enabled by default and automatically redacts common sensitive fields. You can customize the fields to redact:
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+import { SensitiveDataFilter } from '@mastra/core/ai-tracing';
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      production: {
+        serviceName: 'my-service',
+        exporters: [langfuseExporter],
+        processors: [
+          new SensitiveDataFilter([
+            // Default fields
+            'password', 'token', 'secret', 'key', 'apiKey',
+            // Add custom sensitive fields
+            'ssn', 'creditCard', 'bankAccount'
+          ])
+        ],
+      },
+    },
+  },
+});
+```
+
+## What Gets Traced
+
+Mastra automatically creates spans for:
+
+### Agent Operations
+- **Agent runs** - Complete execution with instructions and tools
+- **LLM calls** - Model interactions with tokens and parameters
+- **Tool executions** - Function calls with inputs and outputs
+- **Memory operations** - Thread and semantic recall
+
+### Workflow Operations
+- **Workflow runs** - Full execution from start to finish
+- **Individual steps** - Step processing with inputs/outputs
+- **Control flow** - Conditionals, loops, parallel execution
+- **Wait operations** - Delays and event waiting
+
+## Viewing Traces
+
+Traces are available in multiple locations:
+
+- **Mastra Playground** - Local development environment
+- **Mastra Cloud** - Production monitoring dashboard
+- **Langfuse Dashboard** - When using Langfuse exporter
+- **Braintrust Console** - When using Braintrust exporter
+
+## Next Steps
+
+- [View examples](/examples/observability/basic-ai-tracing.mdx) of AI tracing in action
+- [Configure exporters](/reference/observability/ai-tracing/exporters/default-exporter.mdx) for your environment
+- [Learn about span types](/reference/observability/ai-tracing/spans/agent-span.mdx) and attributes
+- [Create custom processors](/reference/observability/ai-tracing/processors/sensitive-data-filter.mdx) for data transformation
