@@ -11,7 +11,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     this.operations = operations;
   }
 
-  async createAISpan(span: AISpanRecord): Promise<void> {
+  async createAISpan(span: Omit<AISpanRecord, 'createdAt' | 'updatedAt'>): Promise<void> {
     try {
       // Explicitly set createdAt/updatedAt timestamps
       const now = new Date().toISOString();
@@ -77,7 +77,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
   }: {
     spanId: string;
     traceId: string;
-    updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+    updates: Partial<Omit<AISpanRecord, 'createdAt' | 'updatedAt' | 'spanId' | 'traceId'>>;
   }): Promise<void> {
     try {
       await this.operations.update({
@@ -212,7 +212,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     }
   }
 
-  async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
+  async batchCreateAISpans(args: { records: Omit<AISpanRecord, 'createdAt' | 'updatedAt'>[] }): Promise<void> {
     try {
       // Use single timestamp for all records in the batch
       const now = new Date().toISOString();
@@ -240,7 +240,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     records: {
       traceId: string;
       spanId: string;
-      updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+      updates: Partial<Omit<AISpanRecord, 'createdAt' | 'updatedAt' | 'spanId' | 'traceId'>>;
     }[];
   }): Promise<void> {
     try {
