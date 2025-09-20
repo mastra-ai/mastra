@@ -29,7 +29,6 @@ export class StoreOperationsPG extends StoreOperations {
   private setupSchemaPromise: Promise<void> | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
 
-
   constructor({ client, schemaName }: { client: IDatabase<{}>; schemaName?: string }) {
     super();
     this.client = client;
@@ -46,6 +45,51 @@ export class StoreOperationsPG extends StoreOperations {
     );
 
     return !!result;
+  }
+
+  /**
+   * Prepares values for insertion, handling JSONB columns by stringifying them
+   */
+  private prepareValuesForInsert(record: Record<string, any>, tableName: TABLE_NAMES): any[] {
+    return Object.entries(record).map(([key, value]) => {
+      // Get the schema for this table to determine column types
+      const schema = TABLE_SCHEMAS[tableName];
+      const columnSchema = schema?.[key];
+
+      // If the column is JSONB and the value is an object/array, stringify it
+      if (columnSchema?.type === 'jsonb' && value !== null && typeof value === 'object') {
+        return JSON.stringify(value);
+      }
+      return value;
+    });
+  }
+
+  /**
+   * Adds timestamp Z columns to a record if timestamp columns exist
+   */
+  private addTimestampZColumns(record: Record<string, any>): void {
+    if (record.createdAt) {
+      record.createdAtZ = record.createdAt;
+    }
+    if (record.created_at) {
+      record.created_atZ = record.created_at;
+    }
+    if (record.updatedAt) {
+      record.updatedAtZ = record.updatedAt;
+    }
+  }
+
+  /**
+   * Prepares a value for database operations, handling Date objects and JSON serialization
+   */
+  private prepareValue(value: any): any {
+    if (value instanceof Date) {
+      return value.toISOString();
+    } else if (typeof value === 'object' && value !== null) {
+      return JSON.stringify(value);
+    } else {
+      return value;
+    }
   }
 
   private async setupSchema() {
@@ -101,31 +145,11 @@ export class StoreOperationsPG extends StoreOperations {
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
-      if (record.createdAt) {
-        record.createdAtZ = record.createdAt;
-      }
-
-      if (record.created_at) {
-        record.created_atZ = record.created_at;
-      }
-
-      if (record.updatedAt) {
-        record.updatedAtZ = record.updatedAt;
-      }
+      this.addTimestampZColumns(record);
 
       const schemaName = getSchemaName(this.schemaName);
       const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
-      const values = Object.entries(record).map(([key, value]) => {
-        // Get the schema for this table to determine column types
-        const schema = TABLE_SCHEMAS[tableName];
-        const columnSchema = schema?.[key];
-
-        // If the column is JSONB and the value is an object/array, stringify it
-        if (columnSchema?.type === 'jsonb' && value !== null && typeof value === 'object') {
-          return JSON.stringify(value);
-        }
-        return value;
-      });
+      const values = this.prepareValuesForInsert(record, tableName);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
 
       await this.client.none(
@@ -244,6 +268,11 @@ export class StoreOperationsPG extends StoreOperations {
         schema,
         ifNotExists: timeZColumnNames,
       });
+
+      // Set up timestamp triggers for AI spans table
+      if (tableName === TABLE_AI_SPANS) {
+        await this.setupTimestampTriggers(tableName);
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -256,6 +285,52 @@ export class StoreOperationsPG extends StoreOperations {
         },
         error,
       );
+    }
+  }
+
+  /**
+   * Set up timestamp triggers for a table to automatically manage createdAt/updatedAt
+   */
+  private async setupTimestampTriggers(tableName: TABLE_NAMES): Promise<void> {
+    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+
+    try {
+      const triggerSQL = `
+        -- Create or replace the trigger function
+        CREATE OR REPLACE FUNCTION trigger_set_timestamps()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            IF TG_OP = 'INSERT' THEN
+                NEW."createdAt" = NOW();
+                NEW."updatedAt" = NOW();
+                NEW."createdAtZ" = NOW();
+                NEW."updatedAtZ" = NOW();
+            ELSIF TG_OP = 'UPDATE' THEN
+                NEW."updatedAt" = NOW();
+                NEW."updatedAtZ" = NOW();
+                -- Prevent createdAt from being changed
+                NEW."createdAt" = OLD."createdAt";
+                NEW."createdAtZ" = OLD."createdAtZ";
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        -- Drop existing trigger if it exists
+        DROP TRIGGER IF EXISTS ${tableName}_timestamps ON ${fullTableName};
+
+        -- Create the trigger
+        CREATE TRIGGER ${tableName}_timestamps
+            BEFORE INSERT OR UPDATE ON ${fullTableName}
+            FOR EACH ROW
+            EXECUTE FUNCTION trigger_set_timestamps();
+      `;
+
+      await this.client.none(triggerSQL);
+      this.logger?.debug?.(`Set up timestamp triggers for table ${fullTableName}`);
+    } catch (error) {
+      // Log warning but don't fail table creation
+      this.logger?.warn?.(`Failed to set up timestamp triggers for ${fullTableName}:`, error);
     }
   }
 
@@ -355,43 +430,13 @@ export class StoreOperationsPG extends StoreOperations {
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     try {
-      const schemaName = getSchemaName(this.schemaName);
-      const tableNameWithSchema = getTableName({ indexName: tableName, schemaName });
-
-      await this.client.tx(async t => {
-        for (const record of records) {
-          // Add timestamp columns if needed
-          if (record.createdAt) {
-            record.createdAtZ = record.createdAt;
-          }
-          if (record.created_at) {
-            record.created_atZ = record.created_at;
-          }
-          if (record.updatedAt) {
-            record.updatedAtZ = record.updatedAt;
-          }
-
-          const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
-          const values = Object.entries(record).map(([key, value]) => {
-            // Get the schema for this table to determine column types
-            const schema = TABLE_SCHEMAS[tableName];
-            const columnSchema = schema?.[key];
-
-            // If the column is JSONB and the value is an object/array, stringify it
-            if (columnSchema?.type === 'jsonb' && value !== null && typeof value === 'object') {
-              return JSON.stringify(value);
-            }
-            return value;
-          });
-          const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
-
-          await t.none(
-            `INSERT INTO ${tableNameWithSchema} (${columns.map(c => `"${c}"`).join(', ')}) VALUES (${placeholders})`,
-            values,
-          );
-        }
-      });
+      await this.client.query('BEGIN');
+      for (const record of records) {
+        await this.insert({ tableName, record });
+      }
+      await this.client.query('COMMIT');
     } catch (error) {
+      await this.client.query('ROLLBACK');
       throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_BATCH_INSERT_FAILED',
@@ -815,15 +860,7 @@ export class StoreOperationsPG extends StoreOperations {
       Object.entries(data).forEach(([key, value]) => {
         const parsedKey = parseSqlIdentifier(key, 'column name');
         setColumns.push(`"${parsedKey}" = $${paramIndex++}`);
-
-        // Handle Date objects
-        if (value instanceof Date) {
-          setValues.push(value.toISOString());
-        } else if (typeof value === 'object' && value !== null) {
-          setValues.push(JSON.stringify(value));
-        } else {
-          setValues.push(value);
-        }
+        setValues.push(this.prepareValue(value));
       });
 
       // Build WHERE clause
@@ -833,7 +870,7 @@ export class StoreOperationsPG extends StoreOperations {
       Object.entries(keys).forEach(([key, value]) => {
         const parsedKey = parseSqlIdentifier(key, 'column name');
         whereConditions.push(`"${parsedKey}" = $${paramIndex++}`);
-        whereValues.push(value);
+        whereValues.push(this.prepareValue(value));
       });
 
       const tableName_ = getTableName({
@@ -874,49 +911,13 @@ export class StoreOperationsPG extends StoreOperations {
     }>;
   }): Promise<void> {
     try {
-      await this.client.tx(async t => {
-        for (const update of updates) {
-          const setColumns: string[] = [];
-          const setValues: any[] = [];
-          let paramIndex = 1;
-
-          // Build SET clause
-          Object.entries(update.data).forEach(([key, value]) => {
-            const parsedKey = parseSqlIdentifier(key, 'column name');
-            setColumns.push(`"${parsedKey}" = $${paramIndex++}`);
-
-            // Handle Date objects
-            if (value instanceof Date) {
-              setValues.push(value.toISOString());
-            } else if (typeof value === 'object' && value !== null) {
-              setValues.push(JSON.stringify(value));
-            } else {
-              setValues.push(value);
-            }
-          });
-
-          // Build WHERE clause
-          const whereConditions: string[] = [];
-          const whereValues: any[] = [];
-
-          Object.entries(update.keys).forEach(([key, value]) => {
-            const parsedKey = parseSqlIdentifier(key, 'column name');
-            whereConditions.push(`"${parsedKey}" = $${paramIndex++}`);
-            whereValues.push(value);
-          });
-
-          const tableName_ = getTableName({
-            indexName: tableName,
-            schemaName: getSchemaName(this.schemaName),
-          });
-
-          const sql = `UPDATE ${tableName_} SET ${setColumns.join(', ')} WHERE ${whereConditions.join(' AND ')}`;
-          const values = [...setValues, ...whereValues];
-
-          await t.none(sql, values);
-        }
-      });
+      await this.client.query('BEGIN');
+      for (const { keys, data } of updates) {
+        await this.update({ tableName, keys, data });
+      }
+      await this.client.query('COMMIT');
     } catch (error) {
+      await this.client.query('ROLLBACK');
       throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_BATCH_UPDATE_FAILED',
@@ -935,13 +936,7 @@ export class StoreOperationsPG extends StoreOperations {
   /**
    * Delete multiple records by keys
    */
-  async batchDelete({
-    tableName,
-    keys,
-  }: {
-    tableName: TABLE_NAMES;
-    keys: Record<string, any>[];
-  }): Promise<void> {
+  async batchDelete({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any>[] }): Promise<void> {
     try {
       if (keys.length === 0) {
         return;
