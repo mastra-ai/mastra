@@ -1,7 +1,5 @@
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../types';
-
-// Use the actual UIMessageWithMetadata type instead of our own
 import type { ToolInvocation } from 'ai';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../types';
 import type { UIMessageWithMetadata } from '../../agent';
 import { AISpanType } from '../../ai-tracing';
 import type { AISpanRecord, AITraceRecord } from '../../storage';

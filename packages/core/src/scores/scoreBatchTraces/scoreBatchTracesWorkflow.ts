@@ -1,6 +1,7 @@
 import pMap from 'p-map';
 import z from 'zod';
-import { InternalSpans, type TracingContext } from '../../ai-tracing';
+import { InternalSpans } from '../../ai-tracing';
+import type { TracingContext } from '../../ai-tracing';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { AISpanRecord, AITraceRecord, MastraStorage } from '../../storage';
 import { createStep, createWorkflow } from '../../workflows/evented';
@@ -49,15 +50,18 @@ const getTraceStep = createStep({
     try {
       scorer = mastra.getScorerByName(inputData.scorerName);
     } catch (error) {
-      const mastraError = new MastraError({
-        id: 'MASTRA_SCORER_NOT_FOUND_FOR_TRACE_SCORING',
-        domain: ErrorDomain.SCORER,
-        category: ErrorCategory.SYSTEM,
-        text: `Scorer not found for trace scoring`,
-        details: {
-          scorerName: inputData.scorerName,
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_SCORER_NOT_FOUND_FOR_TRACE_SCORING',
+          domain: ErrorDomain.SCORER,
+          category: ErrorCategory.SYSTEM,
+          text: `Scorer not found for trace scoring`,
+          details: {
+            scorerName: inputData.scorerName,
+          },
         },
-      });
+        error,
+      );
       logger?.error(mastraError.toString());
       logger?.trackException(mastraError);
       return;

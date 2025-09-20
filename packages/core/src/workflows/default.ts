@@ -1064,7 +1064,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     if (!disableScorers && scorersToUse && Object.keys(scorersToUse || {}).length > 0) {
-      for (const [id, scorerObject] of Object.entries(scorersToUse || {})) {
+      for (const [_id, scorerObject] of Object.entries(scorersToUse || {})) {
         runScorer({
           scorerId: scorerObject.name,
           scorerObject: scorerObject,

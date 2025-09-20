@@ -80,7 +80,7 @@ async function findScorer(mastra: Mastra, entityId: string, entityType: string, 
   let scorerToUse;
   if (entityType === 'AGENT') {
     const scorers = await mastra.getAgentById(entityId).getScorers();
-    for (const [id, scorer] of Object.entries(scorers)) {
+    for (const [_, scorer] of Object.entries(scorers)) {
       if (scorer.scorer.name === scorerName) {
         scorerToUse = scorer;
         break;
@@ -88,7 +88,7 @@ async function findScorer(mastra: Mastra, entityId: string, entityType: string, 
     }
   } else if (entityType === 'WORKFLOW') {
     const scorers = await mastra.getWorkflowById(entityId).getScorers();
-    for (const [id, scorer] of Object.entries(scorers)) {
+    for (const [_, scorer] of Object.entries(scorers)) {
       if (scorer.scorer.name === scorerName) {
         scorerToUse = scorer;
         break;
