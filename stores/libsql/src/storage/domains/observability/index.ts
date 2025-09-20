@@ -13,7 +13,14 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
 
   async createAISpan(span: AISpanRecord): Promise<void> {
     try {
-      return this.operations.insert({ tableName: TABLE_AI_SPANS, record: span });
+      // Let database handle createdAt/updatedAt timestamps
+      const now = new Date().toISOString();
+      const record = {
+        ...span,
+        createdAt: now,
+        updatedAt: now,
+      };
+      return this.operations.insert({ tableName: TABLE_AI_SPANS, record });
     } catch (error) {
       throw new MastraError(
         {
@@ -207,12 +214,14 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
 
   async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
     try {
+      // Use single timestamp for all records in the batch
+      const now = new Date().toISOString();
       return this.operations.batchInsert({
         tableName: TABLE_AI_SPANS,
         records: args.records.map(record => ({
           ...record,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          createdAt: now,
+          updatedAt: now,
         })),
       });
     } catch (error) {
