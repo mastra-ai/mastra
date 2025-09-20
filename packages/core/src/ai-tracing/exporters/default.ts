@@ -6,7 +6,8 @@ import type { AISpanRecord } from '../../storage/types';
 import { AITracingEventType } from '../types';
 import type { AITracingEvent, AITracingExporter, AnyExportedAISpan, TracingStrategy } from '../types';
 
-type InternalAISpanRecord = Omit<AISpanRecord, 'spanId' | 'traceId' | 'createdAt' | 'updatedAt'>;
+type CreateAISpanRecord = Omit<AISpanRecord, 'createdAt' | 'updatedAt'>;
+type UpdateAISpanRecord = Omit<CreateAISpanRecord, 'spanId' | 'traceId'>;
 
 interface BatchingConfig {
   maxBatchSize?: number; // Default: 1000 spans
@@ -21,11 +22,11 @@ interface BatchingConfig {
 
 interface BatchBuffer {
   // For batch-with-updates strategy
-  creates: AISpanRecord[];
+  creates: CreateAISpanRecord[];
   updates: UpdateRecord[];
 
   // For insert-only strategy
-  insertOnly: AISpanRecord[];
+  insertOnly: CreateAISpanRecord[];
 
   // Ordering enforcement (batch-with-updates only)
   seenSpans: Set<string>; // "traceId:spanId" combinations we've seen creates for
@@ -45,7 +46,7 @@ interface BatchBuffer {
 interface UpdateRecord {
   traceId: string;
   spanId: string;
-  updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+  updates: Partial<UpdateAISpanRecord>;
   sequenceNumber: number; // For ordering updates to same span
 }
 
@@ -202,13 +203,7 @@ export class DefaultExporter implements AITracingExporter {
     switch (event.type) {
       case AITracingEventType.SPAN_STARTED:
         if (this.resolvedStrategy === 'batch-with-updates') {
-          const createRecord = {
-            traceId: event.exportedSpan.traceId,
-            spanId: event.exportedSpan.id,
-            ...this.buildCreateRecord(event.exportedSpan),
-            createdAt: new Date(),
-            updatedAt: null,
-          };
+          const createRecord = this.buildCreateRecord(event.exportedSpan);
           this.buffer.creates.push(createRecord);
           this.buffer.seenSpans.add(spanKey);
           // Track this span as created persistently
@@ -224,10 +219,7 @@ export class DefaultExporter implements AITracingExporter {
             this.buffer.updates.push({
               traceId: event.exportedSpan.traceId,
               spanId: event.exportedSpan.id,
-              updates: {
-                ...this.buildUpdateRecord(event.exportedSpan),
-                updatedAt: new Date(),
-              },
+              updates: this.buildUpdateRecord(event.exportedSpan),
               sequenceNumber: this.getNextSequence(spanKey),
             });
           } else {
@@ -246,23 +238,14 @@ export class DefaultExporter implements AITracingExporter {
             this.buffer.updates.push({
               traceId: event.exportedSpan.traceId,
               spanId: event.exportedSpan.id,
-              updates: {
-                ...this.buildUpdateRecord(event.exportedSpan),
-                updatedAt: new Date(),
-              },
+              updates: this.buildUpdateRecord(event.exportedSpan),
               sequenceNumber: this.getNextSequence(spanKey),
             });
             // Mark this span as completed
             this.buffer.completedSpans.add(spanKey);
           } else if (event.exportedSpan.isEvent) {
             // Event-type spans only emit SPAN_ENDED (no prior SPAN_STARTED)
-            const createRecord = {
-              traceId: event.exportedSpan.traceId,
-              spanId: event.exportedSpan.id,
-              ...this.buildCreateRecord(event.exportedSpan),
-              createdAt: new Date(),
-              updatedAt: null,
-            };
+            const createRecord = this.buildCreateRecord(event.exportedSpan);
             this.buffer.creates.push(createRecord);
             this.buffer.seenSpans.add(spanKey);
             // Track this span as created persistently
@@ -276,13 +259,7 @@ export class DefaultExporter implements AITracingExporter {
           }
         } else if (this.resolvedStrategy === 'insert-only') {
           // Only process SPAN_ENDED for insert-only strategy
-          const createRecord = {
-            traceId: event.exportedSpan.traceId,
-            spanId: event.exportedSpan.id,
-            ...this.buildCreateRecord(event.exportedSpan),
-            createdAt: new Date(),
-            updatedAt: null,
-          };
+          const createRecord = this.buildCreateRecord(event.exportedSpan);
           this.buffer.insertOnly.push(createRecord);
           // Mark as completed for insert-only strategy
           this.buffer.completedSpans.add(spanKey);
@@ -393,8 +370,10 @@ export class DefaultExporter implements AITracingExporter {
     }
   }
 
-  private buildCreateRecord(span: AnyExportedAISpan): InternalAISpanRecord {
+  private buildCreateRecord(span: AnyExportedAISpan): CreateAISpanRecord {
     return {
+      traceId: span.traceId,
+      spanId: span.id,
       parentSpanId: span.parentSpanId ?? null,
       name: span.name,
       scope: null,
@@ -411,7 +390,7 @@ export class DefaultExporter implements AITracingExporter {
     };
   }
 
-  private buildUpdateRecord(span: AnyExportedAISpan): Partial<InternalAISpanRecord> {
+  private buildUpdateRecord(span: AnyExportedAISpan): Partial<UpdateAISpanRecord> {
     return {
       name: span.name,
       scope: null,
@@ -435,13 +414,7 @@ export class DefaultExporter implements AITracingExporter {
     // Event spans only have an end event
     if (span.isEvent) {
       if (event.type === AITracingEventType.SPAN_ENDED) {
-        await storage.createAISpan({
-          traceId: span.traceId,
-          spanId: span.id,
-          ...this.buildCreateRecord(span),
-          createdAt: new Date(),
-          updatedAt: null,
-        });
+        await storage.createAISpan(this.buildCreateRecord(event.exportedSpan));
         // For event spans in realtime, we don't need to track them since they're immediately complete
       } else {
         this.logger.warn(`Tracing event type not implemented for event spans: ${event.type}`);
@@ -449,13 +422,7 @@ export class DefaultExporter implements AITracingExporter {
     } else {
       switch (event.type) {
         case AITracingEventType.SPAN_STARTED:
-          await storage.createAISpan({
-            traceId: span.traceId,
-            spanId: span.id,
-            ...this.buildCreateRecord(span),
-            createdAt: new Date(),
-            updatedAt: null,
-          });
+          await storage.createAISpan(this.buildCreateRecord(event.exportedSpan));
           // Track this span as created persistently
           this.allCreatedSpans.add(spanKey);
           break;
@@ -463,20 +430,14 @@ export class DefaultExporter implements AITracingExporter {
           await storage.updateAISpan({
             traceId: span.traceId,
             spanId: span.id,
-            updates: {
-              ...this.buildUpdateRecord(span),
-              updatedAt: new Date(),
-            },
+            updates: this.buildUpdateRecord(span),
           });
           break;
         case AITracingEventType.SPAN_ENDED:
           await storage.updateAISpan({
             traceId: span.traceId,
             spanId: span.id,
-            updates: {
-              ...this.buildUpdateRecord(span),
-              updatedAt: new Date(),
-            },
+            updates: this.buildUpdateRecord(span),
           });
           // Clean up immediately for realtime strategy
           this.allCreatedSpans.delete(spanKey);
