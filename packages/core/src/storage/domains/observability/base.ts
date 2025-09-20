@@ -28,7 +28,7 @@ export class ObservabilityStorage extends MastraBase {
   /**
    * Creates a single AI span record in the storage provider.
    */
-  createAISpan(_span: AISpanRecord): Promise<void> {
+  createAISpan(_span: Omit<AISpanRecord, 'createdAt' | 'updatedAt'>): Promise<void> {
     throw new MastraError({
       id: 'OBSERVABILITY_CREATE_AI_SPAN_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
@@ -43,7 +43,7 @@ export class ObservabilityStorage extends MastraBase {
   updateAISpan(_params: {
     spanId: string;
     traceId: string;
-    updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+    updates: Partial<Omit<AISpanRecord, 'createdAt' | 'updatedAt' | 'spanId' | 'traceId'>>;
   }): Promise<void> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_UPDATE_AI_SPAN_NOT_IMPLEMENTED',
@@ -80,7 +80,7 @@ export class ObservabilityStorage extends MastraBase {
   /**
    * Creates multiple AI spans in a single batch.
    */
-  batchCreateAISpans(_args: { records: AISpanRecord[] }): Promise<void> {
+  batchCreateAISpans(_args: { records: Omit<AISpanRecord, 'createdAt' | 'updatedAt'>[] }): Promise<void> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_BATCH_CREATE_AI_SPAN_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
@@ -96,7 +96,7 @@ export class ObservabilityStorage extends MastraBase {
     records: {
       traceId: string;
       spanId: string;
-      updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+      updates: Partial<Omit<AISpanRecord, 'createdAt' | 'updatedAt' | 'spanId' | 'traceId'>>;
     }[];
   }): Promise<void> {
     throw new MastraError({

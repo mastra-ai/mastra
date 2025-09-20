@@ -558,7 +558,7 @@ export abstract class MastraStorage extends MastraBase {
   /**
    * Creates a single AI span record in the storage provider.
    */
-  async createAISpan(span: AISpanRecord): Promise<void> {
+  async createAISpan(span: Omit<AISpanRecord, 'createdAt' | 'updatedAt'>): Promise<void> {
     if (this.stores?.observability) {
       return this.stores.observability.createAISpan(span);
     }
@@ -576,7 +576,7 @@ export abstract class MastraStorage extends MastraBase {
   async updateAISpan(params: {
     spanId: string;
     traceId: string;
-    updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+    updates: Partial<Omit<AISpanRecord, 'createdAt' | 'updatedAt' | 'spanId' | 'traceId'>>;
   }): Promise<void> {
     if (this.stores?.observability) {
       return this.stores.observability.updateAISpan(params);
@@ -624,7 +624,7 @@ export abstract class MastraStorage extends MastraBase {
   /**
    * Creates multiple AI spans in a single batch.
    */
-  async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
+  async batchCreateAISpans(args: { records: Omit<AISpanRecord, 'createdAt' | 'updatedAt'>[] }): Promise<void> {
     if (this.stores?.observability) {
       return this.stores.observability.batchCreateAISpans(args);
     }
@@ -643,7 +643,7 @@ export abstract class MastraStorage extends MastraBase {
     records: {
       traceId: string;
       spanId: string;
-      updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+      updates: Partial<Omit<AISpanRecord, 'createdAt' | 'updatedAt' | 'spanId' | 'traceId'>>;
     }[];
   }): Promise<void> {
     if (this.stores?.observability) {
