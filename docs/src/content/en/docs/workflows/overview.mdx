@@ -4,6 +4,7 @@ description: "Workflows in Mastra help you orchestrate complex sequences of oper
 ---
 
 import { Steps } from "nextra/components";
+import { Codeblock } from "@/components/codeblock/Codeblock";
 
 # Workflows overview
 
@@ -52,13 +53,45 @@ const step1 = createStep({...});
 
 Create a workflow using `createWorkflow` and complete it with `.commit()`.
 
+
+<Codeblock code={`import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+ 
+const step1 = createStep({
+  id: "step-1",
+  description: "passes value from input to output",
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    value: z.number()
+  }),
+  execute: async ({ inputData }) => {
+    const { value } = inputData;
+    return {
+      value
+    };
+  }
+});
+
+const workflow = createWorkflow({
+  id: "test-workflow",
+  description: 'Test workflow',
+  inputSchema: z.object({
+    input: z.string()
+  }),
+  outputSchema: z.object({
+    output: z.string()
+  })
+}).then(step1).commit();`} />
+
 ```typescript {6,17} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const step1 = createStep({...});
 
-export const testWorkflow = createWorkflow({
+const workflow = createWorkflow({
   id: "test-workflow",
   description: 'Test workflow',
   inputSchema: z.object({
