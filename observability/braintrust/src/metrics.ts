@@ -24,14 +24,23 @@ export interface BraintrustUsageMetrics {
 export function normalizeUsageMetrics(llmAttr: LLMGenerationAttributes): BraintrustUsageMetrics {
   const metrics: BraintrustUsageMetrics = {};
 
-  if (llmAttr.usage?.promptTokens !== undefined) {
+  if (llmAttr.usage?.inputTokens !== undefined) {
+    metrics.prompt_tokens = llmAttr.usage?.inputTokens;
+  } else if (llmAttr.usage?.promptTokens !== undefined) {
     metrics.prompt_tokens = llmAttr.usage?.promptTokens;
   }
-  if (llmAttr.usage?.completionTokens !== undefined) {
+  
+  if (llmAttr.usage?.outputTokens !== undefined) {
+    metrics.completion_tokens = llmAttr.usage?.outputTokens;
+  } else if (llmAttr.usage?.completionTokens !== undefined) {
     metrics.completion_tokens = llmAttr.usage?.completionTokens;
   }
+  
   if (llmAttr.usage?.totalTokens !== undefined) {
     metrics.tokens = llmAttr.usage?.totalTokens;
+  }
+  if (llmAttr.usage?.reasoningTokens !== undefined) {
+    metrics.completion_reasoning_tokens = llmAttr.usage?.reasoningTokens;
   }
   if (llmAttr.usage?.promptCacheHitTokens !== undefined) {
     metrics.prompt_cached_tokens = llmAttr.usage?.promptCacheHitTokens;
