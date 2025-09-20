@@ -255,9 +255,11 @@ export class BraintrustExporter implements AITracingExporter {
 
     // If the parent exists but is the root span (not represented as a Braintrust
     // span because we use the logger as the root), attach to the logger so the
-    // span is not orphaned.
-    const parentIsRoot = !!span.parent && (span.parent as any).parent == null;
-    if (parentIsRoot) {
+    // span is not orphaned. We need to check if parentSpanId exists but the
+    // parent span is not in our spans map (indicating it's the root span).
+    if (parentId && !spanData.spans.has(parentId)) {
+      // This means the parent exists but isn't tracked as a Braintrust span,
+      // which happens when the parent is the root span (we use logger as root)
       return spanData.logger;
     }
 
