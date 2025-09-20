@@ -9,7 +9,7 @@
 import type {
   AITracingExporter,
   AITracingEvent,
-  AnyAISpan,
+  AnyExportedAISpan,
   LLMGenerationAttributes,
 } from '@mastra/core/ai-tracing';
 import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
@@ -80,25 +80,25 @@ export class BraintrustExporter implements AITracingExporter {
       return;
     }
 
-    if (event.span.isEvent) {
-      await this.handleEventSpan(event.span);
+    if (event.exportedSpan.isEvent) {
+      await this.handleEventSpan(event.exportedSpan);
       return;
     }
 
     switch (event.type) {
       case 'span_started':
-        await this.handleSpanStarted(event.span);
+        await this.handleSpanStarted(event.exportedSpan);
         break;
       case 'span_updated':
-        await this.handleSpanUpdateOrEnd(event.span, false);
+        await this.handleSpanUpdateOrEnd(event.exportedSpan, false);
         break;
       case 'span_ended':
-        await this.handleSpanUpdateOrEnd(event.span, true);
+        await this.handleSpanUpdateOrEnd(event.exportedSpan, true);
         break;
     }
   }
 
-  private async handleSpanStarted(span: AnyAISpan): Promise<void> {
+  private async handleSpanStarted(span: AnyExportedAISpan): Promise<void> {
     if (span.isRootSpan) {
       await this.initLogger(span);
     }
@@ -130,7 +130,7 @@ export class BraintrustExporter implements AITracingExporter {
     spanData.spans.set(span.id, braintrustSpan);
   }
 
-  private async handleSpanUpdateOrEnd(span: AnyAISpan, isEnd: boolean): Promise<void> {
+  private async handleSpanUpdateOrEnd(span: AnyExportedAISpan, isEnd: boolean): Promise<void> {
     const method = isEnd ? 'handleSpanEnd' : 'handleSpanUpdate';
 
     const spanData = this.getSpanData({ span, method });
@@ -146,7 +146,7 @@ export class BraintrustExporter implements AITracingExporter {
         spanName: span.name,
         spanType: span.type,
         isRootSpan: span.isRootSpan,
-        parentSpanId: span.parent?.id,
+        parentSpanId: span.parentSpanId,
         method,
       });
       return;
@@ -174,7 +174,7 @@ export class BraintrustExporter implements AITracingExporter {
     }
   }
 
-  private async handleEventSpan(span: AnyAISpan): Promise<void> {
+  private async handleEventSpan(span: AnyExportedAISpan): Promise<void> {
     if (span.isRootSpan) {
       this.logger.debug('Braintrust exporter: Creating logger for event', {
         traceId: span.traceId,
@@ -209,7 +209,7 @@ export class BraintrustExporter implements AITracingExporter {
     braintrustSpan.end({ endTime: span.startTime.getTime() / 1000 });
   }
 
-  private async initLogger(span: AnyAISpan): Promise<void> {
+  private async initLogger(span: AnyExportedAISpan): Promise<void> {
     const logger = await initLogger({
       projectName: this.config.projectName ?? 'mastra-tracing',
       apiKey: this.config.apiKey,
@@ -220,7 +220,7 @@ export class BraintrustExporter implements AITracingExporter {
     this.traceMap.set(span.traceId, { logger, spans: new Map(), activeIds: new Set() });
   }
 
-  private getSpanData(options: { span: AnyAISpan; method: string }): SpanData | undefined {
+  private getSpanData(options: { span: AnyExportedAISpan; method: string }): SpanData | undefined {
     const { span, method } = options;
     if (this.traceMap.has(span.traceId)) {
       return this.traceMap.get(span.traceId);
@@ -232,19 +232,19 @@ export class BraintrustExporter implements AITracingExporter {
       spanName: span.name,
       spanType: span.type,
       isRootSpan: span.isRootSpan,
-      parentSpanId: span.parent?.id,
+      parentSpanId: span.parentSpanId,
       method,
     });
   }
 
   private getBraintrustParent(options: {
     spanData: SpanData;
-    span: AnyAISpan;
+    span: AnyExportedAISpan;
     method: string;
   }): Logger<true> | Span | undefined {
     const { spanData, span, method } = options;
 
-    const parentId = span.parent?.id;
+    const parentId = span.parentSpanId;
     if (!parentId) {
       return spanData.logger;
     }
@@ -256,7 +256,7 @@ export class BraintrustExporter implements AITracingExporter {
     // If the parent exists but is the root span (not represented as a Braintrust
     // span because we use the logger as the root), attach to the logger so the
     // span is not orphaned.
-    const parentIsRoot = !!span.parent && span.parent.parent == null;
+    const parentIsRoot = !!span.parent && (span.parent as any).parent == null;
     if (parentIsRoot) {
       return spanData.logger;
     }
@@ -267,12 +267,12 @@ export class BraintrustExporter implements AITracingExporter {
       spanName: span.name,
       spanType: span.type,
       isRootSpan: span.isRootSpan,
-      parentSpanId: span.parent?.id,
+      parentSpanId: span.parentSpanId,
       method,
     });
   }
 
-  private buildSpanPayload(span: AnyAISpan): Record<string, any> {
+  private buildSpanPayload(span: AnyExportedAISpan): Record<string, any> {
     const payload: Record<string, any> = {};
 
     // Core span data
