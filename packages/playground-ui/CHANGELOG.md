@@ -1,5 +1,47 @@
 # @mastra/playground-ui
 
+## 6.2.2-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#8019](https://github.com/mastra-ai/mastra/pull/8019))
+  - Updated dependency [`motion@^12.23.13` ↗︎](https://www.npmjs.com/package/motion/v/12.23.13) (from `^12.23.12`, in `dependencies`)
+
+- show the tool-output stream in the playground for streamVNext ([#7983](https://github.com/mastra-ai/mastra/pull/7983))
+
+- Updated dependencies [[`c45298a`](https://github.com/mastra-ai/mastra/commit/c45298a0a0791db35cf79f1199d77004da0704cb)]:
+  - @mastra/core@0.17.2-alpha.1
+  - @mastra/client-js@0.13.2-alpha.1
+
+## 6.2.2-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#7980](https://github.com/mastra-ai/mastra/pull/7980))
+  - Updated dependency [`zod@^4.1.8` ↗︎](https://www.npmjs.com/package/zod/v/4.1.8) (from `^4.1.5`, in `dependencies`)
+
+- Get rid off swr one for all ([#7931](https://github.com/mastra-ai/mastra/pull/7931))
+
+- Updated dependencies [[`a61f23f`](https://github.com/mastra-ai/mastra/commit/a61f23fbbca4b88b763d94f1d784c47895ed72d7), [`d1dc606`](https://github.com/mastra-ai/mastra/commit/d1dc6067b0557a71190b68d56ee15b48c26d2411), [`d3bd4d4`](https://github.com/mastra-ai/mastra/commit/d3bd4d482a685bbb67bfa89be91c90dca3fa71ad)]:
+  - @mastra/client-js@0.13.2-alpha.0
+  - @mastra/core@0.17.2-alpha.0
+
+## 6.2.1
+
+### Patch Changes
+
+- Updated dependencies [[`fd00e63`](https://github.com/mastra-ai/mastra/commit/fd00e63759cbcca3473c40cac9843280b0557cff), [`ab610f6`](https://github.com/mastra-ai/mastra/commit/ab610f6f41dbfe6c9502368671485ca7a0aac09b), [`e6bda5f`](https://github.com/mastra-ai/mastra/commit/e6bda5f954ee8493ea18adc1a883f0a5b785ad9b)]:
+  - @mastra/core@0.17.1
+  - @mastra/client-js@0.13.1
+
+## 6.2.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`fd00e63`](https://github.com/mastra-ai/mastra/commit/fd00e63759cbcca3473c40cac9843280b0557cff), [`ab610f6`](https://github.com/mastra-ai/mastra/commit/ab610f6f41dbfe6c9502368671485ca7a0aac09b), [`e6bda5f`](https://github.com/mastra-ai/mastra/commit/e6bda5f954ee8493ea18adc1a883f0a5b785ad9b)]:
+  - @mastra/core@0.17.1-alpha.0
+  - @mastra/client-js@0.13.1-alpha.0
+
 ## 6.2.0
 
 ### Minor Changes

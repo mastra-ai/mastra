@@ -1,5 +1,48 @@
 # mastra
 
+## 0.13.2-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#8007](https://github.com/mastra-ai/mastra/pull/8007))
+  - Updated dependency [`fs-extra@^11.3.2` ↗︎](https://www.npmjs.com/package/fs-extra/v/11.3.2) (from `^11.3.1`, in `dependencies`)
+
+- show the tool-output stream in the playground for streamVNext ([#7983](https://github.com/mastra-ai/mastra/pull/7983))
+
+- Updated dependencies [[`288745a`](https://github.com/mastra-ai/mastra/commit/288745a19aa9557db3ab3c877d667ff59f14d79c), [`c45298a`](https://github.com/mastra-ai/mastra/commit/c45298a0a0791db35cf79f1199d77004da0704cb)]:
+  - @mastra/deployer@0.17.2-alpha.1
+  - @mastra/core@0.17.2-alpha.1
+
+## 0.13.2-alpha.0
+
+### Patch Changes
+
+- Get rid off swr one for all ([#7931](https://github.com/mastra-ai/mastra/pull/7931))
+
+- Updated dependencies [[`a61f23f`](https://github.com/mastra-ai/mastra/commit/a61f23fbbca4b88b763d94f1d784c47895ed72d7), [`d1dc606`](https://github.com/mastra-ai/mastra/commit/d1dc6067b0557a71190b68d56ee15b48c26d2411), [`d3bd4d4`](https://github.com/mastra-ai/mastra/commit/d3bd4d482a685bbb67bfa89be91c90dca3fa71ad)]:
+  - @mastra/core@0.17.2-alpha.0
+  - @mastra/deployer@0.17.2-alpha.0
+
+## 0.13.1
+
+### Patch Changes
+
+- fix workflow resuming issue in the playground ([#7988](https://github.com/mastra-ai/mastra/pull/7988))
+
+- Updated dependencies [[`fd00e63`](https://github.com/mastra-ai/mastra/commit/fd00e63759cbcca3473c40cac9843280b0557cff), [`ab610f6`](https://github.com/mastra-ai/mastra/commit/ab610f6f41dbfe6c9502368671485ca7a0aac09b), [`e6bda5f`](https://github.com/mastra-ai/mastra/commit/e6bda5f954ee8493ea18adc1a883f0a5b785ad9b)]:
+  - @mastra/core@0.17.1
+  - @mastra/deployer@0.17.1
+
+## 0.13.1-alpha.0
+
+### Patch Changes
+
+- fix workflow resuming issue in the playground ([#7988](https://github.com/mastra-ai/mastra/pull/7988))
+
+- Updated dependencies [[`fd00e63`](https://github.com/mastra-ai/mastra/commit/fd00e63759cbcca3473c40cac9843280b0557cff), [`ab610f6`](https://github.com/mastra-ai/mastra/commit/ab610f6f41dbfe6c9502368671485ca7a0aac09b), [`e6bda5f`](https://github.com/mastra-ai/mastra/commit/e6bda5f954ee8493ea18adc1a883f0a5b785ad9b)]:
+  - @mastra/core@0.17.1-alpha.0
+  - @mastra/deployer@0.17.1-alpha.0
+
 ## 0.13.0
 
 ### Minor Changes
