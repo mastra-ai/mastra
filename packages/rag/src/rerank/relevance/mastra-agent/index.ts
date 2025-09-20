@@ -26,7 +26,16 @@ Always return just the number, no explanation.`,
 
   async getRelevanceScore(query: string, text: string): Promise<number> {
     const prompt = createSimilarityPrompt(query, text);
-    const response = await this.agent.generate(prompt);
+
+    const model = await this.agent.getModel();
+    let response;
+
+    if (model.specificationVersion === 'v2') {
+      response = await this.agent.generateVNext(prompt);
+    } else {
+      response = await this.agent.generate(prompt);
+    }
+
     return parseFloat(response.text);
   }
 }

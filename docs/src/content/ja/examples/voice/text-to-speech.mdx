@@ -1,17 +1,18 @@
 ---
-title: "例: テキスト読み上げ | Voice | Mastra ドキュメント"
-description: Mastra を使ってテキスト読み上げアプリケーションを作成する例です。
+title: "例：Text to Speech | Voice | Mastra ドキュメント"
+description: Mastra を使用してテキスト読み上げアプリを作成する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# インタラクティブストーリージェネレーター
 
-以下のコードスニペットは、Next.js を使用したインタラクティブストーリージェネレーターアプリケーションにおける Text-to-Speech（TTS）機能の実装例を示しています。Mastra を別のバックエンド統合として利用しています。この例では、Mastra client-js SDK を使ってご自身の Mastra バックエンドに接続する方法を紹介します。Next.js との Mastra の統合について詳しくは、[Next.js との統合](/docs/frameworks/next-js) ドキュメントをご参照ください。
+# インタラクティブ・ストーリー・ジェネレーター
 
-## TTS機能を備えたエージェントの作成
+以下のコードスニペットは、Next.js で Mastra を独立したバックエンド統合として用いるインタラクティブ・ストーリー・ジェネレーターアプリにおける Text-to-Speech（TTS）機能の実装例です。この例では、Mastra の client-js SDK を使って Mastra バックエンドへ接続する方法を示します。Mastra と Next.js の統合についての詳細は、[Next.js との統合](/docs/frameworks/next-js)をご覧ください。
 
-次の例は、バックエンドでTTS機能を持つストーリー生成エージェントを設定する方法を示しています。
+## TTS 機能を備えたエージェントの作成
+
+次の例は、バックエンドで TTS 機能付きのストーリー生成エージェントをセットアップする方法を示しています。
 
 ```typescript filename="src/mastra/agents/index.ts"
 import { openai } from "@ai-sdk/openai";
@@ -34,7 +35,7 @@ export const storyTellerAgent = new Agent({
 
 ## Mastra へのエージェント登録
 
-このスニペットは、エージェントをあなたの Mastra インスタンスに登録する方法を示しています。
+このスニペットは、Mastra のインスタンスにエージェントを登録する方法を示します。
 
 ```typescript filename="src/mastra/index.ts"
 import { PinoLogger } from "@mastra/loggers";
@@ -50,21 +51,21 @@ export const mastra = new Mastra({
 });
 ```
 
-## フロントエンドからMastraへの接続
+## フロントエンドからMastraに接続する
 
-ここでは、Mastra Client SDKを使用してMastraサーバーとやり取りします。Mastra Client SDKの詳細については、[ドキュメント](/docs/deployment/client)をご覧ください。
+ここでは Mastra Client SDK を使用して Mastra サーバーとやり取りします。Mastra Client SDK の詳細は[ドキュメント](../../docs/server-db/mastra-client.mdx)をご覧ください。
 
 ```typescript filename="src/app/page.tsx"
 import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
-  baseUrl: "http://localhost:4111", // Replace with your Mastra backend URL
+  baseUrl: "http://localhost:4111", // Mastra のバックエンド URL に置き換えてください
 });
 ```
 
-## ストーリーコンテンツの生成と音声への変換
+## 物語コンテンツの生成と音声への変換
 
-この例では、Mastraエージェントへの参照を取得し、ユーザー入力に基づいてストーリーコンテンツを生成し、そのコンテンツを音声に変換する方法を示します。
+この例では、Mastra エージェントを参照し、ユーザー入力に基づいて物語の内容を生成し、その内容を音声に変換する方法を示します。
 
 ```typescript filename="/app/components/StoryManager.tsx"
 const handleInitialSubmit = async (formData: FormData) => {
@@ -110,16 +111,16 @@ const handleInitialSubmit = async (formData: FormData) => {
 
 ## 音声の再生
 
-このスニペットは、新しい音声データを監視してテキスト読み上げ音声の再生を処理する方法を示しています。音声が受信されると、コードは音声のBlobからブラウザで再生可能なURLを作成し、それをaudio要素に割り当て、自動的に再生を試みます。
+このスニペットは、新しい音声データを監視し、テキスト読み上げ音声の再生を行う方法を示します。音声を受信したら、コードは音声のBlobからブラウザで再生可能なURLを生成し、それをaudio要素に設定して自動再生を試みます。
 
 ```typescript filename="/app/components/StoryManager.tsx"
 useEffect(() => {
   if (!audioRef.current || !audioData) return;
 
-  // Store a reference to the HTML audio element
+  // HTMLのaudio要素への参照を保持
   const currentAudio = audioRef.current;
 
-  // Convert the Blob/File audio data from Mastra into a URL the browser can play
+  // MastraからのBlob/File形式の音声データをブラウザで再生できるURLに変換
   const url = URL.createObjectURL(audioData);
 
   const playAudio = async () => {
@@ -145,13 +146,18 @@ useEffect(() => {
 }, [audioData]);
 ```
 
-Interactive Story Generator の完全な実装は、私たちの GitHub リポジトリでご覧いただけます。
+Interactive Story Generatorの完全な実装は、GitHubリポジトリでご覧いただけます。
 
 <br />
+
 <br />
+
 <hr className="dark:border-[#404040] border-gray-300" />
+
 <br />
+
 <br />
+
 <GithubLink
   link={
     "https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech/interactive-story"

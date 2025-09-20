@@ -14,7 +14,7 @@ import { TraceTimeline } from './trace-timeline';
 import { TraceSpanUsage } from './trace-span-usage';
 import { useLinkComponent } from '@/lib/framework';
 import { AISpanRecord } from '@mastra/core';
-import { getTraceInfo, getSpanInfo } from './helpers';
+import { getSpanInfo, useTraceInfo } from './helpers';
 import { SpanDialog } from './span-dialog';
 import { SpanDetails } from './span-details';
 import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
@@ -46,6 +46,7 @@ export function TraceDialog({
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(undefined);
   const [combinedView, setCombinedView] = useState<boolean>(false);
   const selectedSpan = traceSpans.find(span => span.spanId === selectedSpanId);
+  const traceInfo = useTraceInfo(traceDetails);
 
   const hierarchicalSpans = useMemo(() => {
     return formatHierarchicalSpans(traceSpans);
@@ -102,7 +103,6 @@ export function TraceDialog({
     return currentIndex > 0;
   };
 
-  const traceInfo = getTraceInfo(traceDetails);
   const selectedSpanInfo = getSpanInfo({ span: selectedSpan, withTraceId: !combinedView, withSpanId: combinedView });
 
   return (

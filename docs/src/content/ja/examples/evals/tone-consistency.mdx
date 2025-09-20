@@ -1,166 +1,178 @@
 ---
-title: "例: トーンの一貫性 | Evals | Mastra Docs"
-description: トーンの一貫性メトリクスを使用して、テキスト内の感情的なトーンパターンや感情の一貫性を評価する例。
+title: "例: トーン一貫性 | Evals | Mastra Docs"
+description: テキストの感情的なトーンの傾向と感情表現の一貫性を評価するために、Tone Consistency メトリクスを用いる例。
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
 
-# トーン一貫性評価
 
-この例では、Mastra のトーン一貫性メトリックを使用して、テキスト内の感情的なトーンパターンや感情の一貫性を評価する方法を示します。
 
-## 概要
+# トーン一貫性の評価
 
-この例では、以下の方法を示します。
+<ScorerCallout />
 
-1. Tone Consistencyメトリクスの設定方法
-2. テキスト間の感情の比較
-3. テキスト内のトーンの安定性の分析
-4. 異なるトーンのシナリオへの対応
+`ToneConsistencyMetric` を使用して、テキスト内の感情トーンのパターンと感情の一貫性を評価します。メトリクスは `query` と `response` を受け取り、スコアと、感情スコアおよびその差分を含む `info` オブジェクトを返します。
 
-## セットアップ
 
-### 依存関係
 
-必要な依存関係をインポートします：
+## インストール
 
-```typescript copy showLineNumbers filename="src/index.ts"
-import { ToneConsistencyMetric } from "@mastra/evals/nlp";
+```bash copy
+npm install @mastra/evals
 ```
 
-## メトリック設定
 
-トーンの一貫性メトリックを設定します：
 
-```typescript copy showLineNumbers{4} filename="src/index.ts"
+## ポジティブなトーンの例
+
+この例では、両方のテキストが似たポジティブな感情を示しています。メトリクスはトーンの一貫性を評価し、その結果として高いスコアになります。
+
+```typescript filename="src/example-positive-tone.ts" showLineNumbers copy
+import { ToneConsistencyMetric } from "@mastra/evals/nlp";
+
+const metric = new ToneConsistencyMetric();
+
+const query = "This product is fantastic and amazing!";
+const response = "The product is excellent and wonderful!";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### ポジティブなトーンの出力
+
+このメトリクスは、感情の強い整合性を反映した高いスコアを返します。`info` フィールドには感情値とその差分が示されます。
+
+```typescript
+{
+  score: 0.8333333333333335,
+  info: {
+    responseSentiment: 1.3333333333333333,
+    referenceSentiment: 1.1666666666666667,
+    difference: 0.16666666666666652
+  }
+}
+```
+
+
+
+## 安定したトーンの例
+
+この例では、空のレスポンスを渡してテキスト内のトーンの一貫性を解析します。これにより、メトリックは単一の入力テキストにおける感情の安定性を評価し、テキスト全体を通じてトーンがどれほど均一かを示すスコアを算出します。
+
+```typescript filename="src/example-stable-tone.ts" showLineNumbers copy
+import { ToneConsistencyMetric } from "@mastra/evals/nlp";
+
+const metric = new ToneConsistencyMetric();
+
+const query = "Great service! Friendly staff. Perfect atmosphere.";
+const response = "";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 安定したトーンの出力
+
+このメトリックは、入力テキスト全体で感情が一貫していることを示す高いスコアを返します。`info` フィールドには平均感情と感情の分散が含まれ、トーンの安定性を反映します。
+
+```typescript
+{
+  score: 0.9444444444444444,
+  info: {
+    avgSentiment: 1.3333333333333333,
+    sentimentVariance: 0.05555555555555556
+  }
+}
+```
+
+
+
+## トーンが混在する例
+
+この例では、入力と応答の感情的なトーンが異なります。メトリクスはこうした違いを検知し、一貫性スコアを低く評価します。
+
+```typescript filename="src/example-mixed-tone.ts" showLineNumbers copy
+import { ToneConsistencyMetric } from "@mastra/evals/nlp";
+
+const metric = new ToneConsistencyMetric();
+
+const query = "The interface is frustrating and confusing, though it has potential.";
+const response = "The design shows promise but needs significant improvements to be usable.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 混在トーンの出力
+
+感情的トーンに顕著な差があるため、メトリクスは低いスコアを返します。`info` フィールドには、センチメントの値とそれらの差の大きさが示されます。
+
+```typescript
+{
+  score: 0.4181818181818182,
+  info: {
+    responseSentiment: -0.4,
+    referenceSentiment: 0.18181818181818182,
+    difference: 0.5818181818181818
+  }
+}
+```
+
+
+
+## メトリクスの設定
+
+`ToneConsistencyMetric` インスタンスはデフォルト設定で作成できます。追加の設定は不要です。
+
+```typescript
 const metric = new ToneConsistencyMetric();
 ```
 
-## 使用例
+> 設定オプションの詳細は [ToneConsistencyMetric](/reference/evals/tone-consistency.mdx) を参照してください。
 
-### 一貫したポジティブなトーンの例
 
-類似したポジティブな感情を持つテキストを評価します：
 
-```typescript copy showLineNumbers{7} filename="src/index.ts"
-const input1 = "This product is fantastic and amazing!";
-const output1 = "The product is excellent and wonderful!";
-
-console.log("Example 1 - Consistent Positive Tone:");
-console.log("Input:", input1);
-console.log("Output:", output1);
-
-const result1 = await metric.measure(input1, output1);
-console.log("Metric Result:", {
-  score: result1.score,
-  info: result1.info,
-});
-// Example Output:
-// Metric Result: {
-//   score: 0.8333333333333335,
-//   info: {
-//     responseSentiment: 1.3333333333333333,
-//     referenceSentiment: 1.1666666666666667,
-//     difference: 0.16666666666666652
-//   }
-// }
-```
-
-### トーンの安定性の例
-
-単一のテキスト内で感情の一貫性を評価します：
-
-```typescript copy showLineNumbers{21} filename="src/index.ts"
-const input2 = "Great service! Friendly staff. Perfect atmosphere.";
-const output2 = ""; // Empty string for stability analysis
-
-console.log("Example 2 - Tone Stability:");
-console.log("Input:", input2);
-console.log("Output:", output2);
-
-const result2 = await metric.measure(input2, output2);
-console.log("Metric Result:", {
-  score: result2.score,
-  info: result2.info,
-});
-// Example Output:
-// Metric Result: {
-//   score: 0.9444444444444444,
-//   info: {
-//     avgSentiment: 1.3333333333333333,
-//     sentimentVariance: 0.05555555555555556
-//   }
-// }
-```
-
-### 混合トーンの例
-
-異なる感情を持つテキストを評価します：
-
-```typescript copy showLineNumbers{35} filename="src/index.ts"
-const input3 =
-  "The interface is frustrating and confusing, though it has potential.";
-const output3 =
-  "The design shows promise but needs significant improvements to be usable.";
-
-console.log("Example 3 - Mixed Tone:");
-console.log("Input:", input3);
-console.log("Output:", output3);
-
-const result3 = await metric.measure(input3, output3);
-console.log("Metric Result:", {
-  score: result3.score,
-  info: result3.info,
-});
-// Example Output:
-// Metric Result: {
-//   score: 0.4181818181818182,
-//   info: {
-//     responseSentiment: -0.4,
-//     referenceSentiment: 0.18181818181818182,
-//     difference: 0.5818181818181818
-//   }
-// }
-```
 
 ## 結果の理解
 
-この指標は、モードに応じて異なる出力を提供します。
+`ToneConsistencyMetric` は次の形式の結果を返します:
 
-1. 比較モード（出力テキストが提供されている場合）:
-
-   - 0から1のスコアでトーンの一貫性を示す
-   - 入力の感情: 入力テキストの感情的トーン（-1から1）
-   - 参照の感情: 出力テキストの感情的トーン（-1から1）
-   - 差分: 感情値の絶対差
-
-   スコアの解釈:
-
-   - 0.8-1.0: 非常に一貫したトーン
-   - 0.6-0.7: おおむね一貫している
-   - 0.4-0.5: 混在したトーン
-   - 0.0-0.3: 矛盾したトーン
-
-2. 安定性モード（単一テキストを分析する場合）:
-
-   - 0から1のスコアで内部一貫性を示す
-   - 平均感情: 全体的な感情トーン
-   - 感情の分散: 文ごとのトーンの変動度
-
-   スコアの解釈:
-
-   - 0.9-1.0: 非常に安定したトーン
-   - 0.7-0.8: ほぼ安定している
-   - 0.4-0.6: 変動するトーン
-   - 0.0-0.3: 非常に不安定
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/tone-consistency"
+```typescript
+{
+  score: number,
+  info: {
+    responseSentiment?: number,
+    referenceSentiment?: number,
+    difference?: number,
+    avgSentiment?: number,
+    sentimentVariance?: number
   }
+}
+```
+### トーン一貫性スコア
+
+0〜1 の範囲のトーン一貫性スコア:
+
+- **0.8–1.0**: 非常に一貫したトーン。
+- **0.6–0.7**: おおむね一貫したトーン。
+- **0.4–0.5**: トーンにばらつきがある。
+- **0.0–0.3**: トーンが食い違っている。
+
+### トーン一貫性に関する情報
+
+スコアの説明（以下を含む）:
+
+- 入力と応答の感情極性の整合性。
+- 単一テキスト内におけるトーンの安定性。
+- 感情極性の差異または分散の程度。
+
+<GithubLink
+  outdated={true}
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/tone-consistency"
 />

@@ -1,81 +1,127 @@
 ---
-title: "mastra build"
-description: "本番環境へのデプロイのためにMastraプロジェクトをビルドする"
+title: "mastra build | 本番用バンドル | Mastra CLI"
+description: "Mastra プロジェクトを本番環境にデプロイできるようビルドする"
 ---
 
-`mastra build`コマンドは、Mastraプロジェクトを本番環境用のHonoサーバーにバンドルします。Honoは、型安全なルーティングとミドルウェアのサポートを提供する軽量のWebフレームワークで、MastraエージェントをHTTPエンドポイントとしてデプロイするのに理想的です。
 
-## 使用方法
+
+# mastra build
+
+`mastra build` コマンドは、Mastra プロジェクトを本番運用可能な Hono サーバーとしてバンドルします。Hono は、ミドルウェア対応の HTTP エンドポイントとして Mastra エージェントを簡単にデプロイできる、軽量で型安全な Web フレームワークです。
+
+
+
+## 使い方
 
 ```bash
 mastra build [options]
 ```
 
+
+
 ## オプション
 
-- `--dir <path>`: Mastraプロジェクトを含むディレクトリ（デフォルト：現在のディレクトリ）
+<PropertiesTable
+  content={[
+    {
+      name: "--dir",
+      type: "string",
+      description: "Mastra フォルダへのパス",
+      isOptional: true,
+    },
+    {
+      name: "--root",
+      type: "string",
+      description: "ルートフォルダへのパス",
+      isOptional: true,
+    },
+    {
+      name: "--tools",
+      type: "string",
+      description: "含めるツールファイルのパスをカンマ区切りで指定したリスト",
+      isOptional: true,
+    },
+    {
+      name: "--help",
+      type: "boolean",
+      description: "コマンドのヘルプを表示する",
+      isOptional: true,
+    },
+  ]}
+/>
 
-## 高度な使用法
 
-### 並列処理の制限
 
-CIや、リソースが制限された環境で実行する場合、`MASTRA_CONCURRENCY`を設定することで、同時に実行される重いタスクの数を制限できます。
+## 上級者向けの使い方
 
-```bash
+### 並列実行の制限
+
+CI やリソースが限られた環境で実行する場合は、`MASTRA_CONCURRENCY` を設定して、同時に実行する高コストなタスクの数を上限化できます。
+
+```bash copy
 MASTRA_CONCURRENCY=2 mastra build
 ```
 
-設定を解除すると、CLIはホストの性能に基づいて並列処理を行います。
+未設定にすると、CLI がホストの性能に基づいて並列度を決定します。
 
-### テレメトリの無効化
+### テレメトリーの無効化
 
-匿名のビルド分析をオプトアウトするには、以下を設定します：
+匿名のビルド分析をオプトアウトするには、次を設定します:
 
-```bash
+```bash copy
 MASTRA_TELEMETRY_DISABLED=1 mastra build
 ```
 
 ### カスタムプロバイダーエンドポイント
 
-ビルド時には、`mastra dev`と同じ`OPENAI_BASE_URL`および`ANTHROPIC_BASE_URL`変数が尊重されます。これらはAI SDKによって、プロバイダーを呼び出すワークフローやツールに転送されます。
+ビルド時は `OPENAI_BASE_URL` と `ANTHROPIC_BASE_URL` の各変数が `mastra dev` と同様に有効です。これらは AI SDK によって、プロバイダーを呼び出すワークフローやツールへ転送されます。
 
-## 機能
 
-1. Mastraのエントリーファイル（`src/mastra/index.ts`または`src/mastra/index.js`）を見つけます
-2. `.mastra`出力ディレクトリを作成します
-3. 以下の機能を備えたRollupを使用してコードをバンドルします：
-   - 最適なバンドルサイズのためのツリーシェイキング
-   - Node.js環境のターゲティング
+
+## 何をするか
+
+1. Mastra のエントリーファイル（`src/mastra/index.ts` または `src/mastra/index.js`）を検出します
+2. `.mastra` 出力ディレクトリを作成します
+3. 以下の設定で Rollup を使ってコードをバンドルします:
+   - バンドルサイズ最適化のためのツリーシェイキング
+   - Node.js 環境をターゲット
    - デバッグ用のソースマップ生成
+   - テストファイル（名前に `.test.` または `.spec.` を含むもの、または `__tests__` ディレクトリ内）を除外
+
+
 
 ## 例
 
-```bash
-# Build from current directory
+```bash copy
+# 現在のディレクトリからビルド
 mastra build
 
-# Build from specific directory
+# 指定したディレクトリからビルド
 mastra build --dir ./my-mastra-project
 ```
 
+
+
 ## 出力
 
-このコマンドは、`.mastra` ディレクトリに本番用バンドルを生成します。内容は以下の通りです：
+このコマンドは、`.mastra` ディレクトリに本番用バンドルを生成します。内容は次のとおりです:
 
-- Mastra エージェントがエンドポイントとして公開された Hono ベースの HTTP サーバー
+- Mastra エージェントをエンドポイントとして公開する、Hono ベースの HTTP サーバー
 - 本番環境向けに最適化されたバンドル済み JavaScript ファイル
-- デバッグ用のソースマップ
+- デバッグ用ソースマップ
 - 必要な依存関係
 
-この出力は以下の用途に適しています：
+この出力は次の用途に適しています:
 
-- クラウドサーバー（EC2、Digital Ocean）へのデプロイ
-- コンテナ化された環境での実行
-- コンテナオーケストレーションシステムとの併用
+- クラウドサーバー（EC2、DigitalOcean）へのデプロイ
+- コンテナ化環境での実行
+- コンテナオーケストレーションシステムでの利用
+
+
 
 ## デプロイヤー
 
-デプロイヤーを使用すると、ビルド出力が自動的に対象プラットフォーム向けに準備されます。例：
+Deployer を使用すると、ビルド出力は対象プラットフォーム向けに自動的に最適化・準備されます。例：
 
 - [Vercel Deployer](/reference/deployer/vercel)
 - [Netlify Deployer](/reference/deployer/netlify)

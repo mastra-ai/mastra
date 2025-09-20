@@ -3,11 +3,12 @@ import { Callout } from "nextra/components";
 export const StreamVNextCallout = () => {
   return (
     <Callout type="important">
-      <b>Experimental Feature</b>
-      <p>
-        This is a new streaming implementation with support for multiple output
-        formats (including AI SDK v5). It will replace `stream()` once
-        battle-tested, and the API may change as we incorporate feedback.
+      <strong>Experimental API:</strong>
+      <p className="x:leading-7">
+        This is a new streaming implementation that supports multiple output
+        formats (including AI SDK v5). It will replace{" "}
+        <code className="nextra-code">.stream()</code> and may change as we
+        refine the feature based on feedback.
       </p>
     </Callout>
   );

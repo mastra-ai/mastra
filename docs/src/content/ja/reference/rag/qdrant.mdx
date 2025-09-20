@@ -3,10 +3,14 @@ title: "リファレンス: Qdrant ベクトルストア | ベクトルデータ
 description: Mastraとの統合のためのQdrantのドキュメント。Qdrantはベクトルとペイロードを管理するためのベクトル類似性検索エンジンです。
 ---
 
+
+
 # Qdrant ベクトルストア
 
 QdrantVectorクラスは、[Qdrant](https://qdrant.tech/)を使用したベクトル検索を提供します。Qdrantはベクトル類似性検索エンジンです。
 これは、追加のペイロードと拡張フィルタリングサポートを備えたベクトルの保存、検索、管理を行うための便利なAPIを持つ、本番環境対応のサービスを提供します。
+
+
 
 ## コンストラクタオプション
 
@@ -31,6 +35,8 @@ QdrantVectorクラスは、[Qdrant](https://qdrant.tech/)を使用したベク�
     },
   ]}
 />
+
+
 
 ## メソッド
 
@@ -77,8 +83,7 @@ QdrantVectorクラスは、[Qdrant](https://qdrant.tech/)を使用したベク�
       name: "ids",
       type: "string[]",
       isOptional: true,
-      description:
-        "オプションのベクトルID（提供されない場合は自動生成されます）",
+      description: "オプションのベクトルID（提供されない場合は自動生成されます）",
     },
   ]}
 />
@@ -201,6 +206,8 @@ interface IndexStats {
 
 IDによって指定されたインデックスからベクトルを削除します。
 
+
+
 ## レスポンスタイプ
 
 クエリ結果は以下の形式で返されます：
@@ -213,6 +220,8 @@ interface QueryResult {
   vector?: number[]; // Only included if includeVector is true
 }
 ```
+
+
 
 ## エラー処理
 
@@ -231,6 +240,8 @@ try {
   }
 }
 ```
+
+
 
 ## 関連
 

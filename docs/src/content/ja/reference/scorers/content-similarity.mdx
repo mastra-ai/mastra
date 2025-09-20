@@ -1,0 +1,106 @@
+---
+title: "リファレンス: Content Similarity | Scorers | Mastra Docs"
+description: Mastraのコンテンツ類似性スコアラーのドキュメント。文字列間のテキスト類似性を測定し、マッチングスコアを提供します。
+---
+
+
+
+# Content Similarity Scorer
+
+`createContentSimilarityScorer()`関数は、2つの文字列間のテキストの類似性を測定し、それらがどの程度一致するかを示すスコアを提供します。大文字小文字の区別や空白の処理について設定可能なオプションをサポートしています。
+
+使用例については、[Content Similarity Examples](/examples/scorers/content-similarity)を参照してください。
+
+
+
+## Parameters
+
+`createContentSimilarityScorer()` 関数は、以下のプロパティを持つ単一のオプションオブジェクトを受け取ります：
+
+<PropertiesTable
+  content={[
+    {
+      name: "ignoreCase",
+      type: "boolean",
+      required: false,
+      defaultValue: "true",
+      description: "文字列を比較する際に大文字小文字の違いを無視するかどうか。",
+    },
+    {
+      name: "ignoreWhitespace",
+      type: "boolean",
+      required: false,
+      defaultValue: "true",
+      description: "文字列を比較する際に空白文字を正規化するかどうか。",
+    },
+  ]}
+/>
+
+この関数はMastraScorerクラスのインスタンスを返します。`.run()`メソッドとその入力/出力の詳細については、[MastraScorerリファレンス](./mastra-scorer)を参照してください。
+
+
+
+## .run() の戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "実行のID（任意）。",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "object",
+      description: "処理済みの入力と出力を含むオブジェクト: { processedInput: string, processedOutput: string }",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description: "類似度を含むオブジェクト: { similarity: number }",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "類似度スコア（0-1）。1は完全一致を示します。",
+    },
+  ]}
+/>
+
+
+
+## スコアリング詳細
+
+スコアラーは、文字レベルのマッチングと設定可能なテキスト正規化を通じてテキストの類似性を評価します。
+
+### スコアリングプロセス
+
+1. テキストを正規化：
+   - 大文字小文字の正規化（ignoreCase: trueの場合）
+   - 空白の正規化（ignoreWhitespace: trueの場合）
+2. string-similarityアルゴリズムを使用して処理された文字列を比較：
+   - 文字シーケンスを分析
+   - 単語境界を整列
+   - 相対位置を考慮
+   - 長さの違いを考慮
+
+最終スコア：`similarity_value * scale`
+
+### スコアの解釈
+
+（0からscale、デフォルトは0-1）
+
+- 1.0：完全一致 - 同一のテキスト
+- 0.7-0.9：高い類似性 - ほぼ一致するコンテンツ
+- 0.4-0.6：中程度の類似性 - 部分的な一致
+- 0.1-0.3：低い類似性 - わずかな一致パターン
+- 0.0：類似性なし - 完全に異なるテキスト
+
+
+
+## 関連
+
+- [Completeness Scorer](./completeness)
+- [Textual Difference Scorer](./textual-difference)
+- [Answer Relevancy Scorer](./answer-relevancy)
+- [Keyword Coverage Scorer](./keyword-coverage)

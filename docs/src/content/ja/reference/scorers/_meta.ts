@@ -1,0 +1,21 @@
+const meta = {
+  "mastra-scorer": "MastraScorer クラス",
+  "create-scorer": "createScorer",
+  "answer-relevancy": "回答の関連性",
+  "answer-similarity": "回答の類似性",
+  bias: "バイアス",
+  completeness: "完全性",
+  "content-similarity": "コンテンツの類似性",
+  "context-relevance": "文脈との関連性",
+  "context-precision": "文脈の精度",
+  faithfulness: "忠実性",
+  hallucination: "幻覚",
+  "keyword-coverage": "キーワードの網羅性",
+  "textual-difference": "テキストの差異",
+  "tone-consistency": "トーンの一貫性",
+  "tool-call-accuracy": "ツール呼び出しの正確性",
+  "prompt-alignment": "プロンプトへの整合",
+  "noise-sensitivity": "ノイズへの感受性",
+  toxicity: "有害性",
+};
+export default meta;

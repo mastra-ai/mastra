@@ -12,7 +12,6 @@ To get started with Mastra, you’ll need access to a large language model (LLM)
 
 Mastra also supports other LLM providers. For a full list of supported models and setup instructions, see [Model Providers](/docs/getting-started/model-providers).
 
-
 ## Prerequisites
 
 - Node.js `v20.0` or higher
@@ -228,7 +227,9 @@ touch tsconfig.json
 
 Add the following configuration:
 
-```json filename="tsconfig.json" copy
+Mastra requires `module` and `moduleResolution` values that support modern Node.js versions. Older settings like `CommonJS` or `node` are incompatible with Mastra’s packages and will cause resolution errors.
+
+```json {4-5} filename="tsconfig.json" copy
 {
   "compilerOptions": {
     "target": "ES2022",

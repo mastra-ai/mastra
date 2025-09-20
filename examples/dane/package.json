@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dane",
-  "version": "0.0.52",
+  "version": "0.1.2-alpha.1",
   "main": "dist/index.js",
   "type": "module",
   "files": [
@@ -32,7 +32,6 @@
     "@ai-sdk/anthropic": "^1.2.12",
     "@inquirer/prompts": "^7.8.4",
     "@mastra/core": "workspace:*",
-    "@mastra/github": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",

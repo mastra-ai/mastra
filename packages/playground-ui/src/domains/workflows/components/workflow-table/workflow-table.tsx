@@ -18,11 +18,10 @@ export interface WorkflowTableProps {
   workflows?: Record<string, GetWorkflowResponse>;
   legacyWorkflows?: Record<string, GetLegacyWorkflowResponse>;
   isLoading: boolean;
-  computeLink: (agentId: string) => string;
 }
 
-export function WorkflowTable({ workflows, legacyWorkflows, isLoading, computeLink }: WorkflowTableProps) {
-  const { navigate } = useLinkComponent();
+export function WorkflowTable({ workflows, legacyWorkflows, isLoading }: WorkflowTableProps) {
+  const { navigate, paths } = useLinkComponent();
   const workflowData: WorkflowTableData[] = useMemo(() => {
     const _workflowsData = Object.keys(workflows ?? {}).map(key => {
       const workflow = workflows?.[key];
@@ -32,7 +31,7 @@ export function WorkflowTable({ workflows, legacyWorkflows, isLoading, computeLi
         name: workflow?.name || 'N/A',
         stepsCount: Object.keys(workflow?.steps ?? {})?.length,
         isLegacy: false,
-        link: computeLink(key),
+        link: paths.workflowLink(key),
       };
     });
 
@@ -44,7 +43,7 @@ export function WorkflowTable({ workflows, legacyWorkflows, isLoading, computeLi
         name: workflow?.name || 'N/A',
         stepsCount: Object.keys(workflow?.steps ?? {})?.length,
         isLegacy: true,
-        link: computeLink(key),
+        link: paths.workflowLink(key),
       };
     });
 

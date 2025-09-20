@@ -1,0 +1,116 @@
+---
+title: Mastra Cloudダッシュボードの理解
+description: Mastra Cloudで利用可能な各機能の詳細
+---
+
+import { MastraCloudCallout } from '@/components/mastra-cloud-callout'
+
+
+
+# ダッシュボードのナビゲーション
+
+このページでは、Mastra Cloudダッシュボードのナビゲーション方法について説明します。ここでは、プロジェクトの設定、デプロイメントの詳細表示、および組み込みの[Playground](/docs/mastra-cloud/dashboard#playground)を使用したエージェントとワークフローとの対話が可能です。
+
+<MastraCloudCallout />
+
+
+
+## 概要
+
+**概要**ページでは、ドメインURL、ステータス、最新のデプロイメント、接続されたエージェントとワークフローなど、アプリケーションの詳細情報を提供します。
+
+![Project dashboard](/image/mastra-cloud/mastra-cloud-project-dashboard.jpg)
+
+主な機能：
+
+各プロジェクトは現在のデプロイメントステータス、アクティブなドメイン、環境変数を表示するため、アプリケーションがどのように動作しているかを素早く理解できます。
+
+
+
+## Deployments
+
+**Deployments**ページでは、最近のビルドを表示し、詳細なビルドログへの迅速なアクセスを提供します。任意の行をクリックして、特定のデプロイメントに関する詳細情報を表示できます。
+
+![Dashboard deployment](/image/mastra-cloud/mastra-cloud-dashboard-deployments.jpg)
+
+主な機能：
+
+各デプロイメントには、現在のステータス、デプロイされたGitブランチ、およびコミットハッシュから生成されたタイトルが含まれています。
+
+
+
+## Logs
+
+**Logs**ページは、本番環境でのアプリケーションの動作をデバッグし、監視するのに役立つ詳細情報を見つけることができる場所です。
+
+![Dashboard logs](/image/mastra-cloud/mastra-cloud-dashboard-logs.jpg)
+
+主な機能：
+
+各ログには重要度レベルと、エージェント、ワークフロー、ストレージのアクティビティを示す詳細なメッセージが含まれています。
+
+
+
+## Settings
+
+**Settings**ページでは、アプリケーションの設定を変更できます。
+
+![Dashboard settings](/image/mastra-cloud/mastra-cloud-dashboard-settings.jpg)
+
+主な機能：
+
+環境変数の管理、名前やブランチなどの主要なプロジェクト設定の編集、LibSQLStoreでのストレージ設定、エンドポイント用の安定したURLの設定が可能です。
+
+> 設定の変更を有効にするには、新しいデプロイメントが必要です。
+
+
+
+## Playground
+
+### Agents
+
+**Agents**ページでは、アプリケーションで使用されているすべてのエージェントを確認できます。任意のエージェントをクリックして、チャットインターフェースを使用して対話できます。
+
+![Dashboard playground agents](/image/mastra-cloud/mastra-cloud-dashboard-playground-agents.jpg)
+
+主な機能：
+
+チャットインターフェースを使用してエージェントをリアルタイムでテストし、各インタラクションのトレースを確認し、すべてのレスポンスの評価スコアを表示できます。
+
+### Workflows
+
+**Workflows**ページでは、アプリケーションで使用されているすべてのワークフローを確認できます。任意のワークフローをクリックして、ランナーインターフェースを使用して対話できます。
+
+![Dashboard playground workflows](/image/mastra-cloud/mastra-cloud-dashboard-playground-workflows.jpg)
+
+主な機能：
+
+ステップバイステップのグラフでワークフローを視覚化し、実行トレースを表示し、内蔵のランナーを使用してワークフローを直接実行できます。
+
+### Tools
+
+**Tools**ページでは、エージェントが使用するすべてのツールを確認できます。任意のツールをクリックして、入力インターフェースを使用して対話できます。
+
+![Dashboard playground tools](/image/mastra-cloud/mastra-cloud-dashboard-playground-tools.jpg)
+
+主な機能：
+
+スキーマに一致する入力を提供してツールをテストし、構造化された出力を表示できます。
+
+
+
+## MCP Servers
+
+**MCP Servers**ページでは、アプリケーションに含まれるすべてのMCP Serverが一覧表示されます。詳細情報を確認するには、任意のMCP Serverをクリックしてください。
+
+![Dashboard playground mcp servers](/image/mastra-cloud/mastra-cloud-dashboard-playground-mcpservers.jpg)
+
+主な機能：
+
+各MCP ServerにはHTTPとSSE用のAPIエンドポイントが含まれており、CursorやWindsurfなどのツール用のIDE設定スニペットも提供されています。
+
+
+
+## 次のステップ
+
+- [トレーシングとログの理解](/docs/mastra-cloud/observability)
