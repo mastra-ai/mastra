@@ -40,10 +40,10 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@opentelemetry/core": "^2.0.1",
-    "@opentelemetry/otlp-exporter-base": "^0.203.0",
-    "@opentelemetry/otlp-transformer": "^0.203.0",
-    "@opentelemetry/sdk-trace-base": "^2.0.1"
+    "@opentelemetry/core": "^2.1.0",
+    "@opentelemetry/otlp-exporter-base": "^0.205.0",
+    "@opentelemetry/otlp-transformer": "^0.205.0",
+    "@opentelemetry/sdk-trace-base": "^2.1.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
