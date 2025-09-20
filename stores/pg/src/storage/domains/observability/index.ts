@@ -25,7 +25,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     this.schema = schema;
   }
 
-  async createAISpan(span: AISpanRecord): Promise<void> {
+  async createAISpan(span: Omit<AISpanRecord, 'createdAt' | 'updatedAt'>): Promise<void> {
     try {
       const startedAt = span.startedAt instanceof Date ? span.startedAt.toISOString() : span.startedAt;
       const endedAt = span.endedAt instanceof Date ? span.endedAt.toISOString() : span.endedAt;
@@ -112,7 +112,7 @@ export class ObservabilityPG extends ObservabilityStorage {
   }: {
     spanId: string;
     traceId: string;
-    updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+    updates: Partial<Omit<AISpanRecord, 'createdAt' | 'updatedAt' | 'spanId' | 'traceId'>>;
   }): Promise<void> {
     try {
       const data = { ...updates };
@@ -259,7 +259,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     }
   }
 
-  async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
+  async batchCreateAISpans(args: { records: Omit<AISpanRecord, 'createdAt' | 'updatedAt'>[] }): Promise<void> {
     try {
       const records = args.records.map(record => {
         const startedAt = record.startedAt instanceof Date ? record.startedAt.toISOString() : record.startedAt;
@@ -296,7 +296,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     records: {
       traceId: string;
       spanId: string;
-      updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+      updates: Partial<Omit<AISpanRecord, 'createdAt' | 'updatedAt' | 'spanId' | 'traceId'>>;
     }[];
   }): Promise<void> {
     try {
