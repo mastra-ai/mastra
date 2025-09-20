@@ -1,6 +1,6 @@
-import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { PaginationArgs, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { TABLE_SCHEMAS } from '@mastra/core/storage';
+import { parseSqlIdentifier } from '@mastra/core/utils';
 
 export function getSchemaName(schema?: string) {
   return schema ? `"${parseSqlIdentifier(schema, 'schema name')}"` : undefined;
@@ -16,10 +16,7 @@ export function getTableName({ indexName, schemaName }: { indexName: string; sch
 /**
  * Build date range filter for queries
  */
-export function buildDateRangeFilter(
-  dateRange: PaginationArgs['dateRange'],
-  fieldName: string,
-): Record<string, any> {
+export function buildDateRangeFilter(dateRange: PaginationArgs['dateRange'], fieldName: string): Record<string, any> {
   const filters: Record<string, any> = {};
   if (dateRange?.start) {
     filters[`${fieldName}_gte`] = dateRange.start;
@@ -35,7 +32,7 @@ export function buildDateRangeFilter(
  */
 export function prepareWhereClause(
   filters: Record<string, any>,
-  schema?: Record<string, StorageColumn>,
+  _schema?: Record<string, StorageColumn>,
 ): { sql: string; args: any[] } {
   const conditions: string[] = [];
   const args: any[] = [];
@@ -98,8 +95,7 @@ export function transformFromSqlRow<T>({
     // Handle boolean columns
     else if (columnSchema?.type === 'boolean') {
       result[key] = Boolean(value);
-    }
-    else {
+    } else {
       result[key] = value;
     }
   });

@@ -27,23 +27,16 @@ export class ObservabilityPG extends ObservabilityStorage {
 
   async createAISpan(span: AISpanRecord): Promise<void> {
     try {
-      // Convert Date objects to ISO strings for PostgreSQL
       const startedAt = span.startedAt instanceof Date ? span.startedAt.toISOString() : span.startedAt;
-      const endedAt = span.endedAt instanceof Date ? span.endedAt?.toISOString() : span.endedAt;
-      const createdAt = span.createdAt instanceof Date ? span.createdAt.toISOString() : span.createdAt;
-      const updatedAt = span.updatedAt instanceof Date ? span.updatedAt?.toISOString() : span.updatedAt;
+      const endedAt = span.endedAt instanceof Date ? span.endedAt.toISOString() : span.endedAt;
 
       const record = {
         ...span,
         startedAt,
         endedAt,
-        createdAt,
-        updatedAt,
-        // Also set the TIMESTAMPTZ columns
         startedAtZ: startedAt,
         endedAtZ: endedAt,
-        createdAtZ: createdAt,
-        updatedAtZ: updatedAt,
+        // Note: createdAt/updatedAt will be set by database triggers
       };
 
       return this.operations.insert({ tableName: TABLE_AI_SPANS, record });
@@ -69,7 +62,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     try {
       const tableName = getTableName({
         indexName: TABLE_AI_SPANS,
-        schemaName: getSchemaName(this.schema)
+        schemaName: getSchemaName(this.schema),
       });
 
       const spans = await this.client.manyOrNone<AISpanRecord>(
@@ -90,10 +83,12 @@ export class ObservabilityPG extends ObservabilityStorage {
 
       return {
         traceId,
-        spans: spans.map(span => transformFromSqlRow<AISpanRecord>({
-          tableName: TABLE_AI_SPANS,
-          sqlRow: span
-        })),
+        spans: spans.map(span =>
+          transformFromSqlRow<AISpanRecord>({
+            tableName: TABLE_AI_SPANS,
+            sqlRow: span,
+          }),
+        ),
       };
     } catch (error) {
       throw new MastraError(
@@ -120,7 +115,6 @@ export class ObservabilityPG extends ObservabilityStorage {
     updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
   }): Promise<void> {
     try {
-      // Prepare update data with proper date handling
       const data = { ...updates };
       if (data.endedAt instanceof Date) {
         data.endedAt = data.endedAt.toISOString() as any;
@@ -128,7 +122,7 @@ export class ObservabilityPG extends ObservabilityStorage {
       if (data.startedAt instanceof Date) {
         data.startedAt = data.startedAt.toISOString() as any;
       }
-      data.updatedAt = new Date().toISOString() as any;
+      // Note: updatedAt will be set by database trigger automatically
 
       await this.operations.update({
         tableName: TABLE_AI_SPANS,
@@ -203,7 +197,7 @@ export class ObservabilityPG extends ObservabilityStorage {
 
     const tableName = getTableName({
       indexName: TABLE_AI_SPANS,
-      schemaName: getSchemaName(this.schema)
+      schemaName: getSchemaName(this.schema),
     });
 
     try {
@@ -246,10 +240,12 @@ export class ObservabilityPG extends ObservabilityStorage {
           perPage,
           hasMore: spans.length === perPage,
         },
-        spans: spans.map(span => transformFromSqlRow<AISpanRecord>({
-          tableName: TABLE_AI_SPANS,
-          sqlRow: span
-        })),
+        spans: spans.map(span =>
+          transformFromSqlRow<AISpanRecord>({
+            tableName: TABLE_AI_SPANS,
+            sqlRow: span,
+          }),
+        ),
       };
     } catch (error) {
       throw new MastraError(
@@ -265,24 +261,18 @@ export class ObservabilityPG extends ObservabilityStorage {
 
   async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
     try {
-      // Convert dates to ISO strings for all records
       const records = args.records.map(record => {
         const startedAt = record.startedAt instanceof Date ? record.startedAt.toISOString() : record.startedAt;
         const endedAt = record.endedAt instanceof Date ? record.endedAt?.toISOString() : record.endedAt;
-        const createdAt = new Date().toISOString();
-        const updatedAt = new Date().toISOString();
 
         return {
           ...record,
           startedAt,
           endedAt,
-          createdAt,
-          updatedAt,
-          // Also set the TIMESTAMPTZ columns
+          // Also set the TIMESTAMPTZ columns for startedAt/endedAt
           startedAtZ: startedAt,
           endedAtZ: endedAt,
-          createdAtZ: createdAt,
-          updatedAtZ: updatedAt,
+          // Note: createdAt/updatedAt will be set by database triggers
         };
       });
 
@@ -314,14 +304,13 @@ export class ObservabilityPG extends ObservabilityStorage {
         tableName: TABLE_AI_SPANS,
         updates: args.records.map(record => {
           const data = { ...record.updates };
-          // Convert dates to ISO strings
           if (data.endedAt instanceof Date) {
             data.endedAt = data.endedAt.toISOString() as any;
           }
           if (data.startedAt instanceof Date) {
             data.startedAt = data.startedAt.toISOString() as any;
           }
-          data.updatedAt = new Date().toISOString() as any;
+          // Note: updatedAt will be set by database trigger automatically
 
           return {
             keys: { spanId: record.spanId, traceId: record.traceId },
@@ -345,15 +334,11 @@ export class ObservabilityPG extends ObservabilityStorage {
     try {
       const tableName = getTableName({
         indexName: TABLE_AI_SPANS,
-        schemaName: getSchemaName(this.schema)
+        schemaName: getSchemaName(this.schema),
       });
 
-      // Delete all spans for the given trace IDs
       const placeholders = args.traceIds.map((_, i) => `$${i + 1}`).join(', ');
-      await this.client.none(
-        `DELETE FROM ${tableName} WHERE "traceId" IN (${placeholders})`,
-        args.traceIds,
-      );
+      await this.client.none(`DELETE FROM ${tableName} WHERE "traceId" IN (${placeholders})`, args.traceIds);
     } catch (error) {
       throw new MastraError(
         {
