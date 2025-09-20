@@ -13,7 +13,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
 
   async createAISpan(span: Omit<AISpanRecord, 'createdAt' | 'updatedAt'>): Promise<void> {
     try {
-      // Explicitly set createdAt/updatedAt timestamps
+      // Let database handle createdAt/updatedAt timestamps
       const now = new Date().toISOString();
       const record = {
         ...span,

@@ -62,7 +62,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     try {
       const tableName = getTableName({
         indexName: TABLE_AI_SPANS,
-        schemaName: getSchemaName(this.schema)
+        schemaName: getSchemaName(this.schema),
       });
 
       const spans = await this.client.manyOrNone<AISpanRecord>(
@@ -83,10 +83,12 @@ export class ObservabilityPG extends ObservabilityStorage {
 
       return {
         traceId,
-        spans: spans.map(span => transformFromSqlRow<AISpanRecord>({
-          tableName: TABLE_AI_SPANS,
-          sqlRow: span
-        })),
+        spans: spans.map(span =>
+          transformFromSqlRow<AISpanRecord>({
+            tableName: TABLE_AI_SPANS,
+            sqlRow: span,
+          }),
+        ),
       };
     } catch (error) {
       throw new MastraError(
@@ -238,10 +240,12 @@ export class ObservabilityPG extends ObservabilityStorage {
           perPage,
           hasMore: spans.length === perPage,
         },
-        spans: spans.map(span => transformFromSqlRow<AISpanRecord>({
-          tableName: TABLE_AI_SPANS,
-          sqlRow: span
-        })),
+        spans: spans.map(span =>
+          transformFromSqlRow<AISpanRecord>({
+            tableName: TABLE_AI_SPANS,
+            sqlRow: span,
+          }),
+        ),
       };
     } catch (error) {
       throw new MastraError(

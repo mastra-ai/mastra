@@ -30,7 +30,6 @@ export class StoreOperationsPG extends StoreOperations {
   private setupSchemaPromise: Promise<void> | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
 
-
   constructor({ client, schemaName }: { client: IDatabase<{}>; schemaName?: string }) {
     super();
     this.client = client;
@@ -432,43 +431,13 @@ export class StoreOperationsPG extends StoreOperations {
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     try {
-      const schemaName = getSchemaName(this.schemaName);
-      const tableNameWithSchema = getTableName({ indexName: tableName, schemaName });
-
-      await this.client.tx(async t => {
-        for (const record of records) {
-          // Add timestamp columns if needed
-          if (record.createdAt) {
-            record.createdAtZ = record.createdAt;
-          }
-          if (record.created_at) {
-            record.created_atZ = record.created_at;
-          }
-          if (record.updatedAt) {
-            record.updatedAtZ = record.updatedAt;
-          }
-
-          const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
-          const values = Object.entries(record).map(([key, value]) => {
-            // Get the schema for this table to determine column types
-            const schema = TABLE_SCHEMAS[tableName];
-            const columnSchema = schema?.[key];
-
-            // If the column is JSONB and the value is an object/array, stringify it
-            if (columnSchema?.type === 'jsonb' && value !== null && typeof value === 'object') {
-              return JSON.stringify(value);
-            }
-            return value;
-          });
-          const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
-
-          await t.none(
-            `INSERT INTO ${tableNameWithSchema} (${columns.map(c => `"${c}"`).join(', ')}) VALUES (${placeholders})`,
-            values,
-          );
-        }
-      });
+      await this.client.query('BEGIN');
+      for (const record of records) {
+        await this.insert({ tableName, record });
+      }
+      await this.client.query('COMMIT');
     } catch (error) {
+      await this.client.query('ROLLBACK');
       throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_BATCH_INSERT_FAILED',
