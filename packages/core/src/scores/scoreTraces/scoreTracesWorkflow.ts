@@ -26,7 +26,7 @@ const getTraceStep = createStep({
     const logger = mastra.getLogger();
     if (!logger) {
       console.warn(
-        '[ScoreBatchTracesWorkflow] Logger not initialized: no debug or error logs will be recorded for scoring traces.',
+        '[scoreTracesWorkflow] Logger not initialized: no debug or error logs will be recorded for scoring traces.',
       );
     }
 
@@ -210,7 +210,7 @@ async function attachScoreToSpan({
   });
 }
 
-export const scoreBatchTracesWorkflow = createWorkflow({
+export const scoreTracesWorkflow = createWorkflow({
   id: '__batch-scoring-traces',
   inputSchema: z.object({
     targets: z.array(
@@ -230,4 +230,4 @@ export const scoreBatchTracesWorkflow = createWorkflow({
   },
 });
 
-scoreBatchTracesWorkflow.then(getTraceStep).commit();
+scoreTracesWorkflow.then(getTraceStep).commit();

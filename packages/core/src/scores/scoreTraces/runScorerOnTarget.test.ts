@@ -10,7 +10,7 @@ vi.mock('./utils', () => ({
   transformTraceToScorerOutput: vi.fn().mockReturnValue({ transformedOutput: 'test' }),
 }));
 
-import { runScorerOnTarget } from './scoreBatchTracesWorkflow';
+import { runScorerOnTarget } from './scoreTracesWorkflow';
 
 function createMockAISpanRecord(overrides: Partial<AISpanRecord> = {}): AISpanRecord {
   return {

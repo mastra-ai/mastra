@@ -1,7 +1,7 @@
 import { MastraError } from '../../error';
 import type { Mastra } from '../../mastra';
 
-export async function scoreBatchTraces({
+export async function scoreTraces({
   scorerName,
   targets,
   mastra,
