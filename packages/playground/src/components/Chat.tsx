@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useSWRConfig } from 'swr';
 
 import type { Message, ChatProps } from '../types';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { ChatContainer, ChatForm, ChatMessages } from './ui/chat';
 import { MessageInput } from './ui/message-input';
@@ -10,10 +10,10 @@ import { PromptSuggestions } from './ui/prompt-suggestions';
 import { ScrollArea } from './ui/scroll-area';
 
 export function Chat({ agentId, initialMessages = [], agentName, threadId, memory }: ChatProps) {
+  const queryClient = useQueryClient();
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { mutate } = useSWRConfig();
 
   useEffect(() => {
     if (initialMessages) {
@@ -66,7 +66,7 @@ export function Chat({ agentId, initialMessages = [], agentName, threadId, memor
         throw new Error(error.message);
       }
 
-      mutate(`/api/memory/threads?resourceid=${agentId}&agentId=${agentId}`);
+      queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();

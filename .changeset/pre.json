@@ -74,5 +74,19 @@
     "@mastra/voice-speechify": "0.11.5",
     "@mastra/inngest": "0.14.0"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_deployer-8007-dependencies",
+    "@mastra_deployer-cloud-8007-dependencies",
+    "@mastra_deployer-netlify-8007-dependencies",
+    "@mastra_deployer-vercel-8007-dependencies",
+    "@mastra_evals-8007-dependencies",
+    "@mastra_playground-ui-7980-dependencies",
+    "@mastra_playground-ui-8019-dependencies",
+    "create-mastra-8007-dependencies",
+    "five-dodos-count",
+    "large-cats-guess",
+    "mastra-8007-dependencies",
+    "metal-showers-push",
+    "orange-baths-buy"
+  ]
 }

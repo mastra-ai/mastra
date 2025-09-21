@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-vercel",
-  "version": "0.12.1",
+  "version": "0.12.2-alpha.1",
   "description": "",
   "type": "module",
   "files": [
@@ -34,7 +34,7 @@
   "dependencies": {
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "^3.0.2",
-    "fs-extra": "^11.3.1"
+    "fs-extra": "^11.3.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -58,6 +58,6 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.15.3-0 <0.18.0-0"
+    "@mastra/core": ">=0.15.3-0 <0.19.0-0"
   }
 }
