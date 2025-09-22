@@ -75,6 +75,8 @@ import type {
   AgentModelManagerConfig,
   AgentCreateOptions,
   AgentExecuteOnFinishOptions,
+  AgentInstructions,
+  DynamicAgentInstructions,
 } from './types';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 
@@ -141,7 +143,7 @@ export class Agent<
 > extends MastraBase {
   public id: TAgentId;
   public name: TAgentId;
-  #instructions: DynamicArgument<string>;
+  #instructions: DynamicAgentInstructions;
   readonly #description?: string;
   model:
     | DynamicArgument<MastraLanguageModel>
@@ -476,7 +478,8 @@ export class Agent<
     if (this.#voice) {
       const voice = this.#voice;
       voice?.addTools(await this.getTools({ runtimeContext }));
-      voice?.addInstructions(await this.getInstructions({ runtimeContext }));
+      const instructions = await this.getInstructions({ runtimeContext });
+      voice?.addInstructions(this.#convertInstructionsToString(instructions));
       return voice;
     } else {
       return new DefaultVoice();
@@ -501,35 +504,79 @@ export class Agent<
       throw mastraError;
     }
 
+    // Throw error for non-string instructions to force migration
+    if (typeof this.#instructions !== 'string') {
+      const mastraError = new MastraError({
+        id: 'AGENT_INSTRUCTIONS_MUST_BE_STRING_FOR_DEPRECATED_GETTER',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+          instructionsType: Array.isArray(this.#instructions) ? 'array' : 'object',
+        },
+        text: 'The instructions getter is deprecated and only supports string instructions. For non-string instructions, please use getInstructions() instead.',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
+    }
+
     return this.#instructions;
   }
 
   public getInstructions({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
-    | string
-    | Promise<string> {
-    if (typeof this.#instructions === 'string') {
-      return this.#instructions;
+    | AgentInstructions
+    | Promise<AgentInstructions> {
+    if (typeof this.#instructions === 'function') {
+      const result = this.#instructions({ runtimeContext, mastra: this.#mastra });
+      return resolveMaybePromise(result, instructions => {
+        if (!instructions) {
+          const mastraError = new MastraError({
+            id: 'AGENT_GET_INSTRUCTIONS_FUNCTION_EMPTY_RETURN',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: {
+              agentName: this.name,
+            },
+            text: 'Instructions are required to use an Agent. The function-based instructions returned an empty value.',
+          });
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
+        }
+
+        return instructions;
+      });
     }
 
-    const result = this.#instructions({ runtimeContext, mastra: this.#mastra });
-    return resolveMaybePromise(result, instructions => {
-      if (!instructions) {
-        const mastraError = new MastraError({
-          id: 'AGENT_GET_INSTRUCTIONS_FUNCTION_EMPTY_RETURN',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          details: {
-            agentName: this.name,
-          },
-          text: 'Instructions are required to use an Agent. The function-based instructions returned an empty value.',
-        });
-        this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
-        throw mastraError;
-      }
+    return this.#instructions;
+  }
 
+  /**
+   * Helper function to convert agent instructions to string for backward compatibility
+   * Used for legacy methods that expect string instructions (e.g., voice, telemetry)
+   */
+  #convertInstructionsToString(instructions: AgentInstructions): string {
+    if (typeof instructions === 'string') {
       return instructions;
-    });
+    }
+
+    if (Array.isArray(instructions)) {
+      // Handle array of messages (strings or objects)
+      return instructions
+        .map(msg => {
+          if (typeof msg === 'string') {
+            return msg;
+          }
+          // Safely extract content from message objects
+          return typeof msg.content === 'string' ? msg.content : '';
+        })
+        .filter(content => content) // Remove empty strings
+        .join('\n\n');
+    }
+
+    // Handle single message object - safely extract content
+    return typeof instructions.content === 'string' ? instructions.content : '';
   }
 
   public getDescription(): string {
@@ -1883,7 +1930,7 @@ export class Agent<
     tracingContext,
     tracingOptions,
   }: {
-    instructions: string;
+    instructions: AgentInstructions;
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
     resourceId?: string;
@@ -1913,7 +1960,7 @@ export class Agent<
           },
           attributes: {
             agentId: this.id,
-            instructions,
+            instructions: this.#convertInstructionsToString(instructions),
             availableTools: [
               ...(toolsets ? Object.keys(toolsets) : []),
               ...(clientTools ? Object.keys(clientTools) : []),
@@ -1974,10 +2021,7 @@ export class Agent<
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
-          .addSystem({
-            role: 'system',
-            content: instructions || `${this.instructions}.`,
-          })
+          .addSystem(instructions || (await this.getInstructions({ runtimeContext })))
           .add(context || [], 'context');
 
         if (!memory || (!threadId && !resourceId)) {
@@ -2152,7 +2196,7 @@ export class Agent<
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
-          .addSystem(instructions || `${this.instructions}.`)
+          .addSystem(instructions || (await this.getInstructions({ runtimeContext })))
           .addSystem(memorySystemMessage)
           .addSystem(systemMessages)
           .add(context || [], 'context')
@@ -2414,7 +2458,7 @@ export class Agent<
     messageList: MessageList;
     runId: string;
     outputText: string;
-    instructions: string;
+    instructions: AgentInstructions;
     runtimeContext: RuntimeContext;
     structuredOutput?: boolean;
     overrideScorers?:
@@ -2439,7 +2483,7 @@ export class Agent<
           runId: runIdToUse,
           metric,
           agentName,
-          instructions: instructions,
+          instructions: this.#convertInstructionsToString(instructions),
         });
       }
     }
@@ -2963,7 +3007,7 @@ export class Agent<
       input: options.messages,
       attributes: {
         agentId: this.id,
-        instructions,
+        instructions: this.#convertInstructionsToString(instructions),
       },
       metadata: {
         runId,
