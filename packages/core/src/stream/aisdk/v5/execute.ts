@@ -106,10 +106,6 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
           throw error;
         }
 
-        if (shouldThrowError) {
-          throw error;
-        }
-
         return {
           stream: new ReadableStream({
             start: async controller => {
