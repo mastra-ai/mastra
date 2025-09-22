@@ -380,6 +380,49 @@ describe('PgVector', () => {
         expect(stats2.config.efConstruction).toBe(64);
       });
 
+      it('should create ivfflat index when no index exists and config is empty', async () => {
+        const testNewIndex = 'test_no_index_empty_config';
+
+        // Create without any config - should default to ivfflat
+        await vectorDB.createIndex({
+          indexName: testNewIndex,
+          dimension: 128,
+          metric: 'cosine',
+        });
+
+        const stats = await vectorDB.describeIndex({ indexName: testNewIndex });
+        expect(stats.type).toBe('ivfflat');
+
+        // Cleanup
+        await vectorDB.deleteIndex({ indexName: testNewIndex });
+      });
+
+      it('should stay flat when explicitly requested', async () => {
+        const testFlatIndex = 'test_explicit_flat';
+
+        // Create with explicit flat config
+        await vectorDB.createIndex({
+          indexName: testFlatIndex,
+          dimension: 64,
+          metric: 'cosine',
+          indexConfig: { type: 'flat' },
+        });
+
+        // Try to create again with empty config - should stay flat since that's what exists
+        await vectorDB.createIndex({
+          indexName: testFlatIndex,
+          dimension: 64,
+          metric: 'cosine',
+          indexConfig: { type: 'flat' },
+        });
+
+        const stats = await vectorDB.describeIndex({ indexName: testFlatIndex });
+        expect(stats.type).toBe('flat');
+
+        // Cleanup
+        await vectorDB.deleteIndex({ indexName: testFlatIndex });
+      });
+
       it('should handle dimension properly when using buildIndex', async () => {
         // Create index
         await vectorDB.createIndex({
