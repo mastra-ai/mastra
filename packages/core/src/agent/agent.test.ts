@@ -615,6 +615,78 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     }, 500000);
 
     describe('tool approval and suspension', () => {
+      describe.skipIf(version === 'v1')('suspension', () => {
+        it('should call findUserTool with suspend and resume', async () => {
+          const findUserTool = createTool({
+            id: 'Find user tool',
+            description: 'This is a test tool that returns the name and email',
+            inputSchema: z.object({
+              name: z.string(),
+            }),
+            suspendSchema: z.object({
+              message: z.string(),
+            }),
+            resumeSchema: z.object({
+              name: z.string(),
+            }),
+            execute: async ({ suspend, resumeData }) => {
+              console.log('resumeData', resumeData, suspend);
+              if (!resumeData) {
+                return await suspend({ message: 'Please provide the name of the user' });
+              }
+
+              return {
+                name: resumeData?.name,
+                email: 'test@test.com',
+              };
+            },
+          });
+
+          const userAgent = new Agent({
+            name: 'User agent',
+            instructions: 'You are an agent that can get list of users using findUserTool.',
+            model: openaiModel,
+            tools: { findUserTool },
+          });
+
+          const mastra = new Mastra({
+            agents: { userAgent },
+            logger: false,
+            storage: mockStorage,
+          });
+
+          const agentOne = mastra.getAgent('userAgent');
+
+          let toolCall;
+          const stream = await agentOne.streamVNext('Find the user with name - Dero Israel');
+          for await (const chunk of stream.fullStream) {
+            if (chunk.type === 'tool-call-suspended') {
+              console.log('tool-call-suspended chunk', chunk);
+            }
+          }
+          console.log('status', stream.status);
+          console.log('suspendPayload', await stream.suspendPayload);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          const resumeStream = await agentOne.resumeStreamVNext({ name: 'Dero Israel' }, { runId: stream.runId });
+          for await (const chunk of resumeStream.fullStream) {
+            console.log('resume stream chunk', chunk);
+          }
+
+          console.log('resume status', resumeStream.status);
+          console.log('resume tool results', await resumeStream.toolResults);
+
+          toolCall = (await resumeStream.toolResults).find(
+            (result: any) => result.payload.toolName === 'findUserTool',
+          ).payload;
+
+          const name = toolCall?.result?.name;
+          const email = toolCall?.result?.email;
+
+          expect(name).toBe('Dero Israel');
+          expect(email).toBe('test@test.com');
+        }, 500000);
+      });
+
       describe.skipIf(version === 'v1')('requireToolApproval', () => {
         it('should call findUserTool with requireToolApproval on agent', async () => {
           const findUserTool = createTool({
@@ -747,72 +819,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
           expect(mockFindUser).toHaveBeenCalled();
           expect(name).toBe('Dero Israel');
-        }, 500000);
-      });
-
-      describe.skipIf(version === 'v1')('suspension', () => {
-        it('should call findUserTool with suspend and resume', async () => {
-          const findUserTool = createTool({
-            id: 'Find user tool',
-            description: 'This is a test tool that returns the name and email',
-            inputSchema: z.object({
-              name: z.string(),
-            }),
-            execute: async ({ suspend, resumeData }) => {
-              console.log('resumeData', resumeData, suspend);
-              if (!resumeData) {
-                return await suspend({ message: 'Please provide the name of the user' });
-              }
-
-              return {
-                name: resumeData?.name,
-                email: 'test@test.com',
-              };
-            },
-          });
-
-          const userAgent = new Agent({
-            name: 'User agent',
-            instructions: 'You are an agent that can get list of users using findUserTool.',
-            model: openaiModel,
-            tools: { findUserTool },
-          });
-
-          const mastra = new Mastra({
-            agents: { userAgent },
-            logger: false,
-            storage: mockStorage,
-          });
-
-          const agentOne = mastra.getAgent('userAgent');
-
-          let toolCall;
-          const stream = await agentOne.streamVNext('Find the user with name - Dero Israel');
-          for await (const chunk of stream.fullStream) {
-            if (chunk.type === 'tool-call-suspended') {
-              console.log('tool-call-suspended chunk', chunk);
-            }
-          }
-          console.log('status', stream.status);
-          console.log('suspendPayload', await stream.suspendPayload);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          const resumeStream = await agentOne.resumeStreamVNext({ name: 'Dero Israel' }, { runId: stream.runId });
-          for await (const chunk of resumeStream.fullStream) {
-            console.log('resume stream chunk', chunk);
-          }
-
-          console.log('resume status', resumeStream.status);
-          console.log('resume tool results', await resumeStream.toolResults);
-
-          toolCall = (await resumeStream.toolResults).find(
-            (result: any) => result.payload.toolName === 'findUserTool',
-          ).payload;
-
-          const name = toolCall?.result?.name;
-          const email = toolCall?.result?.email;
-
-          expect(name).toBe('Dero Israel');
-          expect(email).toBe('test@test.com');
         }, 500000);
       });
 

@@ -100,10 +100,12 @@ export function createStep<
 
 export function createStep<
   TSchemaIn extends z.ZodType<any>,
+  TSuspendSchema extends z.ZodType<any>,
+  TResumeSchema extends z.ZodType<any>,
   TSchemaOut extends z.ZodType<any>,
-  TContext extends ToolExecutionContext<TSchemaIn>,
+  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema>,
 >(
-  tool: Tool<TSchemaIn, TSchemaOut, TContext> & {
+  tool: Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
     inputSchema: TSchemaIn;
     outputSchema: TSchemaOut;
     execute: (context: TContext) => Promise<any>;
@@ -220,13 +222,17 @@ export function createStep<
       id: params.id,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
-      execute: async ({ inputData, mastra, runtimeContext }) => {
+      suspendSchema: params.suspendSchema,
+      resumeSchema: params.resumeSchema,
+      execute: async ({ inputData, mastra, runtimeContext, suspend, resumeData }) => {
         return params.execute({
           context: inputData,
           mastra,
           runtimeContext,
           // TODO: Pass proper tracing context when evented workflows support tracing
           tracingContext: { currentSpan: undefined },
+          suspend,
+          resumeData,
         });
       },
     };

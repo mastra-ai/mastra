@@ -52,21 +52,32 @@ export type InternalCoreTool = {
     }
 );
 
-export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema | undefined = undefined>
-  extends IExecutionContext<TSchemaIn> {
+export interface ToolExecutionContext<
+  TSchemaIn extends z.ZodSchema | undefined = undefined,
+  TSuspendSchema extends z.ZodSchema = any,
+  TResumeSchema extends z.ZodSchema = any,
+> extends IExecutionContext<TSchemaIn> {
   mastra?: MastraUnion;
   runtimeContext: RuntimeContext;
   writer?: ToolStream<any>;
   tracingContext?: TracingContext;
-  suspend: (suspendPayload: any) => Promise<any>;
-  resumeData?: any;
+  suspend: (suspendPayload: z.infer<TSuspendSchema>) => Promise<any>;
+  resumeData?: z.infer<TResumeSchema>;
 }
 
 export interface ToolAction<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
-  TContext extends ToolExecutionContext<TSchemaIn> = ToolExecutionContext<TSchemaIn>,
+  TSuspendSchema extends z.ZodSchema = any,
+  TResumeSchema extends z.ZodSchema = any,
+  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema> = ToolExecutionContext<
+    TSchemaIn,
+    TSuspendSchema,
+    TResumeSchema
+  >,
 > extends IAction<string, TSchemaIn, TSchemaOut, TContext, ToolInvocationOptions> {
+  suspendSchema?: TSuspendSchema;
+  resumeSchema?: TResumeSchema;
   description: string;
   execute?: (
     context: TContext,
