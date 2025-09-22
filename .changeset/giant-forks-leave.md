@@ -3,7 +3,8 @@
 '@mastra/deployer-netlify': patch
 '@mastra/deployer-vercel': patch
 '@mastra/deployer-cloud': patch
+'@mastra/core': patch
 'mastra': patch
 ---
 
-Register trace scoring workflow in deployers entryfile
+feat: implement trace scoring with batch processing capabilities
