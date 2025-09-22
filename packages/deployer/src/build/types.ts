@@ -1,3 +1,5 @@
+import type { Config } from '@mastra/core/mastra';
+
 /**
  * Collected metadata about a dependency
  */
@@ -15,3 +17,5 @@ export interface DependencyMetadata {
    */
   isWorkspace: boolean;
 }
+
+export type BundlerOptions = Required<NonNullable<Config['bundler']>>;

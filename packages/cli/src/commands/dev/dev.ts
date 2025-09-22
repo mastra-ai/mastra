@@ -1,11 +1,14 @@
 import type { ChildProcess } from 'child_process';
+import { dirname } from 'node:path';
 import process from 'node:process';
 import { join } from 'path';
 import devcert from '@expo/devcert';
 import { FileService } from '@mastra/deployer';
 import { getServerOptions } from '@mastra/deployer/build';
 import { isWebContainer } from '@webcontainer/env';
+import { up as getClosestPkgJson } from 'empathic/package';
 import { execa } from 'execa';
+import { exists } from 'fs-extra';
 import getPort from 'get-port';
 
 import { devLogger } from '../../utils/dev-logger.js';
@@ -279,9 +282,22 @@ async function rebundleAndRestart(
   }
 }
 
+async function getRootDir(root?: string) {
+  if (root) {
+    if (!(await exists(join(root, 'package.json')))) {
+      throw new Error('Root directory does not have a package.json file, which is required for Mastra projects');
+    }
+
+    return root;
+  }
+
+  const closestPkgJson = getClosestPkgJson({ cwd: process.cwd() });
+  return closestPkgJson ? dirname(closestPkgJson) : process.cwd();
+}
+
 export async function dev({
   port,
-  dir,
+  dir = 'src/mastra',
   root,
   tools,
   env,
@@ -300,8 +316,8 @@ export async function dev({
   customArgs?: string[];
   https?: boolean;
 }) {
-  const rootDir = root || process.cwd();
-  const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
+  const rootDir = await getRootDir(root);
+  const mastraDir = dir.startsWith('/') ? dir : join(rootDir, dir);
   const dotMastraPath = join(rootDir, '.mastra');
 
   // You cannot express an "include all js/ts except these" in one single string glob pattern so by default an array is passed to negate test files.
@@ -315,9 +331,8 @@ export async function dev({
   const discoveredTools = [defaultTools, ...(tools ?? [])];
 
   const fileService = new FileService();
-  const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
-
-  const bundler = new DevBundler(env);
+  const entryFile = fileService.getFirstExistingFile(['.ts', '.mjs', '.js'].map(ext => join(mastraDir, 'index' + ext)));
+  const bundler = new DevBundler(rootDir, env);
   bundler.__setLogger(logger); // Keep Pino logger for internal bundler operations
 
   const loadedEnv = await bundler.loadEnvVars();

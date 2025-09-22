@@ -229,7 +229,7 @@ export interface ToolOptions {
   memory?: MastraMemory;
   agentName?: string;
   model?: MastraLanguageModel;
-  writableStream?: WritableStream<ChunkType>;
+  streamWriter?: WritableStreamDefaultWriter<ChunkType>;
 }
 
 /**

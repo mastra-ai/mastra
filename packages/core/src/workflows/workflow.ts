@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import EventEmitter from 'events';
-import type { ReadableStream, WritableStream } from 'node:stream/web';
+import type { ReadableStream, WritableStream, WritableStreamDefaultWriter } from 'node:stream/web';
 import { TransformStream } from 'node:stream/web';
 import { z } from 'zod';
 import type { Mastra, WorkflowRun } from '..';
@@ -1055,7 +1055,7 @@ export class Workflow<
 
     const res = isResume
       ? await run.resume({ resumeData, step: resume.steps as any, runtimeContext, tracingContext })
-      : await run.start({ inputData, runtimeContext, tracingContext, writableStream: writer });
+      : await run.start({ inputData, runtimeContext, tracingContext, streamWriter: writer });
     unwatch();
     unwatchV2();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
@@ -1338,14 +1338,14 @@ export class Run<
   protected async _start({
     inputData,
     runtimeContext,
-    writableStream,
+    streamWriter,
     tracingContext,
     tracingOptions,
     format,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
-    writableStream?: WritableStream<ChunkType>;
+    streamWriter?: WritableStreamDefaultWriter<ChunkType>;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     format?: 'aisdk' | 'mastra' | undefined;
@@ -1391,7 +1391,7 @@ export class Run<
       retryConfig: this.retryConfig,
       runtimeContext: runtimeContext ?? new RuntimeContext(),
       abortController: this.abortController,
-      writableStream,
+      streamWriter,
       workflowAISpan,
       format,
     });
@@ -1412,20 +1412,20 @@ export class Run<
   async start({
     inputData,
     runtimeContext,
-    writableStream,
+    streamWriter,
     tracingContext,
     tracingOptions,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
-    writableStream?: WritableStream<ChunkType>;
+    streamWriter?: WritableStreamDefaultWriter<ChunkType>;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
   }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     return this._start({
       inputData,
       runtimeContext,
-      writableStream,
+      streamWriter,
       tracingContext,
       tracingOptions,
       format: 'aisdk',
@@ -1629,6 +1629,8 @@ export class Run<
           },
         });
 
+        const writer = writable.getWriter();
+
         let buffer: ChunkType[] = [];
         let isWriting = false;
         const tryWrite = async () => {
@@ -1640,9 +1642,10 @@ export class Run<
           }
           isWriting = true;
 
-          let watchWriter = writable.getWriter();
+          let watchWriter = writer;
 
           try {
+            await watchWriter.ready;
             for (const chunk of chunkToWrite) {
               await watchWriter.write(chunk);
             }
@@ -1667,7 +1670,9 @@ export class Run<
             },
           });
 
-          await tryWrite();
+          console.trace('write??', type);
+          //await writer.write(buffer.shift());
+          writer.releaseLock();
         }, 'watch-v2');
 
         this.closeStreamAction = async () => {
@@ -1684,7 +1689,7 @@ export class Run<
           inputData,
           runtimeContext,
           tracingContext,
-          writableStream: writable,
+          streamWriter: writer,
           format,
         }).then(result => {
           if (closeOnSuspend) {
@@ -1739,6 +1744,7 @@ export class Run<
           },
         });
 
+        const writer = writable.getWriter();
         let buffer: ChunkType[] = [];
         let isWriting = false;
         const tryWrite = async () => {
@@ -1795,7 +1801,7 @@ export class Run<
           step,
           runtimeContext,
           tracingContext,
-          writableStream: writable,
+          streamWriter: writer,
           format,
           isVNext: true,
         }).then(result => {
@@ -1892,7 +1898,7 @@ export class Run<
     runCount?: number;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
-    writableStream?: WritableStream<ChunkType>;
+    streamWriter?: WritableStreamDefaultWriter<ChunkType>;
   }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     return this._resume(params);
   }
@@ -1908,7 +1914,7 @@ export class Run<
     runCount?: number;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
-    writableStream?: WritableStream<ChunkType>;
+    streamWriter?: WritableStreamDefaultWriter<ChunkType>;
     format?: 'aisdk' | 'mastra' | undefined;
     isVNext?: boolean;
   }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {

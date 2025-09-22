@@ -1,6 +1,9 @@
+import type { WritableStreamDefaultWriter } from 'stream/web';
 import { WritableStream } from 'stream/web';
 
 export class ToolStream<T> extends WritableStream<T> {
+  #writer?: WritableStreamDefaultWriter<T>;
+
   constructor(
     {
       prefix,
@@ -13,14 +16,17 @@ export class ToolStream<T> extends WritableStream<T> {
       name: string;
       runId: string;
     },
-    originalStream?: WritableStream,
+    writer?: WritableStreamDefaultWriter<any>,
   ) {
     super({
       async write(chunk: any) {
-        const writer = originalStream?.getWriter();
+        if (!writer) {
+          return;
+        }
 
         try {
-          await writer?.write({
+          console.trace('write tool??');
+          await writer.write({
             type: `${prefix}-output`,
             runId,
             from: 'USER',
@@ -38,19 +44,23 @@ export class ToolStream<T> extends WritableStream<T> {
             },
           });
         } finally {
-          writer?.releaseLock();
+          writer.releaseLock();
         }
       },
     });
+
+    this.#writer = writer;
   }
 
   async write(data: any) {
-    const writer = this.getWriter();
+    if (!this.#writer) {
+      return;
+    }
 
     try {
-      await writer.write(data);
+      await this.#writer.write(data);
     } finally {
-      writer.releaseLock();
+      this.#writer.releaseLock();
     }
   }
 }

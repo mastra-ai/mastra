@@ -203,7 +203,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     runtimeContext: RuntimeContext;
     workflowAISpan?: AISpan<AISpanType.WORKFLOW_RUN>;
     abortController: AbortController;
-    writableStream?: WritableStream<ChunkType>;
+    streamWriter?: WritableStreamDefaultWriter<ChunkType>;
     format?: 'aisdk' | 'mastra' | undefined;
   }): Promise<TOutput> {
     const { workflowId, runId, resourceId, graph, input, resume, retryConfig, workflowAISpan, disableScorers } = params;
@@ -265,7 +265,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           abortController: params.abortController,
           emitter: params.emitter,
           runtimeContext: params.runtimeContext,
-          writableStream: params.writableStream,
+          streamWriter: params.streamWriter,
           disableScorers,
         });
 
@@ -423,7 +423,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController,
     runtimeContext,
     executionContext,
-    writableStream,
+    streamWriter,
     tracingContext,
   }: {
     workflowId: string;
@@ -448,7 +448,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
-    writableStream?: WritableStream<ChunkType>;
+    streamWriter?: WritableStreamDefaultWriter<ChunkType>;
     tracingContext: TracingContext;
   }): Promise<void> {
     let { duration, fn } = entry;
@@ -506,7 +506,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             name: 'sleep',
             runId,
           },
-          writableStream,
+          streamWriter,
         ),
       });
 
@@ -536,7 +536,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController,
     runtimeContext,
     executionContext,
-    writableStream,
+    streamWriter,
     tracingContext,
   }: {
     workflowId: string;
@@ -561,7 +561,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
-    writableStream?: WritableStream<ChunkType>;
+    streamWriter?: WritableStreamDefaultWriter<ChunkType>;
     tracingContext: TracingContext;
   }): Promise<void> {
     let { date, fn } = entry;
@@ -620,7 +620,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             name: 'sleepUntil',
             runId,
           },
-          writableStream,
+          streamWriter,
         ),
       });
 
@@ -709,7 +709,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController,
     runtimeContext,
     skipEmits = false,
-    writableStream,
+    streamWriter,
     disableScorers,
     serializedStepGraph,
     tracingContext,
@@ -729,7 +729,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController: AbortController;
     runtimeContext: RuntimeContext;
     skipEmits?: boolean;
-    writableStream?: WritableStream<ChunkType>;
+    streamWriter?: WritableStreamDefaultWriter<ChunkType>;
     disableScorers?: boolean;
     serializedStepGraph: SerializedStepFlowEntry[];
     tracingContext: TracingContext;
@@ -894,7 +894,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               name: step.id,
               runId,
             },
-            writableStream,
+            streamWriter,
           ),
           // Disable scorers must be explicitly set to false they are on by default
           scorers: disableScorers === false ? undefined : step.scorers,
@@ -1099,7 +1099,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
-    writableStream,
+    streamWriter,
     disableScorers,
   }: {
     workflowId: string;
@@ -1120,7 +1120,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
-    writableStream?: WritableStream<ChunkType>;
+    streamWriter?: WritableStreamDefaultWriter<ChunkType>;
     disableScorers?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
     const parallelSpan = tracingContext.currentSpan?.createChildSpan({
@@ -1160,7 +1160,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           emitter,
           abortController,
           runtimeContext,
-          writableStream,
+          streamWriter,
           disableScorers,
         }),
       ),
@@ -1217,7 +1217,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
-    writableStream,
+    streamWriter,
     disableScorers,
   }: {
     workflowId: string;
@@ -1243,7 +1243,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
-    writableStream?: WritableStream<ChunkType>;
+    streamWriter?: WritableStreamDefaultWriter<ChunkType>;
     disableScorers?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
     const conditionalSpan = tracingContext.currentSpan?.createChildSpan({
@@ -1312,7 +1312,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                   name: 'conditional',
                   runId,
                 },
-                writableStream,
+                streamWriter,
               ),
             });
 
@@ -1394,7 +1394,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           emitter,
           abortController,
           runtimeContext,
-          writableStream,
+          streamWriter,
           disableScorers,
         }),
       ),
@@ -1472,7 +1472,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
-    writableStream,
+    streamWriter,
     disableScorers,
     serializedStepGraph,
   }: {
@@ -1499,7 +1499,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
-    writableStream?: WritableStream<ChunkType>;
+    streamWriter?: WritableStreamDefaultWriter<ChunkType>;
     disableScorers?: boolean;
     serializedStepGraph: SerializedStepFlowEntry[];
   }): Promise<StepResult<any, any, any, any>> {
@@ -1537,7 +1537,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         emitter,
         abortController,
         runtimeContext,
-        writableStream,
+        streamWriter,
         disableScorers,
         serializedStepGraph,
       });
@@ -1602,7 +1602,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             name: 'loop',
             runId,
           },
-          writableStream,
+          streamWriter,
         ),
       });
       evalSpan?.end({
@@ -1635,7 +1635,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
-    writableStream,
+    streamWriter,
     disableScorers,
     serializedStepGraph,
   }: {
@@ -1663,7 +1663,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
-    writableStream?: WritableStream<ChunkType>;
+    streamWriter?: WritableStreamDefaultWriter<ChunkType>;
     disableScorers?: boolean;
     serializedStepGraph: SerializedStepFlowEntry[];
   }): Promise<StepResult<any, any, any, any>> {
@@ -1741,7 +1741,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             abortController,
             runtimeContext,
             skipEmits: true,
-            writableStream,
+            streamWriter,
             disableScorers,
             serializedStepGraph,
           });
@@ -1934,7 +1934,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
-    writableStream,
+    streamWriter,
     disableScorers,
   }: {
     workflowId: string;
@@ -1955,7 +1955,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
-    writableStream?: WritableStream<ChunkType>;
+    streamWriter?: WritableStreamDefaultWriter<ChunkType>;
     disableScorers?: boolean;
   }): Promise<{
     result: StepResult<any, any, any, any>;
@@ -1980,7 +1980,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         emitter,
         abortController,
         runtimeContext,
-        writableStream,
+        streamWriter,
         disableScorers,
         serializedStepGraph,
       });
@@ -2007,7 +2007,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         emitter,
         abortController,
         runtimeContext,
-        writableStream,
+        streamWriter,
         disableScorers,
       });
 
@@ -2101,7 +2101,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         emitter,
         abortController,
         runtimeContext,
-        writableStream,
+        streamWriter,
         disableScorers,
       });
     } else if (entry.type === 'conditional') {
@@ -2119,7 +2119,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         emitter,
         abortController,
         runtimeContext,
-        writableStream,
+        streamWriter,
         disableScorers,
       });
     } else if (entry.type === 'loop') {
@@ -2136,7 +2136,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         emitter,
         abortController,
         runtimeContext,
-        writableStream,
+        streamWriter,
         disableScorers,
         serializedStepGraph,
       });
@@ -2154,7 +2154,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         emitter,
         abortController,
         runtimeContext,
-        writableStream,
+        streamWriter,
         disableScorers,
         serializedStepGraph,
       });
@@ -2219,7 +2219,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         emitter,
         abortController,
         runtimeContext,
-        writableStream,
+        streamWriter,
       });
 
       await this.persistStepUpdate({
@@ -2342,7 +2342,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         emitter,
         abortController,
         runtimeContext,
-        writableStream,
+        streamWriter,
       });
 
       await this.persistStepUpdate({
@@ -2478,7 +2478,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           emitter,
           abortController,
           runtimeContext,
-          writableStream,
+          streamWriter,
           disableScorers,
           serializedStepGraph,
         });

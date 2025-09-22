@@ -1,6 +1,7 @@
 import { readFile } from 'fs/promises';
 import { parse } from 'dotenv';
 
+import type { RollupWatcher } from 'rollup';
 import { MastraBase } from '../base';
 
 export interface IBundler {
@@ -34,6 +35,14 @@ export abstract class MastraBundler extends MastraBase implements IBundler {
     }
 
     return envVars;
+  }
+
+  async watch(
+    entryFile: string,
+    outputDirectory: string,
+    toolsPaths: (string | string[])[],
+  ): Promise<RollupWatcher | null> {
+    return null;
   }
 
   abstract prepare(outputDirectory: string): Promise<void>;

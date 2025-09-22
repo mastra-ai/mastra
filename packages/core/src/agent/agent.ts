@@ -1472,7 +1472,7 @@ export class Agent<
     runtimeContext: RuntimeContext;
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
-    writableStream?: WritableStream<ChunkType>;
+    streamWriter?: WritableStreamDefaultWriter<ChunkType>;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
 
@@ -1769,7 +1769,7 @@ export class Agent<
     runId?: string;
     runtimeContext: RuntimeContext;
     tracingContext?: TracingContext;
-    writableStream?: WritableStream<ChunkType>;
+    streamWriter?: WritableStreamDefaultWriter<ChunkType>;
     methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
     format?: 'mastra' | 'aisdk';
   }): Promise<Record<string, CoreTool>> {
@@ -1941,7 +1941,7 @@ export class Agent<
     messages: MessageListInput;
     runtimeContext: RuntimeContext;
     saveQueueManager: SaveQueueManager;
-    writableStream?: WritableStream<ChunkType>;
+    streamWriter?: WritableStreamDefaultWriter<ChunkType>;
     methodType: 'generate' | 'stream';
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -2649,7 +2649,7 @@ export class Agent<
   >(
     messages: MessageListInput,
     options: (AgentGenerateOptions<Output, ExperimentalOutput> | AgentStreamOptions<Output, ExperimentalOutput>) & {
-      writableStream?: WritableStream<ChunkType>;
+      streamWriter?: WritableStreamDefaultWriter<ChunkType>;
     },
     methodType: 'generate' | 'stream',
   ): Promise<{

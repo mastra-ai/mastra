@@ -1,8 +1,15 @@
 import { writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { Config } from '@mastra/core/mastra';
 import { FileService } from '@mastra/deployer';
-import { createWatcher, getWatcherInputOptions, writeTelemetryConfig, getBundlerOptions } from '@mastra/deployer/build';
+import {
+  createWatcher,
+  getWatcherInputOptions,
+  writeTelemetryConfig,
+  getBundlerOptions,
+  generateEntry,
+} from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import * as fsExtra from 'fs-extra';
 import type { RollupWatcherEvent } from 'rollup';
@@ -11,10 +18,12 @@ import { devLogger } from '../../utils/dev-logger.js';
 
 export class DevBundler extends Bundler {
   private customEnvFile?: string;
+  private rootDir: string;
 
-  constructor(customEnvFile?: string) {
+  constructor(rootDir: string, customEnvFile?: string) {
     super('Dev');
     this.customEnvFile = customEnvFile;
+    this.rootDir = rootDir;
   }
 
   getEnvFiles(): Promise<string[]> {
@@ -57,34 +66,28 @@ export class DevBundler extends Bundler {
 
     const envFiles = await this.getEnvFiles();
 
-    let sourcemapEnabled = false;
-    try {
-      const bundlerOptions = await getBundlerOptions(entryFile, outputDirectory);
-      sourcemapEnabled = !!bundlerOptions?.sourcemap;
-    } catch (error) {
-      this.logger.debug('Failed to get bundler options, sourcemap will be disabled', { error });
-    }
+    const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
+    await generateEntry(entryFile, toolsInputOptions, join(outputDirectory, this.analyzeOutputDir));
+    const compiledEntryFile = join(outputDirectory, this.analyzeOutputDir, 'entry.js');
+    const bundlerOptions = await getBundlerOptions(compiledEntryFile, outputDirectory);
 
-    const inputOptions = await getWatcherInputOptions(
-      entryFile,
-      'node',
-      {
+    const inputOptions = await getWatcherInputOptions(compiledEntryFile, {
+      env: {
         'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
       },
-      { sourcemap: sourcemapEnabled },
-    );
-    const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
+      bundlerOptions,
+      tools: toolsInputOptions,
+      projectRoot: this.rootDir,
+    });
 
     const outputDir = join(outputDirectory, this.outputDir);
-    await writeTelemetryConfig(entryFile, outputDir, this.logger);
+    await writeTelemetryConfig(compiledEntryFile, outputDir, this.logger);
 
     const mastraFolder = dirname(entryFile);
     const fileService = new FileService();
-    const customInstrumentation = fileService.getFirstExistingFileOrUndefined([
-      join(mastraFolder, 'instrumentation.js'),
-      join(mastraFolder, 'instrumentation.ts'),
-      join(mastraFolder, 'instrumentation.mjs'),
-    ]);
+    const customInstrumentation = fileService.getFirstExistingFileOrUndefined(
+      ['ts', 'mjs', 'js'].map(ext => join(mastraFolder, `instrumentation.${ext}`)),
+    );
 
     await this.writeInstrumentationFile(outputDir, customInstrumentation);
 
@@ -110,6 +113,7 @@ export class DevBundler extends Bundler {
           // @ts-ignore - types are good
           // eslint-disable-next-line @typescript-eslint/no-misused-promises
           ...inputOptions.plugins,
+
           {
             name: 'env-watcher',
             buildStart() {
@@ -127,36 +131,36 @@ export class DevBundler extends Bundler {
               return copyPublic(dirname(entryFile), outputDirectory);
             },
           },
-          {
-            name: 'tools-watcher',
-            async buildEnd() {
-              const toolImports: string[] = [];
-              const toolsExports: string[] = [];
-              Array.from(Object.keys(toolsInputOptions || {}))
-                .filter(key => key.startsWith('tools/'))
-                .forEach((key, index) => {
-                  const toolExport = `tool${index}`;
-                  toolImports.push(`import * as ${toolExport} from './${key}.mjs';`);
-                  toolsExports.push(toolExport);
-                });
+          // {
+          //   name: 'tools-watcher',
+          //   async buildEnd() {
+          //     const toolImports: string[] = [];
+          //     const toolsExports: string[] = [];
+          //     Array.from(Object.keys(toolsInputOptions || {}))
+          //       .filter(key => key.startsWith('tools/'))
+          //       .forEach((key, index) => {
+          //         const toolExport = `tool${index}`;
+          //         toolImports.push(`import * as ${toolExport} from './${key}.mjs';`);
+          //         toolsExports.push(toolExport);
+          //       });
 
-              await writeFile(
-                join(outputDir, 'tools.mjs'),
-                `${toolImports.join('\n')}
-        
-                export const tools = [${toolsExports.join(', ')}]`,
-              );
-            },
-          },
+          //     await writeFile(
+          //       join(outputDir, 'tools.mjs'),
+          //       `${toolImports.join('\n')}
+
+          //       export const tools = [${toolsExports.join(', ')}]`,
+          //     );
+          //   },
+          // },
         ],
         input: {
           index: join(__dirname, 'templates', 'dev.entry.js'),
-          ...toolsInputOptions,
+          tools: './tools.mjs',
         },
       },
       {
         dir: outputDir,
-        sourcemap: sourcemapEnabled,
+        sourcemap: bundlerOptions.sourcemap,
       },
     );
 

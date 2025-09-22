@@ -7,7 +7,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import virtual from '@rollup/plugin-virtual';
 import * as pkg from 'empathic/package';
 import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
-import type { InputOptions, OutputOptions } from 'rollup';
+import type { InputOptions, OutputOptions, RollupWatcher } from 'rollup';
 import { glob } from 'tinyglobby';
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
@@ -485,6 +485,14 @@ export const tools = [${toolsExports.join(', ')}]`,
         error,
       );
     }
+  }
+
+  async watch(
+    entryFile: string,
+    outputDirectory: string,
+    toolsPaths: (string | string[])[],
+  ): Promise<RollupWatcher | null> {
+    return null;
   }
 
   async lint(_entryFile: string, _outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {

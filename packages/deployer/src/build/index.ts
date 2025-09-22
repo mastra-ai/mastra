@@ -6,3 +6,4 @@ export { Deps } from '../services/deps';
 export { writeTelemetryConfig } from './telemetry';
 export { getServerOptions } from './serverOptions';
 export { getBundlerOptions } from './bundlerOptions';
+export { generateEntry } from './analyze/generateEntry';

@@ -1,3 +1,4 @@
+import type { WritableStreamDefaultWriter } from 'stream/web';
 import type { Mastra, SerializedStepFlowEntry } from '..';
 import type { AISpan, AISpanType, TracingPolicy } from '../ai-tracing';
 import { MastraBase } from '../base';
@@ -64,7 +65,7 @@ export abstract class ExecutionEngine extends MastraBase {
       delay?: number;
     };
     abortController: AbortController;
-    writableStream?: WritableStream<ChunkType>;
+    streamWriter?: WritableStreamDefaultWriter<ChunkType>;
     format?: 'aisdk' | 'mastra' | undefined;
   }): Promise<TOutput>;
 }

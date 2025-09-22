@@ -18,11 +18,17 @@ import { DEPS_TO_IGNORE } from './constants';
  * Configures and returns the Rollup plugins needed for analyzing entry files.
  * Sets up module resolution, transpilation, and custom alias handling for Mastra-specific imports.
  */
-function getInputPlugins(
-  { entry, isVirtualFile }: { entry: string; isVirtualFile: boolean },
-  mastraEntry: string,
-  { sourcemapEnabled }: { sourcemapEnabled: boolean },
-): Plugin[] {
+function getInputPlugins({
+  entry,
+  isVirtualFile,
+  mastraEntry,
+  sourcemapEnabled,
+}: {
+  entry: string;
+  isVirtualFile: boolean;
+  mastraEntry: string;
+  sourcemapEnabled: boolean;
+}): Plugin[] {
   const normalizedMastraEntry = mastraEntry.replaceAll('\\', '/');
   let virtualPlugin = null;
   if (isVirtualFile) {
@@ -233,7 +239,7 @@ export async function analyzeEntry(
     input: isVirtualFile ? '#entry' : entry,
     treeshake: 'smallest',
     preserveSymlinks: true,
-    plugins: getInputPlugins({ entry, isVirtualFile }, mastraEntry, { sourcemapEnabled }),
+    plugins: getInputPlugins({ entry, isVirtualFile, mastraEntry, sourcemapEnabled }),
     external: DEPS_TO_IGNORE,
   });
 

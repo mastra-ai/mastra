@@ -146,6 +146,7 @@ export type InnerAgentExecutionOptions<
   FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
 > = AgentExecutionOptions<OUTPUT, FORMAT> & {
   writableStream?: WritableStream<ChunkType>;
+  streamWriter?: WritableStreamDefaultWriter<ChunkType>;
   messages: MessageListInput;
   methodType: 'generate' | 'stream' | 'streamVNext';
   /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */

@@ -152,9 +152,6 @@ If you think your configuration is valid, please open an issue.`);
       projectRoot,
     });
 
-    // Write the entry file to the output dir so that we can use it for workspace resolution stuff
-    await writeFile(join(outputDir, `entry-${index++}.mjs`), analyzeResult.output.code);
-
     // Merge dependencies from each entry (main, tools, etc.)
     for (const [dep, metadata] of analyzeResult.dependencies.entries()) {
       if (depsToOptimize.has(dep)) {
