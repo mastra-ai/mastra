@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DrizzleStore } from '../src/index';
+import { DrizzleStore } from '../index';
 
 describe('DrizzleStore Setup', () => {
   it('should create a DrizzleStore instance', () => {
