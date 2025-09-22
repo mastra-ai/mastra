@@ -9,10 +9,12 @@ Both `streamVNext` and `generateVNext` are experimental APIs that will replace t
 ## streamVNext API
 
 ### Location
+
 - Found in `packages/core/src/agent/agent.ts` (line 3293)
 - Also available in client SDKs: `client-sdks/client-js/src/resources/agent.ts`, `client-sdks/client-js/src/resources/workflow.ts`
 
 ### Method Signature
+
 ```typescript
 streamVNext<OUTPUT = unknown, FORMAT extends 'mastra' | 'aisdk' = 'mastra'>(
   messages: MessageListInput,
@@ -21,6 +23,7 @@ streamVNext<OUTPUT = unknown, FORMAT extends 'mastra' | 'aisdk' = 'mastra'>(
 ```
 
 ### Key Features
+
 - Real-time streaming of agent responses
 - Supports both Mastra's native format and AI SDK v5 compatibility
 - Designed specifically for V2 models (throws error if used with V1 models)
@@ -29,22 +32,28 @@ streamVNext<OUTPUT = unknown, FORMAT extends 'mastra' | 'aisdk' = 'mastra'>(
 ### Input Parameters
 
 #### messages: MessageListInput
+
 Accepts various message formats:
+
 - Core `Message[]` array
 - AI SDK compatible messages
 - String (converted to user message)
 - Object with role/content properties
 
 #### streamOptions: AgentExecutionOptions<OUTPUT, FORMAT>
+
 A comprehensive options object with the following properties:
 
 ##### Format Control
+
 - `format`: 'mastra' | 'aisdk' - Controls output format compatibility
 
 ##### Memory Configuration
+
 - `memory`: Object with `thread` and `resource` properties for contextual memory
 
 ##### Output Control
+
 - `structuredOutput`: Preferred method for schema-based output with properties:
   - `schema`: Zod schema for validation
   - `model`: MastraLanguageModel for structured output
@@ -53,6 +62,7 @@ A comprehensive options object with the following properties:
   - `instructions`: Specific instructions for structured output generation
 
 ##### Model Settings
+
 - `modelSettings`: Configuration object for model parameters including:
   - `temperature`: Controls randomness of output
   - `maxTokens`: Maximum tokens to generate
@@ -63,9 +73,11 @@ A comprehensive options object with the following properties:
   - `stopSequences`: Array of stop sequences
 
 ##### Provider Options
+
 - `providerOptions`: Provider-specific configuration (e.g., OpenAI's `reasoningEffort`)
 
 ##### Execution Control
+
 - `maxSteps`: Maximum number of execution steps
 - `stopWhen`: Function to determine when to stop streaming
 - `toolChoice`: Controls tool selection behavior
@@ -85,6 +97,7 @@ A comprehensive options object with the following properties:
 - `prepareStep`: Function to prepare each step
 
 ##### Callbacks
+
 - `onStepFinish`: Called after each execution step
 - `onFinish`: Called when streaming is complete
 - `onChunk`: Called for each streamed chunk
@@ -92,12 +105,14 @@ A comprehensive options object with the following properties:
 - `onAbort`: Called when the stream is aborted
 
 ##### Processors
+
 - `inputProcessors`: Array of input processors
 - `outputProcessors`: Array of output processors
 
 ### Return Types
 
 #### Mastra Native Format (format: 'mastra')
+
 Returns `MastraModelOutput<OUTPUT>` which provides getters for various output components as `DelayedPromise`s:
 
 - `text`: Final text output
@@ -126,6 +141,7 @@ Returns `MastraModelOutput<OUTPUT>` which provides getters for various output co
 - `object`: Final structured object
 
 #### AI SDK v5 Format (format: 'aisdk')
+
 Returns `AISDKV5OutputStream<OUTPUT>` which provides AI SDK v5 compatible streaming output:
 
 - `textStream`: Text stream
@@ -148,6 +164,7 @@ Returns `AISDKV5OutputStream<OUTPUT>` which provides AI SDK v5 compatible stream
 - `error`: Error information if any
 
 Additional methods:
+
 - `toTextStreamResponse()`: Convert to text stream response
 - `toUIMessageStreamResponse()`: Convert to UI message stream response
 - `toUIMessageStream()`: Convert to UI message stream
@@ -155,10 +172,12 @@ Additional methods:
 ## generateVNext API
 
 ### Location
+
 - Found in `packages/core/src/agent/agent.ts` (line 3264)
 - Also available in client SDKs: `client-sdks/client-js/src/resources/agent.ts`, `client-sdks/client-js/src/resources/workflow.ts`
 
 ### Method Signature
+
 ```typescript
 generateVNext<OUTPUT = unknown, FORMAT extends 'mastra' | 'aisdk' = 'mastra'>(
   messages: MessageListInput,
@@ -167,6 +186,7 @@ generateVNext<OUTPUT = unknown, FORMAT extends 'mastra' | 'aisdk' = 'mastra'>(
 ```
 
 ### Key Features
+
 - Non-streaming generation method that returns complete output
 - Calls `streamVNext` internally and awaits its `getFullOutput()`
 - Supports both Mastra's native format and AI SDK v5 compatibility
@@ -174,22 +194,28 @@ generateVNext<OUTPUT = unknown, FORMAT extends 'mastra' | 'aisdk' = 'mastra'>(
 - Handles tripwire conditions and errors
 
 ### Input Parameters
+
 Same as `streamVNext`:
+
 - `messages`: MessageListInput
 - `options`: AgentExecutionOptions<OUTPUT, FORMAT>
 
 ### Return Types
+
 Returns the full output by awaiting the `getFullOutput()` method of the underlying stream:
 
 #### Mastra Native Format (format: 'mastra')
+
 Returns the resolved output from `MastraModelOutput.getFullOutput()` which contains all the properties listed in the streamVNext return types section.
 
 #### AI SDK v5 Format (format: 'aisdk')
+
 Returns the resolved output from `AISDKV5OutputStream.getFullOutput()` which contains all the properties listed in the streamVNext return types section.
 
 ## Differences from Legacy APIs
 
 ### Legacy stream() Method
+
 - Located in `packages/core/src/agent/agent.ts` (line 3747)
 - Deprecated and will be replaced by `streamVNext` on September 23rd, 2025
 - Only supports V1 models
@@ -197,6 +223,7 @@ Returns the resolved output from `AISDKV5OutputStream.getFullOutput()` which con
 - Returns different structure than VNext APIs
 
 ### Legacy generate() Method
+
 - Located in `packages/core/src/agent/agent.ts` (line 3400)
 - Deprecated and will be replaced by `generateVNext` on September 23rd, 2025
 - Only supports V1 models
@@ -206,6 +233,7 @@ Returns the resolved output from `AISDKV5OutputStream.getFullOutput()` which con
 ### Key Differences in Options
 
 #### AgentExecutionOptions (VNext) vs AgentGenerateOptions/AgentStreamOptions (Legacy)
+
 1. **Format Control**: VNext includes a `format` option ('mastra' | 'aisdk') for compatibility
 2. **Structured Output**: VNext uses `structuredOutput` as the preferred method (legacy had both `output` and `structuredOutput`)
 3. **Memory**: VNext uses `memory` with `thread` and `resource` properties (legacy had deprecated `memoryOptions`)
@@ -217,14 +245,17 @@ Returns the resolved output from `AISDKV5OutputStream.getFullOutput()` which con
 ## Implementation Details
 
 ### Model Version Check
+
 Both VNext APIs explicitly check that the underlying LLM model's `specificationVersion` is 'v2', throwing an error if a 'v1' model is used.
 
 ### getLLM Method
+
 The `getLLM` method in `packages/core/src/agent/agent.ts` (line 702) is responsible for instantiating either `MastraLLMV1` for v1 models or `MastraLLMVNext` for v2 models, based on the model's `specificationVersion`.
 
 ## Usage Examples
 
 ### Basic Usage
+
 ```typescript
 // Mastra native format (default)
 const stream = await agent.streamVNext(messages, options);
@@ -234,33 +265,36 @@ const stream = await agent.streamVNext(messages, { ...options, format: 'aisdk' }
 ```
 
 ### With Structured Output
+
 ```typescript
 const result = await agent.generateVNext(messages, {
   structuredOutput: {
     schema: z.object({ name: z.string(), age: z.number() }),
     model: openai('gpt-4o'),
     errorStrategy: 'ignore',
-    fallbackValue: { name: 'Unknown', age: 0 }
-  }
+    fallbackValue: { name: 'Unknown', age: 0 },
+  },
 });
 ```
 
 ### With Memory
+
 ```typescript
 const stream = await agent.streamVNext(messages, {
   memory: {
     thread: 'thread-id',
-    resource: 'resource-id'
-  }
+    resource: 'resource-id',
+  },
 });
 ```
 
 ### With Callbacks
+
 ```typescript
 const stream = await agent.streamVNext(messages, {
-  onFinish: (result) => console.log('Finished:', result),
-  onStepFinish: (step) => console.log('Step finished:', step),
-  onChunk: (chunk) => console.log('Chunk received:', chunk)
+  onFinish: result => console.log('Finished:', result),
+  onStepFinish: step => console.log('Step finished:', step),
+  onChunk: chunk => console.log('Chunk received:', chunk),
 });
 ```
 

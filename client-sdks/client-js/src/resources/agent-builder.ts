@@ -326,10 +326,10 @@ export class AgentBuilder extends BaseResource {
   }
 
   /**
-   * Streams agent builder action progress in real-time using VNext streaming.
-   * This calls `/api/agent-builder/:actionId/streamVNext`.
+   * Streams agent builder action progress in real-time using streaming.
+   * This calls `/api/agent-builder/:actionId/stream`.
    */
-  async streamVNext(params: AgentBuilderActionRequest, runId?: string) {
+  async stream(params: AgentBuilderActionRequest, runId?: string) {
     const searchParams = new URLSearchParams();
     if (runId) {
       searchParams.set('runId', runId);
@@ -338,7 +338,7 @@ export class AgentBuilder extends BaseResource {
     const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
     const { runtimeContext: _, ...actionParams } = params;
 
-    const url = `/api/agent-builder/${this.actionId}/streamVNext${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+    const url = `/api/agent-builder/${this.actionId}/stream${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
     const response: Response = await this.request(url, {
       method: 'POST',
       body: { ...actionParams, runtimeContext },
@@ -346,7 +346,7 @@ export class AgentBuilder extends BaseResource {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to stream agent builder action VNext: ${response.statusText}`);
+      throw new Error(`Failed to stream agent builder action: ${response.statusText}`);
     }
 
     if (!response.body) {

@@ -1,15 +1,23 @@
 import { Callout } from 'nextra/components';
 import { Tag } from '@/components/tag';
 
-# Migration Guide: Legacy to Current APIs
+# Migration Guide: VNext to Standard APIs
 
 <Callout type="info">
-  This guide covers the migration from legacy `generateLegacy()` and `streamLegacy()` methods to the current `generateLegacy()` and `streamLegacy()` methods.
+  This guide covers the migration from legacy `generateLegacy()` and `streamLegacy()` methods to the standard `generate()` and `stream()` methods.
+</Callout>
+
+<Callout type="warning">
+  **Important Naming Clarification**: 
+  - The `streamVNext()` and `generateVNext()` methods have been renamed to `stream()` and `generate()` respectively. These are now the primary APIs for V2 models.
+  - The original `stream()` and `generate()` methods have been renamed to `streamLegacy()` and `generateLegacy()` to maintain backward compatibility with V1 models.
+  - If your code currently uses `agent.stream()` and you're getting an error about needing AI SDK v5 models, it means you need to use `agent.streamLegacy()` instead to continue using V1 models.
+  - Similarly, if your code uses `agent.generate()` and encounters the same error, you should use `agent.generateLegacy()` for V1 model compatibility.
 </Callout>
 
 ## Overview
 
-The legacy `generateLegacy()` and `streamLegacy()` methods in Mastra agents have been replaced by enhanced `generateLegacy()` and `streamLegacy()` methods. These new APIs offer improved capabilities, better performance, and full compatibility with AI SDK v5.
+The `streamVNext()` and `generateVNext()` methods in Mastra agents have been renamed to `stream()` and `generate()` respectively. These are now the standard APIs for V2 models and offer improved capabilities, better performance, and full compatibility with AI SDK v5. The original `stream()` and `generate()` methods have been renamed to `streamLegacy()` and `generateLegacy()` to maintain backward compatibility with V1 models.
 
 ## Key Differences
 
@@ -26,13 +34,13 @@ The legacy `generateLegacy()` and `streamLegacy()` methods in Mastra agents have
 ### 3. Return Types
 
 - **Legacy `generateLegacy()`**: Returns `GenerateTextResult` or `GenerateObjectResult`
-- **Current `generateLegacy()`**: Returns the full output from `getFullOutput()` method
+- **Current `generate()`**: Returns the full output from `getFullOutput()` method
 - **Legacy `streamLegacy()`**: Returns streaming response with callbacks
-- **Current `streamLegacy()`**: Returns `MastraModelOutput` or `AISDKV5OutputStream`
+- **Current `stream()`**: Returns `MastraModelOutput` or `AISDKV5OutputStream`
 
 ## Migration Examples
 
-### Migrating from `generateLegacy()` to `generateLegacy()`
+### Migrating from Legacy to Standard APIs
 
 #### Legacy `generateLegacy()` usage:
 ```typescript
@@ -48,7 +56,7 @@ const result = await agent.generate(messages, {
 });
 ```
 
-#### Current `generateLegacy()` equivalent:
+#### Current `generate()` equivalent:
 ```typescript
 const result = await agent.generate(messages, {
   structuredOutput: {
@@ -64,8 +72,6 @@ const result = await agent.generate(messages, {
 });
 ```
 
-### Migrating from `streamLegacy()` to `streamLegacy()`
-
 #### Legacy `streamLegacy()` usage:
 ```typescript
 const streamResult = await agent.stream(messages, {
@@ -77,7 +83,7 @@ const streamResult = await agent.stream(messages, {
 });
 ```
 
-#### Current `streamLegacy()` equivalent:
+#### Standard `stream()` equivalent:
 ```typescript
 const streamResult = await agent.stream(messages, {
   callbacks: {
@@ -94,7 +100,7 @@ const streamResult = await agent.stream(messages, {
 
 ## Parameter Mapping
 
-| Legacy Parameter | Current Equivalent | Notes |
+| Legacy Parameter | Standard Equivalent | Notes |
 |------------------|------------------|-------|
 | `temperature` | `modelSettings.temperature` | Moved to nested settings object |
 | `maxSteps` | `maxSteps` | Same location |
@@ -105,10 +111,10 @@ const streamResult = await agent.stream(messages, {
 | `toolChoice` | `toolChoice` | Same location |
 | `providerOptions` | `providerOptions` | Same location |
 
-## Enhanced Features in Current APIs
+## Enhanced Features in Standard APIs
 
 ### 1. Format Options
-The Current APIs support a `format` option that allows you to choose between Mastra's native format and AI SDK v5 compatibility:
+The current APIs support a `format` option that allows you to choose between Mastra's native format and AI SDK v5 compatibility:
 
 ```typescript
 // Mastra native format (default)
@@ -138,7 +144,7 @@ const result = await agent.stream(messages, {
 ```
 
 ### 3. Better Structured Output Handling
-The `structuredOutput` parameter in Current APIs has enhanced capabilities:
+The `structuredOutput` parameter in current APIs has enhanced capabilities:
 
 ```typescript
 const result = await agent.generate(messages, {
@@ -155,13 +161,13 @@ const result = await agent.generate(messages, {
 
 1. **Model Version Check**: Current APIs will throw an error if used with V1 models. Ensure your models are V2 compatible.
 
-2. **Return Type Differences**: The return types are different between legacy and Current APIs. Update your code to handle the new return structures.
+2. **Return Type Differences**: The return types are different between legacy and current APIs. Update your code to handle the new return structures.
 
 3. **Callback Organization**: Callbacks are now organized under a `callbacks` object rather than being top-level parameters.
 
 4. **Model Settings**: Model-specific settings like `temperature` are now grouped under `modelSettings`.
 
-5. **Experimental Status**: These APIs are currently experimental and may change before becoming the default implementation.
+5. **API Status**: These APIs are now the default implementation in Mastra.
 
 ## Migration Checklist
 
@@ -174,4 +180,4 @@ const result = await agent.generate(messages, {
 - [ ] Check memory configuration compatibility
 - [ ] Update provider-specific options if needed
 
-By following this guide, you should be able to smoothly transition your code from the legacy APIs to the new Current APIs.
+By following this guide, you should be able to smoothly transition your code from the legacy APIs to the new current APIs.
