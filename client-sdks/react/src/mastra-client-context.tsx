@@ -1,9 +1,7 @@
 import { createContext, useContext, ReactNode } from 'react';
 import { MastraClient } from '@mastra/client-js';
 
-type MastraClientContextType = {
-  client: MastraClient;
-};
+type MastraClientContextType = MastraClient;
 
 const MastraClientContext = createContext<MastraClientContextType | undefined>(undefined);
 
@@ -18,7 +16,7 @@ export const MastraClientProvider = ({
 }) => {
   const client = createMastraClient(baseUrl, headers);
 
-  return <MastraClientContext.Provider value={{ client }}>{children}</MastraClientContext.Provider>;
+  return <MastraClientContext.Provider value={client}>{children}</MastraClientContext.Provider>;
 };
 
 export const useMastraClient = () => {
@@ -27,7 +25,7 @@ export const useMastraClient = () => {
     throw new Error('useMastraClient must be used within a MastraClientProvider');
   }
 
-  return context.client;
+  return context;
 };
 
 const createMastraClient = (baseUrl?: string, mastraClientHeaders: Record<string, string> = {}) => {

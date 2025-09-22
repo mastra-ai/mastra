@@ -1,16 +1,7 @@
 import { useMutation, useQuery, useInfiniteQuery } from '@tanstack/react-query';
-import type {
-  GenerateParams,
-  StreamParams,
-  UpdateModelParams,
-  StreamVNextParams,
-  NetworkStreamParams,
-} from '@mastra/client-js';
+import type { UpdateModelParams, NetworkStreamParams } from '@mastra/client-js';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
-import type { MessageListInput } from '@mastra/core/agent/message-list';
-import type { OutputSchema } from '@mastra/core/stream';
-import type { JSONSchema7 } from 'json-schema';
-import type { ZodType } from 'zod';
+
 import { useMastraClient } from '../mastra-client-context';
 
 // Agent Voice Hooks
@@ -43,7 +34,7 @@ export const useAgentListen = (agentId: string) => {
 export const useAgentSpeakers = (
   agentId: string,
   runtimeContext?: RuntimeContext | Record<string, any>,
-  options?: Parameters<typeof useQuery>[0],
+  options?: Parameters<typeof useQuery>[number],
 ) => {
   const client = useMastraClient();
 
@@ -60,7 +51,7 @@ export const useAgentSpeakers = (
 export const useAgentListener = (
   agentId: string,
   runtimeContext?: RuntimeContext | Record<string, any>,
-  options?: Parameters<typeof useQuery>[0],
+  options?: Parameters<typeof useQuery>[number],
 ) => {
   const client = useMastraClient();
   return useQuery({
@@ -78,7 +69,7 @@ export const useAgentListener = (
 export const useAgentDetails = (
   agentId: string,
   runtimeContext?: RuntimeContext | Record<string, any>,
-  options?: Parameters<typeof useQuery>[0],
+  options?: Parameters<typeof useQuery>[number],
 ) => {
   const client = useMastraClient();
   return useQuery({
@@ -94,12 +85,8 @@ export const useAgentDetails = (
 export const useAgentGenerate = (agentId: string) => {
   const client = useMastraClient();
   return useMutation({
-    mutationFn: <
-      Output extends JSONSchema7 | ZodType | undefined = undefined,
-      StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
-    >(
-      params: GenerateParams<Output>,
-    ) => client.getAgent(agentId).generate(params),
+    mutationFn: (params: Parameters<ReturnType<typeof client.getAgent>['generate']>[number]) =>
+      client.getAgent(agentId).generate(params),
   });
 };
 
@@ -109,12 +96,8 @@ export const useAgentGenerate = (agentId: string) => {
 export const useAgentGenerateLegacy = (agentId: string) => {
   const client = useMastraClient();
   return useMutation({
-    mutationFn: <
-      Output extends JSONSchema7 | ZodType | undefined = undefined,
-      StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
-    >(
-      params: GenerateParams<Output>,
-    ) => client.getAgent(agentId).generateLegacy(params),
+    mutationFn: (params: Parameters<ReturnType<typeof client.getAgent>['generateLegacy']>[number]) =>
+      client.getAgent(agentId).generateLegacy(params),
   });
 };
 
@@ -124,13 +107,8 @@ export const useAgentGenerateLegacy = (agentId: string) => {
 export const useAgentGenerateVNext = (agentId: string) => {
   const client = useMastraClient();
   return useMutation({
-    mutationFn: <OUTPUT extends OutputSchema = undefined>({
-      messages,
-      options,
-    }: {
-      messages: MessageListInput;
-      options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>;
-    }) => client.getAgent(agentId).generateVNext(messages, options),
+    mutationFn: (params: Parameters<ReturnType<typeof client.getAgent>['generateVNext']>[number]) =>
+      client.getAgent(agentId).generateVNext(params),
   });
 };
 
@@ -140,7 +118,7 @@ export const useAgentGenerateVNext = (agentId: string) => {
 export const useAgentStream = (agentId: string) => {
   const client = useMastraClient();
   return useMutation({
-    mutationFn: <T extends JSONSchema7 | ZodType | undefined = undefined>(params: StreamParams<T>) =>
+    mutationFn: (params: Parameters<ReturnType<typeof client.getAgent>['stream']>[number]) =>
       client.getAgent(agentId).stream(params),
   });
 };
@@ -151,7 +129,7 @@ export const useAgentStream = (agentId: string) => {
 export const useAgentStreamLegacy = (agentId: string) => {
   const client = useMastraClient();
   return useMutation({
-    mutationFn: <T extends JSONSchema7 | ZodType | undefined = undefined>(params: StreamParams<T>) =>
+    mutationFn: (params: Parameters<ReturnType<typeof client.getAgent>['streamLegacy']>[number]) =>
       client.getAgent(agentId).streamLegacy(params),
   });
 };
@@ -162,13 +140,8 @@ export const useAgentStreamLegacy = (agentId: string) => {
 export const useAgentStreamVNext = (agentId: string) => {
   const client = useMastraClient();
   return useMutation({
-    mutationFn: <OUTPUT extends OutputSchema = undefined>({
-      messages,
-      options,
-    }: {
-      messages: MessageListInput;
-      options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>;
-    }) => client.getAgent(agentId).streamVNext(messages, options),
+    mutationFn: (params: Parameters<ReturnType<typeof client.getAgent>['streamVNext']>[number]) =>
+      client.getAgent(agentId).streamVNext(params),
   });
 };
 
@@ -189,7 +162,7 @@ export const useAgentTool = (
   agentId: string,
   toolId: string,
   runtimeContext?: RuntimeContext | Record<string, any>,
-  options?: Parameters<typeof useQuery>[0],
+  options?: Parameters<typeof useQuery>[number],
 ) => {
   const client = useMastraClient();
   return useQuery({
@@ -221,7 +194,7 @@ export const useAgentExecuteTool = (agentId: string) => {
 export const useAgentEvals = (
   agentId: string,
   runtimeContext?: RuntimeContext | Record<string, any>,
-  options?: Parameters<typeof useQuery>[0],
+  options?: Parameters<typeof useQuery>[number],
 ) => {
   const client = useMastraClient();
   return useQuery({
@@ -237,7 +210,7 @@ export const useAgentEvals = (
 export const useAgentLiveEvals = (
   agentId: string,
   runtimeContext?: RuntimeContext | Record<string, any>,
-  options?: Parameters<typeof useQuery>[0],
+  options?: Parameters<typeof useQuery>[number],
 ) => {
   const client = useMastraClient();
   return useQuery({
@@ -254,5 +227,13 @@ export const useAgentUpdateModel = (agentId: string) => {
   const client = useMastraClient();
   return useMutation({
     mutationFn: (params: UpdateModelParams) => client.getAgent(agentId).updateModel(params),
+  });
+};
+
+export const useAgents = () => {
+  const client = useMastraClient();
+  return useQuery({
+    queryKey: ['agents'],
+    queryFn: () => client.getAgents(),
   });
 };
