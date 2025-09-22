@@ -738,6 +738,14 @@ export async function reorderAgentModelListHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
+    const modelList = await agent.getModelList();
+    if (!modelList) {
+      throw new HTTPException(400, { message: 'Agent model list is not found' });
+    }
+    if (modelList?.length === 0) {
+      throw new HTTPException(400, { message: 'Agent model list is empty' });
+    }
+
     agent.reorderModels(body.reorderedModelIds);
 
     return { message: 'Model list reordered' };
@@ -775,31 +783,31 @@ export async function updateAgentModelInModelListHandler({
       throw new HTTPException(400, { message: 'Model id is required' });
     }
 
+    const modelList = await agent.getModelList();
+    if (!modelList) {
+      throw new HTTPException(400, { message: 'Agent model list is not found' });
+    }
+    if (modelList?.length === 0) {
+      throw new HTTPException(400, { message: 'Agent model list is empty' });
+    }
+
+    const modelToUpdate = modelList.find(m => m.id === modelConfigId);
+    if (!modelToUpdate) {
+      throw new HTTPException(400, { message: 'Model to update is not found in agent model list' });
+    }
+
     let model: MastraLanguageModel | undefined;
     if (bodyModel) {
       const { modelId, provider } = bodyModel;
-      const agentModel = await agent.getModel();
-      const modelVersion = agentModel.specificationVersion;
       const providerMap = {
-        v1: {
-          openai: openai(modelId),
-          anthropic: anthropic(modelId),
-          groq: groq(modelId),
-          xai: xai(modelId),
-          google: google(modelId),
-        },
-        v2: {
-          openai: openaiV5(modelId),
-          anthropic: anthropicV5(modelId),
-          groq: groqV5(modelId),
-          xai: xaiV5(modelId),
-          google: googleV5(modelId),
-        },
+        openai: openaiV5(modelId),
+        anthropic: anthropicV5(modelId),
+        groq: groqV5(modelId),
+        xai: xaiV5(modelId),
+        google: googleV5(modelId),
       };
 
-      const modelVersionKey = modelVersion === 'v2' ? 'v2' : 'v1';
-
-      model = providerMap[modelVersionKey][provider];
+      model = providerMap[provider];
     }
 
     agent.updateModelInModelList({ id: modelConfigId, model, maxRetries, enabled });

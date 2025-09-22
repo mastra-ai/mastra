@@ -128,6 +128,7 @@ describe('Agent Handlers', () => {
           name: 'test-multi-model-agent',
           instructions: 'test instructions',
           tools: {},
+          agents: {},
           workflows: {},
           provider: 'openai.responses',
           modelId: 'gpt-4o-mini',
