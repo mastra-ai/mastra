@@ -102,7 +102,7 @@ export class CloudflareDeployer extends Deployer {
     import { evaluate } from '@mastra/core/eval';
     import { AvailableHooks, registerHook } from '@mastra/core/hooks';
     import { TABLE_EVALS } from '@mastra/core/storage';
-    import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces/scoreTracesWorkflow';
+    import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces';
     import { checkEvalStorageFields } from '@mastra/core/utils';
 
     export default {
