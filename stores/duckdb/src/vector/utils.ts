@@ -153,7 +153,7 @@ export function chunkArray<T>(array: T[], batchSize: number): T[][] {
  */
 export function generateId(prefix = 'vec'): string {
   const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substr(2, 9);
+  const random = Math.random().toString(36).substring(2, 11);
   return `${prefix}_${timestamp}_${random}`;
 }
 
@@ -321,8 +321,11 @@ export async function executeBatched<T, R>(
     const batchResults = await Promise.all(
       batches.map(async (batch, index) => {
         const result = await processor(batch);
-        processed += batch.length;
-        onProgress?.(processed, items.length);
+        // Calculate processed count based on completed batches to avoid race condition
+        const completedItems = batches
+          .slice(0, index + 1)
+          .reduce((sum, b) => sum + b.length, 0);
+        onProgress?.(completedItems, items.length);
         return result;
       })
     );
