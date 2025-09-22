@@ -2069,7 +2069,7 @@ importers:
         specifier: ^10.0.6
         version: 10.0.6(react@19.1.1)
       zod:
-        specifier: ^4.1.8
+        specifier: ^4.1.9
         version: 4.1.9
     devDependencies:
       '@eslint/js':
@@ -2307,7 +2307,7 @@ importers:
         specifier: ^10.0.6
         version: 10.0.6(react@19.1.1)
       zod:
-        specifier: ^4.1.8
+        specifier: ^4.1.9
         version: 4.1.9
       zustand:
         specifier: ^5.0.8
