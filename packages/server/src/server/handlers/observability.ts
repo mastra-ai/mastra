@@ -105,7 +105,7 @@ export async function scoreTracesHandler({ mastra, body }: ScoreTracesContext) {
     const { scorerName, targets } = body;
 
     if (!scorerName) {
-      throw new HTTPException(400, { message: 'Scorer ID is required' });
+      throw new HTTPException(400, { message: 'Scorer Name is required' });
     }
 
     if (!targets || targets.length === 0) {
@@ -134,7 +134,7 @@ export async function scoreTracesHandler({ mastra, body }: ScoreTracesContext) {
     // Return immediate response
     return {
       status: 'success',
-      message: 'Trace scoring started',
+      message: 'Scoring traces started',
     };
   } catch (error) {
     handleError(error, 'Error processing trace scoring');

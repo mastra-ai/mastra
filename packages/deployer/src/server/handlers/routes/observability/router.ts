@@ -155,8 +155,8 @@ export function observabilityRouter() {
                   },
                   status: {
                     type: 'string',
-                    enum: ['initiated'],
-                    example: 'initiated',
+                    enum: ['success'],
+                    example: 'success',
                   },
                 },
               },
