@@ -1,9 +1,9 @@
 const meta = {
   overview: "概要",
-  server: "サーバーを使用",
-  middleware: "ミドルウェア",
-  "custom-api-routes": "カスタムAPIルート",
-  deployment: "サーバーレスプラットフォーム",
-  client: "Mastra クライアントSDK",
+  "server-deployment": "サーバーデプロイメント",
+  monorepo: "モノレポでの使用",
+  "web-framework": "Webフレームワークでの使用",
+  "serverless-platforms": "サーバーレスプラットフォーム",
+  "cloud-providers": "クラウドプロバイダー",
 };
 export default meta;

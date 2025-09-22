@@ -1,0 +1,364 @@
+---
+title: "エージェントとツールでワークフローを使う | ワークフロー | Mastra ドキュメント"
+description: "Mastra のワークフローにおけるステップは、入力、出力、実行ロジックを定義することで、運用を体系的に管理する方法を提供します。"
+---
+
+
+
+# Agents and Tools
+
+ワークフローステップは構成可能で、通常は`execute`関数内で直接ロジックを実行します。しかし、エージェントやツールを呼び出すことがより適切な場合があります。このパターンは特に以下の場合に有用です：
+
+- LLMを使用してユーザー入力から自然言語応答を生成する場合。
+- 複雑または再利用可能なロジックを専用ツールに抽象化する場合。
+- 構造化された、または再利用可能な方法でサードパーティAPIと相互作用する場合。
+
+ワークフローは、Mastraエージェントやツールを直接ステップとして使用できます。例：`createStep(testAgent)`または`createStep(testTool)`。
+
+
+
+## ワークフローでのエージェントの使用
+
+ワークフローにエージェントを含めるには、通常の方法で定義し、`createStep(testAgent)`を使用してワークフローに直接追加するか、ステップの`execute`関数内で`.generate()`を使用して呼び出します。
+
+### エージェントの例
+
+このエージェントはOpenAIを使用して、都市、国、タイムゾーンに関する事実を生成します。
+
+```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+export const testAgent = new Agent({
+  name: "test-agent",
+  description: "Create facts for a country based on the city",
+  instructions: `Return an interesting fact about the country based on the city provided`,
+  model: openai("gpt-4o")
+});
+```
+
+### エージェントをステップとして追加
+
+この例では、`step1`は`testAgent`を使用して、指定された都市に基づいて国に関する興味深い事実を生成します。
+
+`.map`メソッドは、ワークフローの入力を`testAgent`と互換性のある`prompt`文字列に変換します。
+
+ステップは`.then()`を使用してワークフローに組み込まれ、マップされた入力を受け取り、エージェントの構造化された出力を返すことができます。ワークフローは`.commit()`で完了します。
+
+
+![Agent as step](/image/workflows/workflows-agent-tools-agent-step.jpg)
+
+
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { testAgent } from "../agents/test-agent";
+
+const step1 = createStep(testAgent);
+
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  description: 'Test workflow',
+  inputSchema: z.object({
+    input: z.string()
+  }),
+  outputSchema: z.object({
+    output: z.string()
+  })
+})
+  .map(({ inputData }) => {
+    const { input } = inputData;
+    return {
+      prompt: `Provide facts about the city: ${input}`
+    };
+  })
+  .then(step1)
+  .commit();
+```
+
+### `.generate()`でエージェントを呼び出す
+
+この例では、`step1`は提供された`input`を使用してプロンプトを構築し、それを`testAgent`に渡します。エージェントは都市とその国に関する事実を含むプレーンテキストの応答を返します。
+
+ステップは順次`.then()`メソッドを使用してワークフローに追加され、ワークフローから入力を受け取り、構造化された出力を返すことができます。ワークフローは`.commit()`で完了します。
+
+```typescript {1,18, 29} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { testAgent } from "../agents/test-agent";
+
+const step1 = createStep({
+  id: "step-1",
+  description: "Create facts for a country based on the city",
+  inputSchema: z.object({
+    input: z.string()
+  }),
+  outputSchema: z.object({
+    output: z.string()
+  }),
+
+  execute: async ({ inputData }) => {
+    const { input } = inputData;
+
+    const  prompt = `Provide facts about the city: ${input}`
+
+    const { text } = await testAgent.generate([
+      { role: "user", content: prompt }
+    ]);
+
+    return {
+      output: text
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .commit();
+```
+
+
+
+## ワークフローでのツールの使用
+
+ワークフロー内でツールを使用するには、通常の方法でツールを定義し、`createStep(testTool)`を使用してワークフローに直接追加するか、ステップの`execute`関数内で`.execute()`を使用して呼び出します。
+
+### ツールの例
+
+以下の例では、Open Meteo APIを使用して都市の地理的位置の詳細を取得し、その名前、国、タイムゾーンを返します。
+
+```typescript filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core";
+import { z } from "zod";
+
+export const testTool = createTool({
+  id: "test-tool",
+  description: "Gets country for a city",
+  inputSchema: z.object({
+    input: z.string()
+  }),
+  outputSchema: z.object({
+    country_name: z.string()
+  }),
+  execute: async ({ context }) => {
+    const { input } = context;
+    const geocodingResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${input}`);
+    const geocodingData = await geocodingResponse.json();
+
+    const { country } = geocodingData.results[0];
+
+    return {
+      country_name: country
+    };
+  }
+});
+```
+
+### ツールをステップとして追加する
+
+この例では、`step1`が`testTool`を使用し、提供された`city`を使用してジオコーディング検索を実行し、解決された`country`を返します。
+
+ステップは連続的な`.then()`メソッドを使用してワークフローに追加され、ワークフローから入力を受け取り、構造化された出力を返すことができます。ワークフローは`.commit()`で完了します。
+
+![Tool as step](/image/workflows/workflows-agent-tools-tool-step.jpg)
+
+```typescript {1,3,6} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { testTool } from "../tools/test-tool";
+
+const step1 = createStep(testTool);
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .commit();
+```
+
+### `.execute()`でツールを呼び出す
+
+この例では、`step1`が`.execute()`メソッドを使用して`testTool`を直接呼び出します。ツールは提供された`city`でジオコーディング検索を実行し、対応する`country`を返します。
+
+結果はステップから構造化された出力として返されます。ステップは`.then()`を使用してワークフローに組み込まれ、ワークフローの入力を処理し、型付きの出力を生成できます。ワークフローは`.commit()`で完了します。
+
+```typescript {3,20,32} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { RuntimeContext } from "@mastra/core/di";
+
+import { testTool } from "../tools/test-tool";
+
+const runtimeContext = new RuntimeContext();
+
+const step1 = createStep({
+  id: "step-1",
+  description: "Gets country for a city",
+  inputSchema: z.object({
+    input: z.string()
+  }),
+  outputSchema: z.object({
+    output: z.string()
+  }),
+
+  execute: async ({ inputData }) => {
+    const { input } = inputData;
+
+    const { country_name } = await testTool.execute({
+      context: { input },
+      runtimeContext
+    });
+
+    return {
+      output: country_name
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .commit();
+```
+
+
+
+## ワークフローをツールとして使用する
+
+この例では、`cityStringWorkflow`ワークフローがメインのMastraインスタンスに追加されています。
+
+
+```typescript {7} filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+
+import { testWorkflow, cityStringWorkflow } from "./workflows/test-workflow";
+
+export const mastra = new Mastra({
+  ...
+  workflows: { testWorkflow, cityStringWorkflow },
+});
+```
+
+ワークフローが登録されると、ツール内から`getWorkflow`を使用して参照できます。
+
+```typescript {10,17-27} filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
+export const cityCoordinatesTool = createTool({
+  id: "city-tool",
+  description: "Convert city details",
+  inputSchema: z.object({
+    city: z.string()
+  }),
+  outputSchema: z.object({
+    outcome: z.string()
+  }),
+  execute: async ({ context, mastra }) => {
+    const { city } = context;
+    const geocodingResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
+    const geocodingData = await geocodingResponse.json();
+
+    const { name, country, timezone } = geocodingData.results[0];
+
+    const workflow = mastra?.getWorkflow("cityStringWorkflow");
+
+    const run = await workflow?.createRunAsync();
+
+    const { result } = await run?.start({
+      inputData: {
+        city_name: name,
+        country_name: country,
+        country_timezone: timezone
+      }
+    });
+
+    return {
+      outcome: result.outcome
+    };
+  }
+});
+```
+
+
+
+## エージェントでワークフローを使用する
+
+エージェント内でワークフローを使用することも可能です。このエージェントは、テストツールとテストワークフローのいずれかを選択して使用できます。
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { testTool } from "../tools/test-tool";
+import { testWorkflow } from "../workflows/test-workflow";
+
+export const testAgent = new Agent({
+  name: "test-agent",
+  description: "Create facts for a country based on the city",
+  instructions: `Return an interesting fact about the country based on the city provided`,
+  model: openai("gpt-4o"),
+  workflows: {
+    test_workflow: testWorkflow
+  },
+  tools: {
+    test_tool: testTool
+  },
+});
+```
+
+
+
+
+## `MCPServer`でワークフローを公開する
+
+ワークフローをMastra `MCPServer`のインスタンスに渡すことで、ワークフローをツールに変換できます。これにより、MCP互換のクライアントがあなたのワークフローにアクセスできるようになります。
+
+ワークフローの説明がツールの説明になり、入力スキーマがツールの入力スキーマになります。
+
+サーバーにワークフローを提供すると、各ワークフローは自動的に呼び出し可能なツールとして公開されます。例えば：
+
+- `run_testWorkflow`
+
+```typescript filename="src/test-mcp-server.ts" showLineNumbers copy
+import { MCPServer } from "@mastra/mcp";
+
+import { testAgent } from "./mastra/agents/test-agent";
+import { testTool } from "./mastra/tools/test-tool";
+import { testWorkflow } from "./mastra/workflows/test-workflow";
+
+async function startServer() {
+  const server = new MCPServer({
+    name: "test-mcp-server",
+    version: "1.0.0",
+    workflows: {
+      testWorkflow
+    }
+  });
+
+  await server.startStdio();
+  console.log("MCPServer started on stdio");
+}
+
+startServer().catch(console.error);
+```
+
+ワークフローがサーバーで利用可能であることを確認するには、MCPClientで接続できます。
+
+```typescript filename="src/test-mcp-client.ts" showLineNumbers copy
+import { MCPClient } from "@mastra/mcp";
+
+async function main() {
+  const mcp = new MCPClient({
+    servers: {
+      local: {
+        command: "npx",
+        args: ["tsx", "src/test-mcp-server.ts"]
+      }
+    }
+  });
+
+  const tools = await mcp.getTools();
+  console.log(tools);
+}
+
+main().catch(console.error);
+```
+
+クライアントスクリプトを実行して、ワークフローツールを確認してください。
+
+```bash
+npx tsx src/test-mcp-client.ts
+```
+
+
+
+## その他のリソース
+
+- [MCPServer リファレンスドキュメント](/reference/tools/mcp-server)。
+- [MCPClient リファレンスドキュメント](/reference/tools/mcp-client)。

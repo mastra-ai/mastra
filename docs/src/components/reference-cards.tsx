@@ -7,7 +7,9 @@ export const ReferenceCards = () => {
         "Core",
         "CLI",
         "Agents",
+        "Streaming",
         "Workflows",
+        "Legacy Workflows",
         "Tools & MCP",
         "Memory",
         "Networks",
@@ -221,6 +223,24 @@ export const ReferenceCards = () => {
             href: "/reference/agents/getDefaultVNextStreamOptions",
           },
         ],
+        Streaming: [
+          {
+            title: ".stream()",
+            href: "/reference/streaming/stream",
+          },
+          {
+            title: ".streamVNext() (Experimental)",
+            href: "/reference/streaming/streamVNext",
+          },
+          {
+            title: "MastraModelOutput",
+            href: "/reference/streaming/MastraModelOutput",
+          },
+          {
+            title: "ChunkType",
+            href: "/reference/streaming/ChunkType",
+          },
+        ],
         "Tools & MCP": [
           {
             title: "createTool()",
@@ -335,6 +355,100 @@ export const ReferenceCards = () => {
           {
             title: ".cancel()",
             href: "/reference/workflows/run-methods/cancel",
+          },
+        ],
+        "Legacy Workflows": [
+          {
+            title: "Workflow",
+            href: "/reference/legacyWorkflows/workflow",
+          },
+          {
+            title: "Step",
+            href: "/reference/legacyWorkflows/step-class",
+          },
+          {
+            title: "StepOptions",
+            href: "/reference/legacyWorkflows/step-options",
+          },
+          {
+            title: "StepCondition",
+            href: "/reference/legacyWorkflows/step-condition",
+          },
+          {
+            title: ".step()",
+            href: "/reference/legacyWorkflows/step-function",
+          },
+          {
+            title: ".after()",
+            href: "/reference/legacyWorkflows/after",
+          },
+          {
+            title: ".then()",
+            href: "/reference/legacyWorkflows/then",
+          },
+          {
+            title: ".until()",
+            href: "/reference/legacyWorkflows/until",
+          },
+          {
+            title: ".while()",
+            href: "/reference/legacyWorkflows/while",
+          },
+          {
+            title: ".if()",
+            href: "/reference/legacyWorkflows/if",
+          },
+          {
+            title: ".else()",
+            href: "/reference/legacyWorkflows/else",
+          },
+          {
+            title: ".createRun()",
+            href: "/reference/legacyWorkflows/createRun",
+          },
+          {
+            title: ".start()",
+            href: "/reference/legacyWorkflows/start",
+          },
+          {
+            title: ".execute()",
+            href: "/reference/legacyWorkflows/execute",
+          },
+          {
+            title: ".suspend()",
+            href: "/reference/legacyWorkflows/suspend",
+          },
+          {
+            title: "Snapshots",
+            href: "/reference/legacyWorkflows/snapshots",
+          },
+          {
+            title: ".resume()",
+            href: "/reference/legacyWorkflows/resume",
+          },
+          {
+            title: ".commit()",
+            href: "/reference/legacyWorkflows/commit",
+          },
+          {
+            title: ".watch()",
+            href: "/reference/legacyWorkflows/watch",
+          },
+          {
+            title: "Event-Driven Workflows",
+            href: "/reference/legacyWorkflows/events",
+          },
+          {
+            title: ".afterEvent()",
+            href: "/reference/legacyWorkflows/afterEvent",
+          },
+          {
+            title: ".resumeWithEvent()",
+            href: "/reference/legacyWorkflows/resumeWithEvent",
+          },
+          {
+            title: "Step Retries",
+            href: "/reference/legacyWorkflows/step-retries",
           },
         ],
         Networks: [
@@ -760,6 +874,54 @@ export const ReferenceCards = () => {
             title: "OTelConfig",
             href: "/reference/observability/otel-config",
           },
+          {
+            title: "Arize AX",
+            href: "/reference/observability/providers/arize-ax",
+          },
+          {
+            title: "Arize Phoenix",
+            href: "/reference/observability/providers/arize-phoenix",
+          },
+          {
+            title: "Dash0",
+            href: "/reference/observability/providers/dash0",
+          },
+          {
+            title: "SigNoz",
+            href: "/reference/observability/providers/signoz",
+          },
+          {
+            title: "Braintrust",
+            href: "/reference/observability/providers/braintrust",
+          },
+          {
+            title: "LangSmith",
+            href: "/reference/observability/providers/langsmith",
+          },
+          {
+            title: "Langfuse",
+            href: "/reference/observability/providers/langfuse",
+          },
+          {
+            title: "LangWatch",
+            href: "/reference/observability/providers/langwatch",
+          },
+          {
+            title: "New Relic",
+            href: "/reference/observability/providers/new-relic",
+          },
+          {
+            title: "Traceloop",
+            href: "/reference/observability/providers/traceloop",
+          },
+          {
+            title: "Laminar",
+            href: "/reference/observability/providers/laminar",
+          },
+          {
+            title: "Keywords AI",
+            href: "/reference/observability/providers/keywordsai",
+          },
         ],
         "Client SDK": [
           {
@@ -825,6 +987,14 @@ export const ReferenceCards = () => {
           {
             title: "JSON Web Token",
             href: "/reference/auth/jwt",
+          },
+          {
+            title: "Clerk",
+            href: "/reference/auth/clerk",
+          },
+          {
+            title: "Firebase",
+            href: "/reference/auth/firebase",
           },
           {
             title: "Supabase",

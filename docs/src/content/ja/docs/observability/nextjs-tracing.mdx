@@ -3,13 +3,15 @@ title: "Next.js トレーシング | Mastra Observability ドキュメント"
 description: "Next.js アプリケーションのための OpenTelemetry トレーシングの設定"
 ---
 
-# Next.js トレーシング
 
-Next.js で OpenTelemetry トレーシングを有効にするには、追加の設定が必要です。
 
-### ステップ 1: Next.js の設定
+# Next.js Tracing
 
-まず、Next.js の設定ファイルでインストゥルメンテーションフックを有効にします。
+Next.jsでOpenTelemetryトレーシングを有効にするには、追加の設定が必要です。
+
+### ステップ1: Next.js設定
+
+まず、Next.js設定でinstrumentationフックを有効にします：
 
 ```ts filename="next.config.ts" showLineNumbers copy
 import type { NextConfig } from "next";
@@ -23,9 +25,9 @@ const nextConfig: NextConfig = {
 export default nextConfig;
 ```
 
-### ステップ 2: Mastra の設定
+### ステップ2: Mastra設定
 
-Mastra インスタンスを設定します。
+Mastraインスタンスを設定します：
 
 ```typescript filename="mastra.config.ts" copy
 import { Mastra } from "@mastra/core";
@@ -39,21 +41,21 @@ export const mastra = new Mastra({
 });
 ```
 
-### ステップ 3: プロバイダーの設定
+### ステップ3: プロバイダーの設定
 
-Next.js を使用している場合、OpenTelemetry インストゥルメンテーションのセットアップ方法は2つあります。
+Next.jsを使用している場合、OpenTelemetryインストルメンテーションの設定には2つのオプションがあります：
 
-#### オプション 1: カスタムエクスポーターの使用
+#### オプション1: カスタムエクスポーターの使用
 
-すべてのプロバイダーで動作するデフォルトの方法は、カスタムエクスポーターを設定することです。
+プロバイダー間で動作するデフォルトは、カスタムエクスポーターを設定することです：
 
-1. 必要な依存関係をインストールします（例: Langfuse を使用）。
+1. 必要な依存関係をインストールします（Langfuseを使用した例）：
 
 ```bash copy
 npm install @opentelemetry/api langfuse-vercel
 ```
 
-2. インストゥルメンテーションファイルを作成します。
+2. instrumentationファイルを作成します：
 
 ```ts filename="instrumentation.ts" copy
 import {
@@ -79,17 +81,17 @@ export function register() {
 }
 ```
 
-#### オプション 2: Vercel の Otel セットアップの使用
+#### オプション2: VercelのOtel設定の使用
 
-Vercel へデプロイする場合は、Vercel の OpenTelemetry セットアップを利用できます。
+Vercelにデプロイする場合は、VercelのOpenTelemetry設定を使用できます：
 
-1. 必要な依存関係をインストールします。
+1. 必要な依存関係をインストールします：
 
 ```bash copy
 npm install @opentelemetry/api @vercel/otel
 ```
 
-2. プロジェクトのルート（または src フォルダ）にインストゥルメンテーションファイルを作成します。
+2. プロジェクトのルート（またはsrcフォルダを使用している場合はその中）にinstrumentationファイルを作成します：
 
 ```ts filename="instrumentation.ts" copy
 import { registerOTel } from "@vercel/otel";
@@ -101,9 +103,9 @@ export function register() {
 
 ### まとめ
 
-このセットアップにより、Next.js アプリケーションおよび Mastra の操作で OpenTelemetry トレーシングが有効になります。
+この設定により、Next.jsアプリケーションとMastra操作でOpenTelemetryトレーシングが有効になります。
 
-詳細については、以下のドキュメントをご覧ください。
+詳細については、以下のドキュメントを参照してください：
 
 - [Next.js Instrumentation](https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation)
 - [Vercel OpenTelemetry](https://vercel.com/docs/observability/otel-overview/quickstart)

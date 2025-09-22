@@ -10,12 +10,12 @@ import {
   Tab,
   TabContent,
   EntityHeader,
+  useWorkflow,
 } from '@mastra/playground-ui';
 
 import { WorkflowLogs } from './workflow-logs';
 import {
   useLegacyWorkflow,
-  useWorkflow,
   useExecuteWorkflow,
   useResumeWorkflow,
   useStreamWorkflow,
@@ -27,13 +27,12 @@ import { CopyIcon } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { WorkflowRuns } from '@mastra/playground-ui';
 import { useNavigate, useParams } from 'react-router';
-import { useWorkflowRuns } from '@/pages/workflows/workflow/hooks/use-workflow-runs';
 
 export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: string; isLegacy?: boolean }) {
   const params = useParams();
   const navigate = useNavigate();
   const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId, !isLegacy);
-  const { isLoading: isRunsLoading, data: runs } = useWorkflowRuns({ workflowId });
+
   const { data: legacyWorkflow, isLoading: isLegacyWorkflowLoading } = useLegacyWorkflow(workflowId, !!isLegacy);
   const { createWorkflowRun } = useExecuteWorkflow();
   const { resumeWorkflow } = useResumeWorkflow();
@@ -107,8 +106,6 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
             <WorkflowRuns
               workflowId={workflowId}
               runId={params?.runId}
-              isLoading={isRunsLoading}
-              runs={runs?.runs || []}
               onPressRun={({ workflowId, runId }) => navigate(`/workflows/${workflowId}/graph/${runId}`)}
             />
           </TabContent>

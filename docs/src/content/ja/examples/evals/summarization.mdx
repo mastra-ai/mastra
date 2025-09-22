@@ -1,189 +1,183 @@
 ---
 title: "例: 要約 | Evals | Mastra Docs"
-description: Summarizationメトリクスを使用して、LLMが生成した要約が内容をどれだけ正確に捉え、事実性を維持しているかを評価する例。
+description: 要約メトリクスを用いて、LLM が生成した要約が内容を適切に捉えつつ、事実関係の正確さを維持しているかを評価する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
 
-# 要約評価
 
-この例では、Mastraの要約メトリクスを使用して、LLMが生成した要約が内容をどれだけ正確に捉え、事実性を維持しているかを評価する方法を示します。
 
-## 概要
+# 要約の評価
 
-この例では、以下の方法を示します：
+<ScorerCallout />
 
-1. LLMを使ってSummarizationメトリクスを設定する
-2. 要約の品質と事実の正確性を評価する
-3. アラインメントとカバレッジのスコアを分析する
-4. さまざまな要約シナリオに対応する
+`SummarizationMetric` を使用して、ソースの重要情報をどれだけ適切に捉え、かつ事実関係の正確さを維持できているかを評価します。このメトリックは `query` と `response` を入力として受け取り、スコアと、理由・整合性スコア・網羅性スコアを含む `info` オブジェクトを返します。
 
-## セットアップ
 
-### 環境のセットアップ
 
-環境変数を設定してください：
+## インストール
 
-```bash filename=".env"
-OPENAI_API_KEY=your_api_key_here
+```bash copy
+npm install @mastra/evals
 ```
 
-### 依存関係
 
-必要な依存関係をインポートします：
 
-```typescript copy showLineNumbers filename="src/index.ts"
+## 正確な要約の例
+
+この例では、要約が元の文章に含まれる重要な事実をすべて正確に保持し、表現も忠実です。スコアは、完全な網羅性と完全な事実整合性の両方を反映しています。
+
+```typescript filename="src/example-accurate-summary.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { SummarizationMetric } from "@mastra/evals/llm";
+
+const metric = new SummarizationMetric(openai("gpt-4o-mini"));
+
+const query =
+  "The electric car company Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning. Elon Musk joined in 2004 as the largest investor and became CEO in 2008. The company's first car, the Roadster, was launched in 2008.";
+const response =
+  "Tesla, founded by Martin Eberhard and Marc Tarpenning in 2003, launched its first car, the Roadster, in 2008. Elon Musk joined as the largest investor in 2004 and became CEO in 2008.";
+
+const result = await metric.measure(query, response);
 ```
 
-## メトリックの設定
+### 正確な要約の出力
 
-OpenAIモデルを使ってSummarizationメトリックを設定します：
+高いスコアは、要約が誤りを加えることなく入力の重要な詳細をすべて捉えていることを示します。`info` フィールドは、完全な整合性と完全な網羅性を確認します。
 
-```typescript copy showLineNumbers{4} filename="src/index.ts"
+```typescript
+{
+  score: 1,
+  info: {
+    reason: 'The score is 1 because the summary is completely factual and covers all key information from the original text.',
+    alignmentScore: 1,
+    coverageScore: 1
+  }
+}
+```
+
+
+
+## 部分的な要約の例
+
+この例では、要約は事実関係は正確ですが、元のソースのいくつかの重要な点が抜け落ちています。強い整合性がある一方で、スコアはカバレッジの不十分さを反映しています。
+
+```typescript filename="src/example-partial-summary.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { SummarizationMetric } from "@mastra/evals/llm";
+
+const metric = new SummarizationMetric(openai("gpt-4o-mini"));
+
+const query =
+  "The Python programming language was created by Guido van Rossum and was first released in 1991. It emphasizes code readability with its notable use of significant whitespace. Python is dynamically typed and garbage-collected. It supports multiple programming paradigms, including structured, object-oriented, and functional programming.";
+const response = "Python, created by Guido van Rossum, is a programming language known for its readable code and use of whitespace. It was released in 1991.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+### 部分的な要約の出力
+
+この要約は、入力からいくつかの重要情報が欠けているため、中程度のスコアとなっています。`info` フィールドは事実の整合性を確認しつつ、内容カバレッジの不足を指摘しています。
+
+```typescript
+{
+  score: 0.7,
+  info: {
+    reason: "The score is 0.7 because the summary accurately captures key facts about Python's creation, release date, and emphasis on readability, achieving a perfect alignment score. However, it fails to mention that Python is dynamically typed, garbage-collected, and supports multiple programming paradigms, which affects the coverage score.",
+    alignmentScore: 1,
+    coverageScore: 0.7
+  }
+}
+```
+
+
+
+## 不正確な要約の例
+
+この例では、要約に事実誤りが含まれ、元のソースの重要な詳細が誤って伝えられています。情報の一部が部分的に含まれていても、スコアは整合性の低さを反映しています。
+
+```typescript filename="src/example-inaccurate-summary.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { SummarizationMetric } from "@mastra/evals/llm";
+
+const metric = new SummarizationMetric(openai("gpt-4o-mini"));
+
+const query =
+  "The World Wide Web was invented by Tim Berners-Lee in 1989 while working at CERN. He published the first website in 1991. Berners-Lee made the Web freely available, with no patent and no royalties due.";
+const response = "The Internet was created by Tim Berners-Lee at MIT in the early 1990s, and he went on to commercialize the technology through patents.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 不正確な要約の出力
+
+この要約は、事実誤りと入力との不整合により低いスコアとなります。`info` フィールドでは、どの詳細が誤っていたか、また要約がどのように元のソースから逸脱したかを説明します。
+
+```typescript
+{
+  score: 0,
+  info: {
+    reason: 'The score is 0 because the summary contains factual inaccuracies and fails to cover essential details from the original text. The claim that the Internet was created at MIT in the early 1990s contradicts the original text, which states that the World Wide Web was invented at CERN in 1989. Additionally, the summary incorrectly states that Berners-Lee commercialized the technology through patents, while the original text clearly mentions that he made the Web freely available with no patents or royalties.',
+    alignmentScore: 0,
+    coverageScore: 0.17
+  }
+}
+```
+
+
+
+## メトリクスの設定
+
+モデルを指定するだけで `SummarizationMetric` インスタンスを作成できます。追加の設定は不要です。
+
+```typescript showLineNumbers copy
 const metric = new SummarizationMetric(openai("gpt-4o-mini"));
 ```
 
-## 使用例
+> 利用可能な設定オプションの一覧は、[SummarizationMetric](/reference/evals/summarization.mdx) を参照してください。
 
-### 高品質な要約の例
 
-事実の正確性と完全な網羅性の両方を維持している要約を評価します：
-
-```typescript copy showLineNumbers{7} filename="src/index.ts"
-const input1 = `The electric car company Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning. 
-Elon Musk joined in 2004 as the largest investor and became CEO in 2008. The company's first car, 
-the Roadster, was launched in 2008.`;
-
-const output1 = `Tesla, founded by Martin Eberhard and Marc Tarpenning in 2003, launched its first car, 
-the Roadster, in 2008. Elon Musk joined as the largest investor in 2004 and became CEO in 2008.`;
-
-console.log("Example 1 - High-quality Summary:");
-console.log("Input:", input1);
-console.log("Output:", output1);
-
-const result1 = await metric.measure(input1, output1);
-console.log("Metric Result:", {
-  score: result1.score,
-  info: {
-    reason: result1.info.reason,
-    alignmentScore: result1.info.alignmentScore,
-    coverageScore: result1.info.coverageScore,
-  },
-});
-// Example Output:
-// Metric Result: {
-//   score: 1,
-//   info: {
-//     reason: "The score is 1 because the summary maintains perfect factual accuracy and includes all key information from the source text.",
-//     alignmentScore: 1,
-//     coverageScore: 1
-//   }
-// }
-```
-
-### 部分的な網羅性の例
-
-事実は正確だが、重要な情報が省略されている要約を評価します：
-
-```typescript copy showLineNumbers{24} filename="src/index.ts"
-const input2 = `The Python programming language was created by Guido van Rossum and was first released 
-in 1991. It emphasizes code readability with its notable use of significant whitespace. Python is 
-dynamically typed and garbage-collected. It supports multiple programming paradigms, including 
-structured, object-oriented, and functional programming.`;
-
-const output2 = `Python, created by Guido van Rossum, is a programming language known for its readable 
-code and use of whitespace. It was released in 1991.`;
-
-console.log("Example 2 - Partial Coverage:");
-console.log("Input:", input2);
-console.log("Output:", output2);
-
-const result2 = await metric.measure(input2, output2);
-console.log("Metric Result:", {
-  score: result2.score,
-  info: {
-    reason: result2.info.reason,
-    alignmentScore: result2.info.alignmentScore,
-    coverageScore: result2.info.coverageScore,
-  },
-});
-// Example Output:
-// Metric Result: {
-//   score: 0.4,
-//   info: {
-//     reason: "The score is 0.4 because while the summary is factually accurate (alignment score: 1), it only covers a portion of the key information from the source text (coverage score: 0.4), omitting several important technical details.",
-//     alignmentScore: 1,
-//     coverageScore: 0.4
-//   }
-// }
-```
-
-### 不正確な要約の例
-
-事実誤認や誤った表現が含まれている要約を評価します：
-
-```typescript copy showLineNumbers{41} filename="src/index.ts"
-const input3 = `The World Wide Web was invented by Tim Berners-Lee in 1989 while working at CERN. 
-He published the first website in 1991. Berners-Lee made the Web freely available, with no patent 
-and no royalties due.`;
-
-const output3 = `The Internet was created by Tim Berners-Lee at MIT in the early 1990s, and he went 
-on to commercialize the technology through patents.`;
-
-console.log("Example 3 - Inaccurate Summary:");
-console.log("Input:", input3);
-console.log("Output:", output3);
-
-const result3 = await metric.measure(input3, output3);
-console.log("Metric Result:", {
-  score: result3.score,
-  info: {
-    reason: result3.info.reason,
-    alignmentScore: result3.info.alignmentScore,
-    coverageScore: result3.info.coverageScore,
-  },
-});
-// Example Output:
-// Metric Result: {
-//   score: 0,
-//   info: {
-//     reason: "The score is 0 because the summary contains multiple factual errors and misrepresentations of key details from the source text, despite covering some of the basic information.",
-//     alignmentScore: 0,
-//     coverageScore: 0.6
-//   }
-// }
-```
 
 ## 結果の理解
 
-この指標は、要約を次の2つの要素で評価します。
+`SummarizationMetric` は次の形式の結果を返します:
 
-1. アライメントスコア（0-1）:
-
-   - 1.0: 完全な事実の正確性
-   - 0.7-0.9: 軽微な事実の不一致
-   - 0.4-0.6: いくつかの事実誤認
-   - 0.1-0.3: 重大な不正確さ
-   - 0.0: 完全な事実の誤表現
-
-2. カバレッジスコア（0-1）:
-   - 1.0: 情報が完全に網羅されている
-   - 0.7-0.9: 主要な情報のほとんどが含まれている
-   - 0.4-0.6: 主要なポイントの一部のみカバー
-   - 0.1-0.3: 最も重要な詳細がほとんど抜けている
-   - 0.0: 関連する情報が全く含まれていない
-
-最終スコアはこれら2つのスコアのうち低い方で決定されます。これにより、高品質な要約には事実の正確性と情報の網羅性の両方が必要となります。
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/summarization"
+```typescript
+{
+  score: number,
+  info: {
+    reason: string,
+    alignmentScore: number,
+    coverageScore: number
   }
+}
+```
+
+### 要約スコア
+
+0〜1 の範囲で示される要約スコア:
+
+- **1.0**: 完璧な要約 – 完全に正確で網羅的。
+- **0.7–0.9**: 良好な要約 – 軽微な抜けやわずかな不正確さ。
+- **0.4–0.6**: ばらつきのある要約 – 部分的に正確、または不完全。
+- **0.1–0.3**: 弱い要約 – 重大な欠落や誤りがある。
+- **0.0**: 失敗した要約 – ほとんど不正確、または重要な内容が欠落。
+
+### 要約情報
+
+スコアの根拠を説明し、以下の詳細を含みます:
+
+- 入力の事実内容との整合性。
+- 元ソースの重要点の網羅状況。
+- 整合性と網羅性の個別スコア。
+- 何が保持され、何が省かれ、何が誤って記述されたかの説明。
+
+<GithubLink
+  outdated={true}
+  marginTop="mt-16"
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/summarization"
 />

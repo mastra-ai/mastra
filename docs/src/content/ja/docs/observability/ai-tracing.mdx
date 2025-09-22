@@ -1,0 +1,613 @@
+---
+title: "AIトレーシング | Mastra Observability ドキュメント"
+description: "Mastra アプリケーションの AI トレーシングを設定する"
+---
+
+import { Callout } from "nextra/components";
+
+
+# AI Tracing
+
+AI Tracing は、アプリケーション内の AI 関連処理に特化した監視とデバッグ機能を提供します。有効化すると、Mastra がエージェントの実行、LLM の生成、ツール呼び出し、ワークフロー各ステップについて、AI 固有のコンテキストとメタデータを含むトレースを自動的に作成します。
+
+従来のアプリケーショントレーシングと異なり、AI Tracing は AI パイプラインの理解に特化しています。トークン使用量、モデルパラメータ、ツール実行の詳細、会話フローを記録し、問題のデバッグ、パフォーマンス最適化、本番環境における AI システムの挙動の把握を容易にします。
+
+AI トレースは次の方法で作成します:
+
+- **エクスポーターを構成** して、Langfuse などのオブザーバビリティプラットフォームへトレースデータを送信する
+- **サンプリング戦略を設定** して、収集するトレースを制御する
+- **エージェントとワークフローを実行** — Mastra が詳細な AI トレーシングで自動計測します
+
+これにより、最小限のセットアップで AI オペレーションを完全に可視化でき、信頼性が高く観測可能な AI アプリケーションの構築に役立ちます。
+
+<Callout type="warning">
+  **実験的機能**
+
+  AI Tracing は `@mastra/core 0.14.0` から利用可能で、現在は実験的です。API は今後のリリースで変更される可能性があります。
+</Callout>
+
+## 標準的なトレーシングとの違い
+
+AI TracingはMastraの既存の[OpenTelemetryベースのトレーシング](./tracing.mdx)を補完しますが、目的は異なります：
+
+| 機能 | 標準トレーシング | AI Tracing |
+|---------|-----------------|------------|
+| **フォーカス** | アプリケーションのインフラ | AIのオペレーションのみ |
+| **データ形式** | OpenTelemetry準拠 | プロバイダー独自（Langfuse など） |
+| **タイミング** | バッチエクスポート | デバッグ向けのリアルタイム対応 |
+| **メタデータ** | 汎用的なスパン属性 | AI特有（トークン、モデル、ツール） |
+
+## 現在の状況
+
+**対応エクスポーター:**
+
+- ✅ [Langfuse](https://langfuse.com/) - リアルタイムモードを含むフルサポート
+- ✅ [Braintrust](https://www.braintrust.dev/home) - 初期リリース
+- 🔄 [OpenTelemetry](https://opentelemetry.io/) - 近日対応予定
+
+**既知の制限事項:**
+
+- Mastra Playground のトレースは引き続き従来のトレーシングシステムを使用しています
+- API は実験的で、今後変更される可能性があります
+
+最新情報は [GitHub issue #6773](https://github.com/mastra-ai/mastra/issues/6773) をご確認ください。
+
+## 基本設定
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  // ... 他の設定
+  observability: {
+    default: { enabled: true }, // DefaultExporter と CloudExporter を有効にする
+  },
+});
+```
+
+## 設定オプション
+
+AI トレーシングの設定では次のプロパティを指定できます:
+
+```ts
+type AITracingConfig = {
+  // 組み込みエクスポーターを使用したデフォルト設定を有効化
+  default?: {
+    enabled?: boolean;
+  };
+
+  // トレーシングインスタンス名とその設定のマッピング
+  configs?: Record<string, AITracingInstanceConfig | MastraAITracing>;
+
+  // 使用するトレーシングインスタンスを選択する任意の関数
+  configSelector?: TracingSelector;
+};
+
+type AITracingInstanceConfig = {
+  // トレース上でサービスを識別するための名前
+  serviceName: string;
+
+  // サンプリングするトレースの割合を制御
+  sampling?: {
+    type: "always" | "never" | "ratio" | "custom";
+    probability?: number; // 比率サンプリング用 (0.0〜1.0)
+    sampler?: (context: TraceContext) => boolean; // カスタムサンプリング用
+  };
+
+  // トレースデータを送信するエクスポーターの配列
+  exporters?: AITracingExporter[];
+
+  // エクスポート前に Span を処理・変換するプロセッサの配列
+  processors?: AISpanProcessor[];
+};
+```
+
+### デフォルト設定
+
+`default.enabled` が `true` に設定されている場合、Mastra は適切な既定値で AI トレーシングを自動的に設定します:
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    default: { enabled: true },
+    configs: {
+      // Your custom configs can coexist with the default
+    }
+  }
+});
+```
+
+既定の設定には以下が含まれます:
+
+- **Service Name**: `"mastra"`
+- **Sampling**: 常時サンプリング（トレースの 100%）
+- **Exporters**: 
+  - `DefaultExporter` - 設定したストレージにトレースを永続化
+  - `CloudExporter` - Mastra Cloud にトレースを送信（`MASTRA_CLOUD_ACCESS_TOKEN` が必要）
+- **Processors**: `SensitiveDataFilter` - 機密フィールドを自動的にマスキング
+
+<Callout type="info">
+  **Note**: 既定の設定が有効な場合、カスタム設定に `"default"` という名前は付けられません。命名の競合を防ぐため、エラーがスローされます。
+</Callout>
+
+### サンプリング設定
+
+どのトレースを収集してエクスポートするかを制御します:
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      langfuse: {
+        serviceName: 'my-service',
+        // すべてのトレースをサンプリング（デフォルト）
+        sampling: { type: 'always' },
+        exporters: [langfuseExporter],
+      },
+
+      development: {
+        serviceName: 'dev-service',
+        // トレースの10%をサンプリング
+        sampling: {
+          type: 'ratio',
+          probability: 0.1
+        },
+        exporters: [langfuseExporter],
+      },
+
+      custom: {
+        serviceName: 'custom-service',
+        // カスタムサンプリングロジック
+        sampling: {
+          type: 'custom',
+          sampler: (context) => {
+            // 特定のユーザーからのリクエストのみトレース
+            return context.metadata?.userId === 'debug-user';
+          }
+        },
+        exporters: [langfuseExporter],
+      },
+    },
+  },
+});
+```
+
+## エクスポート機能
+
+### 組み込みエクスポーター
+
+Mastra には、デフォルト設定を使用すると自動的に設定される組み込みのエクスポーターが 2 つ含まれています。
+
+#### DefaultExporter
+
+`DefaultExporter` は、設定済みの Mastra ストレージバックエンドにトレースを永続化します。バッチ処理とリトライのロジックを自動的に処理します。
+
+**機能:**
+
+- バッチサイズを設定可能な自動バッチ処理
+- 失敗したエクスポートに対するリトライ機構
+- ストレージ機能に基づく戦略選択
+- 外部依存不要
+
+**設定:**
+
+```ts
+import { DefaultExporter } from '@mastra/core';
+
+new DefaultExporter({
+  maxBatchSize: 1000,    // バッチあたりの最大スパン数
+  maxBatchWaitMs: 5000,  // フラッシュまでの最大待機時間
+  maxRetries: 4,         // リトライ回数
+  strategy: 'auto',      // 'auto' | 'realtime' | 'batch-with-updates' | 'insert-only'
+});
+```
+
+<Callout type="info">
+  ストレージが設定されていない場合、DefaultExporter は警告をログに記録し、no-op として動作します。これにより、アプリケーションはエラーなく実行を継続できます。
+</Callout>
+
+#### CloudExporter
+
+`CloudExporter` は、トレースを Mastra Cloud に送信し、オンラインでの可視化と分析を行います。
+
+**機能:**
+
+- Mastra Cloud ダッシュボードでのリアルタイムなトレース可視化
+- 自動バッチ処理と圧縮
+- トークンベースの安全な認証
+- トークン未設定時の適切なフォールバック動作
+
+**設定:**
+
+```ts
+import { CloudExporter } from '@mastra/core';
+
+new CloudExporter({
+  accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN, // 必須（環境変数からの直接取得も可）
+  endpoint: 'https://api.mastra.ai/ai/spans/publish', // 任意のカスタムエンドポイント
+  maxBatchSize: 1000,    // バッチあたりの最大スパン数
+  maxBatchWaitMs: 5000,  // フラッシュまでの最大待機時間
+});
+```
+
+**環境変数:**
+
+- `MASTRA_CLOUD_ACCESS_TOKEN` - Mastra Cloud のアクセストークン
+- `MASTRA_CLOUD_AI_TRACES_ENDPOINT` - 任意のカスタムエンドポイント URL
+
+<Callout type="warning">
+  `MASTRA_CLOUD_ACCESS_TOKEN` が設定されていない場合、CloudExporter は [mastra.ai](https://mastra.ai) でのサインアップを案内するメッセージをログに出力し、no-op（何もしない）として動作します。
+</Callout>
+
+### Langfuse エクスポート
+
+#### インストール
+
+```bash
+npm install @mastra/langfuse
+```
+
+#### 設定
+
+Langfuse エクスポーターは次のオプションを受け付けます:
+
+```ts
+type LangfuseExporterConfig = {
+  // Langfuse API の認証情報（必須）
+  publicKey?: string;
+  secretKey?: string;
+  
+  // Langfuse のホスト URL（任意 - 既定は Langfuse Cloud）
+  baseUrl?: string;
+  
+  // トレースを即時に可視化するためのリアルタイムモードを有効化
+  realtime?: boolean; // 既定は false
+
+  // Langfuse クライアントに渡す追加オプション
+  options?: any;
+};
+```
+
+#### 基本的なセットアップ
+
+```ts filename="mastra.config.ts" showLineNumbers copy
+import { LangfuseExporter } from '@mastra/langfuse';
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      langfuse: {
+        serviceName: process.env.SERVICE_NAME || 'mastra-app',
+        sampling: { type: 'always' },
+        exporters: [
+          new LangfuseExporter({
+            publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+            secretKey: process.env.LANGFUSE_SECRET_KEY,
+            baseUrl: process.env.LANGFUSE_BASE_URL, // Optional
+            realtime: process.env.NODE_ENV === 'development',
+          }),
+        ],
+      },
+    },
+  },
+});
+```
+
+#### リアルタイム vs バッチモード
+
+Langfuse エクスポーターは 2 つのモードをサポートしています:
+
+**バッチモード（デフォルト）**
+
+- トレースはバッファに蓄積され、定期的に送信される
+- 本番環境で高いパフォーマンス
+- トレースの表示にわずかな遅延が生じる場合がある
+
+**リアルタイムモード**
+
+- 各トレースイベントが即時にフラッシュされる
+- 開発やデバッグに最適
+- Langfuse ダッシュボードに即時に反映
+
+```ts
+new LangfuseExporter({
+  // ... その他の設定
+  realtime: process.env.NODE_ENV === 'development',
+})
+```
+
+### Braintrust エクスポーター
+
+Braintrust エクスポーターは、AI の評価と監視のためにトレースデータを [Braintrust](https://www.braintrust.dev/) に送信します。
+
+#### インストール
+
+```bash
+npm install @mastra/braintrust
+```
+
+#### 設定
+
+```ts
+type BraintrustExporterConfig = {
+  // Braintrust の API キー（必須）
+  apiKey?: string;
+
+  // カスタムエンドポイント（任意）
+  endpoint?: string;
+
+  // 診断メッセージ用のログレベル（デフォルト: 'warn'）
+  logLevel?: 'debug' | 'info' | 'warn' | 'error';
+
+  // Braintrust に渡す追加のチューニングパラメータ
+  tuningParameters?: Record<string, any>;
+};
+```
+
+#### 基本的なセットアップ
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+import { BraintrustExporter } from '@mastra/braintrust';
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      braintrust: {
+        serviceName: 'my-service',
+        exporters: [
+          new BraintrustExporter({
+            apiKey: process.env.BRAINTRUST_API_KEY,
+            endpoint: process.env.BRAINTRUST_ENDPOINT, // 省略可
+          }),
+        ],
+      },
+    },
+  },
+});
+```
+
+### 複数インスタンスの設定
+
+複数のトレーシングインスタンスを設定し、セレクターで使用するインスタンスを選択できます:
+
+```ts filename="mastra.config.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      production: {
+        serviceName: 'prod-service',
+        sampling: { type: 'ratio', probability: 0.1 },
+        exporters: [prodLangfuseExporter],
+      },
+      development: {
+        serviceName: 'dev-service',
+        sampling: { type: 'always' },
+        exporters: [devLangfuseExporter],
+      },
+    },
+    configSelector: (context, availableTracers) => {
+      // デバッグセッションでは development トレーサーを使用
+      if (context.runtimeContext?.get('debug') === 'true') {
+        return 'development';
+      }
+      return 'production';
+    },
+  },
+});
+```
+
+デフォルト設定とカスタム設定を組み合わせることもできます:
+
+```ts filename="mastra.config.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    default: { enabled: true }, // 'default' インスタンスを提供
+    configs: {
+      langfuse: {
+        serviceName: 'langfuse-service',
+        exporters: [langfuseExporter],
+      },
+    },
+    configSelector: (context, availableTracers) => {
+      // 特定のリクエストは langfuse に、その他は default にルーティング
+      if (context.runtimeContext?.get('useExternalTracing')) {
+        return 'langfuse';
+      }
+      return 'default';
+    },
+  },
+});
+```
+
+## スパンの種類と属性
+
+AI Tracing は、さまざまな AI 処理に対して自動的にスパンを作成します。Mastra は次のスパンタイプをサポートしています：
+
+### エージェントのオペレーションタイプ
+
+- **`AGENT_RUN`** - エージェントの実行（開始から終了まで）
+- **`LLM_GENERATION`** - プロンプトと生成結果を含む個別のモデル呼び出し
+- **`TOOL_CALL`** - 入力と出力を伴う関数/ツールの実行
+- **`MCP_TOOL_CALL`** - Model Context Protocol のツール実行
+- **`GENERIC`** - カスタムオペレーション
+
+### ワークフローの操作タイプ
+
+- **`WORKFLOW_RUN`** - ワークフロー全体の実行
+- **`WORKFLOW_STEP`** - 個々のステップの処理
+- **`WORKFLOW_CONDITIONAL`** - 条件分岐ブロック
+- **`WORKFLOW_CONDITIONAL_EVAL`** - 個々の条件の評価
+- **`WORKFLOW_PARALLEL`** - 並列実行ブロック
+- **`WORKFLOW_LOOP`** - ループ実行ブロック
+- **`WORKFLOW_SLEEP`** - スリープ／遅延の操作
+- **`WORKFLOW_WAIT_EVENT`** - イベント待機の操作
+
+### 主要な属性
+
+各スパンタイプには、対応する属性が含まれます:
+
+- **Agent スパン**: エージェント ID、指示、利用可能なツール、最大ステップ数
+- **LLM スパン**: モデル名、プロバイダー、トークン使用量、パラメータ、終了理由
+- **Tool スパン**: ツール ID、ツール種別、成功ステータス
+- **Workflow スパン**: ステップ/ワークフロー ID、ステータス情報
+
+## スパンにカスタムメタデータを追加する
+
+ワークフローステップやツール呼び出しで利用できる `tracingContext.currentSpan` を使って、スパンにカスタムメタデータを追加できます。これは、APIのステータスコード、ユーザーID、パフォーマンスメトリクスなどの追加情報を追跡するのに役立ちます。
+
+```ts showLineNumbers copy
+execute: async ({ inputData, tracingContext }) => {
+  const response = await fetch(inputData.endpoint, {
+    method: 'POST',
+    body: JSON.stringify(inputData.payload),
+  });
+
+  // 現在のスパンにカスタムメタデータを追加
+  tracingContext.currentSpan?.update({
+    metadata: {
+      apiStatusCode: response.status,
+      responseHeaders: Object.fromEntries(response.headers.entries()),
+      endpoint: inputData.endpoint,
+    }
+  });
+
+  const data = await response.json();
+  return { data, statusCode: response.status };
+}
+```
+
+## 子スパンの作成
+
+ワークフローのステップやツール内で特定の処理を追跡するために、子スパンを作成できます。これにより、実行時に何が起きているかをより細かく可視化できます。
+
+```ts showLineNumbers copy
+execute: async ({ input, tracingContext }) => {
+  // データベースクエリ用の子スパンを作成
+  const querySpan = tracingContext.currentSpan?.createChildSpan({
+    type: 'generic',
+    name: 'database-query',
+    input: {
+      query: input.query,
+      params: input.params,
+    }
+  });
+
+  try {
+    const results = await db.query(input.query, input.params);
+
+    // 子スパンを結果で更新して終了
+    querySpan?.end({
+      output: results.data,
+      metadata: {
+        rowsReturned: results.length,
+        success: true,
+      }
+    });
+
+    return { results, rowCount: results.length };
+  } catch (error) {
+    // 子スパンにエラーを記録
+    querySpan?.error({error});
+    throw error;
+  }
+}
+```
+
+## スパンプロセッサとデータフィルタリング
+
+スパンプロセッサは、スパンデータがオブザーバビリティプラットフォームにエクスポートされる前に、データの変更やフィルタリングを行うための機能です。これにより、算出フィールドの追加、機密情報のマスキング、データ形式の変換などが可能になります。
+
+### 組み込みの SensitiveDataFilter
+
+Mastra には、スパンデータから機微情報フィールドを自動的にマスクする `SensitiveDataFilter` プロセッサが含まれています。デフォルトで有効になっており、一般的な機微情報のフィールド名を走査します:
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+import { LangfuseExporter } from '@mastra/langfuse';
+import { SensitiveDataFilter } from '@mastra/core/ai-tracing';
+
+export const mastra = new Mastra({
+  observability: {
+    instances: {
+      langfuse: {
+        serviceName: 'my-service',
+        exporters: [new LangfuseExporter({ /* config */ })],
+        // SensitiveDataFilter is included by default, but you can customize it
+        processors: [
+          new SensitiveDataFilter([
+            'password', 'token', 'secret', 'key', 'apiKey',
+            'auth', 'authorization', 'bearer', 'jwt',
+            'credential', 'sessionId',
+            // Add your custom sensitive fields
+            'ssn', 'creditCard', 'bankAccount'
+          ])
+        ],
+      },
+    },
+  },
+});
+```
+
+`SensitiveDataFilter` は次の項目に含まれる一致フィールドを自動的にマスクします:
+
+- スパン属性
+- スパンのメタデータ
+- 入出力データ
+- エラー情報
+
+フィールドは大文字小文字を区別せずに照合され、ネストされたオブジェクトも再帰的に処理されます。
+
+### カスタムプロセッサー
+
+独自のスパン変換ロジックを実装するために、カスタムプロセッサーを作成できます：
+
+```ts showLineNumbers copy
+import type { AISpanProcessor, AnyAISpan } from '@mastra/core/ai-tracing';
+
+export class PerformanceEnrichmentProcessor implements AISpanProcessor {
+  name = 'performance-enrichment';
+
+  process(span: AnyAISpan): AnyAISpan | null {
+    const modifiedSpan = { ...span };
+
+    // 算出したパフォーマンス指標を追加
+    if (span.startTime && span.endTime) {
+      const duration = span.endTime.getTime() - span.startTime.getTime();
+
+      modifiedSpan.metadata = {
+        ...span.metadata,
+        durationMs: duration,
+        performanceCategory: duration < 100 ? 'fast' : duration < 1000 ? 'medium' : 'slow',
+      };
+    }
+
+    // 実行環境の情報を追加
+    modifiedSpan.metadata = {
+      ...modifiedSpan.metadata,
+      environment: process.env.NODE_ENV || 'unknown',
+      region: process.env.AWS_REGION || 'unknown',
+    };
+
+    return modifiedSpan;
+  }
+
+  async shutdown(): Promise<void> {
+    // 必要に応じてクリーンアップ
+  }
+}
+
+// Mastra の設定で使用
+export const mastra = new Mastra({
+  observability: {
+    instances: {
+      langfuse: {
+        serviceName: 'my-service',
+        exporters: [new LangfuseExporter({ /* config */ })],
+        processors: [
+          new SensitiveDataFilter(),
+          new PerformanceEnrichmentProcessor(),
+        ],
+      },
+    },
+  },
+});
+```
+
+プロセッサーは定義された順に実行され、各プロセッサーは直前のプロセッサーの出力を受け取ります。

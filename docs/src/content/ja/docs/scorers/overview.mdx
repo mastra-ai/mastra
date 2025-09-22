@@ -1,0 +1,152 @@
+---
+title: "概要"
+description: MastraのスコアラーのAI出力評価とパフォーマンス測定機能について詳述した概要。
+---
+
+
+
+# Scorers概要
+
+**Scorers**は、AI生成出力の品質、精度、またはパフォーマンスを測定する評価ツールです。Scorersは、特定の基準に対してレスポンスを分析することで、エージェント、ワークフロー、または言語モデルが望ましい結果を生成しているかどうかを評価する自動化された方法を提供します。
+
+**Scores**は、出力が評価基準をどの程度満たしているかを定量化する数値（通常0から1の間）です。これらのスコアにより、パフォーマンスを客観的に追跡し、異なるアプローチを比較し、AIシステムの改善領域を特定することができます。
+
+
+
+## 評価パイプライン
+
+Mastraスコアラーは、シンプルから複雑な評価ワークフローまで対応できる柔軟な4ステップのパイプラインに従います：
+
+1. **preprocess**（オプション）：評価のための入力/出力データの準備または変換
+2. **analyze**（オプション）：評価分析の実行と洞察の収集
+3. **generateScore**（必須）：分析を数値スコアに変換
+4. **generateReason**（オプション）：スコアの説明や根拠の生成
+
+このモジュラー構造により、シンプルな単一ステップの評価から複雑な多段階分析ワークフローまで実現でき、特定のニーズに合わせた評価を構築できます。
+
+### 各ステップの使用場面
+
+**preprocessステップ** - コンテンツが複雑で前処理が必要な場合：
+- 複雑なデータ構造から特定の要素を抽出
+- 分析前のテキストのクリーニングや正規化
+- 個別評価が必要な複数の主張の解析
+- 関連セクションに評価を集中させるためのコンテンツフィルタリング
+
+**analyzeステップ** - 構造化された評価分析が必要な場合：
+- スコアリング判定に必要な洞察の収集
+- 複雑な評価基準をコンポーネントに分解
+- generateScoreで使用する詳細な分析の実行
+- 透明性確保のための証拠や推論データの収集
+
+**generateScoreステップ** - 分析をスコアに変換するために常に必要：
+- シンプルなケース：入力/出力ペアの直接スコアリング
+- 複雑なケース：詳細な分析結果を数値スコアに変換
+- 分析結果へのビジネスロジックと重み付けの適用
+- 最終的な数値スコアを生成する唯一のステップ
+
+**generateReasonステップ** - 説明が重要な場合：
+- ユーザーがスコアが付けられた理由を理解する必要がある場合
+- デバッグと透明性が重要な場合
+- コンプライアンスや監査で説明が必要な場合
+- 改善のための実用的なフィードバックを提供する場合
+
+独自のスコアラーの作成方法については、[カスタムスコアラーの作成](/docs/scorers/custom-scorers)を参照してください。
+
+
+
+## インストール
+
+Mastraのスコアラー機能を使用するには、`@mastra/evals`パッケージをインストールします。
+
+```bash copy
+npm install @mastra/evals@latest
+```
+
+
+
+## ライブ評価
+
+**ライブ評価**を使用すると、エージェントやワークフローが動作している間に、AI出力をリアルタイムで自動的にスコア化できます。評価を手動で実行したりバッチで実行したりする代わりに、スコアラーがAIシステムと並行して非同期で実行され、継続的な品質監視を提供します。
+
+### エージェントにスコアラーを追加する
+
+エージェントに組み込みスコアラーを追加して、その出力を自動的に評価できます。利用可能なすべてのオプションについては、[組み込みスコアラーの完全なリスト](/docs/scorers/off-the-shelf-scorers)を参照してください。
+
+```typescript filename="src/mastra/agents/evaluated-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { 
+  createAnswerRelevancyScorer,
+  createToxicityScorer 
+} from "@mastra/evals/scorers/llm";
+
+export const evaluatedAgent = new Agent({
+  // ...
+  scorers: {
+    relevancy: {
+      scorer: createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") }),
+      sampling: { type: "ratio", rate: 0.5 }
+    },
+    safety: {
+      scorer: createToxicityScorer({ model: openai("gpt-4o-mini") }),
+      sampling: { type: "ratio", rate: 1 }
+    }
+  }
+});
+```
+
+### ワークフローステップにスコアラーを追加する
+
+個々のワークフローステップにスコアラーを追加して、プロセスの特定のポイントで出力を評価することもできます：
+
+```typescript filename="src/mastra/workflows/content-generation.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+import { customStepScorer } from "../scorers/custom-step-scorer";
+
+const contentStep = createStep({
+  // ...
+  scorers: {
+    customStepScorer: {
+      scorer: customStepScorer(),
+      sampling: {
+        type: "ratio",
+        rate: 1, // すべてのステップ実行をスコア化
+      }
+    }
+  },
+});
+
+export const contentWorkflow = createWorkflow({ ... })
+  .then(contentStep)
+  .commit();
+```
+
+### ライブ評価の仕組み
+
+**非同期実行**: ライブ評価は、エージェントの応答やワークフローの実行をブロックすることなく、バックグラウンドで実行されます。これにより、AIシステムは監視されながらもパフォーマンスを維持できます。
+
+**サンプリング制御**: `sampling.rate`パラメータ（0-1）は、スコア化される出力の割合を制御します：
+- `1.0`: すべての応答をスコア化（100%）
+- `0.5`: すべての応答の半分をスコア化（50%）
+- `0.1`: 応答の10%をスコア化
+- `0.0`: スコア化を無効化
+
+**自動保存**: すべてのスコア化結果は、設定されたデータベースの`mastra_scorers`テーブルに自動的に保存され、時間の経過とともにパフォーマンスの傾向を分析できます。
+
+
+
+## スコアラーのローカルテスト
+
+Mastraは、スコアラーをテストするためのCLIコマンド`mastra dev`を提供しています。プレイグラウンドには、個別のスコアラーをテスト入力に対して実行し、詳細な結果を表示できるスコアラーセクションが含まれています。
+
+詳細については、[Local Dev Playground](/docs/server-db/local-dev-playground)のドキュメントを参照してください。
+
+
+
+## 次のステップ
+
+- [カスタムスコアラーの作成](/docs/scorers/custom-scorers)ガイドで独自のスコアラーを作成する方法を学ぶ
+- [既製のスコアラー](/docs/scorers/off-the-shelf-scorers)セクションで組み込みスコアラーを探索する
+- [ローカル開発プレイグラウンド](/docs/server-db/local-dev-playground)でスコアラーをテストする
+- [例の概要](/examples)セクションでスコアラーの例を確認する

@@ -1,142 +1,180 @@
 ---
-title: "例: キーワードカバレッジ | Evals | Mastra Docs"
-description: キーワードカバレッジ指標を使用して、回答が入力テキストの重要なキーワードをどれだけカバーしているかを評価する例。
+title: "例: キーワード網羅率 | Evals | Mastra Docs"
+description: 入力テキストの重要なキーワードが応答でどの程度カバーされているかを評価するために、Keyword Coverage 指標を用いる例。
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
 
-# キーワードカバレッジ評価
 
-この例では、Mastra のキーワードカバレッジ指標を使用して、回答が入力テキストの重要なキーワードをどれだけ含んでいるかを評価する方法を示します。
 
-## 概要
+# キーワード網羅性の評価
 
-この例では、以下の方法を示します。
+<ScorerCallout />
 
-1. Keyword Coverageメトリクスの設定
-2. キーワード一致による応答の評価
-3. カバレッジスコアの分析
-4. さまざまなカバレッジシナリオの対応
+`KeywordCoverageMetric` を使って、コンテキストで要求されるキーワードやフレーズが応答にどれだけ正確に含まれているかを評価します。このメトリクスは `query` と `response` を受け取り、スコアと、キーワード一致の統計を含む `info` オブジェクトを返します。
 
-## セットアップ
 
-### 依存関係
 
-必要な依存関係をインポートします：
+## インストール
 
-```typescript copy showLineNumbers filename="src/index.ts"
-import { KeywordCoverageMetric } from "@mastra/evals/nlp";
+```bash copy
+npm install @mastra/evals
 ```
+
+
+
+## 完全カバレッジの例
+
+この例では、応答が入力の主要な用語を余すところなく反映しています。必要なキーワードがすべて含まれており、欠落のない完全なカバレッジになっています。
+
+
+```typescript filename="src/example-full-keyword-coverage.ts" showLineNumbers copy
+import { KeywordCoverageMetric } from "@mastra/evals/nlp";
+
+const metric = new KeywordCoverageMetric();
+
+const query = "JavaScript frameworks like React and Vue.";
+const response = "Popular JavaScript frameworks include React and Vue for web development";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 完全カバレッジの出力
+
+スコアが1であることは、想定されるすべてのキーワードが応答内で見つかったことを示します。`info` フィールドは、マッチしたキーワード数が入力から抽出されたキーワードの総数と一致していることを示しています。
+
+```typescript
+{
+  score: 1,
+  info: {
+    totalKeywords: 4,
+    matchedKeywords: 4
+  }
+}
+```
+
+
+
+## 部分的なカバレッジの例
+
+この例では、応答には入力の重要なキーワードの一部は含まれていますが、すべては含まれていません。スコアは部分的なカバレッジを反映しており、主要な用語が欠落しているか、または一部しか一致していないことを示します。
+
+```typescript filename="src/example-partial-keyword-coverage.ts" showLineNumbers copy
+import { KeywordCoverageMetric } from "@mastra/evals/nlp";
+
+const metric = new KeywordCoverageMetric();
+
+const query = "TypeScript offers interfaces, generics, and type inference.";
+const response = "TypeScript provides type inference and some advanced features";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 部分的なカバレッジの出力
+
+スコアが 0.5 の場合、期待されるキーワードの半分しか応答内で見つからなかったことを示します。`info` フィールドには、入力で特定された総数に対して、いくつの用語が一致したかが表示されます。
+
+```typescript
+{
+  score: 0.5,
+  info: {
+    totalKeywords: 6,
+    matchedKeywords: 3
+  }
+}
+```
+
+
+
+## 最小限のカバレッジ例
+
+この例では、応答には入力の重要なキーワードがほとんど含まれていません。スコアはカバレッジが最小限であることを反映しており、主要な用語の多くが欠落しているか考慮されていません。
+
+```typescript filename="src/example-minimal-keyword-coverage.ts" showLineNumbers copy
+import { KeywordCoverageMetric } from "@mastra/evals/nlp";
+
+const metric = new KeywordCoverageMetric();
+
+const query = "Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning";
+const response = "Data preparation is important for models";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 最小限のカバレッジ出力
+
+低いスコアは、期待されるキーワードのうちごく一部しか応答に含まれていないことを示します。`info` フィールドは、合計キーワード数と一致したキーワード数の差を示し、カバレッジ不足を示唆します。
+
+```typescript
+{
+  score: 0.2,
+  info: {
+    totalKeywords: 10,
+    matchedKeywords: 2
+  }
+}
+```
+
+
 
 ## メトリックの設定
 
-Keyword Coverageメトリックを設定します：
+`KeywordCoverageMetric` は既定の設定で作成できます。追加の設定は不要です。
 
-```typescript copy showLineNumbers{4} filename="src/index.ts"
+```typescript
 const metric = new KeywordCoverageMetric();
 ```
 
-## 使用例
+> 設定オプションの一覧については [KeywordCoverageMetric](/reference/evals/keyword-coverage.mdx) をご覧ください。
 
-### 完全カバレッジの例
 
-すべてのキーワードを含む応答を評価します：
-
-```typescript copy showLineNumbers{7} filename="src/index.ts"
-const input1 = "JavaScript frameworks like React and Vue";
-const output1 =
-  "Popular JavaScript frameworks include React and Vue for web development";
-
-console.log("Example 1 - Full Coverage:");
-console.log("Input:", input1);
-console.log("Output:", output1);
-
-const result1 = await metric.measure(input1, output1);
-console.log("Metric Result:", {
-  score: result1.score,
-  info: {
-    totalKeywords: result1.info.totalKeywords,
-    matchedKeywords: result1.info.matchedKeywords,
-  },
-});
-// Example Output:
-// Metric Result: { score: 1, info: { totalKeywords: 4, matchedKeywords: 4 } }
-```
-
-### 部分的カバレッジの例
-
-一部のキーワードが含まれている応答を評価します：
-
-```typescript copy showLineNumbers{24} filename="src/index.ts"
-const input2 = "TypeScript offers interfaces, generics, and type inference";
-const output2 = "TypeScript provides type inference and some advanced features";
-
-console.log("Example 2 - Partial Coverage:");
-console.log("Input:", input2);
-console.log("Output:", output2);
-
-const result2 = await metric.measure(input2, output2);
-console.log("Metric Result:", {
-  score: result2.score,
-  info: {
-    totalKeywords: result2.info.totalKeywords,
-    matchedKeywords: result2.info.matchedKeywords,
-  },
-});
-// Example Output:
-// Metric Result: { score: 0.5, info: { totalKeywords: 6, matchedKeywords: 3 } }
-```
-
-### 最小限カバレッジの例
-
-キーワードの一致が限られている応答を評価します：
-
-```typescript copy showLineNumbers{41} filename="src/index.ts"
-const input3 =
-  "Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning";
-const output3 = "Data preparation is important for models";
-
-console.log("Example 3 - Minimal Coverage:");
-console.log("Input:", input3);
-console.log("Output:", output3);
-
-const result3 = await metric.measure(input3, output3);
-console.log("Metric Result:", {
-  score: result3.score,
-  info: {
-    totalKeywords: result3.info.totalKeywords,
-    matchedKeywords: result3.info.matchedKeywords,
-  },
-});
-// Example Output:
-// Metric Result: { score: 0.2, info: { totalKeywords: 10, matchedKeywords: 2 } }
-```
 
 ## 結果の理解
 
-この指標は以下を提供します：
+`KeywordCoverageMetric` は次の形式で結果を返します：
 
-1. 0から1の間のカバレッジスコア：
-
-   - 1.0: 完全なカバレッジ - すべてのキーワードが含まれている
-   - 0.7-0.9: 高いカバレッジ - ほとんどのキーワードが含まれている
-   - 0.4-0.6: 部分的なカバレッジ - 一部のキーワードが含まれている
-   - 0.1-0.3: 低いカバレッジ - わずかなキーワードが一致
-   - 0.0: カバレッジなし - キーワードが見つからない
-
-2. 詳細な統計情報（以下を含む）:
-   - 入力されたキーワードの総数
-   - 一致したキーワードの数
-   - カバレッジ比率の計算
-   - 専門用語の取り扱い
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/keyword-coverage"
+```typescript
+{
+  score: number,
+  info: {
+    totalKeywords: number,
+    matchedKeywords: number
   }
+}
+```
+
+
+
+## キーワード網羅スコア
+
+0〜1 の範囲の網羅スコア:
+
+- **1.0**: 完全に網羅 — すべてのキーワードを含む。
+- **0.7–0.9**: 高水準の網羅 — ほとんどのキーワードを含む。
+- **0.4–0.6**: 部分的な網羅 — 一部のキーワードを含む。
+- **0.1–0.3**: 低水準の網羅 — 該当するキーワードが少ない。
+- **0.0**: 網羅なし — キーワードが見つからない。
+
+
+
+## キーワード網羅情報
+
+以下の詳細統計を含みます:
+
+- 入力中のキーワード総数
+- 一致したキーワード数
+- 網羅率の算出
+- 専門用語の扱い
+
+<GithubLink
+  outdated={true}
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/keyword-coverage"
 />

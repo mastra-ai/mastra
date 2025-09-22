@@ -1,3 +1,4 @@
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type {
   ClientOptions,
   LegacyWorkflowRunResult,
@@ -5,6 +6,7 @@ import type {
   GetWorkflowRunsParams,
   GetLegacyWorkflowResponse,
 } from '../types';
+import { base64RuntimeContext, parseClientRuntimeContext, runtimeContextQueryString } from '../utils';
 
 import { BaseResource } from './base';
 
@@ -20,18 +22,25 @@ export class LegacyWorkflow extends BaseResource {
 
   /**
    * Retrieves details about the legacy workflow
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing legacy workflow details including steps and graphs
    */
-  details(): Promise<GetLegacyWorkflowResponse> {
-    return this.request(`/api/workflows/legacy/${this.workflowId}`);
+  details(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetLegacyWorkflowResponse> {
+    return this.request(`/api/workflows/legacy/${this.workflowId}${runtimeContextQueryString(runtimeContext)}`);
   }
 
   /**
    * Retrieves all runs for a legacy workflow
    * @param params - Parameters for filtering runs
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing legacy workflow runs array
    */
-  runs(params?: GetWorkflowRunsParams): Promise<GetLegacyWorkflowRunsResponse> {
+  runs(
+    params?: GetWorkflowRunsParams,
+    runtimeContext?: RuntimeContext | Record<string, any>,
+  ): Promise<GetLegacyWorkflowRunsResponse> {
+    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
+
     const searchParams = new URLSearchParams();
     if (params?.fromDate) {
       searchParams.set('fromDate', params.fromDate.toISOString());
@@ -47,6 +56,9 @@ export class LegacyWorkflow extends BaseResource {
     }
     if (params?.resourceId) {
       searchParams.set('resourceId', params.resourceId);
+    }
+    if (runtimeContextParam) {
+      searchParams.set('runtimeContext', runtimeContextParam);
     }
 
     if (searchParams.size) {

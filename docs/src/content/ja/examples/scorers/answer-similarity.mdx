@@ -1,0 +1,287 @@
+---
+title: "例: Answer Similarity | スコアラー | Mastra ドキュメント"
+description: CI/CD テストのために Answer Similarity スコアラーを使用して、エージェントの出力を正解と比較する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+
+# 回答類似度スコアラー
+
+`createAnswerSimilarityScorer` を使用して、エージェントの出力を正解と照合します。このスコアラーは、期待される回答が定義されており、時間の経過に伴う一貫性を担保したい CI/CD のテストシナリオ向けに設計されています。
+
+## インストール
+
+```bash copy
+npm install @mastra/evals
+```
+
+> APIの詳細なドキュメントと設定オプションについては、[`createAnswerSimilarityScorer`](/reference/scorers/answer-similarity)をご覧ください。
+
+## 完全類似の例
+
+この例では、エージェントの出力が意味的に正解と完全に一致します。
+
+```typescript filename="src/example-perfect-similarity.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { runExperiment } from "@mastra/core/scores";
+import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
+import { myAgent } from "./agent";
+
+const scorer = createAnswerSimilarityScorer({ model: openai("gpt-4o-mini") });
+
+const result = await runExperiment({
+  data: [
+    { 
+      input: "What is 2+2?",
+      groundTruth: "4"
+    }
+  ],
+  scorers: [scorer],
+  target: myAgent,
+});
+
+console.log(result.scores);
+```
+
+### 完全一致の出力
+
+エージェントの回答と正解が完全に一致しているため、出力は満点となります。
+
+```typescript
+{
+  "Answer Similarity Scorer": {
+    score: 1.0,
+    reason: "スコアは1.0/1です。出力が正解と完全に一致しており、エージェントは数値解を正しく提示しました。応答は完全に正確なため、改善の必要はありません。"
+  }
+}
+```
+
+## 高い意味的類似度の例
+
+この例では、エージェントは言い回しは異なるものの、グラウンドトゥルースと同じ情報を提供します。
+
+```typescript filename="src/example-semantic-similarity.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { runExperiment } from "@mastra/core/scores";
+import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
+import { myAgent } from "./agent";
+
+const scorer = createAnswerSimilarityScorer({ model: openai("gpt-4o-mini") });
+
+const result = await runExperiment({
+  data: [
+    { 
+      input: "What is the capital of France?",
+      groundTruth: "The capital of France is Paris",
+    }
+  ],
+  scorers: [scorer],
+  target: myAgent,
+});
+
+console.log(result.scores);
+```
+
+### 高い意味的類似性の出力
+
+この出力は、同等の意味で同じ情報を伝えているため、高スコアとなります。
+
+```typescript
+{
+  "Answer Similarity Scorer": {
+    score: 0.9,
+    reason: "スコアは0.9/1です。両方の回答が「ParisはFranceの首都である」という同じ情報を伝えているためです。エージェントは主要な事実を、表現はやや異なるものの正しく特定しました。構造にわずかな違いはありますが、意味的には同等です。"
+  }
+}
+```
+
+## 部分一致の例
+
+この例では、エージェントの応答は一部正しいものの、重要な情報が欠けています。
+
+```typescript filename="src/example-partial-similarity.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { runExperiment } from "@mastra/core/scores";
+import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
+import { myAgent } from "./agent";
+
+const scorer = createAnswerSimilarityScorer({ model: openai("gpt-4o-mini") });
+
+const result = await runExperiment({
+  data: [
+    { 
+      input: "What are the primary colors?",
+      groundTruth: "The primary colors are red, blue, and yellow",
+    }
+  ],
+  scorers: [scorer],
+  target: myAgent,
+});
+
+console.log(result.scores);
+```
+
+### 部分的な類似の出力
+
+この出力は、正しい情報をいくつか含んでいるものの不完全であるため、評価は中程度となります。
+
+```typescript
+{
+  "Answer Similarity Scorer": {
+    score: 0.6,
+    reason: "The score is 0.6/1 because the answer captures some key elements but is incomplete. The agent correctly identified red and blue as primary colors. However, it missed the critical color yellow, which is essential for a complete answer."
+  }
+}
+```
+
+## 矛盾の例
+
+この例では、エージェントが事実と異なり、正解（グラウンドトゥルース）と矛盾する情報を提示します。
+
+```typescript filename="src/example-contradiction.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { runExperiment } from "@mastra/core/scores";
+import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
+import { myAgent } from "./agent";
+
+const scorer = createAnswerSimilarityScorer({ model: openai("gpt-4o-mini") });
+
+const result = await runExperiment({
+  data: [
+    { 
+      input: "Who wrote Romeo and Juliet?",
+      groundTruth: "William Shakespeare wrote Romeo and Juliet",
+    }
+  ],
+  scorers: [scorer],
+  target: myAgent,
+});
+
+console.log(result.scores);
+```
+
+### 矛盾のある出力
+
+この出力は、事実に反する情報が含まれているため、極めて低いスコアとなります。
+
+```typescript
+{
+  "Answer Similarity Scorer": {
+    score: 0.0,
+    reason: "スコアが 0.0/1 であるのは、著者に関する重大な誤りが含まれているためです。エージェントは戯曲の題名は正しく特定したものの、著者をウィリアム・シェイクスピアではなくクリストファー・マーロウと誤って帰属しており、これは本質的な矛盾です。"
+  }
+}
+```
+
+## CI/CD 連携の例
+
+テストスイートで scorer を使い、時間の経過に伴うエージェントの一貫性を検証します:
+
+```typescript filename="src/ci-integration.test.ts" showLineNumbers copy
+import { describe, it, expect } from 'vitest';
+import { openai } from "@ai-sdk/openai";
+import { runExperiment } from "@mastra/core/scores";
+import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
+import { myAgent } from "./agent";
+
+describe('Agent Consistency Tests', () => {
+  const scorer = createAnswerSimilarityScorer({ model: openai("gpt-4o-mini") });
+
+  it('should provide accurate factual answers', async () => {
+    const result = await runExperiment({
+      data: [
+        { 
+          input: "What is the speed of light?",
+          groundTruth: "The speed of light in vacuum is 299,792,458 meters per second"
+        },
+        { 
+          input: "What is the capital of Japan?",
+          groundTruth: "Tokyo is the capital of Japan"
+        }
+      ],
+      scorers: [scorer],
+      target: myAgent,
+    });
+
+    // すべての回答が類似度のしきい値を満たしていることを検証
+    expect(result.scores['Answer Similarity Scorer'].score).toBeGreaterThan(0.8);
+  });
+
+  it('should maintain consistency across runs', async () => {
+    const testData = { 
+      input: "Define machine learning",
+      groundTruth: "Machine learning is a subset of AI that enables systems to learn and improve from experience"
+    };
+
+    // 複数回実行して一貫性を確認
+    const results = await Promise.all([
+      runExperiment({ data: [testData], scorers: [scorer], target: myAgent }),
+      runExperiment({ data: [testData], scorers: [scorer], target: myAgent }),
+      runExperiment({ data: [testData], scorers: [scorer], target: myAgent })
+    ]);
+
+    // すべての実行で類似したスコアになることを確認（許容差 0.1）
+    const scores = results.map(r => r.scores['Answer Similarity Scorer'].score);
+    const maxDiff = Math.max(...scores) - Math.min(...scores);
+    expect(maxDiff).toBeLessThan(0.1);
+  });
+});
+```
+
+## カスタム設定の例
+
+特定のユースケースに合わせてスコアラーの動作をカスタマイズします:
+
+```typescript filename="src/custom-config.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { runExperiment } from "@mastra/core/scores";
+import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
+import { myAgent } from "./agent";
+
+// 厳密な完全一致と高いスケールで設定
+const strictScorer = createAnswerSimilarityScorer({ 
+  model: openai("gpt-4o-mini"),
+  options: {
+    exactMatchBonus: 0.5,        // 完全一致のボーナスを高める
+    contradictionPenalty: 2.0,   // 矛盾に非常に厳しくする
+    missingPenalty: 0.3,         // 欠落情報へのペナルティを高める
+    scale: 10                    // スコアを1ではなく10点満点にする
+  }
+});
+
+// 寛容な意味一致で設定
+const lenientScorer = createAnswerSimilarityScorer({ 
+  model: openai("gpt-4o-mini"),
+  options: {
+    semanticThreshold: 0.6,      // 意味的一致のしきい値を下げる
+    contradictionPenalty: 0.5,   // 軽微な矛盾には寛容にする
+    extraInfoPenalty: 0,         // 追加情報にはペナルティを科さない
+    requireGroundTruth: false    // 正解データがなくても許容する
+  }
+});
+
+const result = await runExperiment({
+  data: [
+    { 
+      input: "Explain photosynthesis",
+      groundTruth: "Photosynthesis is the process by which plants convert light energy into chemical energy"
+    }
+  ],
+  scorers: [strictScorer, lenientScorer],
+  target: myAgent,
+});
+
+console.log('Strict scorer:', result.scores['Answer Similarity Scorer'].score); // 10点満点
+console.log('Lenient scorer:', result.scores['Answer Similarity Scorer'].score); // 1点満点
+```
+
+## 主なメリット
+
+- **回帰テスト**: エージェントの挙動が予期せず変化した際に検知
+- **品質保証**: 応答が期待する基準を満たしているかを確認
+- **意味理解（セマンティック）**: 単なる文字列一致を超えて意味を把握
+- **実践的なフィードバック**: 改善が必要な点を明確に説明
+- **CI/CD対応**: 自動テストパイプライン向けに設計
+
+<GithubLink href="https://github.com/mastra-ai/mastra/tree/main/packages/evals/src/scorers/llm/answer-similarity" />

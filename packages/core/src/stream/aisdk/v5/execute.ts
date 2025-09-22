@@ -9,7 +9,7 @@ import { prepareToolsAndToolChoice } from './compat';
 import { AISDKV5InputStream } from './input';
 import { getModelSupport } from './model-supports';
 
-type ExecutionProps<OUTPUT extends OutputSchema | undefined = undefined> = {
+type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   runId: string;
   model: LanguageModelV2;
   providerOptions?: SharedV2ProviderOptions;
@@ -31,9 +31,10 @@ type ExecutionProps<OUTPUT extends OutputSchema | undefined = undefined> = {
   Only applicable for HTTP-based providers.
   */
   headers?: Record<string, string | undefined>;
+  shouldThrowError?: boolean;
 };
 
-export function execute<OUTPUT extends OutputSchema | undefined = undefined>({
+export function execute<OUTPUT extends OutputSchema = undefined>({
   runId,
   model,
   providerOptions,
@@ -48,6 +49,7 @@ export function execute<OUTPUT extends OutputSchema | undefined = undefined>({
   modelSettings,
   output,
   headers,
+  shouldThrowError,
 }: ExecutionProps<OUTPUT>) {
   const v5 = new AISDKV5InputStream({
     component: 'LLM',
@@ -97,7 +99,11 @@ export function execute<OUTPUT extends OutputSchema | undefined = undefined>({
       } catch (error) {
         console.error('Error creating stream', error);
         if (isAbortError(error) && options?.abortSignal?.aborted) {
-          console.log('Abort error', error);
+          console.error('Abort error', error);
+        }
+
+        if (shouldThrowError) {
+          throw error;
         }
 
         return {

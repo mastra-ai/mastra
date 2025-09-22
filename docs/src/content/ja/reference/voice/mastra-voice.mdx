@@ -3,9 +3,13 @@ title: "リファレンス: MastraVoice | Voice Providers | Mastra ドキュメ�
 description: "Mastra のすべての音声サービスのコアインターフェースを定義する抽象基底クラス MastraVoice のドキュメント。音声から音声への機能も含まれます。"
 ---
 
+
+
 # MastraVoice
 
 MastraVoice クラスは、Mastra における音声サービスのコアインターフェースを定義する抽象基底クラスです。すべての音声プロバイダー実装（OpenAI、Deepgram、PlayAI、Speechify など）は、このクラスを継承して、それぞれの機能を提供します。このクラスには、WebSocket 接続を通じたリアルタイム音声対音声機能のサポートも追加されています。
+
+
 
 ## 使用例
 
@@ -83,6 +87,8 @@ class MyVoiceProvider extends MastraVoice {
   }
 }
 ```
+
+
 
 ## コンストラクタのパラメータ
 
@@ -171,6 +177,8 @@ class MyVoiceProvider extends MastraVoice {
   ]}
 />
 
+
+
 ## 抽象メソッド
 
 これらのメソッドは、MastraVoice を拡張する未知のクラスによって実装される必要があります。
@@ -232,6 +240,8 @@ abstract getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: unknown 
 - 各声には少なくとも voiceId プロパティが必要です
 - プロバイダーは各声に関する追加のメタデータを含めることができます
 - テキスト読み上げ変換のために利用可能な声を見つける際に使用されます
+
+
 
 ## オプションのメソッド
 
@@ -343,6 +353,8 @@ off<E extends VoiceEventType>(
 - 以前に登録したイベントリスナーを削除します
 - もう必要なくなったイベントハンドラーのクリーンアップに使用します
 
+
+
 ## イベントシステム
 
 MastraVoice クラスには、リアルタイム通信のためのイベントシステムが含まれています。標準的なイベントタイプは以下の通りです。
@@ -367,6 +379,8 @@ MastraVoice クラスには、リアルタイム通信のためのイベント�
     },
   ]}
 />
+
+
 
 ## 保護されたプロパティ
 
@@ -399,9 +413,13 @@ MastraVoice クラスには、リアルタイム通信のためのイベント�
   ]}
 />
 
+
+
 ## テレメトリーサポート
 
 MastraVoice には、パフォーマンスの追跡とエラー監視を行う `traced` メソッドを通じて、組み込みのテレメトリーサポートが含まれています。
+
+
 
 ## 注意事項
 

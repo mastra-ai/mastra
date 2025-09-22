@@ -1,0 +1,123 @@
+---
+title: "Streaming Events | Streaming | Mastra"
+description: "Mastra における各種ストリーミングイベント（テキストの差分、ツール呼び出し、ステップイベントなど）と、それらをアプリケーションでの扱い方について学びます。"
+---
+
+
+
+# ストリーミングイベント
+
+エージェントやワークフローからのストリーミングにより、LLMの出力やワークフロー実行の状態をリアルタイムで可視化できます。このフィードバックはユーザーに直接提示することも、アプリケーション内でワークフローの状態をより効果的に扱うために活用することもでき、よりスムーズで応答性の高い体験を実現します。
+
+エージェントやワークフローから送出されるイベントは、実行開始、テキスト生成、ツール呼び出しなど、生成や実行のさまざまな段階を表します。
+
+
+
+## イベントの種類
+
+以下は、`.streamVNext()` から送出されるイベントの全一覧です。
+**agent** と **workflow** のどちらからストリーミングしているかにより、発生するイベントは一部に限られます。
+
+- **start**: agent または workflow の実行が開始されたことを示します。
+- **step-start**: workflow のステップの実行が始まったことを示します。
+- **text-delta**: LLM によって逐次生成されるテキストの増分チャンク。
+- **tool-call**: agent がツールの使用を決定したとき。ツール名と引数を含みます。
+- **tool-result**: ツール実行の結果。
+- **step-finish**: 特定のステップが完全に終了したことを示し、そのステップの終了理由などのメタデータを含む場合があります。
+- **finish**: agent または workflow の実行が完了したとき。使用量の統計を含みます。
+
+
+
+## エージェントのストリームを検査する
+
+`for await` ループで `stream` を反復処理し、送信されるすべてのイベントチャンクを確認します。
+
+```typescript {3,7} showLineNumbers copy
+const testAgent = mastra.getAgent("testAgent");
+
+const stream = await testAgent.streamVNext([
+  { role: "user", content: "Help me organize my day" },
+]);
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+> 詳細は [Agent.streamVNext()](../../reference/agents/streamVNext.mdx) をご覧ください。
+
+### エージェント出力例
+
+以下は発行され得るイベントの例です。各イベントには必ず `type` が含まれ、`from` や `payload` などの追加フィールドが含まれる場合があります。
+
+```typescript {2,7,15}
+{
+  type: 'start',
+  from: 'AGENT',
+  // ..
+}
+{
+  type: 'step-start',
+  from: 'AGENT',
+  payload: {
+    messageId: 'msg-cdUrkirvXw8A6oE4t5lzDuxi',
+    // ...
+  }
+}
+{
+  type: 'tool-call',
+  from: 'AGENT',
+  payload: {
+    toolCallId: 'call_jbhi3s1qvR6Aqt9axCfTBMsA',
+    toolName: 'testTool'
+    // ..
+  }
+}
+```
+
+
+
+## ワークフローストリームの確認
+
+発行されたすべてのイベントチャンクを確認するには、`for await` ループで `stream` を反復処理します。
+
+```typescript {5,11} showLineNumbers copy
+const testWorkflow = mastra.getWorkflow("testWorkflow");
+
+const run = await testWorkflow.createRunAsync();
+
+const stream = await run.streamVNext({
+  inputData: {
+    value: "initial data"
+  }
+});
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+### ワークフロー出力例
+
+以下は発行される可能性のあるイベントの例です。各イベントには常に `type` が含まれ、`from` や `payload` などの追加フィールドが含まれる場合があります。
+
+```typescript {2,8,11}
+{
+  type: 'workflow-start',
+  runId: '221333ed-d9ee-4737-922b-4ab4d9de73e6',
+  from: 'WORKFLOW',
+  // ...
+}
+{
+  type: 'workflow-step-start',
+  runId: '221333ed-d9ee-4737-922b-4ab4d9de73e6',
+  from: 'WORKFLOW',
+  payload: {
+    stepName: 'step-1',
+    args: { value: 'initial data' },
+    stepCallId: '9e8c5217-490b-4fe7-8c31-6e2353a3fc98',
+    startedAt: 1755269732792,
+    status: 'running'
+  }
+}
+```

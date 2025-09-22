@@ -1,11 +1,19 @@
 ---
-title: "リファレンス: コンテンツ類似度 | Evals | Mastra ドキュメント"
-description: Mastra のコンテンツ類似度メトリクスに関するドキュメント。これは文字列間のテキスト類似度を測定し、マッチングスコアを提供します。
+title: "リファレンス: Content Similarity | Evals | Mastra Docs"
+description: 文字列間のテキスト類似度を測定し、マッチングスコアを提供するMastraのContent Similarity Metricのドキュメント。
 ---
+
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
 
 # ContentSimilarityMetric
 
-`ContentSimilarityMetric` クラスは、2つの文字列間のテキスト類似度を測定し、それらがどれだけ一致しているかを示すスコアを提供します。大文字と小文字の区別や空白の扱いについて、設定可能なオプションをサポートしています。
+<ScorerCallout />
+
+`ContentSimilarityMetric`クラスは、2つの文字列間のテキストの類似性を測定し、それらがどの程度一致するかを示すスコアを提供します。大文字小文字の区別や空白の処理について設定可能なオプションをサポートしています。
+
+
 
 ## 基本的な使い方
 
@@ -22,6 +30,8 @@ const result = await metric.measure("Hello, world!", "hello world");
 console.log(result.score); // 類似度スコア（0〜1）
 console.log(result.info); // 詳細な類似度メトリクス
 ```
+
+
 
 ## コンストラクタのパラメーター
 
@@ -58,6 +68,8 @@ console.log(result.info); // 詳細な類似度メトリクス
   ]}
 />
 
+
+
 ## measure() のパラメーター
 
 <PropertiesTable
@@ -77,6 +89,8 @@ console.log(result.info); // 詳細な類似度メトリクス
   ]}
 />
 
+
+
 ## 戻り値
 
 <PropertiesTable
@@ -84,7 +98,8 @@ console.log(result.info); // 詳細な類似度メトリクス
     {
       name: "score",
       type: "number",
-      description: "類似度スコア（0～1）。1は完全な類似を示します",
+      description:
+        "類似度スコア（0～1）。1は完全な類似を示します",
     },
     {
       name: "info",
@@ -105,6 +120,8 @@ console.log(result.info); // 詳細な類似度メトリクス
     },
   ]}
 />
+
+
 
 ## スコアリングの詳細
 
@@ -134,6 +151,8 @@ console.log(result.info); // 詳細な類似度メトリクス
 - 0.4-0.6: 中程度の類似度 - 部分的な一致
 - 0.1-0.3: 低い類似度 - 一致するパターンが少ない
 - 0.0: 類似性なし - 全く異なるテキスト
+
+
 
 ## 異なるオプションを使った例
 
@@ -171,6 +190,8 @@ const result2 = await strictWhitespaceMetric.measure(
 //   info: { similarity: 0.85 }
 // }
 ```
+
+
 
 ## 関連
 

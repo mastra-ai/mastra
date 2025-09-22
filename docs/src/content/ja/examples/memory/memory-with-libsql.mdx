@@ -1,117 +1,153 @@
-# LibSQLを使用したメモリ
+---
+title: "例: LibSQL を使った Memory | Memory | Mastra Docs"
+description: Mastra のメモリシステムを、LibSQL ストレージとベクターデータベースのバックエンドで使用する方法の例。
+---
 
-この例では、MastraのメモリシステムをLibSQLと共に使用する方法を示します。LibSQLはデフォルトのストレージおよびベクトルデータベースバックエンドです。
 
-## クイックスタート
 
-設定なしでメモリを初期化すると、LibSQLがストレージとベクトルデータベースとして使用されます。
+# LibSQL を用いたメモリー
 
-```typescript copy showLineNumbers
+この例では、Mastra のメモリーシステムで LibSQL をストレージバックエンドとして利用する方法を示します。
+
+
+
+## 前提条件
+
+この例では `openai` モデルを使用します。`OPENAI_API_KEY` を `.env` ファイルに追加してください。
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+```
+
+また、次のパッケージをインストールしてください:
+
+```bash copy
+npm install @mastra/libsql
+```
+
+
+
+## エージェントにメモリを追加する
+
+エージェントに LibSQL のメモリ機能を追加するには、`Memory` クラスを使用し、`LibSQLStore` で新しい `storage` キーを作成します。`url` にはリモートの場所かローカルのファイルシステム上のリソースを指定できます。
+
+```typescript filename="src/mastra/agents/example-libsql-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { LibSQLStore } from "@mastra/libsql";
 
-// Initialize memory with LibSQL defaults
-const memory = new Memory();
-
-const memoryAgent = new Agent({
-  name: "Memory Agent",
-  instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-4o-mini"),
-  memory,
+export const libsqlAgent = new Agent({
+  name: "libsql-agent",
+  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:libsql-agent.db"
+    }),
+    options: {
+      threads: {
+        generateTitle: true
+      }
+    }
+  })
 });
 ```
 
-## カスタム設定
 
-より詳細な制御が必要な場合は、ストレージ、ベクトルデータベース、エンベッダーを明示的に設定できます。`storage`または`vector`のいずれかを省略した場合、省略されたオプションにはデフォルトでLibSQLが使用されます。これにより、必要に応じてストレージまたはベクトル検索のみに異なるプロバイダーを使用することができます。
 
-FastEmbed（ローカルの埋め込みモデル）をエンベッダーとして使用するには、まずパッケージをインストールします：
+## fastembed を使ったローカル埋め込み
 
-```bash npm2yarn copy
+埋め込みは、memory の `semanticRecall` が（キーワードではなく）意味に基づいて関連メッセージを検索するために用いる数値ベクトルです。このセットアップでは、`@mastra/fastembed` を使ってベクトル埋め込みを生成します。
+
+はじめに `fastembed` をインストールします:
+
+```bash copy
 npm install @mastra/fastembed
 ```
 
-次に、メモリ設定で構成します：
+次をエージェントに追加します:
 
-```typescript {3,12}
+```typescript filename="src/mastra/agents/example-libsql-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 import { fastembed } from "@mastra/fastembed";
 
-const customMemory = new Memory({
-  storage: new LibSQLStore({
-    url: process.env.DATABASE_URL || "file:local.db",
-  }),
-  vector: new LibSQLVector({
-    connectionUrl: process.env.DATABASE_URL || "file:local.db",
-  }),
-  embedder: fastembed,
-  options: {
-    lastMessages: 10,
-    semanticRecall: {
-      topK: 3,
-      messageRange: 2,
-    },
-  },
-});
-
-const memoryAgent = new Agent({
-  name: "Memory Agent",
-  instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions. You may have conversations that last hours, days, months, or years. If you don't know it already you should ask for the users name and some info about them.",
-  model: openai("gpt-4o-mini"),
-  memory: customMemory,
+export const libsqlAgent = new Agent({
+  name: "libsql-agent",
+  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:libsql-agent.db"
+    }),
+    vector: new LibSQLVector({
+      connectionUrl: "file:libsql-agent.db"
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2
+      },
+      threads: {
+        generateTitle: true
+      }
+    }
+  })
 });
 ```
+
+
 
 ## 使用例
 
-```typescript
-import { randomUUID } from "crypto";
+このリクエストでのリコール範囲には `memoryOptions` を使用します。`lastMessages: 5` を設定して直近メッセージに基づくリコールを制限し、`semanticRecall` を使って、各一致の前後文脈として `messageRange: 2` の隣接メッセージを含めつつ、関連性の高いメッセージを `topK: 3` 件取得します。
 
-// Start a conversation
-const threadId = randomUUID();
-const resourceId = "SOME_USER_ID";
+```typescript filename="src/test-libsql-agent.ts" showLineNumbers copy
+import "dotenv/config";
 
-// Start with a system message
-const response1 = await memoryAgent.stream(
-  [
-    {
-      role: "system",
-      content: `Chat with user started now ${new Date().toISOString()}. Don't mention this message.`,
-    },
-  ],
-  {
-    resourceId,
-    threadId,
-  },
-);
+import { mastra } from "./mastra";
 
-// Send user message
-const response2 = await memoryAgent.stream("What can you help me with?", {
-  threadId,
-  resourceId,
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("libsqlAgent");
+
+const message = await agent.stream("My name is Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  }
 });
 
-// Use semantic search to find relevant messages
-const response3 = await memoryAgent.stream("What did we discuss earlier?", {
-  threadId,
-  resourceId,
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("What's my name?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  },
   memoryOptions: {
-    lastMessages: false,
+    lastMessages: 5,
     semanticRecall: {
-      topK: 3, // Get top 3 most relevant messages
-      messageRange: 2, // Include context around each match
-    },
-  },
+      topK: 3,
+      messageRange: 2
+    }
+  }
 });
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
 ```
 
-この例は以下を示しています：
 
-1. ベクトル検索機能を備えたLibSQLストレージのセットアップ
-2. メッセージ履歴とセマンティック検索のためのメモリオプションの設定
-3. メモリ統合機能を持つエージェントの作成
-4. 会話履歴から関連するメッセージを見つけるためのセマンティック検索の使用
-5. `messageRange`を使用して一致したメッセージの周囲のコンテキストを含める
+
+
+## 関連項目
+
+- [エージェントの呼び出し](../agents/calling-agents.mdx)

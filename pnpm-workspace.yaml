@@ -8,8 +8,6 @@ packages:
   - "client-sdks/*"
   - "integrations/*"
   - "examples/dane"
-  - "packages/*/integration-tests"
-  - "packages/*/integration-tests-v5"
   - "auth/*"
   - "observability/*"
   - "explorations/longmemeval"

@@ -142,10 +142,19 @@ export class SensitiveDataFilter implements AISpanProcessor {
   }
 
   /**
-   * Check whether a normalized key matches any sensitive field substring.
+   * Check whether a normalized key exactly matches any sensitive field.
+   * Both key and sensitive fields are normalized by removing all non-alphanumeric
+   * characters and converting to lowercase before comparison.
+   *
+   * Examples:
+   * - "api_key", "api-key", "ApiKey" all normalize to "apikey" → MATCHES "apikey"
+   * - "promptTokens", "prompt_tokens" normalize to "prompttokens" → DOES NOT MATCH "token"
    */
   private isSensitive(normalizedKey: string): boolean {
-    return this.sensitiveFields.some(f => normalizedKey.includes(f));
+    return this.sensitiveFields.some(sensitiveField => {
+      // Simple case-insensitive match after normalization
+      return normalizedKey === sensitiveField;
+    });
   }
 
   /**

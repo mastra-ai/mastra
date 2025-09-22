@@ -1,0 +1,128 @@
+---
+title: "MastraAuthFirebase Class"
+description: "API reference for the MastraAuthFirebase class, which authenticates Mastra applications using Firebase Authentication."
+---
+
+# MastraAuthFirebase Class
+
+The `MastraAuthFirebase` class provides authentication for Mastra using Firebase Authentication. It verifies incoming requests using Firebase ID tokens and integrates with the Mastra server using the `experimental_auth` option.
+
+## Usage examples
+
+### Basic usage with environment variables
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthFirebase } from '@mastra/auth-firebase';
+
+// Automatically uses FIREBASE_SERVICE_ACCOUNT and FIRESTORE_DATABASE_ID env vars
+export const mastra = new Mastra({
+  // ..
+  server: {
+    experimental_auth: new MastraAuthFirebase(),
+  },
+});
+```
+
+### Custom configuration
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthFirebase } from '@mastra/auth-firebase';
+
+export const mastra = new Mastra({
+  // ..
+  server: {
+    experimental_auth: new MastraAuthFirebase({
+      serviceAccount: "/path/to/service-account-key.json",
+      databaseId: "your-database-id"
+    }),
+  },
+});
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "serviceAccount",
+      type: "string",
+      description: "Path to the Firebase service account JSON file. This file contains the credentials needed to verify Firebase ID tokens on the server side.",
+      isOptional: true,
+      defaultValue: "process.env.FIREBASE_SERVICE_ACCOUNT"
+    },
+    {
+      name: "databaseId",
+      type: "string",
+      description: "The Firestore database ID to use. Typically '(default)' for the default database.",
+      isOptional: true,
+      defaultValue: "process.env.FIRESTORE_DATABASE_ID || process.env.FIREBASE_DATABASE_ID"
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Custom name for the auth provider instance.",
+      isOptional: true,
+      defaultValue: '"firebase"'
+    },
+    {
+      name: "authorizeUser",
+      type: "(user: FirebaseUser) => Promise<boolean> | boolean",
+      description: "Custom authorization function to determine if a user should be granted access. Called after token verification. By default, checks for the presence of a document in the 'user_access' collection keyed by the user's UID.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Environment Variables
+
+The following environment variables are automatically used when constructor options are not provided:
+
+<PropertiesTable
+  content={[
+    {
+      name: "FIREBASE_SERVICE_ACCOUNT",
+      type: "string",
+      description: "Path to Firebase service account JSON file. Used if serviceAccount option is not provided.",
+      isOptional: true,
+    },
+    {
+      name: "FIRESTORE_DATABASE_ID",
+      type: "string",
+      description: "Firestore database ID. Primary environment variable for database configuration.",
+      isOptional: true,
+    },
+    {
+      name: "FIREBASE_DATABASE_ID",
+      type: "string",
+      description: "Alternative environment variable for Firestore database ID. Used if FIRESTORE_DATABASE_ID is not set.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Default Authorization Behavior
+
+By default, `MastraAuthFirebase` uses Firestore to manage user access:
+
+1. After successfully verifying a Firebase ID token, the `authorizeUser` method is called
+2. It checks for the existence of a document in the `user_access` collection with the user's UID as the document ID
+3. If the document exists, the user is authorized; otherwise, access is denied
+4. The Firestore database used is determined by the `databaseId` parameter or environment variables
+
+## Firebase User Type
+
+The `FirebaseUser` type used in the `authorizeUser` function corresponds to Firebase's `DecodedIdToken` interface, which includes:
+
+- `uid`: The user's unique identifier
+- `email`: The user's email address (if available)
+- `email_verified`: Whether the email is verified
+- `name`: The user's display name (if available)
+- `picture`: URL to the user's profile picture (if available)
+- `auth_time`: When the user authenticated
+- And other standard JWT claims
+
+## Related
+
+[MastraAuthFirebase Class](/docs/auth/firebase.mdx)

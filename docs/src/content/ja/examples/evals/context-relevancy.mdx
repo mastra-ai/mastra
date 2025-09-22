@@ -1,169 +1,198 @@
 ---
 title: "例: コンテキスト関連性 | Evals | Mastra Docs"
-description: Context Relevancyメトリクスを使用して、クエリに対するコンテキスト情報の関連性を評価する例。
+description: クエリに対するコンテキスト情報の関連度を評価するために、Context Relevancy メトリクスを使用する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
 
-# コンテキスト関連性
 
-この例では、Mastra のコンテキスト関連性指標を使用して、コンテキスト情報が特定のクエリにどれだけ関連しているかを評価する方法を示します。
 
-## 概要
+# コンテキスト適合性の評価
 
-この例では、以下の方法を示します。
+<ScorerCallout />
 
-1. Context Relevancyメトリックの設定
-2. コンテキストの関連性を評価する
-3. 関連性スコアを分析する
-4. 異なる関連性レベルへの対応
+`ContextRelevancyMetric` を使って、取得したコンテキストが元のクエリにどれだけ適合しているかを評価します。このメトリックは `query` と `response` を入力として受け取り、スコアと、その理由を含む `info` オブジェクトを返します。
 
-## セットアップ
 
-### 環境設定
 
-環境変数を必ず設定してください：
+## インストール
 
-```bash filename=".env"
-OPENAI_API_KEY=your_api_key_here
+```bash copy
+npm install @mastra/evals
 ```
 
-### 依存関係
 
-必要な依存関係をインポートします：
 
-```typescript copy showLineNumbers filename="src/index.ts"
+## 高関連性の例
+
+この例では、応答はクエリに直接関係するコンテキストのみを使用します。すべてのコンテキスト項目が回答を支えており、結果として関連性スコアは満点になります。
+
+```typescript filename="src/example-high-context-relevancy.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { ContextRelevancyMetric } from "@mastra/evals/llm";
+
+const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
+  context: [
+    "Einstein won the Nobel Prize for his discovery of the photoelectric effect.",
+    "He published his theory of relativity in 1905.",
+    "His work revolutionized modern physics."
+  ]
+});
+
+const query = "What were some of Einstein's achievements?";
+const response = "Einstein won the Nobel Prize for discovering the photoelectric effect and published his groundbreaking theory of relativity.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
 ```
 
-## 使用例
+### 高関連性の出力
 
-### 高い関連性の例
+すべてのコンテキスト文が、無関係な情報を含めずにクエリへの回答に直接寄与しているため、この出力は満点となります。
 
-すべてのコンテキストが関連している応答を評価します：
-
-```typescript copy showLineNumbers{5} filename="src/index.ts"
-const context1 = [
-  "Einstein won the Nobel Prize for his discovery of the photoelectric effect.",
-  "He published his theory of relativity in 1905.",
-  "His work revolutionized modern physics.",
-];
-
-const metric1 = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
-  context: context1,
-});
-
-const query1 = "What were some of Einstein's achievements?";
-const response1 =
-  "Einstein won the Nobel Prize for discovering the photoelectric effect and published his groundbreaking theory of relativity.";
-
-console.log("Example 1 - High Relevancy:");
-console.log("Context:", context1);
-console.log("Query:", query1);
-console.log("Response:", response1);
-
-const result1 = await metric1.measure(query1, response1);
-console.log("Metric Result:", {
-  score: result1.score,
-  reason: result1.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 1, reason: 'The context uses all relevant information and does not include any irrelevant information.' }
+```typescript
+{
+  score: 1,
+  info: {
+    reason: "The score is 1 because the retrieval context directly addresses the input by highlighting Einstein's significant achievements, making it entirely relevant."
+  }
+}
 ```
 
-### 関連性が混在している例
 
-一部のコンテキストが無関係である応答を評価します：
 
-```typescript copy showLineNumbers{31} filename="src/index.ts"
-const context2 = [
-  "Solar eclipses occur when the Moon blocks the Sun.",
-  "The Moon moves between the Earth and Sun during eclipses.",
-  "The Moon is visible at night.",
-  "The Moon has no atmosphere.",
-];
+## 関連性が混在する例
 
-const metric2 = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
-  context: context2,
+この例では、応答に1つ以上の関連するコンテキスト項目が使われていますが、無関係または有用性の低い情報も含まれています。これにより、全体の関連性スコアが低下します。
+
+```typescript filename="src/example-mixed-context-relevancy.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextRelevancyMetric } from "@mastra/evals/llm";
+
+const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
+  context: [
+    "Solar eclipses occur when the Moon blocks the Sun.",
+    "The Moon moves between the Earth and Sun during eclipses.",
+    "The Moon is visible at night.",
+    "The Moon has no atmosphere."
+  ]
 });
 
-const query2 = "What causes solar eclipses?";
-const response2 =
+const query = "What causes solar eclipses?";
+const response =
   "Solar eclipses happen when the Moon moves between Earth and the Sun, blocking sunlight.";
 
-console.log("Example 2 - Mixed Relevancy:");
-console.log("Context:", context2);
-console.log("Query:", query2);
-console.log("Response:", response2);
+const result = await metric.measure(query, response);
 
-const result2 = await metric2.measure(query2, response2);
-console.log("Metric Result:", {
-  score: result2.score,
-  reason: result2.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 0.5, reason: 'The context uses some relevant information and includes some irrelevant information.' }
+console.log(result);
 ```
 
-### 低い関連性の例
+### 関連性が混在する出力
 
-ほとんどのコンテキストが無関係である応答を評価します：
+この出力は、日食の仕組みに関する関連コンテキストを含みつつ、全体的な関連性を薄める無関係な事実も含んでいるため、中程度のスコアになります。
 
-```typescript copy showLineNumbers{57} filename="src/index.ts"
-const context3 = [
-  "The Great Barrier Reef is in Australia.",
-  "Coral reefs need warm water to survive.",
-  "Marine life depends on coral reefs.",
-  "The capital of Australia is Canberra.",
-];
-
-const metric3 = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
-  context: context3,
-});
-
-const query3 = "What is the capital of Australia?";
-const response3 = "The capital of Australia is Canberra.";
-
-console.log("Example 3 - Low Relevancy:");
-console.log("Context:", context3);
-console.log("Query:", query3);
-console.log("Response:", response3);
-
-const result3 = await metric3.measure(query3, response3);
-console.log("Metric Result:", {
-  score: result3.score,
-  reason: result3.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 0.12, reason: 'The context only has one relevant piece, while most of the context is irrelevant.' }
+```typescript
+{
+  score: 0.5,
+  info: {
+    reason: "スコアが0.5であるのは、取得されたコンテキストに入力と無関係な記述（例：「The Moon is visible at night」「The Moon has no atmosphere」）が含まれており、これらは日食の原因を説明していないためです。関連情報の不足が、文脈的な関連性スコアを大きく下げています。"
+  }
+}
 ```
+
+
+
+## 関連性が低い例
+
+この例では、文脈の大半がクエリと無関係です。関連する項目は1つだけのため、関連性スコアは低くなります。
+
+```typescript filename="src/example-low-context-relevancy.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextRelevancyMetric } from "@mastra/evals/llm";
+
+const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
+  context: [
+    "The Great Barrier Reef is in Australia.",
+    "Coral reefs need warm water to survive.",
+    "Marine life depends on coral reefs.",
+    "The capital of Australia is Canberra."
+  ]
+});
+
+const query = "What is the capital of Australia?";
+const response = "The capital of Australia is Canberra.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 関連性が低い出力
+
+この出力は、クエリに関連する文脈項目が1つしかないためスコアが低くなります。残りの項目は、応答を裏付けない無関係な情報を含んでいます。
+
+```typescript
+{
+  score: 0.25,
+  info: {
+    reason: "The score is 0.25 because the retrieval context contains statements that are completely irrelevant to the input question about the capital of Australia. For instance, 'The Great Barrier Reef is in Australia' and 'Coral reefs need warm water to survive' do not provide any geographical or political information related to the capital, thus failing to address the inquiry."
+  }
+}
+```
+
+
+
+## メトリクスの設定
+
+クエリに関連する背景情報を表す `context` 配列を指定して、`ContextRelevancyMetric` のインスタンスを作成できます。スコアの範囲を定義する `scale` などのオプションパラメータも設定できます。
+
+```typescript showLineNumbers copy
+const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
+  context: [""],
+  scale: 1
+});
+```
+
+> 設定オプションの全一覧については、[ContextRelevancyMetric](/reference/evals/context-relevancy.mdx) を参照してください。
+
+
 
 ## 結果の理解
 
-この指標は以下を提供します：
+`ContextRelevancyMetric` は次の形式の結果を返します:
 
-1. 0から1の間の関連性スコア：
-
-   - 1.0: 完全な関連性 - すべてのコンテキストがクエリに直接関連
-   - 0.7-0.9: 高い関連性 - ほとんどのコンテキストがクエリに関連
-   - 0.4-0.6: 混合された関連性 - 一部のコンテキストがクエリに関連
-   - 0.1-0.3: 低い関連性 - わずかなコンテキストがクエリに関連
-   - 0.0: 関連性なし - クエリに関連するコンテキストが存在しない
-
-2. スコアの詳細な理由付け（以下の分析を含む）：
-   - 入力クエリへの関連性
-   - コンテキストからの文の抽出
-   - 応答への有用性
-   - 全体的なコンテキストの質
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-relevancy"
+```typescript
+{
+  score: number,
+  info: {
+    reason: string
   }
+}
+```
+
+### 関連度スコア
+
+関連度スコアは 0 から 1 の範囲です:
+
+- **1.0**: 完全に関連 — すべてのコンテキストがクエリに直接関連。
+- **0.7–0.9**: 高い関連 — ほとんどのコンテキストがクエリに関連。
+- **0.4–0.6**: 一部関連 — 一部のコンテキストがクエリに関連。
+- **0.1–0.3**: 低い関連 — ごく一部のコンテキストのみがクエリに関連。
+- **0.0**: 無関連 — クエリに関連するコンテキストがない。
+
+### 関連情報
+
+スコアの根拠となる説明。以下の詳細を含みます:
+
+- 入力クエリとの関連性
+- コンテキストからの記述の抽出
+- 応答に対する有用性
+- コンテキストの総合的な品質
+
+<GithubLink
+  outdated={true}
+  marginTop="mt-16"
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-relevancy"
 />
