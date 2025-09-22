@@ -219,21 +219,10 @@ export function validateTrace(trace: AITraceRecord): void {
  * Find the most recent LLM span that contains conversation history
  */
 function findPrimaryLLMSpan(spanTree: SpanTree, rootAgentSpan: AISpanRecord): AISpanRecord {
-  // First try direct children of root agent
   const directLLMSpans = getChildrenOfType<AISpanRecord>(spanTree, rootAgentSpan.spanId, AISpanType.LLM_GENERATION);
-
   if (directLLMSpans.length > 0) {
-    return directLLMSpans[directLLMSpans.length - 1]!; // Take the last (most recent) one
-  }
-
-  // If no direct children, search in sub-agent spans
-  const subAgentSpans = getChildrenOfType<AISpanRecord>(spanTree, rootAgentSpan.spanId, AISpanType.AGENT_RUN);
-
-  for (const subAgent of subAgentSpans) {
-    const subLLMSpans = getChildrenOfType<AISpanRecord>(spanTree, subAgent.spanId, AISpanType.LLM_GENERATION);
-    if (subLLMSpans.length > 0) {
-      return subLLMSpans[subLLMSpans.length - 1]!;
-    }
+    // There should only be one LLM generation span per agent run which is a direct child of the root agent span
+    return directLLMSpans[0]!;
   }
 
   throw new Error('No LLM generation span found in trace');
@@ -254,13 +243,8 @@ export function transformTraceToScorerInput(trace: AITraceRecord): ScorerRunInpu
       throw new Error('No root agent_run span found in trace');
     }
 
-    // Find the primary LLM generation span
     const primaryLLMSpan = findPrimaryLLMSpan(spanTree, rootAgentSpan);
-
-    // Extract input messages from agent span
     const inputMessages = extractInputMessages(rootAgentSpan);
-
-    // Extract system messages from LLM span
     const systemMessages = extractSystemMessages(primaryLLMSpan);
 
     // Extract remembered messages from LLM span (excluding current input)
@@ -272,7 +256,7 @@ export function transformTraceToScorerInput(trace: AITraceRecord): ScorerRunInpu
       inputMessages: inputMessages as UIMessageWithMetadata[],
       rememberedMessages: rememberedMessages as UIMessageWithMetadata[],
       systemMessages,
-      taggedSystemMessages: {}, // Not available in traces
+      taggedSystemMessages: {}, // Todo: Support tagged system messages
     };
   } catch (error) {
     throw new Error(
