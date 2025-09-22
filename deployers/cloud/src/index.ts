@@ -69,7 +69,7 @@ import { HttpTransport } from '@mastra/loggers/http';
 import { evaluate } from '@mastra/core/eval';
 import { AvailableHooks, registerHook } from '@mastra/core/hooks';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
-import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces/scoreTracesWorkflow';
+import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces';
 const startTime = process.env.RUNNER_START_TIME ? new Date(process.env.RUNNER_START_TIME).getTime() : Date.now();
 const createNodeServerStartTime = Date.now();
 
