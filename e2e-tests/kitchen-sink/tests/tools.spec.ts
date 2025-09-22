@@ -9,7 +9,7 @@ test('has valid links', async ({ page }) => {
 
   await el.click();
 
-  await expect(page).toHaveURL('http://localhost:4111/tools/weatherAgent/get-weather');
+  await expect(page).toHaveURL('http://localhost:4111/tools/all/get-weather');
   await expect(page.locator('h2')).toHaveText('get-weather');
 });
 
