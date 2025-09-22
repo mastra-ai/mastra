@@ -16,7 +16,6 @@ import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
 import type { NewAgentNetwork } from '../network/vNext';
 import type { MastraScorer } from '../scores';
-import { scoreTracesWorkflow } from '../scores/scoreTraces/scoreTracesWorkflow';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -491,19 +490,6 @@ do:
       });
     }
 
-    // These workflows are used internally by Mastra and are not part of the user's workflows
-    const internalWorkflows = {
-      scoreTracesWorkflow,
-    };
-    Object.entries(internalWorkflows).forEach(([key, workflow]) => {
-      workflow.__registerMastra(this);
-      workflow.__registerPrimitives({
-        logger: this.getLogger(),
-      });
-      // @ts-ignore
-      this.#internalMastraWorkflows[key] = workflow;
-    });
-
     if (config?.server) {
       this.#server = config.server;
     }
@@ -697,6 +683,15 @@ do:
     }
 
     return workflow;
+  }
+
+  __registerInternalWorkflow(workflow: Workflow) {
+    workflow.__registerMastra(this);
+    workflow.__registerPrimitives({
+      logger: this.getLogger(),
+      storage: this.storage,
+    });
+    this.#internalMastraWorkflows[workflow.id] = workflow;
   }
 
   __hasInternalWorkflow(id: string): boolean {
