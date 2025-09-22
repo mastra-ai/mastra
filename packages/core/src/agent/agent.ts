@@ -156,7 +156,7 @@ export class Agent<
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
-  #workflows?: DynamicArgument<Record<string, Workflow>>;
+  #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
   #defaultGenerateOptions: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptions: DynamicArgument<AgentStreamOptions>;
   #defaultVNextStreamOptions: DynamicArgument<AgentExecutionOptions<any>>;
@@ -429,7 +429,7 @@ export class Agent<
 
   public async getWorkflows({
     runtimeContext = new RuntimeContext(),
-  }: { runtimeContext?: RuntimeContext } = {}): Promise<Record<string, Workflow>> {
+  }: { runtimeContext?: RuntimeContext } = {}): Promise<Record<string, Workflow<any, any, any, any, any, any>>> {
     let workflowRecord;
     if (typeof this.#workflows === 'function') {
       workflowRecord = await Promise.resolve(this.#workflows({ runtimeContext, mastra: this.#mastra }));
