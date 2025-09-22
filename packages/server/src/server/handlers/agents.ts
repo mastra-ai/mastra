@@ -36,6 +36,9 @@ export async function getSerializedAgentTools(tools: Record<string, any>) {
     if (_tool.inputSchema) {
       if (_tool.inputSchema?.jsonSchema) {
         inputSchemaForReturn = stringify(_tool.inputSchema.jsonSchema);
+      } else if (_tool.inputSchema.$schema || (_tool.inputSchema.type && !_tool.inputSchema._def)) {
+        // Already a JSON Schema object (has '$schema' property or has 'type' but not '_def' which is Zod-specific)
+        inputSchemaForReturn = stringify(_tool.inputSchema);
       } else {
         inputSchemaForReturn = stringify(zodToJsonSchema(_tool.inputSchema));
       }
@@ -46,6 +49,9 @@ export async function getSerializedAgentTools(tools: Record<string, any>) {
     if (_tool.outputSchema) {
       if (_tool.outputSchema?.jsonSchema) {
         outputSchemaForReturn = stringify(_tool.outputSchema.jsonSchema);
+      } else if (_tool.outputSchema.$schema || (_tool.outputSchema.type && !_tool.outputSchema._def)) {
+        // Already a JSON Schema object (has '$schema' property or has 'type' but not '_def' which is Zod-specific)
+        outputSchemaForReturn = stringify(_tool.outputSchema);
       } else {
         outputSchemaForReturn = stringify(zodToJsonSchema(_tool.outputSchema));
       }
@@ -486,20 +492,20 @@ export async function streamGenerateLegacyHandler({
 
     const streamResponse = rest.output
       ? streamResult.toTextStreamResponse({
-          headers: {
-            'Transfer-Encoding': 'chunked',
-          },
-        })
+        headers: {
+          'Transfer-Encoding': 'chunked',
+        },
+      })
       : streamResult.toDataStreamResponse({
-          sendUsage: true,
-          sendReasoning: true,
-          getErrorMessage: (error: any) => {
-            return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
-          },
-          headers: {
-            'Transfer-Encoding': 'chunked',
-          },
-        });
+        sendUsage: true,
+        sendReasoning: true,
+        getErrorMessage: (error: any) => {
+          return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
+        },
+        headers: {
+          'Transfer-Encoding': 'chunked',
+        },
+      });
 
     return streamResponse;
   } catch (error) {

@@ -1,8 +1,8 @@
 import { describe, it, expect, } from "vitest";
 import { createAgent, tool } from "langchain";
 import { z } from "zod";
-import { toMastraCompatible, convertExternalAgentResult } from "./index";
 import { fail } from "assert";
+import { toMastraCompatible, convertExternalAgentResult } from "./langchain";
 
 describe("LangChain Agent Compatibility", () => {
     describe("getTools", () => {
