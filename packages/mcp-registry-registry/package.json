@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-registry-registry",
-  "version": "0.10.15",
+  "version": "0.10.16-alpha.0",
   "description": "MCP server for registry registry services.",
   "type": "module",
   "main": "dist/index.js",
