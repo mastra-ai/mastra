@@ -1,0 +1,162 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model WorkflowSnapshot {
+  id           String   @id @default(uuid())
+  workflowName String   @map("workflow_name")
+  runId        String   @map("run_id")
+  resourceId   String?  @map("resourceId")
+  snapshot     Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([workflowName, runId])
+  @@map("mastra_workflow_snapshot")
+}
+
+model Eval {
+  id          String   @id @default(uuid())
+  input       String   @db.Text
+  output      String   @db.Text
+  result      Json
+  agentName   String   @map("agent_name")
+  metricName  String   @map("metric_name")
+  instructions String  @db.Text
+  testInfo    Json?    @map("test_info")
+  globalRunId String   @map("global_run_id")
+  runId       String   @map("run_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("mastra_evals")
+}
+
+model Thread {
+  id         String    @id @default(uuid())
+  resourceId String    @map("resourceId")
+  title      String    @db.Text
+  metadata   String?   @db.Text
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  messages   Message[]
+
+  @@index([resourceId])
+  @@map("mastra_threads")
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  threadId   String   @map("thread_id")
+  thread     Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  content    String   @db.Text
+  role       String   @db.Text
+  type       String   @db.Text
+  resourceId String?  @map("resourceId")
+  createdAt  DateTime @default(now())
+
+  @@index([threadId])
+  @@index([resourceId])
+  @@map("mastra_messages")
+}
+
+model Trace {
+  id           String   @id @default(uuid())
+  parentSpanId String?  @map("parentSpanId") @db.Text
+  name         String   @db.Text
+  traceId      String   @map("traceId") @db.Text
+  scope        String   @db.Text
+  kind         Int
+  attributes   Json?
+  status       Json?
+  events       Json?
+  links        Json?
+  other        String?  @db.Text
+  startTime    BigInt   @map("startTime")
+  endTime      BigInt   @map("endTime")
+  createdAt    DateTime @default(now())
+
+  @@index([traceId])
+  @@map("mastra_traces")
+}
+
+model Resource {
+  id            String   @id @default(uuid())
+  workingMemory String?  @map("workingMemory") @db.Text
+  metadata      Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("mastra_resources")
+}
+
+model Scorer {
+  id                   String   @id @default(uuid())
+  scorerId             String?  @map("scorerId") @db.Text
+  traceId              String?  @map("traceId") @db.Text
+  runId                String   @map("runId") @db.Text
+  scorer               Json?
+  preprocessStepResult Json?    @map("preprocessStepResult")
+  extractStepResult    Json?    @map("extractStepResult")
+  analyzeStepResult    Json?    @map("analyzeStepResult")
+  score                Float
+  reason               String?  @db.Text
+  metadata             Json?
+  preprocessPrompt     String?  @map("preprocessPrompt") @db.Text
+  extractPrompt        String?  @map("extractPrompt") @db.Text
+  generateScorePrompt  String?  @map("generateScorePrompt") @db.Text
+  generateReasonPrompt String?  @map("generateReasonPrompt") @db.Text
+  analyzePrompt        String?  @map("analyzePrompt") @db.Text
+  reasonPrompt         String?  @map("reasonPrompt") @db.Text // Deprecated
+  input                Json
+  output               Json
+  additionalContext    Json?    @map("additionalContext")
+  runtimeContext       Json?    @map("runtimeContext")
+  entityType           String?  @map("entityType") @db.Text
+  entity               Json?
+  entityId             String?  @map("entityId") @db.Text
+  source               String   @db.Text
+  resourceId           String?  @map("resourceId") @db.Text
+  threadId             String?  @map("threadId") @db.Text
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([scorerId])
+  @@index([runId])
+  @@index([entityId, entityType])
+  @@index([resourceId])
+  @@index([threadId])
+  @@map("mastra_scorers")
+}
+
+model AISpan {
+  traceId      String    @map("traceId") @db.Text
+  spanId       String    @map("spanId") @db.Text
+  parentSpanId String?   @map("parentSpanId") @db.Text
+  name         String    @db.Text
+  scope        Json?
+  spanType     Int       @map("spanType")
+  attributes   Json?
+  metadata     Json?
+  links        Json?
+  input        Json?
+  output       Json?
+  error        Json?
+  startedAt    DateTime  @map("startedAt")
+  endedAt      DateTime? @map("endedAt")
+  createdAt    DateTime  @default(now()) @map("createdAt")
+  updatedAt    DateTime? @updatedAt @map("updatedAt")
+  isEvent      Boolean   @default(false) @map("isEvent")
+
+  @@id([traceId, spanId])
+  @@index([traceId])
+  @@index([parentSpanId])
+  @@map("mastra_ai_spans")
+}
