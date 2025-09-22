@@ -67,6 +67,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private vectorExtensionInstalled: boolean | undefined = undefined;
   private vectorExtensionSchema: string | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
+  private cacheWarmupPromise: Promise<void> | null = null;
 
   constructor({
     connectionString,
@@ -105,19 +106,28 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           },
         }) ?? basePool;
 
-      void (async () => {
-        // warm the created indexes cache so we don't need to check if indexes exist every time
-        const existingIndexes = await this.listIndexes();
-        void existingIndexes.map(async indexName => {
-          const info = await this.getIndexInfo({ indexName });
-          const key = await this.getIndexCacheKey({
-            indexName,
-            metric: info.metric,
-            dimension: info.dimension,
-            type: info.type,
-          });
-          this.createdIndexes.set(indexName, key);
-        });
+      // Warm the created indexes cache in background so we don't need to check if indexes exist every time
+      // Store the promise so we can wait for it during disconnect to avoid "pool already closed" errors
+      this.cacheWarmupPromise = (async () => {
+        try {
+          const existingIndexes = await this.listIndexes();
+          await Promise.all(
+            existingIndexes.map(async indexName => {
+              const info = await this.getIndexInfo({ indexName });
+              const key = await this.getIndexCacheKey({
+                indexName,
+                metric: info.metric,
+                dimension: info.dimension,
+                type: info.type,
+              });
+              this.createdIndexes.set(indexName, key);
+            }),
+          );
+        } catch (error) {
+          // Don't throw - cache warming is optional optimization
+          // If it fails (e.g., pool closed early), just log and continue
+          this.logger?.debug('Cache warming skipped or failed', { error });
+        }
       })();
     } catch (error) {
       throw new MastraError(
@@ -942,6 +952,16 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   }
 
   async disconnect() {
+    // Wait for cache warmup to complete before closing pool
+    // This prevents "Cannot use a pool after calling end on the pool" errors
+    if (this.cacheWarmupPromise) {
+      try {
+        await this.cacheWarmupPromise;
+      } catch {
+        // Ignore errors - we're shutting down anyway
+      }
+    }
+
     await this.pool.end();
   }
 
