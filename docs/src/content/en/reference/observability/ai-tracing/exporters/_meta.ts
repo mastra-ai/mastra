@@ -1,9 +1,9 @@
 const meta = {
-  "braintrust": "Braintrust",
+  braintrust: "Braintrust",
   "cloud-exporter": "CloudExporter",
   "console-exporter": "ConsoleExporter",
   "default-exporter": "DefaultExporter",
-  "langfuse": "Langfuse",
+  langfuse: "Langfuse",
 };
 
 export default meta;

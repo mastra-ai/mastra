@@ -63,14 +63,14 @@ When a sensitive field is detected, its value is replaced with `[REDACTED]` by d
 You can customize which fields are redacted and how redaction appears:
 
 ```ts filename="src/mastra/index.ts" showLineNumbers copy
-import { SensitiveDataFilter } from '@mastra/core/ai-tracing';
+import { SensitiveDataFilter, DefaultExporter } from '@mastra/core/ai-tracing';
 
 export const mastra = new Mastra({
   observability: {
     configs: {
       production: {
         serviceName: 'my-service',
-        exporters: [langfuseExporter],
+        exporters: [new DefaultExporter()],
         processors: [
           new SensitiveDataFilter({
             // Add custom sensitive fields

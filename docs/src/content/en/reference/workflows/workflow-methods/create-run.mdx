@@ -29,22 +29,6 @@ await workflow.createRunAsync();
       description: "Optional custom identifier for the workflow run",
       isOptional: true,
     },
-    {
-      name: "tracingContext",
-      type: "TracingContext",
-      isOptional: true,
-      description: "AI tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
-      properties: [
-        {
-          parameters: [{
-            name: "currentSpan",
-            type: "AISpan",
-            isOptional: true,
-            description: "Current AI span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution."
-          }]
-        }
-      ]
-    },
   ]}
 />
 

@@ -833,62 +833,74 @@ export const redirectList = [
   // OTLP Tracing provider redirects
   {
     source: "/:locale/reference/observability/providers/arize-ax",
-    destination: "/:locale/reference/observability/otlp-tracing/providers/arize-ax",
+    destination:
+      "/:locale/reference/observability/otlp-tracing/providers/arize-ax",
     permanent: true,
   },
   {
     source: "/:locale/reference/observability/providers/arize-phoenix",
-    destination: "/:locale/reference/observability/otlp-tracing/providers/arize-phoenix",
+    destination:
+      "/:locale/reference/observability/otlp-tracing/providers/arize-phoenix",
     permanent: true,
   },
   {
     source: "/:locale/reference/observability/providers/braintrust",
-    destination: "/:locale/reference/observability/otlp-tracing/providers/braintrust",
+    destination:
+      "/:locale/reference/observability/otlp-tracing/providers/braintrust",
     permanent: true,
   },
   {
     source: "/:locale/reference/observability/providers/dash0",
-    destination: "/:locale/reference/observability/otlp-tracing/providers/dash0",
+    destination:
+      "/:locale/reference/observability/otlp-tracing/providers/dash0",
     permanent: true,
   },
   {
     source: "/:locale/reference/observability/providers/keywordsai",
-    destination: "/:locale/reference/observability/otlp-tracing/providers/keywordsai",
+    destination:
+      "/:locale/reference/observability/otlp-tracing/providers/keywordsai",
     permanent: true,
   },
   {
     source: "/:locale/reference/observability/providers/laminar",
-    destination: "/:locale/reference/observability/otlp-tracing/providers/laminar",
+    destination:
+      "/:locale/reference/observability/otlp-tracing/providers/laminar",
     permanent: true,
   },
   {
     source: "/:locale/reference/observability/providers/langfuse",
-    destination: "/:locale/reference/observability/otlp-tracing/providers/langfuse",
+    destination:
+      "/:locale/reference/observability/otlp-tracing/providers/langfuse",
     permanent: true,
   },
   {
     source: "/:locale/reference/observability/providers/langsmith",
-    destination: "/:locale/reference/observability/otlp-tracing/providers/langsmith",
+    destination:
+      "/:locale/reference/observability/otlp-tracing/providers/langsmith",
     permanent: true,
   },
   {
     source: "/:locale/reference/observability/providers/langwatch",
-    destination: "/:locale/reference/observability/otlp-tracing/providers/langwatch",
+    destination:
+      "/:locale/reference/observability/otlp-tracing/providers/langwatch",
     permanent: true,
   },
   {
     source: "/:locale/reference/observability/providers/new-relic",
-    destination: "/:locale/reference/observability/otlp-tracing/providers/new-relic",
+    destination:
+      "/:locale/reference/observability/otlp-tracing/providers/new-relic",
     permanent: true,
   },
   {
     source: "/:locale/reference/observability/providers/signoz",
-    destination: "/:locale/reference/observability/otlp-tracing/providers/signoz",
+    destination:
+      "/:locale/reference/observability/otlp-tracing/providers/signoz",
     permanent: true,
   },
   {
     source: "/:locale/reference/observability/providers/traceloop",
-    destination: "/:locale/reference/observability/otlp-tracing/providers/traceloop",
+    destination:
+      "/:locale/reference/observability/otlp-tracing/providers/traceloop",
     permanent: true,
   },
   {

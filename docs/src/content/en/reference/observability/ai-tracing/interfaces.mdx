@@ -35,6 +35,31 @@ interface AITracing {
 }
 ```
 
+### AISpanTypeMap
+
+Mapping of span types to their corresponding attribute interfaces.
+
+```typescript
+interface AISpanTypeMap {
+  AGENT_RUN: AgentRunAttributes;
+  WORKFLOW_RUN: WorkflowRunAttributes;
+  LLM_GENERATION: LLMGenerationAttributes;
+  LLM_CHUNK: LLMChunkAttributes;
+  TOOL_CALL: ToolCallAttributes;
+  MCP_TOOL_CALL: MCPToolCallAttributes;
+  WORKFLOW_STEP: WorkflowStepAttributes;
+  WORKFLOW_CONDITIONAL: WorkflowConditionalAttributes;
+  WORKFLOW_CONDITIONAL_EVAL: WorkflowConditionalEvalAttributes;
+  WORKFLOW_PARALLEL: WorkflowParallelAttributes;
+  WORKFLOW_LOOP: WorkflowLoopAttributes;
+  WORKFLOW_SLEEP: WorkflowSleepAttributes;
+  WORKFLOW_WAIT_EVENT: WorkflowWaitEventAttributes;
+  GENERIC: AIBaseAttributes;
+}
+```
+
+This mapping defines which attribute interface is used for each span type when creating or processing spans.
+
 ### AISpan
 
 AI Span interface, used internally for tracing.
