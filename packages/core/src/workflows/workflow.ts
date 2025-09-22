@@ -610,8 +610,8 @@ export class Workflow<
 
     const mappingStep: any = createStep({
       id: stepOptions?.id || `mapping_${this.#mastra?.generateId() || randomUUID()}`,
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
+      inputSchema: z.any(),
+      outputSchema: z.any(),
       execute: async ctx => {
         const { getStepResult, getInitData, runtimeContext } = ctx;
 
@@ -930,6 +930,7 @@ export class Workflow<
         disableScorers: options?.disableScorers,
         cleanup: () => this.#runs.delete(runIdToUse),
         tracingPolicy: this.options?.tracingPolicy,
+        workflowSteps: this.steps,
       });
 
     this.#runs.set(runIdToUse, run);
@@ -1265,6 +1266,12 @@ export class Run<
   public serializedStepGraph: SerializedStepFlowEntry[];
 
   /**
+   * The steps for this workflow
+   */
+
+  public workflowSteps: Record<string, StepWithComponent>;
+
+  /**
    * The storage for this run
    */
   #mastra?: Mastra;
@@ -1301,6 +1308,7 @@ export class Run<
     serializedStepGraph: SerializedStepFlowEntry[];
     disableScorers?: boolean;
     tracingPolicy?: TracingPolicy;
+    workflowSteps: Record<string, StepWithComponent>;
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
@@ -1314,6 +1322,7 @@ export class Run<
     this.cleanup = params.cleanup;
     this.disableScorers = params.disableScorers;
     this.tracingPolicy = params.tracingPolicy;
+    this.workflowSteps = params.workflowSteps;
   }
 
   public get abortController(): AbortController {
@@ -1973,6 +1982,23 @@ export class Run<
       const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
 
       const isStepSuspended = suspendedStepIds.includes(steps?.[0] ?? '');
+
+      const suspendedStep = this.workflowSteps[steps?.[0] ?? ''];
+
+      if (suspendedStep && suspendedStep.resumeSchema) {
+        const resumeSchema = suspendedStep.resumeSchema;
+
+        const validatedResumeData = await resumeSchema.safeParseAsync(params.resumeData);
+
+        if (!validatedResumeData.success) {
+          throw new Error(
+            'Invalid resume data: \n' +
+              validatedResumeData.error.errors
+                .map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`)
+                .join('\n'),
+          );
+        }
+      }
 
       if (!isStepSuspended) {
         throw new Error(

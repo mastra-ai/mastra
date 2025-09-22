@@ -8,7 +8,13 @@ import type { ToolExecutionContext } from '../../tools/types';
 import { Workflow, Run } from '../../workflows';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
 import type { ExecuteFunction, Step } from '../../workflows/step';
-import type { SerializedStepFlowEntry, WorkflowConfig, WorkflowResult, WatchEvent } from '../../workflows/types';
+import type {
+  SerializedStepFlowEntry,
+  WorkflowConfig,
+  WorkflowResult,
+  WatchEvent,
+  StepWithComponent,
+} from '../../workflows/types';
 import { EMITTER_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
 import { WorkflowEventProcessor } from './workflow-event-processor';
@@ -296,6 +302,7 @@ export class EventedWorkflow<
         mastra: this.mastra,
         retryConfig: this.retryConfig,
         cleanup: () => this.runs.delete(runIdToUse),
+        workflowSteps: this.steps,
       });
 
     this.runs.set(runIdToUse, run);
@@ -345,6 +352,7 @@ export class EventedRun<
       delay?: number;
     };
     cleanup?: () => void;
+    workflowSteps: Record<string, StepWithComponent>;
   }) {
     super(params);
     this.serializedStepGraph = params.serializedStepGraph;
