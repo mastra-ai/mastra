@@ -78,7 +78,6 @@ const getTraceStep = createStep({
               id: 'MASTRA_SCORER_FAILED_TO_RUN_SCORER_ON_TRACE',
               domain: ErrorDomain.SCORER,
               category: ErrorCategory.SYSTEM,
-              text: `Failed to run scorer ${scorer.name}`,
               details: {
                 scorerName: scorer.name,
                 spanId: target.spanId || '',
