@@ -129,10 +129,14 @@ export class DuckDBVector extends MastraVector {
     params: any[] = []
   ): Promise<any[]> {
     return new Promise((resolve, reject) => {
-      conn.all(sql, ...params, (err: Error | null, result: any[]) => {
+      // DuckDB expects parameters as separate arguments, not an array
+      const callback = (err: Error | null, result: any[]) => {
         if (err) reject(err);
         else resolve(result || []);
-      });
+      };
+
+      // Spread the params array as individual arguments
+      conn.all(sql, ...params, callback);
     });
   }
 
@@ -209,6 +213,18 @@ export class DuckDBVector extends MastraVector {
         USING HNSW (vector)
         WITH (metric = '${metricMap[metric] || 'cosine'}', M = 16, ef_construction = 128)
       `);
+
+      // Create FTS index for hybrid search - Install FTS extension and create virtual table
+      try {
+        await this.execute(conn, `INSTALL fts;`);
+        await this.execute(conn, `LOAD fts;`);
+        await this.execute(conn, `
+          PRAGMA create_fts_index('${tableName}', 'id', 'content');
+        `);
+      } catch (error) {
+        // FTS might not be available, ignore for now
+        console.warn('FTS extension not available for hybrid search:', error);
+      }
 
     } finally {
       this.releaseConnection(conn);
@@ -321,6 +337,9 @@ export class DuckDBVector extends MastraVector {
       // Get similarity function based on metric
       const similarityFunc = this.getSimilarityFunction();
 
+      // For euclidean distance, smaller is better, so we order ASC
+      const orderDirection = this.config.metric === 'euclidean' ? 'ASC' : 'DESC';
+
       // Query similar vectors
       const sql = `
         SELECT
@@ -331,7 +350,7 @@ export class DuckDBVector extends MastraVector {
           ${similarityFunc}(vector, ?::FLOAT[${this.config.dimensions}]) as score
         FROM ${tableName}
         ${whereClause}
-        ORDER BY score DESC
+        ORDER BY score ${orderDirection}
         LIMIT ?
       `;
 
@@ -400,6 +419,7 @@ export class DuckDBVector extends MastraVector {
         dimension: index.dimension,
         count: index.total_vectors,
         metric: index.metric as 'cosine' | 'euclidean' | 'dotproduct',
+        status: 'ready' as const,
       };
 
     } finally {
@@ -438,24 +458,24 @@ export class DuckDBVector extends MastraVector {
     const conn = await this.getConnection();
 
     try {
-      const { indexName, id, update } = params;
+      const { indexName, id, metadata, vector } = params;
       const tableName = this.getTableName(indexName);
 
       const updates: string[] = [];
       const updateParams: any[] = [];
 
-      if (update.vector) {
-        validateVector(update.vector, this.config.dimensions);
+      if (vector) {
+        validateVector(vector, this.config.dimensions);
         const normalizedVector = this.config.metric === 'cosine'
-          ? normalizeVector(update.vector)
-          : update.vector;
+          ? normalizeVector(vector)
+          : vector;
         updates.push('vector = ?');
         updateParams.push(`[${normalizedVector.join(',')}]`);
       }
 
-      if (update.metadata) {
+      if (metadata) {
         updates.push('metadata = ?');
-        updateParams.push(JSON.stringify(update.metadata));
+        updateParams.push(JSON.stringify(metadata));
       }
 
       if (updates.length === 0) return;
@@ -484,10 +504,14 @@ export class DuckDBVector extends MastraVector {
       const { indexName, id } = params;
       const tableName = this.getTableName(indexName);
 
+      // Handle both single ID and array of IDs
+      const ids = Array.isArray(id) ? id : [id];
+      const placeholders = ids.map(() => '?').join(',');
+
       await this.execute(conn, `
         DELETE FROM ${tableName}
-        WHERE id = ?
-      `, [id]);
+        WHERE id IN (${placeholders})
+      `, ids);
 
       // Update vector count
       await this.execute(conn, `

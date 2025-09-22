@@ -60,7 +60,7 @@ describe('DuckDBVector', () => {
   describe('Index Management', () => {
     it('should create an index', async () => {
       await vectorStore.createIndex({
-        name: 'test-index',
+        indexName: 'test-index',
         dimension: 512,
         metric: 'cosine',
       });
@@ -71,22 +71,22 @@ describe('DuckDBVector', () => {
 
     it('should fail to create duplicate index', async () => {
       await vectorStore.createIndex({
-        name: 'test-index',
+        indexName: 'test-index',
         dimension: 512,
       });
 
       await expect(
         vectorStore.createIndex({
-          name: 'test-index',
+          indexName: 'test-index',
           dimension: 512,
         })
       ).rejects.toThrow('already exists');
     });
 
     it('should list all indexes', async () => {
-      await vectorStore.createIndex({ name: 'index1', dimension: 512 });
-      await vectorStore.createIndex({ name: 'index2', dimension: 256 });
-      await vectorStore.createIndex({ name: 'index3', dimension: 1024 });
+      await vectorStore.createIndex({ indexName: 'index1', dimension: 512 });
+      await vectorStore.createIndex({ indexName: 'index2', dimension: 256 });
+      await vectorStore.createIndex({ indexName: 'index3', dimension: 1024 });
 
       const indexes = await vectorStore.listIndexes();
       expect(indexes).toHaveLength(3);
@@ -95,7 +95,7 @@ describe('DuckDBVector', () => {
 
     it('should describe index statistics', async () => {
       await vectorStore.createIndex({
-        name: 'test-index',
+        indexName: 'test-index',
         dimension: 512,
         metric: 'cosine',
       });
@@ -103,7 +103,9 @@ describe('DuckDBVector', () => {
       const vectors = generateTestVectors(100, 512);
       await vectorStore.upsert({
         indexName: 'test-index',
-        vectors,
+        vectors: vectors.map(v => v.values),
+        ids: vectors.map(v => v.id),
+        metadata: vectors.map(v => v.metadata),
       });
 
       const stats = await vectorStore.describeIndex({
@@ -119,7 +121,7 @@ describe('DuckDBVector', () => {
     });
 
     it('should delete an index', async () => {
-      await vectorStore.createIndex({ name: 'test-index', dimension: 512 });
+      await vectorStore.createIndex({ indexName: 'test-index', dimension: 512 });
 
       await vectorStore.deleteIndex({ indexName: 'test-index' });
 
@@ -131,31 +133,34 @@ describe('DuckDBVector', () => {
   describe('Vector Operations', () => {
     beforeEach(async () => {
       await vectorStore.createIndex({
-        name: 'test-index',
+        indexName: 'test-index',
         dimension: 512,
         metric: 'cosine',
       });
     });
 
     it('should upsert vectors', async () => {
-      const vectors = generateTestVectors(10, 512);
+      const testData = generateTestVectors(10, 512);
 
       const ids = await vectorStore.upsert({
         indexName: 'test-index',
-        vectors,
+        vectors: testData.map(v => v.values),
+        ids: testData.map(v => v.id),
+        metadata: testData.map(v => v.metadata),
       });
 
       expect(ids).toHaveLength(10);
-      expect(ids).toEqual(vectors.map((v) => v.id));
+      expect(ids).toEqual(testData.map((v) => v.id));
     });
 
     it('should upsert vectors with namespace', async () => {
-      const vectors = generateTestVectors(5, 512);
+      const testData = generateTestVectors(5, 512);
 
       const ids = await vectorStore.upsert({
         indexName: 'test-index',
-        vectors,
-        namespace: 'test-namespace',
+        vectors: testData.map(v => v.values),
+        ids: testData.map(v => v.id),
+        metadata: testData.map(v => ({ ...v.metadata, namespace: 'test-namespace' })),
       });
 
       expect(ids).toHaveLength(5);
@@ -170,7 +175,9 @@ describe('DuckDBVector', () => {
 
       await vectorStore.upsert({
         indexName: 'test-index',
-        vectors: [vector],
+        vectors: [vector.values],
+        ids: [vector.id],
+        metadata: [vector.metadata],
       });
 
       const updatedVector = {
@@ -181,7 +188,9 @@ describe('DuckDBVector', () => {
 
       await vectorStore.upsert({
         indexName: 'test-index',
-        vectors: [updatedVector],
+        vectors: [updatedVector.values],
+        ids: [updatedVector.id],
+        metadata: [updatedVector.metadata],
       });
 
       const results = await vectorStore.query({
@@ -199,7 +208,9 @@ describe('DuckDBVector', () => {
 
       await vectorStore.upsert({
         indexName: 'test-index',
-        vectors,
+        vectors: vectors.map(v => v.values),
+        ids: vectors.map(v => v.id),
+        metadata: vectors.map(v => v.metadata),
       });
 
       const queryVector = vectors[0].values;
@@ -219,7 +230,9 @@ describe('DuckDBVector', () => {
 
       await vectorStore.upsert({
         indexName: 'test-index',
-        vectors,
+        vectors: vectors.map(v => v.values),
+        ids: vectors.map(v => v.id),
+        metadata: vectors.map(v => v.metadata),
       });
 
       const results = await vectorStore.query({
@@ -243,7 +256,9 @@ describe('DuckDBVector', () => {
 
       await vectorStore.upsert({
         indexName: 'test-index',
-        vectors,
+        vectors: vectors.map(v => v.values),
+        ids: vectors.map(v => v.id),
+        metadata: vectors.map(v => v.metadata),
       });
 
       const results = await vectorStore.query({
@@ -273,7 +288,9 @@ describe('DuckDBVector', () => {
 
       await vectorStore.upsert({
         indexName: 'test-index',
-        vectors: [vector],
+        vectors: [vector.values],
+        ids: [vector.id],
+        metadata: [vector.metadata],
       });
 
       await vectorStore.updateVector({
@@ -300,7 +317,9 @@ describe('DuckDBVector', () => {
 
       await vectorStore.upsert({
         indexName: 'test-index',
-        vectors,
+        vectors: vectors.map(v => v.values),
+        ids: vectors.map(v => v.id),
+        metadata: vectors.map(v => v.metadata),
       });
 
       await vectorStore.deleteVector({
@@ -319,7 +338,7 @@ describe('DuckDBVector', () => {
   describe('Advanced Features', () => {
     beforeEach(async () => {
       await vectorStore.createIndex({
-        name: 'test-index',
+        indexName: 'test-index',
         dimension: 512,
         metric: 'cosine',
       });
@@ -330,7 +349,9 @@ describe('DuckDBVector', () => {
 
       await vectorStore.upsert({
         indexName: 'test-index',
-        vectors,
+        vectors: vectors.map(v => v.values),
+        ids: vectors.map(v => v.id),
+        metadata: vectors.map(v => v.metadata),
       });
 
       const results = await vectorStore.hybridSearch(
@@ -359,7 +380,9 @@ describe('DuckDBVector', () => {
         async () =>
           await vectorStore.upsert({
             indexName: 'test-index',
-            vectors,
+            vectors: vectors.map(v => v.values),
+        ids: vectors.map(v => v.id),
+        metadata: vectors.map(v => v.metadata),
           }),
         'Batch upsert 1000 vectors'
       );
@@ -383,13 +406,18 @@ describe('DuckDBVector', () => {
       });
 
       await store.createIndex({
-        name: 'cosine-index',
+        indexName: 'cosine-index',
         dimension: 128,
         metric: 'cosine',
       });
 
       const vectors = generateTestVectors(20, 128);
-      await store.upsert({ indexName: 'cosine-index', vectors });
+      await store.upsert({
+        indexName: 'cosine-index',
+        vectors: vectors.map(v => v.values),
+        ids: vectors.map(v => v.id),
+        metadata: vectors.map(v => v.metadata),
+      });
 
       const results = await store.query({
         indexName: 'cosine-index',
@@ -411,13 +439,18 @@ describe('DuckDBVector', () => {
       });
 
       await store.createIndex({
-        name: 'euclidean-index',
+        indexName: 'euclidean-index',
         dimension: 128,
         metric: 'euclidean',
       });
 
       const vectors = generateTestVectors(20, 128);
-      await store.upsert({ indexName: 'euclidean-index', vectors });
+      await store.upsert({
+        indexName: 'euclidean-index',
+        vectors: vectors.map(v => v.values),
+        ids: vectors.map(v => v.id),
+        metadata: vectors.map(v => v.metadata),
+      });
 
       const results = await store.query({
         indexName: 'euclidean-index',
@@ -439,13 +472,18 @@ describe('DuckDBVector', () => {
       });
 
       await store.createIndex({
-        name: 'dot-index',
+        indexName: 'dot-index',
         dimension: 128,
         metric: 'dot',
       });
 
       const vectors = generateTestVectors(20, 128);
-      await store.upsert({ indexName: 'dot-index', vectors });
+      await store.upsert({
+        indexName: 'dot-index',
+        vectors: vectors.map(v => v.values),
+        ids: vectors.map(v => v.id),
+        metadata: vectors.map(v => v.metadata),
+      });
 
       const results = await store.query({
         indexName: 'dot-index',
@@ -463,7 +501,7 @@ describe('DuckDBVector', () => {
   describe('Error Handling', () => {
     it('should throw error for invalid dimensions', async () => {
       await vectorStore.createIndex({
-        name: 'test-index',
+        indexName: 'test-index',
         dimension: 512,
       });
 
@@ -475,7 +513,8 @@ describe('DuckDBVector', () => {
       await expect(
         vectorStore.upsert({
           indexName: 'test-index',
-          vectors: [invalidVector],
+          vectors: [invalidVector.values],
+          ids: [invalidVector.id],
         })
       ).rejects.toThrow('dimension mismatch');
     });
@@ -491,7 +530,7 @@ describe('DuckDBVector', () => {
 
     it('should handle empty query results gracefully', async () => {
       await vectorStore.createIndex({
-        name: 'test-index',
+        indexName: 'test-index',
         dimension: 512,
       });
 
@@ -508,7 +547,7 @@ describe('DuckDBVector', () => {
   describe('Deposium Integration Scenarios', () => {
     it('should handle multi-space queries', async () => {
       await vectorStore.createIndex({
-        name: 'deposium-index',
+        indexName: 'deposium-index',
         dimension: 512,
         metric: 'cosine',
       });
@@ -531,7 +570,9 @@ describe('DuckDBVector', () => {
 
       await vectorStore.upsert({
         indexName: 'deposium-index',
-        vectors,
+        vectors: vectors.map(v => v.values),
+        ids: vectors.map(v => v.id),
+        metadata: vectors.map(v => v.metadata),
       });
 
       // Query specific space
@@ -551,7 +592,7 @@ describe('DuckDBVector', () => {
 
     it('should handle Ollama 512D embeddings', async () => {
       await vectorStore.createIndex({
-        name: 'ollama-index',
+        indexName: 'ollama-index',
         dimension: 512,
         metric: 'cosine',
       });
@@ -568,7 +609,9 @@ describe('DuckDBVector', () => {
 
       await vectorStore.upsert({
         indexName: 'ollama-index',
-        vectors: embeddings,
+        vectors: embeddings.map(v => v.values),
+        ids: embeddings.map(v => v.id),
+        metadata: embeddings.map(v => v.metadata),
       });
 
       const results = await vectorStore.query({

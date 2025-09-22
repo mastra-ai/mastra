@@ -140,7 +140,7 @@ export class DuckDBFilterBuilder {
         conditions.push(`metadata->>'${key}' IS NULL`);
       } else if (typeof value === 'object' && !Array.isArray(value)) {
         // Handle operators
-        const opCondition = this.buildOperatorCondition(key, value);
+        const opCondition = this.buildOperatorCondition(`metadata->>'${key}'`, value);
         if (opCondition) {
           conditions.push(opCondition);
         }
