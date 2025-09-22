@@ -21,6 +21,7 @@ import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '../mem
 import { RuntimeContext } from '../runtime-context';
 import { createScorer } from '../scores';
 import { runScorer } from '../scores/hooks';
+import { MockStore } from '../storage';
 import type { AIV5FullStreamPart } from '../stream/aisdk/v5/output';
 import type { ChunkType } from '../stream/types';
 import { createMockModel } from '../test-utils/llm-mock';
@@ -30,7 +31,6 @@ import { CompositeVoice, MastraVoice } from '../voice';
 import { MessageList } from './message-list/index';
 import { assertNoDuplicateParts, MockMemory } from './test-utils';
 import { Agent } from './index';
-import { MockStore } from '../storage';
 
 config();
 
