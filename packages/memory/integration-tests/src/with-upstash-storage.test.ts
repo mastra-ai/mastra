@@ -4,7 +4,7 @@ import { LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { UpstashStore } from '@mastra/upstash';
 import { describe } from 'vitest';
-import { getResuableTests, StorageType } from './reusable-tests';
+import { getReusableTests, StorageType } from './reusable-tests';
 
 const files = ['upstash-test-vector.db', 'upstash-test-vector.db-shm', 'upstash-test-vector.db-wal'];
 
@@ -50,5 +50,5 @@ describe('Memory with UpstashStore Integration', () => {
     memoryOptionsForWorker: memoryOptions,
   };
 
-  getResuableTests(memory, workerTestConfig);
+  getReusableTests(memory, workerTestConfig);
 });
