@@ -11,7 +11,7 @@ import { createToolCallStep } from './tool-call-step';
 
 export function createAgenticExecutionWorkflow<
   Tools extends ToolSet = ToolSet,
-  OUTPUT extends OutputSchema | undefined = undefined,
+  OUTPUT extends OutputSchema = undefined,
 >({ models, telemetry_settings, _internal, modelStreamSpan, ...rest }: OuterLLMRun<Tools, OUTPUT>) {
   const llmExecutionStep = createLLMExecutionStep({
     models,

@@ -9,7 +9,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool, ToolStream } from '@mastra/core/tools';
-import { Workflow, Run, DefaultExecutionEngine } from '@mastra/core/workflows';
+import { getStepResult, Workflow, Run, DefaultExecutionEngine } from '@mastra/core/workflows';
 import type {
   ExecuteFunction,
   ExecutionContext,
@@ -192,7 +192,7 @@ export class InngestRun<
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
-  }): Promise<WorkflowResult<TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     await this.#mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
@@ -243,7 +243,7 @@ export class InngestRun<
       | string
       | string[];
     runtimeContext?: RuntimeContext;
-  }): Promise<WorkflowResult<TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     const p = this._resume(params).then(result => {
       if (result.status !== 'suspended') {
         this.closeStreamAction?.().catch(() => {});
@@ -264,7 +264,7 @@ export class InngestRun<
       | string
       | string[];
     runtimeContext?: RuntimeContext;
-  }): Promise<WorkflowResult<TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
     );
@@ -331,7 +331,7 @@ export class InngestRun<
 
   stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
     stream: ReadableStream<StreamEvent>;
-    getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
+    getWorkflowState: () => Promise<WorkflowResult<TInput, TOutput, TSteps>>;
   } {
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
@@ -578,7 +578,7 @@ export class InngestWorkflow<
         };
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt);
-        const result = await engine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
+        const result = await engine.execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
           workflowId: this.id,
           runId,
           resourceId,
@@ -1057,19 +1057,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             currentSpan: sleepSpan,
           },
           getInitData: () => stepResults?.input as any,
-          getStepResult: (step: any) => {
-            if (!step?.id) {
-              return null;
-            }
-
-            const result = stepResults[step.id];
-            if (result?.status === 'success') {
-              return result.output;
-            }
-
-            return null;
-          },
-
+          getStepResult: getStepResult.bind(this, stepResults),
           // TODO: this function shouldn't have suspend probably?
           suspend: async (_suspendPayload: any): Promise<any> => {},
           bail: () => {},
@@ -1175,19 +1163,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             currentSpan: sleepUntilSpan,
           },
           getInitData: () => stepResults?.input as any,
-          getStepResult: (step: any) => {
-            if (!step?.id) {
-              return null;
-            }
-
-            const result = stepResults[step.id];
-            if (result?.status === 'success') {
-              return result.output;
-            }
-
-            return null;
-          },
-
+          getStepResult: getStepResult.bind(this, stepResults),
           // TODO: this function shouldn't have suspend probably?
           suspend: async (_suspendPayload: any): Promise<any> => {},
           bail: () => {},
@@ -1331,7 +1307,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
     if (step instanceof InngestWorkflow) {
       const isResume = !!resume?.steps?.length;
-      let result: WorkflowResult<any, any>;
+      let result: WorkflowResult<any, any, any>;
       let runId: string;
       if (isResume) {
         // @ts-ignore
@@ -1549,14 +1525,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             currentSpan: stepAISpan,
           },
           getInitData: () => stepResults?.input as any,
-          getStepResult: (step: any) => {
-            const result = stepResults[step.id];
-            if (result?.status === 'success') {
-              return result.output;
-            }
-
-            return null;
-          },
+          getStepResult: getStepResult.bind(this, stepResults),
           suspend: async (suspendPayload: any) => {
             executionContext.suspendedPaths[step.id] = executionContext.executionPath;
             suspended = { payload: suspendPayload };
@@ -1823,19 +1792,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                   currentSpan: evalSpan,
                 },
                 getInitData: () => stepResults?.input as any,
-                getStepResult: (step: any) => {
-                  if (!step?.id) {
-                    return null;
-                  }
-
-                  const result = stepResults[step.id];
-                  if (result?.status === 'success') {
-                    return result.output;
-                  }
-
-                  return null;
-                },
-
+                getStepResult: getStepResult.bind(this, stepResults),
                 // TODO: this function shouldn't have suspend probably?
                 suspend: async (_suspendPayload: any) => {},
                 bail: () => {},

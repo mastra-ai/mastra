@@ -4,6 +4,8 @@ const meta = {
   clerk: "Clerk",
   supabase: "Supabase",
   firebase: "Firebase",
+  workos: "WorkOS",
+  auth0: "Auth0",
 };
 
 export default meta;

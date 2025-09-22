@@ -15,6 +15,7 @@ import type {
   StreamTextOnFinishCallback,
   StreamObjectOnFinishCallback,
 } from 'ai';
+import type { SystemModelMessage } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
@@ -79,6 +80,14 @@ export type {
 export type { TripwireProperties } from './model/shared.types';
 
 export type OutputType = StructuredOutput | ZodSchema | JSONSchema7 | undefined;
+
+export type SystemMessage =
+  | string
+  | string[]
+  | CoreSystemMessage
+  | SystemModelMessage
+  | CoreSystemMessage[]
+  | SystemModelMessage[];
 
 type GenerateTextOptions = Parameters<typeof generateText>[0];
 type StreamTextOptions = Parameters<typeof streamText>[0];

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { toast } from 'sonner';
-import { LegacyWorkflowRunResult, WorkflowWatchResult, GetWorkflowResponse } from '@mastra/client-js';
+import { LegacyWorkflowRunResult, WorkflowWatchResult } from '@mastra/client-js';
 import type { LegacyWorkflow } from '@mastra/core/workflows/legacy';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { usePlaygroundStore } from '@/store/playground-store';
