@@ -2379,7 +2379,7 @@ describe('PgVector', () => {
             await client.query(`DROP EXTENSION IF EXISTS vector CASCADE`);
             await client.query(`CREATE EXTENSION vector`);
           }
-        } catch (error) {
+        } catch {
           // Ignore errors, extension might not exist
         } finally {
           client.release();
