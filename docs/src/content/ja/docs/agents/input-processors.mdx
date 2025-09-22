@@ -1,25 +1,21 @@
 ---
-title: "Input Processors"
-description: "エージェントメッセージが言語モデルに到達する前にそれらを傍受し、変更するためのinput processorsの使用方法を学びます。"
+title: "入力プロセッサ"
+description: "入力プロセッサを使って、エージェントのメッセージが言語モデルに渡る前に傍受・変更する方法を学びましょう。"
 ---
 
+# 入力プロセッサ
 
+入力プロセッサを使うと、メッセージが言語モデルに送信される前に、傍受・変更・検証・フィルタリングを行えます。これは、ガードレールの導入、コンテンツのモデレーション、メッセージ変換、セキュリティ制御の実装に役立ちます。
 
-# Input Processors
-
-Input Processorsを使用すると、メッセージが言語モデルに送信される_前に_、メッセージを傍受、変更、検証、またはフィルタリングできます。これは、ガードレール、コンテンツモデレーション、メッセージ変換、およびセキュリティ制御の実装に役立ちます。
-
-Processorsは会話スレッド内のメッセージに対して動作します。コンテンツを変更、フィルタリング、または検証でき、特定の条件が満たされた場合はリクエストを完全に中止することもできます。
-
-
+プロセッサは会話スレッド内のメッセージに対して動作します。内容の変更・フィルタリング・検証が可能で、条件に応じてリクエスト自体を中止することもできます。
 
 ## 組み込みプロセッサ
 
-Mastra には、一般的なユースケース向けの組み込みプロセッサが複数用意されています。
+Mastra は一般的なユースケース向けに、いくつかの組み込みプロセッサを提供しています。
 
 ### `UnicodeNormalizer`
 
-このプロセッサは、Unicode テキストを正規化して表記の一貫性を確保し、問題になり得る文字を取り除きます。
+このプロセッサは、Unicodeテキストを正規化して表記ゆれを防ぎ、問題になり得る文字を取り除きます。
 
 ```typescript copy showLineNumbers {9-11}
 import { Agent } from "@mastra/core/agent";
@@ -40,14 +36,15 @@ const agent = new Agent({
 ```
 
 利用可能なオプション:
-- `stripControlChars`: 制御文字を削除 (デフォルト: false)
-- `preserveEmojis`: 絵文字を保持 (デフォルト: true) 
-- `collapseWhitespace`: 複数のスペースや改行をまとめる (デフォルト: true)
-- `trim`: 前後の空白を削除 (デフォルト: true)
+
+- `stripControlChars`: 制御文字を削除（デフォルト: false）
+- `preserveEmojis`: 絵文字を保持（デフォルト: true）
+- `collapseWhitespace`: 連続するスペースや改行をまとめる（デフォルト: true）
+- `trim`: 先頭と末尾の空白を削除（デフォルト: true）
 
 ### `ModerationProcessor`
 
-このプロセッサは、LLM を用いて複数のカテゴリーにわたる不適切なコンテンツを検出し、モデレーションを行います。
+このプロセッサは、LLM を用いて複数カテゴリにわたる不適切コンテンツを検出し、モデレーションを行います。
 
 ```typescript copy showLineNumbers {5-13}
 import { ModerationProcessor } from "@mastra/core/processors";
@@ -55,30 +52,32 @@ import { ModerationProcessor } from "@mastra/core/processors";
 const agent = new Agent({
   inputProcessors: [
     new ModerationProcessor({
-      model: openai("gpt-4.1-nano"), // 高速でコスト効率の高いモデルを使用
-      threshold: 0.7, // フラグ付けの信頼度しきい値
-      strategy: 'block', // フラグ付けされたコンテンツをブロック
-      categories: ['hate', 'harassment', 'violence'], // カスタムカテゴリー
+      model: openai("gpt-4.1-nano"), // 高速かつコスト効率の高いモデルを使用
+      threshold: 0.7, // フラグ判定の信頼度しきい値
+      strategy: 'block', // フラグ判定されたコンテンツをブロック
+      categories: ['hate', 'harassment', 'violence'], // カスタムカテゴリ
     }),
   ],
 });
 ```
 
 利用可能なオプション:
-- `model`: モデレーション分析に使用する言語モデル (必須)
-- `categories`: チェックするカテゴリーの配列 (デフォルト: ['hate','hate/threatening','harassment','harassment/threatening','self-harm','self-harm/intent','self-harm/instructions','sexual','sexual/minors','violence','violence/graphic'])
-- `threshold`: フラグ付けの信頼度しきい値 (0〜1、デフォルト: 0.5)
-- `strategy`: コンテンツがフラグ付けされた際の処理 (デフォルト: 'block')
-- `customInstructions`: モデレーション用エージェントへのカスタム指示
+
+- `model`: モデレーション分析に用いる言語モデル（必須）
+- `categories`: チェックするカテゴリ配列（デフォルト: ['hate','hate/threatening','harassment','harassment/threatening','self-harm','self-harm/intent','self-harm/instructions','sexual','sexual/minors','violence','violence/graphic']）
+- `threshold`: フラグ判定の信頼度しきい値（0〜1、デフォルト: 0.5）
+- `strategy`: コンテンツがフラグ判定された場合の動作（デフォルト: 'block'）
+- `customInstructions`: モデレーションエージェントへのカスタム指示
 
 利用可能な戦略:
-- `block`: エラーでリクエストを拒否 (デフォルト)
-- `warn`: 警告を記録するがコンテンツは許可
-- `filter`: フラグ付けされたメッセージを除去して処理を継続
+
+- `block`: エラーでリクエストを拒否（デフォルト）
+- `warn`: 警告を記録しつつコンテンツを許可
+- `filter`: フラグ判定されたメッセージを除去し、処理を継続
 
 ### `PromptInjectionDetector`
 
-このプロセッサは、プロンプトインジェクション攻撃、jailbreak、システム操作の試みを検出・防止します。
+このプロセッサは、プロンプトインジェクション攻撃、ジェイルブレイク、システムの乗っ取り・改ざんの試みを検出して防止します。
 
 ```typescript copy showLineNumbers {5-12}
 import { PromptInjectionDetector } from "@mastra/core/processors";
@@ -87,7 +86,7 @@ const agent = new Agent({
   inputProcessors: [
     new PromptInjectionDetector({
       model: openai("gpt-4.1-nano"),
-      threshold: 0.8, // 偽陽性を減らすため高めのしきい値
+      threshold: 0.8, // 誤検知を減らすための高めのしきい値
       strategy: 'rewrite', // 意図を保ちながら無害化を試みる
       detectionTypes: ['injection', 'jailbreak', 'system-override'],
     }),
@@ -96,22 +95,24 @@ const agent = new Agent({
 ```
 
 利用可能なオプション:
-- `model`: インジェクション検出用の言語モデル (必須)
-- `detectionTypes`: 検出対象のインジェクション種別の配列 (デフォルト: ['injection', 'jailbreak', 'system-override'])
-- `threshold`: フラグ付けの信頼度しきい値 (0〜1、デフォルト: 0.7)
-- `strategy`: インジェクション検出時の処理 (デフォルト: 'block')
-- `instructions`: エージェントへのカスタム検出指示
-- `includeScores`: ログに信頼度スコアを含めるかどうか (デフォルト: false)
+
+- `model`: インジェクション検出に使用する言語モデル（必須）
+- `detectionTypes`: 検出対象のインジェクション種別の配列（デフォルト: ['injection', 'jailbreak', 'system-override']）
+- `threshold`: フラグ付けのための信頼度しきい値（0〜1、デフォルト: 0.7）
+- `strategy`: インジェクション検出時の対応（デフォルト: 'block'）
+- `instructions`: エージェント向けのカスタム検出指示
+- `includeScores`: ログに信頼度スコアを含めるかどうか（デフォルト: false）
 
 利用可能な戦略:
-- `block`: リクエストを拒否 (デフォルト)
-- `warn`: 警告を記録するが許可
+
+- `block`: リクエストを拒否（デフォルト）
+- `warn`: 警告を記録するが処理は継続
 - `filter`: フラグ付けされたメッセージを除去
-- `rewrite`: 正当な意図を保ちつつインジェクションを無害化
+- `rewrite`: 正当な意図を保ちつつインジェクションを無害化することを試みる
 
 ### `PIIDetector`
 
-このプロセッサは、メッセージから個人を特定できる情報 (PII) を検出し、必要に応じて編集・マスクします。
+このプロセッサは、メッセージ内の個人を特定できる情報（PII）を検出し、必要に応じてマスキング（秘匿化）します。
 
 ```typescript copy showLineNumbers {5-14}
 import { PIIDetector } from "@mastra/core/processors";
@@ -121,33 +122,33 @@ const agent = new Agent({
     new PIIDetector({
       model: openai("gpt-4.1-nano"),
       threshold: 0.6,
-      strategy: 'redact', // 検出された PII を自動的に編集
+      strategy: 'redact', // Automatically redact detected PII
       detectionTypes: ['email', 'phone', 'credit-card', 'ssn', 'api-key', 'crypto-wallet', 'iban'],
-      redactionMethod: 'mask', // 形式を維持しつつマスク
-      preserveFormat: true, // マスク後も元の構造を保持
-      includeDetections: true, // コンプライアンス監査用に詳細を記録
+      redactionMethod: 'mask', // Preserve format while masking
+      preserveFormat: true, // Keep original structure in redacted values
+      includeDetections: true, // Log details for compliance auditing
     }),
   ],
 });
 ```
 
-
-
 利用可能なオプション:
+
 - `model`: PII 検出用の言語モデル（必須）
-- `detectionTypes`: 検出対象の PII タイプの配列（デフォルト: ['email', 'phone', 'credit-card', 'ssn', 'api-key', 'ip-address', 'name', 'address', 'date-of-birth', 'url', 'uuid', 'crypto-wallet', 'iban']）
-- `threshold`: フラグ付けの信頼度のしきい値（0〜1、デフォルト: 0.6）
-- `strategy`: PII 検出時の動作（デフォルト: 'block'）
-- `redactionMethod`: PII の秘匿方法（'mask', 'hash', 'remove', 'placeholder'、デフォルト: 'mask'）
-- `preserveFormat`: 秘匿時に PII の形式を維持（デフォルト: true）
-- `includeDetections`: コンプライアンス対応のため検出詳細をログに含める（デフォルト: false）
+- `detectionTypes`: 検出する PII 種別の配列（デフォルト: ['email', 'phone', 'credit-card', 'ssn', 'api-key', 'ip-address', 'name', 'address', 'date-of-birth', 'url', 'uuid', 'crypto-wallet', 'iban']）
+- `threshold`: フラグ判定の信頼度しきい値（0〜1、デフォルト: 0.6）
+- `strategy`: PII 検出時の処理方針（デフォルト: 'block'）
+- `redactionMethod`: PII の秘匿化方法（'mask', 'hash', 'remove', 'placeholder'、デフォルト: 'mask'）
+- `preserveFormat`: 秘匿化時に PII の形式を維持（デフォルト: true）
+- `includeDetections`: コンプライアンス監査向けに検出詳細をログへ含める（デフォルト: false）
 - `instructions`: エージェント向けのカスタム検出指示
 
 利用可能な戦略:
+
 - `block`: PII を含むリクエストを拒否（デフォルト）
-- `warn`: 警告を記録するが許可する
+- `warn`: 警告を記録して許可
 - `filter`: PII を含むメッセージを除去
-- `redact`: PII をプレースホルダー値に置き換える
+- `redact`: PII をプレースホルダー値に置換
 
 ### `LanguageDetector`
 
@@ -169,34 +170,34 @@ const agent = new Agent({
 ```
 
 利用可能なオプション:
-- `model`: 検出と翻訳用の言語モデル（必須）
-- `targetLanguages`: ターゲット言語の配列（言語名または ISO コード）
-- `threshold`: 言語検出の信頼度のしきい値（0〜1、デフォルト: 0.7）
-- `strategy`: ターゲット外言語が検出された場合の動作（デフォルト: 'detect'）
+
+- `model`: 言語検出と翻訳に使用するモデル（必須）
+- `targetLanguages`: ターゲット言語の配列（言語名またはISOコード）
+- `threshold`: 言語検出の信頼度しきい値（0〜1、デフォルト: 0.7）
+- `strategy`: ターゲット外の言語が検出された場合の動作（デフォルト: 'detect'）
 - `preserveOriginal`: 元のコンテンツをメタデータに保持（デフォルト: true）
-- `instructions`: エージェント向けのカスタム検出指示
+- `instructions`: エージェント用のカスタム検出指示
 
 利用可能な戦略:
-- `detect`: 言語を検出するのみで翻訳しない（デフォルト）
+
+- `detect`: 言語のみ検出し、翻訳しない（デフォルト）
 - `translate`: 自動的にターゲット言語へ翻訳
 - `block`: ターゲット言語以外のコンテンツを拒否
-- `warn`: 警告を記録するがコンテンツを許可
+- `warn`: 警告を記録するがコンテンツは通過させる
 
+## 複数のプロセッサを適用する
 
+複数のプロセッサを連結できます。`inputProcessors` 配列に並んだ順に逐次実行され、あるプロセッサの出力は次のプロセッサの入力になります。
 
-## 複数のプロセッサの適用
-
-複数のプロセッサをチェーンできます。これらは `inputProcessors` 配列で指定した順に順次実行され、あるプロセッサの出力が次のプロセッサの入力になります。
-
-**順序が重要です！** 一般的には、最初にテキストの正規化、次にセキュリティチェック、最後にコンテンツの変更を配置するのがベストプラクティスです。
+**順序が重要です！** 一般的には、最初にテキスト正規化、次にセキュリティチェック、最後にコンテンツの変更を行うのが推奨されます。
 
 ```typescript copy showLineNumbers {9-18}
 import { Agent } from "@mastra/core/agent";
-import { 
-  UnicodeNormalizer, 
-  ModerationProcessor, 
+import {
+  UnicodeNormalizer,
+  ModerationProcessor,
   PromptInjectionDetector,
-  PIIDetector 
+  PIIDetector
 } from "@mastra/core/processors";
 
 const secureAgent = new Agent({
@@ -213,47 +214,47 @@ const secureAgent = new Agent({
 });
 ```
 
-
-
 ## カスタムプロセッサの作成
 
-`Processor` インターフェースを実装することで、カスタムプロセッサを作成できます。`processInput` メソッドを実装している場合、Processor は入力処理に使用できます。
+`Processor` インターフェースを実装することで、カスタムプロセッサを作成できます。`processInput` メソッドを実装すると、入力処理に使用できます。
 
-```typescript copy showLineNumbers {4-19,23-26}
-import type { Processor, MastraMessageV2, TripWire } from "@mastra/core/processors";
+```typescript copy showLineNumbers {5,10-33,39}
+import type { Processor } from "@mastra/core/processors";
+import type { MastraMessageV2 } from "@mastra/core/agent/message-list";
+import { TripWire } from "@mastra/core/agent";
 
 class MessageLengthLimiter implements Processor {
   readonly name = 'message-length-limiter';
-  
+
   constructor(private maxLength: number = 1000) {}
 
-  processInput({ messages, abort }: { 
-    messages: MastraMessageV2[]; 
-    abort: (reason?: string) => never 
+  processInput({ messages, abort }: {
+    messages: MastraMessageV2[];
+    abort: (reason?: string) => never
   }): MastraMessageV2[] {
-    // メッセージの合計文字数をチェック
+    // メッセージ全体の長さをチェック
     try {
       const totalLength = messages.reduce((sum, msg) => {
         return sum + msg.content.parts
           .filter(part => part.type === 'text')
           .reduce((partSum, part) => partSum + (part as any).text.length, 0);
       }, 0);
-      
+
       if (totalLength > this.maxLength) {
-        abort(`Message too long: ${totalLength} characters (max: ${this.maxLength})`); // TripWire エラーを送出
+        abort(`メッセージが長すぎます: ${totalLength} 文字（上限: ${this.maxLength}）`); // TripWire エラーを投げる
       }
     } catch (error) {
       if (error instanceof TripWire) {
-        throw error; // TripWire エラーは再送出
+        throw error; // TripWire エラーは投げ直す
       }
-      throw new Error(`Length validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`); // アプリケーションレベルでは標準的なエラーを送出
+      throw new Error(`長さの検証に失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`); // アプリケーションレベルでは標準のエラーを投げる
     }
-    
+
     return messages;
   }
 }
 
-// カスタムプロセッサを使用する
+// カスタムプロセッサを使用
 const agent = new Agent({
   inputProcessors: [
     new MessageLengthLimiter(2000), // 2000 文字に制限
@@ -261,18 +262,17 @@ const agent = new Agent({
 });
 ```
 
-カスタムプロセッサを作成する際のポイント:
-- 常に `messages` 配列（必要に応じて変更後のもの）を返す
-- 早期終了には `abort(reason)` を使用する。Abort はメッセージのブロックを模擬するために使われ、`abort` で送出されるエラーは TripWire のインスタンスになる。コード／アプリケーションレベルのエラーは標準的なエラーを送出する。
-- 入力メッセージを直接変更する。メッセージの parts と content の両方を必ず更新する。
-- プロセッサは単一責務に絞る
-- プロセッサ内でエージェントを使用する場合は、高速なモデルを使い、その応答サイズを可能な限り小さく抑え（トークンが増えるほど応答は指数関数的に遅くなる）、system プロンプトはできるだけ簡潔にする。これらはいずれもレイテンシのボトルネックとなる。
+カスタムプロセッサを作成する際は、次の点に注意してください:
 
-
+- 必ず `messages` 配列を返すこと（必要に応じて変更されたもの）
+- 処理を早期終了するには `abort(reason)` を使用します。abort はメッセージのブロックをシミュレートするために使われ、`abort` によって投げられるエラーは TripWire のインスタンスになります。コード／アプリケーションレベルのエラーには、標準のエラーを投げてください。
+- 入力メッセージは直接変更し、メッセージの `parts` と `content` の両方を必ず更新してください。
+- プロセッサは単一責務に絞ること
+- プロセッサ内でエージェントを使用する場合は、高速なモデルを用い、その応答サイズを可能な限り小さくし（トークンが増えるほど応答は指数関数的に遅くなります）、システムプロンプトはできるだけ簡潔にしてください。これらはいずれもレイテンシのボトルネックになります。
 
 ## エージェントメソッドとの統合
 
-Input Processor は `generate()`, `stream()`, `streamVNext()` メソッドで動作します。エージェントが応答の生成やストリーミングを開始する前に、すべての Processor パイプラインが完了します。
+Input processor は `generate()`, `stream()`, `streamVNext()` メソッドで動作します。エージェントが応答の生成やストリーミングを開始する前に、すべての processor パイプラインが完了します。
 
 ```typescript copy showLineNumbers
 // Processors run before generate()
@@ -285,12 +285,10 @@ for await (const chunk of stream) {
 }
 ```
 
-いずれかの Processor が `abort()` を呼び出すと、リクエストは即座に終了し、それ以降の Processor は実行されません。エージェントは、そのリクエストがブロックされた理由（`result.tripwireReason`）の詳細とともに、200 のレスポンスを返します。
-
-
+いずれかの processor が `abort()` を呼び出すと、リクエストは即座に終了し、以降の processor は実行されません。エージェントは、そのリクエストがブロックされた理由（`result.tripwireReason`）の詳細とともに、200 のレスポンスを返します。
 
 ## 出力プロセッサ
 
-入力プロセッサがユーザーのメッセージを言語モデルに届く前に処理するのに対し、**出力プロセッサ**は生成後、ユーザーに返される前の LLM の応答を処理します。これは、応答の検証、コンテンツのフィルタリング、LLM 生成コンテンツに対する安全対策に役立ちます。
+入力プロセッサがユーザーのメッセージを言語モデルに届く前に処理するのに対し、**出力プロセッサ**は、生成されたLLMの応答をユーザーに返す前に処理します。これは、応答の検証、コンテンツのフィルタリング、LLM生成コンテンツの安全対策に役立ちます。
 
-LLM の応答処理の詳細は、[Output Processors のドキュメント](/docs/agents/output-processors)をご覧ください。 
+LLMの応答処理の詳細は、[Output Processors のドキュメント](/docs/agents/output-processors)をご参照ください。

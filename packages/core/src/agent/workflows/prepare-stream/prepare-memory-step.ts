@@ -2,6 +2,7 @@ import deepEqual from 'fast-deep-equal';
 import { z } from 'zod';
 import type { AISpan, AISpanType } from '../../../ai-tracing';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
+import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
 import type { RuntimeContext } from '../../../runtime-context';
@@ -9,7 +10,27 @@ import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { MessageList } from '../../message-list';
-import type { AgentCapabilities } from './types';
+import type { AgentCapabilities } from './schema';
+import { prepareMemoryStepOutputSchema } from './schema';
+
+/**
+ * Helper function to add system message(s) to a MessageList
+ * Handles string, CoreSystemMessage, SystemModelMessage, and arrays of these message formats
+ * Used for both agent instructions and user-provided system messages
+ */
+function addSystemMessage(messageList: MessageList, content: SystemMessage | undefined, tag?: string): void {
+  if (!content) return;
+
+  if (Array.isArray(content)) {
+    // Handle array of system messages
+    for (const msg of content) {
+      messageList.addSystem(msg, tag);
+    }
+  } else {
+    // Handle string, CoreSystemMessage, or SystemModelMessage
+    messageList.addSystem(content, tag);
+  }
+}
 
 interface PrepareMemoryStepOptions<
   OUTPUT extends OutputSchema | undefined = undefined,
@@ -24,7 +45,7 @@ interface PrepareMemoryStepOptions<
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
   methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
   format?: FORMAT;
-  instructions: string;
+  instructions: SystemMessage;
   memoryConfig?: MemoryConfig;
   memory?: MastraMemory;
 }
@@ -45,14 +66,8 @@ export function createPrepareMemoryStep<
 }: PrepareMemoryStepOptions<OUTPUT, FORMAT>) {
   return createStep({
     id: 'prepare-memory-step',
-    inputSchema: z.any(),
-    outputSchema: z.object({
-      threadExists: z.boolean(),
-      thread: z.any(),
-      messageList: z.any(),
-      tripwire: z.boolean().optional(),
-      tripwireReason: z.string().optional(),
-    }),
+    inputSchema: z.object({}),
+    outputSchema: prepareMemoryStepOutputSchema,
     execute: async ({ tracingContext }) => {
       const thread = threadFromArgs;
       const messageList = new MessageList({
@@ -61,12 +76,15 @@ export function createPrepareMemoryStep<
         generateMessageId: capabilities.generateMessageId,
         // @ts-ignore Flag for agent network messages
         _agentNetworkAppend: capabilities._agentNetworkAppend,
-      })
-        .addSystem({
-          role: 'system',
-          content: instructions,
-        })
-        .add(options.context || [], 'context');
+      });
+
+      // Add instructions as system message(s)
+      addSystemMessage(messageList, instructions);
+
+      messageList.add(options.context || [], 'context');
+
+      // Add user-provided system message if present
+      addSystemMessage(messageList, options.system, 'user-provided');
 
       if (!memory || (!thread?.id && !resourceId)) {
         messageList.add(options.messages, 'user');
@@ -232,13 +250,20 @@ export function createPrepareMemoryStep<
         generateMessageId: capabilities.generateMessageId,
         // @ts-ignore Flag for agent network messages
         _agentNetworkAppend: capabilities._agentNetworkAppend,
-      })
-        .addSystem(instructions)
+      });
+
+      // Add instructions as system message(s)
+      addSystemMessage(processedList, instructions);
+
+      processedList
         .addSystem(memorySystemMessage)
         .addSystem(systemMessages)
-        .add(options.context || [], 'context')
-        .add(processedMemoryMessages, 'memory')
-        .add(messageList.get.input.v2(), 'user');
+        .add(options.context || [], 'context');
+
+      // Add user-provided system message if present
+      addSystemMessage(processedList, options.system, 'user-provided');
+
+      processedList.add(processedMemoryMessages, 'memory').add(messageList.get.input.v2(), 'user');
 
       return {
         thread: threadObject,

@@ -4,11 +4,11 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2, LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
-import type { CoreMessage, LanguageModelV1 } from 'ai';
+import type { CoreMessage, LanguageModelV1, CoreSystemMessage } from 'ai';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { stepCountIs } from 'ai-v5';
-import type { UIMessageChunk } from 'ai-v5';
+import type { SystemModelMessage, UIMessageChunk } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { config } from 'dotenv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -3907,6 +3907,555 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
   });
 
+  describe(`${version} - Agent instructions with SystemMessage types`, () => {
+    it('should support string instructions (backward compatibility)', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: dummyModel,
+      });
+
+      const instructions = await agent.getInstructions();
+      expect(instructions).toBe('You are a helpful assistant.');
+
+      // Deprecated getter should work for strings
+      expect(agent.instructions).toBe('You are a helpful assistant.');
+    });
+
+    it('should support CoreSystemMessage instructions', async () => {
+      const systemMessage: CoreSystemMessage = {
+        role: 'system',
+        content: 'You are an expert programmer.',
+      };
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: systemMessage,
+        model: dummyModel,
+      });
+
+      const instructions = await agent.getInstructions();
+      expect(instructions).toEqual(systemMessage);
+
+      // Deprecated getter should throw for non-string
+      expect(() => agent.instructions).toThrow(
+        'The instructions getter is deprecated and only supports string instructions',
+      );
+    });
+
+    it('should support SystemModelMessage instructions', async () => {
+      const systemMessage: SystemModelMessage = {
+        role: 'system',
+        content: 'You are a data analyst.',
+      };
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: systemMessage,
+        model: dummyModel,
+      });
+
+      const instructions = await agent.getInstructions();
+      expect(instructions).toEqual(systemMessage);
+
+      // Deprecated getter should throw for non-string
+      expect(() => agent.instructions).toThrow(
+        'The instructions getter is deprecated and only supports string instructions',
+      );
+    });
+
+    it('should support array of string instructions', async () => {
+      const instructionsArray = ['You are a helpful assistant.', 'Always be polite.', 'Provide detailed answers.'];
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: instructionsArray,
+        model: dummyModel,
+      });
+
+      const instructions = await agent.getInstructions();
+      expect(instructions).toEqual(instructionsArray);
+
+      // Deprecated getter should throw for arrays
+      expect(() => agent.instructions).toThrow(
+        'The instructions getter is deprecated and only supports string instructions',
+      );
+    });
+
+    it('should support array of CoreSystemMessage instructions', async () => {
+      const instructionsArray: CoreSystemMessage[] = [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'system', content: 'Always be polite.' },
+      ];
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: instructionsArray,
+        model: dummyModel,
+      });
+
+      const instructions = await agent.getInstructions();
+      expect(instructions).toEqual(instructionsArray);
+
+      // Deprecated getter should throw
+      expect(() => agent.instructions).toThrow(
+        'The instructions getter is deprecated and only supports string instructions',
+      );
+    });
+
+    it('should support array of CoreSystemMessage with provider metadata', async () => {
+      const instructionsArray: CoreSystemMessage[] = [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        {
+          role: 'system',
+          content: 'Always be polite.',
+          experimental_providerMetadata: { anthropic: { cache_control: { type: 'ephemeral' } } },
+        },
+        {
+          role: 'system',
+          content: 'Use technical language.',
+          providerOptions: { openai: { reasoning_effort: 'medium' } },
+        },
+      ];
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: instructionsArray,
+        model: dummyModel,
+      });
+
+      const instructions = await agent.getInstructions();
+      expect(instructions).toEqual(instructionsArray);
+    });
+
+    it('should support dynamic instructions returning string', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: ({ runtimeContext }) => {
+          const role = runtimeContext?.get('role') || 'assistant';
+          return `You are a helpful ${role}.`;
+        },
+        model: dummyModel,
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('role', 'teacher');
+
+      const instructions = await agent.getInstructions({ runtimeContext });
+      expect(instructions).toBe('You are a helpful teacher.');
+
+      // Deprecated getter should throw for function
+      expect(() => agent.instructions).toThrow('Instructions are not compatible when instructions are a function');
+    });
+
+    it('should support dynamic instructions returning CoreSystemMessage', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: ({ runtimeContext }) => {
+          const role = runtimeContext?.get('role') || 'assistant';
+          return {
+            role: 'system',
+            content: `You are a helpful ${role}.`,
+          };
+        },
+        model: dummyModel,
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('role', 'doctor');
+
+      const instructions = await agent.getInstructions({ runtimeContext });
+      expect(instructions).toEqual({
+        role: 'system',
+        content: 'You are a helpful doctor.',
+      });
+    });
+
+    it('should support dynamic instructions returning array', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: ({ runtimeContext }) => {
+          const expertise = (runtimeContext?.get('expertise') as string[]) || [];
+          const expertiseMessages: CoreSystemMessage[] = expertise.map((exp: string) => ({
+            role: 'system',
+            content: `You have expertise in ${exp}.`,
+          }));
+          const messages: CoreSystemMessage[] = [
+            { role: 'system', content: 'You are a helpful assistant.' },
+            ...expertiseMessages,
+          ];
+          return messages;
+        },
+        model: dummyModel,
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('expertise', ['Python', 'JavaScript']);
+
+      const instructions = await agent.getInstructions({ runtimeContext });
+      expect(instructions).toEqual([
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'system', content: 'You have expertise in Python.' },
+        { role: 'system', content: 'You have expertise in JavaScript.' },
+      ]);
+    });
+
+    it('should support async dynamic instructions', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: async ({ runtimeContext }) => {
+          // Simulate async operation
+          await delay(10);
+          const role = runtimeContext?.get('role') || 'assistant';
+          return {
+            role: 'system',
+            content: `You are an async ${role}.`,
+          };
+        },
+        model: dummyModel,
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('role', 'consultant');
+
+      const instructions = await agent.getInstructions({ runtimeContext });
+      expect(instructions).toEqual({
+        role: 'system',
+        content: 'You are an async consultant.',
+      });
+    });
+
+    it('should combine instructions with system option in generateVNext', async () => {
+      // This test verifies that both agent instructions and user-provided system messages
+      // are properly combined when using generateVNext
+      // For now, we're just testing that the functionality doesn't break
+      // Full integration testing would require checking the actual messages sent to the LLM
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: dummyModel,
+      });
+
+      const additionalSystem: CoreSystemMessage = {
+        role: 'system',
+        content: 'Be concise in your responses.',
+      };
+
+      if (version === 'v2') {
+        // This test only applies to V2
+        // Simply verify that generateVNext works with the system option
+        // without throwing errors
+        const response = await agent.generateVNext('Hello', {
+          system: additionalSystem,
+        });
+
+        // Basic check that response was generated
+        expect(response.text).toBe('Dummy response');
+      } else {
+        // Skip for V1
+        expect(true).toBe(true);
+      }
+    });
+
+    it('should combine array instructions with array system option', async () => {
+      // This test verifies that array instructions and array system messages
+      // are properly combined when using generateVNext
+
+      // Use CoreSystemMessage array instead of mixed array
+      const agentInstructions: CoreSystemMessage[] = [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'system', content: 'You are an expert.' },
+      ];
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: agentInstructions,
+        model: dummyModel,
+      });
+
+      // Use string array for additional system messages
+      const additionalSystem: string[] = ['Be concise.', 'Use examples.'];
+
+      if (version === 'v2') {
+        // This test only applies to V2
+        // Simply verify that generateVNext works with array system option
+        // without throwing errors
+        const response = await agent.generateVNext('Hello', {
+          system: additionalSystem,
+        });
+
+        // Basic check that response was generated
+        expect(response.text).toBe('Dummy response');
+      } else {
+        // Skip for V1
+        expect(true).toBe(true);
+      }
+    });
+
+    it('should handle empty instructions gracefully', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: '',
+        model: dummyModel,
+      });
+
+      const instructions = await agent.getInstructions();
+      expect(instructions).toBe('');
+    });
+
+    it('should handle empty array instructions', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: [],
+        model: dummyModel,
+      });
+
+      const instructions = await agent.getInstructions();
+      expect(instructions).toEqual([]);
+    });
+
+    it('should throw error for function instructions in deprecated getter', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: () => 'Dynamic instructions',
+        model: dummyModel,
+      });
+
+      expect(() => agent.instructions).toThrow('Instructions are not compatible when instructions are a function');
+    });
+
+    it('should throw error for non-string static instructions in deprecated getter', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: { role: 'system', content: 'Instructions' },
+        model: dummyModel,
+      });
+
+      expect(() => agent.instructions).toThrow(
+        'The instructions getter is deprecated and only supports string instructions',
+      );
+    });
+
+    it('should allow override instructions in generate options', async () => {
+      const agent = new Agent({
+        name: 'override-agent',
+        instructions: 'Default instructions',
+        model: dummyModel,
+      });
+
+      if (version === 'v1') {
+        const response = await agent.generate('Hello', {
+          instructions: {
+            role: 'system',
+            content: 'Override instructions',
+          },
+        });
+        expect(response.text).toBe('Dummy response');
+      } else {
+        // For v2, use generateVNext
+        const response = await agent.generateVNext('Hello', {
+          instructions: {
+            role: 'system',
+            content: 'Override instructions',
+          },
+        });
+        expect(response.text).toBe('Dummy response');
+      }
+    });
+
+    it('should convert CoreSystemMessage instructions for voice', async () => {
+      const mockVoice = {
+        addInstructions: vi.fn(),
+        addTools: vi.fn(),
+      };
+
+      const agent = new Agent({
+        name: 'voice-agent',
+        instructions: {
+          role: 'system',
+          content: 'You are a helpful voice assistant.',
+        },
+        model: dummyModel,
+        voice: mockVoice as any,
+      });
+
+      await agent.getVoice();
+
+      // Verify voice received the instruction text
+      expect(mockVoice.addInstructions).toHaveBeenCalledWith('You are a helpful voice assistant.');
+    });
+
+    it('should support SystemModelMessage with providerOptions', async () => {
+      const systemMessage: SystemModelMessage = {
+        role: 'system',
+        content: 'You are an expert programmer.',
+        providerOptions: {
+          openai: { reasoning_effort: 'high' },
+        },
+      };
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: systemMessage,
+        model: dummyModel,
+      });
+
+      const instructions = await agent.getInstructions();
+      expect(instructions).toEqual(systemMessage);
+    });
+
+    it('should support array of SystemModelMessage', async () => {
+      const instructionsArray: SystemModelMessage[] = [
+        {
+          role: 'system',
+          content: 'You are an expert.',
+          providerOptions: { openai: { temperature: 0.7 } },
+        },
+        {
+          role: 'system',
+          content: 'Be concise.',
+          providerOptions: { openai: { max_tokens: 100 } },
+        },
+      ];
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: instructionsArray,
+        model: dummyModel,
+      });
+
+      const instructions = await agent.getInstructions();
+      expect(instructions).toEqual(instructionsArray);
+    });
+
+    it('should combine instructions with system option in streamVNext', async () => {
+      if (version === 'v2') {
+        const agent = new Agent({
+          name: 'test-agent',
+          instructions: 'You are a helpful assistant.',
+          model: dummyModel,
+        });
+
+        const additionalSystem = {
+          role: 'system' as const,
+          content: 'Be concise in your responses.',
+        };
+
+        const stream = await agent.streamVNext('Hello', {
+          system: additionalSystem,
+        });
+
+        // Verify stream completes without error
+        const result = await stream.getFullOutput();
+        expect(result).toBeDefined();
+      } else {
+        expect(true).toBe(true);
+      }
+    });
+
+    it('should allow override with array instructions in generate options', async () => {
+      const agent = new Agent({
+        name: 'override-array-agent',
+        instructions: 'Default instructions',
+        model: dummyModel,
+      });
+
+      if (version === 'v1') {
+        const response = await agent.generate('Hello', {
+          instructions: ['Override instruction 1', 'Override instruction 2'],
+        });
+        expect(response.text).toBe('Dummy response');
+      } else {
+        // For v2, use generateVNext
+        const response = await agent.generateVNext('Hello', {
+          instructions: ['Override instruction 1', 'Override instruction 2'],
+        });
+        expect(response.text).toBe('Dummy response');
+      }
+    });
+
+    it('should support dynamic instructions returning SystemModelMessage', async () => {
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: ({ runtimeContext }) => {
+          const mode = runtimeContext?.get('mode') || 'default';
+          return {
+            role: 'system' as const,
+            content: `You are in ${mode} mode.`,
+            providerOptions: {
+              openai: { temperature: mode === 'creative' ? 0.9 : 0.3 },
+            },
+          } as SystemModelMessage;
+        },
+        model: dummyModel,
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('mode', 'creative');
+
+      const instructions = await agent.getInstructions({ runtimeContext });
+      expect(instructions).toEqual({
+        role: 'system',
+        content: 'You are in creative mode.',
+        providerOptions: { openai: { temperature: 0.9 } },
+      });
+    });
+
+    it('should preserve provider options when building message list', async () => {
+      // This test verifies that provider options (like Anthropic caching) are preserved
+      // when instructions are added to the message list
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: {
+          role: 'system',
+          content: 'You are a helpful assistant with caching.',
+          providerOptions: {
+            anthropic: { cacheControl: { type: 'ephemeral' } },
+          },
+        } as SystemModelMessage,
+        model: dummyModel,
+      });
+
+      // Spy on MessageList.addSystem to capture what's being added
+      const addSystemSpy = vi.spyOn(MessageList.prototype, 'addSystem');
+
+      if (version === 'v2') {
+        try {
+          // This will trigger the message list building
+          await agent.generateVNext('Hello');
+
+          // Check all addSystem calls
+          const systemMessageCalls = addSystemSpy.mock.calls.filter(call => {
+            const msg = call[0];
+            return typeof msg === 'object' && msg !== null && 'role' in msg && msg.role === 'system';
+          });
+
+          // Find calls that have provider options
+          const messagesWithProviderOptions = systemMessageCalls
+            .map(call => call[0])
+            .filter((msg): msg is SystemModelMessage => {
+              return (
+                typeof msg === 'object' && msg !== null && 'providerOptions' in msg && msg.providerOptions !== undefined
+              );
+            });
+
+          // Verify provider options are preserved
+          expect(messagesWithProviderOptions.length).toBeGreaterThan(0);
+          expect(messagesWithProviderOptions?.[0]?.providerOptions).toEqual({
+            anthropic: { cacheControl: { type: 'ephemeral' } },
+          });
+        } finally {
+          // Restore the spy
+          addSystemSpy.mockRestore();
+        }
+      } else {
+        // Skip for v1
+        expect(true).toBe(true);
+      }
+    });
+  });
+
   describe(`${version} - Agent save message parts`, () => {
     // Model that emits 10 parts
     let dummyResponseModel: MockLanguageModelV1 | MockLanguageModelV2;
@@ -6290,6 +6839,582 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(userSystemMessage?.content).toContain(
         'You always put jokes in your conversation and also always say Super!!!!',
       );
+    });
+
+    it('should support system option in generate method', async () => {
+      // Mock the LLM to capture what messages it receives
+      let capturedMessages: any[] = [];
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        testModel = new MockLanguageModelV1({
+          doGenerate: async ({ prompt }) => {
+            capturedMessages = prompt;
+            return {
+              text: 'Test response',
+              usage: { promptTokens: 10, completionTokens: 5 },
+              finishReason: 'stop',
+              rawCall: { rawPrompt: [], rawSettings: {} },
+            };
+          },
+        });
+      } else {
+        testModel = new MockLanguageModelV2({
+          doGenerate: async ({ prompt }) => {
+            capturedMessages = prompt;
+            return {
+              content: [{ type: 'text', text: 'Test response' }],
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              finishReason: 'stop',
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          },
+          doStream: async ({ prompt }) => {
+            capturedMessages = prompt;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                {
+                  type: 'response-metadata',
+                  id: 'mock-response-id',
+                  modelId: 'mock-model-v2',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Test response' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+            };
+          },
+        });
+      }
+
+      const agent = new Agent({
+        name: 'system-option-generate-test',
+        instructions: 'Default instructions',
+        model: testModel,
+      });
+
+      // Test generate with system option
+      if (version === 'v1') {
+        await agent.generate('Hello', {
+          system: 'You must respond in JSON format',
+        });
+      } else {
+        await agent.generateVNext('Hello', {
+          system: 'You must respond in JSON format',
+        });
+      }
+
+      // Check if system message from option was added
+      const systemMessages = capturedMessages.filter(m => m.role === 'system');
+      const customSystemMessage = systemMessages.find(
+        m => typeof m.content === 'string' && m.content.includes('You must respond in JSON format'),
+      );
+
+      expect(customSystemMessage).toBeDefined();
+      expect(customSystemMessage?.content).toContain('You must respond in JSON format');
+    });
+
+    it('should support system option in stream method', async () => {
+      // Mock the LLM to capture what messages it receives
+      let capturedMessages: any[] = [];
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        testModel = new MockLanguageModelV1({
+          doGenerate: async ({ prompt }) => {
+            capturedMessages = prompt;
+            return {
+              text: 'Test response',
+              usage: { promptTokens: 10, completionTokens: 5 },
+              finishReason: 'stop',
+              rawCall: { rawPrompt: [], rawSettings: {} },
+            };
+          },
+          doStream: async ({ prompt }) => {
+            capturedMessages = prompt;
+            return {
+              stream: simulateReadableStream({
+                chunks: [
+                  { type: 'text-delta', textDelta: 'Test response' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { promptTokens: 10, completionTokens: 5 },
+                  },
+                ],
+              }),
+              rawCall: { rawPrompt: [], rawSettings: {} },
+            };
+          },
+        });
+      } else {
+        testModel = new MockLanguageModelV2({
+          doStream: async ({ prompt }) => {
+            capturedMessages = prompt;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                {
+                  type: 'response-metadata',
+                  id: 'mock-response-id',
+                  modelId: 'mock-model-v2',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Test response' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+            };
+          },
+        });
+      }
+
+      const agent = new Agent({
+        name: 'system-option-stream-test',
+        instructions: 'Default instructions',
+        model: testModel,
+      });
+
+      // Test stream with system option
+      if (version === 'v1') {
+        const streamResult = await agent.stream('Hello', {
+          system: 'Always be concise',
+        });
+        // Properly consume the v1 stream
+        for await (const _chunk of streamResult.textStream) {
+          // Just consume the stream
+        }
+      } else {
+        const streamResult = await agent.streamVNext('Hello', {
+          system: 'Always be concise',
+        });
+        await streamResult.getFullOutput(); // Consume the stream
+      }
+
+      // Check if system message from option was added
+      const systemMessages = capturedMessages.filter(m => m.role === 'system');
+      const customSystemMessage = systemMessages.find(
+        m => typeof m.content === 'string' && m.content.includes('Always be concise'),
+      );
+
+      expect(customSystemMessage).toBeDefined();
+      expect(customSystemMessage?.content).toContain('Always be concise');
+    });
+
+    it('should work with both instructions override and system option', async () => {
+      let capturedMessages: any[] = [];
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        testModel = new MockLanguageModelV1({
+          doGenerate: async ({ prompt }) => {
+            capturedMessages = prompt;
+            return {
+              text: 'Response',
+              usage: { promptTokens: 10, completionTokens: 5 },
+              finishReason: 'stop',
+              rawCall: { rawPrompt: [], rawSettings: {} },
+            };
+          },
+        });
+      } else {
+        testModel = new MockLanguageModelV2({
+          doGenerate: async ({ prompt }) => {
+            capturedMessages = prompt;
+            return {
+              content: [{ type: 'text', text: 'Response' }],
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              finishReason: 'stop',
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          },
+          doStream: async ({ prompt }) => {
+            capturedMessages = prompt;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                {
+                  type: 'response-metadata',
+                  id: 'mock-response-id',
+                  modelId: 'mock-model-v2',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Response' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+            };
+          },
+        });
+      }
+
+      const agent = new Agent({
+        name: 'combined-test-agent',
+        instructions: 'Default instructions',
+        model: testModel,
+      });
+
+      if (version === 'v1') {
+        await agent.generate('Hello', {
+          instructions: 'Override instructions',
+          system: 'Additional system context',
+        });
+      } else {
+        await agent.generateVNext('Hello', {
+          instructions: 'Override instructions',
+          system: 'Additional system context',
+        });
+      }
+
+      const systemMessages = capturedMessages.filter(m => m.role === 'system');
+      const allSystemContent = systemMessages.map(m => m.content).join(' ');
+
+      expect(allSystemContent).toContain('Override instructions');
+      expect(allSystemContent).toContain('Additional system context');
+    });
+
+    it('should support CoreSystemMessage object in generateVNext method', async () => {
+      // Skip this test for v1 as it only applies to VNext methods
+      if (version === 'v1') {
+        return;
+      }
+
+      let capturedMessages: any[] = [];
+      const testModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          capturedMessages = prompt;
+          return {
+            content: [{ type: 'text', text: 'Test response' }],
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            finishReason: 'stop',
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        },
+        doStream: async ({ prompt }) => {
+          capturedMessages = prompt;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'response-metadata',
+                id: 'mock-response-id',
+                modelId: 'mock-model-v2',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: 'Test response' },
+              { type: 'text-end', id: '1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+          };
+        },
+      });
+
+      const agent = new Agent({
+        name: 'core-system-message-test',
+        instructions: 'Default instructions',
+        model: testModel,
+      });
+
+      // Test with CoreSystemMessage object
+      await agent.generateVNext('Hello', {
+        system: {
+          role: 'system',
+          content: 'You are a helpful assistant that responds in JSON format',
+        },
+      });
+
+      // Check if system message was properly added
+      const systemMessages = capturedMessages.filter(m => m.role === 'system');
+      const jsonSystemMessage = systemMessages.find(
+        m =>
+          typeof m.content === 'string' &&
+          m.content.includes('You are a helpful assistant that responds in JSON format'),
+      );
+
+      expect(jsonSystemMessage).toBeDefined();
+      expect(jsonSystemMessage?.content).toBe('You are a helpful assistant that responds in JSON format');
+    });
+
+    it('should support SystemModelMessage object in streamVNext method', async () => {
+      // Skip this test for v1 as it only applies to VNext methods
+      if (version === 'v1') {
+        return;
+      }
+
+      let capturedMessages: any[] = [];
+      const testModel = new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          capturedMessages = prompt;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'response-metadata',
+                id: 'mock-response-id',
+                modelId: 'mock-model-v2',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: 'Test' },
+              { type: 'text-delta', id: '1', delta: ' response' },
+              { type: 'text-end', id: '1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+          };
+        },
+      });
+
+      const agent = new Agent({
+        name: 'system-model-message-stream-test',
+        instructions: 'Default instructions',
+        model: testModel,
+      });
+
+      // Test with SystemModelMessage object (AI SDK v5 format)
+      const result = await agent.streamVNext('Hello', {
+        system: {
+          role: 'system',
+          content: 'You are an expert programmer who provides detailed explanations',
+        },
+      });
+
+      // Consume the stream
+      const fullContent = await result.textStream;
+      for await (const _chunk of fullContent) {
+        // Just consume the stream
+      }
+
+      // Check if system message was properly handled
+      const systemMessages = capturedMessages.filter(m => m.role === 'system');
+      const expertSystemMessage = systemMessages.find(
+        m =>
+          typeof m.content === 'string' &&
+          m.content.includes('You are an expert programmer who provides detailed explanations'),
+      );
+
+      expect(expertSystemMessage).toBeDefined();
+    });
+
+    it('should handle mixed system message types correctly', async () => {
+      // Skip this test for v1 as it only applies to VNext methods
+      if (version === 'v1') {
+        return;
+      }
+
+      let capturedMessages: any[] = [];
+      const testModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          capturedMessages = prompt;
+          return {
+            content: [{ type: 'text', text: 'Test response' }],
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            finishReason: 'stop',
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        },
+        doStream: async ({ prompt }) => {
+          capturedMessages = prompt;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'response-metadata',
+                id: 'mock-response-id',
+                modelId: 'mock-model-v2',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: 'Test response' },
+              { type: 'text-end', id: '1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+          };
+        },
+      });
+
+      const agent = new Agent({
+        name: 'mixed-system-test',
+        instructions: 'Default instructions',
+        model: testModel,
+      });
+
+      // Test 1: String system message
+      capturedMessages = [];
+      await agent.generateVNext('Test 1', {
+        system: 'String system message',
+      });
+      let systemMessages = capturedMessages.filter(m => m.role === 'system');
+      let customSystemMessage = systemMessages.find(
+        m => typeof m.content === 'string' && m.content.includes('String system message'),
+      );
+      expect(customSystemMessage).toBeDefined();
+
+      // Test 2: CoreSystemMessage object
+      capturedMessages = [];
+      await agent.generateVNext('Test 2', {
+        system: {
+          role: 'system',
+          content: 'CoreSystemMessage content',
+        },
+      });
+      systemMessages = capturedMessages.filter(m => m.role === 'system');
+      customSystemMessage = systemMessages.find(
+        m => typeof m.content === 'string' && m.content.includes('CoreSystemMessage content'),
+      );
+      expect(customSystemMessage).toBeDefined();
+
+      // Test 3: SystemModelMessage with string content
+      capturedMessages = [];
+      await agent.generateVNext('Test 3', {
+        system: {
+          role: 'system',
+          content: 'SystemModelMessage with full string content',
+        },
+      });
+      systemMessages = capturedMessages.filter(m => m.role === 'system');
+      customSystemMessage = systemMessages.find(
+        m => typeof m.content === 'string' && m.content.includes('SystemModelMessage with full string content'),
+      );
+      expect(customSystemMessage).toBeDefined();
+    });
+
+    it('should support arrays of system messages', async () => {
+      // Skip this test for v1 as it only applies to VNext methods
+      if (version === 'v1') {
+        return;
+      }
+
+      let capturedMessages: any[] = [];
+      const testModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          capturedMessages = prompt;
+          return {
+            content: [{ type: 'text', text: 'Test response' }],
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            finishReason: 'stop',
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        },
+        doStream: async ({ prompt }) => {
+          capturedMessages = prompt;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'response-metadata',
+                id: 'mock-response-id',
+                modelId: 'mock-model-v2',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: 'Test response' },
+              { type: 'text-end', id: '1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+          };
+        },
+      });
+
+      const agent = new Agent({
+        name: 'array-system-test',
+        instructions: 'Default instructions',
+        model: testModel,
+      });
+
+      // Test 1: Array of strings
+      capturedMessages = [];
+      await agent.generateVNext('Test string array', {
+        system: ['First string message', 'Second string message', 'Third string message'],
+      });
+
+      let systemMessages = capturedMessages.filter(m => m.role === 'system');
+      let hasFirst = systemMessages.some(
+        m => typeof m.content === 'string' && m.content.includes('First string message'),
+      );
+      let hasSecond = systemMessages.some(
+        m => typeof m.content === 'string' && m.content.includes('Second string message'),
+      );
+      let hasThird = systemMessages.some(
+        m => typeof m.content === 'string' && m.content.includes('Third string message'),
+      );
+
+      expect(hasFirst).toBe(true);
+      expect(hasSecond).toBe(true);
+      expect(hasThird).toBe(true);
+
+      // Test 2: Array of CoreSystemMessage objects
+      capturedMessages = [];
+      await agent.generateVNext('Test object array', {
+        system: [
+          { role: 'system', content: 'First system message' },
+          { role: 'system', content: 'Second system message' },
+          { role: 'system', content: 'Third system message' },
+        ],
+      });
+
+      systemMessages = capturedMessages.filter(m => m.role === 'system');
+      hasFirst = systemMessages.some(m => typeof m.content === 'string' && m.content.includes('First system message'));
+      hasSecond = systemMessages.some(
+        m => typeof m.content === 'string' && m.content.includes('Second system message'),
+      );
+      hasThird = systemMessages.some(m => typeof m.content === 'string' && m.content.includes('Third system message'));
+
+      expect(hasFirst).toBe(true);
+      expect(hasSecond).toBe(true);
+      expect(hasThird).toBe(true);
     });
   });
 
