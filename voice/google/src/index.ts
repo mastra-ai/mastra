@@ -5,14 +5,17 @@ import type { google as SpeechTypes } from '@google-cloud/speech/build/protos/pr
 import { TextToSpeechClient } from '@google-cloud/text-to-speech';
 import type { google as TextToSpeechTypes } from '@google-cloud/text-to-speech/build/protos/protos';
 import { MastraVoice } from '@mastra/core/voice';
+import type { GoogleAuthOptions } from 'google-auth-library';
 
 /**
  * Configuration for Google Cloud Voice models
  * @interface GoogleModelConfig
  * @property {string} [apiKey] - Optional Google Cloud API key. If not provided, will use GOOGLE_API_KEY environment variable
+ * @property {GoogleAuthOptions} [options] - Optional Google Auth options for client configuration
  */
 export interface GoogleModelConfig {
   apiKey?: string;
+  options?: Omit<GoogleAuthOptions, 'apiKey'>;
 }
 
 const DEFAULT_VOICE = 'en-US-Casual-K';
@@ -67,10 +70,12 @@ export class GoogleVoice extends MastraVoice {
 
     this.ttsClient = new TextToSpeechClient({
       apiKey: this.speechModel?.apiKey || defaultApiKey,
+      ...speechModel?.options,
     });
 
     this.speechClient = new SpeechClient({
       apiKey: this.listeningModel?.apiKey || defaultApiKey,
+      ...listeningModel?.options,
     });
   }
 
