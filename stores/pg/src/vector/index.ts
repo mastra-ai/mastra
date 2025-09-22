@@ -531,6 +531,25 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         dimension = existingIndexInfo.dimension;
 
         // Check if the existing index matches what we want to create
+        // If no indexConfig provided or it's empty, preserve the existing index
+        const isConfigEmpty = !indexConfig || (!indexConfig.type && !indexConfig.ivf && !indexConfig.hnsw);
+
+        if (isConfigEmpty) {
+          // No specific config provided - preserve existing index regardless of type
+          this.logger?.debug(
+            `Index ${vectorIndexName} already exists (type: ${existingIndexInfo.type}, metric: ${existingIndexInfo.metric}), preserving existing configuration`,
+          );
+          const cacheKey = await this.getIndexCacheKey({
+            indexName,
+            dimension,
+            type: existingIndexInfo.type,
+            metric: existingIndexInfo.metric,
+          });
+          this.createdIndexes.set(indexName, cacheKey);
+          return;
+        }
+
+        // Config was provided, check if it matches
         const desiredType = indexConfig.type || 'ivfflat';
         const configMatches =
           existingIndexInfo.metric === metric &&
@@ -564,7 +583,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         this.logger?.debug(`Index ${indexName} doesn't exist yet, will create it`);
       }
 
-      if (indexConfig.type === 'flat') {
+      // Determine index type - use defaults if no config provided
+      const isConfigEmpty = !indexConfig || (!indexConfig.type && !indexConfig.ivf && !indexConfig.hnsw);
+      const indexType = isConfigEmpty ? 'ivfflat' : indexConfig.type || 'ivfflat';
+
+      if (indexType === 'flat') {
         this.describeIndexCache.delete(indexName);
         return;
       }
@@ -573,7 +596,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         metric === 'cosine' ? 'vector_cosine_ops' : metric === 'euclidean' ? 'vector_l2_ops' : 'vector_ip_ops';
 
       let indexSQL: string;
-      if (indexConfig.type === 'hnsw') {
+      if (indexType === 'hnsw') {
         const m = indexConfig.hnsw?.m ?? 8;
         const efConstruction = indexConfig.hnsw?.efConstruction ?? 32;
 

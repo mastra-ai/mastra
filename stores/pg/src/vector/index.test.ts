@@ -317,6 +317,37 @@ describe('PgVector', () => {
         expect(stats2.config.lists).toBe(200);
       });
 
+      it('should preserve existing index when no config provided', async () => {
+        // Create HNSW index with specific config
+        await vectorDB.createIndex({
+          indexName: testRecreateIndex,
+          dimension: 512,
+          metric: 'dotproduct',
+          indexConfig: {
+            type: 'hnsw',
+            hnsw: { m: 32, efConstruction: 128 },
+          },
+        });
+
+        const stats1 = await vectorDB.describeIndex({ indexName: testRecreateIndex });
+        expect(stats1.type).toBe('hnsw');
+        expect(stats1.config.m).toBe(32);
+        expect(stats1.metric).toBe('dotproduct');
+
+        // Call create again WITHOUT indexConfig - should preserve HNSW
+        await vectorDB.createIndex({
+          indexName: testRecreateIndex,
+          dimension: 512,
+          metric: 'dotproduct',
+        });
+
+        // Verify index was NOT recreated - still HNSW
+        const stats2 = await vectorDB.describeIndex({ indexName: testRecreateIndex });
+        expect(stats2.type).toBe('hnsw');
+        expect(stats2.config.m).toBe(32);
+        expect(stats2.metric).toBe('dotproduct');
+      });
+
       it('should handle switching from ivfflat to hnsw', async () => {
         // Create with ivfflat
         await vectorDB.createIndex({

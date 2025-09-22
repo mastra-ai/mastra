@@ -239,6 +239,12 @@ Choose the appropriate metric for your embeddings:
 
 The system automatically detects configuration changes and only rebuilds indexes when necessary, preventing the performance issues from unnecessary recreations.
 
+**Important behaviors:**
+
+- If no `indexConfig` is provided, existing indexes are preserved as-is
+- If `indexConfig` is provided, indexes are only rebuilt if the configuration differs
+- New indexes default to IVFFlat with cosine distance when no config is specified
+
 ## Vector Store Methods
 
 - `createIndex({indexName, dimension, metric?, indexConfig?, buildIndex?})`: Create a new table with vector support
