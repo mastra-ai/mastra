@@ -12,7 +12,7 @@
   "dependencies": {
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "@mastra/react-hooks": "file:../../client-sdks/react"
+    "@mastra/react-hooks": "latest"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

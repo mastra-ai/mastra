@@ -28,5 +28,5 @@ export interface QueryClientProviderProps {
 }
 
 export const QueryClientProvider = ({ children, config }: QueryClientProviderProps) => {
-  return <QCProvider client={new QueryClient()}>{children}</QCProvider>;
+  return <QCProvider client={getQueryClient(config)}>{children}</QCProvider>;
 };

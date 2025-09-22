@@ -15,9 +15,7 @@
   ],
   "dependencies": {
     "@mastra/client-js": "workspace:*",
-    "@tanstack/react-query": "^5.81.5",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "@tanstack/react-query": "^5.81.5"
   },
   "devDependencies": {
     "eslint": "^9.35.0",
@@ -29,5 +27,9 @@
     "vite-plugin-dts": "^4.5.4",
     "rollup-plugin-node-externals": "^8.0.1",
     "@vitejs/plugin-react": "^5.0.3"
+  },
+  "peerDependencies":{
+   "react": ">= 18.2.0",
+   "react-dom": ">= 18.2.0"
   }
 }

@@ -3,6 +3,7 @@ import type { UpdateModelParams, NetworkStreamParams } from '@mastra/client-js';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 
 import { useMastraClient } from '../mastra-client-context';
+import { useEffect, useState } from 'react';
 
 // Agent Voice Hooks
 
@@ -232,9 +233,19 @@ export const useAgentUpdateModel = (agentId: string) => {
 
 export const useAgents = () => {
   const client = useMastraClient();
+  
+  const [agents, setAgents] = useState<Awaited<ReturnType<typeof client.getAgents>>>({});
 
-  return useQuery({
-    queryKey: ['agents'],
-    queryFn: () => client.getAgents(),
+  useEffect(() => {
+    const getAgent = async () => {
+      const agents = await client.getAgents();
+      if (agents) {
+        setAgents(agents);
+      } else {
+        setAgents({});
+      }
+    };
+    getAgent();
   });
+  return { agents, isLoading: false };
 };
