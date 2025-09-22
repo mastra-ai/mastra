@@ -739,11 +739,8 @@ export async function reorderAgentModelListHandler({
     }
 
     const modelList = await agent.getModelList();
-    if (!modelList) {
-      throw new HTTPException(400, { message: 'Agent model list is not found' });
-    }
-    if (modelList?.length === 0) {
-      throw new HTTPException(400, { message: 'Agent model list is empty' });
+    if (!modelList || modelList.length === 0) {
+      throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
     }
 
     agent.reorderModels(body.reorderedModelIds);
@@ -784,11 +781,8 @@ export async function updateAgentModelInModelListHandler({
     }
 
     const modelList = await agent.getModelList();
-    if (!modelList) {
-      throw new HTTPException(400, { message: 'Agent model list is not found' });
-    }
-    if (modelList?.length === 0) {
-      throw new HTTPException(400, { message: 'Agent model list is empty' });
+    if (!modelList || modelList.length === 0) {
+      throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
     }
 
     const modelToUpdate = modelList.find(m => m.id === modelConfigId);

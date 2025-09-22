@@ -616,9 +616,9 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                   items: {
                     type: 'string',
                   },
-                  required: ['reorderedModelIds'],
                 },
               },
+              required: ['reorderedModelIds'],
             },
           },
         },
