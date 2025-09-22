@@ -345,7 +345,8 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       ].includes(chunk.type)
     ) {
       const transformedChunk = convertMastraChunkToAISDKv5({
-        chunk,
+        // @ts-ignore
+        chunk, // TODO: fix types here (is not assignable to type 'ChunkType'.)
       });
 
       if (chunk.type === 'raw' && !includeRawChunks) {
