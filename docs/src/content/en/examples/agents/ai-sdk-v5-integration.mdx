@@ -8,7 +8,7 @@ import { GithubLink } from "@/components/github-link";
 
 # Example: AI SDK v5 Integration
 
-This example demonstrates how to integrate Mastra agents with [AI SDK v5](https://sdk.vercel.ai/) to build modern streaming chat interfaces. It showcases a complete Next.js application with real-time conversation capabilities, persistent memory, and tool integration using the experimental `stream` method with AI SDK v5 format support.
+This example demonstrates how to integrate Mastra agents with [AI SDK v5](https://sdk.vercel.ai/) to build modern streaming chat interfaces. It showcases a complete Next.js application with real-time conversation capabilities, persistent memory, and tool integration using the `stream` method with AI SDK v5 format support.
 
 ## Key Features
 
@@ -135,7 +135,7 @@ const getWeather = async (location: string) => {
 
 ### Streaming Chat Endpoint
 
-Create an API route that streams responses from your Mastra agent using the experimental `stream` with AI SDK v5 format:
+Create an API route that streams responses from your Mastra agent using the `stream` method with AI SDK v5 format:
 
 ```typescript showLineNumbers copy filename="app/api/chat/route.ts"
 import { mastra } from "@/src/mastra";

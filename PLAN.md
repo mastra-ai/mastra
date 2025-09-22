@@ -60,10 +60,16 @@ To minimize confusion and ensure clean updates:
 
 ### Step 5: Update Examples
 
-1. Update example projects to use new APIs
-2. Add comments about version compatibility where needed
+. Update example projects to use new APIs
+. Add comments about version compatibility where needed
 
-### Step 6: Final Review
+### Step 6: Review Code Examples in Documentation
+
+. Review all code examples in documentation files to ensure they follow the migration guide
+. Check that examples use the correct methods based on model version context
+. Ensure consistency across all documentation examples
+
+### Step 7: Final Review
 
 1. Search for any remaining "generateVNext" or "streamVNext" references
 2. Verify all links work
@@ -75,14 +81,14 @@ To minimize confusion and ensure clean updates:
 
 #### English Documentation
 
-- [ ] `/docs/src/content/en/reference/agents/generate.mdx` - Convert to document new `generate()` (formerly `generateVNext`)
-- [ ] `/docs/src/content/en/reference/agents/generateLegacy.mdx` - NEW: Create page for legacy `generate()` method, copy contents from existing generate page
-- [ ] `/docs/src/content/en/reference/agents/generateVNext.mdx` - redirect to new `generate.mdx`
-- [ ] `/docs/src/content/en/reference/streaming/agents/stream.mdx` - Convert to document new `stream()` (formerly `streamVNext`)
-- [ ] `/docs/src/content/en/reference/streaming/agents/streamLegacy.mdx` - NEW: Create page for legacy `stream()` method
-- [ ] `/docs/src/content/en/reference/streaming/agents/streamVNext.mdx` - redirect to new `stream.mdx`
-- [ ] `/docs/src/content/en/reference/agents/migration-guide.mdx` - Update to reflect the actual migration (not experimental)
-- [ ] `/docs/src/content/en/reference/agents/_meta.tsx` - Update navigation structure
+- [x] `/docs/src/content/en/reference/agents/generate.mdx` - Convert to document new `generate()` (formerly `generateVNext`)
+- [x] `/docs/src/content/en/reference/agents/generateLegacy.mdx` - NEW: Create page for legacy `generate()` method, copy contents from existing generate page
+- [x] `/docs/src/content/en/reference/agents/generateVNext.mdx` - redirect to new `generate.mdx`
+- [x] `/docs/src/content/en/reference/streaming/agents/stream.mdx` - Convert to document new `stream()` (formerly `streamVNext`)
+- [x] `/docs/src/content/en/reference/streaming/agents/streamLegacy.mdx` - NEW: Create page for legacy `stream()` method
+- [x] `/docs/src/content/en/reference/streaming/agents/streamVNext.mdx` - redirect to new `stream.mdx`
+- [x] `/docs/src/content/en/reference/agents/migration-guide.mdx` - Update to reflect the actual migration (not experimental)
+- [x] `/docs/src/content/en/reference/agents/_meta.tsx` - Update navigation structure
 
 #### Japanese Documentation (Same changes as English)
 
@@ -122,33 +128,33 @@ Ignore, this is auto generated from en
 
 #### English Documentation
 
-- [ ] `/docs/src/content/en/reference/client-js/agents.mdx` - Update all method references
-- [ ] `/docs/src/content/en/reference/client-js/workflows.mdx` - Update stream references
-- [ ] `/docs/src/content/en/reference/client-js/error-handling.mdx` - Update examples
+- [x] `/docs/src/content/en/reference/client-js/agents.mdx` - Update all method references
+- [x] `/docs/src/content/en/reference/client-js/workflows.mdx` - Update stream references
+- [x] `/docs/src/content/en/reference/client-js/error-handling.mdx` - Update examples
 
 ### 6. Memory Documentation
 
 #### English Documentation
 
-- [ ] `/docs/src/content/en/reference/memory/createThread.mdx` - Update examples
+- [x] `/docs/src/content/en/reference/memory/createThread.mdx` - Update examples
 
 ### 7. Guide and Tutorial Updates
 
-- [ ] Search and update any guides that reference these methods
-- [ ] Update course content if applicable
-- [ ] Update getting started guides
+- [x] Search and update any guides that reference these methods
+- [x] Update course content if applicable
+- [x] Update getting started guides
 
 ### 8. Example Code Updates
 
 Update example projects to use new APIs:
 
-- [ ] `examples/client-side-tools/`
-- [ ] `examples/memory-with-context/`
-- [ ] `examples/basics/agents/`
-- [ ] `examples/basics/evals/`
-- [ ] `examples/basics/rag/`
-- [ ] `examples/basics/scorers/`
-- [ ] Other examples as identified
+- [x] `examples/client-side-tools/`
+- [x] `examples/memory-with-context/`
+- [x] `examples/basics/agents/`
+- [x] `examples/basics/evals/`
+- [x] `examples/basics/rag/`
+- [x] `examples/basics/scorers/`
+- [x] Other examples as identified (workflows-legacy uses LegacyWorkflow/LegacyStep correctly)
 
 ## Key Changes for Each Page Type
 

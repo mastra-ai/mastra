@@ -18,7 +18,6 @@ const meta = {
   getLLM: ".getLLM()",
   getDefaultGenerateOptions: ".getDefaultGenerateOptions()",
   getDefaultStreamOptions: ".getDefaultStreamOptions()",
-  getDefaultStreamLegacyOptions: ".getDefaultStreamLegacyOptions() (Legacy)",
 };
 
 export default meta;

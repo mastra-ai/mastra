@@ -4,7 +4,7 @@ import { Tag } from '@/components/tag';
 # Migration Guide: VNext to Standard APIs
 
 <Callout type="info">
-  This guide covers the migration from legacy `generateLegacy()` and `streamLegacy()` methods to the standard `generate()` and `stream()` methods.
+  This guide covers the migration from the original `generate()` and `stream()` methods (now renamed to `generateLegacy()` and `streamLegacy()`) to the new standard `generate()` and `stream()` methods (formerly `generateVNext()` and `streamVNext()`).
 </Callout>
 
 <Callout type="warning">
@@ -17,7 +17,9 @@ import { Tag } from '@/components/tag';
 
 ## Overview
 
-The `streamVNext()` and `generateVNext()` methods in Mastra agents have been renamed to `stream()` and `generate()` respectively. These are now the standard APIs for V2 models and offer improved capabilities, better performance, and full compatibility with AI SDK v5. The original `stream()` and `generate()` methods have been renamed to `streamLegacy()` and `generateLegacy()` to maintain backward compatibility with V1 models.
+The `streamVNext()` and `generateVNext()` methods in Mastra agents have been renamed to `stream()` and `generate()` respectively. These are now the standard APIs for V2 models with full AI SDK v5 compatibility. The original `stream()` and `generate()` methods have been renamed to `streamLegacy()` and `generateLegacy()` to maintain backward compatibility with V1 models.
+
+**Deprecation Notice**: The legacy methods will be deprecated on September 23rd, 2025.
 
 ## Key Differences
 
@@ -42,9 +44,9 @@ The `streamVNext()` and `generateVNext()` methods in Mastra agents have been ren
 
 ### Migrating from Legacy to Standard APIs
 
-#### Legacy `generateLegacy()` usage:
+#### Before (using legacy API):
 ```typescript
-const result = await agent.generate(messages, {
+const result = await agent.generateLegacy(messages, {
   structuredOutput: {
     schema: z.object({
       name: z.string(),
@@ -56,7 +58,7 @@ const result = await agent.generate(messages, {
 });
 ```
 
-#### Current `generate()` equivalent:
+#### After (using standard API):
 ```typescript
 const result = await agent.generate(messages, {
   structuredOutput: {
@@ -72,9 +74,9 @@ const result = await agent.generate(messages, {
 });
 ```
 
-#### Legacy `streamLegacy()` usage:
+#### Before (using legacy API):
 ```typescript
-const streamResult = await agent.stream(messages, {
+const streamResult = await agent.streamLegacy(messages, {
   onFinish: (result) => {
     console.log('Finished:', result);
   },
@@ -83,7 +85,7 @@ const streamResult = await agent.stream(messages, {
 });
 ```
 
-#### Standard `stream()` equivalent:
+#### After (using standard API):
 ```typescript
 const streamResult = await agent.stream(messages, {
   callbacks: {
@@ -128,8 +130,8 @@ const result = await agent.stream(messages, {
 });
 ```
 
-### 2. Improved Callback System
-Current APIs provide a more comprehensive callback system:
+### 2. Callback System
+Current APIs organize callbacks in a dedicated object:
 
 ```typescript
 const result = await agent.stream(messages, {
@@ -143,8 +145,8 @@ const result = await agent.stream(messages, {
 });
 ```
 
-### 3. Better Structured Output Handling
-The `structuredOutput` parameter in current APIs has enhanced capabilities:
+### 3. Structured Output Configuration
+The `structuredOutput` parameter in current APIs includes additional options:
 
 ```typescript
 const result = await agent.generate(messages, {
@@ -169,15 +171,63 @@ const result = await agent.generate(messages, {
 
 5. **API Status**: These APIs are now the default implementation in Mastra.
 
+## Common Migration Scenarios
+
+### Scenario 1: Simple Chat Application
+If your application uses basic chat functionality:
+
+```typescript
+// Before
+const response = await agent.generateLegacy(messages);
+
+// After  
+const response = await agent.generate(messages);
+```
+
+### Scenario 2: Application with Temperature Control
+If you customize model parameters:
+
+```typescript
+// Before
+const response = await agent.generateLegacy(messages, {
+  temperature: 0.3
+});
+
+// After
+const response = await agent.generate(messages, {
+  modelSettings: {
+    temperature: 0.3
+  }
+});
+```
+
+### Scenario 3: Streaming with Callbacks
+If you use streaming with event handlers:
+
+```typescript
+// Before
+const stream = await agent.streamLegacy(messages, {
+  onFinish: handleFinish,
+  onStepFinish: handleStep
+});
+
+// After
+const stream = await agent.stream(messages, {
+  callbacks: {
+    onFinish: handleFinish,
+    onStepFinish: handleStep
+  }
+});
+```
+
 ## Migration Checklist
 
-- [ ] Update model references to V2 compatible models
+- [ ] Identify which models you're using (V1 or V2)
+- [ ] Update method calls (`generate` → `generateLegacy` or use new `generate` with V2 models)
 - [ ] Move model settings to `modelSettings` object
 - [ ] Move callbacks to `callbacks` object
 - [ ] Test return type handling in your application
-- [ ] Update any type definitions or interfaces
+- [ ] Update any TypeScript type definitions or interfaces
 - [ ] Verify structured output usage with new schema options
 - [ ] Check memory configuration compatibility
 - [ ] Update provider-specific options if needed
-
-By following this guide, you should be able to smoothly transition your code from the legacy APIs to the new current APIs.
