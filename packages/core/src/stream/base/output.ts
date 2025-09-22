@@ -505,6 +505,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#delayedPromises.totalUsage.resolve(self.#getTotalUsage());
               self.#delayedPromises.content.resolve(messageList.get.response.aiV5.stepContent());
               self.#delayedPromises.reasoningDetails.resolve(Object.values(self.#bufferedReasoningDetails || {}));
+              self.#delayedPromises.suspendPayload.resolve(undefined);
 
               const baseFinishStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
 
