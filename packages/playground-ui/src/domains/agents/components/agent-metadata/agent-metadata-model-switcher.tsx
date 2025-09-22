@@ -201,7 +201,7 @@ export const AgentMetadataModelSwitcher = ({
                 type="text"
                 value={selectedModel}
                 onChange={handleModelInputChange}
-                onFocus={() => setShowSuggestions(showSuggestions => !showSuggestions)}
+                onFocus={() => setShowSuggestions(true)}
                 onBlur={handleModelInputBlur}
                 placeholder="Enter model name or select from suggestions..."
                 autoComplete="off"
@@ -243,7 +243,13 @@ export const AgentMetadataModelSwitcher = ({
             disabled={loading || !selectedModel}
             className="w-full"
           >
-            <Icon>{loading ? <Spinner /> : 'Save'}</Icon>
+            {loading ? (
+              <Icon>
+                <Spinner />
+              </Icon>
+            ) : (
+              'Save'
+            )}
           </Button>
         )}
       </div>

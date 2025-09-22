@@ -111,7 +111,7 @@ export function TemplateForm({
                 closeEditor={() => {}} // No need to close in template context
                 modelProviders={['openai', 'anthropic', 'google', 'xai', 'groq']}
                 autoSave={true}
-                selectProviderPlaceholder="Provider "
+                selectProviderPlaceholder="Provider"
               />
             </div>
           </>
