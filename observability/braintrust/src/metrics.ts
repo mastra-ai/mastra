@@ -29,13 +29,13 @@ export function normalizeUsageMetrics(llmAttr: LLMGenerationAttributes): Braintr
   } else if (llmAttr.usage?.promptTokens !== undefined) {
     metrics.prompt_tokens = llmAttr.usage?.promptTokens;
   }
-  
+
   if (llmAttr.usage?.outputTokens !== undefined) {
     metrics.completion_tokens = llmAttr.usage?.outputTokens;
   } else if (llmAttr.usage?.completionTokens !== undefined) {
     metrics.completion_tokens = llmAttr.usage?.completionTokens;
   }
-  
+
   if (llmAttr.usage?.totalTokens !== undefined) {
     metrics.tokens = llmAttr.usage?.totalTokens;
   }

@@ -9,7 +9,12 @@
  * - Braintrust-specific error handling
  */
 
-import type { AITracingEvent, AnyExportedAISpan, LLMGenerationAttributes, ToolCallAttributes } from '@mastra/core/ai-tracing';
+import type {
+  AITracingEvent,
+  AnyExportedAISpan,
+  LLMGenerationAttributes,
+  ToolCallAttributes,
+} from '@mastra/core/ai-tracing';
 import { AISpanType, AITracingEventType } from '@mastra/core/ai-tracing';
 import { initLogger } from 'braintrust';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
