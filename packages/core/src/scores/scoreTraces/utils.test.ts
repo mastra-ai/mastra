@@ -433,7 +433,7 @@ describe('Transformer Functions', () => {
 
       const result = transformTraceToScorerInput(trace);
       expect(result.inputMessages[0]?.content).toBe('Test input');
-      expect(result.rememberedMessages[0]?.content).toBe('First partSecond part');
+      expect(result.rememberedMessages[0]?.content).toBe('Second part'); // AI SDK convention: last text part only
     });
   });
 });

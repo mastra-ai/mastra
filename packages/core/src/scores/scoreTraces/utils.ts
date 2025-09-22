@@ -1,6 +1,7 @@
 import type { ToolInvocation } from 'ai';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../types';
 import type { UIMessageWithMetadata } from '../../agent';
+import { convertMessages } from '../../agent/message-list/utils/convert-messages';
 import { AISpanType } from '../../ai-tracing';
 import type { AISpanRecord, AITraceRecord } from '../../storage';
 
@@ -68,34 +69,52 @@ function normalizeMessageContent(content: string | Array<{ type: string; text: s
   if (typeof content === 'string') {
     return content;
   }
-  // For array format, extract text from text parts
-  return content
-    .filter(part => part.type === 'text')
-    .map(part => part.text)
-    .join('');
+
+  const tempMessage = {
+    id: 'temp',
+    role: 'user' as const,
+    parts: content.map(part => ({ type: part.type as 'text', text: part.text })),
+  };
+
+  const converted = convertMessages(tempMessage).to('AIV4.UI');
+  return converted[0]?.content || '';
 }
 
 /**
- * Convert v5 message to v4 UIMessage format
+ * Convert v5 message to v4 UIMessage format using convertMessages
+ * Ensures full consistency with AI SDK UIMessage behavior
  */
 function convertToUIMessage(
   message: { role: string; content: string | Array<{ type: string; text: string }> },
   createdAt: Date,
 ): UIMessageWithMetadata {
-  const content = normalizeMessageContent(message.content);
+  // Create proper message input for convertMessages
+  let messageInput;
+  if (typeof message.content === 'string') {
+    messageInput = {
+      id: 'temp',
+      role: message.role as 'user' | 'assistant' | 'system',
+      content: message.content,
+    };
+  } else {
+    messageInput = {
+      id: 'temp',
+      role: message.role as 'user' | 'assistant' | 'system',
+      parts: message.content.map(part => ({ type: part.type as 'text', text: part.text })),
+    };
+  }
+
+  const converted = convertMessages(messageInput).to('AIV4.UI');
+  const result = converted[0];
+
+  if (!result) {
+    throw new Error('Failed to convert message');
+  }
 
   return {
-    id: '',
-    role: message.role as 'user' | 'assistant' | 'system',
-    content,
-    createdAt: new Date(createdAt),
-    parts: [
-      {
-        type: 'text',
-        text: content,
-      },
-    ],
-    experimental_attachments: [],
+    ...result,
+    id: '', // Spans don't have message IDs
+    createdAt: new Date(createdAt), // Use span timestamp
   };
 }
 
