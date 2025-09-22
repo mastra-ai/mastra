@@ -18,6 +18,7 @@ export interface ExecutionGraph<TEngineType = any> {
 
 export interface ExecutionEngineOptions {
   tracingPolicy?: TracingPolicy;
+  validateSchemas?: boolean;
 }
 /**
  * Execution engine abstract class for building and executing workflow graphs

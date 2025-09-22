@@ -402,7 +402,7 @@ export class Workflow<
       // TODO: this should be configured using the Mastra class instance that's passed in
       this.executionEngine = new DefaultExecutionEngine({
         mastra: this.#mastra,
-        options: { tracingPolicy: options?.tracingPolicy },
+        options: { tracingPolicy: options?.tracingPolicy, validateSchemas: options?.validateSchemas },
       });
     } else {
       this.executionEngine = executionEngine;
@@ -931,6 +931,7 @@ export class Workflow<
         cleanup: () => this.#runs.delete(runIdToUse),
         tracingPolicy: this.options?.tracingPolicy,
         workflowSteps: this.steps,
+        validateSchemas: this.options?.validateSchemas,
       });
 
     this.#runs.set(runIdToUse, run);
@@ -1246,6 +1247,11 @@ export class Run<
   readonly tracingPolicy?: TracingPolicy;
 
   /**
+   * Options around how to trace this run
+   */
+  readonly validateSchemas?: boolean;
+
+  /**
    * Internal state of the workflow run
    */
   protected state: Record<string, any> = {};
@@ -1269,7 +1275,7 @@ export class Run<
    * The steps for this workflow
    */
 
-  public workflowSteps: Record<string, StepWithComponent>;
+  readonly workflowSteps: Record<string, StepWithComponent>;
 
   /**
    * The storage for this run
@@ -1309,6 +1315,7 @@ export class Run<
     disableScorers?: boolean;
     tracingPolicy?: TracingPolicy;
     workflowSteps: Record<string, StepWithComponent>;
+    validateSchemas?: boolean;
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
@@ -1323,6 +1330,7 @@ export class Run<
     this.disableScorers = params.disableScorers;
     this.tracingPolicy = params.tracingPolicy;
     this.workflowSteps = params.workflowSteps;
+    this.validateSchemas = params.validateSchemas;
   }
 
   public get abortController(): AbortController {
@@ -1985,7 +1993,7 @@ export class Run<
 
       const suspendedStep = this.workflowSteps[steps?.[0] ?? ''];
 
-      if (suspendedStep && suspendedStep.resumeSchema) {
+      if (suspendedStep && suspendedStep.resumeSchema && this.validateSchemas) {
         const resumeSchema = suspendedStep.resumeSchema;
 
         const validatedResumeData = await resumeSchema.safeParseAsync(params.resumeData);

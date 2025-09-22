@@ -817,15 +817,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         let suspended: { payload: any } | undefined;
         let bailed: { payload: any } | undefined;
 
-        const inputSchema = step.inputSchema;
+        if (this.options?.validateSchemas) {
+          const inputSchema = step.inputSchema;
 
-        const validatedInput = await inputSchema.safeParseAsync(prevOutput);
+          const validatedInput = await inputSchema.safeParseAsync(prevOutput);
 
-        if (!validatedInput.success) {
-          const errorMessages = validatedInput.error.errors
-            .map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`)
-            ?.join('\n');
-          throw new Error('Step input validation failed: \n' + errorMessages);
+          if (!validatedInput.success) {
+            const errorMessages = validatedInput.error.errors
+              .map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`)
+              ?.join('\n');
+            throw new Error('Step input validation failed: \n' + errorMessages);
+          }
         }
 
         const result = await runStep({

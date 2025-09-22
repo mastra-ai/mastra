@@ -3093,7 +3093,7 @@ export class Agent<
     });
 
     const run = await executionWorkflow.createRunAsync();
-    const result = await run.start({ tracingContext: { currentSpan: agentAISpan }, inputData: {} });
+    const result = await run.start({ tracingContext: { currentSpan: agentAISpan } });
 
     return result;
   }

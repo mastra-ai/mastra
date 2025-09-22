@@ -40,12 +40,12 @@ describe('Workflow', () => {
         id: 'step1',
         execute: step1Action,
         inputSchema: z.object({}),
-        outputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
       });
       const step2 = createStep({
         id: 'step2',
         execute: step2Action,
-        inputSchema: z.object({ result: z.string() }),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({}),
       });
 
@@ -797,12 +797,12 @@ describe('Workflow', () => {
         id: 'step1',
         execute: step1Action,
         inputSchema: z.object({}),
-        outputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
       });
       const step2 = createStep({
         id: 'step2',
         execute: step2Action,
-        inputSchema: z.object({ result: z.string() }),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({}),
       });
 
@@ -1189,12 +1189,12 @@ describe('Workflow', () => {
         id: 'step1',
         execute: step1Action,
         inputSchema: z.object({}),
-        outputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
       });
       const step2 = createStep({
         id: 'step2',
         execute: step2Action,
-        inputSchema: z.object({ result: z.string() }),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({}),
       });
 
@@ -1329,12 +1329,12 @@ describe('Workflow', () => {
         id: 'step1',
         execute: step1Action,
         inputSchema: z.object({}),
-        outputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
       });
       const step2 = createStep({
         id: 'step2',
         execute: step2Action,
-        inputSchema: z.object({ result: z.string() }),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({}),
       });
 
@@ -2356,12 +2356,12 @@ describe('Workflow', () => {
         id: 'step1',
         execute: step1Action,
         inputSchema: z.object({}),
-        outputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
       });
       const step2 = createStep({
         id: 'step2',
         execute: step2Action,
-        inputSchema: z.object({ result: z.string() }),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({}),
       });
 
@@ -2755,12 +2755,12 @@ describe('Workflow', () => {
         id: 'step1',
         execute: step1Action,
         inputSchema: z.object({}),
-        outputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
       });
       const step2 = createStep({
         id: 'step2',
         execute: step2Action,
-        inputSchema: z.object({ result: z.string() }),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({}),
       });
 
@@ -5238,6 +5238,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result: z.string(),
         }),
+        options: { validateSchemas: true },
       });
 
       workflow.then(step1).commit();
@@ -5316,6 +5317,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result: z.string(),
         }),
+        options: { validateSchemas: true },
       });
 
       workflow
@@ -5492,6 +5494,7 @@ describe('Workflow', () => {
         description: 'Increments the current value by 1',
         inputSchema: z.object({
           value: z.number(),
+          target: z.number(),
         }),
         outputSchema: z.object({
           value: z.number(),
@@ -5518,6 +5521,7 @@ describe('Workflow', () => {
         steps: [incrementStep, finalStep],
         id: 'counter-workflow',
         inputSchema: z.object({
+          target: z.number(),
           value: z.number(),
         }),
         outputSchema: z.object({
@@ -5533,7 +5537,7 @@ describe('Workflow', () => {
         .commit();
 
       const run = await counterWorkflow.createRunAsync();
-      const result = await run.start({ inputData: { value: 0 } });
+      const result = await run.start({ inputData: { target: 10, value: 0 } });
 
       expect(increment).toHaveBeenCalledTimes(12);
       expect(final).toHaveBeenCalledTimes(1);
@@ -5558,6 +5562,7 @@ describe('Workflow', () => {
         description: 'Increments the current value by 1',
         inputSchema: z.object({
           value: z.number(),
+          target: z.number(),
         }),
         outputSchema: z.object({
           value: z.number(),
@@ -5584,6 +5589,7 @@ describe('Workflow', () => {
         steps: [incrementStep, finalStep],
         id: 'counter-workflow',
         inputSchema: z.object({
+          target: z.number(),
           value: z.number(),
         }),
         outputSchema: z.object({
@@ -5599,7 +5605,7 @@ describe('Workflow', () => {
         .commit();
 
       const run = await counterWorkflow.createRunAsync();
-      const result = await run.start({ inputData: { value: 0 } });
+      const result = await run.start({ inputData: { target: 10, value: 0 } });
 
       expect(increment).toHaveBeenCalledTimes(12);
       expect(final).toHaveBeenCalledTimes(1);
@@ -6373,12 +6379,12 @@ describe('Workflow', () => {
         id: 'step1',
         execute: step1Action,
         inputSchema: z.object({}),
-        outputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
       });
       const step2 = createStep({
         id: 'step2',
         execute: step2Action,
-        inputSchema: z.object({ result: z.string() }),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({}),
       });
 
@@ -6488,12 +6494,12 @@ describe('Workflow', () => {
         id: 'step1',
         execute: step1Action,
         inputSchema: z.object({}),
-        outputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
       });
       const step2 = createStep({
         id: 'step2',
         execute: step2Action,
-        inputSchema: z.object({ result: z.string() }),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({}),
       });
 
@@ -7561,7 +7567,7 @@ describe('Workflow', () => {
 
         runtimeContext.set('responses', [...(runtimeContext.get('responses') ?? []), 'promptAgentAction']);
 
-        return { modelOutput: 'model output' };
+        return undefined;
       });
       const runtimeContextAction = vi.fn().mockImplementation(async ({ runtimeContext }) => {
         return runtimeContext.get('responses');
@@ -7629,7 +7635,7 @@ describe('Workflow', () => {
 
         runtimeContext.set('responses', [...(runtimeContext.get('responses') ?? []), 'promptAgentAction']);
 
-        return { modelOutput: 'model output' };
+        return undefined;
       });
       const runtimeContextAction = vi.fn().mockImplementation(async ({ runtimeContext }) => {
         return runtimeContext.get('responses');
@@ -8050,6 +8056,7 @@ describe('Workflow', () => {
         id: 'increment-workflow',
         inputSchema: z.object({ value: z.number() }),
         outputSchema: z.object({ value: z.number() }),
+        options: { validateSchemas: true },
       })
         .then(incrementStep)
         .then(resumeStep)
@@ -9174,8 +9181,8 @@ describe('Workflow', () => {
         execute: start,
       });
 
-      const other = vi.fn().mockImplementation(async ({ inputData }) => {
-        return { other: 26, newValue: inputData.newValue };
+      const other = vi.fn().mockImplementation(async () => {
+        return { other: 26 };
       });
       const otherStep = createStep({
         id: 'other',
@@ -9195,7 +9202,7 @@ describe('Workflow', () => {
       const finalStep = createStep({
         id: 'final',
         inputSchema: z.object({ newValue: z.number(), other: z.number() }),
-        outputSchema: z.object({ finalValue: z.number() }),
+        outputSchema: z.object({ success: z.boolean() }),
         execute: final,
       });
 
@@ -9205,12 +9212,13 @@ describe('Workflow', () => {
           startValue: z.number(),
         }),
         outputSchema: z.object({ success: z.boolean() }),
+        options: { validateSchemas: true },
       });
 
       const wfA = createWorkflow({
         id: 'nested-workflow-a',
         inputSchema: counterWorkflow.inputSchema,
-        outputSchema: z.object({ finalValue: z.number() }),
+        outputSchema: z.object({ success: z.boolean() }),
       })
         .then(startStep)
         .then(otherStep)
@@ -9219,11 +9227,11 @@ describe('Workflow', () => {
       const wfB = createWorkflow({
         id: 'nested-workflow-b',
         inputSchema: counterWorkflow.inputSchema,
-        outputSchema: z.object({ finalValue: z.number() }),
+        outputSchema: z.object({ success: z.boolean() }),
       })
         .then(startStep)
         .map({
-          other: mapVariable({
+          finalValue: mapVariable({
             step: startStep,
             path: 'newValue',
           }),
@@ -9240,8 +9248,8 @@ describe('Workflow', () => {
           createStep({
             id: 'last-step',
             inputSchema: z.object({
-              'nested-workflow-a': z.object({ finalValue: z.number() }),
-              'nested-workflow-b': z.object({ finalValue: z.number() }),
+              'nested-workflow-a': z.object({ success: z.boolean() }),
+              'nested-workflow-b': z.object({ success: z.boolean() }),
             }),
             outputSchema: z.object({ success: z.boolean() }),
             execute: last,
@@ -9301,13 +9309,13 @@ describe('Workflow', () => {
         execute: start,
       });
 
-      const other = vi.fn().mockImplementation(async ({ inputData }) => {
-        return { other: 26, newValue: inputData.newValue };
+      const other = vi.fn().mockImplementation(async () => {
+        return { other: 26 };
       });
       const otherStep = createStep({
         id: 'other',
         inputSchema: z.object({ newValue: z.number() }),
-        outputSchema: z.object({ other: z.number(), newValue: z.number() }),
+        outputSchema: z.object({ other: z.number() }),
         execute: other,
       });
 
@@ -9322,7 +9330,7 @@ describe('Workflow', () => {
       const finalStep = createStep({
         id: 'final',
         inputSchema: z.object({ newValue: z.number(), other: z.number() }),
-        outputSchema: z.object({ finalValue: z.number() }),
+        outputSchema: z.object({ success: z.boolean() }),
         execute: final,
       });
 
@@ -9337,7 +9345,7 @@ describe('Workflow', () => {
       const wfA = createWorkflow({
         id: 'nested-workflow-a',
         inputSchema: counterWorkflow.inputSchema,
-        outputSchema: z.object({ finalValue: z.number() }),
+        outputSchema: z.object({ success: z.boolean() }),
       })
         .then(startStep)
         .then(cloneStep(otherStep, { id: 'other-clone' }))
@@ -9346,10 +9354,9 @@ describe('Workflow', () => {
       const wfB = createWorkflow({
         id: 'nested-workflow-b',
         inputSchema: counterWorkflow.inputSchema,
-        outputSchema: z.object({ finalValue: z.number() }),
+        outputSchema: z.object({ success: z.boolean() }),
       })
         .then(startStep)
-        .then(otherStep)
         .then(cloneStep(finalStep, { id: 'final-clone' }))
         .commit();
 
@@ -9361,8 +9368,8 @@ describe('Workflow', () => {
           createStep({
             id: 'last-step',
             inputSchema: z.object({
-              'nested-workflow-b': z.object({ finalValue: z.number() }),
-              'nested-workflow-a-clone': z.object({ finalValue: z.number() }),
+              'nested-workflow-b': z.object({ success: z.boolean() }),
+              'nested-workflow-a-clone': z.object({ success: z.boolean() }),
             }),
             outputSchema: z.object({ success: z.boolean() }),
             execute: last,
@@ -9374,7 +9381,7 @@ describe('Workflow', () => {
       const result = await run.start({ inputData: { startValue: 0 } });
 
       expect(start).toHaveBeenCalledTimes(2);
-      expect(other).toHaveBeenCalledTimes(2);
+      expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
       // @ts-ignore
@@ -9422,13 +9429,13 @@ describe('Workflow', () => {
         execute: start,
       });
 
-      const other = vi.fn().mockImplementation(async ({ inputData }) => {
-        return { other: 26, newValue: inputData.newValue };
+      const other = vi.fn().mockImplementation(async () => {
+        return { other: 26 };
       });
       const otherStep = createStep({
         id: 'other',
         inputSchema: z.object({ newValue: z.number() }),
-        outputSchema: z.object({ newValue: z.number(), other: z.number().optional() }),
+        outputSchema: z.object({ newValue: z.number(), other: z.number() }),
         execute: other,
       });
 
@@ -9442,7 +9449,7 @@ describe('Workflow', () => {
       });
       const finalStep = createStep({
         id: 'final',
-        inputSchema: z.object({ newValue: z.number(), other: z.number().optional() }),
+        inputSchema: z.object({ newValue: z.number(), other: z.number() }),
         outputSchema: z.object({ finalValue: z.number() }),
         execute: final,
       });
@@ -9467,7 +9474,7 @@ describe('Workflow', () => {
       const wfB = createWorkflow({
         id: 'nested-workflow-b',
         inputSchema: counterWorkflow.inputSchema,
-        outputSchema: z.object({ finalValue: z.number() }),
+        outputSchema: z.object({ other: otherStep.outputSchema, final: finalStep.outputSchema }),
       })
         .then(startStep)
         .branch([
@@ -9550,8 +9557,8 @@ describe('Workflow', () => {
           execute: start,
         });
 
-        const other = vi.fn().mockImplementation(async ({ inputData }) => {
-          return { other: 26, newValue: inputData.newValue };
+        const other = vi.fn().mockImplementation(async () => {
+          return { other: 26 };
         });
         const otherStep = createStep({
           id: 'other',
@@ -9565,8 +9572,8 @@ describe('Workflow', () => {
           const otherVal = getStepResult(otherStep)?.other ?? 0;
           return { finalValue: startVal + otherVal };
         });
-        const first = vi.fn().mockImplementation(async ({ inputData }) => {
-          return { startValue: inputData.startValue };
+        const first = vi.fn().mockImplementation(async () => {
+          return { success: true };
         });
         const last = vi.fn().mockImplementation(async () => {
           return { success: true };
@@ -9602,7 +9609,7 @@ describe('Workflow', () => {
         })
           .then(startStep)
           .map({
-            other: mapVariable({
+            finalValue: mapVariable({
               step: finalStep,
               path: 'finalValue',
             }),
@@ -9626,21 +9633,13 @@ describe('Workflow', () => {
             [async () => true, wfA],
             [async () => false, wfB],
           ])
-          .map(async ({ inputData }) => {
-            return {
-              'nested-workflow-a': inputData['nested-workflow-a'],
-              'nested-workflow-b': inputData['nested-workflow-b'],
-            };
-          })
           .then(
             createStep({
               id: 'last-step',
-              inputSchema: z
-                .object({
-                  'nested-workflow-a': wfA.outputSchema,
-                  'nested-workflow-b': wfB.outputSchema,
-                })
-                .partial(),
+              inputSchema: z.object({
+                'nested-workflow-a': wfA.outputSchema,
+                'nested-workflow-b': wfB.outputSchema,
+              }),
               outputSchema: z.object({ success: z.boolean() }),
               execute: last,
             }),
@@ -9661,7 +9660,7 @@ describe('Workflow', () => {
         });
 
         expect(result.steps['first-step']).toEqual({
-          output: { startValue: 0 },
+          output: { success: true },
           status: 'success',
           payload: {
             startValue: 0,
@@ -9703,8 +9702,8 @@ describe('Workflow', () => {
           execute: start,
         });
 
-        const other = vi.fn().mockImplementation(async ({ inputData }) => {
-          return { other: 26, newValue: inputData.newValue };
+        const other = vi.fn().mockImplementation(async () => {
+          return { other: 26 };
         });
         const otherStep = createStep({
           id: 'other',
@@ -9718,8 +9717,8 @@ describe('Workflow', () => {
           const otherVal = getStepResult(otherStep)?.other ?? 0;
           return { finalValue: startVal + otherVal };
         });
-        const first = vi.fn().mockImplementation(async ({ inputData }) => {
-          return { startValue: inputData.startValue };
+        const first = vi.fn().mockImplementation(async () => {
+          return { success: true };
         });
         const last = vi.fn().mockImplementation(async () => {
           return { success: true };
@@ -9756,7 +9755,7 @@ describe('Workflow', () => {
           .then(startStep)
           .map(async ({ inputData }) => {
             return {
-              other: inputData.newValue + 1,
+              finalValue: inputData.newValue + 1,
               newValue: inputData.newValue,
             };
           })
@@ -9775,21 +9774,13 @@ describe('Workflow', () => {
             [async () => false, wfA],
             [async () => true, wfB],
           ])
-          .map(async ({ inputData }) => {
-            return {
-              'nested-workflow-a': inputData['nested-workflow-a'],
-              'nested-workflow-b': inputData['nested-workflow-b'],
-            };
-          })
           .then(
             createStep({
               id: 'last-step',
-              inputSchema: z
-                .object({
-                  'nested-workflow-a': wfA.outputSchema,
-                  'nested-workflow-b': wfB.outputSchema,
-                })
-                .partial(),
+              inputSchema: z.object({
+                'nested-workflow-a': wfA.outputSchema,
+                'nested-workflow-b': wfB.outputSchema,
+              }),
               outputSchema: z.object({ success: z.boolean() }),
               execute: last,
             }),
@@ -9811,7 +9802,7 @@ describe('Workflow', () => {
         });
 
         expect(result.steps['first-step']).toEqual({
-          output: { startValue: 0 },
+          output: { success: true },
           status: 'success',
           payload: {
             startValue: 0,
@@ -9853,8 +9844,8 @@ describe('Workflow', () => {
           execute: start,
         });
 
-        const other = vi.fn().mockImplementation(async ({ inputData }) => {
-          return { other: 26, newValue: inputData.newValue };
+        const other = vi.fn().mockImplementation(async () => {
+          return { other: 26 };
         });
         const otherStep = createStep({
           id: 'other',
@@ -9868,8 +9859,8 @@ describe('Workflow', () => {
           const otherVal = getStepResult(otherStep)?.other ?? 0;
           return { finalValue: startVal + otherVal };
         });
-        const first = vi.fn().mockImplementation(async ({ inputData }) => {
-          return { startValue: inputData.startValue };
+        const first = vi.fn().mockImplementation(async () => {
+          return { success: true };
         });
         const last = vi.fn().mockImplementation(async () => {
           return { success: true };
@@ -9926,12 +9917,23 @@ describe('Workflow', () => {
                 .commit(),
             ],
           ])
-          .map(async ({ inputData }) => {
-            return {
-              newValue: inputData['nested-workflow-c']?.newValue ?? inputData['nested-workflow-d']?.newValue,
-              other: inputData['nested-workflow-c']?.other ?? inputData['nested-workflow-d']?.other,
-            };
-          })
+          // TODO: maybe make this a little nicer to do with .map()?
+          .then(
+            createStep({
+              id: 'map-results',
+              inputSchema: z.object({
+                'nested-workflow-c': otherStep.outputSchema,
+                'nested-workflow-d': otherStep.outputSchema,
+              }),
+              outputSchema: otherStep.outputSchema,
+              execute: async ({ inputData }) => {
+                return {
+                  newValue: inputData['nested-workflow-c']?.newValue ?? inputData['nested-workflow-d']?.newValue,
+                  other: inputData['nested-workflow-c']?.other ?? inputData['nested-workflow-d']?.other,
+                };
+              },
+            }),
+          )
           .then(finalStep)
           .commit();
 
@@ -9948,21 +9950,13 @@ describe('Workflow', () => {
             [async () => false, wfA],
             [async () => true, wfB],
           ])
-          .map(async ({ inputData }) => {
-            return {
-              'nested-workflow-a': inputData['nested-workflow-a'],
-              'nested-workflow-b': inputData['nested-workflow-b'],
-            };
-          })
           .then(
             createStep({
               id: 'last-step',
-              inputSchema: z
-                .object({
-                  'nested-workflow-a': wfA.outputSchema,
-                  'nested-workflow-b': wfB.outputSchema,
-                })
-                .partial(),
+              inputSchema: z.object({
+                'nested-workflow-a': wfA.outputSchema,
+                'nested-workflow-b': wfB.outputSchema,
+              }),
               outputSchema: z.object({ success: z.boolean() }),
               execute: last,
             }),
@@ -9980,11 +9974,11 @@ describe('Workflow', () => {
 
         // @ts-ignore
         expect(result.steps['nested-workflow-b'].output).toEqual({
-          finalValue: 2,
+          finalValue: 1,
         });
 
         expect(result.steps['first-step']).toEqual({
-          output: { startValue: 1 },
+          output: { success: true },
           status: 'success',
           payload: {
             startValue: 1,
@@ -9999,7 +9993,7 @@ describe('Workflow', () => {
           payload: {
             'nested-workflow-a': undefined,
             'nested-workflow-b': {
-              finalValue: 2,
+              finalValue: 1,
             },
           },
           startedAt: expect.any(Number),
@@ -10028,11 +10022,11 @@ describe('Workflow', () => {
           execute: start,
         });
 
-        const other = vi.fn().mockImplementation(async ({ suspend, resumeData, inputData }) => {
+        const other = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
           if (!resumeData) {
             return await suspend();
           }
-          return { other: 26, newValue: inputData.newValue };
+          return { other: 26 };
         });
         const otherStep = createStep({
           id: 'other',
@@ -10381,8 +10375,8 @@ describe('Workflow', () => {
           execute: start,
         });
 
-        const other = vi.fn().mockImplementation(async ({ inputData }) => {
-          return { other: 26, newValue: inputData.newValue };
+        const other = vi.fn().mockImplementation(async () => {
+          return { other: 26 };
         });
         const otherStep = createStep({
           id: 'other',
@@ -10493,11 +10487,11 @@ describe('Workflow', () => {
         execute: start,
       });
 
-      const other = vi.fn().mockImplementation(async ({ suspend, resumeData, inputData }) => {
+      const other = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
         if (!resumeData) {
           return await suspend();
         }
-        return { other: 26, newValue: inputData.newValue };
+        return { other: 26 };
       });
       const otherStep = createStep({
         id: 'other',
@@ -10931,7 +10925,7 @@ describe('Workflow', () => {
       workflow.then(step).commit();
 
       const run = await workflow.createRunAsync();
-      const result = await run.start({ runtimeContext, inputData: {} });
+      const result = await run.start({ runtimeContext });
 
       // @ts-ignore
       expect(result.steps.step1.output.injectedValue).toBe(testValue);
@@ -10961,20 +10955,19 @@ describe('Workflow', () => {
       const step = createStep({
         id: 'step1',
         execute,
-        inputSchema: z.object({}),
-        resumeSchema: z.object({ human: z.boolean() }),
+        inputSchema: z.object({ human: z.boolean() }),
         outputSchema: z.object({}),
       });
       const workflow = createWorkflow({
         id: 'test-workflow',
         mastra,
-        inputSchema: z.object({}),
+        inputSchema: z.object({ human: z.boolean() }),
         outputSchema: z.object({}),
       });
       workflow.then(step).commit();
 
       const run = await workflow.createRunAsync();
-      await run.start({ runtimeContext, inputData: {} });
+      await run.start({ runtimeContext });
 
       const resumeruntimeContext = new RuntimeContext();
       resumeruntimeContext.set('testKey', testValue + '2');
