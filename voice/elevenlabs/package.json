@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-elevenlabs",
-  "version": "0.11.5",
+  "version": "0.11.6-alpha.0",
   "description": "Mastra ElevenLabs voice integration",
   "type": "module",
   "files": [
@@ -41,8 +41,7 @@
     "eslint": "^9.35.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4",
-    "@internal/types-builder": "workspace:*"
+    "vitest": "^3.2.4"
   },
   "peerDependencies": {
     "@mastra/core": ">=0.15.3-0 <0.19.0-0",

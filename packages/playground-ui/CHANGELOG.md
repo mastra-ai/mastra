@@ -1,5 +1,21 @@
 # @mastra/playground-ui
 
+## 6.2.2-alpha.2
+
+### Patch Changes
+
+- dependencies updates: ([#8034](https://github.com/mastra-ai/mastra/pull/8034))
+  - Updated dependency [`zod@^4.1.9` ↗︎](https://www.npmjs.com/package/zod/v/4.1.9) (from `^4.1.8`, in `dependencies`)
+
+- dependencies updates: ([#8050](https://github.com/mastra-ai/mastra/pull/8050))
+  - Updated dependency [`@xyflow/react@^12.8.5` ↗︎](https://www.npmjs.com/package/@xyflow/react/v/12.8.5) (from `^12.8.4`, in `dependencies`)
+
+- Update Peerdeps for packages based on core minor bump ([#8025](https://github.com/mastra-ai/mastra/pull/8025))
+
+- Updated dependencies [[`cf34503`](https://github.com/mastra-ai/mastra/commit/cf345031de4e157f29087946449e60b965e9c8a9), [`6b4b1e4`](https://github.com/mastra-ai/mastra/commit/6b4b1e4235428d39e51cbda9832704c0ba70ab32), [`3469fca`](https://github.com/mastra-ai/mastra/commit/3469fca7bb7e5e19369ff9f7044716a5e4b02585), [`c4a8204`](https://github.com/mastra-ai/mastra/commit/c4a82046bfd241d6044e234bc5917d5a01fe6b55)]:
+  - @mastra/core@0.18.0-alpha.2
+  - @mastra/client-js@0.13.2-alpha.2
+
 ## 6.2.2-alpha.1
 
 ### Patch Changes
