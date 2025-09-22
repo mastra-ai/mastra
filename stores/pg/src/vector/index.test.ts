@@ -2943,6 +2943,7 @@ describe('PgVector', () => {
 
           expect(warnSpy).toHaveBeenCalledWith(
             expect.stringContaining('Could not install vector extension. This requires superuser privileges'),
+            expect.objectContaining({ error: expect.any(Error) }),
           );
 
           warnSpy.mockRestore();
@@ -2959,13 +2960,16 @@ describe('PgVector', () => {
         });
 
         try {
-          const debugSpy = vi.spyOn(restrictedDB['logger'], 'debug');
+          const infoSpy = vi.spyOn(restrictedDB['logger'], 'info');
 
           await restrictedDB.createIndex({ indexName: 'test', dimension: 3 });
 
-          expect(debugSpy).toHaveBeenCalledWith('Vector extension already installed, skipping installation');
+          // The new code logs that it found the extension in a schema
+          expect(infoSpy).toHaveBeenCalledWith(
+            expect.stringMatching(/Vector extension (already installed|found) in schema:/),
+          );
 
-          debugSpy.mockRestore();
+          infoSpy.mockRestore();
         } finally {
           // Ensure we wait for any pending operations before disconnecting
           await new Promise(resolve => setTimeout(resolve, 100));
