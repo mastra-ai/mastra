@@ -1,7 +1,7 @@
 import type { StepResult, ToolSet } from 'ai-v5';
 import { InternalSpans } from '../../../ai-tracing';
 import type { OutputSchema } from '../../../stream/base/schema';
-import type { ChunkType, StepFinishPayload } from '../../../stream/types';
+import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createWorkflow } from '../../../workflows';
 import type { LoopRun } from '../../types';
@@ -124,34 +124,12 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       }
 
       if (typedInputData.stepResult?.reason !== 'abort') {
-        // Convert LLMIterationData to StepFinishPayload structure
-        const stepFinishPayload: StepFinishPayload = {
-          id: typedInputData.metadata?.id,
-          providerMetadata: typedInputData.metadata?.providerMetadata,
-          messageId: typedInputData.messageId,
-          stepResult: {
-            logprobs: typedInputData.stepResult?.logprobs,
-            isContinued: typedInputData.stepResult?.isContinued,
-            warnings: typedInputData.stepResult?.warnings,
-            reason: typedInputData.stepResult?.reason,
-          },
-          output: {
-            usage: typedInputData.output.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-          },
-          metadata: {
-            request: typedInputData.stepResult?.request || typedInputData.metadata?.request,
-            providerMetadata: typedInputData.metadata?.providerMetadata,
-            ...(typedInputData.metadata || {}),
-          },
-          // @ts-ignore TODO: Why is this complaining? The types are the same
-          messages: typedInputData.messages,
-        };
-
         controller.enqueue({
           type: 'step-finish',
           runId,
           from: ChunkFrom.AGENT,
-          payload: stepFinishPayload,
+          // @ts-ignore TODO: Look into the proper types for this
+          payload: typedInputData,
         });
       }
 

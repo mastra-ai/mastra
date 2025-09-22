@@ -1,11 +1,4 @@
-import type {
-  StepResult,
-  ToolSet,
-  StaticToolCall,
-  StaticToolResult,
-  DynamicToolCall,
-  DynamicToolResult,
-} from 'ai-v5';
+import type { StepResult, ToolSet, StaticToolCall, StaticToolResult, DynamicToolCall, DynamicToolResult } from 'ai-v5';
 export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOLS> {
   readonly content: StepResult<TOOLS>['content'];
   readonly finishReason: StepResult<TOOLS>['finishReason'];
@@ -14,7 +7,7 @@ export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOL
   readonly request: StepResult<TOOLS>['request'];
   readonly response: StepResult<TOOLS>['response'];
   readonly providerMetadata: StepResult<TOOLS>['providerMetadata'];
-  
+
   constructor({
     content,
     finishReason,

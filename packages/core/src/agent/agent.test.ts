@@ -4868,7 +4868,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               resource: 'test-resource-7050',
             },
             onStepFinish: async step => {
-              console.log(`step inside onStepFinish`, JSON.stringify(step, null, 2));
               capturedStep = step;
             },
           });
@@ -4888,14 +4887,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(Array.isArray(capturedStep.response.messages)).toBe(true);
         expect(capturedStep.response.messages.length).toBeGreaterThan(0);
 
-        console.log('capturedStep', JSON.stringify(capturedStep, null, 2));
-        console.log('firstMessage type check:', {
-          hasContent: 'content' in capturedStep.response.messages[0],
-          contentType: typeof capturedStep.response.messages[0].content,
-          isArray: Array.isArray(capturedStep.response.messages[0].content),
-          actualContent: capturedStep.response.messages[0].content,
-        });
-
         // Check that messages have the correct CoreMessage structure
         const firstMessage = capturedStep.response.messages[0];
         expect(firstMessage).toHaveProperty('role');
@@ -4908,8 +4899,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           // [{ type: 'text', text: 'Hello' }, { type: 'text', text: ' world' }]
           // Instead of: [{ role: 'assistant', content: [{ type: 'text', text: 'Hello world' }] }]
           // should only have a single text part of combined text delta chunks
-
-          // More flexible check - content might be string or array depending on message type
           expect(firstMessage.content?.filter(p => p.type === `text`)).toHaveLength(1);
         }
       });
@@ -9346,7 +9335,7 @@ describe('Agent Tests', () => {
     expect(finalCoreMessages.length).toBe(4); // Assistant call for tool-1, Tool result for tool-1, Assistant call for tool-2, Tool result for tool-2
   });
 
-  // agentTests({ version: 'v1' });
+  agentTests({ version: 'v1' });
   agentTests({ version: 'v2' });
 
   describe('agent.stopWhen', () => {

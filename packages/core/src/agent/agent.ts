@@ -3111,7 +3111,7 @@ export class Agent<
         if (!responseMessages && result.object) {
           responseMessages = [
             {
-              id: result.response.id || runId,
+              id: result.response.id,
               role: 'assistant',
               content: [
                 {
@@ -3203,7 +3203,7 @@ export class Agent<
       if (!responseMessages && result.object) {
         responseMessages = [
           {
-            id: result.response.id || runId,
+            id: result.response.id,
             role: 'assistant',
             content: [
               {

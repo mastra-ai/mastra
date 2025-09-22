@@ -1,5 +1,5 @@
 import type { AiMessageType } from '@mastra/core/memory';
-import type { LLMStepResults } from '@mastra/core';
+import type { LLMStepResults } from '@mastra/core/agent';
 
 export type Message = AiMessageType;
 
