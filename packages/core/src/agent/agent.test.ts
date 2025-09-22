@@ -631,7 +631,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               name: z.string(),
             }),
             execute: async ({ suspend, resumeData }) => {
-              console.log('resumeData', resumeData, suspend);
               if (!resumeData) {
                 return await suspend({ message: 'Please provide the name of the user' });
               }
@@ -660,21 +659,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
           let toolCall;
           const stream = await agentOne.streamVNext('Find the user with name - Dero Israel');
-          for await (const chunk of stream.fullStream) {
-            if (chunk.type === 'tool-call-suspended') {
-              console.log('tool-call-suspended chunk', chunk);
-            }
+          for await (const _chunk of stream.fullStream) {
           }
-          console.log('status', stream.status);
-          console.log('suspendPayload', await stream.suspendPayload);
           await new Promise(resolve => setTimeout(resolve, 1000));
           const resumeStream = await agentOne.resumeStreamVNext({ name: 'Dero Israel' }, { runId: stream.runId });
-          for await (const chunk of resumeStream.fullStream) {
-            console.log('resume stream chunk', chunk);
+          for await (const _chunk of resumeStream.fullStream) {
           }
-
-          console.log('resume status', resumeStream.status);
-          console.log('resume tool results', await resumeStream.toolResults);
 
           toolCall = (await resumeStream.toolResults).find(
             (result: any) => result.payload.toolName === 'findUserTool',
@@ -728,22 +718,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             const stream = await agentOne.streamVNext('Find the user with name - Dero Israel', {
               requireToolApproval: true,
             });
-            for await (const chunk of stream.fullStream) {
-              if (chunk.type === 'tool-call-approval') {
-                console.log('tool-call-approval chunk', chunk);
-              }
+            for await (const _chunk of stream.fullStream) {
             }
-            // response = await stream.response;
-            // console.log('response', JSON.stringify(response.toolResults, null, 2));
-            console.log('status', stream.status);
             await new Promise(resolve => setTimeout(resolve, 1000));
             const resumeStream = await agentOne.resumeStreamVNext({ hello: 'world' }, { runId: stream.runId });
-            for await (const chunk of resumeStream.fullStream) {
-              console.log('resume stream chunk', chunk);
+            for await (const _chunk of resumeStream.fullStream) {
             }
-
-            console.log('resume status', resumeStream.status);
-            console.log('resume tool results', await resumeStream.toolResults);
 
             toolCall = (await resumeStream.toolResults).find(
               (result: any) => result.payload.toolName === 'findUserTool',
@@ -794,22 +774,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
           } else {
             const stream = await agentOne.streamVNext('Find the user with name - Dero Israel');
-            for await (const chunk of stream.fullStream) {
-              if (chunk.type === 'tool-call-approval') {
-                console.log('tool-call-approval chunk', chunk);
-              }
+            for await (const _chunk of stream.fullStream) {
             }
-            // response = await stream.response;
-            // console.log('response', JSON.stringify(response.toolResults, null, 2));
-            console.log('status', stream.status);
             await new Promise(resolve => setTimeout(resolve, 1000));
             const resumeStream = await agentOne.resumeStreamVNext({ hello: 'world' }, { runId: stream.runId });
-            for await (const chunk of resumeStream.fullStream) {
-              console.log('resume stream chunk', chunk);
+            for await (const _chunk of resumeStream.fullStream) {
             }
-
-            console.log('resume status', resumeStream.status);
-            console.log('resume tool results', await resumeStream.toolResults);
 
             toolCall = (await resumeStream.toolResults).find(
               (result: any) => result.payload.toolName === 'findUserTool',
@@ -868,38 +838,23 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             );
             let firstText = '';
             for await (const chunk of stream.fullStream) {
-              if (chunk.type === 'tool-call-approval') {
-                console.log('tool-call-approval chunk', chunk);
-              } else if (chunk.type === 'text-delta') {
+              if (chunk.type === 'text-delta') {
                 firstText += chunk.payload.text;
               }
             }
-            // response = await stream.response;
-            // console.log('response', JSON.stringify(response.toolResults, null, 2));
-            console.log('status', stream.status);
-            console.log('suspendPayload', await stream.suspendPayload);
             await new Promise(resolve => setTimeout(resolve, 1000));
             const resumeStream = await agentOne.resumeStreamVNext({ hello: 'world' }, { runId: stream.runId });
             let secondText = '';
             for await (const chunk of resumeStream.fullStream) {
-              // console.log('resume stream chunk', chunk);
               if (chunk.type === 'text-delta') {
                 secondText += chunk.payload.text;
               }
             }
 
-            console.log('resume status', resumeStream.status);
-            console.log('resume tool results', await resumeStream.toolResults);
-
             const finalText = await resumeStream.text;
-
-            console.log('first text', firstText);
-            console.log('second text', secondText);
-            console.log('final text', finalText);
 
             const steps = await resumeStream.steps;
             const textBySteps = steps.map(step => step.text);
-            console.log('text by steps', textBySteps);
 
             expect(finalText).toBe(firstText + secondText);
             expect(steps.length).toBe(2);
