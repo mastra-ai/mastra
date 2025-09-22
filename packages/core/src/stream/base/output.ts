@@ -644,7 +644,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 break;
 
               case 'error':
-                console.log('setting self.#error from error chunk:', chunk);
+                // console.log('setting self.#error from error chunk:', chunk);
                 self.#error = chunk.payload.error as any;
 
                 // Reject all delayed promises on error
@@ -778,7 +778,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   }
 
   teeStream() {
-    // if (this.outputProcessorRunnerMode === 'result' && !this.#options.output) {
+    // if (this.outputProcessorRunnerMode === 'inner') {
     //   return this.#baseStream;
     // }
     const [stream1, stream2] = this.#baseStream.tee();
@@ -790,8 +790,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * Stream of all chunks. Provides complete control over stream processing.
    */
   get fullStream() {
-    let fullStream = this.teeStream();
-    return fullStream;
+    return this.teeStream();
+    // let fullStream = this.teeStream();
+    // return fullStream;
   }
 
   /**
@@ -1036,7 +1037,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * ```
    */
   get objectStream() {
-    return this.fullStream.pipeThrough(
+    return this.teeStream().pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, PartialSchemaOutput<OUTPUT>>({
         transform(chunk, controller) {
           if (chunk.type === 'object') {
@@ -1053,7 +1054,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   get elementStream(): ReadableStream<InferSchemaOutput<OUTPUT> extends Array<infer T> ? T : never> {
     let publishedElements = 0;
 
-    return this.fullStream.pipeThrough(
+    return this.teeStream().pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, InferSchemaOutput<OUTPUT> extends Array<infer T> ? T : never>({
         transform(chunk, controller) {
           if (chunk.type === 'object') {
@@ -1076,7 +1077,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     const self = this;
     const outputSchema = getTransformedSchema(self.#options.output);
     if (outputSchema?.outputFormat === 'array') {
-      return this.fullStream.pipeThrough(createJsonTextStreamTransformer(self.#options.output));
+      return this.teeStream().pipeThrough(createJsonTextStreamTransformer(self.#options.output));
     }
 
     return this.teeStream().pipeThrough(

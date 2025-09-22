@@ -183,9 +183,9 @@ class ObjectFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseF
 
   async validateAndTransformFinal(finalRawValue: string): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
     if (!finalRawValue) {
-      console.log('validateAndTransformFinal no finalRawValue', {
-        schema: !!this.schema,
-      });
+      // console.log('validateAndTransformFinal no finalRawValue', {
+      //   schema: !!this.schema,
+      // });
       return {
         success: false,
         error: new Error('No object generated: could not parse the response.'),
