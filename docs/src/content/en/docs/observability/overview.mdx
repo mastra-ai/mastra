@@ -23,7 +23,7 @@ Specialized tracing for AI operations that captures:
 - **Workflow steps**: Branching logic, parallel execution, and step outputs
 - **Automatic instrumentation**: Zero-configuration tracing with decorators
 
-### OTLP Tracing (Deprecated)
+### OTEL Tracing
 Traditional distributed tracing with OpenTelemetry:
 - **Standard OTLP protocol**: Compatible with existing observability infrastructure
 - **HTTP and database instrumentation**: Automatic spans for common operations
@@ -49,7 +49,7 @@ export const mastra = new Mastra({
     url: "file:./mastra.db", // Storage is required for tracing
   }),
   telemetry: {
-    enabled: true, // Enables OTLP Tracing (Deprecated)
+    enabled: true, // Enables OTEL Tracing
   }
 });
 ```
