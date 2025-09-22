@@ -23,6 +23,7 @@ const supportAgent = new Agent({
     const userTier = runtimeContext.get("user-tier");
     const language = runtimeContext.get("language");
 
+    // Can return a string
     return `You are a customer support agent for our SaaS platform.
     The current user is on the ${userTier} tier and prefers ${language} language.
 
@@ -32,6 +33,24 @@ const supportAgent = new Agent({
     ${userTier === "enterprise" ? "- Provide priority support with custom solutions" : ""}
 
     Always respond in ${language} language.`;
+    
+    // Alternative: Return a system message object with provider options
+    // return {
+    //   role: "system",
+    //   content: `You are a customer support agent for ${userTier} tier...`,
+    //   providerOptions: {
+    //     openai: { 
+    //       reasoning_effort: userTier === "enterprise" ? "high" : "medium"
+    //     }
+    //   }
+    // };
+    
+    // Alternative: Return an array of system messages for modular instructions
+    // return [
+    //   { role: "system", content: "You are a customer support agent." },
+    //   { role: "system", content: `User is on ${userTier} tier.` },
+    //   { role: "system", content: `Respond in ${language} language.` }
+    // ];
   },
 
   model: ({ runtimeContext }) => {

@@ -47,6 +47,9 @@ import type {
   SaveScoreParams,
   SaveScoreResponse,
   GetAITracesResponse,
+  GetMemoryConfigParams,
+  GetMemoryConfigResponse,
+  GetMemoryThreadMessagesResponse,
 } from './types';
 import { base64RuntimeContext, parseClientRuntimeContext } from './utils';
 
@@ -94,6 +97,15 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Retrieves memory config for a resource
+   * @param params - Parameters containing the resource ID
+   * @returns Promise containing array of memory threads
+   */
+  public getMemoryConfig(params: GetMemoryConfigParams): Promise<GetMemoryConfigResponse> {
+    return this.request(`/api/memory/config?agentId=${params.agentId}`);
+  }
+
+  /**
    * Creates a new memory thread
    * @param params - Parameters for creating the memory thread
    * @returns Promise containing the created memory thread
@@ -109,6 +121,33 @@ export class MastraClient extends BaseResource {
    */
   public getMemoryThread(threadId: string, agentId: string) {
     return new MemoryThread(this.options, threadId, agentId);
+  }
+
+  public getThreadMessages(
+    threadId: string,
+    opts: { agentId?: string; networkId?: string } = {},
+  ): Promise<GetMemoryThreadMessagesResponse> {
+    let url = '';
+    if (opts.agentId) {
+      url = `/api/memory/threads/${threadId}/messages?agentId=${opts.agentId}`;
+    } else if (opts.networkId) {
+      url = `/api/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}`;
+    }
+    return this.request(url);
+  }
+
+  public deleteThread(
+    threadId: string,
+    opts: { agentId?: string; networkId?: string } = {},
+  ): Promise<{ success: boolean; message: string }> {
+    let url = '';
+
+    if (opts.agentId) {
+      url = `/api/memory/threads/${threadId}?agentId=${opts.agentId}`;
+    } else if (opts.networkId) {
+      url = `/api/memory/network/threads/${threadId}?networkId=${opts.networkId}`;
+    }
+    return this.request(url, { method: 'DELETE' });
   }
 
   /**
