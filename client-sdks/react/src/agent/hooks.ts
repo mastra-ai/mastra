@@ -232,6 +232,7 @@ export const useAgentUpdateModel = (agentId: string) => {
 
 export const useAgents = () => {
   const client = useMastraClient();
+
   return useQuery({
     queryKey: ['agents'],
     queryFn: () => client.getAgents(),

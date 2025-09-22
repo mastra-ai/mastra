@@ -316,21 +316,21 @@ importers:
         specifier: ^5.81.5
         version: 5.81.5(react@19.1.1)
       react:
-        specifier: '>=19.0.0'
+        specifier: ^19.1.1
         version: 19.1.1
       react-dom:
-        specifier: '>=19.0.0'
+        specifier: ^19.1.1
         version: 19.1.1(react@19.1.1)
     devDependencies:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
       '@types/react':
-        specifier: ^19.1.9
-        version: 19.1.9
+        specifier: ^19.1.13
+        version: 19.1.13
       '@types/react-dom':
-        specifier: ^19.1.7
-        version: 19.1.7(@types/react@19.1.9)
+        specifier: ^19.1.9
+        version: 19.1.9(@types/react@19.1.13)
       '@vitejs/plugin-react':
         specifier: ^5.0.3
         version: 5.0.3(vite@7.1.7(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.1))
@@ -9847,8 +9847,16 @@ packages:
     peerDependencies:
       '@types/react': ^19.0.0
 
+  '@types/react-dom@19.1.9':
+    resolution: {integrity: sha512-qXRuZaOsAdXKFyOhRBg6Lqqc0yay13vN7KrIg4L7N4aaHN68ma9OK3NE1BoDFgFOTfM7zg+3/8+2n8rLUH3OKQ==}
+    peerDependencies:
+      '@types/react': ^19.0.0
+
   '@types/react-syntax-highlighter@15.5.13':
     resolution: {integrity: sha512-uLGJ87j6Sz8UaBAooU0T6lWJ0dBmjZgN1PZTrj05TNql2/XpC6+4HhMT5syIdFUUt+FASfCeLLv4kBygNU+8qA==}
+
+  '@types/react@19.1.13':
+    resolution: {integrity: sha512-hHkbU/eoO3EG5/MZkuFSKmYqPbSVk5byPFa3e7y/8TybHiLMACgI8seVYlicwk7H5K/rI2px9xrQp/C+AUDTiQ==}
 
   '@types/react@19.1.9':
     resolution: {integrity: sha512-WmdoynAX8Stew/36uTSVMcLJJ1KRh6L3IZRx1PZ7qJtBqT3dYTgyDTx8H1qoRghErydW7xw9mSJ3wS//tCRpFA==}
@@ -24267,9 +24275,17 @@ snapshots:
     dependencies:
       '@types/react': 19.1.9
 
+  '@types/react-dom@19.1.9(@types/react@19.1.13)':
+    dependencies:
+      '@types/react': 19.1.13
+
   '@types/react-syntax-highlighter@15.5.13':
     dependencies:
-      '@types/react': 19.1.9
+      '@types/react': 19.1.13
+
+  '@types/react@19.1.13':
+    dependencies:
+      csstype: 3.1.3
 
   '@types/react@19.1.9':
     dependencies:

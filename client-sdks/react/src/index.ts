@@ -1,2 +1,2 @@
-export * from './mastra-client-context'; // MastraProvider + useMastraClient
-export * from './agent'; // Agent hooks
+export * from './mastra-react-provider';
+export * from './agent/hooks'; // Agent hooks

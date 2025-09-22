@@ -1,7 +1,16 @@
 import { useAgents } from '@mastra/react-hooks';
+import { MastraReactProvider } from '@mastra/react-hooks';
 import './App.css';
 
-function App() {
+export default function App() {
+  return (
+    <MastraReactProvider>
+      <Agents />
+    </MastraReactProvider>
+  );
+}
+
+function Agents() {
   const { data: agents, isLoading } = useAgents();
 
   if (isLoading) return <div>Loading...</div>;
@@ -10,5 +19,3 @@ function App() {
 
   return <ul>{agentsList}</ul>;
 }
-
-export default App;

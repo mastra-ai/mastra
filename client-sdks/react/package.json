@@ -7,7 +7,8 @@
   "module": "dist/index.es.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "vite build"
+    "build": "vite build",
+    "dev": "vite build --watch"
   },
   "files": [
     "src"
@@ -15,14 +16,14 @@
   "dependencies": {
     "@mastra/client-js": "workspace:*",
     "@tanstack/react-query": "^5.81.5",
-    "react": ">=19.0.0",
-    "react-dom": ">=19.0.0"
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
   },
   "devDependencies": {
     "eslint": "^9.35.0",
     "typescript": "^5.8.3",
-    "@types/react": "^19.1.9",
-    "@types/react-dom": "^19.1.7",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
     "@mastra/core": "workspace:*",
     "vite": "^7.1.7",
     "vite-plugin-dts": "^4.5.4",
