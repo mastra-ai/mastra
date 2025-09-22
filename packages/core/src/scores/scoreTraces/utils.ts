@@ -1,6 +1,7 @@
 import type { ToolInvocation } from 'ai';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../types';
 import type { UIMessageWithMetadata } from '../../agent';
+import { convertMessages } from '../../agent/message-list/utils/convert-messages';
 import { AISpanType } from '../../ai-tracing';
 import type { AISpanRecord, AITraceRecord } from '../../storage';
 
@@ -68,34 +69,52 @@ function normalizeMessageContent(content: string | Array<{ type: string; text: s
   if (typeof content === 'string') {
     return content;
   }
-  // For array format, extract text from text parts
-  return content
-    .filter(part => part.type === 'text')
-    .map(part => part.text)
-    .join('');
+
+  const tempMessage = {
+    id: 'temp',
+    role: 'user' as const,
+    parts: content.map(part => ({ type: part.type as 'text', text: part.text })),
+  };
+
+  const converted = convertMessages(tempMessage).to('AIV4.UI');
+  return converted[0]?.content || '';
 }
 
 /**
- * Convert v5 message to v4 UIMessage format
+ * Convert v5 message to v4 UIMessage format using convertMessages
+ * Ensures full consistency with AI SDK UIMessage behavior
  */
 function convertToUIMessage(
   message: { role: string; content: string | Array<{ type: string; text: string }> },
   createdAt: Date,
 ): UIMessageWithMetadata {
-  const content = normalizeMessageContent(message.content);
+  // Create proper message input for convertMessages
+  let messageInput;
+  if (typeof message.content === 'string') {
+    messageInput = {
+      id: 'temp',
+      role: message.role as 'user' | 'assistant' | 'system',
+      content: message.content,
+    };
+  } else {
+    messageInput = {
+      id: 'temp',
+      role: message.role as 'user' | 'assistant' | 'system',
+      parts: message.content.map(part => ({ type: part.type as 'text', text: part.text })),
+    };
+  }
+
+  const converted = convertMessages(messageInput).to('AIV4.UI');
+  const result = converted[0];
+
+  if (!result) {
+    throw new Error('Failed to convert message');
+  }
 
   return {
-    id: '',
-    role: message.role as 'user' | 'assistant' | 'system',
-    content,
-    createdAt: new Date(createdAt),
-    parts: [
-      {
-        type: 'text',
-        text: content,
-      },
-    ],
-    experimental_attachments: [],
+    ...result,
+    id: '', // Spans don't have message IDs
+    createdAt: new Date(createdAt), // Use span timestamp
   };
 }
 
@@ -219,21 +238,10 @@ export function validateTrace(trace: AITraceRecord): void {
  * Find the most recent LLM span that contains conversation history
  */
 function findPrimaryLLMSpan(spanTree: SpanTree, rootAgentSpan: AISpanRecord): AISpanRecord {
-  // First try direct children of root agent
   const directLLMSpans = getChildrenOfType<AISpanRecord>(spanTree, rootAgentSpan.spanId, AISpanType.LLM_GENERATION);
-
   if (directLLMSpans.length > 0) {
-    return directLLMSpans[directLLMSpans.length - 1]!; // Take the last (most recent) one
-  }
-
-  // If no direct children, search in sub-agent spans
-  const subAgentSpans = getChildrenOfType<AISpanRecord>(spanTree, rootAgentSpan.spanId, AISpanType.AGENT_RUN);
-
-  for (const subAgent of subAgentSpans) {
-    const subLLMSpans = getChildrenOfType<AISpanRecord>(spanTree, subAgent.spanId, AISpanType.LLM_GENERATION);
-    if (subLLMSpans.length > 0) {
-      return subLLMSpans[subLLMSpans.length - 1]!;
-    }
+    // There should only be one LLM generation span per agent run which is a direct child of the root agent span
+    return directLLMSpans[0]!;
   }
 
   throw new Error('No LLM generation span found in trace');
@@ -254,13 +262,8 @@ export function transformTraceToScorerInput(trace: AITraceRecord): ScorerRunInpu
       throw new Error('No root agent_run span found in trace');
     }
 
-    // Find the primary LLM generation span
     const primaryLLMSpan = findPrimaryLLMSpan(spanTree, rootAgentSpan);
-
-    // Extract input messages from agent span
     const inputMessages = extractInputMessages(rootAgentSpan);
-
-    // Extract system messages from LLM span
     const systemMessages = extractSystemMessages(primaryLLMSpan);
 
     // Extract remembered messages from LLM span (excluding current input)
@@ -272,7 +275,7 @@ export function transformTraceToScorerInput(trace: AITraceRecord): ScorerRunInpu
       inputMessages: inputMessages as UIMessageWithMetadata[],
       rememberedMessages: rememberedMessages as UIMessageWithMetadata[],
       systemMessages,
-      taggedSystemMessages: {}, // Not available in traces
+      taggedSystemMessages: {}, // Todo: Support tagged system messages
     };
   } catch (error) {
     throw new Error(
