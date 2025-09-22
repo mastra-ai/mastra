@@ -295,8 +295,6 @@ export class MessageList {
           });
         }
 
-        console.log('messages before need default user message====', messages);
-
         // Ensure we have at least one user message
         const needsDefaultUserMessage = !messages.length || messages[messages.length - 1]?.role !== 'user';
         if (needsDefaultUserMessage) {
@@ -306,8 +304,6 @@ export class MessageList {
           };
           messages.push(defaultMessage);
         }
-
-        console.log('messages after need default user message====', messages);
 
         return messages.map(MessageList.aiV5ModelMessageToV2PromptMessage);
       },
