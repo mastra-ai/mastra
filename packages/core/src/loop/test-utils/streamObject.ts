@@ -1059,6 +1059,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             output: z.object({ content: z.string() }),
             options: {
               onFinish: async event => {
+                console.log('onFinish called!!', event);
                 result = event;
               },
             },
@@ -1067,8 +1068,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           });
           // consume stream
           await convertAsyncIterableToArray(objectStream);
+
+          expect(await object).rejects.toThrow('Type validation failed: Value: {"invalid":"Hello, world!"}.');
           // consume expected error rejection
-          await object.catch(() => {});
+          //           await object.catch(err => {
+          //             expect(err).toMatchInlineSnapshot(`Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
+          // Error message: Validation failed`);
+          //           })
 
           expect(result!).toMatchInlineSnapshot(`
             {
@@ -1818,7 +1824,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         it('should stream elements individually in elementStream', async () => {
           const arr = await convertAsyncIterableToArray(result.aisdk.v5.elementStream);
-          console.log('arr22', arr);
           assert.deepStrictEqual(arr, [{ content: 'element 1' }, { content: 'element 2' }, { content: 'element 3' }]);
         });
       });

@@ -8,9 +8,9 @@ import type {
   LanguageModelV2,
 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1StreamPart, LanguageModelRequestMetadata } from 'ai';
-import type { CoreMessage, StepResult } from 'ai-v5';
+import type { CoreMessage, StepResult, ToolSet, TypedToolCall } from 'ai-v5';
 import type { WorkflowStreamEvent } from '../workflows/types';
-import type { OutputSchema, PartialSchemaOutput } from './base/schema';
+import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './base/schema';
 
 export enum ChunkFrom {
   AGENT = 'AGENT',
@@ -22,6 +22,7 @@ export enum ChunkFrom {
 interface BaseChunkType {
   runId: string;
   from: ChunkFrom;
+  metadata?: Record<string, any>;
 }
 
 interface ResponseMetadataPayload {
@@ -166,7 +167,7 @@ interface StepStartPayload {
   [key: string]: any;
 }
 
-export interface StepFinishPayload {
+export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
   id?: string;
   providerMetadata?: SharedV2ProviderMetadata;
   totalUsage?: LanguageModelV2Usage;
@@ -179,7 +180,11 @@ export interface StepFinishPayload {
     reason: LanguageModelV2FinishReason;
   };
   output: {
+    text?: string;
+    toolCalls?: TypedToolCall<Tools>[];
     usage: LanguageModelV2Usage;
+    steps?: StepResult<Tools>[];
+    object?: OUTPUT extends undefined ? unknown : InferSchemaOutput<OUTPUT>;
   };
   metadata: {
     request?: LanguageModelRequestMetadata;
@@ -381,12 +386,19 @@ export type ChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'raw'; payload: RawPayload })
   | (BaseChunkType & { type: 'start'; payload: StartPayload })
   | (BaseChunkType & { type: 'step-start'; payload: StepStartPayload })
-  | (BaseChunkType & { type: 'step-finish'; payload: StepFinishPayload })
+  | (BaseChunkType & { type: 'step-finish'; payload: StepFinishPayload<ToolSet, OUTPUT> })
   | (BaseChunkType & { type: 'tool-error'; payload: ToolErrorPayload })
   | (BaseChunkType & { type: 'abort'; payload: AbortPayload })
   | (BaseChunkType & {
       type: 'object';
       object: PartialSchemaOutput<OUTPUT>;
+    })
+  | (BaseChunkType & {
+      /**
+       * The object promise is resolved with the object from the object-result chunk
+       */
+      type: 'object-result';
+      object: InferSchemaOutput<OUTPUT>;
     })
   | (BaseChunkType & { type: 'tool-output'; payload: ToolOutputPayload })
   | (BaseChunkType & { type: 'step-output'; payload: StepOutputPayload })
@@ -410,10 +422,11 @@ export type CreateStream = () => Promise<{
   response?: Record<string, any>;
 }>;
 
-export interface StepBufferItem {
+export interface StepBufferItem<OUTPUT extends OutputSchema = undefined> {
   stepType: 'initial' | 'tool-result';
   text: string;
   reasoning?: string;
+  object?: InferSchemaOutput<OUTPUT>;
   sources: any[];
   files: any[];
   toolCalls: any[];

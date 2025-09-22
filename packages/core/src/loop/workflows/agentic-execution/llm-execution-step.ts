@@ -30,7 +30,7 @@ type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   outputStream: MastraModelOutput<OUTPUT>;
   runState: AgenticRunState;
   options?: LoopConfig;
-  controller: ReadableStreamDefaultController<ChunkType>;
+  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
   responseFromModel: {
     warnings: any;
     request: any;
@@ -54,8 +54,8 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       continue;
     }
 
-    if (chunk.type == 'object') {
-      // controller.enqueue(chunk);
+    if (chunk.type == 'object' || chunk.type == 'object-result') {
+      controller.enqueue(chunk);
       continue;
     }
 
@@ -559,7 +559,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
             includeRawChunks,
             output,
             outputProcessors,
-            outputProcessorRunnerMode: 'stream',
+            outputProcessorRunnerMode: 'inner',
             tracingContext,
           },
         });
@@ -703,7 +703,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
       const usage = outputStream._getImmediateUsage();
       const responseMetadata = runState.state.responseMetadata;
       const text = outputStream._getImmediateText();
-
+      const object = outputStream._getImmediateObject();
       // Check if tripwire was triggered
       const tripwireTriggered = outputStream.tripwire;
 
@@ -754,6 +754,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
           toolCalls,
           usage: usage ?? inputData.output?.usage,
           steps,
+          ...(object ? { object } : {}),
         },
         messages,
       };

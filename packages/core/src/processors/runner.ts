@@ -26,7 +26,7 @@ export class ProcessorState {
   }
 }
 
-export type ProcessorRunnerMode = 'stream' | 'result' | false;
+export type ProcessorRunnerMode = 'inner' | 'outer' | false;
 
 export class ProcessorRunner {
   public readonly inputProcessors: Processor[];

@@ -3,10 +3,11 @@ import { asSchema, isDeepEqualData, jsonSchema, parsePartialJson } from 'ai-v5';
 import type { JSONSchema7, Schema } from 'ai-v5';
 import type z3 from 'zod/v3';
 import type z4 from 'zod/v4';
+import type { ProcessorRunnerMode } from '../../processors/runner';
 import { safeValidateTypes } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
 import type { ChunkType } from '../types';
-import { getTransformedSchema, getResponseFormat } from './schema';
+import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput, ZodLikePartialSchema } from './schema';
 
 interface ProcessPartialChunkParams {
@@ -102,7 +103,10 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
    * @param finalValue - The final parsed value to validate
    * @returns Promise resolving to validation result
    */
-  abstract validateAndTransformFinal(finalValue: string): Promise<ValidateAndTransformFinalResult<OUTPUT>>;
+  abstract validateAndTransformFinal(
+    finalValue: string,
+    previousObject: any,
+  ): Promise<ValidateAndTransformFinalResult<OUTPUT>>;
 
   /**
    * Preprocesses accumulated text to handle LLMs that wrap JSON in code blocks.
@@ -179,6 +183,9 @@ class ObjectFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseF
 
   async validateAndTransformFinal(finalRawValue: string): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
     if (!finalRawValue) {
+      console.log('validateAndTransformFinal no finalRawValue', {
+        schema: !!this.schema,
+      });
       return {
         success: false,
         error: new Error('No object generated: could not parse the response.'),
@@ -287,7 +294,10 @@ class ArrayFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFo
     return { shouldEmit: false };
   }
 
-  async validateAndTransformFinal(_finalValue: string): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
+  async validateAndTransformFinal(
+    _finalValue: string,
+    _previousObject: any,
+  ): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
     const resultValue = this.textPreviousFilteredArray;
 
     if (!resultValue) {
@@ -483,42 +493,41 @@ function createOutputHandler<OUTPUT extends OutputSchema = undefined>({
  * - Always passes through original chunks for downstream processing
  */
 export function createObjectStreamTransformer<OUTPUT extends OutputSchema = undefined>({
+  outputProcessorRunnerMode,
   schema,
-  onFinish,
 }: {
+  outputProcessorRunnerMode?: ProcessorRunnerMode;
   schema?: OUTPUT;
-  /**
-   * Callback to be called when the stream finishes.
-   * @param data The final parsed object / array
-   */
-  onFinish: (data: InferSchemaOutput<OUTPUT>) => void;
 }) {
-  const responseFormat = getResponseFormat(schema);
   const transformedSchema = getTransformedSchema(schema);
   const handler = createOutputHandler({ transformedSchema, schema });
 
   let accumulatedText = '';
   let previousObject: any = undefined;
-  let finishReason: string | undefined;
+  // let finishReason: string | undefined;
   let currentRunId: string | undefined;
+
+  const runInProcessorRunnerMode: ProcessorRunnerMode = 'outer';
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
+      if (outputProcessorRunnerMode !== runInProcessorRunnerMode || !schema) {
+        // Bypassing processing in inner stream, only process object chunks in outer stream
+        // OR if there is no output schema provided
+        controller.enqueue(chunk);
+        return;
+      }
+
       if (chunk.runId) {
+        // save runId to use in error chunks
         currentRunId = chunk.runId;
       }
 
-      if (chunk.type === 'finish') {
-        finishReason = chunk.payload.stepResult.reason;
-        controller.enqueue(chunk);
-        return;
-      }
-
-      if (responseFormat?.type !== 'json') {
-        // Not JSON mode - pass through original chunks and exit
-        controller.enqueue(chunk);
-        return;
-      }
+      // if (chunk.type === 'finish') {
+      //   finishReason = chunk.payload.stepResult.reason;
+      //   controller.enqueue(chunk);
+      //   return;
+      // }
 
       if (chunk.type === 'text-delta' && typeof chunk.payload?.text === 'string') {
         accumulatedText += chunk.payload.text;
@@ -530,12 +539,14 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
 
         if (result.shouldEmit) {
           previousObject = result.newPreviousResult ?? previousObject;
-          controller.enqueue({
+          const chunkData = {
             from: chunk.from,
             runId: chunk.runId,
             type: 'object',
             object: result.emitValue as PartialSchemaOutput<OUTPUT>, // TODO: handle partial runtime type validation of json chunks
-          });
+          };
+
+          controller.enqueue(chunkData as ChunkType<OUTPUT>);
         }
       }
 
@@ -544,19 +555,22 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
     },
 
     async flush(controller) {
-      if (responseFormat?.type !== 'json') {
-        // Not JSON mode, no final validation needed - exit
+      // Bypass final validation if there is no output schema provided
+      // or if we are not in result mode (outer stream)
+      if (outputProcessorRunnerMode !== runInProcessorRunnerMode || !schema) {
         return;
       }
 
-      if (['tool-calls'].includes(finishReason ?? '')) {
-        onFinish(undefined as InferSchemaOutput<OUTPUT>);
-        return;
-      }
+      // TODO: make sure stream ended with reason client tool-calls doesnt reject the object promise
+      // if (['tool-calls'].includes(finishReason ?? '')) {
+      // onFinish(undefined as InferSchemaOutput<OUTPUT>); // TODO: handle
+      // return;
+      // }
 
-      const finalResult = await handler.validateAndTransformFinal(accumulatedText);
-
+      const finalResult = await handler.validateAndTransformFinal(accumulatedText, previousObject);
+      console.log('finalResult', finalResult);
       if (!finalResult.success) {
+        console.log('not successful finalResult error', finalResult.error);
         controller.enqueue({
           from: ChunkFrom.AGENT,
           runId: currentRunId ?? '',
@@ -566,7 +580,13 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
         return;
       }
 
-      onFinish(finalResult.value);
+      controller.enqueue({
+        from: ChunkFrom.AGENT,
+        runId: currentRunId ?? '',
+        type: 'object-result',
+        object: finalResult.value,
+      });
+      return;
     },
   });
 }

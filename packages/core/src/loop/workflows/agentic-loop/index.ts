@@ -11,8 +11,8 @@ import type { LLMIterationData } from '../schema';
 
 interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>
   extends LoopRun<Tools, OUTPUT> {
-  controller: ReadableStreamDefaultController<ChunkType>;
-  writer: WritableStream<ChunkType>;
+  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
+  writer: WritableStream<ChunkType<OUTPUT>>;
 }
 
 export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>(
@@ -124,12 +124,13 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       }
 
       if (typedInputData.stepResult?.reason !== 'abort') {
-        controller.enqueue({
-          type: 'step-finish',
+        const stepFinishChunk = {
+          type: 'step-finish' as const,
           runId,
           from: ChunkFrom.AGENT,
-          payload: typedInputData as StepFinishPayload,
-        });
+          payload: typedInputData as unknown as StepFinishPayload<ToolSet, OUTPUT>,
+        };
+        controller.enqueue(stepFinishChunk);
       }
 
       modelStreamSpan.setAttributes({

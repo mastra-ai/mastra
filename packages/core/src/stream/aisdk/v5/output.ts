@@ -289,50 +289,52 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
     const fullStream = this.#modelOutput.fullStream;
 
     const transformedStream = fullStream.pipeThrough(
-      new TransformStream<ChunkType | NonNullable<OutputChunkType>, TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>>(
-        {
-          transform(chunk, controller) {
-            if (responseFormat?.type === 'json' && chunk.type === 'object') {
-              /**
-               * Pass through 'object' chunks that were created by
-               * createObjectStreamTransformer in base/output.ts.
-               */
-              controller.enqueue(chunk as TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>);
-              return;
+      new TransformStream<
+        ChunkType<OUTPUT> | NonNullable<OutputChunkType>,
+        TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>
+      >({
+        transform(chunk, controller) {
+          // TODO: check this works with new changes to structured output stream merging
+          if (responseFormat?.type === 'json' && chunk.type === 'object') {
+            /**
+             * Pass through 'object' chunks that were created by
+             * createObjectStreamTransformer in base/output.ts.
+             */
+            controller.enqueue(chunk as TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>);
+            return;
+          }
+
+          if (chunk.type === 'step-start' && !startEvent) {
+            startEvent = convertMastraChunkToAISDKv5({
+              chunk,
+            });
+            // stepCounter++;
+            return;
+          } else if (chunk.type !== 'error') {
+            hasStarted = true;
+          }
+
+          if (startEvent && hasStarted) {
+            controller.enqueue(startEvent as TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>);
+            startEvent = undefined;
+          }
+
+          if ('payload' in chunk) {
+            const transformedChunk = convertMastraChunkToAISDKv5({
+              chunk,
+            });
+
+            if (transformedChunk) {
+              // if (!['start', 'finish', 'finish-step'].includes(transformedChunk.type)) {
+              //   console.log('step counter', stepCounter);
+              //   transformedChunk.id = transformedChunk.id ?? stepCounter.toString();
+              // }
+
+              controller.enqueue(transformedChunk as TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>);
             }
-
-            if (chunk.type === 'step-start' && !startEvent) {
-              startEvent = convertMastraChunkToAISDKv5({
-                chunk,
-              });
-              // stepCounter++;
-              return;
-            } else if (chunk.type !== 'error') {
-              hasStarted = true;
-            }
-
-            if (startEvent && hasStarted) {
-              controller.enqueue(startEvent as TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>);
-              startEvent = undefined;
-            }
-
-            if ('payload' in chunk) {
-              const transformedChunk = convertMastraChunkToAISDKv5({
-                chunk,
-              });
-
-              if (transformedChunk) {
-                // if (!['start', 'finish', 'finish-step'].includes(transformedChunk.type)) {
-                //   console.log('step counter', stepCounter);
-                //   transformedChunk.id = transformedChunk.id ?? stepCounter.toString();
-                // }
-
-                controller.enqueue(transformedChunk as TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>);
-              }
-            }
-          },
+          }
         },
-      ),
+      }),
     );
 
     return transformedStream as any as AIV5FullStreamType<OUTPUT>;

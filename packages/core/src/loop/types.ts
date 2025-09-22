@@ -93,8 +93,8 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema
 
 export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = {
   messageId: string;
-  controller: ReadableStreamDefaultController<ChunkType>;
-  writer: WritableStream<ChunkType>;
+  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
+  writer: WritableStream<ChunkType<OUTPUT>>;
 } & LoopRun<Tools, OUTPUT>;
 
 export const RESOURCE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool']);

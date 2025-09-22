@@ -11,8 +11,8 @@ import { getValidTraceId } from '../../ai-tracing';
 import type { TracingContext } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import type { OutputProcessor } from '../../processors';
-import type { ProcessorRunnerMode, ProcessorState } from '../../processors/runner';
-import { ProcessorRunner } from '../../processors/runner';
+import type { ProcessorRunnerMode } from '../../processors/runner';
+import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
 import { DelayedPromise } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
@@ -81,6 +81,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     msgCount: 0,
   };
   #bufferedText: string[] = [];
+  #bufferedObject: InferSchemaOutput<OUTPUT> | undefined;
   #bufferedTextChunks: Record<string, string[]> = {};
   #bufferedSources: any[] = [];
   #bufferedReasoning: string[] = [];
@@ -199,11 +200,23 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     // Apply output processors if they exist
     let processedStream = stream;
     const processorRunner = this.processorRunner;
-    if (processorRunner && options.outputProcessorRunnerMode === `stream`) {
+    if (processorRunner && options.outputProcessorRunnerMode === `inner`) {
       const processorStates = new Map<string, ProcessorState>();
+
       processedStream = stream.pipeThrough(
         new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
           async transform(chunk, controller) {
+            /**
+             * Add base stream controller to structured output processor state
+             * so it can be used to enqueue chunks into the main stream from the structuring agent stream
+             */
+            const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
+            if (!processorStates.has(STRUCTURED_OUTPUT_PROCESSOR_NAME)) {
+              const structuredOutputProcessorState = new ProcessorState(STRUCTURED_OUTPUT_PROCESSOR_NAME);
+              structuredOutputProcessorState.customState = { controller };
+              processorStates.set(STRUCTURED_OUTPUT_PROCESSOR_NAME, structuredOutputProcessorState);
+            }
+
             const {
               part: processed,
               blocked,
@@ -227,406 +240,459 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       );
     }
 
-    this.#baseStream = processedStream.pipeThrough(
-      new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
-        transform: async (chunk, controller) => {
-          switch (chunk.type) {
-            case 'source':
-              self.#bufferedSources.push(chunk);
-              self.#bufferedByStep.sources.push(chunk);
-              break;
-            case 'text-delta':
-              self.#bufferedText.push(chunk.payload.text);
-              self.#bufferedByStep.text += chunk.payload.text;
-              if (chunk.payload.id) {
-                const ary = self.#bufferedTextChunks[chunk.payload.id] ?? [];
-                ary.push(chunk.payload.text);
-                self.#bufferedTextChunks[chunk.payload.id] = ary;
-              }
-              break;
-            case 'tool-call-input-streaming-start':
-              self.#toolCallDeltaIdNameMap[chunk.payload.toolCallId] = chunk.payload.toolName;
-              break;
-            case 'tool-call-delta':
-              if (!self.#toolCallArgsDeltas[chunk.payload.toolCallId]) {
-                self.#toolCallArgsDeltas[chunk.payload.toolCallId] = [];
-              }
-              self.#toolCallArgsDeltas?.[chunk.payload.toolCallId]?.push(chunk.payload.argsTextDelta);
-              // mutate chunk to add toolname, we need it later to look up tools by their name
-              chunk.payload.toolName ||= self.#toolCallDeltaIdNameMap[chunk.payload.toolCallId];
-              break;
-            case 'file':
-              self.#bufferedFiles.push(chunk);
-              self.#bufferedByStep.files.push(chunk);
-              break;
-            case 'reasoning-start':
-              self.#bufferedReasoningDetails[chunk.payload.id] = {
-                type: 'reasoning',
-                text: '',
-                providerMetadata: chunk.payload.providerMetadata || {},
-              };
-              break;
-            case 'reasoning-delta': {
-              self.#bufferedReasoning.push(chunk.payload.text);
-              self.#bufferedByStep.reasoning += chunk.payload.text;
+    this.#baseStream = processedStream
+      .pipeThrough(
+        createObjectStreamTransformer({
+          outputProcessorRunnerMode: self.#options.outputProcessorRunnerMode,
+          schema: self.#options.output,
+        }),
+      )
+      .pipeThrough(
+        new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
+          transform: async (chunk, controller) => {
+            switch (chunk.type) {
+              case 'object-result':
+                self.#bufferedObject = chunk.object;
+                self.#delayedPromises.object.resolve(chunk.object);
+                break;
+              case 'source':
+                self.#bufferedSources.push(chunk);
+                self.#bufferedByStep.sources.push(chunk);
+                break;
+              case 'text-delta':
+                self.#bufferedText.push(chunk.payload.text);
+                self.#bufferedByStep.text += chunk.payload.text;
+                if (chunk.payload.id) {
+                  const ary = self.#bufferedTextChunks[chunk.payload.id] ?? [];
+                  ary.push(chunk.payload.text);
+                  self.#bufferedTextChunks[chunk.payload.id] = ary;
+                }
+                break;
+              case 'tool-call-input-streaming-start':
+                self.#toolCallDeltaIdNameMap[chunk.payload.toolCallId] = chunk.payload.toolName;
+                break;
+              case 'tool-call-delta':
+                if (!self.#toolCallArgsDeltas[chunk.payload.toolCallId]) {
+                  self.#toolCallArgsDeltas[chunk.payload.toolCallId] = [];
+                }
+                self.#toolCallArgsDeltas?.[chunk.payload.toolCallId]?.push(chunk.payload.argsTextDelta);
+                // mutate chunk to add toolname, we need it later to look up tools by their name
+                chunk.payload.toolName ||= self.#toolCallDeltaIdNameMap[chunk.payload.toolCallId];
+                break;
+              case 'file':
+                self.#bufferedFiles.push(chunk);
+                self.#bufferedByStep.files.push(chunk);
+                break;
+              case 'reasoning-start':
+                self.#bufferedReasoningDetails[chunk.payload.id] = {
+                  type: 'reasoning',
+                  text: '',
+                  providerMetadata: chunk.payload.providerMetadata || {},
+                };
+                break;
+              case 'reasoning-delta': {
+                self.#bufferedReasoning.push(chunk.payload.text);
+                self.#bufferedByStep.reasoning += chunk.payload.text;
 
-              const bufferedReasoning = self.#bufferedReasoningDetails[chunk.payload.id];
-              if (bufferedReasoning) {
-                bufferedReasoning.text += chunk.payload.text;
-                if (chunk.payload.providerMetadata) {
+                const bufferedReasoning = self.#bufferedReasoningDetails[chunk.payload.id];
+                if (bufferedReasoning) {
+                  bufferedReasoning.text += chunk.payload.text;
+                  if (chunk.payload.providerMetadata) {
+                    bufferedReasoning.providerMetadata = chunk.payload.providerMetadata;
+                  }
+                }
+
+                break;
+              }
+              case 'reasoning-end': {
+                const bufferedReasoning = self.#bufferedReasoningDetails[chunk.payload.id];
+                if (chunk.payload.providerMetadata && bufferedReasoning) {
                   bufferedReasoning.providerMetadata = chunk.payload.providerMetadata;
                 }
+                break;
               }
+              case 'tool-call':
+                self.#toolCalls.push(chunk);
+                self.#bufferedByStep.toolCalls.push(chunk);
+                if (chunk.payload?.output?.from === 'AGENT' && chunk.payload?.output?.type === 'finish') {
+                  const finishPayload = chunk.payload?.output.payload;
+                  self.updateUsageCount(finishPayload.usage);
+                }
+                break;
+              case 'tool-result':
+                self.#toolResults.push(chunk);
+                self.#bufferedByStep.toolResults.push(chunk);
+                break;
+              case 'step-finish': {
+                self.updateUsageCount(chunk.payload.output.usage as Record<string, number>);
+                // chunk.payload.totalUsage = self.totalUsage;
+                self.#warnings = chunk.payload.stepResult.warnings || [];
 
-              break;
-            }
-            case 'reasoning-end': {
-              const bufferedReasoning = self.#bufferedReasoningDetails[chunk.payload.id];
-              if (chunk.payload.providerMetadata && bufferedReasoning) {
-                bufferedReasoning.providerMetadata = chunk.payload.providerMetadata;
-              }
-              break;
-            }
-            case 'tool-call':
-              self.#toolCalls.push(chunk);
-              self.#bufferedByStep.toolCalls.push(chunk);
-              if (chunk.payload?.output?.from === 'AGENT' && chunk.payload?.output?.type === 'finish') {
-                const finishPayload = chunk.payload?.output.payload;
-                self.updateUsageCount(finishPayload.usage);
-              }
-              break;
-            case 'tool-result':
-              self.#toolResults.push(chunk);
-              self.#bufferedByStep.toolResults.push(chunk);
-              break;
-            case 'step-finish': {
-              self.updateUsageCount(chunk.payload.output.usage as Record<string, number>);
-              // chunk.payload.totalUsage = self.totalUsage;
-              self.#warnings = chunk.payload.stepResult.warnings || [];
+                if (chunk.payload.metadata.request) {
+                  self.#request = chunk.payload.metadata.request;
+                }
 
-              if (chunk.payload.metadata.request) {
-                self.#request = chunk.payload.metadata.request;
-              }
+                const reasoningDetails = reasoningDetailsFromMessages(
+                  chunk.payload.messages.all.slice(self.#bufferedByStep.msgCount),
+                );
 
-              const reasoningDetails = reasoningDetailsFromMessages(
-                chunk.payload.messages.all.slice(self.#bufferedByStep.msgCount),
-              );
-
-              const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
-
-              const stepResult: StepBufferItem = {
-                stepType: self.#bufferedSteps.length === 0 ? 'initial' : 'tool-result',
-                text: self.#bufferedByStep.text,
-                reasoning: self.#bufferedByStep.reasoning || undefined,
-                sources: self.#bufferedByStep.sources,
-                files: self.#bufferedByStep.files,
-                toolCalls: self.#bufferedByStep.toolCalls,
-                toolResults: self.#bufferedByStep.toolResults,
-                warnings: self.#warnings,
-                reasoningDetails: reasoningDetails,
-                providerMetadata: providerMetadata,
-                experimental_providerMetadata: providerMetadata,
-                isContinued: chunk.payload.stepResult.isContinued,
-                logprobs: chunk.payload.stepResult.logprobs,
-                finishReason: chunk.payload.stepResult.reason,
-                response: { ...otherMetadata, messages: chunk.payload.messages.nonUser } as any,
-                request: request,
-                usage: chunk.payload.output.usage,
-                content: messageList.get.response.aiV5.modelContent(-1),
-              };
-
-              await options?.onStepFinish?.({
-                ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
-                ...stepResult,
-              });
-
-              self.#bufferedSteps.push(stepResult);
-
-              self.#bufferedByStep = {
-                text: '',
-                reasoning: '',
-                sources: [],
-                files: [],
-                toolCalls: [],
-                toolResults: [],
-                msgCount: chunk.payload.messages.all.length,
-              };
-
-              break;
-            }
-            case 'tripwire':
-              // Handle tripwire chunks from processors
-              self.#tripwire = true;
-              self.#tripwireReason = chunk.payload?.tripwireReason || 'Content blocked';
-              self.#finishReason = 'other';
-
-              // Resolve all delayed promises before terminating
-              self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
-              self.#delayedPromises.finishReason.resolve('other');
-              self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
-              self.#delayedPromises.usage.resolve(self.#usageCount);
-              self.#delayedPromises.warnings.resolve(self.#warnings);
-              self.#delayedPromises.providerMetadata.resolve(undefined);
-              self.#delayedPromises.response.resolve({});
-              self.#delayedPromises.request.resolve({});
-              self.#delayedPromises.reasoning.resolve('');
-              self.#delayedPromises.reasoningText.resolve(undefined);
-              self.#delayedPromises.sources.resolve([]);
-              self.#delayedPromises.files.resolve([]);
-              self.#delayedPromises.toolCalls.resolve([]);
-              self.#delayedPromises.toolResults.resolve([]);
-              self.#delayedPromises.steps.resolve(self.#bufferedSteps);
-              self.#delayedPromises.totalUsage.resolve(self.#usageCount);
-              self.#delayedPromises.content.resolve([]);
-              self.#delayedPromises.reasoningDetails.resolve([]);
-
-              // Pass the tripwire chunk through
-              controller.enqueue(chunk);
-              // Terminate the stream
-              controller.terminate();
-              return;
-            case 'finish':
-              if (chunk.payload.stepResult.reason) {
-                self.#finishReason = chunk.payload.stepResult.reason;
-              }
-
-              let response = {};
-              if (chunk.payload.metadata) {
                 const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
 
-                response = {
-                  ...otherMetadata,
-                  messages: messageList.get.response.aiV5.model(),
-                  uiMessages: messageList.get.response.aiV5.ui(),
-                };
-              }
-
-              this.populateUsageCount(chunk.payload.output.usage as Record<string, number>);
-
-              chunk.payload.output.usage = self.#usageCount as any;
-
-              try {
-                if (self.processorRunner && self.outputProcessorRunnerMode === `result`) {
-                  self.messageList = await self.processorRunner.runOutputProcessors(self.messageList);
-                  const outputText = self.messageList.get.response.aiV4
-                    .core()
-                    .map(m => MessageList.coreContentToString(m.content))
-                    .join('\n');
-
-                  const messages = self.messageList.get.response.v2();
-                  const messagesWithStructuredData = messages.filter(
-                    msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
-                  );
-
-                  if (
-                    messagesWithStructuredData[0] &&
-                    messagesWithStructuredData[0].content.metadata?.structuredOutput
-                  ) {
-                    const structuredOutput = messagesWithStructuredData[0].content.metadata.structuredOutput;
-                    self.#delayedPromises.object.resolve(structuredOutput as InferSchemaOutput<OUTPUT>);
-                  } else if (!self.#options.output) {
-                    self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
-                  }
-
-                  self.#delayedPromises.text.resolve(outputText);
-                  self.#delayedPromises.finishReason.resolve(self.#finishReason);
-
-                  // Update response with processed messages after output processors have run
-                  if (chunk.payload.metadata) {
-                    const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
-                    response = {
-                      ...otherMetadata,
-                      messages: messageList.get.response.aiV5.model(),
-                      uiMessages: messageList.get.response.aiV5.ui(),
-                    };
-                  }
-                } else {
-                  const textContent = self.#bufferedText.join('');
-                  self.#delayedPromises.text.resolve(textContent);
-                  self.#delayedPromises.finishReason.resolve(self.#finishReason);
-
-                  // Check for structuredOutput in metadata (from output processors in stream mode)
-                  const messages = self.messageList.get.response.v2();
-                  const messagesWithStructuredData = messages.filter(
-                    msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
-                  );
-
-                  if (
-                    messagesWithStructuredData[0] &&
-                    // this is to make typescript happy
-                    messagesWithStructuredData[0].content.metadata?.structuredOutput
-                  ) {
-                    const structuredOutput = messagesWithStructuredData[0].content.metadata.structuredOutput;
-                    self.#delayedPromises.object.resolve(structuredOutput as InferSchemaOutput<OUTPUT>);
-                  } else if (!self.#options.output && self.#delayedPromises.object.status.type !== 'resolved') {
-                    // Resolve object promise to avoid hanging
-                    self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
-                  }
-                }
-              } catch (error) {
-                if (error instanceof TripWire) {
-                  self.#tripwire = true;
-                  self.#tripwireReason = error.message;
-                  self.#delayedPromises.finishReason.resolve('other');
-                  self.#delayedPromises.text.resolve('');
-                } else {
-                  self.#error = error instanceof Error ? error.message : String(error);
-                  self.#delayedPromises.finishReason.resolve('error');
-                  self.#delayedPromises.text.resolve('');
-                }
-                self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
-              }
-
-              // Resolve all delayed promises with final values
-              self.#delayedPromises.usage.resolve(self.#usageCount);
-              self.#delayedPromises.warnings.resolve(self.#warnings);
-              self.#delayedPromises.providerMetadata.resolve(chunk.payload.metadata?.providerMetadata);
-              self.#delayedPromises.response.resolve(response);
-              self.#delayedPromises.request.resolve(self.#request || {});
-              self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
-              self.#delayedPromises.reasoning.resolve(self.#bufferedReasoning.join(''));
-              const reasoningText = self.#bufferedReasoning.length > 0 ? self.#bufferedReasoning.join('') : undefined;
-              self.#delayedPromises.reasoningText.resolve(reasoningText);
-              self.#delayedPromises.sources.resolve(self.#bufferedSources);
-              self.#delayedPromises.files.resolve(self.#bufferedFiles);
-              self.#delayedPromises.toolCalls.resolve(self.#toolCalls);
-              self.#delayedPromises.toolResults.resolve(self.#toolResults);
-              self.#delayedPromises.steps.resolve(self.#bufferedSteps);
-              self.#delayedPromises.totalUsage.resolve(self.#getTotalUsage());
-              self.#delayedPromises.content.resolve(messageList.get.response.aiV5.stepContent());
-              self.#delayedPromises.reasoningDetails.resolve(Object.values(self.#bufferedReasoningDetails || {}));
-
-              const baseFinishStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
-
-              if (baseFinishStep) {
-                const { stepType: _stepType, isContinued: _isContinued } = baseFinishStep;
-
-                const onFinishPayload = {
-                  ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
-                  text: baseFinishStep.text,
-                  warnings: baseFinishStep.warnings ?? [],
+                const stepResult: StepBufferItem = {
+                  stepType: self.#bufferedSteps.length === 0 ? 'initial' : 'tool-result',
+                  text: self.#bufferedByStep.text,
+                  reasoning: self.#bufferedByStep.reasoning || undefined,
+                  sources: self.#bufferedByStep.sources,
+                  files: self.#bufferedByStep.files,
+                  toolCalls: self.#bufferedByStep.toolCalls,
+                  toolResults: self.#bufferedByStep.toolResults,
+                  warnings: self.#warnings,
+                  reasoningDetails: reasoningDetails,
+                  providerMetadata: providerMetadata,
+                  experimental_providerMetadata: providerMetadata,
+                  isContinued: chunk.payload.stepResult.isContinued,
+                  logprobs: chunk.payload.stepResult.logprobs,
                   finishReason: chunk.payload.stepResult.reason,
-                  // TODO: we should add handling for step IDs in message list so you can retrieve step content by step id. And on finish should the content here be from all steps?
-                  content: messageList.get.response.aiV5.stepContent(),
-                  request: await self.request,
-                  error: self.error,
-                  reasoning: await self.aisdk.v5.reasoning,
-                  reasoningText: await self.aisdk.v5.reasoningText,
-                  sources: await self.aisdk.v5.sources,
-                  files: await self.aisdk.v5.files,
-                  steps: transformSteps({ steps: self.#bufferedSteps }),
-                  response: { ...(await self.response), messages: messageList.get.response.aiV5.model() },
+                  response: { ...otherMetadata, messages: chunk.payload.messages.nonUser } as any,
+                  request: request,
                   usage: chunk.payload.output.usage,
-                  totalUsage: self.#getTotalUsage(),
-                  toolCalls: await self.aisdk.v5.toolCalls,
-                  toolResults: await self.aisdk.v5.toolResults,
-                  staticToolCalls: (await self.aisdk.v5.toolCalls).filter(
-                    (toolCall: any) => toolCall.dynamic === false,
-                  ),
-                  staticToolResults: (await self.aisdk.v5.toolResults).filter(
-                    (toolResult: any) => toolResult.dynamic === false,
-                  ),
-                  dynamicToolCalls: (await self.aisdk.v5.toolCalls).filter(
-                    (toolCall: any) => toolCall.dynamic === true,
-                  ),
-                  dynamicToolResults: (await self.aisdk.v5.toolResults).filter(
-                    (toolResult: any) => toolResult.dynamic === true,
-                  ),
+                  content: messageList.get.response.aiV5.modelContent(-1),
                   object:
                     self.#delayedPromises.object.status.type === 'resolved'
                       ? self.#delayedPromises.object.status.value
-                      : self.#options.output && baseFinishStep.text
-                        ? (() => {
-                            try {
-                              return JSON.parse(baseFinishStep.text);
-                            } catch {
-                              return undefined;
-                            }
-                          })()
-                        : undefined,
+                      : undefined,
                 };
 
-                await options?.onFinish?.(onFinishPayload);
-              }
-
-              if (options?.rootSpan) {
-                options.rootSpan.setAttributes({
-                  ...(self.#model.modelId ? { 'aisdk.model.id': self.#model.modelId } : {}),
-                  ...(self.#model.provider ? { 'aisdk.model.provider': self.#model.provider } : {}),
-                  ...(baseFinishStep?.usage?.reasoningTokens
-                    ? {
-                        'stream.usage.reasoningTokens': baseFinishStep.usage.reasoningTokens,
-                      }
-                    : {}),
-
-                  ...(baseFinishStep?.usage?.totalTokens
-                    ? {
-                        'stream.usage.totalTokens': baseFinishStep.usage.totalTokens,
-                      }
-                    : {}),
-
-                  ...(baseFinishStep?.usage?.inputTokens
-                    ? {
-                        'stream.usage.inputTokens': baseFinishStep.usage.inputTokens,
-                      }
-                    : {}),
-                  ...(baseFinishStep?.usage?.outputTokens
-                    ? {
-                        'stream.usage.outputTokens': baseFinishStep.usage.outputTokens,
-                      }
-                    : {}),
-                  ...(baseFinishStep?.usage?.cachedInputTokens
-                    ? {
-                        'stream.usage.cachedInputTokens': baseFinishStep.usage.cachedInputTokens,
-                      }
-                    : {}),
-
-                  ...(baseFinishStep?.providerMetadata
-                    ? { 'stream.response.providerMetadata': JSON.stringify(baseFinishStep?.providerMetadata) }
-                    : {}),
-                  ...(baseFinishStep?.finishReason
-                    ? { 'stream.response.finishReason': baseFinishStep?.finishReason }
-                    : {}),
-                  ...(options?.telemetry_settings?.recordOutputs !== false
-                    ? { 'stream.response.text': baseFinishStep?.text }
-                    : {}),
-                  ...(baseFinishStep?.toolCalls && options?.telemetry_settings?.recordOutputs !== false
-                    ? {
-                        'stream.response.toolCalls': JSON.stringify(
-                          baseFinishStep?.toolCalls?.map(chunk => {
-                            return {
-                              type: 'tool-call',
-                              toolCallId: chunk.payload.toolCallId,
-                              args: chunk.payload.args,
-                              toolName: chunk.payload.toolName,
-                            };
-                          }),
-                        ),
-                      }
-                    : {}),
+                await options?.onStepFinish?.({
+                  ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
+                  ...stepResult,
                 });
 
-                options.rootSpan.end();
+                self.#bufferedSteps.push(stepResult);
+
+                self.#bufferedByStep = {
+                  text: '',
+                  reasoning: '',
+                  sources: [],
+                  files: [],
+                  toolCalls: [],
+                  toolResults: [],
+                  msgCount: chunk.payload.messages.all.length,
+                };
+
+                break;
               }
+              case 'tripwire':
+                // Handle tripwire chunks from processors
+                self.#tripwire = true;
+                self.#tripwireReason = chunk.payload?.tripwireReason || 'Content blocked';
+                self.#finishReason = 'other';
 
-              break;
+                // Resolve all delayed promises before terminating
+                self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
+                self.#delayedPromises.finishReason.resolve('other');
+                self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
+                self.#delayedPromises.usage.resolve(self.#usageCount);
+                self.#delayedPromises.warnings.resolve(self.#warnings);
+                self.#delayedPromises.providerMetadata.resolve(undefined);
+                self.#delayedPromises.response.resolve({});
+                self.#delayedPromises.request.resolve({});
+                self.#delayedPromises.reasoning.resolve('');
+                self.#delayedPromises.reasoningText.resolve(undefined);
+                self.#delayedPromises.sources.resolve([]);
+                self.#delayedPromises.files.resolve([]);
+                self.#delayedPromises.toolCalls.resolve([]);
+                self.#delayedPromises.toolResults.resolve([]);
+                self.#delayedPromises.steps.resolve(self.#bufferedSteps);
+                self.#delayedPromises.totalUsage.resolve(self.#usageCount);
+                self.#delayedPromises.content.resolve([]);
+                self.#delayedPromises.reasoningDetails.resolve([]);
 
-            case 'error':
-              self.#error = chunk.payload.error as any;
+                // Pass the tripwire chunk through
+                controller.enqueue(chunk);
+                // Terminate the stream
+                controller.terminate();
+                return;
+              case 'finish':
+                if (chunk.payload.stepResult.reason) {
+                  self.#finishReason = chunk.payload.stepResult.reason;
+                }
 
-              // Reject all delayed promises on error
-              const error =
-                typeof self.#error === 'object' ? new Error(self.#error.message) : new Error(String(self.#error));
+                let response = {};
+                if (chunk.payload.metadata) {
+                  const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
 
-              Object.values(self.#delayedPromises).forEach(promise => promise.reject(error));
+                  response = {
+                    ...otherMetadata,
+                    messages: messageList.get.response.aiV5.model(),
+                    uiMessages: messageList.get.response.aiV5.ui(),
+                  };
+                }
 
-              break;
-          }
+                this.populateUsageCount(chunk.payload.output.usage as Record<string, number>);
 
-          controller.enqueue(chunk);
-        },
-      }),
-    );
+                chunk.payload.output.usage = self.#usageCount as any;
+
+                try {
+                  if (self.processorRunner && self.outputProcessorRunnerMode === `outer`) {
+                    self.messageList = await self.processorRunner.runOutputProcessors(self.messageList);
+                    const outputText = self.messageList.get.response.aiV4
+                      .core()
+                      .map(m => MessageList.coreContentToString(m.content))
+                      .join('\n');
+
+                    const messages = self.messageList.get.response.v2();
+                    const messagesWithStructuredData = messages.filter(
+                      msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
+                    );
+                    // TODO: do we still need this messagesWithStructuredData stuff?
+                    if (
+                      messagesWithStructuredData[0] &&
+                      messagesWithStructuredData[0].content.metadata?.structuredOutput
+                    ) {
+                      const structuredOutput = messagesWithStructuredData[0].content.metadata.structuredOutput;
+                      self.#delayedPromises.object.resolve(structuredOutput as InferSchemaOutput<OUTPUT>);
+                    } else if (!self.#options.output && self.#delayedPromises.object.status.type !== 'resolved') {
+                      self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
+                    }
+
+                    self.#delayedPromises.text.resolve(outputText);
+                    self.#delayedPromises.finishReason.resolve(self.#finishReason);
+
+                    // Update response with processed messages after output processors have run
+                    if (chunk.payload.metadata) {
+                      const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
+                      response = {
+                        ...otherMetadata,
+                        messages: messageList.get.response.aiV5.model(),
+                        uiMessages: messageList.get.response.aiV5.ui(),
+                      };
+                    }
+                  } else {
+                    const textContent = self.#bufferedText.join('');
+                    self.#delayedPromises.text.resolve(textContent);
+                    self.#delayedPromises.finishReason.resolve(self.#finishReason);
+
+                    // Check for structuredOutput in metadata (from output processors in stream mode)
+                    const messages = self.messageList.get.response.v2();
+                    const messagesWithStructuredData = messages.filter(
+                      msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
+                    );
+
+                    if (
+                      messagesWithStructuredData[0] &&
+                      // this is to make typescript happy
+                      messagesWithStructuredData[0].content.metadata?.structuredOutput
+                    ) {
+                      const structuredOutput = messagesWithStructuredData[0].content.metadata.structuredOutput;
+                      self.#delayedPromises.object.resolve(structuredOutput as InferSchemaOutput<OUTPUT>);
+                    } else if (!self.#options.output && self.#delayedPromises.object.status.type !== 'resolved') {
+                      // Resolve object promise to avoid hanging
+                      self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
+                    }
+                  }
+                } catch (error) {
+                  if (error instanceof TripWire) {
+                    self.#tripwire = true;
+                    self.#tripwireReason = error.message;
+                    self.#delayedPromises.finishReason.resolve('other');
+                    self.#delayedPromises.text.resolve('');
+                  } else {
+                    self.#error = error instanceof Error ? error.message : String(error);
+                    self.#delayedPromises.finishReason.resolve('error');
+                    self.#delayedPromises.text.resolve('');
+                  }
+                  if (self.#delayedPromises.object.status.type !== 'resolved') {
+                    self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
+                  }
+                }
+
+                // Resolve all delayed promises with final values
+                self.#delayedPromises.usage.resolve(self.#usageCount);
+                self.#delayedPromises.warnings.resolve(self.#warnings);
+                self.#delayedPromises.providerMetadata.resolve(chunk.payload.metadata?.providerMetadata);
+                self.#delayedPromises.response.resolve(response);
+                self.#delayedPromises.request.resolve(self.#request || {});
+                self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
+                self.#delayedPromises.reasoning.resolve(self.#bufferedReasoning.join(''));
+                const reasoningText = self.#bufferedReasoning.length > 0 ? self.#bufferedReasoning.join('') : undefined;
+                self.#delayedPromises.reasoningText.resolve(reasoningText);
+                self.#delayedPromises.sources.resolve(self.#bufferedSources);
+                self.#delayedPromises.files.resolve(self.#bufferedFiles);
+                self.#delayedPromises.toolCalls.resolve(self.#toolCalls);
+                self.#delayedPromises.toolResults.resolve(self.#toolResults);
+                self.#delayedPromises.steps.resolve(self.#bufferedSteps);
+                self.#delayedPromises.totalUsage.resolve(self.#getTotalUsage());
+                self.#delayedPromises.content.resolve(messageList.get.response.aiV5.stepContent());
+                self.#delayedPromises.reasoningDetails.resolve(Object.values(self.#bufferedReasoningDetails || {}));
+
+                const baseFinishStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
+
+                if (baseFinishStep) {
+                  const { stepType: _stepType, isContinued: _isContinued } = baseFinishStep;
+
+                  const onFinishPayload = {
+                    ...(self.#model.modelId && self.#model.provider && self.#model.version
+                      ? { model: self.#model }
+                      : {}),
+                    text: baseFinishStep.text,
+                    warnings: baseFinishStep.warnings ?? [],
+                    finishReason: chunk.payload.stepResult.reason,
+                    // TODO: we should add handling for step IDs in message list so you can retrieve step content by step id. And on finish should the content here be from all steps?
+                    content: messageList.get.response.aiV5.stepContent(),
+                    request: await self.request,
+                    error: self.error,
+                    reasoning: await self.aisdk.v5.reasoning,
+                    reasoningText: await self.aisdk.v5.reasoningText,
+                    sources: await self.aisdk.v5.sources,
+                    files: await self.aisdk.v5.files,
+                    steps: transformSteps({ steps: self.#bufferedSteps }),
+                    response: { ...(await self.response), messages: messageList.get.response.aiV5.model() },
+                    usage: chunk.payload.output.usage,
+                    totalUsage: self.#getTotalUsage(),
+                    toolCalls: await self.aisdk.v5.toolCalls,
+                    toolResults: await self.aisdk.v5.toolResults,
+                    staticToolCalls: (await self.aisdk.v5.toolCalls).filter(
+                      (toolCall: any) => toolCall.dynamic === false,
+                    ),
+                    staticToolResults: (await self.aisdk.v5.toolResults).filter(
+                      (toolResult: any) => toolResult.dynamic === false,
+                    ),
+                    dynamicToolCalls: (await self.aisdk.v5.toolCalls).filter(
+                      (toolCall: any) => toolCall.dynamic === true,
+                    ),
+                    dynamicToolResults: (await self.aisdk.v5.toolResults).filter(
+                      (toolResult: any) => toolResult.dynamic === true,
+                    ),
+                    object:
+                      self.#delayedPromises.object.status.type === 'resolved'
+                        ? self.#delayedPromises.object.status.value
+                        : self.#options.output && baseFinishStep.text
+                          ? (() => {
+                              try {
+                                return JSON.parse(baseFinishStep.text);
+                              } catch {
+                                return undefined;
+                              }
+                            })()
+                          : undefined,
+                  };
+
+                  await options?.onFinish?.(onFinishPayload);
+                }
+
+                if (options?.rootSpan) {
+                  options.rootSpan.setAttributes({
+                    ...(self.#model.modelId ? { 'aisdk.model.id': self.#model.modelId } : {}),
+                    ...(self.#model.provider ? { 'aisdk.model.provider': self.#model.provider } : {}),
+                    ...(baseFinishStep?.usage?.reasoningTokens
+                      ? {
+                          'stream.usage.reasoningTokens': baseFinishStep.usage.reasoningTokens,
+                        }
+                      : {}),
+
+                    ...(baseFinishStep?.usage?.totalTokens
+                      ? {
+                          'stream.usage.totalTokens': baseFinishStep.usage.totalTokens,
+                        }
+                      : {}),
+
+                    ...(baseFinishStep?.usage?.inputTokens
+                      ? {
+                          'stream.usage.inputTokens': baseFinishStep.usage.inputTokens,
+                        }
+                      : {}),
+                    ...(baseFinishStep?.usage?.outputTokens
+                      ? {
+                          'stream.usage.outputTokens': baseFinishStep.usage.outputTokens,
+                        }
+                      : {}),
+                    ...(baseFinishStep?.usage?.cachedInputTokens
+                      ? {
+                          'stream.usage.cachedInputTokens': baseFinishStep.usage.cachedInputTokens,
+                        }
+                      : {}),
+
+                    ...(baseFinishStep?.providerMetadata
+                      ? { 'stream.response.providerMetadata': JSON.stringify(baseFinishStep?.providerMetadata) }
+                      : {}),
+                    ...(baseFinishStep?.finishReason
+                      ? { 'stream.response.finishReason': baseFinishStep?.finishReason }
+                      : {}),
+                    ...(options?.telemetry_settings?.recordOutputs !== false
+                      ? { 'stream.response.text': baseFinishStep?.text }
+                      : {}),
+                    ...(baseFinishStep?.toolCalls && options?.telemetry_settings?.recordOutputs !== false
+                      ? {
+                          'stream.response.toolCalls': JSON.stringify(
+                            baseFinishStep?.toolCalls?.map(chunk => {
+                              return {
+                                type: 'tool-call',
+                                toolCallId: chunk.payload.toolCallId,
+                                args: chunk.payload.args,
+                                toolName: chunk.payload.toolName,
+                              };
+                            }),
+                          ),
+                        }
+                      : {}),
+                  });
+
+                  options.rootSpan.end();
+                }
+
+                break;
+
+              case 'error':
+                console.log('setting self.#error from error chunk:', chunk);
+                self.#error = chunk.payload.error as any;
+
+                // Reject all delayed promises on error
+                const error =
+                  typeof self.#error === 'object' ? new Error(self.#error.message) : new Error(String(self.#error));
+
+                Object.values(self.#delayedPromises).forEach(promise => {
+                  if (promise.status.type === 'pending') {
+                    promise.reject(error);
+                  }
+                });
+
+                break;
+            }
+
+            controller.enqueue(chunk);
+          },
+        }),
+      )
+      .pipeThrough(
+        new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
+          transform(chunk, controller) {
+            if (chunk.type === 'raw' && !self.#options.includeRawChunks) {
+              return;
+            }
+
+            controller.enqueue(chunk);
+          },
+          flush: () => {
+            // TODO: might need to also check if we are in the main stream with a structuring agent so we
+            // TODO: can also reject if structuredOutput.errorStrategy is not 'ignore'
+            // TODO: main agent will not have #options.output but can still have a structuring agent and object promise
+            if (!self.#options.output && self.#delayedPromises.object.status.type !== 'resolved') {
+              // always resolve object promise as undefined if still hanging in flush and no output schema provided
+              self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
+            }
+            // If stream ends without proper finish/error chunks, reject unresolved promises
+            // This must be in the final transformer in the fullStream pipeline
+            // to ensure all of the delayed promises had a chance to resolve or reject already
+            // Avoids promises hanging forever
+            Object.entries(self.#delayedPromises).forEach(([key, promise]) => {
+              if (promise.status.type === 'pending') {
+                promise.reject(new Error(`Stream ${key} terminated unexpectedly`));
+              }
+            });
+          },
+        }),
+      );
 
     this.#aisdkv5 = new AISDKV5OutputStream({
       modelOutput: this,
@@ -712,6 +778,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   }
 
   teeStream() {
+    // if (this.outputProcessorRunnerMode === 'result' && !this.#options.output) {
+    //   return this.#baseStream;
+    // }
     const [stream1, stream2] = this.#baseStream.tee();
     this.#baseStream = stream2;
     return stream1;
@@ -721,39 +790,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * Stream of all chunks. Provides complete control over stream processing.
    */
   get fullStream() {
-    const self = this;
-
     let fullStream = this.teeStream();
-
-    return fullStream
-      .pipeThrough(
-        createObjectStreamTransformer({
-          schema: self.#options.output,
-          onFinish: data => self.#delayedPromises.object.resolve(data),
-        }),
-      )
-      .pipeThrough(
-        new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
-          transform(chunk, controller) {
-            if (chunk.type === 'raw' && !self.#options.includeRawChunks) {
-              return;
-            }
-
-            controller.enqueue(chunk);
-          },
-          flush: () => {
-            // If stream ends without proper finish/error chunks, reject unresolved promises
-            // This must be in the final transformer in the fullStream pipeline
-            // to ensure all of the delayed promises had a chance to resolve or reject already
-            // Avoids promises hanging forever
-            Object.entries(self.#delayedPromises).forEach(([key, promise]) => {
-              if (promise.status.type === 'pending') {
-                promise.reject(new Error(`Stream ${key} terminated unexpectedly`));
-              }
-            });
-          },
-        }),
-      );
+    return fullStream;
   }
 
   /**
@@ -1085,6 +1123,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   /** @internal */
   _getImmediateText() {
     return this.#bufferedText.join('');
+  }
+
+  /** @internal */
+  _getImmediateObject() {
+    return this.#bufferedObject;
   }
   /** @internal */
   _getImmediateUsage() {
