@@ -504,10 +504,10 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
 
   let accumulatedText = '';
   let previousObject: any = undefined;
-  // let finishReason: string | undefined;
+  let finishReason: string | undefined;
   let currentRunId: string | undefined;
 
-  const runInProcessorRunnerMode: ProcessorRunnerMode = 'outer';
+  const runInProcessorRunnerMode: ProcessorRunnerMode = 'inner';
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
@@ -523,11 +523,11 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
         currentRunId = chunk.runId;
       }
 
-      // if (chunk.type === 'finish') {
-      //   finishReason = chunk.payload.stepResult.reason;
-      //   controller.enqueue(chunk);
-      //   return;
-      // }
+      if (chunk.type === 'finish') {
+        finishReason = chunk.payload.stepResult.reason;
+        controller.enqueue(chunk);
+        return;
+      }
 
       if (chunk.type === 'text-delta' && typeof chunk.payload?.text === 'string') {
         accumulatedText += chunk.payload.text;
@@ -562,15 +562,20 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
       }
 
       // TODO: make sure stream ended with reason client tool-calls doesnt reject the object promise
-      // if (['tool-calls'].includes(finishReason ?? '')) {
-      // onFinish(undefined as InferSchemaOutput<OUTPUT>); // TODO: handle
-      // return;
-      // }
+      if (['tool-calls'].includes(finishReason ?? '')) {
+        controller.enqueue({
+          from: ChunkFrom.AGENT,
+          runId: currentRunId ?? '',
+          type: 'object-result',
+          object: undefined as InferSchemaOutput<OUTPUT>,
+        });
+        return;
+      }
 
       const finalResult = await handler.validateAndTransformFinal(accumulatedText, previousObject);
-      console.log('finalResult', finalResult);
+      // console.log('finalResult', finalResult);
       if (!finalResult.success) {
-        console.log('not successful finalResult error', finalResult.error);
+        // console.log('not successful finalResult error', finalResult.error);
         controller.enqueue({
           from: ChunkFrom.AGENT,
           runId: currentRunId ?? '',
