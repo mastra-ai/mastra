@@ -37,7 +37,7 @@ import type { SaveQueueManager } from './save-queue';
 
 export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
 export type { Message as AiMessageType } from 'ai';
-export type { LLMStepResults } from '../stream/types';
+export type { LLMStepResult } from '../stream/types';
 
 export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5>;
 

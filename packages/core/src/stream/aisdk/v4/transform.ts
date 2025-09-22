@@ -20,7 +20,7 @@ export function convertFullStreamChunkToMastra(value: any, ctx: { runId: string 
       from: ChunkFrom.AGENT,
       payload: {
         toolCallId: value.toolCallId,
-        input: value.input,
+        args: value.args,
         toolName: value.toolName,
       },
     };

@@ -1,5 +1,5 @@
 import type { AiMessageType } from '@mastra/core/memory';
-import type { LLMStepResults } from '@mastra/core/agent';
+import type { LLMStepResult } from '@mastra/core/agent';
 
 export type Message = AiMessageType;
 
@@ -21,6 +21,14 @@ export interface AssistantMessage {
   };
 }
 
+export type ReadonlyJSONValue = null | string | number | boolean | ReadonlyJSONObject | ReadonlyJSONArray;
+
+export type ReadonlyJSONObject = {
+  readonly [key: string]: ReadonlyJSONValue;
+};
+
+export type ReadonlyJSONArray = readonly ReadonlyJSONValue[];
+
 export interface ModelSettings {
   frequencyPenalty?: number;
   presencePenalty?: number;
@@ -31,7 +39,7 @@ export interface ModelSettings {
   topK?: number;
   topP?: number;
   instructions?: string;
-  providerOptions?: LLMStepResults['providerMetadata'];
+  providerOptions?: LLMStepResult['providerMetadata'];
   chatWithGenerate?: boolean;
   chatWithGenerateVNext?: boolean;
   chatWithStreamVNext?: boolean;

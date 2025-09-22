@@ -14,7 +14,7 @@ import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import type {
   ChunkType,
   LanguageModelUsage,
-  LLMStepResults,
+  LLMStepResult,
   MastraModelOutputOptions,
   MastraOnFinishCallbackArgs,
 } from '../types';
@@ -35,7 +35,7 @@ export class JsonToSseTransformStream extends TransformStream<unknown, string> {
   }
 }
 
-const emptyBufferedByStep: LLMStepResults = {
+const emptyBufferedByStep: LLMStepResult = {
   text: '',
   reasoning: [],
   sources: [],
@@ -65,43 +65,43 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   #aisdkv5: AISDKV5OutputStream<OUTPUT>;
   #error: Error | string | { message: string; stack: string } | undefined;
   #baseStream: ReadableStream<ChunkType<OUTPUT>>;
-  #bufferedSteps: LLMStepResults[] = [];
-  #bufferedReasoningDetails: Record<string, LLMStepResults['reasoning'][number]> = {};
-  #bufferedByStep: LLMStepResults = emptyBufferedByStep;
-  #bufferedText: LLMStepResults['text'][] = [];
-  #bufferedTextChunks: Record<string, LLMStepResults['text'][]> = {};
-  #bufferedSources: LLMStepResults['sources'] = [];
-  #bufferedReasoning: LLMStepResults['reasoning'] = [];
-  #bufferedFiles: LLMStepResults['files'] = [];
-  #toolCallArgsDeltas: Record<string, LLMStepResults['text'][]> = {};
+  #bufferedSteps: LLMStepResult[] = [];
+  #bufferedReasoningDetails: Record<string, LLMStepResult['reasoning'][number]> = {};
+  #bufferedByStep: LLMStepResult = emptyBufferedByStep;
+  #bufferedText: LLMStepResult['text'][] = [];
+  #bufferedTextChunks: Record<string, LLMStepResult['text'][]> = {};
+  #bufferedSources: LLMStepResult['sources'] = [];
+  #bufferedReasoning: LLMStepResult['reasoning'] = [];
+  #bufferedFiles: LLMStepResult['files'] = [];
+  #toolCallArgsDeltas: Record<string, LLMStepResult['text'][]> = {};
   #toolCallDeltaIdNameMap: Record<string, string> = {};
-  #toolCalls: LLMStepResults['toolCalls'] = [];
-  #toolResults: LLMStepResults['toolResults'] = [];
-  #warnings: LLMStepResults['warnings'] = [];
-  #finishReason: LLMStepResults['finishReason'] = undefined;
-  #request: LLMStepResults['request'] = {};
-  #usageCount: LLMStepResults['usage'] = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+  #toolCalls: LLMStepResult['toolCalls'] = [];
+  #toolResults: LLMStepResult['toolResults'] = [];
+  #warnings: LLMStepResult['warnings'] = [];
+  #finishReason: LLMStepResult['finishReason'] = undefined;
+  #request: LLMStepResult['request'] = {};
+  #usageCount: LLMStepResult['usage'] = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
   #tripwire = false;
   #tripwireReason = '';
 
   #delayedPromises = {
     object: new DelayedPromise<InferSchemaOutput<OUTPUT>>(),
-    finishReason: new DelayedPromise<LLMStepResults['finishReason']>(),
-    usage: new DelayedPromise<LLMStepResults['usage']>(),
-    warnings: new DelayedPromise<LLMStepResults['warnings']>(),
-    providerMetadata: new DelayedPromise<LLMStepResults['providerMetadata']>(),
-    response: new DelayedPromise<LLMStepResults['response']>(),
-    request: new DelayedPromise<LLMStepResults['request']>(),
-    text: new DelayedPromise<LLMStepResults['text']>(),
-    reasoning: new DelayedPromise<LLMStepResults['reasoning']>(),
+    finishReason: new DelayedPromise<LLMStepResult['finishReason']>(),
+    usage: new DelayedPromise<LLMStepResult['usage']>(),
+    warnings: new DelayedPromise<LLMStepResult['warnings']>(),
+    providerMetadata: new DelayedPromise<LLMStepResult['providerMetadata']>(),
+    response: new DelayedPromise<LLMStepResult['response']>(),
+    request: new DelayedPromise<LLMStepResult['request']>(),
+    text: new DelayedPromise<LLMStepResult['text']>(),
+    reasoning: new DelayedPromise<LLMStepResult['reasoning']>(),
     reasoningText: new DelayedPromise<string | undefined>(),
-    sources: new DelayedPromise<LLMStepResults['sources']>(),
-    files: new DelayedPromise<LLMStepResults['files']>(),
-    toolCalls: new DelayedPromise<LLMStepResults['toolCalls']>(),
-    toolResults: new DelayedPromise<LLMStepResults['toolResults']>(),
-    steps: new DelayedPromise<LLMStepResults[]>(),
-    totalUsage: new DelayedPromise<LLMStepResults['usage']>(),
-    content: new DelayedPromise<LLMStepResults['content']>(),
+    sources: new DelayedPromise<LLMStepResult['sources']>(),
+    files: new DelayedPromise<LLMStepResult['files']>(),
+    toolCalls: new DelayedPromise<LLMStepResult['toolCalls']>(),
+    toolResults: new DelayedPromise<LLMStepResult['toolResults']>(),
+    steps: new DelayedPromise<LLMStepResult[]>(),
+    totalUsage: new DelayedPromise<LLMStepResult['usage']>(),
+    content: new DelayedPromise<LLMStepResult['content']>(),
   };
 
   #streamConsumed = false;
@@ -292,7 +292,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
 
-              const stepResult: LLMStepResults = {
+              const stepResult: LLMStepResult = {
                 // Keep original Mastra chunk format
                 sources: self.#bufferedByStep.sources,
                 files: self.#bufferedByStep.files,
@@ -366,7 +366,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#delayedPromises.usage.resolve(self.#usageCount);
               self.#delayedPromises.warnings.resolve(self.#warnings);
               self.#delayedPromises.providerMetadata.resolve(undefined);
-              self.#delayedPromises.response.resolve({} as LLMStepResults['response']);
+              self.#delayedPromises.response.resolve({} as LLMStepResult['response']);
               self.#delayedPromises.request.resolve({});
               self.#delayedPromises.reasoning.resolve([]);
               self.#delayedPromises.reasoningText.resolve(undefined);
@@ -495,7 +495,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#delayedPromises.usage.resolve(self.#usageCount);
               self.#delayedPromises.warnings.resolve(self.#warnings);
               self.#delayedPromises.providerMetadata.resolve(chunk.payload.metadata?.providerMetadata);
-              self.#delayedPromises.response.resolve(response as LLMStepResults['response']);
+              self.#delayedPromises.response.resolve(response as LLMStepResult['response']);
               self.#delayedPromises.request.resolve(self.#request || {});
               self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
               const reasoningText =
@@ -614,7 +614,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                               return {
                                 type: 'tool-call',
                                 toolCallId: toolCall.payload?.toolCallId,
-                                input: toolCall.payload?.input,
+                                args: toolCall.payload?.args,
                                 toolName: toolCall.payload?.toolName,
                               };
                             })

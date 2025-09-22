@@ -13,6 +13,10 @@ import { RuntimeContext } from '@mastra/core/runtime-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
 
+import type {
+  StreamTextOnFinishCallback,
+  StreamTextOnStepFinishCallback,
+} from '../../../../core/dist/llm/model/base.types';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 
@@ -612,8 +616,11 @@ export async function streamVNextUIMessageHandler({
 }: Context & {
   runtimeContext: RuntimeContext;
   agentId: string;
-  body: GetBody<'streamVNext'> & {
+  body: Omit<GetBody<'streamVNext'>, 'onStepFinish' | 'onFinish' | 'output'> & {
     runtimeContext?: string;
+    onStepFinish?: StreamTextOnStepFinishCallback<any>;
+    onFinish?: StreamTextOnFinishCallback<any>;
+    output?: undefined;
   };
   abortSignal?: AbortSignal;
 }): Promise<Response | undefined> {

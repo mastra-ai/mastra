@@ -89,10 +89,45 @@ export interface FilePayload {
   providerMetadata?: SharedV2ProviderMetadata;
 }
 
+type JSONValue = string | number | boolean | null | JSONObject | JSONArray;
+type JSONObject = { [key: string]: JSONValue | undefined };
+type JSONArray = JSONValue[];
+
+export type ReadonlyJSONValue = null | string | number | boolean | ReadonlyJSONObject | ReadonlyJSONArray;
+
+export type ReadonlyJSONObject = {
+  readonly [key: string]: ReadonlyJSONValue;
+};
+
+export type ReadonlyJSONArray = readonly ReadonlyJSONValue[];
+
+export interface MastraMetadataMessage {
+  type: 'text' | 'tool';
+  content?: string;
+  toolName?: string;
+  toolInput?: ReadonlyJSONValue;
+  toolOutput?: ReadonlyJSONValue;
+  args?: ReadonlyJSONValue;
+  toolCallId?: string;
+  result?: ReadonlyJSONValue;
+}
+
+export interface MastraMetadata {
+  isStreaming?: boolean;
+  from?: 'AGENT' | 'WORKFLOW' | 'USER' | 'SYSTEM';
+  networkMetadata?: ReadonlyJSONObject;
+  toolOutput?: ReadonlyJSONValue | ReadonlyJSONValue[];
+  messages?: MastraMetadataMessage[];
+  workflowFullState?: ReadonlyJSONObject;
+  selectionReason?: string;
+}
+
 export interface ToolCallPayload<TArgs = unknown, TOutput = unknown> {
   toolCallId: string;
   toolName: string;
-  input?: TArgs;
+  args?: TArgs & {
+    __mastraMetadata?: MastraMetadata;
+  };
   providerExecuted?: boolean;
   providerMetadata?: SharedV2ProviderMetadata;
   output?: TOutput;
@@ -106,7 +141,7 @@ export interface ToolResultPayload<TResult = unknown, TArgs = unknown> {
   isError?: boolean;
   providerExecuted?: boolean;
   providerMetadata?: SharedV2ProviderMetadata;
-  input?: TArgs;
+  args?: TArgs;
   dynamic?: boolean;
 }
 
@@ -344,7 +379,9 @@ interface ToolExecutionStartPayload {
   args: Record<string, unknown> & {
     toolName?: string;
     toolCallId?: string;
-    args?: unknown; // The actual tool arguments are nested here
+    args?: Record<string, unknown>; // The actual tool arguments are nested here
+    selectionReason?: string;
+    __mastraMetadata?: MastraMetadata;
     // Other inputData fields spread here
     [key: string]: unknown;
   };
@@ -440,10 +477,10 @@ export type ChunkType<OUTPUT extends OutputSchema = undefined> = TypedChunkType<
 
 export interface LanguageModelV2StreamResult {
   stream: ReadableStream<LanguageModelV2StreamPart>;
-  request: LLMStepResults['request'];
-  response?: LLMStepResults['response'];
-  rawResponse: LLMStepResults['response'] | Record<string, never>;
-  warnings?: LLMStepResults['warnings'];
+  request: LLMStepResult['request'];
+  response?: LLMStepResult['response'];
+  rawResponse: LLMStepResult['response'] | Record<string, never>;
+  warnings?: LLMStepResult['warnings'];
 }
 
 export type OnResult = (result: Omit<LanguageModelV2StreamResult, 'stream'>) => void;
@@ -480,13 +517,13 @@ export type partialModel = {
 };
 
 export type MastraOnStepFinishCallback = (
-  event: LLMStepResults & { model?: partialModel; runId?: string },
+  event: LLMStepResult & { model?: partialModel; runId?: string },
 ) => Promise<void> | void;
 
-export type MastraOnFinishCallbackArgs<OUTPUT extends OutputSchema = undefined> = LLMStepResults & {
+export type MastraOnFinishCallbackArgs<OUTPUT extends OutputSchema = undefined> = LLMStepResult & {
   error?: Error | string | { message: string; stack: string };
   object?: InferSchemaOutput<OUTPUT>;
-  steps: LLMStepResults[];
+  steps: LLMStepResult[];
   totalUsage: LanguageModelUsage;
   model?: partialModel;
   runId?: string;
@@ -509,7 +546,7 @@ export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = 
   tracingContext?: TracingContext;
 };
 
-export type LLMStepResults = {
+export type LLMStepResult = {
   toolCalls: ToolCallChunk[];
   toolResults: ToolResultChunk[];
   dynamicToolCalls: ToolCallChunk[];

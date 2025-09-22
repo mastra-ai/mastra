@@ -8,14 +8,14 @@ import {
 } from '@assistant-ui/react';
 import { useState, ReactNode, useEffect, useRef } from 'react';
 import { RuntimeContext } from '@mastra/core/di';
-import { ChatProps, Message } from '@/types';
+import { ChatProps } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@/lib/file/toBase64';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
-import { MastraModelOutput } from '@mastra/core/stream';
+import { MastraModelOutput, ReadonlyJSONObject } from '@mastra/core/stream';
 
 import { handleNetworkMessageFromMemory } from './agent-network-message';
 import {
@@ -404,13 +404,13 @@ export function MastraRuntimeProvider({
                       ...chunk.payload,
                       toolCallId: argsData.toolCallId || 'unknown',
                       toolName: argsData.toolName || 'unknown',
-                      input: {
+                      args: {
                         ...nestedArgs,
                         __mastraMetadata: {
                           ...mastraMetadata,
                           networkMetadata: {
                             selectionReason,
-                            input: nestedArgs,
+                            input: nestedArgs as ReadonlyJSONObject,
                           },
                         },
                       },

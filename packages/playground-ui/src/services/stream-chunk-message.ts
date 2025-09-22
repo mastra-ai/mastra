@@ -3,8 +3,8 @@ import { mapWorkflowStreamChunkToWatchResult } from '@/domains/workflows/utils';
 import { StreamChunk } from '@/types';
 import { ThreadMessageLike } from '@assistant-ui/react';
 import { ChunkType } from '@mastra/core';
+import { ReadonlyJSONObject } from '@mastra/core/stream';
 import { flushSync } from 'react-dom';
-
 export interface HandleStreamChunkOptions {
   setMessages: React.Dispatch<React.SetStateAction<ThreadMessageLike[]>>;
   chunk: ChunkType;
@@ -134,10 +134,8 @@ export const handleStreamChunk = async ({
                     toolCallId: chunk.payload.toolCallId,
                     toolName: chunk.payload.toolName,
                     args: {
-                      // @ts-ignore TODO: Look into this
-                      ...chunk.payload.args,
+                      ...(typeof chunk.payload.args === 'object' ? chunk.payload.args : {}),
                       __mastraMetadata: {
-                        // @ts-ignore TODO: Look into this
                         ...chunk.payload.args?.__mastraMetadata,
                         isStreaming: true,
                       },
@@ -151,10 +149,8 @@ export const handleStreamChunk = async ({
                     toolCallId: chunk.payload.toolCallId,
                     toolName: chunk.payload.toolName,
                     args: {
-                      // @ts-ignore TODO: Look into this
                       ...chunk.payload.args,
                       __mastraMetadata: {
-                        // @ts-ignore TODO: Look into this
                         ...chunk.payload.args?.__mastraMetadata,
                         isStreaming: true,
                       },
@@ -180,10 +176,11 @@ export const handleStreamChunk = async ({
               toolCallId: chunk.payload.toolCallId,
               toolName: chunk.payload.toolName,
               args: {
-                // @ts-ignore TODO: Look into this
                 ...chunk.payload.args,
-                // @ts-ignore TODO: Look into this
-                __mastraMetadata: { ...chunk.payload.args?.__mastraMetadata, isStreaming: true },
+                __mastraMetadata: {
+                  ...(chunk.payload.args?.__mastraMetadata as ReadonlyJSONObject),
+                  isStreaming: true,
+                },
               },
             },
           ],

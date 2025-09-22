@@ -111,11 +111,11 @@ export class TokenLimiterProcessor implements Processor {
     } else if (part.type === 'tool-call') {
       // For tool-call chunks, count tool name and args
       let tokenString = part.payload.toolName;
-      if (part.payload.input) {
-        if (typeof part.payload.input === 'string') {
-          tokenString += part.payload.input;
+      if (part.payload.args) {
+        if (typeof part.payload.args === 'string') {
+          tokenString += part.payload.args;
         } else {
-          tokenString += JSON.stringify(part.payload.input);
+          tokenString += JSON.stringify(part.payload.args);
         }
       }
       return this.encoder.encode(tokenString).length;

@@ -136,7 +136,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         payload: {
           toolCallId: value.toolCallId,
           toolName: value.toolName,
-          input: value.input ? JSON.parse(value.input) : undefined,
+          args: value.input ? JSON.parse(value.input) : undefined,
           providerExecuted: value.providerExecuted,
           providerMetadata: value.providerMetadata,
         },
@@ -425,7 +425,7 @@ export function convertMastraChunkToAISDKv5({
         providerMetadata: chunk.payload.providerMetadata,
         providerExecuted: chunk.payload.providerExecuted,
         toolName: chunk.payload.toolName,
-        input: chunk.payload.input,
+        input: chunk.payload.args,
       };
     case 'tool-call-input-streaming-start':
       return {
@@ -486,7 +486,7 @@ export function convertMastraChunkToAISDKv5({
     case 'tool-result':
       return {
         type: 'tool-result',
-        input: chunk.payload.input,
+        input: chunk.payload.args,
         toolCallId: chunk.payload.toolCallId,
         providerExecuted: chunk.payload.providerExecuted,
         toolName: chunk.payload.toolName,
