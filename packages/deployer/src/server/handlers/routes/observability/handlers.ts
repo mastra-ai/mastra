@@ -4,6 +4,7 @@ import type { AITracesPaginatedArg } from '@mastra/core/storage';
 import {
   getAITraceHandler as getOriginalAITraceHandler,
   getAITracesPaginatedHandler as getOriginalAITracesPaginatedHandler,
+  scoreTracesHandler as getOriginalScoreTracesHandler,
 } from '@mastra/server/handlers/observability';
 import type { Context } from 'hono';
 import { handleError } from '../../error';
@@ -79,5 +80,21 @@ export async function getAITracesPaginatedHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error getting AI traces paginated');
+  }
+}
+
+export async function processTraceScoringHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const { scorerName, targets } = await c.req.json();
+
+    const result = await getOriginalScoreTracesHandler({
+      mastra,
+      body: { scorerName, targets },
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error processing trace scoring');
   }
 }

@@ -492,7 +492,7 @@ export interface McpServerToolListResponse {
 export type ClientScoreRowData = Omit<ScoreRowData, 'createdAt' | 'updatedAt'> & {
   createdAt: string;
   updatedAt: string;
-};
+} & { spanId?: string };
 
 // Scores-related types
 export interface GetScoresByRunIdParams {
@@ -536,7 +536,9 @@ export interface SaveScoreResponse {
 
 export type GetScorerResponse = MastraScorerEntry & {
   agentIds: string[];
+  agentNames: string[];
   workflowIds: string[];
+  isRegistered: boolean;
 };
 
 export interface GetScorersResponse {
