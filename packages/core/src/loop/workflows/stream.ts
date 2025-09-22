@@ -133,12 +133,6 @@ export function workflowLoopStream<
             tracingContext: { currentSpan: llmAISpan },
           });
 
-      if (executionResult.status === 'suspended') {
-        if (executionResult.suspendPayload?.requireToolApproval) {
-          console.log('tool approval required', executionResult.suspendPayload.requireToolApproval);
-        }
-      }
-
       if (executionResult.status !== 'success') {
         controller.close();
         return;
