@@ -14,7 +14,8 @@ import type { DynamicArgument } from '../types';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
-import { getStepResult, type ExecuteFunction, type Step } from './step';
+import type { ExecuteFunction, Step } from './step';
+import { getStepResult } from './step';
 import type {
   DefaultEngineType,
   Emitter,
