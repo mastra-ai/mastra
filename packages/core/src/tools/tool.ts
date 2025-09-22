@@ -42,7 +42,7 @@ export class Tool<
     if (opts.execute) {
       const originalExecute = opts.execute;
       this.execute = async (context: TContext, options?: ToolInvocationOptions) => {
-        const { resumeData, suspend } = options as {
+        const { resumeData, suspend } = (options ?? {}) as {
           resumeData?: any;
           suspend?: (suspendPayload: any) => Promise<any>;
         };
