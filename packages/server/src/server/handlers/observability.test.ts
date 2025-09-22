@@ -5,9 +5,9 @@ import { HTTPException } from '../http-exception';
 import * as errorHandler from './error';
 import { getAITraceHandler, getAITracesPaginatedHandler, scoreTracesHandler } from './observability';
 
-// Mock processTraceScoring
-vi.mock('@mastra/core/scores', () => ({
-  processTraceScoring: vi.fn(),
+// Mock scoreTraces
+vi.mock('@mastra/core/scores/scoreTraces', () => ({
+  scoreTraces: vi.fn(),
 }));
 
 // Mock the error handler
@@ -426,18 +426,18 @@ describe('Observability Handlers', () => {
   });
 
   describe('scoreTracesHandler', () => {
-    let processTraceScoringMock: ReturnType<typeof vi.fn>;
+    let scoreTracesMock: ReturnType<typeof vi.fn>;
 
     beforeEach(async () => {
-      const scoresModule = vi.mocked(await import('@mastra/core/scores'));
-      processTraceScoringMock = scoresModule.processTraceScoring as any;
-      processTraceScoringMock.mockClear();
+      const scoresModule = vi.mocked(await import('@mastra/core/scores/scoreTraces'));
+      scoreTracesMock = scoresModule.scoreTraces as any;
+      scoreTracesMock.mockClear();
     });
 
     it('should score traces successfully with valid request', async () => {
       const mockScorer = { name: 'test-scorer', run: vi.fn() };
       (mockMastra.getScorerByName as any).mockReturnValue(mockScorer);
-      processTraceScoringMock.mockResolvedValue(undefined);
+      scoreTracesMock.mockResolvedValue(undefined);
 
       const requestBody = {
         scorerName: 'test-scorer',
@@ -452,15 +452,14 @@ describe('Observability Handlers', () => {
       expect(result).toEqual({
         message: 'Scoring started for 2 traces',
         traceCount: 2,
-        status: 'initiated',
+        status: 'success',
       });
 
       expect(mockMastra.getScorerByName).toHaveBeenCalledWith('test-scorer');
-      expect(processTraceScoringMock).toHaveBeenCalledWith({
-        scorer: mockScorer,
+      expect(scoreTracesMock).toHaveBeenCalledWith({
+        scorerName: 'test-scorer',
         targets: requestBody.targets,
-        storage: mockStorage,
-        logger: expect.any(Object),
+        mastra: mockMastra,
       });
     });
 
@@ -504,7 +503,7 @@ describe('Observability Handlers', () => {
       } catch (error) {
         expect(error).toBeInstanceOf(HTTPException);
         expect(error.status).toBe(400);
-        expect(error.message).toBe('Scorer ID is required');
+        expect(error.message).toBe('Scorer Name is required');
       }
     });
 
@@ -590,12 +589,12 @@ describe('Observability Handlers', () => {
       }
     });
 
-    it('should handle processTraceScoring errors gracefully', async () => {
+    it('should handle scoreTraces errors gracefully', async () => {
       const mockScorer = { name: 'test-scorer', run: vi.fn() };
       (mockMastra.getScorerByName as any).mockReturnValue(mockScorer);
 
       const processingError = new Error('Processing failed');
-      processTraceScoringMock.mockRejectedValue(processingError);
+      scoreTracesMock.mockRejectedValue(processingError);
 
       // Should still return success response since processing is fire-and-forget
       const result = await scoreTracesHandler({
@@ -607,9 +606,9 @@ describe('Observability Handlers', () => {
       });
 
       expect(result).toEqual({
-        message: 'Scoring started for 1 traces',
+        message: 'Scoring started for 1 trace',
         traceCount: 1,
-        status: 'initiated',
+        status: 'success',
       });
     });
   });

@@ -146,19 +146,21 @@ export function observabilityRouter() {
               schema: {
                 type: 'object',
                 properties: {
-                  message: {
-                    type: 'string',
-                  },
-                  traceCount: {
-                    type: 'number',
-                    example: 3,
-                  },
                   status: {
                     type: 'string',
                     enum: ['success'],
                     example: 'success',
                   },
+                  message: {
+                    type: 'string',
+                    example: 'Scoring started for 3 traces',
+                  },
+                  traceCount: {
+                    type: 'number',
+                    example: 3,
+                  },
                 },
+                required: ['status', 'message', 'traceCount'],
               },
             },
           },

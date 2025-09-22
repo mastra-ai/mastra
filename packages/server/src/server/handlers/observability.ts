@@ -1,8 +1,8 @@
+import type { AITracesPaginatedArg } from '@mastra/core';
+import { scoreTraces } from '@mastra/core/scores/scoreTraces';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 import { handleError } from './error';
-import type { AITracesPaginatedArg } from '@mastra/core';
-import { scoreTraces } from '@mastra/core/scores/scoreTraces';
 
 interface ObservabilityContext extends Context {
   traceId?: string;
@@ -134,7 +134,8 @@ export async function scoreTracesHandler({ mastra, body }: ScoreTracesContext) {
     // Return immediate response
     return {
       status: 'success',
-      message: 'Scoring traces started',
+      message: `Scoring started for ${targets.length} ${targets.length === 1 ? 'trace' : 'traces'}`,
+      traceCount: targets.length,
     };
   } catch (error) {
     handleError(error, 'Error processing trace scoring');
