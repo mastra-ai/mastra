@@ -1,5 +1,4 @@
 import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
-import type { LanguageModelV1StreamPart } from 'ai';
 import { MastraBase } from '../../base';
 import type { ChunkType, CreateStream, OnResult } from '../types';
 
@@ -10,7 +9,7 @@ export abstract class MastraModelInput extends MastraBase {
     controller,
   }: {
     runId: string;
-    stream: ReadableStream<LanguageModelV1StreamPart | LanguageModelV2StreamPart | Record<string, unknown>>;
+    stream: ReadableStream<LanguageModelV2StreamPart | Record<string, unknown>>;
     controller: ReadableStreamDefaultController<ChunkType>;
   }): Promise<void>;
 
@@ -25,7 +24,8 @@ export abstract class MastraModelInput extends MastraBase {
           onResult({
             warnings: stream.warnings,
             request: stream.request,
-            rawResponse: stream.rawResponse || stream.response || {},
+            rawResponse: stream.rawResponse || {},
+            response: stream.response || {},
           });
 
           await self.transform({

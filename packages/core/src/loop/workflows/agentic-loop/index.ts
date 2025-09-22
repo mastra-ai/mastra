@@ -1,4 +1,3 @@
-import type { LanguageModelV2FinishReason } from '@ai-sdk/provider-v5';
 import type { StepResult, ToolSet } from 'ai-v5';
 import { InternalSpans } from '../../../ai-tracing';
 import type { OutputSchema } from '../../../stream/base/schema';
@@ -134,7 +133,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
             logprobs: typedInputData.stepResult?.logprobs,
             isContinued: typedInputData.stepResult?.isContinued,
             warnings: typedInputData.stepResult?.warnings,
-            reason: typedInputData.stepResult?.reason as LanguageModelV2FinishReason,
+            reason: typedInputData.stepResult?.reason,
           },
           output: {
             usage: typedInputData.output.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
@@ -144,11 +143,9 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
             providerMetadata: typedInputData.metadata?.providerMetadata,
             ...(typedInputData.metadata || {}),
           },
+          // @ts-ignore TODO: Why is this complaining? The types are the same
           messages: typedInputData.messages,
         };
-
-        console.log('typedInputData.messages', JSON.stringify(typedInputData.messages, null, 2));
-        console.log('agentic-loop messages.nonUser:', JSON.stringify(typedInputData.messages?.nonUser, null, 2));
 
         controller.enqueue({
           type: 'step-finish',

@@ -4789,7 +4789,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         ).toBe(true);
       });
 
-      it.only('should format messages correctly in onStepFinish when provider sends multiple response-metadata chunks (Issue #7050)', async () => {
+      it('should format messages correctly in onStepFinish when provider sends multiple response-metadata chunks (Issue #7050)', async () => {
         // This test reproduces the bug where real LLM providers (like OpenRouter)
         // send multiple response-metadata chunks (after each text-delta)
         // which causes the message to have multiple text parts, one for each chunks
@@ -4893,7 +4893,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           hasContent: 'content' in capturedStep.response.messages[0],
           contentType: typeof capturedStep.response.messages[0].content,
           isArray: Array.isArray(capturedStep.response.messages[0].content),
-          actualContent: capturedStep.response.messages[0].content
+          actualContent: capturedStep.response.messages[0].content,
         });
 
         // Check that messages have the correct CoreMessage structure

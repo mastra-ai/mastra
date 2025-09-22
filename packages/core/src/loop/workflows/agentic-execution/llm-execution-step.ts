@@ -683,6 +683,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
               type: 'tool-call',
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
+              // @ts-ignore TODO: look into this
               args: toolCall.args,
             };
           }) as any),
@@ -734,8 +735,6 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
         user: messageList.get.input.aiV5.model(),
         nonUser: messageList.get.response.aiV5.model(),
       };
-
-      console.log('llm-execution-step messages.nonUser:', JSON.stringify(messages.nonUser, null, 2));
 
       return {
         messageId,

@@ -144,10 +144,10 @@ export function MastraRuntimeProvider({
               }
             } catch (e) {}
 
-            const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
-              type: image.contentType.startsWith(`image/`)
+            const attachmentsAsContentParts = (message.experimental_attachments || []).map(image => ({
+              type: image.contentType?.startsWith(`image/`)
                 ? 'image'
-                : image.contentType.startsWith(`audio/`)
+                : image.contentType?.startsWith(`audio/`)
                   ? 'audio'
                   : 'file',
               mimeType: image.contentType,
@@ -404,7 +404,7 @@ export function MastraRuntimeProvider({
                       ...chunk.payload,
                       toolCallId: argsData.toolCallId || 'unknown',
                       toolName: argsData.toolName || 'unknown',
-                      args: {
+                      input: {
                         ...nestedArgs,
                         __mastraMetadata: {
                           ...mastraMetadata,
@@ -487,7 +487,7 @@ export function MastraRuntimeProvider({
                 topP,
                 maxOutputTokens: maxTokens,
               },
-              providerOptions: providerOptions as any,
+              providerOptions,
               instructions,
               runtimeContext: runtimeContextInstance,
               ...(memory ? { threadId, resourceId: agentId } : {}),

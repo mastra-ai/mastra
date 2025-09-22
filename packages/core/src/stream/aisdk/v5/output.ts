@@ -1,7 +1,13 @@
 import type { ReadableStream } from 'stream/web';
 import { TransformStream } from 'stream/web';
 import { getErrorMessage } from '@ai-sdk/provider-v5';
-import { consumeStream, createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse, generateId } from 'ai-v5';
+import {
+  consumeStream,
+  createTextStreamResponse,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  generateId,
+} from 'ai-v5';
 import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
 import type z from 'zod';
 import type { MessageList } from '../../../agent/message-list';
@@ -11,7 +17,6 @@ import type { OutputSchema } from '../../base/schema';
 import type { ChunkType } from '../../types';
 import type { ConsumeStreamOptions } from './compat';
 import { getResponseUIMessageId, convertFullStreamChunkToUIMessageStream } from './compat';
-import { transformSteps } from './output-helpers';
 import { convertMastraChunkToAISDKv5 } from './transform';
 import type { OutputChunkType } from './transform';
 
@@ -195,7 +200,6 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
     return this.#modelOutput.objectStream;
   }
 
-
   get toolCalls() {
     return this.#modelOutput.toolCalls.then(toolCalls =>
       toolCalls.map(toolCall => {
@@ -255,9 +259,8 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   }
 
   get steps() {
-    return this.#modelOutput.steps.then(steps => transformSteps({ steps }));
+    return this.#modelOutput.steps.then(steps => steps);
   }
-
 
   get content() {
     return this.#messageList.get.response.aiV5.modelContent();

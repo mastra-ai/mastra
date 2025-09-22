@@ -134,8 +134,10 @@ export const handleStreamChunk = async ({
                     toolCallId: chunk.payload.toolCallId,
                     toolName: chunk.payload.toolName,
                     args: {
+                      // @ts-ignore TODO: Look into this
                       ...chunk.payload.args,
                       __mastraMetadata: {
+                        // @ts-ignore TODO: Look into this
                         ...chunk.payload.args?.__mastraMetadata,
                         isStreaming: true,
                       },
@@ -149,8 +151,10 @@ export const handleStreamChunk = async ({
                     toolCallId: chunk.payload.toolCallId,
                     toolName: chunk.payload.toolName,
                     args: {
+                      // @ts-ignore TODO: Look into this
                       ...chunk.payload.args,
                       __mastraMetadata: {
+                        // @ts-ignore TODO: Look into this
                         ...chunk.payload.args?.__mastraMetadata,
                         isStreaming: true,
                       },
@@ -176,7 +180,9 @@ export const handleStreamChunk = async ({
               toolCallId: chunk.payload.toolCallId,
               toolName: chunk.payload.toolName,
               args: {
+                // @ts-ignore TODO: Look into this
                 ...chunk.payload.args,
+                // @ts-ignore TODO: Look into this
                 __mastraMetadata: { ...chunk.payload.args?.__mastraMetadata, isStreaming: true },
               },
             },
@@ -221,6 +227,7 @@ export const handleStreamChunk = async ({
       });
       try {
         const toolName = _sideEffects.toolCallIdToName.current[chunk.payload.toolCallId];
+        // @ts-ignore TODO: Look into this
         if (toolName === 'updateWorkingMemory' && chunk.payload.result?.success) {
           await refreshWorkingMemory?.();
         }

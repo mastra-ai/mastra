@@ -1,4 +1,5 @@
 import type { AiMessageType } from '@mastra/core/memory';
+import type { LLMStepResults } from '@mastra/core';
 
 export type Message = AiMessageType;
 
@@ -30,7 +31,7 @@ export interface ModelSettings {
   topK?: number;
   topP?: number;
   instructions?: string;
-  providerOptions?: Record<string, unknown>;
+  providerOptions?: LLMStepResults['providerMetadata'];
   chatWithGenerate?: boolean;
   chatWithGenerateVNext?: boolean;
   chatWithStreamVNext?: boolean;

@@ -1,4 +1,5 @@
 import type { LanguageModelV1LogProbs } from '@ai-sdk/provider';
+import type { ReasoningPart } from '@ai-sdk/provider-utils-v5';
 import type {
   LanguageModelV2FinishReason,
   LanguageModelV2Usage,
@@ -8,11 +9,16 @@ import type {
   LanguageModelV2,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider-v5';
-import type { LanguageModelRequestMetadata } from 'ai';
+import type { Span } from '@opentelemetry/api';
+import type { FinishReason, LanguageModelRequestMetadata, TelemetrySettings } from 'ai';
 import type { ModelMessage, StepResult, ToolSet, UIMessage } from 'ai-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
+import type { AIV5Type } from '../agent/message-list/types';
+import type { TracingContext } from '../ai-tracing/types';
+import type { OutputProcessor } from '../processors';
+import type { ProcessorRunnerMode } from '../processors/runner';
 import type { WorkflowStreamEvent } from '../workflows/types';
-import type { OutputSchema, PartialSchemaOutput } from './base/schema';
+import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './base/schema';
 
 export enum ChunkFrom {
   AGENT = 'AGENT',
@@ -434,61 +440,20 @@ export type ChunkType<OUTPUT extends OutputSchema = undefined> = TypedChunkType<
 
 export interface LanguageModelV2StreamResult {
   stream: ReadableStream<LanguageModelV2StreamPart>;
-  request: {
-    body?: unknown;
-  };
-  response: {
-    headers?: Record<string, string>;
-  };
-  warnings?: LanguageModelV2CallWarning[];
+  request: LLMStepResults['request'];
+  response?: LLMStepResults['response'];
+  rawResponse: LLMStepResults['response'] | Record<string, never>;
+  warnings?: LLMStepResults['warnings'];
 }
 
-export type OnResult = (result: {
-  warnings?: LanguageModelV2CallWarning[];
-  request: LanguageModelV2StreamResult['request'] | LanguageModelRequestMetadata;
-  rawResponse: LanguageModelV2StreamResult['response'] | Record<string, never>;
-}) => void;
-
-export type CreateStream = () => Promise<{
-  stream: ReadableStream<LanguageModelV2StreamPart>;
-  warnings?: LanguageModelV2CallWarning[];
-  request: LanguageModelV2StreamResult['request'] | LanguageModelRequestMetadata;
-  rawResponse?: LanguageModelV2StreamResult['response'];
-  response?: LanguageModelV2StreamResult['response'];
-}>;
+export type OnResult = (result: Omit<LanguageModelV2StreamResult, 'stream'>) => void;
+export type CreateStream = () => Promise<LanguageModelV2StreamResult>;
 
 // Type helpers for chunk payloads
 export type SourceChunk = BaseChunkType & { type: 'source'; payload: SourcePayload };
 export type FileChunk = BaseChunkType & { type: 'file'; payload: FilePayload };
 export type ToolCallChunk = BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload };
 export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload };
-
-export interface StepBufferItem<TOOLS extends ToolSet = ToolSet>
-  extends Omit<StepResult<TOOLS>, 'sources' | 'files' | 'toolCalls' | 'toolResults' | 'response'> {
-  // Our custom properties
-  stepType?: 'initial' | 'tool-result';
-  isContinued?: boolean;
-
-  // Keep original Mastra chunk format for these
-  sources: SourceChunk[];
-  files: FileChunk[];
-  toolCalls: ToolCallChunk[];
-  toolResults: ToolResultChunk[];
-
-  // Override response to include uiMessages
-  response: StepResult<TOOLS>['response'] & {
-    uiMessages?: UIMessage[];
-  };
-}
-
-export interface BufferedByStep {
-  text: string;
-  reasoning: string;
-  sources: SourceChunk[];
-  files: FileChunk[];
-  toolCalls: ToolCallChunk[];
-  toolResults: ToolResultChunk[];
-}
 
 export type ExecuteStreamModelManager<T> = (
   callback: (model: LanguageModelV2, isLastModel: boolean) => Promise<T>,
@@ -498,4 +463,77 @@ export type ModelManagerModelConfig = {
   model: LanguageModelV2;
   maxRetries: number;
   id: string;
+};
+
+export interface LanguageModelUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
+}
+
+export type partialModel = {
+  modelId?: string;
+  provider?: string;
+  version?: string;
+};
+
+export type MastraOnStepFinishCallback = (
+  event: LLMStepResults & { model?: partialModel; runId?: string },
+) => Promise<void> | void;
+
+export type MastraOnFinishCallbackArgs<OUTPUT extends OutputSchema = undefined> = LLMStepResults & {
+  error?: Error | string | { message: string; stack: string };
+  object?: InferSchemaOutput<OUTPUT>;
+  steps: LLMStepResults[];
+  totalUsage: LanguageModelUsage;
+  model?: partialModel;
+  runId?: string;
+};
+
+export type MastraOnFinishCallback = (event: MastraOnFinishCallbackArgs) => Promise<void> | void;
+
+export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
+  runId: string;
+  rootSpan?: Span;
+  telemetry_settings?: TelemetrySettings;
+  toolCallStreaming?: boolean;
+  onFinish?: MastraOnFinishCallback;
+  onStepFinish?: MastraOnStepFinishCallback;
+  includeRawChunks?: boolean;
+  output?: OUTPUT;
+  outputProcessors?: OutputProcessor[];
+  outputProcessorRunnerMode?: ProcessorRunnerMode;
+  returnScorerData?: boolean;
+  tracingContext?: TracingContext;
+};
+
+export type LLMStepResults = {
+  toolCalls: ToolCallChunk[];
+  toolResults: ToolResultChunk[];
+  dynamicToolCalls: ToolCallChunk[];
+  dynamicToolResults: ToolResultChunk[];
+  staticToolCalls: ToolCallChunk[];
+  staticToolResults: ToolResultChunk[];
+  files: FileChunk[];
+  sources: SourceChunk[];
+  text: string;
+  reasoning: ReasoningPart[];
+  content: AIV5Type.StepResult<ToolSet>['content'];
+  finishReason?: FinishReason | string;
+  usage: LanguageModelUsage;
+  warnings: LanguageModelV2CallWarning[];
+  request: { body?: unknown };
+  response: {
+    headers?: Record<string, string>;
+    messages?: StepResult<ToolSet>['response']['messages'];
+    uiMessages?: UIMessage[];
+    id?: string;
+    timestamp?: Date;
+    modelId?: string;
+    [key: string]: unknown;
+  };
+  reasoningText: string | undefined;
+  providerMetadata: SharedV2ProviderMetadata | undefined;
 };

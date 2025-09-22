@@ -16,7 +16,12 @@ import type { AISpan, AISpanType } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
 import type { OutputProcessor } from '../processors';
 import type { OutputSchema } from '../stream/base/schema';
-import type { ChunkType, ModelManagerModelConfig } from '../stream/types';
+import type {
+  ChunkType,
+  MastraOnFinishCallback,
+  MastraOnStepFinishCallback,
+  ModelManagerModelConfig,
+} from '../stream/types';
 import type { MastraIdGenerator } from '../types';
 
 export type StreamInternal = {
@@ -43,8 +48,8 @@ export type PrepareStepFunction<TOOLS extends ToolSet = ToolSet> = (options: {
 export type LoopConfig = {
   onChunk?: (chunk: ChunkType) => Promise<void> | void;
   onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
-  onFinish?: (event: any) => Promise<void> | void;
-  onStepFinish?: (event: any) => Promise<void> | void;
+  onFinish?: MastraOnFinishCallback;
+  onStepFinish?: MastraOnStepFinishCallback;
   onAbort?: (event: any) => Promise<void> | void;
   activeTools?: Array<keyof ToolSet> | undefined;
   abortSignal?: AbortSignal;
