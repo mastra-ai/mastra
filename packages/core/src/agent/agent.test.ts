@@ -721,7 +721,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             for await (const _chunk of stream.fullStream) {
             }
             await new Promise(resolve => setTimeout(resolve, 1000));
-            const resumeStream = await agentOne.resumeStreamVNext({ hello: 'world' }, { runId: stream.runId });
+            const resumeStream = await agentOne.approveToolCall({ runId: stream.runId });
             for await (const _chunk of resumeStream.fullStream) {
             }
 
@@ -777,7 +777,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             for await (const _chunk of stream.fullStream) {
             }
             await new Promise(resolve => setTimeout(resolve, 1000));
-            const resumeStream = await agentOne.resumeStreamVNext({ hello: 'world' }, { runId: stream.runId });
+            const resumeStream = await agentOne.approveToolCall({ runId: stream.runId });
             for await (const _chunk of resumeStream.fullStream) {
             }
 
@@ -790,6 +790,48 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
           expect(mockFindUser).toHaveBeenCalled();
           expect(name).toBe('Dero Israel');
+        }, 500000);
+
+        it('should call findUserTool with requireToolApproval on tool and be able to reject the tool call', async () => {
+          const findUserTool = createTool({
+            id: 'Find user tool',
+            description: 'This is a test tool that returns the name and email',
+            inputSchema: z.object({
+              name: z.string(),
+            }),
+            requireApproval: true,
+            execute: async ({ context }) => {
+              return mockFindUser(context) as Promise<Record<string, any>>;
+            },
+          });
+
+          const userAgent = new Agent({
+            name: 'User agent',
+            instructions: 'You are an agent that can get list of users using findUserTool.',
+            model: openaiModel,
+            tools: { findUserTool },
+          });
+
+          const mastra = new Mastra({
+            agents: { userAgent },
+            logger: false,
+            storage: mockStorage,
+          });
+
+          const agentOne = mastra.getAgent('userAgent');
+
+          const stream = await agentOne.streamVNext('Find the user with name - Dero Israel');
+          for await (const _chunk of stream.fullStream) {
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          const resumeStream = await agentOne.declineToolCall({ runId: stream.runId });
+          for await (const _chunk of resumeStream.fullStream) {
+            console.log(_chunk);
+          }
+
+          expect((await resumeStream.toolCalls).length).toBe(1);
+          expect((await resumeStream.toolResults).length).toBe(0);
+          expect(mockFindUser).toHaveBeenCalled();
         }, 500000);
       });
 

@@ -100,25 +100,43 @@ export function createToolCallStep<
       });
 
       try {
-        if ((requireToolApproval || (tool as any).requireApproval) && !resumeData) {
-          controller.enqueue({
-            type: 'tool-call-approval',
-            runId,
-            from: ChunkFrom.AGENT,
-            payload: {
-              toolCallId: inputData.toolCallId,
-              toolName: inputData.toolName,
-              args: inputData.args,
-            },
-          });
-          await suspend({
-            requireToolApproval: {
-              toolCallId: inputData.toolCallId,
-              toolName: inputData.toolName,
-              args: inputData.args,
-            },
-            __streamState: streamState.serialize(),
-          });
+        if (requireToolApproval || (tool as any).requireApproval) {
+          if (!resumeData) {
+            controller.enqueue({
+              type: 'tool-call-approval',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: inputData.toolCallId,
+                toolName: inputData.toolName,
+                args: inputData.args,
+              },
+            });
+            await suspend({
+              requireToolApproval: {
+                toolCallId: inputData.toolCallId,
+                toolName: inputData.toolName,
+                args: inputData.args,
+              },
+              __streamState: streamState.serialize(),
+            });
+          } else {
+            if (!resumeData.approved) {
+              const error = new Error(
+                'Tool call was declined: ' +
+                  JSON.stringify({
+                    toolCallId: inputData.toolCallId,
+                    toolName: inputData.toolName,
+                    args: inputData.args,
+                  }),
+              );
+
+              return {
+                error,
+                ...inputData,
+              };
+            }
+          }
         }
 
         const result = await tool.execute(inputData.args, {

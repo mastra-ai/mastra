@@ -3521,6 +3521,24 @@ export class Agent<
     return result.result as unknown as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
   }
 
+  async approveToolCall<
+    OUTPUT extends OutputSchema | undefined = undefined,
+    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
+  >(
+    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
+  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
+    return this.resumeStreamVNext({ approved: true }, streamOptions);
+  }
+
+  async declineToolCall<
+    OUTPUT extends OutputSchema | undefined = undefined,
+    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
+  >(
+    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
+  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
+    return this.resumeStreamVNext({ approved: false }, streamOptions);
+  }
+
   async generate(
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
