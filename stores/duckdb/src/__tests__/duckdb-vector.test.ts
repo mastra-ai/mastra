@@ -116,7 +116,6 @@ describe('DuckDBVector', () => {
         dimension: 512,
         count: 100,
         metric: 'cosine',
-        status: 'ready',
       });
     });
 
@@ -296,7 +295,9 @@ describe('DuckDBVector', () => {
       await vectorStore.updateVector({
         indexName: 'test-index',
         id: 'vec_1',
-        metadata: { original: false, updated: true },
+        update: {
+          metadata: { original: false, updated: true },
+        },
       });
 
       const results = await vectorStore.query({

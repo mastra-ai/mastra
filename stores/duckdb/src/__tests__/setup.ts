@@ -2,7 +2,7 @@
  * Test setup for DuckDB Vector Store tests
  */
 
-import { beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { beforeAll, afterAll, beforeEach, afterEach, expect } from 'vitest';
 import * as duckdb from 'duckdb';
 import { rimraf } from 'rimraf';
 import path from 'path';
@@ -163,7 +163,7 @@ export const expectVectorSimilarity = (
 ) => {
   expect(actual.length).toBe(expected.length);
   for (let i = 0; i < actual.length; i++) {
-    expect(Math.abs(actual[i] - expected[i])).toBeLessThan(tolerance);
+    expect(Math.abs(actual[i]! - expected[i]!)).toBeLessThan(tolerance);
   }
 };
 

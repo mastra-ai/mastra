@@ -419,7 +419,6 @@ export class DuckDBVector extends MastraVector {
         dimension: index.dimension,
         count: index.total_vectors,
         metric: index.metric as 'cosine' | 'euclidean' | 'dotproduct',
-        status: 'ready' as const,
       };
 
     } finally {
@@ -458,7 +457,8 @@ export class DuckDBVector extends MastraVector {
     const conn = await this.getConnection();
 
     try {
-      const { indexName, id, metadata, vector } = params;
+      const { indexName, id, update } = params;
+      const { metadata, vector } = update;
       const tableName = this.getTableName(indexName);
 
       const updates: string[] = [];
