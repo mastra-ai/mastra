@@ -408,5 +408,152 @@ describe('Memory with PostgresStore Integration', () => {
 
       expect(result.messages).toBeDefined();
     });
+
+    it('should handle index configuration changes', async () => {
+      // Start with IVFFlat
+      const memory1 = new Memory({
+        storage: new PostgresStore(config),
+        vector: new PgVector({ connectionString }),
+        embedder: fastembed,
+        options: {
+          semanticRecall: {
+            topK: 3,
+            indexConfig: {
+              type: 'ivfflat',
+              metric: 'cosine',
+            },
+          },
+        },
+      });
+
+      const threadId = randomUUID();
+      const resourceId = randomUUID();
+
+      await memory1.createThread({ threadId, resourceId });
+      await memory1.saveMessages({
+        messages: [
+          {
+            id: randomUUID(),
+            content: 'First configuration',
+            role: 'user',
+            createdAt: new Date(),
+            threadId,
+            resourceId,
+            type: 'text',
+          },
+        ],
+      });
+
+      // Now switch to HNSW - should trigger index recreation
+      const memory2 = new Memory({
+        storage: new PostgresStore(config),
+        vector: new PgVector({ connectionString }),
+        embedder: fastembed,
+        options: {
+          semanticRecall: {
+            topK: 3,
+            indexConfig: {
+              type: 'hnsw',
+              metric: 'dotproduct',
+              hnsw: { m: 16, efConstruction: 64 },
+            },
+          },
+        },
+      });
+
+      await memory2.saveMessages({
+        messages: [
+          {
+            id: randomUUID(),
+            content: 'Second configuration with HNSW',
+            role: 'user',
+            createdAt: new Date(),
+            threadId,
+            resourceId,
+            type: 'text',
+          },
+        ],
+      });
+
+      // Query should work with new index
+      const result = await memory2.query({
+        query: 'configuration',
+        threadId,
+        resourceId,
+      });
+      expect(result.messages).toBeDefined();
+    });
+
+    it('should preserve existing index when no config provided', async () => {
+      // First, create with HNSW
+      const memory1 = new Memory({
+        storage: new PostgresStore(config),
+        vector: new PgVector({ connectionString }),
+        embedder: fastembed,
+        options: {
+          semanticRecall: {
+            topK: 3,
+            indexConfig: {
+              type: 'hnsw',
+              metric: 'dotproduct',
+              hnsw: { m: 16, efConstruction: 64 },
+            },
+          },
+        },
+      });
+
+      const threadId = randomUUID();
+      const resourceId = randomUUID();
+
+      await memory1.createThread({ threadId, resourceId });
+      await memory1.saveMessages({
+        messages: [
+          {
+            id: randomUUID(),
+            content: 'HNSW index created',
+            role: 'user',
+            createdAt: new Date(),
+            threadId,
+            resourceId,
+            type: 'text',
+          },
+        ],
+      });
+
+      // Create another memory instance without index config - should preserve HNSW
+      const memory2 = new Memory({
+        storage: new PostgresStore(config),
+        vector: new PgVector({ connectionString }),
+        embedder: fastembed,
+        options: {
+          semanticRecall: {
+            topK: 3,
+            // No indexConfig - should preserve existing HNSW
+          },
+        },
+      });
+
+      await memory2.saveMessages({
+        messages: [
+          {
+            id: randomUUID(),
+            content: 'Should still use HNSW index',
+            role: 'user',
+            createdAt: new Date(),
+            threadId,
+            resourceId,
+            type: 'text',
+          },
+        ],
+      });
+
+      // Query should work with preserved HNSW index
+      const result = await memory2.query({
+        query: 'index',
+        threadId,
+        resourceId,
+      });
+      expect(result.messages).toBeDefined();
+    });
   });
 });
