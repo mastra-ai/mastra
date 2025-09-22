@@ -6,7 +6,7 @@ import {
   AppendMessage,
   AssistantRuntimeProvider,
 } from '@assistant-ui/react';
-import { useState, ReactNode, useEffect, useRef } from 'react';
+import { useState, ReactNode, useRef } from 'react';
 import { RuntimeContext } from '@mastra/core/di';
 import { ChatProps, Message } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
@@ -24,6 +24,7 @@ import {
   handleStreamChunk,
   handleWorkflowChunk,
 } from './stream-chunk-message';
+import { ModelSettings, useMastraChat } from '@mastra/react-hooks';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -84,6 +85,79 @@ const convertToAIAttachments = async (attachments: AppendMessage['attachments'])
   return Promise.all(promises);
 };
 
+const initializeMessageState = (initialMessages: Message[]) => {
+  const convertedMessages: ThreadMessageLike[] = initialMessages
+    ?.map((message: Message) => {
+      let content;
+      try {
+        content = JSON.parse(message.content);
+        if (content.isNetwork) {
+          return handleNetworkMessageFromMemory(content);
+        }
+      } catch (e) {}
+
+      const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
+        type: image.contentType.startsWith(`image/`)
+          ? 'image'
+          : image.contentType.startsWith(`audio/`)
+            ? 'audio'
+            : 'file',
+        mimeType: image.contentType,
+        image: image.url,
+      }));
+
+      const formattedParts = (message.parts || [])
+        .map(part => {
+          if (part.type === 'reasoning') {
+            return {
+              type: 'reasoning',
+              text:
+                part.reasoning ||
+                part?.details
+                  ?.filter(detail => detail.type === 'text')
+                  ?.map(detail => detail.text)
+                  .join(' '),
+            };
+          }
+          if (part.type === 'tool-invocation') {
+            if (part.toolInvocation.state === 'result') {
+              return {
+                type: 'tool-call',
+                toolCallId: part.toolInvocation.toolCallId,
+                toolName: part.toolInvocation.toolName,
+                args: part.toolInvocation.args,
+                result: part.toolInvocation.result,
+              };
+            }
+          }
+
+          if (part.type === 'file') {
+            return {
+              type: 'file',
+              mimeType: part.mimeType,
+              data: part.data,
+            };
+          }
+
+          if (part.type === 'text') {
+            return {
+              type: 'text',
+              text: part.text,
+            };
+          }
+        })
+        .filter(Boolean);
+
+      return {
+        ...message,
+        content: [...formattedParts, ...attachmentsAsContentParts],
+      } as ThreadMessageLike;
+    })
+    .filter(Boolean);
+
+  return convertedMessages;
+};
+
 export function MastraRuntimeProvider({
   children,
   agentId,
@@ -99,8 +173,19 @@ export function MastraRuntimeProvider({
 }> &
   ChatProps) {
   const [isRunning, setIsRunning] = useState(false);
-  const [messages, setMessages] = useState<ThreadMessageLike[]>([]);
-  const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
+
+  const {
+    messages,
+    setMessages,
+    streamVNext,
+    network,
+    cancelRun,
+    isRunning: isRunningStreamVNext,
+  } = useMastraChat<ThreadMessageLike>({
+    agentId,
+    initializeMessages: () => (memory ? initializeMessageState(initialMessages || []) : []),
+  });
+
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -126,87 +211,17 @@ export function MastraRuntimeProvider({
     runtimeContextInstance.set(key, value);
   });
 
-  useEffect(() => {
-    const hasNewInitialMessages = initialMessages && initialMessages?.length > messages?.length;
-    if (
-      messages.length === 0 ||
-      currentThreadId !== threadId ||
-      (hasNewInitialMessages && currentThreadId === threadId)
-    ) {
-      if (initialMessages && threadId && memory) {
-        const convertedMessages: ThreadMessageLike[] = initialMessages
-          ?.map((message: Message) => {
-            let content;
-            try {
-              content = JSON.parse(message.content);
-              if (content.isNetwork) {
-                return handleNetworkMessageFromMemory(content);
-              }
-            } catch (e) {}
-
-            const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
-              type: image.contentType.startsWith(`image/`)
-                ? 'image'
-                : image.contentType.startsWith(`audio/`)
-                  ? 'audio'
-                  : 'file',
-              mimeType: image.contentType,
-              image: image.url,
-            }));
-
-            const formattedParts = (message.parts || [])
-              .map(part => {
-                if (part.type === 'reasoning') {
-                  return {
-                    type: 'reasoning',
-                    text:
-                      part.reasoning ||
-                      part?.details
-                        ?.filter(detail => detail.type === 'text')
-                        ?.map(detail => detail.text)
-                        .join(' '),
-                  };
-                }
-                if (part.type === 'tool-invocation') {
-                  if (part.toolInvocation.state === 'result') {
-                    return {
-                      type: 'tool-call',
-                      toolCallId: part.toolInvocation.toolCallId,
-                      toolName: part.toolInvocation.toolName,
-                      args: part.toolInvocation.args,
-                      result: part.toolInvocation.result,
-                    };
-                  }
-                }
-
-                if (part.type === 'file') {
-                  return {
-                    type: 'file',
-                    mimeType: part.mimeType,
-                    data: part.data,
-                  };
-                }
-
-                if (part.type === 'text') {
-                  return {
-                    type: 'text',
-                    text: part.text,
-                  };
-                }
-              })
-              .filter(Boolean);
-
-            return {
-              ...message,
-              content: [...formattedParts, ...attachmentsAsContentParts],
-            } as ThreadMessageLike;
-          })
-          .filter(Boolean);
-        setMessages(convertedMessages);
-        setCurrentThreadId(threadId);
-      }
-    }
-  }, [initialMessages, threadId, memory]);
+  const modelSettingsArgs: ModelSettings = {
+    frequencyPenalty,
+    presencePenalty,
+    maxRetries,
+    temperature,
+    topK,
+    topP,
+    maxTokens,
+    instructions,
+    providerOptions: providerOptions as any,
+  };
 
   const baseClient = useMastraClient();
 
@@ -216,10 +231,7 @@ export function MastraRuntimeProvider({
     const attachments = await convertToAIAttachments(message.attachments);
 
     const input = message.content[0].text;
-    setMessages(currentConversation => [
-      ...currentConversation,
-      { role: 'user', content: input, attachments: message.attachments },
-    ]);
+    setMessages(s => [...s, { role: 'user', content: input, attachments: message.attachments }]);
     setIsRunning(true);
 
     const controller = new AbortController();
@@ -344,49 +356,28 @@ export function MastraRuntimeProvider({
 
       if (modelVersion === 'v2') {
         if (chatWithNetwork) {
-          const response = await agent.network({
-            messages: [
+          let currentEntityId: string | undefined;
+
+          await network({
+            coreUserMessages: [
               {
                 role: 'user',
                 content: input,
               },
+              ...attachments,
             ],
-            maxSteps,
-            modelSettings: {
-              frequencyPenalty,
-              presencePenalty,
-              maxRetries,
-              maxOutputTokens: maxTokens,
-              temperature,
-              topK,
-              topP,
-            },
-
-            runId: agentId,
-
             runtimeContext: runtimeContextInstance,
-
-            ...(memory ? { thread: threadId, resourceId: agentId } : {}),
-          });
-
-          const _sideEffects = {
-            assistantMessageAdded: false,
-            assistantToolCallAddedForUpdater: false,
-            assistantToolCallAddedForContent: false,
-            content: '',
-            toolCallIdToName: toolCallIdToName,
-          };
-
-          let currentEntityId: string | undefined;
-
-          await response.processDataStream({
-            onChunk: async chunk => {
+            threadId,
+            modelSettings: modelSettingsArgs,
+            signal: controller.signal,
+            onNetworkChunk: (chunk, conversation) => {
               if (chunk.type.startsWith('agent-execution-event-')) {
                 const agentChunk = chunk.payload;
-                if (!currentEntityId) return;
-                await handleAgentChunk({ agentChunk, setMessages, entityName: currentEntityId });
+                if (!currentEntityId) return conversation;
+
+                return handleAgentChunk({ agentChunk, conversation, entityName: currentEntityId });
               } else if (chunk.type === 'tool-execution-start') {
-                await handleStreamChunk({
+                return handleStreamChunk({
                   chunk: {
                     ...chunk,
                     type: 'tool-call',
@@ -406,33 +397,31 @@ export function MastraRuntimeProvider({
                       },
                     },
                   },
-                  setMessages,
+                  conversation,
                   refreshWorkingMemory,
-                  _sideEffects,
                 });
               } else if (chunk.type === 'tool-execution-end') {
-                await handleStreamChunk({
+                return handleStreamChunk({
                   chunk: { ...chunk, type: 'tool-result' },
-                  setMessages,
+                  conversation,
                   refreshWorkingMemory,
-                  _sideEffects,
                 });
               } else if (chunk.type.startsWith('workflow-execution-event-')) {
                 const workflowChunk = chunk.payload;
-                if (!currentEntityId) return;
-                await handleWorkflowChunk({ workflowChunk, setMessages, entityName: currentEntityId });
+                if (!currentEntityId) return conversation;
+
+                return handleWorkflowChunk({ workflowChunk, conversation, entityName: currentEntityId });
               } else if (chunk.type === 'workflow-execution-start' || chunk.type === 'agent-execution-start') {
                 currentEntityId = chunk.payload?.args?.resourceId;
 
                 const runId = chunk.payload.runId;
 
-                if (!currentEntityId || !runId) return;
+                if (!currentEntityId || !runId) return conversation;
 
-                createRootToolAssistantMessage({
+                return createRootToolAssistantMessage({
                   entityName: currentEntityId,
-                  setMessages,
+                  conversation,
                   runId,
-                  _sideEffects,
                   chunk,
                   from: chunk.type === 'agent-execution-start' ? 'AGENT' : 'WORKFLOW',
                   networkMetadata: {
@@ -440,17 +429,13 @@ export function MastraRuntimeProvider({
                     input: chunk?.payload?.args?.prompt,
                   },
                 });
-
-                _sideEffects.toolCallIdToName.current[runId] = currentEntityId;
               } else if (chunk.type === 'network-execution-event-step-finish') {
-                setMessages(currentConversation => {
-                  return [
-                    ...currentConversation,
-                    { role: 'assistant', content: [{ type: 'text', text: chunk?.payload?.result || '' }] },
-                  ];
-                });
+                return [
+                  ...conversation,
+                  { role: 'assistant', content: [{ type: 'text', text: chunk?.payload?.result || '' }] },
+                ];
               } else {
-                await handleStreamChunk({ chunk, setMessages, refreshWorkingMemory, _sideEffects });
+                return handleStreamChunk({ chunk, conversation, refreshWorkingMemory });
               }
             },
           });
@@ -484,49 +469,21 @@ export function MastraRuntimeProvider({
             setIsRunning(false);
             return;
           } else {
-            const response = await agent.streamVNext({
-              messages: [
+            await streamVNext({
+              coreUserMessages: [
                 {
                   role: 'user',
                   content: input,
                 },
                 ...attachments,
               ],
-              runId: agentId,
-              modelSettings: {
-                frequencyPenalty,
-                presencePenalty,
-                maxRetries,
-                maxOutputTokens: maxTokens,
-                temperature,
-                topK,
-                topP,
-              },
-              instructions,
               runtimeContext: runtimeContextInstance,
-              ...(memory ? { threadId, resourceId: agentId } : {}),
-              providerOptions: providerOptions as any,
+              threadId,
+              modelSettings: modelSettingsArgs,
+              onChunk: (chunk, conversation) => handleStreamChunk({ chunk, conversation, refreshWorkingMemory }),
+              signal: controller.signal,
             });
 
-            if (!response.body) {
-              throw new Error('No response body');
-            }
-
-            const _sideEffects = {
-              assistantMessageAdded: false,
-              assistantToolCallAddedForUpdater: false,
-              assistantToolCallAddedForContent: false,
-              content: '',
-              toolCallIdToName: toolCallIdToName,
-            };
-
-            await response.processDataStream({
-              onChunk: async chunk => {
-                await handleStreamChunk({ chunk, setMessages, refreshWorkingMemory, _sideEffects });
-              },
-            });
-
-            setIsRunning(false);
             return;
           }
         }
@@ -892,13 +849,14 @@ export function MastraRuntimeProvider({
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
       setIsRunning(false);
+      cancelRun?.();
     }
   };
 
   const { adapters, isReady } = useAdapters(agentId);
 
   const runtime = useExternalStoreRuntime({
-    isRunning,
+    isRunning: isRunning || isRunningStreamVNext,
     messages,
     convertMessage,
     onNew,
