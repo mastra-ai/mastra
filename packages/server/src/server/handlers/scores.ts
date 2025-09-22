@@ -29,6 +29,7 @@ async function getScorersFromSystem({
         const scorerName = scorer.scorer.name;
         if (scorersMap.has(scorerName)) {
           scorersMap.get(scorerName)?.agentIds.push(agentId);
+          scorersMap.get(scorerName)?.agentNames.push(agent.name);
         } else {
           scorersMap.set(scorerName, {
             workflowIds: [],
@@ -69,7 +70,9 @@ async function getScorersFromSystem({
   const registeredScorers = await mastra.getScorers();
   for (const [_scorerId, scorer] of Object.entries(registeredScorers || {})) {
     const scorerName = scorer.name;
-    if (!scorersMap.has(scorerName)) {
+    if (scorersMap.has(scorerName)) {
+      scorersMap.get(scorerName)!.isRegistered = true;
+    } else {
       scorersMap.set(scorerName, {
         scorer: scorer,
         agentIds: [],
@@ -77,8 +80,6 @@ async function getScorersFromSystem({
         workflowIds: [],
         isRegistered: true,
       });
-    } else {
-      scorersMap.get(scorerName)!.isRegistered = true;
     }
   }
 
