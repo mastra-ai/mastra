@@ -53,12 +53,6 @@ export const agent = new Agent({
       isOptional: true,
     },
     {
-      name: "indexConfig",
-      type: "VectorIndexConfig",
-      description: "Configuration for vector index optimization. Currently supported only by PostgreSQL with pgvector. Allows configuring index type (ivfflat, hnsw, flat), distance metric, and index-specific parameters.",
-      isOptional: true,
-    },
-    {
       name: "options",
       type: "MemoryConfig",
       description: "Memory configuration options.",
@@ -178,18 +172,18 @@ export const agent = new Agent({
       connectionString: process.env.DATABASE_URL
     }),
     embedder: openai.embedding("text-embedding-3-small"),
-    indexConfig: {
-      type: 'hnsw',              // Use HNSW for better performance
-      distance: 'innerproduct',  // Optimal for OpenAI embeddings
-      m: 16,                     // Number of bi-directional links
-      efConstruction: 64         // Construction-time candidate list size
-    },
     options: {
       lastMessages: 20,
       semanticRecall: {
         topK: 5,
         messageRange: 3,
-        scope: 'resource'
+        scope: 'resource',
+        indexConfig: {
+          type: 'hnsw',              // Use HNSW for better performance
+          metric: 'dotproduct',      // Optimal for OpenAI embeddings
+          m: 16,                     // Number of bi-directional links
+          efConstruction: 64         // Construction-time candidate list size
+        }
       },
       workingMemory: {
         enabled: true

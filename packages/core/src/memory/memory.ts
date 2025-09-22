@@ -186,11 +186,10 @@ export abstract class MastraMemory extends MastraBase {
     // Add PG-specific configuration if provided
     // Only PG vector store will use these parameters
     if (indexConfig && (indexConfig.type || indexConfig.ivf || indexConfig.hnsw)) {
-      createParams.indexConfig = {
-        type: indexConfig.type,
-        ivf: indexConfig.ivf,
-        hnsw: indexConfig.hnsw,
-      };
+      createParams.indexConfig = {};
+      if (indexConfig.type) createParams.indexConfig.type = indexConfig.type;
+      if (indexConfig.ivf) createParams.indexConfig.ivf = indexConfig.ivf;
+      if (indexConfig.hnsw) createParams.indexConfig.hnsw = indexConfig.hnsw;
     }
 
     await this.vector.createIndex(createParams);

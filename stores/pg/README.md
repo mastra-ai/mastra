@@ -184,7 +184,7 @@ HNSW builds a graph structure for extremely fast searches:
 await vectorStore.createIndex({
   indexName: 'my_vectors',
   dimension: 1536,
-  metric: 'inner', // Recommended for normalized embeddings (OpenAI, etc.)
+  metric: 'dotproduct', // Recommended for normalized embeddings (OpenAI, etc.)
   indexConfig: {
     type: 'hnsw',
     hnsw: {
@@ -233,7 +233,7 @@ Choose the appropriate metric for your embeddings:
 
 - **`cosine`** (default): Angular similarity, good for text embeddings
 - **`euclidean`**: L2 distance, for unnormalized embeddings
-- **`inner`**: Dot product, optimal for normalized embeddings (OpenAI, Cohere)
+- **`dotproduct`**: Dot product, optimal for normalized embeddings (OpenAI, Cohere)
 
 ### Index Recreation
 

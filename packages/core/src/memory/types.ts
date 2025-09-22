@@ -82,7 +82,7 @@ export type VectorIndexConfig = {
   /** Index type - only supported by PostgreSQL/pgvector */
   type?: 'ivfflat' | 'hnsw' | 'flat';
   /** Distance metric - supported by all vector stores */
-  metric?: 'cosine' | 'euclidean' | 'inner';
+  metric?: 'cosine' | 'euclidean' | 'dotproduct';
   /** IVFFlat configuration (PostgreSQL only) */
   ivf?: {
     lists?: number;

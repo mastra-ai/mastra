@@ -148,15 +148,23 @@ import { PgStore, PgVector } from "@mastra/pg";
 
 const agent = new Agent({
   memory: new Memory({
-    // ... other memory options
+    storage: new PgStore({
+      connectionString: process.env.DATABASE_URL,
+    }),
     vector: new PgVector({
       connectionString: process.env.DATABASE_URL,
     }),
-    indexConfig: {
-      type: 'hnsw',           // Use HNSW for better performance
-      distance: 'innerproduct', // Best for OpenAI embeddings
-      m: 16,                  // Number of bi-directional links (default: 16)
-      efConstruction: 64,    // Size of candidate list during construction (default: 64)
+    options: {
+      semanticRecall: {
+        topK: 5,
+        messageRange: 2,
+        indexConfig: {
+          type: 'hnsw',           // Use HNSW for better performance
+          metric: 'dotproduct',   // Best for OpenAI embeddings  
+          m: 16,                  // Number of bi-directional links (default: 16)
+          efConstruction: 64,    // Size of candidate list during construction (default: 64)
+        },
+      },
     },
   }),
 });
