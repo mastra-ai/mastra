@@ -285,7 +285,7 @@ describe('MessageList AI SDK v5 URL handling', () => {
         },
       ];
 
-      // User is passing these messages to streamVNext with format: 'aisdk'
+      // User is passing these messages to stream with format: 'aisdk'
       const messageList = new MessageList();
       messageList.add(modelMessages, 'input');
 

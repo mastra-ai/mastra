@@ -312,14 +312,12 @@ export function generateHandler({
     // @deprecated use resourceId
     resourceid?: string;
     runtimeContext?: Record<string, unknown>;
+    format?: 'mastra' | 'aisdk';
   };
   abortSignal?: AbortSignal;
 }) {
-  const logger = mastra.getLogger();
-  logger?.warn(
-    "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 23rd, 2025. Please use generateLegacyHandler if you don't want to upgrade just yet.",
-  );
-  return generateLegacyHandler({ mastra, ...args });
+  // Now calls the new generate method (formerly generateVNext)
+  return generateVNextHandler({ mastra, ...args });
 }
 
 export async function generateLegacyHandler({
@@ -360,7 +358,7 @@ export async function generateLegacyHandler({
 
     validateBody({ messages });
 
-    const result = await agent.generate(messages, {
+    const result = await agent.generateLegacy(messages, {
       ...rest,
       abortSignal,
       // @ts-expect-error TODO fix types
@@ -383,12 +381,12 @@ export async function generateVNextHandler({
 }: Context & {
   runtimeContext: RuntimeContext;
   agentId: string;
-  body: GetBody<'generateVNext'> & {
+  body: GetBody<'generate'> & {
     runtimeContext?: Record<string, unknown>;
     format?: 'mastra' | 'aisdk';
   };
   abortSignal?: AbortSignal;
-}): Promise<ReturnType<Agent['generateVNext']>> {
+}): Promise<ReturnType<Agent['generate']>> {
   try {
     const agent = mastra.getAgent(agentId);
 
@@ -409,7 +407,7 @@ export async function generateVNextHandler({
 
     validateBody({ messages });
 
-    const result = await agent.generateVNext(messages, {
+    const result = await agent.generate(messages, {
       ...rest,
       runtimeContext: finalRuntimeContext,
       format: rest.format || 'mastra',
@@ -432,15 +430,12 @@ export async function streamGenerateHandler({
     // @deprecated use resourceId
     resourceid?: string;
     runtimeContext?: string;
+    format?: 'aisdk' | 'mastra';
   };
   abortSignal?: AbortSignal;
 }) {
-  const logger = mastra.getLogger();
-  logger?.warn(
-    "Deprecation NOTICE:\n Stream method will switch to use streamVNext implementation September 23rd, 2025. Please use streamGenerateLegacyHandler if you don't want to upgrade just yet.",
-  );
-
-  return streamGenerateLegacyHandler({ mastra, ...args });
+  // Now calls the new stream method (formerly streamVNext)
+  return streamVNextGenerateHandler({ mastra, ...args });
 }
 export async function streamGenerateLegacyHandler({
   mastra,
@@ -476,7 +471,7 @@ export async function streamGenerateLegacyHandler({
 
     validateBody({ messages });
 
-    const streamResult = await agent.stream(messages, {
+    const streamResult = await agent.streamLegacy(messages, {
       ...rest,
       abortSignal,
       // @ts-expect-error TODO fix types
@@ -516,12 +511,12 @@ export function streamVNextGenerateHandler({
 }: Context & {
   runtimeContext: RuntimeContext;
   agentId: string;
-  body: GetBody<'streamVNext'> & {
+  body: GetBody<'stream'> & {
     runtimeContext?: string;
     format?: 'aisdk' | 'mastra';
   };
   abortSignal?: AbortSignal;
-}): ReturnType<Agent['streamVNext']> {
+}): ReturnType<Agent['stream']> {
   try {
     const agent = mastra.getAgent(agentId);
 
@@ -541,7 +536,7 @@ export function streamVNextGenerateHandler({
 
     validateBody({ messages });
 
-    const streamResult = agent.streamVNext(messages, {
+    const streamResult = agent.stream(messages, {
       ...rest,
       runtimeContext: finalRuntimeContext,
       abortSignal,
@@ -612,7 +607,7 @@ export async function streamVNextUIMessageHandler({
 }: Context & {
   runtimeContext: RuntimeContext;
   agentId: string;
-  body: GetBody<'streamVNext'> & {
+  body: GetBody<'stream'> & {
     runtimeContext?: string;
   };
   abortSignal?: AbortSignal;
@@ -636,7 +631,7 @@ export async function streamVNextUIMessageHandler({
 
     validateBody({ messages });
 
-    const streamResult = await agent.streamVNext(messages, {
+    const streamResult = await agent.stream(messages, {
       ...rest,
       runtimeContext: finalRuntimeContext,
       abortSignal,

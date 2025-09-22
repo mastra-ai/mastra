@@ -31,7 +31,7 @@ Always return just the number, no explanation.`,
 
     let response: string;
     if (model.specificationVersion === 'v2') {
-      const responseText = await this.agent.generateVNext(prompt);
+      const responseText = await this.agent.generate(prompt);
       response = responseText.text;
     } else {
       const responseText = await this.agent.generate(prompt);

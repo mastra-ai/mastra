@@ -187,7 +187,7 @@ export function createStep<
           args: inputData,
         };
 
-        // TODO: add support for format, if format is undefined use stream, else streamVNext
+        // TODO: add support for format, if format is undefined use stream, else stream
         let stream: ReadableStream<any>;
 
         if (streamFormat === 'aisdk') {
@@ -221,9 +221,9 @@ export function createStep<
             ...(toolData ?? {}),
           });
         } else {
-          const modelOutput = await params.streamVNext(inputData.prompt, {
+          const modelOutput = await params.stream(inputData.prompt, {
             runtimeContext,
-            onFinish: result => {
+            onFinish: (result: any) => {
               streamPromise.resolve(result.text);
             },
             // abortSignal,

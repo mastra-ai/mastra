@@ -177,7 +177,7 @@ async function runSingleOutputsTest(
     //   prompt: 'You are a test agent. Your task is to respond with valid JSON matching the schema provided.',
     // });
 
-    const response = await agent.generateVNext(allSchemas[schemaName].description, generateOptions);
+    const response = await agent.generate(allSchemas[schemaName].description, generateOptions);
 
     if (!response.object) {
       throw new Error('No object generated for schema: ' + schemaName + ' with text: ' + response.text);

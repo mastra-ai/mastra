@@ -80,7 +80,7 @@ const createMockAgentV2 = (response: string = 'Dummy response'): Agent => {
   });
 
   // Add a spy to the generate method (without mocking the return value)
-  vi.spyOn(agent, 'generateVNext');
+  vi.spyOn(agent, 'generate');
 
   return agent;
 };

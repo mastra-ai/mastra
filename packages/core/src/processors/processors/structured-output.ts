@@ -75,11 +75,11 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
 
           // Use structuring agent to extract structured data from the unstructured text
           if (modelDef.specificationVersion === 'v2') {
-            structuredResult = await this.structuringAgent.generateVNext(prompt, {
+            structuredResult = await this.structuringAgent.generate(prompt, {
               output: schema,
             });
           } else {
-            structuredResult = await this.structuringAgent.generate(prompt, {
+            structuredResult = await this.structuringAgent.generateLegacy(prompt, {
               output: schema as ZodTypeAny,
             });
           }

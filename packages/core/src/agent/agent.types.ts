@@ -147,7 +147,7 @@ export type InnerAgentExecutionOptions<
 > = AgentExecutionOptions<OUTPUT, FORMAT> & {
   writableStream?: WritableStream<ChunkType>;
   messages: MessageListInput;
-  methodType: 'generate' | 'stream' | 'streamVNext';
+  methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
   model?: MastraLanguageModel;
 };

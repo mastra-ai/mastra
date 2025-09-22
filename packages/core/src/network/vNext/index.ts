@@ -514,7 +514,7 @@ export class NewAgentNetwork extends MastraBase {
                     `;
 
           if (model.specificationVersion === 'v2') {
-            completionResult = await routingAgent.generateVNext([{ role: 'assistant', content: completionPrompt }], {
+            completionResult = await routingAgent.generate([{ role: 'assistant', content: completionPrompt }], {
               output: completionSchema,
               threadId: initData?.threadId ?? runId,
               resourceId: initData?.threadResourceId ?? this.name,
@@ -582,7 +582,7 @@ export class NewAgentNetwork extends MastraBase {
         };
 
         if (model.specificationVersion === 'v2') {
-          result = await routingAgent.generateVNext(prompt, options);
+          result = await routingAgent.generate(prompt, options);
         } else {
           result = await routingAgent.generate(prompt, options);
         }
@@ -654,7 +654,7 @@ export class NewAgentNetwork extends MastraBase {
         let result;
 
         if (model.specificationVersion === 'v2') {
-          result = await agent.streamVNext(inputData.prompt, {
+          result = await agent.stream(inputData.prompt, {
             // resourceId: inputData.resourceId,
             // threadId: inputData.threadId,
             runtimeContext: runtimeContextToUse,

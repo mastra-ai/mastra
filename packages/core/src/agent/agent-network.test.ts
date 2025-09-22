@@ -38,7 +38,7 @@ describe('Agent - network', () => {
       text: z.string(),
     }),
     execute: async ({ inputData }) => {
-      const resp = await agent1.generateVNext(inputData.city, {
+      const resp = await agent1.generate(inputData.city, {
         output: z.object({
           text: z.string(),
         }),
@@ -58,7 +58,7 @@ describe('Agent - network', () => {
       text: z.string(),
     }),
     execute: async ({ inputData }) => {
-      const resp = await agent2.generateVNext(inputData.text, {
+      const resp = await agent2.generate(inputData.text, {
         output: z.object({
           text: z.string(),
         }),
