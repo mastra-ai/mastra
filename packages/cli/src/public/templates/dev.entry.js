@@ -3,6 +3,7 @@
 import { evaluate } from '@mastra/core/eval';
 import { AvailableHooks, registerHook } from '@mastra/core/hooks';
 import { TABLE_EVALS } from '@mastra/core/storage';
+import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces/scoreTracesWorkflow';
 import { checkEvalStorageFields } from '@mastra/core/utils';
 import { mastra } from '#mastra';
 import { createNodeServer, getToolExports } from '#server';
@@ -25,6 +26,10 @@ registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agen
     instructions,
   });
 });
+
+if (mastra.getStorage()) {
+  mastra.__registerInternalWorkflow(scoreTracesWorkflow);
+}
 
 registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
   const storage = mastra.getStorage();

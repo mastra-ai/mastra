@@ -39,6 +39,7 @@ export class BuildBundler extends Bundler {
     import { evaluate } from '@mastra/core/eval';
     import { AvailableHooks, registerHook } from '@mastra/core/hooks';
     import { TABLE_EVALS } from '@mastra/core/storage';
+    import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces/scoreTracesWorkflow';
     import { checkEvalStorageFields } from '@mastra/core/utils';
     import { mastra } from '#mastra';
     import { createNodeServer, getToolExports } from '#server';
@@ -61,6 +62,7 @@ export class BuildBundler extends Bundler {
     if (mastra.getStorage()) {
       // start storage init in the background
       mastra.getStorage().init();
+      mastra.__registerInternalWorkflow(scoreTracesWorkflow);
     }
 
     registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {

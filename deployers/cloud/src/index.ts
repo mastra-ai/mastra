@@ -69,7 +69,7 @@ import { HttpTransport } from '@mastra/loggers/http';
 import { evaluate } from '@mastra/core/eval';
 import { AvailableHooks, registerHook } from '@mastra/core/hooks';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
-
+import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces/scoreTracesWorkflow';
 const startTime = process.env.RUNNER_START_TIME ? new Date(process.env.RUNNER_START_TIME).getTime() : Date.now();
 const createNodeServerStartTime = Date.now();
 
@@ -160,6 +160,10 @@ if (process.env.MASTRA_STORAGE_URL && process.env.MASTRA_STORAGE_AUTH_TOKEN) {
       });
     }
   });
+}
+
+if (mastra?.getStorage()) {
+  mastra.__registerInternalWorkflow(scoreTracesWorkflow);
 }
 
 ${getAuthEntrypoint()}

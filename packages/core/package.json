@@ -151,6 +151,16 @@
         "default": "./dist/processors/index.cjs"
       }
     },
+    "./scores/scoreTraces/scoreTracesWorkflow": {
+      "import": {
+        "types": "./dist/scores/scoreTraces/scoreTracesWorkflow.d.ts",
+        "default": "./dist/scores/scoreTraces/scoreTracesWorkflow.js"
+      },
+      "require": {
+        "types": "./dist/scores/scoreTraces/scoreTracesWorkflow.d.ts",
+        "default": "./dist/scores/scoreTraces/scoreTracesWorkflow.cjs"
+      }
+    },
     "./utils/zod-to-json": {
       "import": {
         "types": "./dist/zod-to-json.d.ts",

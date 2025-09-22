@@ -56,6 +56,7 @@ export default defineConfig({
     'src/agent/input-processor/index.ts',
     'src/processors/index.ts',
     'src/zod-to-json.ts',
+    'src/scores/scoreTraces/scoreTracesWorkflow.ts',
   ],
   format: ['esm', 'cjs'],
   clean: true,
