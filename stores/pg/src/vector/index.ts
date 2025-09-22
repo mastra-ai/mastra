@@ -723,14 +723,6 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     }
 
     await this.installVectorExtensionPromise;
-
-    // If extension still not found, throw error
-    if (!this.vectorExtensionInstalled) {
-      throw new Error(
-        'Vector extension not found. Please ensure pgvector is installed in your database. ' +
-          'Run: CREATE EXTENSION vector; with appropriate privileges.',
-      );
-    }
   }
 
   async listIndexes(): Promise<string[]> {
