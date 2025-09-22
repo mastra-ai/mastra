@@ -33,53 +33,6 @@ export const tool = createTool({
 });
 ```
 
-## Example with TracingContext
-
-```typescript filename="src/mastra/tools/traced-tool.ts" showLineNumbers copy
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
-
-export const tracedTool = createTool({
-  id: "data-processor",
-  description: "Process data with custom tracing",
-  inputSchema: z.object({
-    data: z.array(z.string())
-  }),
-  outputSchema: z.object({
-    processed: z.number(),
-    summary: z.string()
-  }),
-  execute: async ({ context, tracingContext }) => {
-    // Create a custom child span if tracing is available
-    const span = tracingContext?.currentSpan?.createSpan({
-      name: "data-processing-operation",
-      type: "TOOL_CALL",
-      attributes: {
-        dataCount: context.data.length,
-      }
-    });
-
-    try {
-      // Process data
-      const processed = context.data.length;
-      const summary = `Processed ${processed} items`;
-
-      // Add custom attributes to the span
-      span?.setAttribute("processingComplete", true);
-      span?.setAttribute("summary", summary);
-
-      return {
-        processed,
-        summary
-      };
-    } finally {
-      // End the custom span
-      span?.end();
-    }
-  }
-});
-```
-
 ## Parameters
 
 <PropertiesTable
