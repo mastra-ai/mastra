@@ -8,7 +8,7 @@ import { myWorkflow } from './workflows';
 import { chefModelV2Agent, networkAgent } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/scores';
 import { myWorkflowX } from './workflows/other';
-import { mastraCompatible } from './agents/external';
+import { weatherAgentAISDK, weatherAgentLangChain } from './agents/external';
 
 const storage = new LibSQLStore({
   url: 'file:./mastra.db',
@@ -30,7 +30,8 @@ export const mastra = new Mastra({
     evalAgent,
     chefModelV2Agent,
     networkAgent,
-    mastraCompatible: mastraCompatible as any,
+    weatherAgentLangChain: weatherAgentLangChain,
+    weatherAgentAISDK: weatherAgentAISDK,
   },
   logger: new PinoLogger({ name: 'Chef', level: 'debug' }),
   storage,
