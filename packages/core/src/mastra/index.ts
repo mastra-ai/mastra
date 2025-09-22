@@ -1,4 +1,5 @@
 import type { Agent } from '../agent';
+import type { ExternalAgent } from '../agent/external';
 import { getAllAITracing, setupAITracing, shutdownAITracingRegistry } from '../ai-tracing';
 import type { ObservabilityRegistryConfig } from '../ai-tracing';
 import type { BundlerConfig } from '../bundler/types';
@@ -29,8 +30,11 @@ import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-proc
 import type { LegacyWorkflow } from '../workflows/legacy';
 import { createOnScorerHook } from './hooks';
 
+
+type MastraAgent = Agent<any> | ExternalAgent;
+
 export interface Config<
-  TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
+  TAgents extends Record<string, MastraAgent> = Record<string, MastraAgent>,
   TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
   TWorkflows extends Record<string, Workflow<any, any, any, any, any, any>> = Record<
     string,
@@ -282,7 +286,7 @@ export class Mastra<
     ) {
       this.#logger?.warn(
         `Mastra telemetry is enabled, but the required instrumentation file was not loaded. ` +
-          `If you are using Mastra outside of the mastra server environment, see: https://mastra.ai/en/docs/observability/tracing#tracing-outside-mastra-server-environment`,
+        `If you are using Mastra outside of the mastra server environment, see: https://mastra.ai/en/docs/observability/tracing#tracing-outside-mastra-server-environment`,
         `If you are using a custom instrumentation file or want to disable this warning, set the globalThis.___MASTRA_TELEMETRY___ variable to true in your instrumentation file.`,
       );
     }

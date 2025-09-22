@@ -1,0 +1,29 @@
+{
+  "name": "@mastra/agent-compat",
+  "version": "0.0.1",
+  "description": "",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "build": "pnpm check && tsup --silent --config tsup.config.ts",
+    "test": "vitest run"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.12.4",
+  "dependencies": {
+    "@langchain/openai": "1.0.0-alpha.1",
+    "@mastra/core": "workspace:*",
+    "langchain": "1.0.0-alpha.6",
+    "zod": "^3.25.32"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "tsup": "^8.5.0",
+    "vitest": "^3.2.4"
+  }
+}

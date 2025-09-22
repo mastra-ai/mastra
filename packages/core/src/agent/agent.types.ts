@@ -8,6 +8,7 @@ import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types
 import type { InputProcessor, OutputProcessor } from '../processors';
 import type { RuntimeContext } from '../runtime-context';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
+import type { MastraModelOutput } from '../stream';
 import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
 import type { MessageListInput } from './message-list';
@@ -128,18 +129,18 @@ export type AgentExecutionOptions<
 
 type OutputOptions<OUTPUT extends OutputSchema = undefined> =
   | {
-      /**
-       * Schema for structured output generation (Zod schema or JSON Schema)
-       * @deprecated Use `structuredOutput` instead. The `output` property will be removed in a future version.
-       */
-      output?: OUTPUT;
-      structuredOutput?: never;
-    }
+    /**
+     * Schema for structured output generation (Zod schema or JSON Schema)
+     * @deprecated Use `structuredOutput` instead. The `output` property will be removed in a future version.
+     */
+    output?: OUTPUT;
+    structuredOutput?: never;
+  }
   | {
-      /** Structured output generation with enhanced developer experience  */
-      structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
-      output?: never;
-    };
+    /** Structured output generation with enhanced developer experience  */
+    structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
+    output?: never;
+  };
 
 export type InnerAgentExecutionOptions<
   OUTPUT extends OutputSchema = undefined,
@@ -151,3 +152,5 @@ export type InnerAgentExecutionOptions<
   /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
   model?: MastraLanguageModel;
 };
+
+export type MastraGenerateResult<OUTPUT extends OutputSchema = undefined> = Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>

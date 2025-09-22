@@ -17,6 +17,9 @@
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
     "@mastra/voice-openai": "latest",
+    "@mastra/agent-compat": "latest",
+    "@langchain/openai": "1.0.0-alpha.1",
+    "langchain": "1.0.0-alpha.6",
     "ai": "^4.3.19",
     "ai-v5": "npm:ai@^5.0.15",
     "fetch-to-node": "^2.1.0",
@@ -26,6 +29,7 @@
   },
   "pnpm": {
     "overrides": {
+      "@mastra/agent-compat": "link:../../packages/agent-compat",
       "@mastra/core": "link:../../packages/core",
       "@mastra/loggers": "link:../../packages/loggers",
       "@mastra/voice-openai": "link:../../voice/openai",
