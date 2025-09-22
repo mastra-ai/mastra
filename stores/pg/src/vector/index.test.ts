@@ -2276,6 +2276,19 @@ describe('PgVector', () => {
         client.release();
       }
 
+      // Create another schema
+      const anotherSchema = 'another_schema';
+      const anotherSchemaClient = await vectorDB['pool'].connect();
+      try {
+        await anotherSchemaClient.query(`CREATE SCHEMA IF NOT EXISTS ${anotherSchema}`);
+        await anotherSchemaClient.query('COMMIT');
+      } catch (e) {
+        await anotherSchemaClient.query('ROLLBACK');
+        throw e;
+      } finally {
+        anotherSchemaClient.release();
+      }
+
       // Now create the custom schema vectorDB instance
       customSchemaVectorDB = new PgVector({
         connectionString,
@@ -2291,10 +2304,11 @@ describe('PgVector', () => {
         // Ignore errors if index doesn't exist
       }
 
-      // Drop schema using the default vectorDB connection
+      // Drop schemas using the default vectorDB connection
       const client = await vectorDB['pool'].connect();
       try {
         await client.query(`DROP SCHEMA IF EXISTS ${customSchema} CASCADE`);
+        await client.query(`DROP SCHEMA IF EXISTS another_schema CASCADE`);
         await client.query('COMMIT');
       } catch (e) {
         await client.query('ROLLBACK');
@@ -2348,6 +2362,27 @@ describe('PgVector', () => {
           await vectorDB.deleteIndex({ indexName: testIndexName });
         } catch {
           // Ignore if doesn't exist
+        }
+
+        // Ensure vector extension is back in public schema for other tests
+        const client = await vectorDB.pool.connect();
+        try {
+          const result = await client.query(`
+            SELECT n.nspname as schema_name
+            FROM pg_extension e
+            JOIN pg_namespace n ON e.extnamespace = n.oid
+            WHERE e.extname = 'vector'
+          `);
+
+          if (result.rows.length > 0 && result.rows[0].schema_name !== 'public') {
+            // Extension is not in public, move it back
+            await client.query(`DROP EXTENSION IF EXISTS vector CASCADE`);
+            await client.query(`CREATE EXTENSION vector`);
+          }
+        } catch (error) {
+          // Ignore errors, extension might not exist
+        } finally {
+          client.release();
         }
       });
 
@@ -2475,6 +2510,194 @@ describe('PgVector', () => {
           topK: 1,
         });
         expect(results).toHaveLength(0);
+      });
+
+      it('should handle vector extension in public schema with custom table schema', async () => {
+        // Ensure vector extension is in public schema
+        const client = await vectorDB.pool.connect();
+        await client.query(`CREATE SCHEMA IF NOT EXISTS ${customSchema}`);
+        client.release();
+
+        // This should not throw "type vector does not exist"
+        await customSchemaVectorDB.createIndex({
+          indexName: testIndexName,
+          dimension: 3,
+        });
+
+        // Verify it works with some data
+        const testVectors = [
+          [1, 2, 3],
+          [4, 5, 6],
+        ];
+        const ids = await customSchemaVectorDB.upsert({
+          indexName: testIndexName,
+          vectors: testVectors,
+        });
+
+        expect(ids).toHaveLength(2);
+
+        const results = await customSchemaVectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 2, 3],
+          topK: 1,
+        });
+
+        expect(results).toHaveLength(1);
+        expect(results[0].score).toBeGreaterThan(0.99);
+      });
+
+      it('should handle vector extension in the same custom schema', async () => {
+        const client = await vectorDB.pool.connect();
+
+        // Create custom schema and install vector extension there
+        await client.query(`CREATE SCHEMA IF NOT EXISTS ${customSchema}`);
+        await client.query(`DROP EXTENSION IF EXISTS vector CASCADE`);
+        await client.query(`CREATE EXTENSION vector SCHEMA ${customSchema}`);
+        client.release();
+
+        // Create a new PgVector instance to detect the new extension location
+        const localSchemaVectorDB = new PgVector({
+          connectionString,
+          schemaName: customSchema,
+        });
+
+        try {
+          // Should work with extension in same schema
+          await localSchemaVectorDB.createIndex({
+            indexName: testIndexName,
+            dimension: 3,
+          });
+
+          const testVectors = [[7, 8, 9]];
+          const ids = await localSchemaVectorDB.upsert({
+            indexName: testIndexName,
+            vectors: testVectors,
+          });
+
+          expect(ids).toHaveLength(1);
+        } finally {
+          // Clean up the local instance
+          await localSchemaVectorDB.disconnect();
+        }
+
+        // Clean up - reinstall in public for other tests
+        const cleanupClient = await vectorDB.pool.connect();
+        await cleanupClient.query(`DROP EXTENSION IF EXISTS vector CASCADE`);
+        await cleanupClient.query(`CREATE EXTENSION IF NOT EXISTS vector`);
+        cleanupClient.release();
+      });
+
+      it('should handle vector extension in a different schema than tables', async () => {
+        const client = await vectorDB.pool.connect();
+
+        // Create two schemas
+        await client.query(`CREATE SCHEMA IF NOT EXISTS another_schema`);
+        await client.query(`CREATE SCHEMA IF NOT EXISTS ${customSchema}`);
+
+        // Install vector extension in another_schema
+        await client.query(`DROP EXTENSION IF EXISTS vector CASCADE`);
+        await client.query(`CREATE EXTENSION vector SCHEMA another_schema`);
+        client.release();
+
+        // Create a new PgVector instance to detect the new extension location
+        const localSchemaVectorDB = new PgVector({
+          connectionString,
+          schemaName: customSchema,
+        });
+
+        try {
+          // Should detect and use vector extension from another_schema
+          await localSchemaVectorDB.createIndex({
+            indexName: testIndexName,
+            dimension: 3,
+          });
+
+          const testVectors = [[10, 11, 12]];
+          const ids = await localSchemaVectorDB.upsert({
+            indexName: testIndexName,
+            vectors: testVectors,
+          });
+
+          expect(ids).toHaveLength(1);
+        } finally {
+          // Clean up the local instance
+          await localSchemaVectorDB.disconnect();
+        }
+
+        // Clean up - reinstall in public for other tests
+        const cleanupClient = await vectorDB.pool.connect();
+        await cleanupClient.query(`DROP EXTENSION IF EXISTS vector CASCADE`);
+        await cleanupClient.query(`CREATE EXTENSION IF NOT EXISTS vector`);
+        cleanupClient.release();
+      });
+
+      it('should detect existing vector extension without trying to reinstall', async () => {
+        const client = await vectorDB.pool.connect();
+
+        // Ensure vector is installed in public
+        await client.query(`DROP EXTENSION IF EXISTS vector CASCADE`);
+        await client.query(`CREATE EXTENSION IF NOT EXISTS vector`);
+        await client.query(`CREATE SCHEMA IF NOT EXISTS ${customSchema}`);
+
+        // Verify extension exists
+        const result = await client.query(`
+          SELECT EXISTS (
+            SELECT 1 FROM pg_extension WHERE extname = 'vector'
+          ) as exists
+        `);
+        expect(result.rows[0].exists).toBe(true);
+
+        client.release();
+
+        // Create index should work without errors since extension exists
+        await customSchemaVectorDB.createIndex({
+          indexName: testIndexName,
+          dimension: 3,
+        });
+
+        // Verify the index was created successfully
+        const indexes = await customSchemaVectorDB.listIndexes();
+        expect(indexes).toContain(testIndexName);
+      });
+
+      it('should handle update operations with custom schema and qualified vector type', async () => {
+        const client = await vectorDB.pool.connect();
+        await client.query(`CREATE SCHEMA IF NOT EXISTS ${customSchema}`);
+        client.release();
+
+        await customSchemaVectorDB.createIndex({
+          indexName: testIndexName,
+          dimension: 3,
+        });
+
+        // Insert initial vector
+        const [id] = await customSchemaVectorDB.upsert({
+          indexName: testIndexName,
+          vectors: [[1, 2, 3]],
+          metadata: [{ original: true }],
+        });
+
+        // Update the vector
+        await customSchemaVectorDB.updateVector({
+          indexName: testIndexName,
+          id,
+          update: {
+            vector: [4, 5, 6],
+            metadata: { updated: true },
+          },
+        });
+
+        // Query and verify update
+        const results = await customSchemaVectorDB.query({
+          indexName: testIndexName,
+          queryVector: [4, 5, 6],
+          topK: 1,
+          includeVector: true,
+        });
+
+        expect(results[0].id).toBe(id);
+        expect(results[0].vector).toEqual([4, 5, 6]);
+        expect(results[0].metadata).toEqual({ updated: true });
       });
     });
   });

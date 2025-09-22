@@ -65,6 +65,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private setupSchemaPromise: Promise<void> | null = null;
   private installVectorExtensionPromise: Promise<void> | null = null;
   private vectorExtensionInstalled: boolean | undefined = undefined;
+  private vectorExtensionSchema: string | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
 
   constructor({
@@ -136,6 +137,55 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private getMutexByName(indexName: string) {
     if (!this.mutexesByName.has(indexName)) this.mutexesByName.set(indexName, new Mutex());
     return this.mutexesByName.get(indexName)!;
+  }
+
+  /**
+   * Detects which schema contains the vector extension
+   */
+  private async detectVectorExtensionSchema(client: pg.PoolClient): Promise<string | null> {
+    try {
+      const result = await client.query(`
+        SELECT n.nspname as schema_name
+        FROM pg_extension e
+        JOIN pg_namespace n ON e.extnamespace = n.oid
+        WHERE e.extname = 'vector'
+        LIMIT 1;
+      `);
+
+      if (result.rows.length > 0) {
+        this.vectorExtensionSchema = result.rows[0].schema_name;
+        this.logger.debug('Vector extension found in schema', { schema: this.vectorExtensionSchema });
+        return this.vectorExtensionSchema;
+      }
+
+      return null;
+    } catch (error) {
+      this.logger.debug('Could not detect vector extension schema', { error });
+      return null;
+    }
+  }
+
+  /**
+   * Gets the properly qualified vector type name
+   */
+  private getVectorTypeName(): string {
+    // If we know where the extension is, use that
+    if (this.vectorExtensionSchema) {
+      // If it's in pg_catalog, return vector
+      if (this.vectorExtensionSchema === 'pg_catalog') {
+        return 'vector';
+      }
+      // If it's in the current schema, return vector
+      if (this.vectorExtensionSchema === (this.schema || 'public')) {
+        return 'vector';
+      }
+      // Otherwise, qualify it with the schema where vector extension is installed
+      const validatedSchema = parseSqlIdentifier(this.vectorExtensionSchema, 'vector extension schema');
+      return `${validatedSchema}.vector`;
+    }
+
+    // Fallback to unqualified (will use search_path)
+    return 'vector';
   }
 
   private getTableName(indexName: string) {
@@ -222,11 +272,14 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       const { tableName } = this.getTableName(indexName);
 
+      // Get the properly qualified vector type
+      const vectorType = this.getVectorTypeName();
+
       const query = `
         WITH vector_scores AS (
           SELECT
             vector_id as id,
-            1 - (embedding <=> '${vectorStr}'::vector) as score,
+            1 - (embedding <=> '${vectorStr}'::${vectorType}) as score,
             metadata
             ${includeVector ? ', embedding' : ''}
           FROM ${tableName}
@@ -275,13 +328,16 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       await client.query('BEGIN');
       const vectorIds = ids || vectors.map(() => crypto.randomUUID());
 
+      // Get the properly qualified vector type
+      const vectorType = this.getVectorTypeName();
+
       for (let i = 0; i < vectors.length; i++) {
         const query = `
           INSERT INTO ${tableName} (vector_id, embedding, metadata)
-          VALUES ($1, $2::vector, $3::jsonb)
+          VALUES ($1, $2::${vectorType}, $3::jsonb)
           ON CONFLICT (vector_id)
           DO UPDATE SET
-            embedding = $2::vector,
+            embedding = $2::${vectorType},
             metadata = $3::jsonb
           RETURNING embedding::text
         `;
@@ -455,13 +511,27 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           // Setup schema if needed
           await this.setupSchema(client);
 
-          // Install vector extension first (needs to be in public schema)
+          // Install vector extension and detect where it is
           await this.installVectorExtension(client);
+
+          // Set search path to include both schemas if needed
+          if (
+            this.schema &&
+            this.vectorExtensionSchema &&
+            this.schema !== this.vectorExtensionSchema &&
+            this.vectorExtensionSchema !== 'pg_catalog'
+          ) {
+            await client.query(`SET search_path TO ${this.getSchemaName()}, "${this.vectorExtensionSchema}"`);
+          }
+
+          // Use the properly qualified vector type
+          const vectorType = this.getVectorTypeName();
+
           await client.query(`
           CREATE TABLE IF NOT EXISTS ${tableName} (
             id SERIAL PRIMARY KEY,
             vector_id TEXT UNIQUE NOT NULL,
-            embedding vector(${dimension}),
+            embedding ${vectorType}(${dimension}),
             metadata JSONB DEFAULT '{}'::jsonb
           );
         `);
@@ -579,46 +649,78 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     if (!this.installVectorExtensionPromise) {
       this.installVectorExtensionPromise = (async () => {
         try {
-          // First check if extension is already installed
-          const extensionCheck = await client.query(`
-            SELECT EXISTS (
-              SELECT 1 FROM pg_extension WHERE extname = 'vector'
-            );
-          `);
+          // First, detect if and where the extension is already installed
+          const existingSchema = await this.detectVectorExtensionSchema(client);
 
-          this.vectorExtensionInstalled = extensionCheck.rows[0].exists;
+          if (existingSchema) {
+            this.vectorExtensionInstalled = true;
+            this.vectorExtensionSchema = existingSchema;
+            this.logger.info(`Vector extension already installed in schema: ${existingSchema}`);
+            return;
+          }
 
-          if (!this.vectorExtensionInstalled) {
-            try {
-              await client.query('CREATE EXTENSION IF NOT EXISTS vector');
-              this.vectorExtensionInstalled = true;
-              this.logger.info('Vector extension installed successfully');
-            } catch {
-              this.logger.warn(
-                'Could not install vector extension. This requires superuser privileges. ' +
-                  'If the extension is already installed globally, you can ignore this warning.',
-              );
-              // Don't set vectorExtensionInstalled to false here since we're not sure if it failed
-              // due to permissions or if it's already installed globally
+          // Try to install the extension
+          try {
+            // First try to install in the custom schema if provided
+            if (this.schema && this.schema !== 'public') {
+              try {
+                await client.query(`CREATE EXTENSION IF NOT EXISTS vector SCHEMA ${this.getSchemaName()}`);
+                this.vectorExtensionInstalled = true;
+                this.vectorExtensionSchema = this.schema;
+                this.logger.info(`Vector extension installed in schema: ${this.schema}`);
+                return;
+              } catch (schemaError) {
+                this.logger.debug(`Could not install vector extension in schema ${this.schema}, trying public schema`, {
+                  error: schemaError,
+                });
+              }
             }
-          } else {
-            this.logger.debug('Vector extension already installed, skipping installation');
+
+            // Fall back to installing in public schema (or default)
+            await client.query('CREATE EXTENSION IF NOT EXISTS vector');
+
+            // Detect where it was actually installed
+            const installedSchema = await this.detectVectorExtensionSchema(client);
+            if (installedSchema) {
+              this.vectorExtensionInstalled = true;
+              this.vectorExtensionSchema = installedSchema;
+              this.logger.info(`Vector extension installed in schema: ${installedSchema}`);
+            }
+          } catch (error) {
+            this.logger.warn(
+              'Could not install vector extension. This requires superuser privileges. ' +
+                'If the extension is already installed, you can ignore this warning.',
+              { error },
+            );
+
+            // Even if installation failed, check if it exists somewhere
+            const existingSchema = await this.detectVectorExtensionSchema(client);
+            if (existingSchema) {
+              this.vectorExtensionInstalled = true;
+              this.vectorExtensionSchema = existingSchema;
+              this.logger.info(`Vector extension found in schema: ${existingSchema}`);
+            }
           }
         } catch (error) {
-          this.logger.error('Error checking vector extension status', { error });
-          // Reset both the promise and the flag so we can retry
+          this.logger.error('Error setting up vector extension', { error });
           this.vectorExtensionInstalled = undefined;
           this.installVectorExtensionPromise = null;
-          throw error; // Re-throw so caller knows it failed
+          throw error;
         } finally {
-          // Clear the promise after completion (success or failure)
           this.installVectorExtensionPromise = null;
         }
       })();
     }
 
-    // Wait for the installation process to complete
     await this.installVectorExtensionPromise;
+
+    // If extension still not found, throw error
+    if (!this.vectorExtensionInstalled) {
+      throw new Error(
+        'Vector extension not found. Please ensure pgvector is installed in your database. ' +
+          'Run: CREATE EXTENSION vector; with appropriate privileges.',
+      );
+    }
   }
 
   async listIndexes(): Promise<string[]> {
@@ -865,8 +967,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       let values = [id];
       let valueIndex = 2;
 
+      // Get the properly qualified vector type
+      const vectorType = this.getVectorTypeName();
+
       if (update.vector) {
-        updateParts.push(`embedding = $${valueIndex}::vector`);
+        updateParts.push(`embedding = $${valueIndex}::${vectorType}`);
         values.push(`[${update.vector.join(',')}]`);
         valueIndex++;
       }
