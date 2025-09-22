@@ -202,7 +202,7 @@ describe('Input and Output Processors with VNext Methods', () => {
         const result = await agentWithAbortProcessor.generateVNext('This should be aborted', {
           format,
         });
-
+        console.log('tripwire result', result);
         expect(result.tripwire).toBe(true);
 
         expect(result.tripwireReason).toBe('Tripwire triggered by abort-processor');
@@ -1535,7 +1535,7 @@ describe('Input and Output Processors with VNext Methods', () => {
         }, 40000);
       });
 
-      it.only('should work with streamVNext', async () => {
+      it('should work with streamVNext', async () => {
         const ideaSchema = z.object({
           idea: z.string().describe('The creative idea'),
           category: z.enum(['technology', 'business', 'art', 'science', 'other']).describe('Category of the idea'),
@@ -1570,29 +1570,30 @@ describe('Input and Output Processors with VNext Methods', () => {
           );
         }
 
-        // for await (const chunk of result.fullStream) {
-        //   if (!chunk.type.includes('delta')) {
-        //     console.log(chunk);
-        //     continue;
-        //   }
+        for await (const chunk of result.fullStream) {
+          const timestamp = new Date().getTime();
+          if (!chunk.type.includes('delta')) {
+            console.log(timestamp, chunk);
+            continue;
+          }
 
-        //   if (chunk.type === 'text-delta') {
-        //     const cyanColorCode = '\x1b[36m';
-        //     const resetColorCode = '\x1b[0m';
-        //     process.stdout.write(cyanColorCode);
-        //     process.stdout.write(chunk.payload.text);
-        //     process.stdout.write(resetColorCode);
-        //     continue;
-        //   }
+          if (chunk.type === 'text-delta') {
+            const cyanColorCode = '\x1b[36m';
+            const resetColorCode = '\x1b[0m';
+            process.stdout.write(cyanColorCode);
+            process.stdout.write(chunk.payload.text);
+            process.stdout.write(resetColorCode);
+            continue;
+          }
 
-        //   if (chunk.metadata?.from === 'structured-output') {
-        //     const redColorCode = '\x1b[31m';
-        //     const resetColorCode = '\x1b[0m';
-        //     process.stdout.write(redColorCode);
-        //     console.log('structuring agent chunk in main stream\n', chunk);
-        //     process.stdout.write(resetColorCode);
-        //   }
-        // }
+          if (chunk.metadata?.from === 'structured-output') {
+            const redColorCode = '\x1b[31m';
+            const resetColorCode = '\x1b[0m';
+            process.stdout.write(redColorCode);
+            console.log(timestamp, 'structuring agent chunk in main stream\n', chunk);
+            process.stdout.write(resetColorCode);
+          }
+        }
 
         for await (const chunk of result.objectStream) {
           console.log('object stream chunk', chunk);
