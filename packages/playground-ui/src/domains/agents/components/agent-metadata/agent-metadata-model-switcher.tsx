@@ -3,7 +3,7 @@ import { anthropicModels, googleModels, groqModels, openaiModels, xAIModels } fr
 import { useEffect, useState } from 'react';
 import { providerMapToIcon } from '../provider-map-icon';
 import { Icon } from '@/ds/icons';
-import { InfoIcon, TriangleAlertIcon } from 'lucide-react';
+import { InfoIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import Spinner from '@/components/ui/spinner';
 import { Select, SelectItem, SelectContent, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UpdateModelParams } from '@mastra/client-js';
@@ -143,9 +143,38 @@ export const AgentMetadataModelSwitcher = ({
     setShowSuggestions(false);
   };
 
+  const handleModelInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSelectedModel(e.target.value);
+
+    const isValidModel = allModels.some(m => m.model === e.target.value);
+
+    if (isValidModel) {
+      const model = allModels.find(m => m.model === e.target.value);
+      if (model) {
+        setSelectedProvider(model.provider);
+      }
+    }
+  };
+
+  const handleModelReset = () => {
+    setSelectedModel('');
+    setInfoMsg('');
+    if (autoSave) {
+      updateModel({
+        provider: selectedProvider as UpdateModelParams['provider'],
+        modelId: '',
+      });
+    }
+  };
+
   return (
     <div>
-      <div className="grid xl:grid-cols-[auto_1fr_auto] items-center gap-2">
+      <div
+        className={cn('grid  items-center gap-2', {
+          'xl:grid-cols-[auto_1fr_auto]': !autoSave,
+          'xl:grid-cols-[auto_1fr]': autoSave,
+        })}
+      >
         <Select value={selectedProvider} onValueChange={handleProviderChange} disabled={!!model?.provider}>
           <SelectTrigger>
             <SelectValue placeholder={selectProviderPlaceholder} />
@@ -163,22 +192,30 @@ export const AgentMetadataModelSwitcher = ({
         </Select>
 
         <Popover open={showSuggestions}>
-          <PopoverTrigger asChild>
-            <Input
-              id="model-input"
-              list="model-suggestions"
-              className="flex-1 w-full h-[2.25rem] rounded-md min-w-[12rem]"
-              type="text"
-              value={selectedModel}
-              onChange={e => {
-                setSelectedModel(e.target.value);
-              }}
-              onFocus={() => setShowSuggestions(showSuggestions => !showSuggestions)}
-              onBlur={handleModelInputBlur}
-              placeholder="Enter model name or select from suggestions..."
-              autoComplete="off"
-            />
-          </PopoverTrigger>
+          <div className="relative">
+            <PopoverTrigger asChild>
+              <Input
+                id="model-input"
+                list="model-suggestions"
+                className="flex-1 w-full h-[2.25rem] rounded-md min-w-[12rem]"
+                type="text"
+                value={selectedModel}
+                onChange={handleModelInputChange}
+                onFocus={() => setShowSuggestions(showSuggestions => !showSuggestions)}
+                onBlur={handleModelInputBlur}
+                placeholder="Enter model name or select from suggestions..."
+                autoComplete="off"
+              />
+            </PopoverTrigger>
+            {selectedModel && (
+              <button
+                className="flex items-center justify-center absolute top-0 right-0 text-icon3 hover:text-white hover:text-icon4 w-[2.25rem] h-[2.25rem] p-[.5rem] rounded-md"
+                onClick={handleModelReset}
+              >
+                <XIcon />
+              </button>
+            )}
+          </div>
 
           {filteredModels.length > 0 && (
             <PopoverContent
@@ -214,7 +251,7 @@ export const AgentMetadataModelSwitcher = ({
       {infoMsg && (
         <div
           className={cn(
-            'text-[0.75rem] text-icon3 flex gap-[.5rem] mt-[0.5rem]',
+            'text-[0.75rem] text-icon3 flex gap-[.5rem] mt-[0.5rem] ml-[.5rem]',
             '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:opacity-7 [&>svg]:flex-shrink-0 [&>svg]:mt-[0.1rem]',
           )}
         >
