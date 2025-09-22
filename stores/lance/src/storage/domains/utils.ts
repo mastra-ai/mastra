@@ -97,8 +97,6 @@ export function processResultWithTypeConversion(
     } else if (fieldTypeStr.includes('float64') && ['createdAt', 'updatedAt'].includes(key)) {
       processedResult[key] = new Date(processedResult[key]);
     }
-
-    console.log(key, 'processedResult', processedResult);
   }
 
   return processedResult;

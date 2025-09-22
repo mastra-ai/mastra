@@ -1,0 +1,35 @@
+---
+title: "リファレンス: Mastra.getAgents() | コア | Mastra ドキュメント"
+description: "Mastra の `Mastra.getAgents()` メソッドのドキュメント。設定済みのすべてのエージェントを取得します。"
+---
+
+# Mastra.getAgents()
+
+`.getAgents()` メソッドは、Mastra インスタンスに構成されているすべてのエージェントを取得するために使用します。
+
+## 使い方の例
+
+```typescript copy
+mastra.getAgents();
+```
+
+## パラメータ
+
+このメソッドはパラメータを受け取りません。
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "agents",
+      type: "TAgents",
+      description: "設定されたすべてのエージェントのレコード。キーはエージェント名、値はエージェントのインスタンスです。",
+    },
+  ]}
+/>
+
+## 関連
+
+- [エージェントの概要](../../docs/agents/overview.mdx)
+- [動的エージェント](../../docs/agents/dynamic-agents.mdx)

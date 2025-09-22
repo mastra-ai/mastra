@@ -1192,20 +1192,16 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
     },
     "type": "finish-step",
     "usage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
   },
   {
     "finishReason": "stop",
     "totalUsage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
     "type": "finish",
@@ -1248,20 +1244,16 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
     },
     "type": "finish-step",
     "usage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
   },
   {
     "finishReason": "stop",
     "totalUsage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
     "type": "finish",
@@ -1310,20 +1302,16 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
     },
     "type": "finish-step",
     "usage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
   },
   {
     "finishReason": "stop",
     "totalUsage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
     "type": "finish",
@@ -1474,6 +1462,7 @@ exports[`Loop Tests > AISDK v5 > result.textStream > should not include reasonin
 exports[`Loop Tests > AISDK v5 > result.toUIMessageStream > should mask error messages by default 1`] = `
 [
   {
+    "messageId": "msg-0",
     "type": "start",
   },
   {
@@ -1495,6 +1484,7 @@ exports[`Loop Tests > AISDK v5 > result.toUIMessageStream > should mask error me
 exports[`Loop Tests > AISDK v5 > result.toUIMessageStream > should send tool call, tool call stream start, tool call deltas, and tool result stream parts 1`] = `
 [
   {
+    "messageId": "msg-0",
     "type": "start",
   },
   {
@@ -1541,6 +1531,7 @@ exports[`Loop Tests > AISDK v5 > result.toUIMessageStream > should send tool cal
 exports[`Loop Tests > AISDK v5 > result.toUIMessageStream > should support custom error messages 1`] = `
 [
   {
+    "messageId": "msg-0",
     "type": "start",
   },
   {
@@ -1561,7 +1552,7 @@ exports[`Loop Tests > AISDK v5 > result.toUIMessageStream > should support custo
 
 exports[`Loop Tests > AISDK v5 > result.toUIMessageStreamResponse > should mask error messages by default 1`] = `
 [
-  "data: {"type":"start"}
+  "data: {"type":"start","messageId":"id-0"}
 
 ",
   "data: {"type":"start-step"}
@@ -1584,7 +1575,7 @@ exports[`Loop Tests > AISDK v5 > result.toUIMessageStreamResponse > should mask 
 
 exports[`Loop Tests > AISDK v5 > result.toUIMessageStreamResponse > should support custom error messages 1`] = `
 [
-  "data: {"type":"start"}
+  "data: {"type":"start","messageId":"id-0"}
 
 ",
   "data: {"type":"start-step"}
@@ -1862,20 +1853,16 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
     },
     "type": "finish-step",
     "usage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
   },
   {
     "finishReason": "stop",
     "totalUsage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
     "type": "finish",

@@ -221,10 +221,16 @@ const aiSdkResult = await agent.generateVNext("message for agent", {
       description: "Custom instructions that override the agent's default instructions for this execution.",
     },
     {
+      name: "system",
+      type: "string | string[] | CoreSystemMessage | SystemModelMessage | CoreSystemMessage[] | SystemModelMessage[]",
+      isOptional: true,
+      description: "Custom system message(s) to include in the prompt. Can be a single string, message object, or array of either. System messages provide additional context or behavior instructions that supplement the agent's main instructions.",
+    },
+    {
       name: "output",
       type: "Zod schema | JsonSchema7",
       isOptional: true,
-      description: "Schema for structured output generation (Zod schema or JSON Schema).",
+      description: "**Deprecated.** Use structuredOutput with maxSteps:1 to achieve the same thing. Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
     },
     {
       name: "memory",

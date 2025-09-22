@@ -45,10 +45,9 @@ export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, 
         const isValueItemArray = Array.isArray(value);
 
         return (
-          <>
+          <React.Fragment key={label + index}>
             <dt
               className={cn('text-icon3 text-[0.875rem] flex items-center gap-[2rem] justify-between min-h-[2.25rem] ')}
-              key={label + index}
             >
               <span
                 className={cn(
@@ -102,7 +101,7 @@ export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, 
                 </>
               )}
             </dd>
-          </>
+          </React.Fragment>
         );
       })}
     </dl>

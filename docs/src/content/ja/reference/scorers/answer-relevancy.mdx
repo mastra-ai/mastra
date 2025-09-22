@@ -1,0 +1,124 @@
+---
+title: "リファレンス: Answer Relevancy | Scorers | Mastra Docs"
+description: "入力クエリに対してLLM出力がどの程度適切に対応しているかを評価するMastraのAnswer Relevancy Scorerのドキュメント。"
+---
+
+
+
+# Answer Relevancy Scorer
+
+`createAnswerRelevancyScorer()`関数は、以下のプロパティを持つ単一のオプションオブジェクトを受け取ります：
+
+使用例については、[Answer Relevancy Examples](/examples/scorers/answer-relevancy)を参照してください。
+
+
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      required: true,
+      description: "関連性を評価するために使用されるモデルの設定。",
+    },
+    {
+      name: "uncertaintyWeight",
+      type: "number",
+      required: false,
+      defaultValue: "0.3",
+      description: "スコアリングにおける「不確実」な判定に与えられる重み（0-1）。",
+    },
+    {
+      name: "scale",
+      type: "number",
+      required: false,
+      defaultValue: "1",
+      description: "最大スコア値。",
+    },
+  ]}
+/>
+
+この関数はMastraScorerクラスのインスタンスを返します。`.run()`メソッドは他のスコアラーと同じ入力を受け取りますが（[MastraScorerリファレンス](./mastra-scorer)を参照）、戻り値には以下に記載されているLLM固有のフィールドが含まれます。
+
+
+
+## .run() の戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "実行のID（任意）。",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "関連性スコア（0からスケール、デフォルト0-1）",
+    },
+    {
+      name: "preprocessPrompt",
+      type: "string",
+      description: "前処理ステップでLLMに送信されるプロンプト（任意）。",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "object",
+      description: "抽出された文を含むオブジェクト: { statements: string[] }",
+    },
+    {
+      name: "analyzePrompt",
+      type: "string",
+      description: "分析ステップでLLMに送信されるプロンプト（任意）。",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description: "結果を含むオブジェクト: { results: Array<{ result: 'yes' | 'unsure' | 'no', reason: string }> }",
+    },
+    {
+      name: "generateReasonPrompt",
+      type: "string",
+      description: "理由生成ステップでLLMに送信されるプロンプト（任意）。",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "スコアの説明。",
+    },
+  ]}
+/>
+
+
+
+## スコアリング詳細
+
+スコアラーは、完全性と詳細レベルを考慮してクエリと回答の整合性を通じて関連性を評価しますが、事実の正確性は評価しません。
+
+### スコアリングプロセス
+
+1. **ステートメント前処理:**
+   - コンテキストを保持しながら出力を意味のあるステートメントに分割します。
+2. **関連性分析:**
+   - 各ステートメントは以下のように評価されます：
+     - "yes"：直接一致に対する完全な重み
+     - "unsure"：近似一致に対する部分的重み（デフォルト：0.3）
+     - "no"：無関係なコンテンツに対するゼロ重み
+3. **スコア計算:**
+   - `((direct + uncertainty * partial) / total_statements) * scale`
+
+### スコア解釈
+
+- 1.0：完璧な関連性 - 完全かつ正確
+- 0.7-0.9：高い関連性 - 軽微なギャップや不正確さ
+- 0.4-0.6：中程度の関連性 - 重要なギャップ
+- 0.1-0.3：低い関連性 - 重大な問題
+- 0.0：関連性なし - 不正確またはトピック外
+
+
+
+## 関連項目
+
+- [Faithfulness Scorer](./faithfulness)

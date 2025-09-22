@@ -1,83 +1,75 @@
 ---
-title: "Cursor/Windsurfでの使用 | はじめに | Mastra ドキュメント"
-description: "Mastra MCPドキュメントサーバーをIDEで使用して、エージェント型のMastraエキスパートに変える方法を学びましょう。"
+title: "MCP ドキュメントサーバー | はじめに | Mastra ドキュメント"
+description: "IDE で Mastra MCP ドキュメントサーバーを使い、IDE をエージェント型の Mastra エキスパートに変える方法を学びましょう。"
 ---
 
 import YouTube from "@/components/youtube";
+import { Tabs } from "nextra/components";
 
-# エージェントIDEのためのMastraツール
 
-`@mastra/mcp-docs-server`は、Cursor、Windsurf、Cline、またはMCPをサポートする他のIDEでMastraの完全なナレッジベースに直接アクセスできるようにします。
+# Mastra Docs Server
 
-これはドキュメント、コード例、技術ブログ投稿/機能アナウンス、パッケージの変更履歴にアクセスでき、あなたのIDEがMastraを使って構築するのを助けることができます。
+`@mastra/mcp-docs-server` パッケージは、MCP プロトコル経由で Mastra のドキュメント、コード例、ブログ記事、変更履歴など、フルなナレッジベースへ直接アクセスできるようにします。Cursor、Windsurf、Cline、Claude Code をはじめ、MCP をサポートするあらゆるツールで動作します。
 
 <YouTube id="vciV57lF0og" />
 
-MCPサーバーツールは、エージェントがMastra関連のタスクを完了するために必要な特定の情報を照会できるように設計されています - 例えば：エージェントにMastra機能を追加する、新しいプロジェクトの足場を作る、または何かがどのように機能するかを理解するのを助けるなど。
+これらのツールは、エージェントに機能を追加する場合、新しいプロジェクトのスキャフォールディングを行う場合、あるいは仕組みを調べる場合などに、エージェントが正確かつタスクに特化した情報を取得できるよう設計されています。
 
 ## 仕組み
 
-IDEにインストールされると、プロンプトを書いて、エージェントがMastraについてすべてを理解していると想定できます。
+インストールが完了したら、プロンプトを書くだけで、エージェントはMastraについてすべてを理解している前提で動作します。
 
 ### 機能を追加する
 
-- 「エージェントに評価を追加してテストを書いてください」
-- 「次のことを行うワークフローを作成してください `[タスク]`」
-- 「エージェントが `[サードパーティAPI]` にアクセスできるようにする新しいツールを作成してください」
+- 「エージェントに eval を追加して、テストも作成して」
+- 「`[task]` を実行するワークフローを書いて」
+- 「エージェントが `[3rd party API]` にアクセスできる新しいツールを作って」
 
-### 統合について質問する
+### 連携についての質問
 
-- 「MastraはAI SDKと連携しますか？
-  `[React/Svelte/など]` プロジェクトでどのように使用できますか？」
-- 「MCPに関する最新のMastraニュースは何ですか？」
-- 「Mastraは `[プロバイダー]` の音声APIをサポートしていますか？コードでの使用例を示してください。」
+- 「Mastra は AI SDK と連携できますか？
+  `[React/Svelte/etc]` プロジェクトではどう使えばいいですか？」
+- 「MCP に関する Mastra の最新情報はありますか？」
+- 「Mastra は `[provider]` の音声・音声認識 API をサポートしていますか？ 自分のコードでの使用例を見せてもらえますか？」
 
 ### 既存のコードをデバッグまたは更新する
 
-- 「エージェントのメモリに関するバグが発生しています。最近関連する変更やバグ修正はありましたか？」
-- 「Mastraでワーキングメモリはどのように動作し、`[タスク]` を実行するためにどのように使用できますか？期待通りに動作していないようです。」
-- 「新しいワークフロー機能があると聞きました。それを説明し、`[ワークフロー]` を更新して使用するようにしてください。」
+- 「エージェントのメモリでバグに遭遇しています。最近、関連する変更やバグ修正はありましたか？」
+- 「Mastra のワーキングメモリはどのように振る舞い、`[task]` を行うにはどう使えばよいですか？ 想定どおりに動作していないようです。」
+- 「新しいワークフロー機能を見ました。まず説明してから、`[workflow]` をそれらを使うように更新してください。」
 
-**その他** - 質問がある場合は、IDEに尋ねて調べてもらいましょう。
+**そのほか** - 質問がある場合は、IDE に聞いて調べてもらってください。
 
 ## 自動インストール
 
-MCPドキュメントサーバーは、`create-mastra`コマンドで`-m`フラグを使用してインストールできます。
-
-```bash npm2yarn
-npm create mastra@latest --default -m cursor
-```
-
-mcpオプションには以下が含まれます：
-
-- `cursor-global` - MCPサーバーをグローバルにインストール
-- `windsurf` - WindsurfにMCPサーバーをインストール
-- `cursor` - CursorにMCPサーバーをインストール
-- `vscode` - VSCodeにMCPサーバーをインストール
-
-または、以下の手順に従ってMCPサーバーを手動でインストールすることもできます。
-
-`pnpm create mastra@latest`を実行し、プロンプトが表示されたらCursorまたはWindsurfを選択してMCPサーバーをインストールします。他のIDEの場合、またはすでにMastraプロジェクトがある場合は、以下の手順に従ってMCPサーバーをインストールしてください。
+**新規**プロジェクトでは、インストール時に [対話型](/docs/getting-started/installation#interactive)セットアップのプロンプトから追加するか、[非対話型](/docs/getting-started/installation#non-interactive)コマンドで `-m` フラグを指定して追加できます。
 
 ## 手動インストール
 
-- **Cursor**: プロジェクトルートの `.cursor/mcp.json` またはグローバル設定の場合は `~/.cursor/mcp.json` を編集してください
-- **Windsurf**: `~/.codeium/windsurf/mcp_config.json` を編集してください（グローバル設定のみ対応）
-- **VSCode**: プロジェクトルートの `~/.vscode/mcp.json` を編集してください  
-  以下の設定を追加します:
+既存のプロジェクトに MCP Docs Server を追加するには、手動でインストールします。
 
-import { Tabs } from "nextra/components";
+- **Cursor**: プロジェクトのルートにある `.cursor/mcp.json`、またはグローバル設定の場合は `~/.cursor/mcp.json` を編集します
+- **Windsurf**: `~/.codeium/windsurf/mcp_config.json` を編集します（グローバル設定のみ対応）
+- **VSCode**: 作成された `.vscode` フォルダをワークスペースの最上位に移動するか、そのフォルダを新しいワークスペースのルートとして開きます。プロジェクトのルートにある `~/.vscode/mcp.json` を編集し、以下の設定を追加します:
+- **Claude Code**: 下記のとおり `claude mcp add` コマンドを実行します。
 
 ### MacOS/Linux
 
-<Tabs items={["cursor", "windsurf", "vscode"]}>
+{/*
+LLM コンテキスト: この Tabs コンポーネントは、MacOS/Linux 上の各種 IDE 向けの MCP サーバー設定を表示します。
+各タブには、該当する IDE で Mastra MCP docs サーバーをセットアップするために必要な JSON 設定が示されています。
+タブにより、ユーザーは自分の IDE（Cursor、Windsurf、VSCode）に合った設定形式を簡単に見つけられます。
+各タブには、その IDE の MCP 設定に必要な正確な JSON 構造とファイルパスが記載されています。
+*/}
+
+<Tabs items={["Cursor", "Windsurf", "VSCode", "Claude Code"]}>
   <Tabs.Tab>
 ```json
 {
   "mcpServers": {
     "mastra": {
       "command": "npx",
-      "args": ["-y", "@mastra/mcp-docs-server@latest"]
+      "args": ["-y", "@mastra/mcp-docs-server"]
     }
   }
 }
@@ -89,7 +81,7 @@ import { Tabs } from "nextra/components";
   "mcpServers": {
     "mastra": {
       "command": "npx",
-      "args": ["-y", "@mastra/mcp-docs-server@latest"]
+      "args": ["-y", "@mastra/mcp-docs-server"]
     }
   }
 }
@@ -101,25 +93,38 @@ import { Tabs } from "nextra/components";
   "servers": {
     "mastra": {
       "command": "npx",
-      "args": ["-y", "@mastra/mcp-docs-server@latest"]
+      "args": ["-y", "@mastra/mcp-docs-server"],
       "type": "stdio"
     }
   }
 }
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash
+claude mcp add mastra -- npx -y @mastra/mcp-docs-server
 ```
   </Tabs.Tab>
 </Tabs>
 
 ### Windows
 
-<Tabs items={["cursor", "windsurf", "vscode"]}>
+{/*
+LLM コンテキスト: この Tabs コンポーネントは、Windows 上の複数の IDE 向け MCP サーバー設定を表示します。
+各タブには、Mastra MCP docs サーバーをセットアップするために必要な Windows 固有の JSON 設定が示されています。
+タブでは、Windows ユーザーが IDE に応じた正しい設定形式を見つけられるよう、直接の npx ではなく cmd を使う方法を提示します。
+各タブは、その IDE の MCP 設定に必要な Windows 専用のコマンド構成を示します。
+最新の Windsurf と Cursor では直接の npx コマンドが機能しますが、VSCode で修正済みかどうかは未確認です。
+*/}
+
+<Tabs items={["Cursor", "Windsurf", "VSCode", "Claude Code"]}>
   <Tabs.Tab>
 ```json
 {
   "mcpServers": {
     "mastra": {
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server@latest"]
+      "command": "npx",
+      "args": ["-y", "@mastra/mcp-docs-server"]
     }
   }
 }
@@ -130,8 +135,8 @@ import { Tabs } from "nextra/components";
 {
   "mcpServers": {
     "mastra": {
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server@latest"]
+      "command": "npx",
+      "args": ["-y", "@mastra/mcp-docs-server"]
     }
   }
 }
@@ -143,11 +148,16 @@ import { Tabs } from "nextra/components";
   "servers": {
     "mastra": {
       "command": "cmd",
-      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server@latest"],
+      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server"],
       "type": "stdio"
     }
   }
 }
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash
+claude mcp add mastra -- npx -y @mastra/mcp-docs-server
 ```
   </Tabs.Tab>
 </Tabs>
@@ -156,106 +166,102 @@ import { Tabs } from "nextra/components";
 
 ### Cursor
 
-自動インストールを行った場合、Cursorを開くと左下にポップアップが表示され、Mastra Docs MCP Serverを有効にするよう促されます。
+自動インストールを行った場合は、左下の Cursor を開くと、Mastra Docs MCP Server を有効化するよう促すポップアップが表示されます。
 
 <img
   src="/image/enable-mastra-docs-cursor.png"
-  alt="Mastra docs MCP server を有効にするよう促す cursor のダイアグラム"
+  alt="Mastra Docs MCP Server を有効化するよう促す Cursor のプロンプトを示す図"
   width={800}
 />
 
-手動インストールの場合は、以下の手順を行ってください。
+手動インストールの場合は、次の手順を実行してください。
 
-1. Cursor の設定を開く
-2. MCP 設定に移動する
-3. Mastra MCP server の「enable」をクリックする
-4. すでにエージェントチャットを開いている場合は、チャットを再度開くか新しいチャットを開始して MCP server を利用してください
+1. Cursor の設定を開きます。
+2. MCP の設定に移動します。
+3. Mastra MCP Server の「有効化」をクリックします。
+4. すでにエージェントのチャットを開いている場合は、MCP Server を使うために、そのチャットを開き直すか新しいチャットを開始してください。
 
 ### Windsurf
 
-1. Windsurf を完全に終了し、再度開く
-2. ツール呼び出しが失敗し始めた場合は、Windsurf の MCP 設定に移動し、MCP server を再起動してください。これはよくある Windsurf MCP の問題であり、Mastra とは関係ありません。現時点では Cursor の MCP 実装の方が Windsurf よりも安定しています。
+1. Windsurf を完全に終了し、再度起動します。
+2. ツール呼び出しが失敗し始めた場合は、Windsurf の MCP 設定から MCP サーバーを再起動してください。これは Windsurf の MCP でよくある問題で、Mastra とは無関係です。現時点では、Cursor の MCP 実装のほうが Windsurf より安定しています。
 
-どちらの IDE でも、初回は npm からパッケージをダウンロードする必要があるため、MCP server の起動に少し時間がかかる場合があります。
+いずれの IDE でも、初回は npm からパッケージをダウンロードする必要があるため、MCP サーバーの起動に数分かかる場合があります。
 
 ### VSCode
 
-1. VSCode の設定を開く
-2. MCP 設定に移動する
-3. Chat > MCP オプションの「enable」をクリックする
-
-<br />
+1. VSCode の設定を開きます。
+2. MCP の設定に移動します。
+3. Chat > MCP のオプションで「有効化（enable）」をクリックします。
 
 <img
   src="/image/vscode-mcp-setting.png"
-  alt="MCP を有効にするための VSCode の設定ページ"
+  alt="VSCode の設定ページで MCP を有効化する"
   width={800}
   className="rounded-lg"
 />
 
-MCP は VSCode ではエージェントモードでのみ動作します。エージェントモードに入ったら、`mcp.json` ファイルを開き、「start」ボタンをクリックしてください。
+MCP は VSCode の Agent モードでのみ動作します。Agent モードに入ったら、`mcp.json` ファイルを開き、「開始（start）」ボタンをクリックします。「開始（start）」ボタンは、`mcp.json` を含む `.vscode` フォルダーがワークスペースのルート、またはエディター内のファイルエクスプローラーの最上位にある場合にのみ表示されます。
 
-<br />
 <img
   src="/image/vscode-start-mcp.png"
-  alt="MCP を有効にするための VSCode の設定ページ"
+  alt="VSCode で MCP を有効化する設定ページ"
   width={800}
   className="rounded-lg"
 />
 
-mcp server を起動した後、copilot ペインのツールボタンをクリックすると利用可能なツールが表示されます。
+MCP サーバーを起動したら、Copilot ペインの「ツール」ボタンをクリックして利用可能なツールを確認します。
 
-<br />
 <img
   src="/image/vscode-mcp-running.png"
-  alt="利用可能なツールを表示する VSCode のツールページ"
+  alt="利用可能なツールを確認するための VSCode のツールページ"
   width={800}
   className="rounded-lg"
 />
 
-## 利用可能なエージェントツール
+## 利用できるエージェントツール
 
 ### ドキュメント
 
-Mastraの完全なドキュメントにアクセス：
+Mastra のドキュメント一式へアクセス:
 
-- 入門 / インストール
+- はじめに / インストール
 - ガイドとチュートリアル
-- APIリファレンス
+- API リファレンス
 
 ### 例
 
-コード例を閲覧：
+コード例を閲覧:
 
-- 完全なプロジェクト構造
+- 完成済みのプロジェクト構成
 - 実装パターン
 - ベストプラクティス
 
-### ブログ投稿
+### ブログ記事
 
-ブログを検索：
+ブログ内を検索:
 
-- 技術的な投稿
-- 変更履歴と機能のお知らせ
-- AIニュースとアップデート
+- 技術関連の投稿
+- 変更履歴と機能に関するお知らせ
+- AIのニュースやアップデート
 
 ### パッケージの変更
 
-Mastraと`@mastra/*`パッケージの更新を追跡：
+Mastra および `@mastra/*` パッケージの更新内容を追跡:
 
 - バグ修正
 - 新機能
 - 破壊的変更
 
-## 一般的な問題
+## よくある問題
 
 1. **サーバーが起動しない**
 
-   - npxがインストールされ、正常に動作していることを確認する
-   - 競合するMCPサーバーがないか確認する
-   - 設定ファイルの構文を確認する
-   - Windowsの場合、Windows専用の設定を使用していることを確認する
+   - [npx](https://docs.npmjs.com/cli/v11/commands/npx) がインストールされ、正常に動作しているか確認してください。
+   - 競合している MCP サーバーがないか確認してください。
+   - 設定ファイルの文法を確認してください。
+   - Windows の場合は、Windows 向けの設定を使用していることを確認してください。
 
-2. **ツール呼び出しが失敗する**
-   - MCPサーバーやIDEを再起動する
-   - IDEを最新バージョンに更新する
+2. **ツール呼び出しに失敗する**
+   - MCP サーバーや IDE を再起動してください。
+   - IDE を最新バージョンに更新してください。

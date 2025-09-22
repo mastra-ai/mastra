@@ -24,14 +24,26 @@ import type { ModelManagerModelConfig } from '../../stream/types';
 import { delay } from '../../utils';
 
 import type { ModelLoopStreamArgs } from './model.loop.types';
+import type { MastraModelOptions } from './shared.types';
 
 export class MastraLLMVNext extends MastraBase {
   #models: ModelManagerModelConfig[];
   #mastra?: Mastra;
+  #options?: MastraModelOptions;
   #firstModel: ModelManagerModelConfig;
 
-  constructor({ mastra, models }: { mastra?: Mastra; models: ModelManagerModelConfig[] }) {
+  constructor({
+    mastra,
+    models,
+    options,
+  }: {
+    mastra?: Mastra;
+    models: ModelManagerModelConfig[];
+    options?: MastraModelOptions;
+  }) {
     super({ name: 'aisdk' });
+
+    this.#options = options;
 
     if (mastra) {
       this.#mastra = mastra;
@@ -130,7 +142,7 @@ export class MastraLLMVNext extends MastraBase {
     ];
   }
 
-  stream<Tools extends ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
+  stream<Tools extends ToolSet, OUTPUT extends OutputSchema = undefined>({
     stopWhen = stepCountIs(5),
     maxSteps,
     tools = {} as Tools,
@@ -186,6 +198,7 @@ export class MastraLLMVNext extends MastraBase {
         threadId,
         resourceId,
       },
+      tracingPolicy: this.#options?.tracingPolicy,
     });
 
     try {
@@ -294,9 +307,11 @@ export class MastraLLMVNext extends MastraBase {
               attributes: {
                 finishReason: props?.finishReason,
                 usage: {
-                  promptTokens: props?.totalUsage?.inputTokens,
-                  completionTokens: props?.totalUsage?.outputTokens,
+                  inputTokens: props?.totalUsage?.inputTokens,
+                  outputTokens: props?.totalUsage?.outputTokens,
                   totalTokens: props?.totalUsage?.totalTokens,
+                  reasoningTokens: props?.totalUsage?.reasoningTokens,
+                  cachedInputTokens: props?.totalUsage?.cachedInputTokens,
                 },
               },
             });

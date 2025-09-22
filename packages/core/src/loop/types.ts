@@ -52,7 +52,7 @@ export type LoopConfig = {
   prepareStep?: PrepareStepFunction<any>;
 };
 
-export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
+export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = {
   models: ModelManagerModelConfig[];
   logger?: IMastraLogger;
   mode?: 'generate' | 'stream';
@@ -80,17 +80,18 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   llmAISpan?: AISpan<AISpanType.LLM_GENERATION>;
 };
 
-export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = LoopOptions<
+export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = LoopOptions<
   Tools,
   OUTPUT
 > & {
+  messageId: string;
   runId: string;
   startTimestamp: number;
   modelStreamSpan: Span;
   _internal: StreamInternal;
 };
 
-export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
+export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = {
   messageId: string;
   controller: ReadableStreamDefaultController<ChunkType>;
   writer: WritableStream<ChunkType>;

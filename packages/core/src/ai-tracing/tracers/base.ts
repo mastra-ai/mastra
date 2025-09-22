@@ -20,6 +20,7 @@ import type {
   CreateSpanOptions,
   AITracing,
   CustomSamplerOptions,
+  AnyExportedAISpan,
 } from '../types';
 import { SamplingStrategyType, AITracingEventType } from '../types';
 
@@ -43,6 +44,7 @@ export abstract class BaseAITracing extends MastraBase implements AITracing {
       sampling: config.sampling ?? { type: SamplingStrategyType.ALWAYS },
       exporters: config.exporters ?? [],
       processors: config.processors ?? [],
+      includeInternalSpans: config.includeInternalSpans ?? false,
     };
   }
 
@@ -161,6 +163,11 @@ export abstract class BaseAITracing extends MastraBase implements AITracing {
    * This ensures all spans emit events regardless of implementation
    */
   private wireSpanLifecycle<TType extends AISpanType>(span: AISpan<TType>): void {
+    // bypass wire up if internal span and not includeInternalSpans
+    if (!this.config.includeInternalSpans && span.isInternal) {
+      return;
+    }
+
     // Store original methods
     const originalEnd = span.end.bind(span);
     const originalUpdate = span.update.bind(span);
@@ -219,37 +226,42 @@ export abstract class BaseAITracing extends MastraBase implements AITracing {
   /**
    * Process a span through all processors
    */
-  private processSpan(span: AnyAISpan): AnyAISpan | null {
-    let processedSpan: AnyAISpan | null = span;
-
+  private processSpan(span?: AnyAISpan): AnyAISpan | undefined {
     for (const processor of this.processors) {
-      if (!processedSpan) {
+      if (!span) {
         break;
       }
 
       try {
-        processedSpan = processor.process(processedSpan);
+        span = processor.process(span);
       } catch (error) {
         this.logger.error(`[AI Tracing] Processor error [name=${processor.name}]`, error);
         // Continue with other processors
       }
     }
 
-    return processedSpan;
+    return span;
   }
 
   // ============================================================================
   // Event-driven Export Methods
   // ============================================================================
 
+  getSpanForExport(span: AnyAISpan): AnyExportedAISpan | undefined {
+    if (!span.isValid) return undefined;
+    if (span.isInternal && !this.config.includeInternalSpans) return undefined;
+
+    const processedSpan = this.processSpan(span);
+    return processedSpan?.exportSpan(this.config.includeInternalSpans);
+  }
+
   /**
    * Emit a span started event
    */
   protected emitSpanStarted(span: AnyAISpan): void {
-    // Process the span before emitting
-    const processedSpan = this.processSpan(span);
-    if (processedSpan) {
-      this.exportEvent({ type: AITracingEventType.SPAN_STARTED, span: processedSpan }).catch(error => {
+    const exportedSpan = this.getSpanForExport(span);
+    if (exportedSpan) {
+      this.exportEvent({ type: AITracingEventType.SPAN_STARTED, exportedSpan }).catch(error => {
         this.logger.error('[AI Tracing] Failed to export span_started event', error);
       });
     }
@@ -259,10 +271,9 @@ export abstract class BaseAITracing extends MastraBase implements AITracing {
    * Emit a span ended event (called automatically when spans end)
    */
   protected emitSpanEnded(span: AnyAISpan): void {
-    // Process the span through all processors
-    const processedSpan = this.processSpan(span);
-    if (processedSpan) {
-      this.exportEvent({ type: AITracingEventType.SPAN_ENDED, span: processedSpan }).catch(error => {
+    const exportedSpan = this.getSpanForExport(span);
+    if (exportedSpan) {
+      this.exportEvent({ type: AITracingEventType.SPAN_ENDED, exportedSpan }).catch(error => {
         this.logger.error('[AI Tracing] Failed to export span_ended event', error);
       });
     }
@@ -272,10 +283,9 @@ export abstract class BaseAITracing extends MastraBase implements AITracing {
    * Emit a span updated event
    */
   protected emitSpanUpdated(span: AnyAISpan): void {
-    // Process the span before emitting
-    const processedSpan = this.processSpan(span);
-    if (processedSpan) {
-      this.exportEvent({ type: AITracingEventType.SPAN_UPDATED, span: processedSpan }).catch(error => {
+    const exportedSpan = this.getSpanForExport(span);
+    if (exportedSpan) {
+      this.exportEvent({ type: AITracingEventType.SPAN_UPDATED, exportedSpan }).catch(error => {
         this.logger.error('[AI Tracing] Failed to export span_updated event', error);
       });
     }
