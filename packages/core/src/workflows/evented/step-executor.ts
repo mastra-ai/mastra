@@ -5,6 +5,7 @@ import type { RuntimeContext } from '../../di';
 import type { PubSub } from '../../events';
 import { RegisteredLogger } from '../../logger';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { getStepResult } from '../step';
 
 export class StepExecutor extends MastraBase {
   protected mastra?: Mastra;
@@ -64,18 +65,7 @@ export class StepExecutor extends MastraBase {
         runCount,
         resumeData: params.resumeData,
         getInitData: () => stepResults?.input as any,
-        getStepResult: (step: any) => {
-          if (!step?.id) {
-            return null;
-          }
-
-          const result = stepResults[step.id];
-          if (result?.status === 'success') {
-            return result.output;
-          }
-
-          return null;
-        },
+        getStepResult: getStepResult.bind(this, stepResults),
         suspend: async (suspendPayload: any): Promise<any> => {
           suspended = { payload: { ...suspendPayload, __workflow_meta: { runId, path: [step.id] } } };
         },
@@ -219,18 +209,7 @@ export class StepExecutor extends MastraBase {
       runCount,
       resumeData: resumeData,
       getInitData: () => stepResults?.input as any,
-      getStepResult: (step: any) => {
-        if (!step?.id) {
-          return null;
-        }
-
-        const result = stepResults[step.id];
-        if (result?.status === 'success') {
-          return result.output;
-        }
-
-        return null;
-      },
+      getStepResult: getStepResult.bind(this, stepResults),
       suspend: async (_suspendPayload: any): Promise<any> => {
         throw new Error('Not implemented');
       },
@@ -285,18 +264,7 @@ export class StepExecutor extends MastraBase {
         runCount,
         resumeData: params.resumeData,
         getInitData: () => stepResults?.input as any,
-        getStepResult: (step: any) => {
-          if (!step?.id) {
-            return null;
-          }
-
-          const result = stepResults[step.id];
-          if (result?.status === 'success') {
-            return result.output;
-          }
-
-          return null;
-        },
+        getStepResult: getStepResult.bind(this, stepResults),
         suspend: async (_suspendPayload: any): Promise<any> => {
           throw new Error('Not implemented');
         },
@@ -355,18 +323,7 @@ export class StepExecutor extends MastraBase {
         runCount,
         resumeData: params.resumeData,
         getInitData: () => stepResults?.input as any,
-        getStepResult: (step: any) => {
-          if (!step?.id) {
-            return null;
-          }
-
-          const result = stepResults[step.id];
-          if (result?.status === 'success') {
-            return result.output;
-          }
-
-          return null;
-        },
+        getStepResult: getStepResult.bind(this, stepResults),
         suspend: async (_suspendPayload: any): Promise<any> => {
           throw new Error('Not implemented');
         },
