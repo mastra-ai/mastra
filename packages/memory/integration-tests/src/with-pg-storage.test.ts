@@ -252,7 +252,7 @@ describe('Memory with PostgresStore Integration', () => {
             messageRange: 2,
             indexConfig: {
               type: 'hnsw',
-              metric: 'inner',
+              metric: 'dotproduct',
               hnsw: {
                 m: 16,
                 efConstruction: 64,
@@ -264,6 +264,12 @@ describe('Memory with PostgresStore Integration', () => {
 
       const threadId = randomUUID();
       const resourceId = randomUUID();
+
+      // Create thread first
+      await hnswMemory.createThread({
+        threadId,
+        resourceId,
+      });
 
       // Save a message to trigger index creation
       await hnswMemory.saveMessages({
@@ -316,6 +322,12 @@ describe('Memory with PostgresStore Integration', () => {
       const threadId = randomUUID();
       const resourceId = randomUUID();
 
+      // Create thread first
+      await ivfflatMemory.createThread({
+        threadId,
+        resourceId,
+      });
+
       // Save a message to trigger index creation
       await ivfflatMemory.saveMessages({
         messages: [
@@ -363,6 +375,12 @@ describe('Memory with PostgresStore Integration', () => {
 
       const threadId = randomUUID();
       const resourceId = randomUUID();
+
+      // Create thread first
+      await flatMemory.createThread({
+        threadId,
+        resourceId,
+      });
 
       // Save a message to trigger index creation
       await flatMemory.saveMessages({
