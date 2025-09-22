@@ -16,6 +16,7 @@ import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
+import { getStepResult } from './step';
 import type {
   DefaultEngineType,
   Emitter,
@@ -477,19 +478,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           currentSpan: sleepSpan,
         },
         getInitData: () => stepResults?.input as any,
-        getStepResult: (step: any) => {
-          if (!step?.id) {
-            return null;
-          }
-
-          const result = stepResults[step.id];
-          if (result?.status === 'success') {
-            return result.output;
-          }
-
-          return null;
-        },
-
+        getStepResult: getStepResult.bind(this, stepResults),
         // TODO: this function shouldn't have suspend probably?
         suspend: async (_suspendPayload: any): Promise<any> => {},
         bail: () => {},
@@ -591,19 +580,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           currentSpan: sleepUntilSpan,
         },
         getInitData: () => stepResults?.input as any,
-        getStepResult: (step: any) => {
-          if (!step?.id) {
-            return null;
-          }
-
-          const result = stepResults[step.id];
-          if (result?.status === 'success') {
-            return result.output;
-          }
-
-          return null;
-        },
-
+        getStepResult: getStepResult.bind(this, stepResults),
         // TODO: this function shouldn't have suspend probably?
         suspend: async (_suspendPayload: any): Promise<any> => {},
         bail: () => {},
@@ -862,18 +839,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           tracingContext: { currentSpan: stepAISpan },
           getInitData: () => stepResults?.input as any,
-          getStepResult: (step: any) => {
-            if (!step?.id) {
-              return null;
-            }
-
-            const result = stepResults[step.id];
-            if (result?.status === 'success') {
-              return result.output;
-            }
-
-            return null;
-          },
+          getStepResult: getStepResult.bind(this, stepResults),
           suspend: async (suspendPayload: any): Promise<any> => {
             executionContext.suspendedPaths[step.id] = executionContext.executionPath;
             suspended = { payload: suspendPayload };
@@ -1294,19 +1260,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 currentSpan: evalSpan,
               },
               getInitData: () => stepResults?.input as any,
-              getStepResult: (step: any) => {
-                if (!step?.id) {
-                  return null;
-                }
-
-                const result = stepResults[step.id];
-                if (result?.status === 'success') {
-                  return result.output;
-                }
-
-                return null;
-              },
-
+              getStepResult: getStepResult.bind(this, stepResults),
               // TODO: this function shouldn't have suspend probably?
               suspend: async (_suspendPayload: any): Promise<any> => {},
               bail: () => {},
@@ -1590,14 +1544,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           currentSpan: evalSpan,
         },
         getInitData: () => stepResults?.input as any,
-        getStepResult: (step: any) => {
-          if (!step?.id) {
-            return null;
-          }
-
-          const result = stepResults[step.id];
-          return result?.status === 'success' ? result.output : null;
-        },
+        getStepResult: getStepResult.bind(this, stepResults),
         suspend: async (_suspendPayload: any): Promise<any> => {},
         bail: () => {},
         abort: () => {

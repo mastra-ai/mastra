@@ -6,13 +6,21 @@ import type { TracingContext } from '../ai-tracing';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import { createWorkflow, createStep } from '../workflows';
-import type { ScoringSamplingConfig } from './types';
+import type { ScoringSamplingConfig, ScorerRunInputForAgent, ScorerRunOutputForAgent } from './types';
 
 interface ScorerStepDefinition {
   name: string;
   definition: any;
   isPromptObject: boolean;
 }
+
+// Predefined type shortcuts for common scorer patterns
+type ScorerTypeShortcuts = {
+  agent: {
+    input: ScorerRunInputForAgent;
+    output: ScorerRunOutputForAgent;
+  };
+};
 
 // Pipeline scorer
 // TInput and TRunOutput establish the type contract for the entire scorer pipeline,
@@ -25,6 +33,13 @@ interface ScorerConfig<TName extends string = string, TInput = any, TRunOutput =
     model: MastraLanguageModel;
     instructions: string;
   };
+  // Optional type specification - can be enum shortcut or explicit schemas
+  type?:
+    | keyof ScorerTypeShortcuts
+    | {
+        input: z.ZodSchema<TInput>;
+        output: z.ZodSchema<TRunOutput>;
+      };
 }
 
 // Standardized input type for all pipelines
@@ -179,6 +194,10 @@ class MastraScorer<
       | GenerateScorePromptObject<any, TInput, TRunOutput>
     > = new Map(),
   ) {}
+
+  get type() {
+    return this.config.type;
+  }
 
   get name(): TName {
     return this.config.name;
@@ -583,13 +602,36 @@ class MastraScorer<
   }
 }
 
+// Overload: enum type shortcuts (e.g., type: 'agent')
+export function createScorer<TName extends string, TType extends keyof ScorerTypeShortcuts>(
+  config: Omit<ScorerConfig<TName, any, any>, 'type'> & {
+    type: TType;
+  },
+): MastraScorer<TName, ScorerTypeShortcuts[TType]['input'], ScorerTypeShortcuts[TType]['output'], {}>;
+
+// Overload: infer TInput/TRunOutput from provided Zod schemas in config.type
+export function createScorer<
+  TName extends string,
+  TInputSchema extends z.ZodTypeAny,
+  TOutputSchema extends z.ZodTypeAny,
+>(
+  config: Omit<ScorerConfig<TName, z.infer<TInputSchema>, z.infer<TOutputSchema>>, 'type'> & {
+    type: { input: TInputSchema; output: TOutputSchema };
+  },
+): MastraScorer<TName, z.infer<TInputSchema>, z.infer<TOutputSchema>, {}>;
+
+// Overload: explicit generics (backwards compatible)
 export function createScorer<TInput = any, TRunOutput = any, TName extends string = string>(
   config: ScorerConfig<TName, TInput, TRunOutput>,
-): MastraScorer<TName, TInput, TRunOutput, {}> {
-  return new MastraScorer<TName, TInput, TRunOutput, {}>({
+): MastraScorer<TName, TInput, TRunOutput, {}>;
+
+// Implementation
+export function createScorer(config: any): any {
+  return new MastraScorer({
     name: config.name,
     description: config.description,
     judge: config.judge,
+    type: config.type,
   });
 }
 

@@ -3248,17 +3248,6 @@ describe('Workflow', () => {
           return { value: 'step1-result' };
         });
 
-        const step2Action = vi.fn().mockImplementation(async ({ getStepResult }) => {
-          // Test accessing previous step result with type
-          const step1Result = getStepResult(step1);
-          expect(step1Result).toEqual({ value: 'step1-result' });
-
-          const failedStep = getStepResult(nonExecutedStep);
-          expect(failedStep).toBe(null);
-
-          return { value: 'step2-result' };
-        });
-
         const step1 = createStep({
           id: 'step1',
           execute: step1Action,
@@ -3267,7 +3256,18 @@ describe('Workflow', () => {
         });
         const step2 = createStep({
           id: 'step2',
-          execute: step2Action,
+          execute: async ({ getStepResult }) => {
+            // Test accessing previous step result with type
+            const step1Result = getStepResult(step1);
+            expect(step1Result).toEqual({ value: 'step1-result' });
+            const step1ResultFromString = getStepResult('step1');
+            expect(step1ResultFromString).toEqual({ value: 'step1-result' });
+
+            const failedStep = getStepResult(nonExecutedStep);
+            expect(failedStep).toBe(null);
+
+            return { value: 'step2-result' };
+          },
           inputSchema: z.object({ value: z.string() }),
           outputSchema: z.object({ value: z.string() }),
         });
@@ -3291,7 +3291,7 @@ describe('Workflow', () => {
         const result = await run.start({ inputData: { inputValue: 'test-input' } });
 
         expect(step1Action).toHaveBeenCalled();
-        expect(step2Action).toHaveBeenCalled();
+        // expect(step2Action).toHaveBeenCalled();
         expect(result.steps).toEqual({
           input: { inputValue: 'test-input' },
           step1: {
@@ -4255,6 +4255,7 @@ describe('Workflow', () => {
           id: 'step1',
           execute: step1Action,
           inputSchema: z.object({}),
+          resumeSchema: z.object({ count: z.number() }),
           outputSchema: z.object({ count: z.number() }),
         });
         const step2 = createStep({
