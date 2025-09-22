@@ -390,13 +390,8 @@ const results = await vectorStore.query({
 ## Testing
 
 ```bash
-# Run tests
+# Run tests (DuckDB runs embedded, no setup required)
 pnpm test
-
-# Run tests with Docker
-pnpm pretest  # Start DuckDB in Docker
-pnpm test
-pnpm posttest # Stop Docker
 
 # Run specific tests
 pnpm test duckdb-vector.test.ts
@@ -435,9 +430,11 @@ Performance on MacBook Pro M1 with 16GB RAM:
 ### Common Issues
 
 1. **VSS Extension Not Found**
-   ```bash
-   # The extension is installed automatically, but if issues:
-   docker-compose up -d  # Ensures proper setup
+   ```typescript
+   // The extension is installed automatically when creating the store
+   const vectorStore = new DuckDBVector({
+     extensions: ['vss'], // Ensure VSS is in extensions list
+   });
    ```
 
 2. **Memory Issues with Large Datasets**

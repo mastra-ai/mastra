@@ -1,14 +1,32 @@
 packages:
-  - "packages/*"
-  - "deployers/*"
-  - "stores/*"
-  - "voice/*"
-  - "workflows/*"
-  - "pubsub/*"
-  - "client-sdks/*"
-  - "integrations/*"
-  - "examples/dane"
-  - "auth/*"
-  - "observability/*"
-  - "explorations/longmemeval"
-  - "explorations/agent-builder-gh-repro"
+  - packages/*
+  - deployers/*
+  - stores/*
+  - voice/*
+  - workflows/*
+  - pubsub/*
+  - client-sdks/*
+  - integrations/*
+  - examples/dane
+  - auth/*
+  - observability/*
+  - explorations/longmemeval
+  - explorations/agent-builder-gh-repro
+
+ignoredBuiltDependencies:
+  - '@clerk/shared'
+  - '@firebase/util'
+  - bufferutil
+  - core-js
+  - couchbase
+  - duckdb
+  - esbuild
+  - inngest-cli
+  - msw
+  - onnxruntime-node
+  - protobufjs
+  - sharp
+  - sqlite3
+  - unrs-resolver
+  - utf-8-validate
+  - workerd
