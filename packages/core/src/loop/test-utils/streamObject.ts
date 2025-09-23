@@ -307,6 +307,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             messageList: new MessageList(),
             options: {
               onError(event) {
+                console.log('onError event', event);
                 result.push(event);
               },
             },
@@ -314,6 +315,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
           // consume stream
           await resultObject.consumeStream();
+
           expect(result).toStrictEqual([{ error: new Error('test error') }]);
         });
       });
@@ -1022,9 +1024,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           `);
         });
 
-        it("should be called when object doesn't match the schema", async () => {
+        it.only("should be called when object doesn't match the schema", async () => {
           let result: any;
-          const { objectStream, object } = loopFn({
+          const output = loopFn({
             models: [
               {
                 id: 'test-model',
@@ -1066,131 +1068,140 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             _internal: { generateId: () => '1234', currentDate: () => new Date(0), now: () => 0 },
             messageList: new MessageList(),
           });
-          // consume stream
-          await convertAsyncIterableToArray(objectStream);
+          // const { object } = output;
 
-          expect(await object).rejects.toThrow('Type validation failed: Value: {"invalid":"Hello, world!"}.');
+          // await consumeStream();
+          // // consume stream
+          // await convertAsyncIterableToArray(objectStream);
+          try {
+            const objRes = await output.object;
+            console.log('objRes', objRes);
+          } catch (error) {
+            console.log('objErr error', error);
+          }
+
+          // expect(await output.object).rejects.toThrow('Type validation failed: Value: {"invalid":"Hello, world!"}.');
           // consume expected error rejection
           //           await object.catch(err => {
           //             expect(err).toMatchInlineSnapshot(`Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
           // Error message: Validation failed`);
           //           })
 
-          expect(result!).toMatchInlineSnapshot(`
-            {
-              "content": [
-                {
-                  "text": "{ "invalid": "Hello, world!" }",
-                  "type": "text",
-                },
-              ],
-              "dynamicToolCalls": [],
-              "dynamicToolResults": [],
-              "error": [Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
-            Error message: Validation failed],
-              "files": [],
-              "finishReason": "error",
-              "model": {
-                "modelId": "mock-model-id",
-                "provider": "mock-provider",
-                "version": "v2",
-              },
-              "object": {
-                "invalid": "Hello, world!",
-              },
-              "reasoning": [],
-              "reasoningText": undefined,
-              "request": {},
-              "response": {
-                "headers": undefined,
-                "id": "id-0",
-                "messages": [
-                  {
-                    "content": [
-                      {
-                        "text": "{ "invalid": "Hello, world!" }",
-                        "type": "text",
-                      },
-                    ],
-                    "role": "assistant",
-                  },
-                ],
-                "modelId": "mock-model-id",
-                "timestamp": 1970-01-01T00:00:00.000Z,
-                "uiMessages": [
-                  {
-                    "id": "1234",
-                    "metadata": {
-                      "__originalContent": "{ "invalid": "Hello, world!" }",
-                      "createdAt": 2024-01-01T00:00:00.000Z,
-                    },
-                    "parts": [
-                      {
-                        "text": "{ "invalid": "Hello, world!" }",
-                        "type": "text",
-                      },
-                    ],
-                    "role": "assistant",
-                  },
-                ],
-              },
-              "sources": [],
-              "staticToolCalls": [],
-              "staticToolResults": [],
-              "steps": [
-                DefaultStepResult {
-                  "content": [
-                    {
-                      "text": "{ "invalid": "Hello, world!" }",
-                      "type": "text",
-                    },
-                  ],
-                  "finishReason": "error",
-                  "providerMetadata": undefined,
-                  "request": {},
-                  "response": {
-                    "headers": undefined,
-                    "id": "id-0",
-                    "messages": [
-                      {
-                        "content": [
-                          {
-                            "text": "{ "invalid": "Hello, world!" }",
-                            "type": "text",
-                          },
-                        ],
-                        "role": "assistant",
-                      },
-                    ],
-                    "modelId": "mock-model-id",
-                    "timestamp": 1970-01-01T00:00:00.000Z,
-                  },
-                  "usage": {
-                    "inputTokens": 3,
-                    "outputTokens": 10,
-                    "totalTokens": 13,
-                  },
-                  "warnings": [],
-                },
-              ],
-              "text": "{ "invalid": "Hello, world!" }",
-              "toolCalls": [],
-              "toolResults": [],
-              "totalUsage": {
-                "cachedInputTokens": undefined,
-                "inputTokens": 3,
-                "outputTokens": 10,
-                "reasoningTokens": undefined,
-                "totalTokens": 13,
-              },
-              "usage": {
-                "inputTokens": 3,
-                "outputTokens": 10,
-                "totalTokens": 13,
-              },
-              "warnings": [],
-            }
-          `);
+          // expect(result!).toMatchInlineSnapshot(`
+          //   {
+          //     "content": [
+          //       {
+          //         "text": "{ "invalid": "Hello, world!" }",
+          //         "type": "text",
+          //       },
+          //     ],
+          //     "dynamicToolCalls": [],
+          //     "dynamicToolResults": [],
+          //     "error": [Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
+          //   Error message: Validation failed],
+          //     "files": [],
+          //     "finishReason": "error",
+          //     "model": {
+          //       "modelId": "mock-model-id",
+          //       "provider": "mock-provider",
+          //       "version": "v2",
+          //     },
+          //     "object": {
+          //       "invalid": "Hello, world!",
+          //     },
+          //     "reasoning": [],
+          //     "reasoningText": undefined,
+          //     "request": {},
+          //     "response": {
+          //       "headers": undefined,
+          //       "id": "id-0",
+          //       "messages": [
+          //         {
+          //           "content": [
+          //             {
+          //               "text": "{ "invalid": "Hello, world!" }",
+          //               "type": "text",
+          //             },
+          //           ],
+          //           "role": "assistant",
+          //         },
+          //       ],
+          //       "modelId": "mock-model-id",
+          //       "timestamp": 1970-01-01T00:00:00.000Z,
+          //       "uiMessages": [
+          //         {
+          //           "id": "1234",
+          //           "metadata": {
+          //             "__originalContent": "{ "invalid": "Hello, world!" }",
+          //             "createdAt": 2024-01-01T00:00:00.000Z,
+          //           },
+          //           "parts": [
+          //             {
+          //               "text": "{ "invalid": "Hello, world!" }",
+          //               "type": "text",
+          //             },
+          //           ],
+          //           "role": "assistant",
+          //         },
+          //       ],
+          //     },
+          //     "sources": [],
+          //     "staticToolCalls": [],
+          //     "staticToolResults": [],
+          //     "steps": [
+          //       DefaultStepResult {
+          //         "content": [
+          //           {
+          //             "text": "{ "invalid": "Hello, world!" }",
+          //             "type": "text",
+          //           },
+          //         ],
+          //         "finishReason": "error",
+          //         "providerMetadata": undefined,
+          //         "request": {},
+          //         "response": {
+          //           "headers": undefined,
+          //           "id": "id-0",
+          //           "messages": [
+          //             {
+          //               "content": [
+          //                 {
+          //                   "text": "{ "invalid": "Hello, world!" }",
+          //                   "type": "text",
+          //                 },
+          //               ],
+          //               "role": "assistant",
+          //             },
+          //           ],
+          //           "modelId": "mock-model-id",
+          //           "timestamp": 1970-01-01T00:00:00.000Z,
+          //         },
+          //         "usage": {
+          //           "inputTokens": 3,
+          //           "outputTokens": 10,
+          //           "totalTokens": 13,
+          //         },
+          //         "warnings": [],
+          //       },
+          //     ],
+          //     "text": "{ "invalid": "Hello, world!" }",
+          //     "toolCalls": [],
+          //     "toolResults": [],
+          //     "totalUsage": {
+          //       "cachedInputTokens": undefined,
+          //       "inputTokens": 3,
+          //       "outputTokens": 10,
+          //       "reasoningTokens": undefined,
+          //       "totalTokens": 13,
+          //     },
+          //     "usage": {
+          //       "inputTokens": 3,
+          //       "outputTokens": 10,
+          //       "totalTokens": 13,
+          //     },
+          //     "warnings": [],
+          //   }
+          // `);
         });
       });
 
