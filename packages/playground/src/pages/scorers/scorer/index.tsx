@@ -117,7 +117,7 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
       value: (scorerEntities || []).map(entity => ({
         id: entity.id,
         name: entity.name || entity.id,
-        path: `${entity.type === 'AGENT' ? '/agents' : '/workflows'}/${entity.id}`,
+        path: `${entity.type === 'AGENT' ? '/agents' : '/workflows'}/${entity.name}`,
       })),
     },
   ];
