@@ -1,5 +1,24 @@
 # @mastra/core
 
+## 0.18.0-alpha.3
+
+### Patch Changes
+
+- feat: implement trace scoring with batch processing capabilities ([#8033](https://github.com/mastra-ai/mastra/pull/8033))
+
+- Fix PostgreSQL vector index recreation issue and add optional index configuration ([#8020](https://github.com/mastra-ai/mastra/pull/8020))
+  - Fixed critical bug where memory vector indexes were unnecessarily recreated on every operation
+  - Added support for configuring vector index types (HNSW, IVFFlat, flat) and parameters
+
+- Fix navigating between scores and entity types ([#8129](https://github.com/mastra-ai/mastra/pull/8129))
+
+- Delayed streamVNext breaking change notice by 1 week ([#8121](https://github.com/mastra-ai/mastra/pull/8121))
+
+- Tool hitl ([#8084](https://github.com/mastra-ai/mastra/pull/8084))
+
+- Updated dependencies [[`b61b8e0`](https://github.com/mastra-ai/mastra/commit/b61b8e0b0e93a7e6e9d82e6f0b620bb919a20bdb)]:
+  - @mastra/schema-compat@0.11.4-alpha.0
+
 ## 0.18.0-alpha.2
 
 ### Minor Changes

@@ -1,5 +1,17 @@
 # @mastra/braintrust
 
+## 0.1.4-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#8098](https://github.com/mastra-ai/mastra/pull/8098))
+  - Updated dependency [`braintrust@^0.3.8` ↗︎](https://www.npmjs.com/package/braintrust/v/0.3.8) (from `^0.3.6`, in `dependencies`)
+
+- Fix out of order spans for braintrust exporter ([#7660](https://github.com/mastra-ai/mastra/pull/7660))
+
+- Updated dependencies [[`4b339b8`](https://github.com/mastra-ai/mastra/commit/4b339b8141c20d6a6d80583c7e8c5c05d8c19492), [`c591dfc`](https://github.com/mastra-ai/mastra/commit/c591dfc1e600fae1dedffe239357d250e146378f), [`1920c5c`](https://github.com/mastra-ai/mastra/commit/1920c5c6d666f687785c73021196aa551e579e0d), [`b6a3b65`](https://github.com/mastra-ai/mastra/commit/b6a3b65d830fa0ca7754ad6481661d1f2c878f21), [`af3abb6`](https://github.com/mastra-ai/mastra/commit/af3abb6f7c7585d856e22d27f4e7d2ece2186b9a)]:
+  - @mastra/core@0.18.0-alpha.3
+
 ## 0.1.4-alpha.0
 
 ### Patch Changes
