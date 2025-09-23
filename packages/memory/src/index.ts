@@ -138,7 +138,7 @@ export class Memory extends MastraMemory {
 
     if (config?.semanticRecall && selectBy?.vectorSearchString && this.vector) {
       const { embeddings, dimension } = await this.embedMessageContent(selectBy.vectorSearchString!);
-      const { indexName } = await this.createEmbeddingIndex(dimension);
+      const { indexName } = await this.createEmbeddingIndex(dimension, config);
 
       await Promise.all(
         embeddings.map(async embedding => {
@@ -664,7 +664,7 @@ export class Memory extends MastraMemory {
           const { embeddings, chunks, dimension } = await this.embedMessageContent(textForEmbedding);
 
           if (typeof indexName === `undefined`) {
-            indexName = this.createEmbeddingIndex(dimension).then(result => result.indexName);
+            indexName = this.createEmbeddingIndex(dimension, config).then(result => result.indexName);
           }
 
           if (typeof this.vector === `undefined`) {
