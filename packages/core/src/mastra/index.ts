@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
 import { getAllAITracing, setupAITracing, shutdownAITracingRegistry } from '../ai-tracing';
 import type { ObservabilityRegistryConfig } from '../ai-tracing';
@@ -175,7 +176,7 @@ export class Mastra<
       }
       return id;
     }
-    return crypto.randomUUID();
+    return randomUUID();
   }
 
   public setIdGenerator(idGenerator: MastraIdGenerator) {

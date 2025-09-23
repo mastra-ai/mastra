@@ -1,5 +1,5 @@
-import { randomUUID } from 'crypto';
 import EventEmitter from 'events';
+import { randomUUID } from 'node:crypto';
 import type { ReadableStream, WritableStream } from 'node:stream/web';
 import { TransformStream } from 'node:stream/web';
 import { z } from 'zod';
@@ -466,7 +466,7 @@ export class Workflow<
    * @returns The workflow instance for chaining
    */
   sleep(duration: number | ExecuteFunction<z.infer<TPrevSchema>, number, any, any, TEngineType>) {
-    const id = `sleep_${this.#mastra?.generateId() || randomUUID()}`;
+    const id = `sleep_${this.#mastra?.generateId()}`;
 
     const opts: StepFlowEntry<TEngineType> =
       typeof duration === 'function'
@@ -568,7 +568,7 @@ export class Workflow<
     if (typeof mappingConfig === 'function') {
       // @ts-ignore
       const mappingStep: any = createStep({
-        id: stepOptions?.id || `mapping_${this.#mastra?.generateId() || randomUUID()}`,
+        id: stepOptions?.id || `mapping_${this.#mastra?.generateId()}`,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         execute: mappingConfig as any,
@@ -609,7 +609,7 @@ export class Workflow<
     );
 
     const mappingStep: any = createStep({
-      id: stepOptions?.id || `mapping_${this.#mastra?.generateId() || randomUUID()}`,
+      id: stepOptions?.id || `mapping_${this.#mastra?.generateId()}`,
       inputSchema: z.object({}),
       outputSchema: z.object({}),
       execute: async ctx => {
