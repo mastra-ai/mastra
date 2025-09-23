@@ -198,6 +198,9 @@ export class DuckDBVector extends MastraVector {
     try {
       const { indexName, dimension, metric = this.config.metric } = params;
 
+      // Validate index name to prevent SQL injection
+      this.validateIdentifier(indexName, 'Index name');
+
       // Validate index doesn't exist
       const existing = await this.execute(conn, 'SELECT name FROM vector_indexes WHERE name = ?', [indexName]);
 
@@ -217,10 +220,11 @@ export class DuckDBVector extends MastraVector {
 
       // Create vector table for this index
       const tableName = `vectors_${indexName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+      const escapedTableName = this.escapeIdentifier(tableName);
       await this.execute(
         conn,
         `
-        CREATE TABLE IF NOT EXISTS ${tableName} (
+        CREATE TABLE IF NOT EXISTS ${escapedTableName} (
           id VARCHAR PRIMARY KEY,
           vector FLOAT[${dimension}],
           content TEXT,
@@ -239,11 +243,13 @@ export class DuckDBVector extends MastraVector {
         dot: 'ip',
       };
 
+      const hnswIndexName = `idx_${tableName}_hnsw`;
+      const escapedIndexName = this.escapeIdentifier(hnswIndexName);
       await this.execute(
         conn,
         `
-        CREATE INDEX idx_${tableName}_hnsw
-        ON ${tableName}
+        CREATE INDEX ${escapedIndexName}
+        ON ${escapedTableName}
         USING HNSW (vector)
         WITH (metric = '${metricMap[metric] || 'cosine'}', M = 16, ef_construction = 128)
       `,
@@ -276,7 +282,12 @@ export class DuckDBVector extends MastraVector {
 
     try {
       const { indexName, vectors, metadata = [], ids } = params;
+
+      // Validate index name
+      this.validateIdentifier(indexName, 'Index name');
+
       const tableName = this.getTableName(indexName);
+      const escapedTableName = this.escapeIdentifier(tableName);
 
       // Generate IDs if not provided
       const vectorIds = ids || vectors.map(() => crypto.randomUUID());
@@ -302,7 +313,7 @@ export class DuckDBVector extends MastraVector {
         await this.execute(
           conn,
           `
-          INSERT INTO ${tableName} (id, vector, content, metadata, updated_at)
+          INSERT INTO ${escapedTableName} (id, vector, content, metadata, updated_at)
           VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
           ON CONFLICT (id) DO UPDATE SET
             vector = EXCLUDED.vector,
@@ -318,7 +329,7 @@ export class DuckDBVector extends MastraVector {
         conn,
         `
         UPDATE vector_indexes
-        SET total_vectors = (SELECT COUNT(*) FROM ${tableName}),
+        SET total_vectors = (SELECT COUNT(*) FROM ${escapedTableName}),
             updated_at = CURRENT_TIMESTAMP
         WHERE name = ?
       `,
@@ -344,7 +355,11 @@ export class DuckDBVector extends MastraVector {
     try {
       const { indexName, queryVector, topK = 10, filter, includeVector = false } = params;
 
+      // Validate index name
+      this.validateIdentifier(indexName, 'Index name');
+
       const tableName = this.getTableName(indexName);
+      const escapedTableName = this.escapeIdentifier(tableName);
 
       // Validate and normalize query vector
       validateVector(queryVector, this.config.dimensions);
@@ -377,7 +392,7 @@ export class DuckDBVector extends MastraVector {
           metadata,
           content,
           ${similarityFunc}(vector, ?::FLOAT[${this.config.dimensions}]) as score
-        FROM ${tableName}
+        FROM ${escapedTableName}
         ${whereClause}
         ORDER BY score ${orderDirection}
         LIMIT ?
@@ -458,10 +473,15 @@ export class DuckDBVector extends MastraVector {
 
     try {
       const { indexName } = params;
+
+      // Validate index name
+      this.validateIdentifier(indexName, 'Index name');
+
       const tableName = this.getTableName(indexName);
+      const escapedTableName = this.escapeIdentifier(tableName);
 
       // Drop table and index
-      await this.execute(conn, `DROP TABLE IF EXISTS ${tableName}`);
+      await this.execute(conn, `DROP TABLE IF EXISTS ${escapedTableName}`);
 
       // Remove from indexes table
       await this.execute(conn, 'DELETE FROM vector_indexes WHERE name = ?', [indexName]);
@@ -479,7 +499,12 @@ export class DuckDBVector extends MastraVector {
     try {
       const { indexName, id, update } = params;
       const { metadata, vector } = update;
+
+      // Validate index name
+      this.validateIdentifier(indexName, 'Index name');
+
       const tableName = this.getTableName(indexName);
+      const escapedTableName = this.escapeIdentifier(tableName);
 
       const updates: string[] = [];
       const updateParams: any[] = [];
@@ -504,7 +529,7 @@ export class DuckDBVector extends MastraVector {
       await this.execute(
         conn,
         `
-        UPDATE ${tableName}
+        UPDATE ${escapedTableName}
         SET ${updates.join(', ')}
         WHERE id = ?
       `,
@@ -523,7 +548,12 @@ export class DuckDBVector extends MastraVector {
 
     try {
       const { indexName, id } = params;
+
+      // Validate index name
+      this.validateIdentifier(indexName, 'Index name');
+
       const tableName = this.getTableName(indexName);
+      const escapedTableName = this.escapeIdentifier(tableName);
 
       // Handle both single ID and array of IDs
       const ids = Array.isArray(id) ? id : [id];
@@ -532,7 +562,7 @@ export class DuckDBVector extends MastraVector {
       await this.execute(
         conn,
         `
-        DELETE FROM ${tableName}
+        DELETE FROM ${escapedTableName}
         WHERE id IN (${placeholders})
       `,
         ids,
@@ -543,7 +573,7 @@ export class DuckDBVector extends MastraVector {
         conn,
         `
         UPDATE vector_indexes
-        SET total_vectors = (SELECT COUNT(*) FROM ${tableName}),
+        SET total_vectors = (SELECT COUNT(*) FROM ${escapedTableName}),
             updated_at = CURRENT_TIMESTAMP
         WHERE name = ?
       `,
@@ -561,7 +591,11 @@ export class DuckDBVector extends MastraVector {
     const conn = await this.getConnection();
 
     try {
+      // Validate index name
+      this.validateIdentifier(indexName, 'Index name');
+
       const tableName = this.getTableName(indexName);
+      const escapedTableName = this.escapeIdentifier(tableName);
       const { source, mapping = {}, filter, batchSize = 10000 } = options;
 
       // Build column mapping
@@ -575,7 +609,7 @@ export class DuckDBVector extends MastraVector {
 
       // Import from Parquet
       const sql = `
-        INSERT INTO ${tableName} (id, vector, content, metadata)
+        INSERT INTO ${escapedTableName} (id, vector, content, metadata)
         SELECT
           ${idCol} as id,
           ${vectorCol} as vector,
@@ -592,7 +626,7 @@ export class DuckDBVector extends MastraVector {
         conn,
         `
         UPDATE vector_indexes
-        SET total_vectors = (SELECT COUNT(*) FROM ${tableName}),
+        SET total_vectors = (SELECT COUNT(*) FROM ${escapedTableName}),
             updated_at = CURRENT_TIMESTAMP
         WHERE name = ?
       `,
@@ -617,9 +651,13 @@ export class DuckDBVector extends MastraVector {
     const conn = await this.getConnection();
 
     try {
+      // Validate index name
+      this.validateIdentifier(indexName, 'Index name');
+
       const { vectorWeight = 0.7 } = options;
 
       const tableName = this.getTableName(indexName);
+      const escapedTableName = this.escapeIdentifier(tableName);
       const textWeight = 1 - vectorWeight;
 
       // Validate and normalize query vector
@@ -629,41 +667,60 @@ export class DuckDBVector extends MastraVector {
       // Get similarity function
       const similarityFunc = this.getSimilarityFunction();
 
-      // Hybrid search query
-      const sql = `
-        WITH vector_scores AS (
+      // Try hybrid search with FTS first, fall back to vector-only if FTS not available
+      let results;
+      try {
+        // Hybrid search query with FTS
+        const sql = `
+          WITH vector_scores AS (
+            SELECT
+              id,
+              ${similarityFunc}(vector, ?::FLOAT[${this.config.dimensions}]) as vector_score
+            FROM ${escapedTableName}
+          ),
+          text_scores AS (
+            SELECT
+              id,
+              fts_main_${tableName}.score as text_score
+            FROM fts_main_${tableName}(?)
+          ),
+          combined_scores AS (
+            SELECT
+              COALESCE(v.id, t.id) as id,
+              COALESCE(v.vector_score * ?, 0) + COALESCE(t.text_score * ?, 0) as final_score
+            FROM vector_scores v
+            FULL OUTER JOIN text_scores t ON v.id = t.id
+          )
+          SELECT
+            c.id,
+            vec.metadata,
+            vec.content,
+            c.final_score as score
+          FROM combined_scores c
+          JOIN ${escapedTableName} vec ON c.id = vec.id
+          ORDER BY c.final_score DESC
+          LIMIT ${options.topK || 10}
+        `;
+
+        const queryParams = [`[${normalizedQuery.join(',')}]`, textQuery, vectorWeight, textWeight];
+        results = await this.execute(conn, sql, queryParams);
+      } catch (error: any) {
+        // FTS not available, fall back to vector search only
+        console.warn('FTS not available, falling back to vector search only');
+        const sql = `
           SELECT
             id,
-            ${similarityFunc}(vector, ?::FLOAT[${this.config.dimensions}]) as vector_score
-          FROM ${tableName}
-        ),
-        text_scores AS (
-          SELECT
-            id,
-            fts_main_${tableName}.score as text_score
-          FROM fts_main_${tableName}(?)
-        ),
-        combined_scores AS (
-          SELECT
-            COALESCE(v.id, t.id) as id,
-            COALESCE(v.vector_score * ?, 0) + COALESCE(t.text_score * ?, 0) as final_score
-          FROM vector_scores v
-          FULL OUTER JOIN text_scores t ON v.id = t.id
-        )
-        SELECT
-          c.id,
-          vec.metadata,
-          vec.content,
-          c.final_score as score
-        FROM combined_scores c
-        JOIN ${tableName} vec ON c.id = vec.id
-        ORDER BY c.final_score DESC
-        LIMIT 10
-      `;
+            metadata,
+            content,
+            ${similarityFunc}(vector, ?::FLOAT[${this.config.dimensions}]) as score
+          FROM ${escapedTableName}
+          ORDER BY score DESC
+          LIMIT ${options.topK || 10}
+        `;
 
-      const queryParams = [`[${normalizedQuery.join(',')}]`, textQuery, vectorWeight, textWeight];
-
-      const results = await this.execute(conn, sql, queryParams);
+        const queryParams = [`[${normalizedQuery.join(',')}]`];
+        results = await this.execute(conn, sql, queryParams);
+      }
 
       return results.map(row => ({
         id: row.id,
@@ -701,6 +758,48 @@ export class DuckDBVector extends MastraVector {
    */
   private getTableName(indexName: string): string {
     return `vectors_${indexName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+  }
+
+  /**
+   * Escape SQL identifier to prevent SQL injection
+   * DuckDB uses double quotes for identifiers, and escapes internal quotes by doubling
+   */
+  private escapeIdentifier(identifier: string): string {
+    // Replace any double quotes with doubled quotes, then wrap in double quotes
+    return `"${identifier.replace(/"/g, '""')}"`;
+  }
+
+  /**
+   * Validate identifier to prevent SQL injection attacks
+   */
+  private validateIdentifier(identifier: string, type: string = 'Identifier'): void {
+    if (!identifier || typeof identifier !== 'string') {
+      throw new Error(`${type} must be a non-empty string`);
+    }
+
+    // Check for common SQL injection patterns
+    const dangerousPatterns = [
+      /;/,           // SQL statement separator
+      /--/,          // SQL comment
+      /\/\*/,        // SQL block comment start
+      /\*\//,        // SQL block comment end
+      /\bDROP\b/i,   // DROP statement
+      /\bTRUNCATE\b/i, // TRUNCATE statement
+      /\bDELETE\b/i,   // DELETE statement (when not expected)
+      /\bEXEC\b/i,     // EXEC statement
+      /\bEXECUTE\b/i,  // EXECUTE statement
+    ];
+
+    for (const pattern of dangerousPatterns) {
+      if (pattern.test(identifier)) {
+        throw new Error(`${type} contains potentially dangerous characters or keywords`);
+      }
+    }
+
+    // Enforce reasonable length limits
+    if (identifier.length > 128) {
+      throw new Error(`${type} must be 128 characters or less`);
+    }
   }
 
   /**
