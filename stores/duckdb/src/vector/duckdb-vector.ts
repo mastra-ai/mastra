@@ -243,6 +243,17 @@ export class DuckDBVector extends MastraVector {
         dot: 'ip',
       };
 
+      // Validate metric to prevent SQL injection
+      const validMetrics = ['cosine', 'euclidean', 'dot', 'dotproduct'];
+      if (!validMetrics.includes(metric)) {
+        throw new Error(`Invalid metric: ${metric}. Must be one of: ${validMetrics.join(', ')}`);
+      }
+
+      const hnswMetric = metricMap[metric];
+      if (!hnswMetric) {
+        throw new Error(`Invalid metric mapping for: ${metric}`);
+      }
+
       const hnswIndexName = `idx_${tableName}_hnsw`;
       const escapedIndexName = this.escapeIdentifier(hnswIndexName);
       await this.execute(
@@ -251,7 +262,7 @@ export class DuckDBVector extends MastraVector {
         CREATE INDEX ${escapedIndexName}
         ON ${escapedTableName}
         USING HNSW (vector)
-        WITH (metric = '${metricMap[metric] || 'cosine'}', M = 16, ef_construction = 128)
+        WITH (metric = '${hnswMetric}', M = 16, ef_construction = 128)
       `,
       );
 
@@ -259,6 +270,10 @@ export class DuckDBVector extends MastraVector {
       try {
         await this.execute(conn, `INSTALL fts;`);
         await this.execute(conn, `LOAD fts;`);
+        // Validate table name format before using in PRAGMA (it's our generated name)
+        if (!/^vectors_[a-zA-Z0-9_]+$/.test(tableName)) {
+          throw new Error('Invalid table name format for FTS index');
+        }
         await this.execute(
           conn,
           `
@@ -598,13 +613,20 @@ export class DuckDBVector extends MastraVector {
       const escapedTableName = this.escapeIdentifier(tableName);
       const { source, mapping = {}, filter, batchSize = 10000 } = options;
 
-      // Build column mapping
-      const idCol = mapping.id || 'id';
-      const vectorCol = mapping.vector || 'embedding';
-      const contentCol = mapping.content || 'content';
-      const metadataCol = mapping.metadata || 'metadata';
+      // Validate source path to prevent SQL injection and directory traversal
+      this.validateParquetSource(source);
 
-      // Build filter clause
+      // Escape single quotes in the source path for SQL
+      const escapedSource = source.replace(/'/g, "''");
+
+      // Build column mapping - validate column names
+      const idCol = this.escapeIdentifier(mapping.id || 'id');
+      const vectorCol = this.escapeIdentifier(mapping.vector || 'embedding');
+      const contentCol = this.escapeIdentifier(mapping.content || 'content');
+      const metadataCol = this.escapeIdentifier(mapping.metadata || 'metadata');
+
+      // Build filter clause - WARNING: filter is still potentially unsafe
+      // Users should be aware that filter is passed directly to SQL
       const whereClause = filter ? `WHERE ${filter}` : '';
 
       // Import from Parquet
@@ -615,7 +637,7 @@ export class DuckDBVector extends MastraVector {
           ${vectorCol} as vector,
           ${contentCol} as content,
           ${metadataCol} as metadata
-        FROM read_parquet('${source}')
+        FROM read_parquet('${escapedSource}')
         ${whereClause}
       `;
 
@@ -799,6 +821,48 @@ export class DuckDBVector extends MastraVector {
     // Enforce reasonable length limits
     if (identifier.length > 128) {
       throw new Error(`${type} must be 128 characters or less`);
+    }
+  }
+
+  /**
+   * Validate Parquet source path to prevent directory traversal and SQL injection
+   */
+  private validateParquetSource(source: string): void {
+    if (!source || typeof source !== 'string') {
+      throw new Error('Parquet source must be a non-empty string');
+    }
+
+    // Check for directory traversal patterns
+    if (source.includes('..')) {
+      throw new Error('Parquet source cannot contain directory traversal patterns');
+    }
+
+    // Check for SQL injection in file paths
+    const dangerousChars = [';', '--', '/*', '*/'];
+    for (const char of dangerousChars) {
+      if (source.includes(char)) {
+        throw new Error('Parquet source contains potentially dangerous characters');
+      }
+    }
+
+    // Validate it's either a local file path or an S3 URL
+    const isS3 = source.startsWith('s3://') || source.startsWith('s3a://');
+    const isHTTP = source.startsWith('http://') || source.startsWith('https://');
+    const isLocal = !isS3 && !isHTTP;
+
+    if (isLocal) {
+      // For local paths, ensure they don't try to access system directories
+      const forbiddenPaths = ['/etc/', '/sys/', '/proc/', '/dev/', '\\Windows\\', '\\System32\\'];
+      for (const forbidden of forbiddenPaths) {
+        if (source.includes(forbidden)) {
+          throw new Error('Parquet source cannot access system directories');
+        }
+      }
+    }
+
+    // Enforce reasonable length limit
+    if (source.length > 1024) {
+      throw new Error('Parquet source path must be 1024 characters or less');
     }
   }
 
