@@ -33,7 +33,33 @@
     "drizzle-orm": "^0.44.5"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.17.0-0 <0.19.0-0"
+    "@mastra/core": ">=0.17.0-0 <0.19.0-0",
+    "better-sqlite3": "^11.0.0",
+    "mysql2": "^3.11.0",
+    "pg": "^8.13.0",
+    "@libsql/client": "^0.14.0",
+    "@planetscale/database": "^1.19.0",
+    "@neondatabase/serverless": "^0.10.0"
+  },
+  "peerDependenciesMeta": {
+    "better-sqlite3": {
+      "optional": true
+    },
+    "mysql2": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    },
+    "@libsql/client": {
+      "optional": true
+    },
+    "@planetscale/database": {
+      "optional": true
+    },
+    "@neondatabase/serverless": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -47,6 +73,10 @@
     "pg": "^8.16.3",
     "mysql2": "^3.11.0",
     "@libsql/client": "^0.15.15",
+    "better-sqlite3": "^11.0.0",
+    "@planetscale/database": "^1.19.0",
+    "@neondatabase/serverless": "^0.10.4",
+    "@types/better-sqlite3": "^7.6.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
