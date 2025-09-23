@@ -1,5 +1,4 @@
-import type { ReadableStream } from 'stream/web';
-import { TransformStream } from 'stream/web';
+import { ReadableStream, TransformStream } from 'stream/web';
 import type { SharedV2ProviderMetadata, LanguageModelV2CallWarning } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
 import { consumeStream } from 'ai-v5';
@@ -22,6 +21,7 @@ import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
+import { MastraError } from '../../error';
 
 export interface LanguageModelUsage {
   inputTokens?: number;
@@ -253,7 +253,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
             switch (chunk.type) {
               case 'object-result':
                 self.#bufferedObject = chunk.object;
-                self.#delayedPromises.object.resolve(chunk.object);
+                // Only resolve if not already rejected by validation error
+                if (self.#delayedPromises.object.status.type === 'pending') {
+                  self.#delayedPromises.object.resolve(chunk.object);
+                }
                 break;
               case 'source':
                 self.#bufferedSources.push(chunk);
@@ -414,6 +417,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 controller.terminate();
                 return;
               case 'finish':
+                // Mark stream as consumed to prevent #getDelayedPromise from calling consumeStream during onFinish payload construction
+                self.#streamConsumed = true;
+
                 if (chunk.payload.stepResult.reason) {
                   self.#finishReason = chunk.payload.stepResult.reason;
                 }
@@ -565,17 +571,19 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                       (toolResult: any) => toolResult.dynamic === true,
                     ),
                     object:
-                      self.#delayedPromises.object.status.type === 'resolved'
-                        ? self.#delayedPromises.object.status.value
-                        : self.#options.output && baseFinishStep.text
-                          ? (() => {
-                              try {
-                                return JSON.parse(baseFinishStep.text);
-                              } catch {
-                                return undefined;
-                              }
-                            })()
-                          : undefined,
+                      self.#delayedPromises.object.status.type === 'rejected'
+                        ? undefined
+                        : self.#delayedPromises.object.status.type === 'resolved'
+                          ? self.#delayedPromises.object.status.value
+                          : self.#options.output && baseFinishStep.text
+                            ? (() => {
+                                try {
+                                  return JSON.parse(baseFinishStep.text);
+                                } catch {
+                                  return undefined;
+                                }
+                              })()
+                            : undefined,
                   };
 
                   await options?.onFinish?.(onFinishPayload);
@@ -643,8 +651,17 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
                 break;
 
+              case 'object-validation-error':
+                // Only reject the object promise, don't cause entire stream to error
+                if (self.#delayedPromises.object.status.type === 'pending') {
+                  self.#delayedPromises.object.reject(chunk.payload.error);
+                }
+                break;
+
               case 'error':
-                // console.log('setting self.#error from error chunk:', chunk);
+                // Mark stream as consumed to prevent #getDelayedPromise from calling consumeStream during error processing
+                self.#streamConsumed = true;
+
                 self.#error = chunk.payload.error as any;
 
                 // Reject all delayed promises on error
@@ -714,26 +731,26 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       (this as any)[name] = fn.bind(this);
     });
 
-    // Convert getters to bound properties to support destructuring
-    // We need to do this because getters lose their 'this' context when destructured
-    const bindGetter = (name: string, getter: () => any) => {
-      Object.defineProperty(this, name, {
-        get: getter.bind(this),
-        enumerable: true,
-        configurable: true,
-      });
-    };
+    // // Convert getters to bound properties to support destructuring
+    // // We need to do this because getters lose their 'this' context when destructured
+    // const bindGetter = (name: string, getter: () => any) => {
+    //   Object.defineProperty(this, name, {
+    //     get: getter.bind(this),
+    //     enumerable: true,
+    //     configurable: true,
+    //   });
+    // };
 
-    // Get the prototype to access the getters
-    const proto = Object.getPrototypeOf(this);
-    const descriptors = Object.getOwnPropertyDescriptors(proto);
+    // // Get the prototype to access the getters
+    // const proto = Object.getPrototypeOf(this);
+    // const descriptors = Object.getOwnPropertyDescriptors(proto);
 
-    // Bind all getters from the prototype
-    for (const [key, descriptor] of Object.entries(descriptors)) {
-      if (descriptor.get && key !== 'constructor') {
-        bindGetter(key, descriptor.get);
-      }
-    }
+    // // Bind all getters from the prototype
+    // for (const [key, descriptor] of Object.entries(descriptors)) {
+    //   if (descriptor.get && key !== 'constructor') {
+    //     bindGetter(key, descriptor.get);
+    //   }
+    // }
   }
 
   #getDelayedPromise<T>(promise: DelayedPromise<T>): Promise<T> {
@@ -778,9 +795,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   }
 
   teeStream() {
-    // if (this.outputProcessorRunnerMode === 'inner') {
-    //   return this.#baseStream;
-    // }
     const [stream1, stream2] = this.#baseStream.tee();
     this.#baseStream = stream2;
     return stream1;
@@ -791,8 +805,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    */
   get fullStream() {
     return this.teeStream();
-    // let fullStream = this.teeStream();
-    // return fullStream;
   }
 
   /**
@@ -912,16 +924,13 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
   async consumeStream(options?: ConsumeStreamOptions): Promise<void> {
     this.#streamConsumed = true;
+
     try {
       await consumeStream({
-        stream: this.fullStream.pipeThrough(
-          new TransformStream({
-            transform(chunk, controller) {
-              controller.enqueue(chunk);
-            },
-          }),
-        ) as any,
-        onError: options?.onError,
+        stream: this.#baseStream as any,
+        onError: error => {
+          options?.onError?.(error);
+        },
       });
     } catch (error) {
       options?.onError?.(error);
@@ -1040,8 +1049,17 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     return this.teeStream().pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, PartialSchemaOutput<OUTPUT>>({
         transform(chunk, controller) {
+          // console.log('objectStream chunk', chunk);
           if (chunk.type === 'object') {
             controller.enqueue(chunk.object);
+          } else if (
+            chunk.type === 'error' ||
+            chunk.type === 'abort' ||
+            chunk.type === 'tripwire' ||
+            chunk.type === 'finish'
+          ) {
+            // Terminate the stream when the base stream terminates
+            controller.terminate();
           }
         },
       }),
