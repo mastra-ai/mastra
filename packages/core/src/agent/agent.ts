@@ -3072,6 +3072,7 @@ export class Agent<
       executeOnFinish: this.#executeOnFinish.bind(this),
       outputProcessors: this.#outputProcessors,
       llm,
+      getTelemetry: this.#mastra?.getTelemetry?.bind(this.#mastra),
     };
 
     // Create the workflow with all necessary context
