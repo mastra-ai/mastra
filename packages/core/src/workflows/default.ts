@@ -15,6 +15,7 @@ import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
+import { getStepResult } from './step';
 import type {
   DefaultEngineType,
   Emitter,
@@ -476,19 +477,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           currentSpan: sleepSpan,
         },
         getInitData: () => stepResults?.input as any,
-        getStepResult: (step: any) => {
-          if (!step?.id) {
-            return null;
-          }
-
-          const result = stepResults[step.id];
-          if (result?.status === 'success') {
-            return result.output;
-          }
-
-          return null;
-        },
-
+        getStepResult: getStepResult.bind(this, stepResults),
         // TODO: this function shouldn't have suspend probably?
         suspend: async (_suspendPayload: any): Promise<any> => {},
         bail: () => {},
@@ -590,19 +579,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           currentSpan: sleepUntilSpan,
         },
         getInitData: () => stepResults?.input as any,
-        getStepResult: (step: any) => {
-          if (!step?.id) {
-            return null;
-          }
-
-          const result = stepResults[step.id];
-          if (result?.status === 'success') {
-            return result.output;
-          }
-
-          return null;
-        },
-
+        getStepResult: getStepResult.bind(this, stepResults),
         // TODO: this function shouldn't have suspend probably?
         suspend: async (_suspendPayload: any): Promise<any> => {},
         bail: () => {},
@@ -850,18 +827,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           tracingContext: { currentSpan: stepAISpan },
           getInitData: () => stepResults?.input as any,
-          getStepResult: (step: any) => {
-            if (!step?.id) {
-              return null;
-            }
-
-            const result = stepResults[step.id];
-            if (result?.status === 'success') {
-              return result.output;
-            }
-
-            return null;
-          },
+          getStepResult: getStepResult.bind(this, stepResults),
           suspend: async (suspendPayload: any): Promise<any> => {
             executionContext.suspendedPaths[step.id] = executionContext.executionPath;
             suspended = { payload: suspendPayload };
@@ -1064,12 +1030,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     if (!disableScorers && scorersToUse && Object.keys(scorersToUse || {}).length > 0) {
-      for (const [id, scorerObject] of Object.entries(scorersToUse || {})) {
+      for (const [_id, scorerObject] of Object.entries(scorersToUse || {})) {
         runScorer({
-          scorerId: id,
+          scorerId: scorerObject.name,
           scorerObject: scorerObject,
           runId: runId,
-          input: [input],
+          input: input,
           output: output,
           runtimeContext,
           entity: {
@@ -1282,19 +1248,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 currentSpan: evalSpan,
               },
               getInitData: () => stepResults?.input as any,
-              getStepResult: (step: any) => {
-                if (!step?.id) {
-                  return null;
-                }
-
-                const result = stepResults[step.id];
-                if (result?.status === 'success') {
-                  return result.output;
-                }
-
-                return null;
-              },
-
+              getStepResult: getStepResult.bind(this, stepResults),
               // TODO: this function shouldn't have suspend probably?
               suspend: async (_suspendPayload: any): Promise<any> => {},
               bail: () => {},
@@ -1578,14 +1532,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           currentSpan: evalSpan,
         },
         getInitData: () => stepResults?.input as any,
-        getStepResult: (step: any) => {
-          if (!step?.id) {
-            return null;
-          }
-
-          const result = stepResults[step.id];
-          return result?.status === 'success' ? result.output : null;
-        },
+        getStepResult: getStepResult.bind(this, stepResults),
         suspend: async (_suspendPayload: any): Promise<any> => {},
         bail: () => {},
         abort: () => {
@@ -1723,10 +1670,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       },
     });
 
-    for (let i = 0; i < prevOutput.length; i += concurrency) {
+    const prevPayload = stepResults[step.id];
+    const resumeIndex =
+      prevPayload?.status === 'suspended' ? prevPayload?.suspendPayload?.__workflow_meta?.foreachIndex || 0 : 0;
+
+    for (let i = resumeIndex; i < prevOutput.length; i += concurrency) {
       const items = prevOutput.slice(i, i + concurrency);
       const itemsResults = await Promise.all(
-        items.map((item: any) => {
+        items.map((item: any, j: number) => {
           return this.executeStep({
             workflowId,
             runId,
@@ -1734,7 +1685,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             step,
             stepResults,
             executionContext,
-            resume,
+            resume: resumeIndex === i + j ? resume : undefined,
             prevOutput: item,
             tracingContext: { currentSpan: loopSpan },
             emitter,
@@ -1786,6 +1737,20 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 ...execResults,
               },
             });
+
+            return {
+              ...stepInfo,
+              status: 'suspended',
+              suspendPayload: {
+                ...execResults.suspendPayload,
+                __workflow_meta: {
+                  ...execResults.suspendPayload?.__workflow_meta,
+                  foreachIndex: i,
+                },
+              },
+              //@ts-ignore
+              endedAt: Date.now(),
+            };
           } else {
             await emitter.emit('watch-v2', {
               type: 'workflow-step-result',
@@ -1802,8 +1767,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 metadata: {},
               },
             });
+
+            return result;
           }
-          return result;
         }
 
         results.push(result?.output);

@@ -64,6 +64,52 @@ export const testAgent = new Agent({
 });
 ```
 
+#### Instruction formats
+
+Instructions define the agent's behavior, personality, and capabilities.
+They are system-level prompts that establish the agent's core identity and expertise.
+
+Instructions can be provided in multiple formats for greater flexibility:
+
+```typescript showLineNumbers copy
+// String (most common)
+instructions: "You are a helpful assistant."
+
+// System message object
+instructions: { 
+  role: "system", 
+  content: "You are an expert programmer." 
+}
+
+// Array of strings
+instructions: [
+  "You are a helpful assistant.",
+  "Always be polite.",
+  "Provide detailed answers."
+]
+
+// Array of system messages
+instructions: [
+  { role: "system", content: "You are a helpful assistant." },
+  { role: "system", content: "You have expertise in TypeScript." }
+]
+
+// With provider-specific options (e.g., caching, reasoning)
+instructions: {
+  role: "system",
+  content: "You are an expert code reviewer. Analyze code for bugs, performance issues, and best practices.",
+  providerOptions: {
+    openai: { reasoning_effort: "high" },        // OpenAI's reasoning models
+    anthropic: { cache_control: { type: "ephemeral" } }  // Anthropic's prompt caching
+  }
+}
+```
+
+Provider-specific options allow you to leverage unique features of different LLM providers:
+- **Anthropic caching**: Reduce costs by caching frequently-used instructions
+- **OpenAI reasoning**: Enable deeper analysis for complex tasks
+- **Custom parameters**: Pass any provider-specific configuration
+
 > See [Agent](../../reference/agents/agent.mdx) for more information.
 
 

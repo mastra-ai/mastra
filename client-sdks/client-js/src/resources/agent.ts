@@ -25,6 +25,9 @@ import type {
   ClientOptions,
   StreamParams,
   UpdateModelParams,
+  StreamVNextParams,
+  UpdateModelInModelListParams,
+  ReorderModelListParams,
   NetworkStreamParams,
 } from '../types';
 
@@ -43,13 +46,13 @@ async function executeToolCallAndRespond({
   runtimeContext,
   respondFn,
 }: {
-  params: StreamParams<any>;
+  params: StreamVNextParams<any>;
   response: Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
   runId?: string;
   resourceId?: string;
   threadId?: string;
   runtimeContext?: RuntimeContext<any>;
-  respondFn: Agent['generate'];
+  respondFn: Agent['generateVNext'];
 }) {
   if (response.finishReason === 'tool-calls') {
     const toolCalls = (
@@ -75,6 +78,7 @@ async function executeToolCallAndRespond({
             threadId,
             runtimeContext: runtimeContext as RuntimeContext,
             tracingContext: { currentSpan: undefined },
+            suspend: async () => {},
           },
           {
             messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -219,7 +223,7 @@ export class Agent extends BaseResource {
     StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
   >(params: GenerateParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
     console.warn(
-      "Deprecation NOTICE:\Generate method will switch to use generate implementation September 23rd, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
+      "Deprecation NOTICE:\Generate method will switch to use generateVNext implementation September 30th, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
     );
     // @ts-expect-error - generic type issues
     return this.generateLegacy(params);
@@ -285,6 +289,7 @@ export class Agent extends BaseResource {
               threadId,
               runtimeContext: runtimeContext as RuntimeContext,
               tracingContext: { currentSpan: undefined },
+              suspend: async () => {},
             },
             {
               messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -322,20 +327,20 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async generate<OUTPUT extends OutputSchema = undefined>(
+  async generateVNext<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
-    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+    options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>,
   ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
   // Backward compatibility overload
-  async generate<OUTPUT extends OutputSchema = undefined>(
-    params: StreamParams<OUTPUT>,
+  async generateVNext<OUTPUT extends OutputSchema = undefined>(
+    params: StreamVNextParams<OUTPUT>,
   ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
-  async generate<OUTPUT extends OutputSchema = undefined>(
-    messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
-    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+  async generateVNext<OUTPUT extends OutputSchema = undefined>(
+    messagesOrParams: MessageListInput | StreamVNextParams<OUTPUT>,
+    options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>,
   ): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
     // Handle both new signature (messages, options) and old signature (single param object)
-    let params: StreamParams<OUTPUT>;
+    let params: StreamVNextParams<OUTPUT>;
     if (typeof messagesOrParams === 'object' && 'messages' in messagesOrParams) {
       // Old signature: single parameter object
       params = messagesOrParams;
@@ -377,7 +382,7 @@ export class Agent extends BaseResource {
         resourceId,
         threadId,
         runtimeContext: runtimeContext as RuntimeContext<any>,
-        respondFn: this.generate.bind(this),
+        respondFn: this.generateVNext.bind(this),
       }) as unknown as Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
     }
 
@@ -742,7 +747,7 @@ export class Agent extends BaseResource {
     }
   > {
     console.warn(
-      "Deprecation NOTICE:\nStream method will switch to use stream implementation September 23rd, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
+      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 30th, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
     );
     return this.streamLegacy(params);
   }
@@ -1219,6 +1224,7 @@ export class Agent extends BaseResource {
                     runtimeContext: processedParams.runtimeContext as RuntimeContext,
                     // TODO: Pass proper tracing context when client-js supports tracing
                     tracingContext: { currentSpan: undefined },
+                    suspend: async () => {},
                   },
                   {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -1334,9 +1340,9 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async stream<OUTPUT extends OutputSchema = undefined>(
+  async streamVNext<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
-    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+    options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1347,8 +1353,8 @@ export class Agent extends BaseResource {
     }
   >;
   // Backward compatibility overload
-  async stream<OUTPUT extends OutputSchema = undefined>(
-    params: StreamParams<OUTPUT>,
+  async streamVNext<OUTPUT extends OutputSchema = undefined>(
+    params: StreamVNextParams<OUTPUT>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1358,9 +1364,9 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   >;
-  async stream<OUTPUT extends OutputSchema = undefined>(
-    messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
-    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+  async streamVNext<OUTPUT extends OutputSchema = undefined>(
+    messagesOrParams: MessageListInput | StreamVNextParams<OUTPUT>,
+    options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1371,7 +1377,7 @@ export class Agent extends BaseResource {
     }
   > {
     // Handle both new signature (messages, options) and old signature (single param object)
-    let params: StreamParams<OUTPUT>;
+    let params: StreamVNextParams<OUTPUT>;
     if (typeof messagesOrParams === 'object' && 'messages' in messagesOrParams) {
       // Old signature: single parameter object
       params = messagesOrParams;
@@ -1495,6 +1501,7 @@ export class Agent extends BaseResource {
                     runtimeContext: processedParams.runtimeContext as RuntimeContext,
                     // TODO: Pass proper tracing context when client-js supports tracing
                     tracingContext: { currentSpan: undefined },
+                    suspend: async () => {},
                   },
                   {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -1632,6 +1639,30 @@ export class Agent extends BaseResource {
    */
   updateModel(params: UpdateModelParams): Promise<{ message: string }> {
     return this.request(`/api/agents/${this.agentId}/model`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Updates the model for the agent in the model list
+   * @param params - Parameters for updating the model
+   * @returns Promise containing the updated model
+   */
+  updateModelInModelList({ modelConfigId, ...params }: UpdateModelInModelListParams): Promise<{ message: string }> {
+    return this.request(`/api/agents/${this.agentId}/models/${modelConfigId}`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Reorders the models for the agent
+   * @param params - Parameters for reordering the model list
+   * @returns Promise containing the updated model list
+   */
+  reorderModelList(params: ReorderModelListParams): Promise<{ message: string }> {
+    return this.request(`/api/agents/${this.agentId}/models/reorder`, {
       method: 'POST',
       body: params,
     });

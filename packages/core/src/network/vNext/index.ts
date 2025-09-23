@@ -57,7 +57,7 @@ export class NewAgentNetwork extends MastraBase {
     });
 
     console.warn(
-      `⚠️  DEPRECATION WARNING: AgentNetwork vNext will be deprecated on September 23rd, 2025 and will be removed in a future version. Please use agent.network() instead.`,
+      `⚠️  DEPRECATION WARNING: AgentNetwork vNext will be deprecated on September 30th, 2025 and will be removed in a future version. Please use agent.network() instead.`,
     );
 
     this.id = id;
@@ -946,6 +946,7 @@ export class NewAgentNetwork extends MastraBase {
           context: inputDataToUse,
           // TODO: Pass proper tracing context when network supports tracing
           tracingContext: { currentSpan: undefined },
+          suspend: async () => {}, // TODO
         });
 
         const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });

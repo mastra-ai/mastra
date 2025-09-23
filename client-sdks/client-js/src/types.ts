@@ -11,7 +11,13 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
-import type { AiMessageType, MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type {
+  AiMessageType,
+  MastraMessageV1,
+  MastraMessageV2,
+  MemoryConfig,
+  StorageThreadType,
+} from '@mastra/core/memory';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
 import type {
@@ -84,6 +90,18 @@ export interface GetAgentResponse {
   modelVersion: string;
   defaultGenerateOptions: WithoutMethods<AgentGenerateOptions>;
   defaultStreamOptions: WithoutMethods<AgentStreamOptions>;
+  modelList:
+    | Array<{
+        id: string;
+        enabled: boolean;
+        maxRetries: number;
+        model: {
+          modelId: string;
+          provider: string;
+          modelVersion: string;
+        };
+      }>
+    | undefined;
 }
 
 export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -133,6 +151,20 @@ type OutputOptions<OUTPUT extends OutputSchema = undefined> =
 export type UpdateModelParams = {
   modelId: string;
   provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+};
+
+export type UpdateModelInModelListParams = {
+  modelConfigId: string;
+  model?: {
+    modelId: string;
+    provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+  };
+  maxRetries?: number;
+  enabled?: boolean;
+};
+
+export type ReorderModelListParams = {
+  reorderedModelIds: string[];
 };
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
@@ -277,6 +309,12 @@ export interface GetMemoryThreadParams {
   resourceId: string;
   agentId: string;
 }
+
+export interface GetMemoryConfigParams {
+  agentId: string;
+}
+
+export type GetMemoryConfigResponse = MemoryConfig;
 
 export interface GetNetworkMemoryThreadParams {
   resourceId: string;
@@ -480,7 +518,7 @@ export interface McpServerToolListResponse {
 export type ClientScoreRowData = Omit<ScoreRowData, 'createdAt' | 'updatedAt'> & {
   createdAt: string;
   updatedAt: string;
-};
+} & { spanId?: string };
 
 // Scores-related types
 export interface GetScoresByRunIdParams {
@@ -524,7 +562,9 @@ export interface SaveScoreResponse {
 
 export type GetScorerResponse = MastraScorerEntry & {
   agentIds: string[];
+  agentNames: string[];
   workflowIds: string[];
+  isRegistered: boolean;
 };
 
 export interface GetScorersResponse {

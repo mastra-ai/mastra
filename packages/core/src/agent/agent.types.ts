@@ -45,7 +45,7 @@ export type AgentExecutionOptions<
   format?: FORMAT;
 
   /** Custom instructions that override the agent's default instructions for this execution */
-  instructions?: string;
+  instructions?: SystemMessage;
 
   /** Custom system message to include in the prompt */
   system?: SystemMessage;
@@ -124,6 +124,9 @@ export type AgentExecutionOptions<
 
   /** Callback function called before each step of multi-step execution */
   prepareStep?: PrepareStepFunction<any>;
+
+  /** Require approval for all tool calls */
+  requireToolApproval?: boolean;
 } & OutputOptions<OUTPUT>;
 
 type OutputOptions<OUTPUT extends OutputSchema = undefined> =
@@ -150,4 +153,6 @@ export type InnerAgentExecutionOptions<
   methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
   model?: MastraLanguageModel;
+  /** Internal: Whether the execution is a resume */
+  resumeContext?: any;
 };

@@ -1,5 +1,101 @@
 # @mastra/core
 
+## 0.18.0
+
+### Minor Changes
+
+- Allow agent instructions to accept SystemMessage types ([#7987](https://github.com/mastra-ai/mastra/pull/7987))
+
+  Agents can now use rich instruction formats beyond simple strings:
+  - CoreSystemMessage and SystemModelMessage objects with provider-specific options
+  - Arrays of strings or system messages
+  - Dynamic instructions returning any SystemMessage type
+
+### Patch Changes
+
+- Agent type fixes ([#8072](https://github.com/mastra-ai/mastra/pull/8072))
+
+- Fixes for `getStepResult` in workflow steps ([#8065](https://github.com/mastra-ai/mastra/pull/8065))
+
+- fix: result object type inference when using structuredOutput and unify output/structuredOutput types with single OUTPUT generic ([#7969](https://github.com/mastra-ai/mastra/pull/7969))
+
+- feat: implement trace scoring with batch processing capabilities ([#8033](https://github.com/mastra-ai/mastra/pull/8033))
+
+- Fix selection of agent method based on model version ([#8001](https://github.com/mastra-ai/mastra/pull/8001))
+
+- show the tool-output stream in the playground for streamVNext ([#7983](https://github.com/mastra-ai/mastra/pull/7983))
+
+- Add scorer type, for automatic type inferrence when creating scorers for agents ([#8032](https://github.com/mastra-ai/mastra/pull/8032))
+
+- Get rid off swr one for all ([#7931](https://github.com/mastra-ai/mastra/pull/7931))
+
+- Fix PostgreSQL vector index recreation issue and add optional index configuration ([#8020](https://github.com/mastra-ai/mastra/pull/8020))
+  - Fixed critical bug where memory vector indexes were unnecessarily recreated on every operation
+  - Added support for configuring vector index types (HNSW, IVFFlat, flat) and parameters
+
+- Fix navigating between scores and entity types ([#8129](https://github.com/mastra-ai/mastra/pull/8129))
+
+- Delayed streamVNext breaking change notice by 1 week ([#8121](https://github.com/mastra-ai/mastra/pull/8121))
+
+- Tool hitl ([#8084](https://github.com/mastra-ai/mastra/pull/8084))
+
+- Updated dependencies [[`b61b8e0`](https://github.com/mastra-ai/mastra/commit/b61b8e0b0e93a7e6e9d82e6f0b620bb919a20bdb)]:
+  - @mastra/schema-compat@0.11.4
+
+## 0.18.0-alpha.3
+
+### Patch Changes
+
+- feat: implement trace scoring with batch processing capabilities ([#8033](https://github.com/mastra-ai/mastra/pull/8033))
+
+- Fix PostgreSQL vector index recreation issue and add optional index configuration ([#8020](https://github.com/mastra-ai/mastra/pull/8020))
+  - Fixed critical bug where memory vector indexes were unnecessarily recreated on every operation
+  - Added support for configuring vector index types (HNSW, IVFFlat, flat) and parameters
+
+- Fix navigating between scores and entity types ([#8129](https://github.com/mastra-ai/mastra/pull/8129))
+
+- Delayed streamVNext breaking change notice by 1 week ([#8121](https://github.com/mastra-ai/mastra/pull/8121))
+
+- Tool hitl ([#8084](https://github.com/mastra-ai/mastra/pull/8084))
+
+- Updated dependencies [[`b61b8e0`](https://github.com/mastra-ai/mastra/commit/b61b8e0b0e93a7e6e9d82e6f0b620bb919a20bdb)]:
+  - @mastra/schema-compat@0.11.4-alpha.0
+
+## 0.18.0-alpha.2
+
+### Minor Changes
+
+- Allow agent instructions to accept SystemMessage types ([#7987](https://github.com/mastra-ai/mastra/pull/7987))
+
+  Agents can now use rich instruction formats beyond simple strings:
+  - CoreSystemMessage and SystemModelMessage objects with provider-specific options
+  - Arrays of strings or system messages
+  - Dynamic instructions returning any SystemMessage type
+
+### Patch Changes
+
+- Agent type fixes ([#8072](https://github.com/mastra-ai/mastra/pull/8072))
+
+- Fixes for `getStepResult` in workflow steps ([#8065](https://github.com/mastra-ai/mastra/pull/8065))
+
+- Add scorer type, for automatic type inferrence when creating scorers for agents ([#8032](https://github.com/mastra-ai/mastra/pull/8032))
+
+## 0.17.2-alpha.1
+
+### Patch Changes
+
+- show the tool-output stream in the playground for streamVNext ([#7983](https://github.com/mastra-ai/mastra/pull/7983))
+
+## 0.17.2-alpha.0
+
+### Patch Changes
+
+- fix: result object type inference when using structuredOutput and unify output/structuredOutput types with single OUTPUT generic ([#7969](https://github.com/mastra-ai/mastra/pull/7969))
+
+- Fix selection of agent method based on model version ([#8001](https://github.com/mastra-ai/mastra/pull/8001))
+
+- Get rid off swr one for all ([#7931](https://github.com/mastra-ai/mastra/pull/7931))
+
 ## 0.17.1
 
 ### Patch Changes

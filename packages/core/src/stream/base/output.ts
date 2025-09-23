@@ -14,6 +14,7 @@ import type { OutputProcessor } from '../../processors';
 import type { ProcessorRunnerMode, ProcessorState } from '../../processors/runner';
 import { ProcessorRunner } from '../../processors/runner';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
+import type { WorkflowRunStatus } from '../../workflows';
 import { DelayedPromise } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
@@ -59,6 +60,7 @@ type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   tracingContext?: TracingContext;
 };
 export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
+  #status: WorkflowRunStatus = 'running';
   #aisdkv5: AISDKV5OutputStream<OUTPUT>;
   #error: Error | string | { message: string; stack: string } | undefined;
   #baseStream: ReadableStream<ChunkType<OUTPUT>>;
@@ -97,6 +99,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   #tripwireReason = '';
 
   #delayedPromises = {
+    suspendPayload: new DelayedPromise<any>(),
     object: new DelayedPromise<InferSchemaOutput<OUTPUT>>(),
     finishReason: new DelayedPromise<FinishReason | string | undefined>(),
     usage: new DelayedPromise<LanguageModelUsage>(),
@@ -178,6 +181,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.#model = _model;
 
     this.messageId = messageId;
+
     // Create processor runner if outputProcessors are provided
     if (options.outputProcessors?.length) {
       this.processorRunner = new ProcessorRunner({
@@ -231,6 +235,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
         transform: async (chunk, controller) => {
           switch (chunk.type) {
+            case 'tool-call-suspended':
+            case 'tool-call-approval':
+              self.#status = 'suspended';
+              self.#delayedPromises.suspendPayload.resolve(chunk.payload);
+              break;
             case 'source':
               self.#bufferedSources.push(chunk);
               self.#bufferedByStep.sources.push(chunk);
@@ -386,6 +395,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               controller.terminate();
               return;
             case 'finish':
+              self.#status = 'success';
               if (chunk.payload.stepResult.reason) {
                 self.#finishReason = chunk.payload.stepResult.reason;
               }
@@ -495,6 +505,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#delayedPromises.totalUsage.resolve(self.#getTotalUsage());
               self.#delayedPromises.content.resolve(messageList.get.response.aiV5.stepContent());
               self.#delayedPromises.reasoningDetails.resolve(Object.values(self.#bufferedReasoningDetails || {}));
+              self.#delayedPromises.suspendPayload.resolve(undefined);
 
               const baseFinishStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
 
@@ -612,6 +623,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               break;
 
             case 'error':
+              self.#status = 'failed';
               self.#error = chunk.payload.error as any;
 
               // Reject all delayed promises on error
@@ -709,6 +721,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
   get steps() {
     return this.#getDelayedPromise(this.#delayedPromises.steps);
+  }
+
+  get suspendPayload() {
+    return this.#getDelayedPromise(this.#delayedPromises.suspendPayload);
   }
 
   teeStream() {
@@ -1116,5 +1132,55 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       reasoningTokens: this.#usageCount.reasoningTokens,
       cachedInputTokens: this.#usageCount.cachedInputTokens,
     };
+  }
+
+  get status() {
+    return this.#status;
+  }
+
+  serializeState() {
+    return {
+      status: this.#status,
+      bufferedSteps: this.#bufferedSteps,
+      bufferedReasoningDetails: this.#bufferedReasoningDetails,
+      bufferedByStep: this.#bufferedByStep,
+      bufferedText: this.#bufferedText,
+      bufferedTextChunks: this.#bufferedTextChunks,
+      bufferedSources: this.#bufferedSources,
+      bufferedReasoning: this.#bufferedReasoning,
+      bufferedFiles: this.#bufferedFiles,
+      toolCallArgsDeltas: this.#toolCallArgsDeltas,
+      toolCallDeltaIdNameMap: this.#toolCallDeltaIdNameMap,
+      toolCalls: this.#toolCalls,
+      toolResults: this.#toolResults,
+      warnings: this.#warnings,
+      finishReason: this.#finishReason,
+      request: this.#request,
+      usageCount: this.#usageCount,
+      tripwire: this.#tripwire,
+      tripwireReason: this.#tripwireReason,
+    };
+  }
+
+  deserializeState(state: any) {
+    this.#status = state.status;
+    this.#bufferedSteps = state.bufferedSteps;
+    this.#bufferedReasoningDetails = state.bufferedReasoningDetails;
+    this.#bufferedByStep = state.bufferedByStep;
+    this.#bufferedText = state.bufferedText;
+    this.#bufferedTextChunks = state.bufferedTextChunks;
+    this.#bufferedSources = state.bufferedSources;
+    this.#bufferedReasoning = state.bufferedReasoning;
+    this.#bufferedFiles = state.bufferedFiles;
+    this.#toolCallArgsDeltas = state.toolCallArgsDeltas;
+    this.#toolCallDeltaIdNameMap = state.toolCallDeltaIdNameMap;
+    this.#toolCalls = state.toolCalls;
+    this.#toolResults = state.toolResults;
+    this.#warnings = state.warnings;
+    this.#finishReason = state.finishReason;
+    this.#request = state.request;
+    this.#usageCount = state.usageCount;
+    this.#tripwire = state.tripwire;
+    this.#tripwireReason = state.tripwireReason;
   }
 }

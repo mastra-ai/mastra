@@ -2,7 +2,7 @@ import { useScorers } from '@mastra/playground-ui';
 import { Header, HeaderTitle, MainContentLayout, ScorersTable } from '@mastra/playground-ui';
 
 export default function Scorers() {
-  const { scorers = {}, isLoading } = useScorers();
+  const { data: scorers = {}, isLoading } = useScorers();
 
   return (
     <MainContentLayout>
@@ -10,7 +10,7 @@ export default function Scorers() {
         <HeaderTitle>Scorers</HeaderTitle>
       </Header>
 
-      <ScorersTable isLoading={isLoading} scorers={scorers} computeScorerLink={scorerId => `/scorers/${scorerId}`} />
+      <ScorersTable isLoading={isLoading} scorers={scorers} />
     </MainContentLayout>
   );
 }

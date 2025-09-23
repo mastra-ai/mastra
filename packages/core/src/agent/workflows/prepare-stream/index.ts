@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { InternalSpans } from '../../../ai-tracing';
 import type { AISpan, AISpanType } from '../../../ai-tracing';
+import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
 import type { RuntimeContext } from '../../../runtime-context';
@@ -28,11 +29,13 @@ interface CreatePrepareStreamWorkflowOptions<
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
   methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   format?: FORMAT;
-  instructions: string;
+  instructions: SystemMessage;
   memoryConfig?: MemoryConfig;
   memory?: MastraMemory;
   saveQueueManager: SaveQueueManager;
   returnScorerData?: boolean;
+  requireToolApproval?: boolean;
+  resumeContext?: any;
 }
 
 export function createPrepareStreamWorkflow<
@@ -53,6 +56,8 @@ export function createPrepareStreamWorkflow<
   memory,
   saveQueueManager,
   returnScorerData,
+  requireToolApproval,
+  resumeContext,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -87,6 +92,8 @@ export function createPrepareStreamWorkflow<
     runId,
     returnScorerData,
     format,
+    requireToolApproval,
+    resumeContext,
   });
 
   const mapResultsStep = createMapResultsStep({

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/upstash",
-  "version": "0.15.1",
+  "version": "0.15.2",
   "description": "Upstash provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -28,7 +28,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@upstash/redis": "^1.35.3",
+    "@upstash/redis": "^1.35.4",
     "@upstash/vector": "^1.2.2"
   },
   "devDependencies": {
@@ -45,7 +45,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.17.0-0 <0.18.0-0"
+    "@mastra/core": ">=0.17.0-0 <0.19.0-0"
   },
   "files": [
     "dist",

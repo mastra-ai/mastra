@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.17.1",
+  "version": "0.18.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -149,6 +149,16 @@
       "require": {
         "types": "./dist/processors/index.d.ts",
         "default": "./dist/processors/index.cjs"
+      }
+    },
+    "./scores/scoreTraces": {
+      "import": {
+        "types": "./dist/scores/scoreTraces/index.d.ts",
+        "default": "./dist/scores/scoreTraces/index.js"
+      },
+      "require": {
+        "types": "./dist/scores/scoreTraces/index.d.ts",
+        "default": "./dist/scores/scoreTraces/index.cjs"
       }
     },
     "./utils/zod-to-json": {
