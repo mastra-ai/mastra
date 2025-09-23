@@ -98,9 +98,7 @@ const ToolEntity = ({ tool }: ToolEntityProps) => {
   const { Link, paths } = useLinkComponent();
 
   // Determine the correct link: agent-specific tool page if tool has agents, otherwise general tool page
-  const toolLink = tool.agents.length > 0 
-    ? paths.agentToolLink(tool.agents[0].id, tool.id) 
-    : paths.toolLink(tool.id);
+  const toolLink = tool.agents.length > 0 ? paths.agentToolLink(tool.agents[0].id, tool.id) : paths.toolLink(tool.id);
 
   return (
     <Entity onClick={() => linkRef.current?.click()}>
