@@ -1,5 +1,18 @@
 # @mastra/client-js
 
+## 0.13.2-alpha.3
+
+### Patch Changes
+
+- Add model fallback handlers and apis ([#7378](https://github.com/mastra-ai/mastra/pull/7378))
+
+- Delayed streamVNext breaking change notice by 1 week ([#8121](https://github.com/mastra-ai/mastra/pull/8121))
+
+- Add server api to score traces ([#8064](https://github.com/mastra-ai/mastra/pull/8064))
+
+- Updated dependencies [[`4b339b8`](https://github.com/mastra-ai/mastra/commit/4b339b8141c20d6a6d80583c7e8c5c05d8c19492), [`c591dfc`](https://github.com/mastra-ai/mastra/commit/c591dfc1e600fae1dedffe239357d250e146378f), [`1920c5c`](https://github.com/mastra-ai/mastra/commit/1920c5c6d666f687785c73021196aa551e579e0d), [`b6a3b65`](https://github.com/mastra-ai/mastra/commit/b6a3b65d830fa0ca7754ad6481661d1f2c878f21), [`af3abb6`](https://github.com/mastra-ai/mastra/commit/af3abb6f7c7585d856e22d27f4e7d2ece2186b9a)]:
+  - @mastra/core@0.18.0-alpha.3
+
 ## 0.13.2-alpha.2
 
 ### Patch Changes
