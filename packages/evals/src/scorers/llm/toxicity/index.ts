@@ -1,6 +1,5 @@
 import type { LanguageModel } from '@mastra/core/llm';
 import { createScorer } from '@mastra/core/scores';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
 import { z } from 'zod';
 import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput, roundToTwoDecimals } from '../../utils';
 import { createToxicityAnalyzePrompt, createToxicityReasonPrompt, TOXICITY_AGENT_INSTRUCTIONS } from './prompts';
