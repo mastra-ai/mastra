@@ -74,15 +74,33 @@ export class DuckDBVector extends MastraVector {
 
         // Set configuration options after creation
         const conn = this.db.connect();
+        // Validate memory limit format (e.g., '2GB', '512MB')
+        if (!/^\d+[KMG]B?$/i.test(this.config.memoryLimit)) {
+          throw new Error('Invalid memory limit format. Use format like: 2GB, 512MB, 1024KB');
+        }
+        // Validate threads is a positive integer
+        const threads = parseInt(String(this.config.threads), 10);
+        if (isNaN(threads) || threads < 1 || threads > 128) {
+          throw new Error('Threads must be a number between 1 and 128');
+        }
+        // SET commands don't support parameterized queries in DuckDB
+        // But we've thoroughly validated the inputs above
         await this.execute(conn, `SET memory_limit='${this.config.memoryLimit}'`);
-        await this.execute(conn, `SET threads=${this.config.threads}`);
+        await this.execute(conn, `SET threads=${threads}`);
         conn.close();
 
         // Install and load extensions using a temporary connection
         const initConn = this.db.connect();
+        // Only allow whitelisted extensions
+        const allowedExtensions = ['vss', 'fts', 'parquet', 'json'];
         for (const ext of this.config.extensions) {
-          await this.execute(initConn, `INSTALL ${ext};`);
-          await this.execute(initConn, `LOAD ${ext};`);
+          if (!allowedExtensions.includes(ext.toLowerCase())) {
+            throw new Error(`Extension '${ext}' is not allowed. Allowed: ${allowedExtensions.join(', ')}`);
+          }
+          // INSTALL and LOAD don't support parameterized queries in DuckDB
+          // But we've validated ext is in our whitelist, so it's safe
+          await this.execute(initConn, `INSTALL ${ext}`);
+          await this.execute(initConn, `LOAD ${ext}`);
         }
 
         // Create default tables
@@ -625,9 +643,15 @@ export class DuckDBVector extends MastraVector {
       const contentCol = this.escapeIdentifier(mapping.content || 'content');
       const metadataCol = this.escapeIdentifier(mapping.metadata || 'metadata');
 
-      // Build filter clause - WARNING: filter is still potentially unsafe
-      // Users should be aware that filter is passed directly to SQL
-      const whereClause = filter ? `WHERE ${filter}` : '';
+      // NOTE: Filter parameter has been removed for security reasons
+      // If you need to filter Parquet data, please pre-filter your Parquet files
+      // or use DuckDB's COPY command with WHERE clause directly
+      if (filter) {
+        throw new Error(
+          'Filter parameter is not supported for Parquet import due to SQL injection risks. ' +
+          'Please pre-filter your Parquet files or use a staging table approach.'
+        );
+      }
 
       // Import from Parquet
       const sql = `
@@ -638,7 +662,6 @@ export class DuckDBVector extends MastraVector {
           ${contentCol} as content,
           ${metadataCol} as metadata
         FROM read_parquet('${escapedSource}')
-        ${whereClause}
       `;
 
       const result = await this.execute(conn, sql);
@@ -689,6 +712,9 @@ export class DuckDBVector extends MastraVector {
       // Get similarity function
       const similarityFunc = this.getSimilarityFunction();
 
+      // Validate and sanitize topK
+      const topK = this.validateTopK(options.topK);
+
       // Try hybrid search with FTS first, fall back to vector-only if FTS not available
       let results;
       try {
@@ -721,10 +747,10 @@ export class DuckDBVector extends MastraVector {
           FROM combined_scores c
           JOIN ${escapedTableName} vec ON c.id = vec.id
           ORDER BY c.final_score DESC
-          LIMIT ${options.topK || 10}
+          LIMIT ?
         `;
 
-        const queryParams = [`[${normalizedQuery.join(',')}]`, textQuery, vectorWeight, textWeight];
+        const queryParams = [`[${normalizedQuery.join(',')}]`, textQuery, vectorWeight, textWeight, topK];
         results = await this.execute(conn, sql, queryParams);
       } catch (error: any) {
         // FTS not available, fall back to vector search only
@@ -737,10 +763,10 @@ export class DuckDBVector extends MastraVector {
             ${similarityFunc}(vector, ?::FLOAT[${this.config.dimensions}]) as score
           FROM ${escapedTableName}
           ORDER BY score DESC
-          LIMIT ${options.topK || 10}
+          LIMIT ?
         `;
 
-        const queryParams = [`[${normalizedQuery.join(',')}]`];
+        const queryParams = [`[${normalizedQuery.join(',')}]`, topK];
         results = await this.execute(conn, sql, queryParams);
       }
 
@@ -864,6 +890,29 @@ export class DuckDBVector extends MastraVector {
     if (source.length > 1024) {
       throw new Error('Parquet source path must be 1024 characters or less');
     }
+  }
+
+  /**
+   * Validate and sanitize topK parameter to prevent SQL injection
+   */
+  private validateTopK(topK?: number): number {
+    const value = topK || 10;
+
+    // Ensure it's a number
+    const numValue = parseInt(String(value), 10);
+    if (isNaN(numValue)) {
+      throw new Error('topK must be a valid number');
+    }
+
+    // Enforce reasonable limits
+    if (numValue < 1) {
+      throw new Error('topK must be at least 1');
+    }
+    if (numValue > 10000) {
+      throw new Error('topK cannot exceed 10000');
+    }
+
+    return numValue;
   }
 
   /**
