@@ -27,10 +27,7 @@ type AuthConfig = Pick<GoogleModelConfig, 'apiKey' | 'keyFilename' | 'credential
 
 type GoogleClientOptions = AuthConfig;
 
-const resolveAuthConfig = (
-  modelConfig: GoogleModelConfig | undefined,
-  fallback: AuthConfig,
-): AuthConfig => {
+const resolveAuthConfig = (modelConfig: GoogleModelConfig | undefined, fallback: AuthConfig): AuthConfig => {
   const resolved: AuthConfig = {};
 
   const apiKey = modelConfig?.apiKey ?? fallback.apiKey;
@@ -105,11 +102,7 @@ export class GoogleVoice extends MastraVoice {
     };
 
     const speechAuthConfig = resolveAuthConfig(speechModel, sharedFallback);
-    const listeningAuthConfig = resolveAuthConfig(listeningModel, {
-      apiKey: listeningModel?.apiKey ?? sharedFallback.apiKey,
-      keyFilename: listeningModel?.keyFilename ?? sharedFallback.keyFilename,
-      credentials: listeningModel?.credentials ?? sharedFallback.credentials,
-    });
+    const listeningAuthConfig = resolveAuthConfig(listeningModel, sharedFallback);
 
     super({
       speechModel: {
