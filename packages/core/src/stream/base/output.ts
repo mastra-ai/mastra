@@ -35,39 +35,38 @@ export class JsonToSseTransformStream extends TransformStream<unknown, string> {
   }
 }
 
-const emptyBufferedByStep: LLMStepResult = {
-  text: '',
-  reasoning: [],
-  sources: [],
-  files: [],
-  toolCalls: [],
-  toolResults: [],
-  dynamicToolCalls: [],
-  dynamicToolResults: [],
-  staticToolCalls: [],
-  staticToolResults: [],
-  content: [],
-  usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-  warnings: [],
-  request: {},
-  response: {
-    id: '',
-    timestamp: new Date(),
-    modelId: '',
-    messages: [],
-    uiMessages: [],
-  },
-  reasoningText: '',
-  providerMetadata: undefined,
-};
-
 export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
   #aisdkv5: AISDKV5OutputStream<OUTPUT>;
   #error: Error | string | { message: string; stack: string } | undefined;
   #baseStream: ReadableStream<ChunkType<OUTPUT>>;
   #bufferedSteps: LLMStepResult[] = [];
   #bufferedReasoningDetails: Record<string, LLMStepResult['reasoning'][number]> = {};
-  #bufferedByStep: LLMStepResult = emptyBufferedByStep;
+  #bufferedByStep: LLMStepResult = {
+    text: '',
+    reasoning: [],
+    sources: [],
+    files: [],
+    toolCalls: [],
+    toolResults: [],
+    dynamicToolCalls: [],
+    dynamicToolResults: [],
+    staticToolCalls: [],
+    staticToolResults: [],
+    content: [],
+    usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+    warnings: [],
+    request: {},
+    response: {
+      id: '',
+      timestamp: new Date(),
+      modelId: '',
+      messages: [],
+      uiMessages: [],
+    },
+    reasoningText: '',
+    providerMetadata: undefined,
+    finishReason: undefined,
+  };
   #bufferedText: LLMStepResult['text'][] = [];
   #bufferedTextChunks: Record<string, LLMStepResult['text'][]> = {};
   #bufferedSources: LLMStepResult['sources'] = [];
@@ -80,7 +79,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   #warnings: LLMStepResult['warnings'] = [];
   #finishReason: LLMStepResult['finishReason'] = undefined;
   #request: LLMStepResult['request'] = {};
-  #usageCount: LLMStepResult['usage'] = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+  #usageCount: LLMStepResult['usage'] = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
   #tripwire = false;
   #tripwireReason = '';
 
@@ -239,19 +238,34 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
             case 'reasoning-start':
               self.#bufferedReasoningDetails[chunk.payload.id] = {
                 type: 'reasoning',
-                text: '',
-                providerOptions: chunk.payload.providerMetadata || {},
+                runId: chunk.runId,
+                from: chunk.from,
+                payload: {
+                  id: chunk.payload.id,
+                  providerMetadata: chunk.payload.providerMetadata,
+                  text: '',
+                },
               };
               break;
             case 'reasoning-delta': {
-              self.#bufferedReasoning.push({ type: 'reasoning', text: chunk.payload.text });
-              self.#bufferedByStep.reasoning.push({ type: 'reasoning', text: chunk.payload.text });
+              self.#bufferedReasoning.push({
+                type: 'reasoning',
+                runId: chunk.runId,
+                from: chunk.from,
+                payload: chunk.payload,
+              });
+              self.#bufferedByStep.reasoning.push({
+                type: 'reasoning',
+                runId: chunk.runId,
+                from: chunk.from,
+                payload: chunk.payload,
+              });
 
               const bufferedReasoning = self.#bufferedReasoningDetails[chunk.payload.id];
               if (bufferedReasoning) {
-                bufferedReasoning.text += chunk.payload.text;
+                bufferedReasoning.payload.text += chunk.payload.text;
                 if (chunk.payload.providerMetadata) {
-                  bufferedReasoning.providerOptions = chunk.payload.providerMetadata;
+                  bufferedReasoning.payload.providerMetadata = chunk.payload.providerMetadata;
                 }
               }
 
@@ -260,7 +274,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
             case 'reasoning-end': {
               const bufferedReasoning = self.#bufferedReasoningDetails[chunk.payload.id];
               if (chunk.payload.providerMetadata && bufferedReasoning) {
-                bufferedReasoning.providerOptions = chunk.payload.providerMetadata;
+                bufferedReasoning.payload.providerMetadata = chunk.payload.providerMetadata;
               }
               break;
             }
@@ -293,18 +307,16 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
 
               const stepResult: LLMStepResult = {
-                // Keep original Mastra chunk format
+                stepType: self.#bufferedSteps.length === 0 ? 'initial' : 'tool-result',
                 sources: self.#bufferedByStep.sources,
                 files: self.#bufferedByStep.files,
                 toolCalls: self.#bufferedByStep.toolCalls,
                 toolResults: self.#bufferedByStep.toolResults,
 
-                // StepResult properties (minus the ones we're overriding)
                 content: messageList.get.response.aiV5.modelContent(-1),
                 text: self.#bufferedByStep.text,
-                reasoningText: self.#bufferedReasoning.map(reasoningPart => reasoningPart.text).join(''),
+                reasoningText: self.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join(''),
                 reasoning: self.#bufferedByStep.reasoning,
-                // Compute these from the content array like DefaultStepResult does
                 get staticToolCalls() {
                   return self.#bufferedByStep.toolCalls.filter(
                     part => part.type === 'tool-call' && part.payload?.dynamic === false,
@@ -335,7 +347,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   modelId:
                     (chunk.payload.metadata?.modelId as string) || (chunk.payload.metadata?.model as string) || '',
                   ...otherMetadata,
-                  // Clone messages to prevent mutation when the chunk is modified later
                   messages: chunk.payload.messages?.nonUser || [],
                   uiMessages: messageList.get.response.aiV5.ui(),
                 },
@@ -349,7 +360,32 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               self.#bufferedSteps.push(stepResult);
 
-              self.#bufferedByStep = { ...emptyBufferedByStep };
+              self.#bufferedByStep = {
+                text: '',
+                reasoning: [],
+                sources: [],
+                files: [],
+                toolCalls: [],
+                toolResults: [],
+                dynamicToolCalls: [],
+                dynamicToolResults: [],
+                staticToolCalls: [],
+                staticToolResults: [],
+                content: [],
+                usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+                warnings: [],
+                request: {},
+                response: {
+                  id: '',
+                  timestamp: new Date(),
+                  modelId: '',
+                  messages: [],
+                  uiMessages: [],
+                },
+                reasoningText: '',
+                providerMetadata: undefined,
+                finishReason: undefined,
+              };
 
               break;
             }
@@ -402,9 +438,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               this.populateUsageCount(chunk.payload.output.usage as Record<string, number>);
 
               chunk.payload.output.usage = {
-                inputTokens: self.#usageCount.inputTokens || 0,
-                outputTokens: self.#usageCount.outputTokens || 0,
-                totalTokens: self.#usageCount.totalTokens || 0,
+                inputTokens: self.#usageCount.inputTokens ?? 0,
+                outputTokens: self.#usageCount.outputTokens ?? 0,
+                totalTokens: self.#usageCount.totalTokens ?? 0,
                 ...(self.#usageCount.reasoningTokens !== undefined && {
                   reasoningTokens: self.#usageCount.reasoningTokens,
                 }),
@@ -500,7 +536,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
               const reasoningText =
                 self.#bufferedReasoning.length > 0
-                  ? self.#bufferedReasoning.map(reasoningPart => reasoningPart.text).join('')
+                  ? self.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join('')
                   : undefined;
               self.#delayedPromises.reasoningText.resolve(reasoningText);
               self.#delayedPromises.reasoning.resolve(Object.values(self.#bufferedReasoningDetails || {}));

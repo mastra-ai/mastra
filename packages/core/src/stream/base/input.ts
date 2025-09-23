@@ -24,8 +24,7 @@ export abstract class MastraModelInput extends MastraBase {
           onResult({
             warnings: stream.warnings,
             request: stream.request,
-            rawResponse: stream.rawResponse || {},
-            response: stream.response || {},
+            rawResponse: stream.rawResponse || stream.response || {},
           });
 
           await self.transform({

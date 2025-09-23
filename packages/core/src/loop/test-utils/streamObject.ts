@@ -915,7 +915,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "error": undefined,
               "files": [],
               "finishReason": "stop",
-              "isContinued": false,
               "model": {
                 "modelId": "mock-model-id",
                 "provider": "mock-provider",
@@ -968,21 +967,25 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "sources": [],
               "staticToolCalls": [],
               "staticToolResults": [],
-              "stepType": "initial",
               "steps": [
-                DefaultStepResult {
+                {
                   "content": [
                     {
                       "text": "{ "content": "Hello, world!" }",
                       "type": "text",
                     },
                   ],
+                  "dynamicToolCalls": [],
+                  "dynamicToolResults": [],
+                  "files": [],
                   "finishReason": "stop",
                   "providerMetadata": {
                     "testProvider": {
                       "testKey": "testValue",
                     },
                   },
+                  "reasoning": [],
+                  "reasoningText": "",
                   "request": {},
                   "response": {
                     "headers": undefined,
@@ -1017,6 +1020,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       },
                     ],
                   },
+                  "sources": [],
+                  "staticToolCalls": [],
+                  "staticToolResults": [],
+                  "stepType": "initial",
+                  "text": "{ "content": "Hello, world!" }",
+                  "toolCalls": [],
+                  "toolResults": [],
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
@@ -1107,7 +1117,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             Error message: Validation failed],
               "files": [],
               "finishReason": "error",
-              "isContinued": false,
               "model": {
                 "modelId": "mock-model-id",
                 "provider": "mock-provider",
@@ -1156,17 +1165,21 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "sources": [],
               "staticToolCalls": [],
               "staticToolResults": [],
-              "stepType": "initial",
               "steps": [
-                DefaultStepResult {
+                {
                   "content": [
                     {
                       "text": "{ "invalid": "Hello, world!" }",
                       "type": "text",
                     },
                   ],
+                  "dynamicToolCalls": [],
+                  "dynamicToolResults": [],
+                  "files": [],
                   "finishReason": "error",
                   "providerMetadata": undefined,
+                  "reasoning": [],
+                  "reasoningText": "",
                   "request": {},
                   "response": {
                     "headers": undefined,
@@ -1201,6 +1214,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       },
                     ],
                   },
+                  "sources": [],
+                  "staticToolCalls": [],
+                  "staticToolResults": [],
+                  "stepType": "initial",
+                  "text": "{ "invalid": "Hello, world!" }",
+                  "toolCalls": [],
+                  "toolResults": [],
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,

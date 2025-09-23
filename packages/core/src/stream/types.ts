@@ -1,5 +1,4 @@
 import type { LanguageModelV1LogProbs } from '@ai-sdk/provider';
-import type { ReasoningPart } from '@ai-sdk/provider-utils-v5';
 import type {
   LanguageModelV2FinishReason,
   LanguageModelV2Usage,
@@ -491,6 +490,7 @@ export type SourceChunk = BaseChunkType & { type: 'source'; payload: SourcePaylo
 export type FileChunk = BaseChunkType & { type: 'file'; payload: FilePayload };
 export type ToolCallChunk = BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload };
 export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload };
+export type ReasoningChunk = BaseChunkType & { type: 'reasoning'; payload: ReasoningDeltaPayload };
 
 export type ExecuteStreamModelManager<T> = (
   callback: (model: LanguageModelV2, isLastModel: boolean) => Promise<T>,
@@ -547,6 +547,7 @@ export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = 
 };
 
 export type LLMStepResult = {
+  stepType?: 'initial' | 'tool-result';
   toolCalls: ToolCallChunk[];
   toolResults: ToolResultChunk[];
   dynamicToolCalls: ToolCallChunk[];
@@ -556,7 +557,7 @@ export type LLMStepResult = {
   files: FileChunk[];
   sources: SourceChunk[];
   text: string;
-  reasoning: ReasoningPart[];
+  reasoning: ReasoningChunk[];
   content: AIV5Type.StepResult<ToolSet>['content'];
   finishReason?: FinishReason | string;
   usage: LanguageModelUsage;

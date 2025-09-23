@@ -629,7 +629,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
             isContinued: false,
           },
           metadata: {
-            providerMetadata: providerOptions,
+            providerMetadata: runState.state.providerOptions,
             ...responseMetadata,
             headers: rawResponse?.headers,
             request,
@@ -683,7 +683,6 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
               type: 'tool-call',
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
-              // @ts-ignore TODO: look into this
               args: toolCall.args,
             };
           }) as any),
@@ -721,7 +720,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
       steps.push(
         new DefaultStepResult({
           warnings: outputStream._getImmediateWarnings(),
-          providerMetadata: providerOptions,
+          providerMetadata: runState.state.providerOptions,
           finishReason: runState.state.stepResult?.reason,
           content: currentIterationContent,
           response: { ...responseMetadata, ...rawResponse, messages: messageList.get.response.aiV5.model() },

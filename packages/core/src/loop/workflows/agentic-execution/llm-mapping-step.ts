@@ -72,7 +72,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
             runId: rest.runId,
             from: ChunkFrom.AGENT,
             payload: {
-              // @ts-ignore TODO: look into this
               args: toolCall.args,
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,

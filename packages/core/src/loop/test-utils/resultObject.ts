@@ -660,7 +660,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       expect(steps).toMatchInlineSnapshot(`
         [
-          DefaultStepResult {
+          {
             "content": [
               {
                 "file": DefaultGeneratedFileWithType {
@@ -685,8 +685,34 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "type": "file",
               },
             ],
+            "dynamicToolCalls": [],
+            "dynamicToolResults": [],
+            "files": [
+              {
+                "from": "AGENT",
+                "payload": {
+                  "base64": "Hello World",
+                  "data": "Hello World",
+                  "mimeType": "text/plain",
+                },
+                "runId": "test-run-id",
+                "type": "file",
+              },
+              {
+                "from": "AGENT",
+                "payload": {
+                  "base64": "QkFVRw==",
+                  "data": "QkFVRw==",
+                  "mimeType": "image/jpeg",
+                },
+                "runId": "test-run-id",
+                "type": "file",
+              },
+            ],
             "finishReason": "stop",
             "providerMetadata": undefined,
+            "reasoning": [],
+            "reasoningText": "",
             "request": {},
             "response": {
               "headers": undefined,
@@ -747,6 +773,13 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 },
               ],
             },
+            "sources": [],
+            "staticToolCalls": [],
+            "staticToolResults": [],
+            "stepType": "initial",
+            "text": "Hello!",
+            "toolCalls": [],
+            "toolResults": [],
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
