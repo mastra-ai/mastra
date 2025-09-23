@@ -55,5 +55,3 @@ export const mastra = new Mastra({
   //   enabled: false,
   // }
 });
-
-console.log('lol', process.env.MASTRA_HIDE_CLOUD_CTA === 'true');
