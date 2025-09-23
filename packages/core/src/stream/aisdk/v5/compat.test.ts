@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { convertFullStreamChunkToUIMessageStream } from './compat';
 
 describe('convertFullStreamChunkToUIMessageStream', () => {
-  it.only('should convert tool-output part into UI message with correct format', () => {
+  it('should convert tool-output part into UI message with correct format', () => {
     // Arrange: Create a tool-output part with sample data
     const toolOutput = {
       type: 'tool-output' as const,
@@ -23,8 +23,6 @@ describe('convertFullStreamChunkToUIMessageStream', () => {
       part: toolOutput,
       onError: error => `Error: ${error}`,
     });
-
-    console.log(result);
 
     // Assert: Verify the transformation
     expect(result).toBeDefined();
