@@ -17,7 +17,7 @@ export function createOnScorerHook(mastra: Mastra) {
     const entityType = hookData.entityType;
     const scorer = hookData.scorer;
     try {
-      const scorerToUse = await findScorer(mastra, entityId, entityType, scorer.id);
+      const scorerToUse = await findScorer(mastra, entityId, entityType, scorer.name);
 
       if (!scorerToUse) {
         throw new MastraError({
@@ -43,7 +43,7 @@ export function createOnScorerHook(mastra: Mastra) {
         ...rest,
         ...runResult,
         entityId,
-        scorerId: hookData.scorer.id,
+        scorerId: hookData.scorer.name,
         metadata: {
           structuredOutput: !!structuredOutput,
         },
