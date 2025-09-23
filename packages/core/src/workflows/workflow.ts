@@ -402,13 +402,13 @@ export class Workflow<
     this.#mastra = mastra;
     this.steps = {};
     this.stepDefs = steps;
-    this.#options = options ?? { validateSchemas: false };
+    this.#options = options ?? { validateInputs: false };
 
     if (!executionEngine) {
       // TODO: this should be configured using the Mastra class instance that's passed in
       this.executionEngine = new DefaultExecutionEngine({
         mastra: this.#mastra,
-        options: { tracingPolicy: options?.tracingPolicy, validateSchemas: options?.validateSchemas },
+        options: { tracingPolicy: options?.tracingPolicy, validateInputs: options?.validateInputs },
       });
     } else {
       this.executionEngine = executionEngine;
@@ -941,7 +941,7 @@ export class Workflow<
         cleanup: () => this.#runs.delete(runIdToUse),
         tracingPolicy: this.#options?.tracingPolicy,
         workflowSteps: this.steps,
-        validateSchemas: this.#options?.validateSchemas,
+        validateInputs: this.#options?.validateInputs,
       });
 
     this.#runs.set(runIdToUse, run);
@@ -1017,7 +1017,7 @@ export class Workflow<
     runCount,
     tracingContext,
     writer,
-    validateSchemas,
+    validateInputs,
   }: {
     runId?: string;
     inputData: z.infer<TInput>;
@@ -1041,20 +1041,20 @@ export class Workflow<
     runCount?: number;
     tracingContext?: TracingContext;
     writer?: WritableStream<ChunkType>;
-    validateSchemas?: boolean;
+    validateInputs?: boolean;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
 
-    if (validateSchemas) {
+    if (validateInputs) {
       this.#options = {
         ...(this.#options || {}),
-        validateSchemas,
+        validateInputs: validateInputs,
       };
     }
 
     this.executionEngine.options = {
       ...(this.executionEngine.options || {}),
-      validateSchemas,
+      validateInputs,
     };
 
     const isResume = !!(resume?.steps && resume.steps.length > 0);
@@ -1273,7 +1273,7 @@ export class Run<
   /**
    * Options around how to trace this run
    */
-  readonly validateSchemas?: boolean;
+  readonly validateInputs?: boolean;
 
   /**
    * Internal state of the workflow run
@@ -1339,7 +1339,7 @@ export class Run<
     disableScorers?: boolean;
     tracingPolicy?: TracingPolicy;
     workflowSteps: Record<string, StepWithComponent>;
-    validateSchemas?: boolean;
+    validateInputs?: boolean;
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
@@ -1354,7 +1354,7 @@ export class Run<
     this.disableScorers = params.disableScorers;
     this.tracingPolicy = params.tracingPolicy;
     this.workflowSteps = params.workflowSteps;
-    this.validateSchemas = params.validateSchemas;
+    this.validateInputs = params.validateInputs;
   }
 
   public get abortController(): AbortController {
@@ -2017,7 +2017,7 @@ export class Run<
 
       const suspendedStep = this.workflowSteps[steps?.[0] ?? ''];
 
-      if (suspendedStep && suspendedStep.resumeSchema && this.validateSchemas) {
+      if (suspendedStep && suspendedStep.resumeSchema && this.validateInputs) {
         const resumeSchema = suspendedStep.resumeSchema;
 
         const validatedResumeData = await resumeSchema.safeParseAsync(params.resumeData);

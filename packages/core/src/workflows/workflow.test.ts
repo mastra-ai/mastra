@@ -5969,7 +5969,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result: z.string(),
         }),
-        options: { validateSchemas: true },
+        options: { validateInputs: true },
       });
 
       workflow.then(step1).commit();
@@ -6048,7 +6048,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result: z.string(),
         }),
-        options: { validateSchemas: true },
+        options: { validateInputs: true },
       });
 
       workflow
@@ -6144,7 +6144,7 @@ describe('Workflow', () => {
         id: 'increment-workflow',
         inputSchema: z.object({ value: z.number() }),
         outputSchema: z.object({ value: z.number() }),
-        options: { validateSchemas: true },
+        options: { validateInputs: true },
       })
         .then(incrementStep)
         .then(resumeStep)
@@ -6239,7 +6239,7 @@ describe('Workflow', () => {
           startValue: z.number(),
         }),
         outputSchema: z.object({ success: z.boolean() }),
-        options: { validateSchemas: true },
+        options: { validateInputs: true },
       });
 
       const wfA = createWorkflow({

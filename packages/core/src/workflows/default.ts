@@ -817,7 +817,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         let suspended: { payload: any } | undefined;
         let bailed: { payload: any } | undefined;
 
-        if (this.options?.validateSchemas) {
+        if (this.options?.validateInputs) {
           const inputSchema = step.inputSchema;
 
           const validatedInput = await inputSchema.safeParseAsync(prevOutput);
@@ -878,7 +878,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           ),
           // Disable scorers must be explicitly set to false they are on by default
           scorers: disableScorers === false ? undefined : step.scorers,
-          validateSchemas: this.options?.validateSchemas,
+          validateInputs: this.options?.validateInputs,
         });
 
         if (step.scorers) {
