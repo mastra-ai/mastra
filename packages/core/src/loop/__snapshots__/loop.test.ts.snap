@@ -1364,48 +1364,73 @@ exports[`Loop Tests > AISDK v5 > result.pipeUIMessageStreamToResponse > should s
 exports[`Loop Tests > AISDK v5 > result.reasoning > should contain reasoning from model response 1`] = `
 [
   {
-    "providerMetadata": {
-      "testProvider": {
-        "signature": "1234567890",
+    "from": "AGENT",
+    "payload": {
+      "id": "1",
+      "providerMetadata": {
+        "testProvider": {
+          "signature": "1234567890",
+        },
       },
+      "text": "I will open the conversation with witty banter.",
     },
-    "text": "I will open the conversation with witty banter.",
+    "runId": "test-run-id",
     "type": "reasoning",
   },
   {
-    "providerMetadata": {
-      "testProvider": {
-        "redactedData": "redacted-reasoning-data",
+    "from": "AGENT",
+    "payload": {
+      "id": "2",
+      "providerMetadata": {
+        "testProvider": {
+          "redactedData": "redacted-reasoning-data",
+        },
       },
+      "text": "",
     },
-    "text": "",
+    "runId": "test-run-id",
     "type": "reasoning",
   },
   {
-    "providerMetadata": {
-      "testProvider": {
-        "signature": "1234567890",
+    "from": "AGENT",
+    "payload": {
+      "id": "3",
+      "providerMetadata": {
+        "testProvider": {
+          "signature": "1234567890",
+        },
       },
+      "text": " Once the user has relaxed, I will pry for valuable information.",
     },
-    "text": " Once the user has relaxed, I will pry for valuable information.",
+    "runId": "test-run-id",
     "type": "reasoning",
   },
   {
-    "providerMetadata": {
-      "testProvider": {
-        "signature": "0987654321",
+    "from": "AGENT",
+    "payload": {
+      "id": "4",
+      "providerMetadata": {
+        "testProvider": {
+          "signature": "0987654321",
+        },
       },
+      "text": " I need to think about this problem carefully.",
     },
-    "text": " I need to think about this problem carefully.",
+    "runId": "test-run-id",
     "type": "reasoning",
   },
   {
-    "providerMetadata": {
-      "testProvider": {
-        "signature": "0987654321",
+    "from": "AGENT",
+    "payload": {
+      "id": "5",
+      "providerMetadata": {
+        "testProvider": {
+          "signature": "0987654321",
+        },
       },
+      "text": " The best solution requires careful consideration of all factors.",
     },
-    "text": " The best solution requires careful consideration of all factors.",
+    "runId": "test-run-id",
     "type": "reasoning",
   },
 ]
