@@ -34,13 +34,14 @@ export function createAnswerRelevancyScorer({
   model: MastraLanguageModel;
   options?: Record<'uncertaintyWeight' | 'scale', number>;
 }) {
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer({
     name: 'Answer Relevancy Scorer',
     description: 'A scorer that evaluates the relevancy of an LLM output to an input',
     judge: {
       model,
       instructions: ANSWER_RELEVANCY_AGENT_INSTRUCTIONS,
     },
+    type: 'agent',
   })
     .preprocess({
       description: 'Extract relevant statements from the LLM output',

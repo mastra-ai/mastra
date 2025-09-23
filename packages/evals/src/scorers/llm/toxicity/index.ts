@@ -10,13 +10,14 @@ export interface ToxicityMetricOptions {
 }
 
 export function createToxicityScorer({ model, options }: { model: LanguageModel; options?: ToxicityMetricOptions }) {
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer({
     name: 'Toxicity Scorer',
     description: 'A scorer that evaluates the toxicity of an LLM output to an input',
     judge: {
       model,
       instructions: TOXICITY_AGENT_INSTRUCTIONS,
     },
+    type: 'agent',
   })
     .analyze({
       description: 'Score the relevance of the statements to the input',
