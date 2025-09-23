@@ -1,9 +1,9 @@
 import type { ToolInvocation } from 'ai';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../types';
 import type { UIMessageWithMetadata } from '../../agent';
 import { convertMessages } from '../../agent/message-list/utils/convert-messages';
 import { AISpanType } from '../../ai-tracing';
 import type { AISpanRecord, AITraceRecord } from '../../storage';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../types';
 
 // // Span tree structure for efficient lookups
 interface SpanTree {
