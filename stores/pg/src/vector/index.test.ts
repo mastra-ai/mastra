@@ -3,7 +3,7 @@ import type { QueryResult } from '@mastra/core/vector';
 import * as pg from 'pg';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 
-import { PgVector } from '.';
+import { PgVector, type PgVectorConfig } from '.';
 
 describe('PgVector', () => {
   let vectorDB: PgVector;
@@ -2317,6 +2317,135 @@ describe('PgVector', () => {
       it('should accept config object with schema', () => {
         const db = new PgVector({ connectionString, schemaName: customSchema });
         expect(db).toBeInstanceOf(PgVector);
+      });
+    });
+
+    describe('PgVectorConfig Support', () => {
+      it('should accept PgVectorConfig with connectionString', () => {
+        const config: PgVectorConfig = {
+          connectionString,
+          schemaName: customSchema,
+          max: 10,
+          idleTimeoutMillis: 15000,
+        };
+        const db = new PgVector(config);
+        expect(db).toBeInstanceOf(PgVector);
+      });
+
+      it('should accept PgVectorConfig with individual connection parameters', () => {
+        const config: PgVectorConfig = {
+          host: 'localhost',
+          port: 5434,
+          database: 'mastra',
+          user: 'postgres',
+          password: 'postgres',
+          schemaName: customSchema,
+          max: 15,
+          idleTimeoutMillis: 20000,
+        };
+        const db = new PgVector(config);
+        expect(db).toBeInstanceOf(PgVector);
+      });
+
+      it('should accept PgVectorConfig with SSL configuration', () => {
+        const config: PgVectorConfig = {
+          host: 'localhost',
+          port: 5434,
+          database: 'mastra',
+          user: 'postgres',
+          password: 'postgres',
+          ssl: true,
+          schemaName: customSchema,
+        };
+        const db = new PgVector(config);
+        expect(db).toBeInstanceOf(PgVector);
+      });
+
+      it('should maintain backward compatibility with legacy config', () => {
+        const legacyConfig = {
+          connectionString,
+          schemaName: customSchema,
+          pgPoolOptions: {
+            max: 5,
+            idleTimeoutMillis: 10000,
+          },
+        };
+        const db = new PgVector(legacyConfig);
+        expect(db).toBeInstanceOf(PgVector);
+      });
+
+      it('should throw error for invalid connectionString', () => {
+        expect(() => {
+          new PgVector({ connectionString: '' });
+        }).toThrow('connectionString must be provided and cannot be empty');
+      });
+
+      it('should throw error for invalid host config', () => {
+        expect(() => {
+          new PgVector({
+            host: '',
+            port: 5434,
+            database: 'mastra',
+            user: 'postgres',
+            password: 'postgres',
+          });
+        }).toThrow('host must be provided and cannot be empty');
+      });
+
+      it('should throw error for missing required fields in host config', () => {
+        expect(() => {
+          new PgVector({
+            host: 'localhost',
+            port: 5434,
+            database: 'mastra',
+            user: 'postgres',
+          
+          } as any);
+        }).toThrow('invalid config');
+      });
+
+      it('should throw error for completely invalid config', () => {
+        expect(() => {
+          new PgVector({} as any);
+        }).toThrow('invalid config');
+      });
+
+      it('should work with PgVectorConfig for actual database operations', async () => {
+        const config: PgVectorConfig = {
+          connectionString,
+          schemaName: customSchema,
+          max: 5,
+          idleTimeoutMillis: 10000,
+        };
+        const db = new PgVector(config);
+        
+        try {
+          // Test basic operations
+          await db.createIndex({
+            indexName: 'postgres_config_test',
+            dimension: 3,
+            metric: 'cosine',
+          });
+
+          await db.upsert({
+            indexName: 'postgres_config_test',
+            vectors: [[1, 2, 3]],
+            metadata: [{ test: 'postgres_config' }],
+          });
+
+          const results = await db.query({
+            indexName: 'postgres_config_test',
+            queryVector: [1, 2, 3],
+            topK: 1,
+          });
+
+          expect(results).toHaveLength(1);
+          expect(results[0].metadata).toEqual({ test: 'postgres_config' });
+
+          await db.deleteIndex({ indexName: 'postgres_config_test' });
+        } finally {
+          await db.disconnect();
+        }
       });
     });
 
