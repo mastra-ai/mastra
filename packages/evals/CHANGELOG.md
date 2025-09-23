@@ -1,5 +1,11 @@
 # @mastra/evals
 
+## 0.13.8-alpha.2
+
+### Patch Changes
+
+- Add explicit type 'agent' for built in scorers ([#8132](https://github.com/mastra-ai/mastra/pull/8132))
+
 ## 0.13.8-alpha.1
 
 ### Patch Changes
