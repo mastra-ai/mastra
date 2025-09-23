@@ -25,7 +25,6 @@ type ScorerTypeShortcuts = {
 // Pipeline scorer
 // TInput and TRunOutput establish the type contract for the entire scorer pipeline,
 // ensuring type safety flows through all steps and contexts
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface ScorerConfig<TName extends string = string, TInput = any, TRunOutput = any> {
   name: TName;
   description: string;

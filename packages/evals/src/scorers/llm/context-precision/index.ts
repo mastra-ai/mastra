@@ -39,7 +39,7 @@ export function createContextPrecisionScorer({
     throw new Error('Context array cannot be empty if provided');
   }
 
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer({
     name: 'Context Precision Scorer',
     description:
       'A scorer that evaluates the relevance and precision of retrieved context nodes for generating expected outputs',
@@ -47,6 +47,7 @@ export function createContextPrecisionScorer({
       model,
       instructions: CONTEXT_PRECISION_AGENT_INSTRUCTIONS,
     },
+    type: 'agent',
   })
     .analyze({
       description: 'Evaluate the relevance of each context piece for generating the expected output',
