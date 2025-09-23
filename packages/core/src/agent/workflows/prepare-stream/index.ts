@@ -34,6 +34,8 @@ interface CreatePrepareStreamWorkflowOptions<
   memory?: MastraMemory;
   saveQueueManager: SaveQueueManager;
   returnScorerData?: boolean;
+  requireToolApproval?: boolean;
+  resumeContext?: any;
 }
 
 export function createPrepareStreamWorkflow<
@@ -54,6 +56,8 @@ export function createPrepareStreamWorkflow<
   memory,
   saveQueueManager,
   returnScorerData,
+  requireToolApproval,
+  resumeContext,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -88,6 +92,8 @@ export function createPrepareStreamWorkflow<
     runId,
     returnScorerData,
     format,
+    requireToolApproval,
+    resumeContext,
   });
 
   const mapResultsStep = createMapResultsStep({
