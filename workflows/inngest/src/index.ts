@@ -27,6 +27,7 @@ import type {
   StreamEvent,
   ChunkType,
   ExecutionEngineOptions,
+  StepWithComponent,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
@@ -117,6 +118,7 @@ export class InngestRun<
         delay?: number;
       };
       cleanup?: () => void;
+      workflowSteps: Record<string, StepWithComponent>;
     },
     inngest: Inngest,
   ) {
@@ -494,6 +496,7 @@ export class InngestWorkflow<
           mastra: this.#mastra,
           retryConfig: this.retryConfig,
           cleanup: () => this.runs.delete(runIdToUse),
+          workflowSteps: this.steps,
         },
         this.inngest,
       );
