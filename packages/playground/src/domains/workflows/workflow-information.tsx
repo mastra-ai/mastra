@@ -31,7 +31,7 @@ import { useNavigate, useParams } from 'react-router';
 export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: string; isLegacy?: boolean }) {
   const params = useParams();
   const navigate = useNavigate();
-  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(isLegacy ? undefined : workflowId);
+  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId, !isLegacy);
 
   const { data: legacyWorkflow, isLoading: isLegacyWorkflowLoading } = useLegacyWorkflow(workflowId, !!isLegacy);
   const { createWorkflowRun } = useExecuteWorkflow();

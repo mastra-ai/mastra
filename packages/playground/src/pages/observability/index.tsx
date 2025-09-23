@@ -19,7 +19,7 @@ import { useAITraces } from '@/domains/observability/hooks/use-ai-traces';
 import { useAITrace } from '@/domains/observability/hooks/use-ai-trace';
 import { format, isToday } from 'date-fns';
 import { useWorkflows } from '@/hooks/use-workflows';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
 
 const listColumns = [
   { name: 'shortId', label: 'ID', size: '6rem' },
@@ -39,7 +39,6 @@ type TraceItem = {
 };
 
 export default function Observability() {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedTraceId, setSelectedTraceId] = useState<string | undefined>();
   const [selectedEntityOption, setSelectedEntityOption] = useState<EntityOptions | undefined>({
@@ -54,9 +53,6 @@ export default function Observability() {
   const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
 
   const { data: aiTrace, isLoading: isLoadingAiTrace } = useAITrace(selectedTraceId, { enabled: !!selectedTraceId });
-
-  const traceId = searchParams.get('traceId');
-  const spanId = searchParams.get('spanId');
 
   const {
     data: aiTraces = [],
@@ -82,13 +78,6 @@ export default function Observability() {
           }
         : undefined,
   });
-
-  useEffect(() => {
-    if (traceId) {
-      setSelectedTraceId(traceId);
-      setDialogIsOpen(true);
-    }
-  }, [traceId]);
 
   const agentOptions: EntityOptions[] = (Object.entries(agents) || []).map(([, value]) => ({
     value: value.name,
@@ -122,7 +111,7 @@ export default function Observability() {
 
   const handleReset = () => {
     setSelectedTraceId(undefined);
-    setSearchParams({ entity: 'all', traceId: '' });
+    setSearchParams({ entity: 'all' });
     setDialogIsOpen(false);
     setSelectedDateFrom(undefined);
     setSelectedDateTo(undefined);
@@ -235,17 +224,12 @@ export default function Observability() {
       <TraceDialog
         traceSpans={aiTrace?.spans}
         traceId={selectedTraceId}
-        initialSpanId={spanId || undefined}
         traceDetails={aiTraces.find(t => t.traceId === selectedTraceId)}
         isOpen={dialogIsOpen}
         onClose={() => setDialogIsOpen(false)}
         onNext={thereIsNextItem() ? toNextItem : undefined}
         onPrevious={thereIsPreviousItem() ? toPreviousItem : undefined}
         isLoadingSpans={isLoadingAiTrace}
-        onScorerTriggered={scorerName => {
-          setDialogIsOpen(false);
-          navigate(`/scorers/${scorerName}`);
-        }}
       />
     </>
   );

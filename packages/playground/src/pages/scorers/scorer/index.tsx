@@ -38,11 +38,7 @@ type ScoreItem = {
   score: number;
 };
 
-export interface ScorerProps {
-  computeTraceLink: (traceId: string) => string;
-}
-
-export default function Scorer({ computeTraceLink }: ScorerProps) {
+export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedScoreId, setSelectedScoreId] = useState<string | undefined>();
@@ -128,7 +124,7 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
 
   const [scoresPage, setScoresPage] = useState<number>(0);
 
-  const { data: scoresData, isLoading: isScoresLoading } = useScoresByScorerId({
+  const { scores: scoresData, isLoading: isScoresLoading } = useScoresByScorerId({
     scorerId,
     page: scoresPage,
     entityId: selectedEntityOption?.value === 'all' ? undefined : selectedEntityOption?.value,
@@ -148,7 +144,7 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
       id: score.id,
       date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
       time: format(createdAtDate, 'h:mm:ss aaa'),
-      input: JSON.stringify(score?.input),
+      input: score?.input?.inputMessages?.[0]?.content || '',
       entityId: score.entityId,
       score: score.score,
     };
@@ -256,7 +252,6 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
         onClose={() => setDialogIsOpen(false)}
         onNext={thereIsNextItem() ? toNextItem : undefined}
         onPrevious={thereIsPreviousItem() ? toPreviousItem : undefined}
-        computeTraceLink={(traceId, spanId) => `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`}
       />
     </>
   );

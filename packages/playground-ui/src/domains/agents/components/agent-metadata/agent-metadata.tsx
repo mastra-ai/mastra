@@ -208,7 +208,7 @@ interface AgentMetadataScorerListProps {
 
 export const AgentMetadataScorerList = ({ entityId, entityType }: AgentMetadataScorerListProps) => {
   const { Link, paths } = useLinkComponent();
-  const { data: scorers = {}, isLoading } = useScorers();
+  const { scorers, isLoading } = useScorers();
 
   const scorerList = Object.keys(scorers)
     .filter(scorerKey => {
