@@ -44,11 +44,11 @@ export const AgentMetadataModelList = ({
         modelConfig.id === params.modelConfigId
           ? {
               ...modelConfig,
-              enabled: params.enabled || modelConfig.enabled,
-              maxRetries: params.maxRetries || modelConfig.maxRetries,
+              enabled: params.enabled ?? modelConfig.enabled,
+              maxRetries: params.maxRetries ?? modelConfig.maxRetries,
               model: {
-                modelId: params.model?.modelId || modelConfig.model.modelId,
-                provider: params.model?.provider || modelConfig.model.provider,
+                modelId: params.model?.modelId ?? modelConfig.model.modelId,
+                provider: params.model?.provider ?? modelConfig.model.provider,
                 modelVersion: modelConfig.model.modelVersion,
               },
             }
@@ -65,7 +65,7 @@ export const AgentMetadataModelList = ({
           <div {...provided.droppableProps} ref={provided.innerRef} className="flex flex-col gap-2">
             {modelConfigs.map((modelConfig, index) => (
               <Draggable key={modelConfig.id} draggableId={modelConfig.id} index={index}>
-                {(provided, snapshot) => (
+                {provided => (
                   <div
                     ref={provided.innerRef}
                     {...provided.draggableProps}
