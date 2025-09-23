@@ -298,11 +298,23 @@ export async function executeBatched<T, R>(
   let processed = 0;
 
   if (parallel) {
+    // Track completed batches for accurate progress reporting
+    const completedBatches = new Set<number>();
     const batchResults = await Promise.all(
       batches.map(async (batch, index) => {
         const result = await processor(batch);
-        // Calculate processed count based on completed batches to avoid race condition
-        const completedItems = batches.slice(0, index + 1).reduce((sum, b) => sum + b.length, 0);
+
+        // Use atomic operation to track completed batches
+        completedBatches.add(index);
+
+        // Calculate progress based on actually completed batches
+        let completedItems = 0;
+        for (let i = 0; i < batches.length; i++) {
+          if (completedBatches.has(i)) {
+            completedItems += batches[i].length;
+          }
+        }
+
         onProgress?.(completedItems, items.length);
         return result;
       }),

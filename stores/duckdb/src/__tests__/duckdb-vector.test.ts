@@ -196,7 +196,7 @@ describe('DuckDBVector', () => {
         indexName: 'test-index',
         queryVector: updatedVector.values,
         topK: 1,
-        includeMetadata: true,
+        includeVector: false,
       });
 
       expect(results[0].metadata.version).toBe(2);
@@ -301,7 +301,7 @@ describe('DuckDBVector', () => {
         indexName: 'test-index',
         queryVector: vector.values,
         topK: 1,
-        includeMetadata: true,
+        includeVector: false,
       });
 
       expect(results[0].metadata).toMatchObject({

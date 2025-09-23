@@ -37,6 +37,10 @@ export class DuckDBVector extends MastraVector {
   private config: Required<DuckDBVectorConfig>;
   private db: duckdb.Database | null = null;
   private connectionPool: duckdb.Connection[] = [];
+  private connectionWaitQueue: Array<{
+    resolve: (conn: duckdb.Connection) => void;
+    reject: (error: Error) => void;
+  }> = [];
   private mutex = new Mutex();
   private initialized = false;
 
@@ -99,25 +103,51 @@ export class DuckDBVector extends MastraVector {
   }
 
   /**
-   * Get a connection from the pool
+   * Get a connection from the pool with retry and queue management
    */
   private async getConnection(): Promise<duckdb.Connection> {
     if (!this.initialized) {
       await this.initialize();
     }
 
+    // Try to get a connection immediately
     const conn = this.connectionPool.pop();
-    if (!conn) {
-      throw new Error('No available connections in pool');
+    if (conn) {
+      return conn;
     }
-    return conn;
+
+    // No connection available, add to wait queue
+    return new Promise<duckdb.Connection>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        const index = this.connectionWaitQueue.findIndex(w => w.resolve === resolve);
+        if (index !== -1) {
+          this.connectionWaitQueue.splice(index, 1);
+        }
+        reject(new Error('Timeout waiting for connection from pool'));
+      }, 30000); // 30 second timeout
+
+      this.connectionWaitQueue.push({
+        resolve: (conn: duckdb.Connection) => {
+          clearTimeout(timeoutId);
+          resolve(conn);
+        },
+        reject,
+      });
+    });
   }
 
   /**
-   * Release a connection back to the pool
+   * Release a connection back to the pool and notify waiting requests
    */
   private releaseConnection(conn: duckdb.Connection): void {
-    this.connectionPool.push(conn);
+    // If there are waiting requests, give the connection to the first one
+    const waiter = this.connectionWaitQueue.shift();
+    if (waiter) {
+      waiter.resolve(conn);
+    } else {
+      // Otherwise, return it to the pool
+      this.connectionPool.push(conn);
+    }
   }
 
   /**
@@ -289,7 +319,7 @@ export class DuckDBVector extends MastraVector {
         `
         UPDATE vector_indexes
         SET total_vectors = (SELECT COUNT(*) FROM ${tableName}),
-            updated_at = NOW()
+            updated_at = CURRENT_TIMESTAMP
         WHERE name = ?
       `,
         [indexName],
@@ -468,7 +498,7 @@ export class DuckDBVector extends MastraVector {
 
       if (updates.length === 0) return;
 
-      updates.push('updated_at = NOW()');
+      updates.push('updated_at = CURRENT_TIMESTAMP');
       updateParams.push(id);
 
       await this.execute(
@@ -514,7 +544,7 @@ export class DuckDBVector extends MastraVector {
         `
         UPDATE vector_indexes
         SET total_vectors = (SELECT COUNT(*) FROM ${tableName}),
-            updated_at = NOW()
+            updated_at = CURRENT_TIMESTAMP
         WHERE name = ?
       `,
         [indexName],
@@ -563,7 +593,7 @@ export class DuckDBVector extends MastraVector {
         `
         UPDATE vector_indexes
         SET total_vectors = (SELECT COUNT(*) FROM ${tableName}),
-            updated_at = NOW()
+            updated_at = CURRENT_TIMESTAMP
         WHERE name = ?
       `,
         [indexName],
