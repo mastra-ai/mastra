@@ -1,7 +1,8 @@
 import type { CoreMessage, CoreSystemMessage } from 'ai';
 import { z } from 'zod';
 import type { UIMessageWithMetadata } from '../agent';
-import { AISpanType, type TracingContext } from '../ai-tracing';
+import { AISpanType } from '../ai-tracing';
+import type { TracingContext } from '../ai-tracing';
 
 export type ScoringSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
 
