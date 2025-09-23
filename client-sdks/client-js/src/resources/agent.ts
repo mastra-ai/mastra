@@ -78,6 +78,7 @@ async function executeToolCallAndRespond({
             threadId,
             runtimeContext: runtimeContext as RuntimeContext,
             tracingContext: { currentSpan: undefined },
+            suspend: async () => {},
           },
           {
             messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -288,6 +289,7 @@ export class Agent extends BaseResource {
               threadId,
               runtimeContext: runtimeContext as RuntimeContext,
               tracingContext: { currentSpan: undefined },
+              suspend: async () => {},
             },
             {
               messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -1222,6 +1224,7 @@ export class Agent extends BaseResource {
                     runtimeContext: processedParams.runtimeContext as RuntimeContext,
                     // TODO: Pass proper tracing context when client-js supports tracing
                     tracingContext: { currentSpan: undefined },
+                    suspend: async () => {},
                   },
                   {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -1498,6 +1501,7 @@ export class Agent extends BaseResource {
                     runtimeContext: processedParams.runtimeContext as RuntimeContext,
                     // TODO: Pass proper tracing context when client-js supports tracing
                     tracingContext: { currentSpan: undefined },
+                    suspend: async () => {},
                   },
                   {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
