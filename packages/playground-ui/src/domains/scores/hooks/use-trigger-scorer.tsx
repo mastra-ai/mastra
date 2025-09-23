@@ -18,7 +18,6 @@ export const useTriggerScorer = (onScorerTriggered: (scorerName: string, traceId
         targets: [{ traceId, spanId }],
       });
 
-      console.log(response);
       return response;
     },
     onSuccess: (_, variables) => {

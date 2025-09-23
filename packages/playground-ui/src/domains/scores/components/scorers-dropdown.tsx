@@ -18,13 +18,15 @@ export const ScorersDropdown = ({ trace, spanId, onScorerTriggered, entityType }
   const { data: scorers = {}, isLoading } = useScorers();
   const { mutate: triggerScorer, isPending } = useTriggerScorer(onScorerTriggered);
 
-  let scorerList = Object.entries(scorers).map(([key, scorer]) => ({
-    id: key,
-    name: scorer.scorer.config.name,
-    description: scorer.scorer.config.description,
-    isRegistered: scorer.isRegistered,
-    type: scorer.scorer.config.type,
-  }));
+  let scorerList = Object.entries(scorers)
+    .map(([key, scorer]) => ({
+      id: key,
+      name: scorer.scorer.config.name,
+      description: scorer.scorer.config.description,
+      isRegistered: scorer.isRegistered,
+      type: scorer.scorer.config.type,
+    }))
+    .filter(scorer => scorer.isRegistered);
 
   // Filter out Scorers with type agent if we are not scoring on a top level agent generated span
   if (entityType !== 'Agent' || spanId) {
@@ -53,16 +55,14 @@ export const ScorersDropdown = ({ trace, spanId, onScorerTriggered, entityType }
         </Button>
       </Dropdown.Trigger>
       <Dropdown.Content>
-        {scorerList
-          .filter(scorer => scorer.isRegistered)
-          .map(scorer => (
-            <Dropdown.Item
-              key={scorer.id}
-              onClick={() => triggerScorer({ scorerName: scorer.name, traceId: trace.traceId, spanId })}
-            >
-              <span>{scorer.name}</span>
-            </Dropdown.Item>
-          ))}
+        {scorerList.map(scorer => (
+          <Dropdown.Item
+            key={scorer.id}
+            onClick={() => triggerScorer({ scorerName: scorer.name, traceId: trace.traceId, spanId })}
+          >
+            <span>{scorer.name}</span>
+          </Dropdown.Item>
+        ))}
       </Dropdown.Content>
     </Dropdown>
   );
