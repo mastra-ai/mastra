@@ -1,6 +1,6 @@
 {
   "name": "@mastra/evals",
-  "version": "0.13.7",
+  "version": "0.13.8-alpha.1",
   "description": "",
   "type": "module",
   "files": [
@@ -104,13 +104,13 @@
   "dependencies": {
     "compromise": "^14.14.4",
     "difflib": "^0.2.4",
-    "fs-extra": "^11.3.1",
+    "fs-extra": "^11.3.2",
     "keyword-extractor": "^0.0.28",
     "sentiment": "^5.0.2",
     "string-similarity": "^4.0.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.15.3-0 <0.18.0-0",
+    "@mastra/core": ">=0.15.3-0 <0.19.0-0",
     "ai": "^4.0.0 || ^5.0.0",
     "zod": "^3.25.0 || ^4.0.0"
   },
