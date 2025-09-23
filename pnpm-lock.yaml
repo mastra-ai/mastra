@@ -1308,7 +1308,7 @@ importers:
         specifier: ^20.17.57
         version: 20.19.14
       esbuild:
-        specifier: ^0.25.9
+        specifier: ^0.25.10
         version: 0.25.10
       eslint:
         specifier: ^9.35.0
@@ -1383,7 +1383,7 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0
       esbuild:
-        specifier: ^0.25.9
+        specifier: ^0.25.10
         version: 0.25.10
       find-workspaces:
         specifier: ^0.3.1
