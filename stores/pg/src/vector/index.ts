@@ -521,13 +521,78 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     const mutex = this.getMutexByName(`build-${indexName}`);
     // Use async-mutex instead of advisory lock for perf (over 2x as fast)
     await mutex.runExclusive(async () => {
+      // Check if the index config is empty
+      const isConfigEmpty =
+        !indexConfig ||
+        Object.keys(indexConfig).length === 0 ||
+        (!indexConfig.type && !indexConfig.ivf && !indexConfig.hnsw);
+      // Determine index type - use defaults if no config provided
+      const indexType = isConfigEmpty ? 'ivfflat' : indexConfig.type || 'ivfflat';
+
       const { tableName, vectorIndexName } = this.getTableName(indexName);
 
-      if (this.createdIndexes.has(indexName)) {
+      // Try to get existing index info to check if configuration has changed
+      let existingIndexInfo: PGIndexStats | null = null;
+      let dimension = 0;
+      try {
+        existingIndexInfo = await this.getIndexInfo({ indexName });
+        dimension = existingIndexInfo.dimension;
+
+        if (isConfigEmpty && existingIndexInfo.metric === metric) {
+          if (existingIndexInfo.type === 'flat') {
+            // No index exists - create the default ivfflat
+            this.logger?.debug(`No index exists for ${vectorIndexName}, will create default ivfflat index`);
+          } else {
+            // Preserve existing non-flat index
+            this.logger?.debug(
+              `Index ${vectorIndexName} already exists (type: ${existingIndexInfo.type}, metric: ${existingIndexInfo.metric}), preserving existing configuration`,
+            );
+            const cacheKey = await this.getIndexCacheKey({
+              indexName,
+              dimension,
+              type: existingIndexInfo.type,
+              metric: existingIndexInfo.metric,
+            });
+            this.createdIndexes.set(indexName, cacheKey);
+            return;
+          }
+        }
+
+        // If config was empty but metric didn't match, OR config was provided, check for changes
+        let configMatches = existingIndexInfo.metric === metric && existingIndexInfo.type === indexType;
+        if (indexType === 'hnsw') {
+          configMatches =
+            configMatches &&
+            existingIndexInfo.config.m === (indexConfig.hnsw?.m ?? 8) &&
+            existingIndexInfo.config.efConstruction === (indexConfig.hnsw?.efConstruction ?? 32);
+        } else if (indexType === 'flat') {
+          configMatches = configMatches && existingIndexInfo.type === 'flat';
+        } else if (indexType === 'ivfflat' && indexConfig.ivf?.lists) {
+          configMatches = configMatches && existingIndexInfo.config.lists === indexConfig.ivf?.lists;
+        }
+
+        if (configMatches) {
+          this.logger?.debug(`Index ${vectorIndexName} already exists with same configuration, skipping recreation`);
+          // Update cache with the existing configuration
+          const cacheKey = await this.getIndexCacheKey({
+            indexName,
+            dimension,
+            type: existingIndexInfo.type,
+            metric: existingIndexInfo.metric,
+          });
+          this.createdIndexes.set(indexName, cacheKey);
+          return;
+        }
+
+        // Configuration changed, need to rebuild
+        this.logger?.info(`Index ${vectorIndexName} configuration changed, rebuilding index`);
         await client.query(`DROP INDEX IF EXISTS ${vectorIndexName}`);
+        this.describeIndexCache.delete(indexName);
+      } catch {
+        this.logger?.debug(`Index ${indexName} doesn't exist yet, will create it`);
       }
 
-      if (indexConfig.type === 'flat') {
+      if (indexType === 'flat') {
         this.describeIndexCache.delete(indexName);
         return;
       }
@@ -536,7 +601,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         metric === 'cosine' ? 'vector_cosine_ops' : metric === 'euclidean' ? 'vector_l2_ops' : 'vector_ip_ops';
 
       let indexSQL: string;
-      if (indexConfig.type === 'hnsw') {
+      if (indexType === 'hnsw') {
         const m = indexConfig.hnsw?.m ?? 8;
         const efConstruction = indexConfig.hnsw?.efConstruction ?? 32;
 

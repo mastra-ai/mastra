@@ -536,7 +536,7 @@ describe('Working Memory Tests', () => {
               enabled: true,
               schema: z.object({
                 city: z.string(),
-                temperature: z.number(),
+                temperature: z.number().describe('The number value of the temperature'),
               }),
             },
             lastMessages: 10,
@@ -597,10 +597,12 @@ describe('Working Memory Tests', () => {
         await agent.generateVNext('Now I am in Seattle and it is 60 degrees', {
           threadId: thread.id,
           resourceId,
+          modelSettings: { temperature: 0 },
         });
         await agent.generateVNext('Now I am in Denver and it is 75 degrees', {
           threadId: thread.id,
           resourceId,
+          modelSettings: { temperature: 0 },
         });
 
         const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });

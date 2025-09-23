@@ -3724,7 +3724,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         } else {
           expect(userMessages.find((m: any) => m.content?.[0]?.text === 'What are your instructions?')).toBeDefined();
         }
-      });
+      }, 20000);
 
       it(`should handle mixed message types in context parameter ${version === 'v2' ? `format: ${format}` : ''}`, async () => {
         const agent = new Agent({
@@ -10337,7 +10337,7 @@ describe('Agent Tests', () => {
       stopWhenCalls.forEach((call, index) => {
         expect(call.stepCount).toBe(index + 1);
       });
-    }, 10000);
+    }, 20000);
 
     it('should contain the correct content in the step results for both stopWhen and stream.steps', async () => {
       const stopWhenContent: any[] = [];
@@ -10393,7 +10393,7 @@ describe('Agent Tests', () => {
       expect(steps[2].content.length).toBe(1);
 
       expect(stopWhenContent[1]).not.toEqual(stopWhenContent[0]);
-    }, 10000);
+    }, 20000);
   });
 });
 

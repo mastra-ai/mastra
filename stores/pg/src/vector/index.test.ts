@@ -192,6 +192,11 @@ describe('PgVector', () => {
       });
 
       it('should create index with flat type', async () => {
+        // Clean up from previous test since they share the same index name
+        try {
+          await vectorDB.deleteIndex({ indexName: testIndexName2 });
+        } catch {}
+
         await vectorDB.createIndex({
           indexName: testIndexName2,
           dimension: 3,
@@ -224,6 +229,291 @@ describe('PgVector', () => {
         const stats = await vectorDB.describeIndex({ indexName: testIndexName2 });
         expect(stats.type).toBe('ivfflat');
         expect(stats.config.lists).toBe(100);
+      });
+    });
+
+    describe('Index Recreation Logic', () => {
+      const testRecreateIndex = 'test_recreate_index';
+
+      beforeEach(async () => {
+        // Clean up any existing index
+        try {
+          await vectorDB.deleteIndex({ indexName: testRecreateIndex });
+        } catch {}
+      });
+
+      afterAll(async () => {
+        try {
+          await vectorDB.deleteIndex({ indexName: testRecreateIndex });
+        } catch {}
+      });
+
+      it('should not recreate index if configuration matches', async () => {
+        // Create index first time
+        await vectorDB.createIndex({
+          indexName: testRecreateIndex,
+          dimension: 128,
+          metric: 'cosine',
+          indexConfig: {
+            type: 'ivfflat',
+            ivf: { lists: 100 },
+          },
+        });
+
+        // Get initial stats
+        const stats1 = await vectorDB.describeIndex({ indexName: testRecreateIndex });
+        expect(stats1.type).toBe('ivfflat');
+        expect(stats1.config.lists).toBe(100);
+
+        // Try to create again with same config - should not recreate
+        await vectorDB.createIndex({
+          indexName: testRecreateIndex,
+          dimension: 128,
+          metric: 'cosine',
+          indexConfig: {
+            type: 'ivfflat',
+            ivf: { lists: 100 },
+          },
+        });
+
+        // Verify index wasn't recreated (config should be identical)
+        const stats2 = await vectorDB.describeIndex({ indexName: testRecreateIndex });
+        expect(stats2.type).toBe('ivfflat');
+        expect(stats2.config.lists).toBe(100);
+        expect(stats2.metric).toBe('cosine');
+      });
+
+      it('should recreate index if configuration changes', async () => {
+        // Create index with initial config
+        await vectorDB.createIndex({
+          indexName: testRecreateIndex,
+          dimension: 64,
+          metric: 'cosine',
+          indexConfig: {
+            type: 'ivfflat',
+            ivf: { lists: 50 },
+          },
+        });
+
+        // Verify initial configuration
+        const stats1 = await vectorDB.describeIndex({ indexName: testRecreateIndex });
+        expect(stats1.type).toBe('ivfflat');
+        expect(stats1.config.lists).toBe(50);
+
+        // Build again with different config - should recreate
+        // We need to use buildIndex to trigger the setupIndex logic
+        await vectorDB.buildIndex({
+          indexName: testRecreateIndex,
+          metric: 'cosine',
+          indexConfig: {
+            type: 'ivfflat',
+            ivf: { lists: 200 },
+          },
+        });
+
+        // Verify configuration changed
+        const stats2 = await vectorDB.describeIndex({ indexName: testRecreateIndex });
+        expect(stats2.type).toBe('ivfflat');
+        expect(stats2.config.lists).toBe(200);
+      });
+
+      it('should preserve existing index when no config provided', async () => {
+        // Create HNSW index with specific config
+        await vectorDB.createIndex({
+          indexName: testRecreateIndex,
+          dimension: 512,
+          metric: 'dotproduct',
+          indexConfig: {
+            type: 'hnsw',
+            hnsw: { m: 32, efConstruction: 128 },
+          },
+        });
+
+        const stats1 = await vectorDB.describeIndex({ indexName: testRecreateIndex });
+        expect(stats1.type).toBe('hnsw');
+        expect(stats1.config.m).toBe(32);
+        expect(stats1.metric).toBe('dotproduct');
+
+        // Call create again WITHOUT indexConfig - should preserve HNSW
+        await vectorDB.createIndex({
+          indexName: testRecreateIndex,
+          dimension: 512,
+          metric: 'dotproduct',
+        });
+
+        // Verify index was NOT recreated - still HNSW
+        const stats2 = await vectorDB.describeIndex({ indexName: testRecreateIndex });
+        expect(stats2.type).toBe('hnsw');
+        expect(stats2.config.m).toBe(32);
+        expect(stats2.metric).toBe('dotproduct');
+      });
+
+      it('should handle switching from ivfflat to hnsw', async () => {
+        // Create with ivfflat
+        await vectorDB.createIndex({
+          indexName: testRecreateIndex,
+          dimension: 256,
+          metric: 'euclidean',
+          indexConfig: {
+            type: 'ivfflat',
+            ivf: { lists: 100 },
+          },
+        });
+
+        const stats1 = await vectorDB.describeIndex({ indexName: testRecreateIndex });
+        expect(stats1.type).toBe('ivfflat');
+
+        // Switch to hnsw
+        await vectorDB.createIndex({
+          indexName: testRecreateIndex,
+          dimension: 256,
+          metric: 'euclidean',
+          indexConfig: {
+            type: 'hnsw',
+            hnsw: { m: 16, efConstruction: 64 },
+          },
+        });
+
+        const stats2 = await vectorDB.describeIndex({ indexName: testRecreateIndex });
+        expect(stats2.type).toBe('hnsw');
+        expect(stats2.config.m).toBe(16);
+        expect(stats2.config.efConstruction).toBe(64);
+      });
+
+      it('should create ivfflat index when no index exists and config is empty', async () => {
+        const testNewIndex = 'test_no_index_empty_config';
+
+        // Create without any config - should default to ivfflat
+        await vectorDB.createIndex({
+          indexName: testNewIndex,
+          dimension: 128,
+          metric: 'cosine',
+        });
+
+        const stats = await vectorDB.describeIndex({ indexName: testNewIndex });
+        expect(stats.type).toBe('ivfflat');
+
+        // Cleanup
+        await vectorDB.deleteIndex({ indexName: testNewIndex });
+      });
+
+      it('should stay flat when explicitly requested', async () => {
+        const testFlatIndex = 'test_explicit_flat';
+
+        // Create with explicit flat config
+        await vectorDB.createIndex({
+          indexName: testFlatIndex,
+          dimension: 64,
+          metric: 'cosine',
+          indexConfig: { type: 'flat' },
+        });
+
+        // Try to create again with empty config - should stay flat since that's what exists
+        await vectorDB.createIndex({
+          indexName: testFlatIndex,
+          dimension: 64,
+          metric: 'cosine',
+          indexConfig: { type: 'flat' },
+        });
+
+        const stats = await vectorDB.describeIndex({ indexName: testFlatIndex });
+        expect(stats.type).toBe('flat');
+
+        // Cleanup
+        await vectorDB.deleteIndex({ indexName: testFlatIndex });
+      });
+
+      it('should recreate index when only metric changes', async () => {
+        const testMetricChange = 'test_metric_change';
+
+        // Create with cosine metric
+        await vectorDB.createIndex({
+          indexName: testMetricChange,
+          dimension: 128,
+          metric: 'cosine',
+          indexConfig: { type: 'ivfflat' },
+        });
+
+        const stats1 = await vectorDB.describeIndex({ indexName: testMetricChange });
+        expect(stats1.metric).toBe('cosine');
+
+        // Recreate with dotproduct metric - should trigger recreation
+        await vectorDB.createIndex({
+          indexName: testMetricChange,
+          dimension: 128,
+          metric: 'dotproduct',
+          indexConfig: { type: 'ivfflat' },
+        });
+
+        const stats2 = await vectorDB.describeIndex({ indexName: testMetricChange });
+        expect(stats2.metric).toBe('dotproduct');
+
+        // Cleanup
+        await vectorDB.deleteIndex({ indexName: testMetricChange });
+      });
+
+      it('should recreate index when HNSW parameters change', async () => {
+        const testHnswParams = 'test_hnsw_param_change';
+
+        // Create HNSW with initial parameters
+        await vectorDB.createIndex({
+          indexName: testHnswParams,
+          dimension: 128,
+          metric: 'cosine',
+          indexConfig: {
+            type: 'hnsw',
+            hnsw: { m: 16, efConstruction: 64 },
+          },
+        });
+
+        // Add a test vector to ensure index is built
+        const testVector = new Array(128).fill(0).map((_, i) => i / 128);
+        await vectorDB.upsert({
+          indexName: testHnswParams,
+          vectors: [testVector],
+        });
+
+        const stats1 = await vectorDB.describeIndex({ indexName: testHnswParams });
+        expect(stats1.type).toBe('hnsw');
+        expect(stats1.config.m).toBe(16);
+
+        // Use buildIndex instead of createIndex to avoid issues with table recreation
+        await vectorDB.buildIndex({
+          indexName: testHnswParams,
+          metric: 'cosine',
+          indexConfig: {
+            type: 'hnsw',
+            hnsw: { m: 32, efConstruction: 64 },
+          },
+        });
+
+        const stats2 = await vectorDB.describeIndex({ indexName: testHnswParams });
+        expect(stats2.type).toBe('hnsw');
+        expect(stats2.config.m).toBe(32);
+        expect(stats2.config.efConstruction).toBe(64);
+
+        // Cleanup
+        await vectorDB.deleteIndex({ indexName: testHnswParams });
+      });
+
+      it('should handle dimension properly when using buildIndex', async () => {
+        // Create index
+        await vectorDB.createIndex({
+          indexName: testRecreateIndex,
+          dimension: 384,
+          metric: 'cosine',
+        });
+
+        // Build the index (which calls setupIndex internally)
+        await vectorDB.buildIndex({
+          indexName: testRecreateIndex,
+          metric: 'cosine',
+          indexConfig: { type: 'ivfflat' },
+        });
+
+        // Verify it maintains correct dimension
+        const stats = await vectorDB.describeIndex({ indexName: testRecreateIndex });
+        expect(stats.dimension).toBe(384);
       });
     });
 
@@ -1597,6 +1887,39 @@ describe('PgVector', () => {
         // Cleanup
         await vectorDB.deleteIndex({ indexName: duplicateIndexName });
       });
+
+      it('should handle index creation with invalid parameters', async () => {
+        // Invalid index name (SQL injection attempt)
+        await expect(
+          vectorDB.createIndex({
+            indexName: "'; DROP TABLE users; --",
+            dimension: 128,
+            metric: 'cosine',
+          }),
+        ).rejects.toThrow('Invalid index name');
+
+        // Invalid dimension
+        await expect(
+          vectorDB.createIndex({
+            indexName: 'test_invalid_dim',
+            dimension: -1,
+            metric: 'cosine',
+          }),
+        ).rejects.toThrow('Dimension must be a positive integer');
+
+        // Invalid HNSW parameters
+        await expect(
+          vectorDB.createIndex({
+            indexName: 'test_invalid_hnsw',
+            dimension: 128,
+            metric: 'cosine',
+            indexConfig: {
+              type: 'hnsw',
+              hnsw: { m: -1, efConstruction: 64 },
+            },
+          }),
+        ).rejects.toThrow();
+      });
     });
 
     describe('Edge Cases and Special Values', () => {
@@ -2250,6 +2573,43 @@ describe('PgVector', () => {
 
       const stats = await vectorDB.describeIndex({ indexName });
       expect(stats.type).toBe('ivfflat');
+
+      await vectorDB.deleteIndex({ indexName });
+    });
+
+    it('should handle concurrent index recreation with different configs', async () => {
+      const indexName = 'concurrent_recreate_test';
+
+      // Create initial index
+      await vectorDB.createIndex({
+        indexName,
+        dimension: 128,
+        metric: 'cosine',
+        indexConfig: { type: 'ivfflat' },
+      });
+
+      // Attempt concurrent recreations with different configs
+      const configs = [
+        { type: 'hnsw' as const, hnsw: { m: 16, efConstruction: 64 } },
+        { type: 'hnsw' as const, hnsw: { m: 32, efConstruction: 128 } },
+        { type: 'ivfflat' as const, ivf: { lists: 50 } },
+        { type: 'hnsw' as const, hnsw: { m: 8, efConstruction: 32 } },
+      ];
+
+      const promises = configs.map(config =>
+        vectorDB.buildIndex({
+          indexName,
+          metric: 'cosine',
+          indexConfig: config,
+        }),
+      );
+
+      // All should complete without error (mutex prevents race conditions)
+      await expect(Promise.all(promises)).resolves.not.toThrow();
+
+      // One of the configs should have won
+      const stats = await vectorDB.describeIndex({ indexName });
+      expect(['hnsw', 'ivfflat']).toContain(stats.type);
 
       await vectorDB.deleteIndex({ indexName });
     });
