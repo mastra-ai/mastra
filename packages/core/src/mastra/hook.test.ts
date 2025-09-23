@@ -141,9 +141,13 @@ describe('createOnScorerHook', () => {
       source: 'LIVE' as const,
       entity: { id: 'test-entity' },
       entityType: 'AGENT' as const,
+      entityId: 'test-entity',
+      scorerId: 'test-scorer',
+      score: 0.8,
     };
 
     const mockScorer = {
+      name: 'test-scorer',
       run: vi.fn().mockResolvedValue({ score: 0.8 }),
     };
 
