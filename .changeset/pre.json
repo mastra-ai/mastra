@@ -75,9 +75,27 @@
     "@mastra/inngest": "0.14.0"
   },
   "changesets": [
+    "@mastra_deployer-8007-dependencies",
+    "@mastra_deployer-cloud-8007-dependencies",
+    "@mastra_deployer-netlify-8007-dependencies",
+    "@mastra_deployer-vercel-8007-dependencies",
+    "@mastra_evals-8007-dependencies",
     "@mastra_playground-ui-7980-dependencies",
+    "@mastra_playground-ui-8019-dependencies",
+    "@mastra_playground-ui-8034-dependencies",
+    "@mastra_playground-ui-8050-dependencies",
+    "@mastra_rag-8011-dependencies",
+    "chatty-doors-itch",
+    "chilled-cherries-greet",
+    "create-mastra-8007-dependencies",
+    "few-hounds-retire",
     "five-dodos-count",
     "large-cats-guess",
-    "orange-baths-buy"
+    "late-poems-type",
+    "mastra-8007-dependencies",
+    "metal-showers-push",
+    "nice-monkeys-lie",
+    "orange-baths-buy",
+    "thirty-camels-stand"
   ]
 }

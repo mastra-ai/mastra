@@ -9,7 +9,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool, ToolStream } from '@mastra/core/tools';
-import { Workflow, Run, DefaultExecutionEngine } from '@mastra/core/workflows';
+import { getStepResult, Workflow, Run, DefaultExecutionEngine } from '@mastra/core/workflows';
 import type {
   ExecuteFunction,
   ExecutionContext,
@@ -661,10 +661,12 @@ export function createStep<
 
 export function createStep<
   TSchemaIn extends z.ZodType<any>,
+  TSuspendSchema extends z.ZodType<any>,
+  TResumeSchema extends z.ZodType<any>,
   TSchemaOut extends z.ZodType<any>,
-  TContext extends ToolExecutionContext<TSchemaIn>,
+  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema>,
 >(
-  tool: Tool<TSchemaIn, TSchemaOut, TContext> & {
+  tool: Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
     inputSchema: TSchemaIn;
     outputSchema: TSchemaOut;
     execute: (context: TContext) => Promise<any>;
@@ -778,12 +780,14 @@ export function createStep<
       id: params.id,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
-      execute: async ({ inputData, mastra, runtimeContext, tracingContext }) => {
+      execute: async ({ inputData, mastra, runtimeContext, tracingContext, suspend, resumeData }) => {
         return params.execute({
           context: inputData,
           mastra: wrapMastra(mastra, tracingContext),
           runtimeContext,
           tracingContext,
+          suspend,
+          resumeData,
         });
       },
     };
@@ -1057,19 +1061,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             currentSpan: sleepSpan,
           },
           getInitData: () => stepResults?.input as any,
-          getStepResult: (step: any) => {
-            if (!step?.id) {
-              return null;
-            }
-
-            const result = stepResults[step.id];
-            if (result?.status === 'success') {
-              return result.output;
-            }
-
-            return null;
-          },
-
+          getStepResult: getStepResult.bind(this, stepResults),
           // TODO: this function shouldn't have suspend probably?
           suspend: async (_suspendPayload: any): Promise<any> => {},
           bail: () => {},
@@ -1175,19 +1167,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             currentSpan: sleepUntilSpan,
           },
           getInitData: () => stepResults?.input as any,
-          getStepResult: (step: any) => {
-            if (!step?.id) {
-              return null;
-            }
-
-            const result = stepResults[step.id];
-            if (result?.status === 'success') {
-              return result.output;
-            }
-
-            return null;
-          },
-
+          getStepResult: getStepResult.bind(this, stepResults),
           // TODO: this function shouldn't have suspend probably?
           suspend: async (_suspendPayload: any): Promise<any> => {},
           bail: () => {},
@@ -1549,14 +1529,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             currentSpan: stepAISpan,
           },
           getInitData: () => stepResults?.input as any,
-          getStepResult: (step: any) => {
-            const result = stepResults[step.id];
-            if (result?.status === 'success') {
-              return result.output;
-            }
-
-            return null;
-          },
+          getStepResult: getStepResult.bind(this, stepResults),
           suspend: async (suspendPayload: any) => {
             executionContext.suspendedPaths[step.id] = executionContext.executionPath;
             suspended = { payload: suspendPayload };
@@ -1823,19 +1796,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                   currentSpan: evalSpan,
                 },
                 getInitData: () => stepResults?.input as any,
-                getStepResult: (step: any) => {
-                  if (!step?.id) {
-                    return null;
-                  }
-
-                  const result = stepResults[step.id];
-                  if (result?.status === 'success') {
-                    return result.output;
-                  }
-
-                  return null;
-                },
-
+                getStepResult: getStepResult.bind(this, stepResults),
                 // TODO: this function shouldn't have suspend probably?
                 suspend: async (_suspendPayload: any) => {},
                 bail: () => {},

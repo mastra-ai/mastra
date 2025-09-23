@@ -75,6 +75,8 @@ import type {
   AgentModelManagerConfig,
   AgentCreateOptions,
   AgentExecuteOnFinishOptions,
+  AgentInstructions,
+  DynamicAgentInstructions,
 } from './types';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 
@@ -141,7 +143,7 @@ export class Agent<
 > extends MastraBase {
   public id: TAgentId;
   public name: TAgentId;
-  #instructions: DynamicArgument<string>;
+  #instructions: DynamicAgentInstructions;
   readonly #description?: string;
   model:
     | DynamicArgument<MastraLanguageModel>
@@ -154,7 +156,7 @@ export class Agent<
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
-  #workflows?: DynamicArgument<Record<string, Workflow>>;
+  #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
   #defaultGenerateOptions: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptions: DynamicArgument<AgentStreamOptions>;
   #defaultVNextStreamOptions: DynamicArgument<AgentExecutionOptions<any>>;
@@ -427,7 +429,7 @@ export class Agent<
 
   public async getWorkflows({
     runtimeContext = new RuntimeContext(),
-  }: { runtimeContext?: RuntimeContext } = {}): Promise<Record<string, Workflow>> {
+  }: { runtimeContext?: RuntimeContext } = {}): Promise<Record<string, Workflow<any, any, any, any, any, any>>> {
     let workflowRecord;
     if (typeof this.#workflows === 'function') {
       workflowRecord = await Promise.resolve(this.#workflows({ runtimeContext, mastra: this.#mastra }));
@@ -476,7 +478,8 @@ export class Agent<
     if (this.#voice) {
       const voice = this.#voice;
       voice?.addTools(await this.getTools({ runtimeContext }));
-      voice?.addInstructions(await this.getInstructions({ runtimeContext }));
+      const instructions = await this.getInstructions({ runtimeContext });
+      voice?.addInstructions(this.#convertInstructionsToString(instructions));
       return voice;
     } else {
       return new DefaultVoice();
@@ -501,35 +504,79 @@ export class Agent<
       throw mastraError;
     }
 
+    // Throw error for non-string instructions to force migration
+    if (typeof this.#instructions !== 'string') {
+      const mastraError = new MastraError({
+        id: 'AGENT_INSTRUCTIONS_MUST_BE_STRING_FOR_DEPRECATED_GETTER',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+          instructionsType: Array.isArray(this.#instructions) ? 'array' : 'object',
+        },
+        text: 'The instructions getter is deprecated and only supports string instructions. For non-string instructions, please use getInstructions() instead.',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
+    }
+
     return this.#instructions;
   }
 
   public getInstructions({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
-    | string
-    | Promise<string> {
-    if (typeof this.#instructions === 'string') {
-      return this.#instructions;
+    | AgentInstructions
+    | Promise<AgentInstructions> {
+    if (typeof this.#instructions === 'function') {
+      const result = this.#instructions({ runtimeContext, mastra: this.#mastra });
+      return resolveMaybePromise(result, instructions => {
+        if (!instructions) {
+          const mastraError = new MastraError({
+            id: 'AGENT_GET_INSTRUCTIONS_FUNCTION_EMPTY_RETURN',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: {
+              agentName: this.name,
+            },
+            text: 'Instructions are required to use an Agent. The function-based instructions returned an empty value.',
+          });
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
+        }
+
+        return instructions;
+      });
     }
 
-    const result = this.#instructions({ runtimeContext, mastra: this.#mastra });
-    return resolveMaybePromise(result, instructions => {
-      if (!instructions) {
-        const mastraError = new MastraError({
-          id: 'AGENT_GET_INSTRUCTIONS_FUNCTION_EMPTY_RETURN',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          details: {
-            agentName: this.name,
-          },
-          text: 'Instructions are required to use an Agent. The function-based instructions returned an empty value.',
-        });
-        this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
-        throw mastraError;
-      }
+    return this.#instructions;
+  }
 
+  /**
+   * Helper function to convert agent instructions to string for backward compatibility
+   * Used for legacy methods that expect string instructions (e.g., voice, telemetry)
+   */
+  #convertInstructionsToString(instructions: AgentInstructions): string {
+    if (typeof instructions === 'string') {
       return instructions;
-    });
+    }
+
+    if (Array.isArray(instructions)) {
+      // Handle array of messages (strings or objects)
+      return instructions
+        .map(msg => {
+          if (typeof msg === 'string') {
+            return msg;
+          }
+          // Safely extract content from message objects
+          return typeof msg.content === 'string' ? msg.content : '';
+        })
+        .filter(content => content) // Remove empty strings
+        .join('\n\n');
+    }
+
+    // Handle single message object - safely extract content
+    return typeof instructions.content === 'string' ? instructions.content : '';
   }
 
   public getDescription(): string {
@@ -1459,6 +1506,7 @@ export class Agent<
           model: await this.getModel({ runtimeContext }),
           writableStream,
           tracingPolicy: this.#options?.tracingPolicy,
+          requireApproval: (tool as any).requireApproval,
         };
         return [k, makeCoreTool(tool, options)];
       }),
@@ -1883,7 +1931,7 @@ export class Agent<
     tracingContext,
     tracingOptions,
   }: {
-    instructions: string;
+    instructions: AgentInstructions;
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
     resourceId?: string;
@@ -1913,7 +1961,7 @@ export class Agent<
           },
           attributes: {
             agentId: this.id,
-            instructions,
+            instructions: this.#convertInstructionsToString(instructions),
             availableTools: [
               ...(toolsets ? Object.keys(toolsets) : []),
               ...(clientTools ? Object.keys(clientTools) : []),
@@ -1974,10 +2022,7 @@ export class Agent<
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
-          .addSystem({
-            role: 'system',
-            content: instructions || `${this.instructions}.`,
-          })
+          .addSystem(instructions || (await this.getInstructions({ runtimeContext })))
           .add(context || [], 'context');
 
         if (!memory || (!threadId && !resourceId)) {
@@ -2152,7 +2197,7 @@ export class Agent<
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
-          .addSystem(instructions || `${this.instructions}.`)
+          .addSystem(instructions || (await this.getInstructions({ runtimeContext })))
           .addSystem(memorySystemMessage)
           .addSystem(systemMessages)
           .add(context || [], 'context')
@@ -2414,7 +2459,7 @@ export class Agent<
     messageList: MessageList;
     runId: string;
     outputText: string;
-    instructions: string;
+    instructions: AgentInstructions;
     runtimeContext: RuntimeContext;
     structuredOutput?: boolean;
     overrideScorers?:
@@ -2439,7 +2484,7 @@ export class Agent<
           runId: runIdToUse,
           metric,
           agentName,
-          instructions: instructions,
+          instructions: this.#convertInstructionsToString(instructions),
         });
       }
     }
@@ -2464,9 +2509,9 @@ export class Agent<
     const scorerOutput: ScorerRunOutputForAgent = messageList.getPersisted.response.ui();
 
     if (Object.keys(scorers || {}).length > 0) {
-      for (const [id, scorerObject] of Object.entries(scorers)) {
+      for (const [_id, scorerObject] of Object.entries(scorers)) {
         runScorer({
-          scorerId: overrideScorers ? scorerObject.scorer.name : id,
+          scorerId: overrideScorers ? scorerObject.scorer.name : scorerObject.scorer.name,
           scorerObject: scorerObject,
           runId,
           input: scorerInput,
@@ -2933,11 +2978,10 @@ export class Agent<
     return finalOnFinish;
   }
 
-  async #execute<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' | undefined = undefined>({
-    methodType,
-    format = 'mastra',
-    ...options
-  }: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
+  async #execute<
+    OUTPUT extends OutputSchema | undefined = undefined,
+    FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
+  >({ methodType, format = 'mastra', resumeContext, ...options }: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
     const runtimeContext = options.runtimeContext || new RuntimeContext();
     const threadFromArgs = resolveThreadIdFromArgs({ threadId: options.threadId, memory: options.memory });
 
@@ -2963,7 +3007,7 @@ export class Agent<
       input: options.messages,
       attributes: {
         agentId: this.id,
-        instructions,
+        instructions: this.#convertInstructionsToString(instructions),
       },
       metadata: {
         runId,
@@ -3046,6 +3090,8 @@ export class Agent<
       memory,
       saveQueueManager,
       returnScorerData: options.returnScorerData,
+      requireToolApproval: options.requireToolApproval,
+      resumeContext,
     });
 
     const run = await executionWorkflow.createRunAsync();
@@ -3396,6 +3442,102 @@ export class Agent<
     return result.result as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
   }
 
+  async resumeStreamVNext<
+    OUTPUT extends OutputSchema | undefined = undefined,
+    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
+  >(
+    resumeContext: any,
+    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
+  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
+    const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
+      runtimeContext: streamOptions?.runtimeContext,
+    });
+
+    let mergedStreamOptions = {
+      ...defaultStreamOptions,
+      ...streamOptions,
+      onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
+    };
+
+    // Map structuredOutput to output when maxSteps is explicitly set to 1
+    // This allows the new structuredOutput API to use the existing output implementation
+    let modelOverride: MastraLanguageModel | undefined;
+    if (mergedStreamOptions.structuredOutput && mergedStreamOptions.maxSteps === 1) {
+      // If structuredOutput has a model, use it to override the agent's model
+      if (mergedStreamOptions.structuredOutput.model) {
+        modelOverride = mergedStreamOptions.structuredOutput.model;
+      }
+
+      mergedStreamOptions = {
+        ...mergedStreamOptions,
+        output: mergedStreamOptions.structuredOutput.schema as OUTPUT,
+        structuredOutput: undefined, // Remove structuredOutput to avoid confusion downstream
+      };
+    }
+
+    const llm = await this.getLLM({
+      runtimeContext: mergedStreamOptions.runtimeContext,
+      model: modelOverride,
+    });
+
+    if (llm.getModel().specificationVersion !== 'v2') {
+      throw new MastraError({
+        id: 'AGENT_STREAM_VNEXT_V1_MODEL_NOT_SUPPORTED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'V1 models are not supported for streamVNext. Please use stream instead.',
+      });
+    }
+
+    const result = await this.#execute({
+      ...mergedStreamOptions,
+      messages: [],
+      resumeContext,
+      methodType: 'streamVNext',
+      model: modelOverride,
+    } as InnerAgentExecutionOptions<OUTPUT, FORMAT>);
+
+    if (result.status !== 'success') {
+      if (result.status === 'failed') {
+        throw new MastraError({
+          id: 'AGENT_STREAM_VNEXT_FAILED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: result.error.message,
+          details: {
+            error: result.error.message,
+          },
+        });
+      }
+      throw new MastraError({
+        id: 'AGENT_STREAM_VNEXT_UNKNOWN_ERROR',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'An unknown error occurred while streaming',
+      });
+    }
+
+    return result.result as unknown as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
+  }
+
+  async approveToolCall<
+    OUTPUT extends OutputSchema | undefined = undefined,
+    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
+  >(
+    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
+  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
+    return this.resumeStreamVNext({ approved: true }, streamOptions);
+  }
+
+  async declineToolCall<
+    OUTPUT extends OutputSchema | undefined = undefined,
+    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
+  >(
+    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
+  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
+    return this.resumeStreamVNext({ approved: false }, streamOptions);
+  }
+
   async generate(
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
@@ -3420,7 +3562,7 @@ export class Agent<
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
     if (!generateDeprecationWarningShown) {
       this.logger.warn(
-        "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 23rd, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
+        "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 30th, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
       );
       generateDeprecationWarningShown = true;
     }
@@ -3790,7 +3932,7 @@ export class Agent<
   > {
     if (!streamDeprecationWarningShown) {
       this.logger.warn(
-        "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 23rd, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
+        "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 30th, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
       );
       streamDeprecationWarningShown = true;
     }

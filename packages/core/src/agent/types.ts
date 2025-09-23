@@ -10,6 +10,7 @@ import type {
   DefaultLLMTextObjectOptions,
   DefaultLLMTextOptions,
   OutputType,
+  SystemMessage,
 } from '../llm';
 import type {
   StreamTextOnFinishCallback,
@@ -40,6 +41,9 @@ export type { Message as AiMessageType } from 'ai';
 export type { LLMStepResult } from '../stream/types';
 
 export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5>;
+
+export type AgentInstructions = SystemMessage;
+export type DynamicAgentInstructions = DynamicArgument<AgentInstructions>;
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
@@ -73,7 +77,7 @@ export interface AgentConfig<
   id?: TAgentId;
   name: TAgentId;
   description?: string;
-  instructions: DynamicArgument<string>;
+  instructions: DynamicAgentInstructions;
   model:
     | DynamicArgument<MastraLanguageModel>
     | {
@@ -83,7 +87,7 @@ export interface AgentConfig<
       }[];
   maxRetries?: number; //defaults to 0
   tools?: DynamicArgument<TTools>;
-  workflows?: DynamicArgument<Record<string, Workflow>>;
+  workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
   defaultGenerateOptions?: DynamicArgument<AgentGenerateOptions>;
   defaultStreamOptions?: DynamicArgument<AgentStreamOptions>;
   defaultVNextStreamOptions?: DynamicArgument<AgentExecutionOptions>;
@@ -115,7 +119,7 @@ export type AgentGenerateOptions<
   EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = {
   /** Optional instructions to override the agent's default instructions */
-  instructions?: string;
+  instructions?: SystemMessage;
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
@@ -199,7 +203,7 @@ export type AgentStreamOptions<
   EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = {
   /** Optional instructions to override the agent's default instructions */
-  instructions?: string;
+  instructions?: SystemMessage;
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
@@ -271,7 +275,7 @@ export type AgentStreamOptions<
 export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };
 
 export type AgentExecuteOnFinishOptions = {
-  instructions: string;
+  instructions: SystemMessage;
   runId: string;
   result: Parameters<StreamTextOnFinishCallback<ToolSet>>[0] & { object?: unknown };
   thread: StorageThreadType | null | undefined;
