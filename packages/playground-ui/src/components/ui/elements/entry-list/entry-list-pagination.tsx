@@ -1,0 +1,38 @@
+import { ArrowLeftIcon, ArrowRightIcon } from 'lucide-react';
+
+import { cn } from '@/lib/utils';
+
+type EntryListPaginationProps = {
+  page?: number;
+  hasMore?: boolean;
+  onNextPage?: () => void;
+  onPrevPage?: () => void;
+};
+
+export function EntryListPagination({ page, hasMore, onNextPage, onPrevPage }: EntryListPaginationProps) {
+  return (
+    <div className={cn('flex pt-[1.5rem] items-center justify-center text-icon3 text-[0.875rem] gap-[2rem]')}>
+      <span>Page {page ? page + 1 : '1'}</span>
+      <div
+        className={cn(
+          'flex gap-[1rem]',
+          '[&>button]:flex [&>button]:items-center [&>button]:gap-[0.5rem] [&>button]:text-icon4 [&>button:hover]:text-icon5 [&>button]:transition-colors [&>button]:border [&>button]:border-border1 [&>button]:p-[0.25rem] [&>button]:px-[0.5rem] [&>button]:rounded-md',
+          ' [&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-icon3',
+        )}
+      >
+        {typeof page === 'number' && page > 0 && (
+          <button onClick={onPrevPage} disabled={page === 0}>
+            <ArrowLeftIcon />
+            Previous
+          </button>
+        )}
+        {hasMore && (
+          <button onClick={onNextPage} disabled={!hasMore}>
+            Next
+            <ArrowRightIcon />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}

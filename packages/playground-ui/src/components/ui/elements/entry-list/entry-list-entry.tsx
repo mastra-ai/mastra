@@ -1,21 +1,16 @@
 import { cn } from '@/lib/utils';
 import { Column, getColumnTemplate } from './shared';
 
-export function EntryListItem({
-  item,
-  selectedItemId,
-  onClick,
-  children,
-  columns,
-  isLoading,
-}: {
+type EntryListEntryProps = {
   item: any;
   selectedItemId?: string;
   onClick?: (itemId: string) => void;
   children?: React.ReactNode;
   columns?: Column[];
   isLoading?: boolean;
-}) {
+};
+
+export function EntryListEntry({ item, selectedItemId, onClick, children, columns, isLoading }: EntryListEntryProps) {
   const isSelected = selectedItemId === item.id;
 
   const handleClick = () => {

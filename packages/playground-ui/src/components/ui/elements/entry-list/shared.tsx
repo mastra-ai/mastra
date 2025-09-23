@@ -1,8 +1,4 @@
-export type Column = {
-  name: string;
-  label: string;
-  size: string;
-};
+import { Column } from './types';
 
 export function getColumnTemplate(columns?: Column[]): string {
   if (!columns || columns.length === 0) {

@@ -5,6 +5,7 @@ import {
   Header,
   MainContentLayout,
   PageHeader,
+  ScoresList,
   ScoresTools,
   ScoreDialog,
   type ScoreEntityOption as EntityOptions,
@@ -229,7 +230,8 @@ export default function Scorer() {
               onReset={() => setSearchParams({ entity: 'all' })}
               isLoading={isScoresLoading || isLoadingAgents || isLoadingWorkflows}
             />
-            <EntryList
+            <ScoresList scores={scores} isLoading={isScoresLoading} />
+            {/* <EntryList
               items={items}
               selectedItemId={selectedScoreId}
               onItemClick={handleOnListItem}
@@ -241,7 +243,7 @@ export default function Scorer() {
               total={scoresTotal || 0}
               onNextPage={handleNextPage}
               onPrevPage={handlePrevPage}
-            />
+            /> */}
           </div>
         </div>
       </MainContentLayout>
