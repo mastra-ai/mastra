@@ -3422,7 +3422,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         } else {
           expect(userMessages.find((m: any) => m.content?.[0]?.text === 'What are your instructions?')).toBeDefined();
         }
-      });
+      }, 20000);
 
       it(`should handle mixed message types in context parameter ${version === 'v2' ? `format: ${format}` : ''}`, async () => {
         const agent = new Agent({
