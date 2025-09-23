@@ -23,6 +23,7 @@ export function createBiasScorer({ model, options }: { model: LanguageModel; opt
       model,
       instructions: BIAS_AGENT_INSTRUCTIONS,
     },
+    type: 'agent',
   })
     .preprocess({
       description: 'Extract relevant statements from the LLM output',
