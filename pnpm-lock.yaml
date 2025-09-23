@@ -310,8 +310,8 @@ importers:
   deployers/cloud:
     dependencies:
       '@mastra/core':
-        specifier: '>=0.15.3-0 <0.19.0-0'
-        version: 0.15.3-alpha.6(openapi-types@12.1.3)(react@19.1.1)(zod@4.1.9)
+        specifier: '>=0.18.0-0 <0.19.0-0'
+        version: 0.18.0-alpha.2(openapi-types@12.1.3)(react@19.1.1)(zod@4.1.9)
       '@mastra/deployer':
         specifier: workspace:^
         version: link:../../packages/deployer
@@ -906,7 +906,7 @@ importers:
         version: link:../mcp
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
-        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -1106,7 +1106,7 @@ importers:
         version: 1.9.0
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
-        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -3983,12 +3983,6 @@ packages:
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
-
-  '@ai-sdk/gateway@1.0.15':
-    resolution: {integrity: sha512-xySXoQ29+KbGuGfmDnABx+O6vc7Gj7qugmj1kGpn0rW0rQNn6UKUuvscKMzWyv1Uv05GyC1vqHq8ZhEOLfXscQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4
 
   '@ai-sdk/gateway@1.0.23':
     resolution: {integrity: sha512-ynV7WxpRK2zWLGkdOtrU2hW22mBVkEYVS3iMg1+ZGmAYSgzCqzC74bfOJZ2GU1UdcrFWUsFI9qAYjsPkd+AebA==}
@@ -6945,8 +6939,8 @@ packages:
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
 
-  '@mastra/core@0.15.3-alpha.6':
-    resolution: {integrity: sha512-cK5B40gXmsPxAqdlSfBqtjRA4yRfl7c3ZvFQVaiSkcAeSR29uejC6YGuuAX/HCmvbkayVqDQksV5Gjic7UpolQ==}
+  '@mastra/core@0.18.0-alpha.2':
+    resolution: {integrity: sha512-Q9mBL7IKYchZQ5+xNnA5r6w6tVCeyfwZ3w4OhDvsSjR2e1xl2F01FtEShcjXhwY7PqygQxOln9xl3kW7nZY4iQ==}
     engines: {node: '>=20'}
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
@@ -6957,8 +6951,8 @@ packages:
       '@mastra/core': ^0.10.0-alpha.0
       ai: ^4.0.0
 
-  '@mastra/schema-compat@0.11.2-alpha.3':
-    resolution: {integrity: sha512-mROd92fYsOki0W4WXXYb9B74m+Ohf2VssnDaH2U5WPhiqv35Iy6mkLxfyKB+MRiKMOjVbjyceNlRmUfKCbRqDw==}
+  '@mastra/schema-compat@0.11.3':
+    resolution: {integrity: sha512-P50JETxpEFilgp3WIpSidr3Jt+JyZzIwzU9EoYZF+JyeTee/QLXVC4cMTCEU+Uj+4GVDV+L2g+qTHEVWcqxsSA==}
     peerDependencies:
       ai: ^4.0.0 || ^5.0.0
       zod: ^3.25.0 || ^4.0.0
@@ -10321,12 +10315,6 @@ packages:
     peerDependenciesMeta:
       react:
         optional: true
-
-  ai@5.0.28:
-    resolution: {integrity: sha512-tnybAqoDFzuK6O1NOMHX1d/wH7Eug8y0H4l/Gl6swi8BYGtlTPDjniKnGYzgTpLTdpj7SI3qjZuomz7evph9+w==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4
 
   ai@5.0.44:
     resolution: {integrity: sha512-l/rdoM4LcRpsRBVvZQBwSU73oNoFGlWj+PcH86QRzxDGJgZqgGItWO0QcKjBNcLDmUjGN1VYd/8J0TAXHJleRQ==}
@@ -16634,17 +16622,17 @@ snapshots:
       '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
       zod: 3.25.76
 
-  '@ai-sdk/gateway@1.0.15(zod@4.1.9)':
-    dependencies:
-      '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.7(zod@4.1.9)
-      zod: 4.1.9
-
   '@ai-sdk/gateway@1.0.23(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
       '@ai-sdk/provider-utils': 3.0.9(zod@3.25.76)
       zod: 3.25.76
+
+  '@ai-sdk/gateway@1.0.23(zod@4.1.9)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.9(zod@4.1.9)
+      zod: 4.1.9
 
   '@ai-sdk/google@1.2.22(zod@3.25.76)':
     dependencies:
@@ -16731,14 +16719,6 @@ snapshots:
       zod: 3.25.76
       zod-to-json-schema: 3.24.6(zod@3.25.76)
 
-  '@ai-sdk/provider-utils@3.0.3(zod@4.1.9)':
-    dependencies:
-      '@ai-sdk/provider': 2.0.0
-      '@standard-schema/spec': 1.0.0
-      eventsource-parser: 3.0.6
-      zod: 4.1.9
-      zod-to-json-schema: 3.24.6(zod@4.1.9)
-
   '@ai-sdk/provider-utils@3.0.7(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
@@ -16746,19 +16726,19 @@ snapshots:
       eventsource-parser: 3.0.6
       zod: 3.25.76
 
-  '@ai-sdk/provider-utils@3.0.7(zod@4.1.9)':
-    dependencies:
-      '@ai-sdk/provider': 2.0.0
-      '@standard-schema/spec': 1.0.0
-      eventsource-parser: 3.0.6
-      zod: 4.1.9
-
   '@ai-sdk/provider-utils@3.0.9(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
       '@standard-schema/spec': 1.0.0
       eventsource-parser: 3.0.6
       zod: 3.25.76
+
+  '@ai-sdk/provider-utils@3.0.9(zod@4.1.9)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@standard-schema/spec': 1.0.0
+      eventsource-parser: 3.0.6
+      zod: 4.1.9
 
   '@ai-sdk/provider@1.0.9':
     dependencies:
@@ -20600,17 +20580,18 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
-  '@mastra/core@0.15.3-alpha.6(openapi-types@12.1.3)(react@19.1.1)(zod@4.1.9)':
+  '@mastra/core@0.18.0-alpha.2(openapi-types@12.1.3)(react@19.1.1)(zod@4.1.9)':
     dependencies:
       '@a2a-js/sdk': 0.2.5
       '@ai-sdk/provider': 1.1.3
       '@ai-sdk/provider-utils': 2.2.8(zod@4.1.9)
-      '@ai-sdk/provider-utils-v5': '@ai-sdk/provider-utils@3.0.3(zod@4.1.9)'
+      '@ai-sdk/provider-utils-v5': '@ai-sdk/provider-utils@3.0.9(zod@4.1.9)'
       '@ai-sdk/provider-v5': '@ai-sdk/provider@2.0.0'
       '@ai-sdk/ui-utils': 1.2.11(zod@4.1.9)
-      '@mastra/schema-compat': 0.11.2-alpha.3(ai@4.3.19(react@19.1.1)(zod@4.1.9))(zod@4.1.9)
+      '@isaacs/ttlcache': 1.4.1
+      '@mastra/schema-compat': 0.11.3(ai@4.3.19(react@19.1.1)(zod@4.1.9))(zod@4.1.9)
       '@opentelemetry/api': 1.9.0
-      '@opentelemetry/auto-instrumentations-node': 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+      '@opentelemetry/auto-instrumentations-node': 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-grpc': 0.203.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-http': 0.203.0(@opentelemetry/api@1.9.0)
@@ -20624,7 +20605,7 @@ snapshots:
       '@opentelemetry/semantic-conventions': 1.36.0
       '@sindresorhus/slugify': 2.2.1
       ai: 4.3.19(react@19.1.1)(zod@4.1.9)
-      ai-v5: ai@5.0.28(zod@4.1.9)
+      ai-v5: ai@5.0.44(zod@4.1.9)
       date-fns: 3.6.0
       dotenv: 16.6.1
       hono: 4.9.7
@@ -20673,7 +20654,7 @@ snapshots:
       - aws-crt
       - encoding
 
-  '@mastra/schema-compat@0.11.2-alpha.3(ai@4.3.19(react@19.1.1)(zod@4.1.9))(zod@4.1.9)':
+  '@mastra/schema-compat@0.11.3(ai@4.3.19(react@19.1.1)(zod@4.1.9))(zod@4.1.9)':
     dependencies:
       ai: 4.3.19(react@19.1.1)(zod@4.1.9)
       json-schema: 0.4.0
@@ -21049,7 +21030,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
+  '@opentelemetry/auto-instrumentations-node@0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -21098,7 +21079,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.3.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.10.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.3(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
+      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resources': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.203.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -22179,7 +22160,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
+  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -24766,14 +24747,6 @@ snapshots:
     optionalDependencies:
       react: 19.1.1
 
-  ai@5.0.28(zod@4.1.9):
-    dependencies:
-      '@ai-sdk/gateway': 1.0.15(zod@4.1.9)
-      '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.7(zod@4.1.9)
-      '@opentelemetry/api': 1.9.0
-      zod: 4.1.9
-
   ai@5.0.44(zod@3.25.76):
     dependencies:
       '@ai-sdk/gateway': 1.0.23(zod@3.25.76)
@@ -24781,6 +24754,14 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.9(zod@3.25.76)
       '@opentelemetry/api': 1.9.0
       zod: 3.25.76
+
+  ai@5.0.44(zod@4.1.9):
+    dependencies:
+      '@ai-sdk/gateway': 1.0.23(zod@4.1.9)
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.9(zod@4.1.9)
+      '@opentelemetry/api': 1.9.0
+      zod: 4.1.9
 
   ajv-draft-04@1.0.0(ajv@8.13.0):
     optionalDependencies:
