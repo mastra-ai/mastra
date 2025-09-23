@@ -11,7 +11,7 @@ export function createToneScorer(config: ToneScorerConfig = {}) {
   return createScorer({
     name: 'Tone Scorer',
     description:
-      'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
+      'Analyzes the tone and sentiment of agent responses using sentiment analysis. Can compare against a reference tone or evaluate sentiment stability.',
     type: 'agent',
   })
     .preprocess(async ({ run }) => {
