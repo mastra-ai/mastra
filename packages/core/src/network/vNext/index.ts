@@ -946,6 +946,7 @@ export class NewAgentNetwork extends MastraBase {
           context: inputDataToUse,
           // TODO: Pass proper tracing context when network supports tracing
           tracingContext: { currentSpan: undefined },
+          suspend: async () => {}, // TODO
         });
 
         const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
