@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 6.2.2-alpha.4
+
+### Patch Changes
+
+- Fix getting tool link path from agent in playground ui tools page ([#8135](https://github.com/mastra-ai/mastra/pull/8135))
+
 ## 6.2.2-alpha.3
 
 ### Patch Changes
