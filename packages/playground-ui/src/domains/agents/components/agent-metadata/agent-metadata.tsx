@@ -208,13 +208,13 @@ interface AgentMetadataScorerListProps {
 
 export const AgentMetadataScorerList = ({ entityId, entityType }: AgentMetadataScorerListProps) => {
   const { Link, paths } = useLinkComponent();
-  const { scorers, isLoading } = useScorers();
+  const { data: scorers = {}, isLoading } = useScorers();
 
   const scorerList = Object.keys(scorers)
     .filter(scorerKey => {
       const scorer = scorers[scorerKey];
       if (entityType === 'AGENT') {
-        return scorer.agentIds.includes(entityId);
+        return scorer.agentNames.includes(entityId);
       }
 
       return scorer.workflowIds.includes(entityId);

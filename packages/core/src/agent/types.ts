@@ -86,7 +86,7 @@ export interface AgentConfig<
       }[];
   maxRetries?: number; //defaults to 0
   tools?: DynamicArgument<TTools>;
-  workflows?: DynamicArgument<Record<string, Workflow>>;
+  workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
   defaultGenerateOptions?: DynamicArgument<AgentGenerateOptions>;
   defaultStreamOptions?: DynamicArgument<AgentStreamOptions>;
   defaultVNextStreamOptions?: DynamicArgument<AgentExecutionOptions>;
