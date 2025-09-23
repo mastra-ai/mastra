@@ -252,7 +252,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
       const tool = tools['myMcpServer_testMastraInstance'];
       expect(tool).toBeDefined();
 
-      const result = await tool.execute({ context: toolCallPayload.params.args });
+      const result = await tool.execute({ context: toolCallPayload.params.args }, { suspend: async () => {} });
 
       expect(result).toBeDefined();
       expect(result.isError).toBe(false);
