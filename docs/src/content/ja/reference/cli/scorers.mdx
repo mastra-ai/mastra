@@ -1,0 +1,176 @@
+---
+title: "mastra scorers | 評価管理 | Mastra CLI"
+description: "Mastra CLI で AI の出力を評価するスコアラーを管理する"
+---
+
+
+
+# mastra scorers
+
+`mastra scorers` コマンドは、AI 生成出力の品質・正確性・パフォーマンスを評価するスコアラーの管理機能を提供します。
+
+
+
+## 使い方
+
+```bash
+mastra scorers <command> [options]
+```
+
+
+
+## コマンド
+
+### mastra scorers add
+
+プロジェクトに新しいスコアラーテンプレートを追加します。
+
+```bash
+mastra scorers add [scorer-name] [options]
+```
+
+#### オプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "--dir",
+      type: "string", 
+      description: "Mastra ディレクトリへのパス（既定値: 自動検出）",
+      isOptional: true,
+    },
+    {
+      name: "--help",
+      type: "boolean",
+      description: "このコマンドのヘルプを表示します",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### 例
+
+特定のスコアラーを名前で追加:
+
+```bash copy
+mastra scorers add answer-relevancy
+```
+
+インタラクティブにスコアラーを選択（名前を指定しない場合）:
+
+```bash copy
+mastra scorers add
+```
+
+カスタムディレクトリにスコアラーを追加:
+
+```bash copy  
+mastra scorers add toxicity-detection --dir ./custom/scorers
+```
+
+### mastra scorers list
+
+利用可能なスコアラーテンプレートをすべて一覧表示します。
+
+```bash
+mastra scorers list
+```
+
+このコマンドは、カテゴリ別に整理された組み込みのスコアラーテンプレートを表示します:
+
+- **正確性と信頼性**: answer-relevancy, bias-detection, faithfulness, hallucination, toxicity-detection
+- **出力品質**: completeness, content-similarity, keyword-coverage, textual-difference, tone-consistency
+
+
+
+## 利用可能なスコアラー
+
+`mastra scorers add` をスコアラー名を指定せずに実行すると、次の組み込みテンプレートから選択できます:
+
+### 正確性と信頼性
+
+- **answer-relevancy**: AIの応答が入力の質問にどれだけ関連しているかを評価
+- **bias-detection**: AI生成コンテンツに潜在的なバイアスがないかを検出
+- **faithfulness**: 応答が提供されたコンテキストにどれほど忠実かを測定
+- **hallucination**: AIが入力に根拠のない情報を生成している場合を検出
+- **toxicity-detection**: 有害または不適切なコンテンツを検出
+
+### 出力品質
+
+- **completeness**: 応答が入力を完全にカバーしているかを評価
+- **content-similarity**: 期待される出力と実際の出力の意味的類似性を測定
+- **keyword-coverage**: 期待されるキーワードやトピックの網羅状況を評価
+- **textual-difference**: 応答間のテキスト差を測定
+- **tone-consistency**: トーンや文体の一貫性を評価
+
+
+
+## 機能
+
+1. **依存関係の管理**: 必要に応じて `@mastra/evals` パッケージを自動的にインストール
+2. **テンプレートの選択**: スコアラーが指定されていない場合、対話的に選択肢を提示
+3. **ファイル生成**: 組み込みテンプレートからスコアラーファイルを作成
+4. **ディレクトリ構成**: スコアラーを `src/mastra/scorers/` または任意のディレクトリに配置
+5. **重複検出**: 既存のスコアラーファイルの上書きを防止
+
+
+
+## 統合
+
+スコアラーを追加したら、エージェントやワークフローに組み込みます:
+
+### エージェントでの利用
+
+```typescript filename="src/mastra/agents/evaluated-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { createAnswerRelevancyScorer } from "../scorers/answer-relevancy-scorer";
+
+export const evaluatedAgent = new Agent({
+  // ... other config
+  scorers: {
+    relevancy: {
+      scorer: createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") }),
+      sampling: { type: "ratio", rate: 0.5 }
+    }
+  }
+});
+```
+
+### ワークフローステップでの利用
+
+```typescript filename="src/mastra/workflows/content-generation.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { customStepScorer } from "../scorers/custom-step-scorer";
+
+const contentStep = createStep({
+  // ... other config
+  scorers: {
+    customStepScorer: {
+      scorer: customStepScorer(),
+      sampling: { type: "ratio", rate: 1 }
+    }
+  },
+});
+```
+
+
+
+## スコアラーのテスト
+
+スコアラーをテストするには、[Local Dev Playground](/docs/server-db/local-dev-playground) を使用します：
+
+```bash copy
+mastra dev
+```
+
+[http://localhost:4111/](http://localhost:4111/) にアクセスし、「Scorers」セクションで個々のスコアラーをテスト入力に対して実行し、詳細な結果を確認します。
+
+
+
+## 次のステップ
+
+- [Creating Custom Scorers](/docs/scorers/custom-scorers) でスコアラーの実装方法を学ぶ
+- [Off-the-shelf Scorers](/docs/scorers/off-the-shelf-scorers) の標準スコアラーを確認する  
+- 評価パイプラインの詳細は [Scorers Overview](/docs/scorers/overview) を参照
+- [Local Dev Playground](/docs/server-db/local-dev-playground) でスコアラーを試す

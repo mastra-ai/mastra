@@ -14,6 +14,7 @@ import type { OutputProcessor } from '../../processors';
 import type { ProcessorRunnerMode, ProcessorState } from '../../processors/runner';
 import { ProcessorRunner } from '../../processors/runner';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
+import type { WorkflowRunStatus } from '../../workflows';
 import { DelayedPromise } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
@@ -22,6 +23,14 @@ import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
+
+export interface LanguageModelUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
+}
 
 export class JsonToSseTransformStream extends TransformStream<unknown, string> {
   constructor() {
@@ -51,6 +60,7 @@ type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   tracingContext?: TracingContext;
 };
 export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
+  #status: WorkflowRunStatus = 'running';
   #aisdkv5: AISDKV5OutputStream<OUTPUT>;
   #error: Error | string | { message: string; stack: string } | undefined;
   #baseStream: ReadableStream<ChunkType<OUTPUT>>;
@@ -84,14 +94,15 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   #warnings: LanguageModelV2CallWarning[] = [];
   #finishReason: FinishReason | string | undefined;
   #request: Record<string, any> | undefined;
-  #usageCount: Record<string, number> = {};
+  #usageCount: LanguageModelUsage = {};
   #tripwire = false;
   #tripwireReason = '';
 
   #delayedPromises = {
+    suspendPayload: new DelayedPromise<any>(),
     object: new DelayedPromise<InferSchemaOutput<OUTPUT>>(),
     finishReason: new DelayedPromise<FinishReason | string | undefined>(),
-    usage: new DelayedPromise<Record<string, number>>(),
+    usage: new DelayedPromise<LanguageModelUsage>(),
     warnings: new DelayedPromise<LanguageModelV2CallWarning[]>(),
     providerMetadata: new DelayedPromise<Record<string, any> | undefined>(),
     response: new DelayedPromise<Record<string, any>>(), // TODO: add type
@@ -104,7 +115,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     toolCalls: new DelayedPromise<any[]>(), // TODO: add type
     toolResults: new DelayedPromise<any[]>(), // TODO: add type
     steps: new DelayedPromise<StepBufferItem[]>(),
-    totalUsage: new DelayedPromise<Record<string, number>>(),
+    totalUsage: new DelayedPromise<LanguageModelUsage>(),
     content: new DelayedPromise<AIV5Type.StepResult<any>['content']>(),
     reasoningDetails: new DelayedPromise<
       {
@@ -117,6 +128,12 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
   #streamConsumed = false;
   #returnScorerData = false;
+
+  #model: {
+    modelId: string | undefined;
+    provider: string | undefined;
+    version: 'v1' | 'v2';
+  };
 
   /**
    * Unique identifier for this execution run.
@@ -160,7 +177,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
     this.traceId = getValidTraceId(options.tracingContext?.currentSpan);
+
+    this.#model = _model;
+
     this.messageId = messageId;
+
     // Create processor runner if outputProcessors are provided
     if (options.outputProcessors?.length) {
       this.processorRunner = new ProcessorRunner({
@@ -214,6 +235,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
         transform: async (chunk, controller) => {
           switch (chunk.type) {
+            case 'tool-call-suspended':
+            case 'tool-call-approval':
+              self.#status = 'suspended';
+              self.#delayedPromises.suspendPayload.resolve(chunk.payload);
+              break;
             case 'source':
               self.#bufferedSources.push(chunk);
               self.#bufferedByStep.sources.push(chunk);
@@ -315,11 +341,13 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 response: { ...otherMetadata, messages: chunk.payload.messages.nonUser } as any,
                 request: request,
                 usage: chunk.payload.output.usage,
-                // TODO: need to be able to pass a step id into this fn to get the content for a specific step id
-                content: messageList.get.response.aiV5.stepContent(),
+                content: messageList.get.response.aiV5.modelContent(-1),
               };
 
-              await options?.onStepFinish?.(stepResult);
+              await options?.onStepFinish?.({
+                ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
+                ...stepResult,
+              });
 
               self.#bufferedSteps.push(stepResult);
 
@@ -367,6 +395,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               controller.terminate();
               return;
             case 'finish':
+              self.#status = 'success';
               if (chunk.payload.stepResult.reason) {
                 self.#finishReason = chunk.payload.stepResult.reason;
               }
@@ -476,6 +505,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#delayedPromises.totalUsage.resolve(self.#getTotalUsage());
               self.#delayedPromises.content.resolve(messageList.get.response.aiV5.stepContent());
               self.#delayedPromises.reasoningDetails.resolve(Object.values(self.#bufferedReasoningDetails || {}));
+              self.#delayedPromises.suspendPayload.resolve(undefined);
 
               const baseFinishStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
 
@@ -483,6 +513,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 const { stepType: _stepType, isContinued: _isContinued } = baseFinishStep;
 
                 const onFinishPayload = {
+                  ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
                   text: baseFinishStep.text,
                   warnings: baseFinishStep.warnings ?? [],
                   finishReason: chunk.payload.stepResult.reason,
@@ -531,6 +562,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               if (options?.rootSpan) {
                 options.rootSpan.setAttributes({
+                  ...(self.#model.modelId ? { 'aisdk.model.id': self.#model.modelId } : {}),
+                  ...(self.#model.provider ? { 'aisdk.model.provider': self.#model.provider } : {}),
                   ...(baseFinishStep?.usage?.reasoningTokens
                     ? {
                         'stream.usage.reasoningTokens': baseFinishStep.usage.reasoningTokens,
@@ -590,6 +623,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               break;
 
             case 'error':
+              self.#status = 'failed';
               self.#error = chunk.payload.error as any;
 
               // Reject all delayed promises on error
@@ -614,6 +648,38 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
         output: options?.output,
       },
     });
+
+    // Bind methods to ensure they work when destructured
+    const methodsToBind = [
+      { name: 'consumeStream', fn: this.consumeStream },
+      { name: 'getFullOutput', fn: this.getFullOutput },
+      { name: 'teeStream', fn: this.teeStream },
+    ] as const;
+
+    methodsToBind.forEach(({ name, fn }) => {
+      (this as any)[name] = fn.bind(this);
+    });
+
+    // Convert getters to bound properties to support destructuring
+    // We need to do this because getters lose their 'this' context when destructured
+    const bindGetter = (name: string, getter: () => any) => {
+      Object.defineProperty(this, name, {
+        get: getter.bind(this),
+        enumerable: true,
+        configurable: true,
+      });
+    };
+
+    // Get the prototype to access the getters
+    const proto = Object.getPrototypeOf(this);
+    const descriptors = Object.getOwnPropertyDescriptors(proto);
+
+    // Bind all getters from the prototype
+    for (const [key, descriptor] of Object.entries(descriptors)) {
+      if (descriptor.get && key !== 'constructor') {
+        bindGetter(key, descriptor.get);
+      }
+    }
   }
 
   #getDelayedPromise<T>(promise: DelayedPromise<T>): Promise<T> {
@@ -655,6 +721,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
   get steps() {
     return this.#getDelayedPromise(this.#delayedPromises.steps);
+  }
+
+  get suspendPayload() {
+    return this.#getDelayedPromise(this.#delayedPromises.suspendPayload);
   }
 
   teeStream() {
@@ -771,25 +841,49 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     return this.#error;
   }
 
-  updateUsageCount(usage: Record<string, number>) {
+  updateUsageCount(usage: Partial<LanguageModelUsage>) {
     if (!usage) {
       return;
     }
 
-    for (const [key, value] of Object.entries(usage)) {
-      this.#usageCount[key] = (this.#usageCount[key] ?? 0) + (value ?? 0);
+    // Use AI SDK v5 format only (MastraModelOutput is only used in VNext paths)
+    if (usage.inputTokens !== undefined) {
+      this.#usageCount.inputTokens = (this.#usageCount.inputTokens ?? 0) + usage.inputTokens;
+    }
+    if (usage.outputTokens !== undefined) {
+      this.#usageCount.outputTokens = (this.#usageCount.outputTokens ?? 0) + usage.outputTokens;
+    }
+    if (usage.totalTokens !== undefined) {
+      this.#usageCount.totalTokens = (this.#usageCount.totalTokens ?? 0) + usage.totalTokens;
+    }
+    if (usage.reasoningTokens !== undefined) {
+      this.#usageCount.reasoningTokens = (this.#usageCount.reasoningTokens ?? 0) + usage.reasoningTokens;
+    }
+    if (usage.cachedInputTokens !== undefined) {
+      this.#usageCount.cachedInputTokens = (this.#usageCount.cachedInputTokens ?? 0) + usage.cachedInputTokens;
     }
   }
 
-  populateUsageCount(usage: Record<string, number>) {
+  populateUsageCount(usage: Partial<LanguageModelUsage>) {
     if (!usage) {
       return;
     }
 
-    for (const [key, value] of Object.entries(usage)) {
-      if (!this.#usageCount[key]) {
-        this.#usageCount[key] = value;
-      }
+    // Use AI SDK v5 format only (MastraModelOutput is only used in VNext paths)
+    if (usage.inputTokens !== undefined && this.#usageCount.inputTokens === undefined) {
+      this.#usageCount.inputTokens = usage.inputTokens;
+    }
+    if (usage.outputTokens !== undefined && this.#usageCount.outputTokens === undefined) {
+      this.#usageCount.outputTokens = usage.outputTokens;
+    }
+    if (usage.totalTokens !== undefined && this.#usageCount.totalTokens === undefined) {
+      this.#usageCount.totalTokens = usage.totalTokens;
+    }
+    if (usage.reasoningTokens !== undefined && this.#usageCount.reasoningTokens === undefined) {
+      this.#usageCount.reasoningTokens = usage.reasoningTokens;
+    }
+    if (usage.cachedInputTokens !== undefined && this.#usageCount.cachedInputTokens === undefined) {
+      this.#usageCount.cachedInputTokens = usage.cachedInputTokens;
     }
   }
 
@@ -1021,16 +1115,72 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     return this.#finishReason;
   }
 
-  #getTotalUsage() {
-    let total = 0;
-    for (const [key, value] of Object.entries(this.#usageCount)) {
-      if (key !== 'totalTokens' && value && !key.startsWith('cached')) {
-        total += value;
-      }
+  #getTotalUsage(): LanguageModelUsage {
+    let total = this.#usageCount.totalTokens;
+
+    if (total === undefined) {
+      const input = this.#usageCount.inputTokens ?? 0;
+      const output = this.#usageCount.outputTokens ?? 0;
+      const reasoning = this.#usageCount.reasoningTokens ?? 0;
+      total = input + output + reasoning;
     }
+
     return {
-      ...this.#usageCount,
+      inputTokens: this.#usageCount.inputTokens,
+      outputTokens: this.#usageCount.outputTokens,
       totalTokens: total,
+      reasoningTokens: this.#usageCount.reasoningTokens,
+      cachedInputTokens: this.#usageCount.cachedInputTokens,
     };
+  }
+
+  get status() {
+    return this.#status;
+  }
+
+  serializeState() {
+    return {
+      status: this.#status,
+      bufferedSteps: this.#bufferedSteps,
+      bufferedReasoningDetails: this.#bufferedReasoningDetails,
+      bufferedByStep: this.#bufferedByStep,
+      bufferedText: this.#bufferedText,
+      bufferedTextChunks: this.#bufferedTextChunks,
+      bufferedSources: this.#bufferedSources,
+      bufferedReasoning: this.#bufferedReasoning,
+      bufferedFiles: this.#bufferedFiles,
+      toolCallArgsDeltas: this.#toolCallArgsDeltas,
+      toolCallDeltaIdNameMap: this.#toolCallDeltaIdNameMap,
+      toolCalls: this.#toolCalls,
+      toolResults: this.#toolResults,
+      warnings: this.#warnings,
+      finishReason: this.#finishReason,
+      request: this.#request,
+      usageCount: this.#usageCount,
+      tripwire: this.#tripwire,
+      tripwireReason: this.#tripwireReason,
+    };
+  }
+
+  deserializeState(state: any) {
+    this.#status = state.status;
+    this.#bufferedSteps = state.bufferedSteps;
+    this.#bufferedReasoningDetails = state.bufferedReasoningDetails;
+    this.#bufferedByStep = state.bufferedByStep;
+    this.#bufferedText = state.bufferedText;
+    this.#bufferedTextChunks = state.bufferedTextChunks;
+    this.#bufferedSources = state.bufferedSources;
+    this.#bufferedReasoning = state.bufferedReasoning;
+    this.#bufferedFiles = state.bufferedFiles;
+    this.#toolCallArgsDeltas = state.toolCallArgsDeltas;
+    this.#toolCallDeltaIdNameMap = state.toolCallDeltaIdNameMap;
+    this.#toolCalls = state.toolCalls;
+    this.#toolResults = state.toolResults;
+    this.#warnings = state.warnings;
+    this.#finishReason = state.finishReason;
+    this.#request = state.request;
+    this.#usageCount = state.usageCount;
+    this.#tripwire = state.tripwire;
+    this.#tripwireReason = state.tripwireReason;
   }
 }

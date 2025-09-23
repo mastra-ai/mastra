@@ -49,7 +49,7 @@ export class PostgresPerformanceTest {
     // Clean up test data more aggressively
     const db = this.store.db;
 
-    console.log('🧹 Cleaning up all test data...');
+    console.info('🧹 Cleaning up all test data...');
 
     // Clean threads and messages with broader patterns
     await db.none('DELETE FROM mastra_threads WHERE title LIKE $1 OR id LIKE $2', ['perf_test_%', 'thread_%']);
@@ -74,7 +74,7 @@ export class PostgresPerformanceTest {
     // Update PostgreSQL statistics after cleanup
     try {
       await db.none('ANALYZE mastra_threads, mastra_messages, mastra_traces, mastra_evals');
-      console.log('📊 Updated PostgreSQL statistics after cleanup');
+      console.info('📊 Updated PostgreSQL statistics after cleanup');
     } catch (error) {
       console.warn('Could not update statistics:', error);
     }
@@ -84,21 +84,21 @@ export class PostgresPerformanceTest {
     // Nuclear option: completely reset all tables
     const db = this.store.db;
 
-    console.log('💥 NUCLEAR CLEANUP: Resetting all tables...');
+    console.info('💥 NUCLEAR CLEANUP: Resetting all tables...');
 
     try {
       await db.none('TRUNCATE TABLE mastra_threads CASCADE');
       await db.none('TRUNCATE TABLE mastra_messages CASCADE');
       await db.none('TRUNCATE TABLE mastra_traces CASCADE');
       await db.none('TRUNCATE TABLE mastra_evals CASCADE');
-      console.log('🧨 All tables truncated');
+      console.info('🧨 All tables truncated');
     } catch (error) {
       console.warn('Could not truncate tables:', error);
     }
   }
 
   async dropPerformanceIndexes(): Promise<void> {
-    console.log('Dropping performance indexes...');
+    console.info('Dropping performance indexes...');
     // Get schema name for index naming
     const schemaPrefix = this.store['schema'] ? `${this.store['schema']}_` : '';
 
@@ -125,13 +125,13 @@ export class PostgresPerformanceTest {
   }
 
   async createAutomaticIndexes(): Promise<void> {
-    console.log('Creating indexes...');
+    console.info('Creating indexes...');
     const operations = this.store.stores.operations as any; // Cast to access PG-specific method
     await operations.createAutomaticIndexes();
   }
 
   async seedTestData(): Promise<void> {
-    console.log(`Seeding ${this.config.testDataSize} test records...`);
+    console.info(`Seeding ${this.config.testDataSize} test records...`);
 
     const resourceIds = Array.from({ length: Math.ceil(this.config.testDataSize / 10) }, (_, i) => `resource_${i}`);
 
@@ -158,7 +158,7 @@ export class PostgresPerformanceTest {
 
     // Batch insert threads (optimized for large datasets)
     const db = this.store.db;
-    console.log(`Inserting ${threads.length} threads...`);
+    console.info(`Inserting ${threads.length} threads...`);
 
     const batchSize = 1000;
     for (let i = 0; i < threads.length; i += batchSize) {
@@ -185,7 +185,7 @@ export class PostgresPerformanceTest {
       );
 
       if (i % (batchSize * 10) === 0) {
-        console.log(`  Inserted ${Math.min(i + batchSize, threads.length)} / ${threads.length} threads`);
+        console.info(`  Inserted ${Math.min(i + batchSize, threads.length)} / ${threads.length} threads`);
       }
     }
 
@@ -214,7 +214,7 @@ export class PostgresPerformanceTest {
     }
 
     // Batch insert messages (optimized for large datasets)
-    console.log(`Inserting ${messages.length} messages...`);
+    console.info(`Inserting ${messages.length} messages...`);
 
     for (let i = 0; i < messages.length; i += batchSize) {
       const batch = messages.slice(i, i + batchSize);
@@ -241,12 +241,12 @@ export class PostgresPerformanceTest {
       );
 
       if (i % (batchSize * 10) === 0) {
-        console.log(`  Inserted ${Math.min(i + batchSize, messages.length)} / ${messages.length} messages`);
+        console.info(`  Inserted ${Math.min(i + batchSize, messages.length)} / ${messages.length} messages`);
       }
     }
 
     // Create test traces for trace performance testing
-    console.log('Inserting traces...');
+    console.info('Inserting traces...');
 
     try {
       const traces: Array<{
@@ -268,7 +268,7 @@ export class PostgresPerformanceTest {
 
       // Use same scale as main dataset - equal scaling across all tables!
       const tracesCount = Math.floor(this.config.testDataSize);
-      console.log(`  Creating ${tracesCount.toLocaleString()} traces...`);
+      console.info(`  Creating ${tracesCount.toLocaleString()} traces...`);
 
       for (let i = 0; i < tracesCount; i++) {
         const now = Date.now();
@@ -314,17 +314,17 @@ export class PostgresPerformanceTest {
           );
 
           if (i % (batchSize * 10) === 0) {
-            console.log(`  Inserted ${Math.min(i + batchSize, traces.length)} / ${traces.length} traces`);
+            console.info(`  Inserted ${Math.min(i + batchSize, traces.length)} / ${traces.length} traces`);
           }
         }
-        console.log(`  Inserted ${traces.length} test traces`);
+        console.info(`  Inserted ${traces.length} test traces`);
       }
     } catch (error) {
       throw new Error(`Failed to seed traces data: ${error}`);
     }
 
     // Create test evals for eval performance testing - PROPERLY SCALED!
-    console.log('Inserting evals...');
+    console.info('Inserting evals...');
 
     try {
       const evals: Array<{
@@ -343,7 +343,7 @@ export class PostgresPerformanceTest {
 
       // Use same scale as main dataset - test at full scale to show index benefits!
       const evalsCount = Math.floor(this.config.testDataSize);
-      console.log(`  Creating ${evalsCount.toLocaleString()} evals...`);
+      console.info(`  Creating ${evalsCount.toLocaleString()} evals...`);
 
       const agentNames = ['test_agent', 'chat_agent', 'search_agent', 'summary_agent', 'code_agent'];
       for (let i = 0; i < evalsCount; i++) {
@@ -390,16 +390,16 @@ export class PostgresPerformanceTest {
           );
 
           if (i % (batchSize * 10) === 0) {
-            console.log(`  Inserted ${Math.min(i + batchSize, evals.length)} / ${evals.length} evals`);
+            console.info(`  Inserted ${Math.min(i + batchSize, evals.length)} / ${evals.length} evals`);
           }
         }
-        console.log(`  Inserted ${evals.length} test evals`);
+        console.info(`  Inserted ${evals.length} test evals`);
       }
     } catch (error) {
       throw new Error(`Failed to seed evals data: ${error}`);
     }
 
-    console.log('Test data seeding completed');
+    console.info('Test data seeding completed');
   }
 
   async measureOperation(
@@ -409,7 +409,7 @@ export class PostgresPerformanceTest {
   ): Promise<PerformanceResult> {
     const times: number[] = [];
 
-    console.log(`Running ${name} test (${scenario}, ${this.config.iterations} iterations)...`);
+    console.info(`Running ${name} test (${scenario}, ${this.config.iterations} iterations)...`);
 
     // Warm up the database cache
     await operation();
@@ -485,7 +485,7 @@ export class PostgresPerformanceTest {
       );
     } catch {
       // Skip if traces table doesn't exist or no traces
-      console.log('Skipping getTracesPaginated test (table may not exist)');
+      console.info('Skipping getTracesPaginated test (table may not exist)');
     }
 
     // Test getEvals (if evals exist)
@@ -499,14 +499,14 @@ export class PostgresPerformanceTest {
       );
     } catch {
       // Skip if evals table doesn't exist or no evals
-      console.log('Skipping getEvals test (table may not exist)');
+      console.info('Skipping getEvals test (table may not exist)');
     }
 
     return results;
   }
 
   async runComparisonTest(): Promise<PerformanceComparison[]> {
-    console.log('\n=== Running Performance Comparison Test ===');
+    console.info('\n=== Running Performance Comparison Test ===');
 
     // First, test without indexes
     await this.dropPerformanceIndexes();
@@ -543,7 +543,7 @@ export class PostgresPerformanceTest {
 
   async analyzeCurrentQueries(): Promise<void> {
     const db = this.store.db;
-    console.log('\n=== Query Execution Plans ===');
+    console.info('\n=== Query Execution Plans ===');
 
     try {
       // Analyze getThreadsByResourceId query
@@ -554,8 +554,8 @@ export class PostgresPerformanceTest {
         WHERE "resourceId" = 'resource_0' 
         ORDER BY "createdAt" DESC
       `);
-      console.log('getThreadsByResourceId plan:');
-      threadPlan.forEach(row => console.log('  ' + row['QUERY PLAN']));
+      console.info('getThreadsByResourceId plan:');
+      threadPlan.forEach(row => console.info('  ' + row['QUERY PLAN']));
 
       // Analyze getMessages query
       const messagePlan = await db.manyOrNone(`
@@ -565,17 +565,17 @@ export class PostgresPerformanceTest {
         WHERE thread_id = 'thread_0' 
         ORDER BY "createdAt" DESC
       `);
-      console.log('\ngetMessages plan:');
-      messagePlan.forEach(row => console.log('  ' + row['QUERY PLAN']));
+      console.info('\ngetMessages plan:');
+      messagePlan.forEach(row => console.info('  ' + row['QUERY PLAN']));
     } catch (error) {
       console.warn('Could not analyze query plans:', error);
     }
   }
 
   printComparison(comparisons: PerformanceComparison[]): void {
-    console.log('\n=== Performance Comparison Results ===');
-    console.log('Operation                 | Without (ms) | With (ms) | Improvement | % Faster');
-    console.log('--------------------------|--------------|-----------|-------------|----------');
+    console.info('\n=== Performance Comparison Results ===');
+    console.info('Operation                 | Without (ms) | With (ms) | Improvement | % Faster');
+    console.info('--------------------------|--------------|-----------|-------------|----------');
 
     for (const comp of comparisons) {
       const operation = comp.operation.padEnd(24);
@@ -584,22 +584,22 @@ export class PostgresPerformanceTest {
       const improvement = `${comp.improvementFactor}x`.padStart(9);
       const percentage = `${comp.improvementPercentage}%`.padStart(8);
 
-      console.log(`${operation} | ${without} | ${with_} | ${improvement} | ${percentage}`);
+      console.info(`${operation} | ${without} | ${with_} | ${improvement} | ${percentage}`);
     }
 
-    console.log('\n=== Summary ===');
+    console.info('\n=== Summary ===');
     const avgImprovement = comparisons.reduce((sum, comp) => sum + comp.improvementFactor, 0) / comparisons.length;
-    console.log(`Average performance improvement: ${avgImprovement.toFixed(2)}x faster`);
+    console.info(`Average performance improvement: ${avgImprovement.toFixed(2)}x faster`);
 
     const maxImprovement = Math.max(...comparisons.map(comp => comp.improvementFactor));
     const maxOp = comparisons.find(comp => comp.improvementFactor === maxImprovement);
-    console.log(`Best improvement: ${maxOp?.operation} - ${maxImprovement.toFixed(2)}x faster`);
+    console.info(`Best improvement: ${maxOp?.operation} - ${maxImprovement.toFixed(2)}x faster`);
   }
 
   printResults(results: PerformanceResult[]): void {
-    console.log('\n=== Performance Test Results ===');
-    console.log('Operation                 | Scenario         | Avg (ms) | Min (ms) | Max (ms) | Iterations');
-    console.log('--------------------------|------------------|----------|----------|----------|----------');
+    console.info('\n=== Performance Test Results ===');
+    console.info('Operation                 | Scenario         | Avg (ms) | Min (ms) | Max (ms) | Iterations');
+    console.info('--------------------------|------------------|----------|----------|----------|----------');
 
     for (const result of results) {
       const operation = result.operation.padEnd(24);
@@ -609,7 +609,7 @@ export class PostgresPerformanceTest {
       const max = result.maxTimeMs.toString().padStart(8);
       const iterations = result.iterations.toString().padStart(8);
 
-      console.log(`${operation} | ${scenario} | ${avg} | ${min} | ${max} | ${iterations}`);
+      console.info(`${operation} | ${scenario} | ${avg} | ${min} | ${max} | ${iterations}`);
     }
   }
 
@@ -622,12 +622,12 @@ export class PostgresPerformanceTest {
       ORDER BY tablename, indexname
     `);
 
-    console.log('\n=== Available Indexes ===');
+    console.info('\n=== Available Indexes ===');
     if (indexes.length === 0) {
-      console.log('No performance indexes found');
+      console.info('No performance indexes found');
     } else {
       for (const index of indexes) {
-        console.log(`${index.tablename}: ${index.indexname}`);
+        console.info(`${index.tablename}: ${index.indexname}`);
       }
     }
   }
@@ -653,7 +653,7 @@ async function runTest() {
     await test.checkIndexes();
     await test.cleanup();
   } catch (error) {
-    console.error('Performance test failed:', error);
+    console.info('Performance test failed:', error);
   }
 }
 

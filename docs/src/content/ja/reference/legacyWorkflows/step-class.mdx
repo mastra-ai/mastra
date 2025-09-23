@@ -1,0 +1,108 @@
+---
+title: "リファレンス: Step | ワークフローの構築（レガシー） | Mastra ドキュメント"
+description: ワークフロー内の個々の作業単位を定義する Step クラスのドキュメント。
+---
+
+
+
+# Step
+
+Stepクラスは、ワークフロー内の個々の作業単位を定義し、実行ロジック、データ検証、および入力／出力の処理をカプセル化します。
+
+
+
+## 使い方
+
+```typescript
+const processOrder = new LegacyStep({
+  id: "processOrder",
+  inputSchema: z.object({
+    orderId: z.string(),
+    userId: z.string(),
+  }),
+  outputSchema: z.object({
+    status: z.string(),
+    orderId: z.string(),
+  }),
+  execute: async ({ context, runId }) => {
+    return {
+      status: "processed",
+      orderId: context.orderId,
+    };
+  },
+});
+```
+
+
+
+## コンストラクタのパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "ステップの一意な識別子",
+      required: true,
+    },
+    {
+      name: "inputSchema",
+      type: "z.ZodSchema",
+      description: "実行前に入力データを検証するためのZodスキーマ",
+      required: false,
+    },
+    {
+      name: "outputSchema",
+      type: "z.ZodSchema",
+      description: "ステップの出力データを検証するためのZodスキーマ",
+      required: false,
+    },
+    {
+      name: "payload",
+      type: "Record<string, any>",
+      description: "変数とマージされる静的データ",
+      required: false,
+    },
+    {
+      name: "execute",
+      type: "(params: ExecuteParams) => Promise<any>",
+      description: "ステップのロジックを含む非同期関数",
+      required: true,
+    },
+  ]}
+/>
+
+### ExecuteParams
+
+<PropertiesTable
+  content={[
+    {
+      name: "context",
+      type: "StepContext",
+      description: "ワークフローのコンテキストとステップ結果へのアクセス",
+    },
+    {
+      name: "runId",
+      type: "string",
+      description: "現在のワークフロー実行の一意な識別子",
+    },
+    {
+      name: "suspend",
+      type: "() => Promise<void>",
+      description: "ステップの実行を一時停止する関数",
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "Mastraインスタンスへのアクセス",
+    },
+  ]}
+/>
+
+
+
+## 関連
+
+- [ワークフローリファレンス](./workflow.mdx)
+- [ステップ設定ガイド](../../docs/workflows-legacy/steps.mdx)
+- [制御フローガイド](../../docs/workflows-legacy/control-flow.mdx)

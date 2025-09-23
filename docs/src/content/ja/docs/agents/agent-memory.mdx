@@ -1,61 +1,205 @@
 ---
 title: "エージェントメモリーの使用 | エージェント | Mastra ドキュメント"
-description: Mastraのエージェントが会話履歴やコンテキスト情報を保存するためにメモリーをどのように使用するかに関するドキュメント。
+description: Mastraのエージェントが会話履歴や文脈情報を保存するためにメモリーをどのように使用するかに関するドキュメント。
 ---
+
+
 
 # エージェントメモリー
 
 Mastraのエージェントは、会話履歴を保存し、関連情報を思い出し、インタラクション間で永続的なコンテキストを維持するための強力なメモリーシステムを活用できます。これにより、エージェントはより自然でステートフルな会話を行うことができます。
 
+
+
 ## エージェントのメモリを有効にする
 
-メモリを有効にするには、単に`Memory`クラスをインスタンス化し、エージェントの設定に渡すだけです。また、メモリパッケージをインストールする必要があります：
+メモリを有効にするには、単に`Memory`クラスをインスタンス化し、エージェントの設定に渡すだけです。また、メモリパッケージとストレージアダプターをインストールする必要があります：
 
 ```bash npm2yarn copy
-npm install @mastra/memory@latest
+npm install @mastra/memory@latest @mastra/libsql@latest
 ```
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
 import { openai } from "@ai-sdk/openai";
 
-// 基本的なメモリのセットアップ
-const memory = new Memory();
+const memory = new Memory({
+  storage: new LibSQLStore({
+    url: "file:../../memory.db",
+  }),
+});
 
 const agent = new Agent({
   name: "MyMemoryAgent",
-  instructions: "あなたはメモリを持つ役立つアシスタントです。",
+  instructions: "You are a helpful assistant with memory.",
   model: openai("gpt-4o"),
-  memory: memory, // メモリインスタンスを接続
+  memory, // Attach the memory instance
 });
 ```
 
-この基本的なセットアップでは、ストレージにLibSQL、埋め込みにFastEmbedを含むデフォルト設定を使用しています。詳細なセットアップ手順については、[メモリ](/docs/memory/overview)を参照してください。
+この基本的なセットアップはデフォルト設定を使用しています。より詳細な設定情報については[メモリのドキュメント](/docs/memory/overview)をご覧ください。
 
-## エージェントコールでのメモリの使用
 
-インタラクション中にメモリを活用するには、エージェントの`stream()`または`generate()`メソッドを呼び出す際に`resourceId`と`threadId`を**必ず**提供する必要があります。
 
-- `resourceId`: 通常、ユーザーまたはエンティティを識別します（例：`user_123`）。
-- `threadId`: 特定の会話スレッドを識別します（例：`support_chat_456`）。
+## 動的メモリ設定
+
+動的な[指示、モデル、ツール](./dynamic-agents.mdx)を設定できるのと同様に、ランタイムコンテキストを使用してメモリを動的に設定することもできます。これにより以下が可能になります：
+
+- ユーザーティアや設定に基づいて異なるメモリシステムを使用
+- 異なる環境に対してメモリ設定を切り替え
+- 機能フラグに基づいてメモリ機能を有効または無効にする
+- ユーザーコンテキストに基づいてメモリの動作をカスタマイズ
+
+### 例：ユーザーティアベースのメモリ
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+import { PostgresStore } from "@mastra/pg";
+import { openai } from "@ai-sdk/openai";
+
+// 異なるユーザーティアに対して異なるメモリインスタンスを作成
+const premiumMemory = new Memory({
+  storage: new LibSQLStore({ url: "file:premium.db" }),
+  options: {
+    semanticRecall: { topK: 10, messageRange: 5 }, // プレミアムユーザーにはより多くのコンテキスト
+    workingMemory: { enabled: true },
+  },
+});
+
+const standardMemory = new Memory({
+  storage: new LibSQLStore({ url: "file:standard.db" }),
+  options: {
+    semanticRecall: { topK: 3, messageRange: 2 }, // 標準ユーザーには基本的なリコール
+    workingMemory: { enabled: false },
+  },
+});
+
+const agent = new Agent({
+  name: "TieredMemoryAgent",
+  instructions: "あなたは階層化されたメモリ機能を持つ有用なアシスタントです。",
+  model: openai("gpt-4o"),
+  memory: ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("userTier");
+    return userTier === "premium" ? premiumMemory : standardMemory;
+  },
+});
+```
+
+### 例：環境ベースのメモリ
+
+```typescript
+const agent = new Agent({
+  name: "EnvironmentAwareAgent",
+  instructions: "あなたは有用なアシスタントです。",
+  model: openai("gpt-4o"),
+  memory: ({ runtimeContext }) => {
+    const environment = runtimeContext.get("environment");
+    
+    if (environment === "test") {
+      // テスト用にローカルストレージを使用
+      return new Memory({
+        storage: new LibSQLStore({ url: ":memory:" }),
+        options: {
+          workingMemory: { enabled: true },
+        },
+      });
+    } else if (environment === "production") {
+      // 本番データベースを使用
+      return new Memory({
+        storage: new PostgresStore({ connectionString: process.env.PRODUCTION_DB_URL }),
+        options: {
+          workingMemory: { enabled: true },
+        },
+      });
+    }
+    
+    // 開発環境
+    return new Memory({
+      storage: new LibSQLStore({ url: "file:dev.db" }),
+    });
+  },
+});
+```
+
+### 例：非同期メモリ設定
+
+```typescript
+const agent = new Agent({
+  name: "AsyncMemoryAgent",
+  instructions: "あなたは有用なアシスタントです。",
+  model: openai("gpt-4o"),
+  memory: async ({ runtimeContext }) => {
+    const userId = runtimeContext.get("userId");
+    
+    // 非同期メモリセットアップをシミュレート（例：データベース検索）
+    await new Promise(resolve => setTimeout(resolve, 10));
+    
+    return new Memory({
+      storage: new LibSQLStore({ 
+        url: `file:user_${userId}.db` 
+      }),
+    });
+  },
+});
+```
+
+### 動的メモリの使用
+
+動的メモリを使用する際は、エージェント呼び出しにランタイムコンテキストを渡します：
+
+```typescript
+import { RuntimeContext } from "@mastra/core/runtime-context";
+
+// ユーザー情報を含むランタイムコンテキストを作成
+const runtimeContext = new RuntimeContext();
+runtimeContext.set("userTier", "premium");
+runtimeContext.set("environment", "production");
+
+// ランタイムコンテキストでエージェントを使用
+const response = await agent.generate("私の好きな色は青だということを覚えておいてください。", {
+  memory: {
+    resource: "user_alice",
+    thread: { id: "preferences_thread" },
+  },
+  runtimeContext, // ランタイムコンテキストを渡す
+});
+```
+
+
+
+## エージェント呼び出しでのメモリの使用
+
+インタラクション中にメモリを利用するには、エージェントの`stream()`または`generate()`メソッドを呼び出す際に、`resource`と`thread`プロパティを持つ`memory`オブジェクトを提供する**必要があります**。
+
+- `resource`: 通常、ユーザーまたはエンティティを識別します（例：`user_123`）。
+- `thread`: 特定の会話スレッドを識別します（例：`support_chat_456`）。
 
 ```typescript
 // メモリを使用したエージェント呼び出しの例
-await agent.stream("私の好きな色は青だということを覚えておいて。", {
-  resourceId: "user_alice",
-  threadId: "preferences_thread",
+await agent.stream("Remember my favorite color is blue.", {
+  memory: {
+    resource: "user_alice",
+    thread: "preferences_thread",
+  },
 });
 
-// 同じスレッドの後で...
-const response = await agent.stream("私の好きな色は何？", {
-  resourceId: "user_alice",
-  threadId: "preferences_thread",
+// 同じスレッドで後に...
+const response = await agent.stream("What's my favorite color?", {
+  memory: {
+    resource: "user_alice",
+    thread: "preferences_thread",
+  },
 });
-// エージェントはメモリを使用して好きな色を思い出します。
+// エージェントはメモリを使用してお気に入りの色を思い出します。
 ```
 
-これらのIDは、会話履歴とコンテキストが適切なユーザーと会話のために正しく保存され、取得されることを保証します。
+これらのIDにより、会話履歴とコンテキストが適切なユーザーと会話に対して正しく保存および取得されることが保証されます。
+
+
 
 ## 次のステップ
 

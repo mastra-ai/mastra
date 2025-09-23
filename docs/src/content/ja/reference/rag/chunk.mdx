@@ -3,9 +3,13 @@ title: "リファレンス: .chunk() | ドキュメント処理 | RAG | Mastra �
 description: Mastra の chunk 関数のドキュメント。さまざまな戦略を用いてドキュメントを小さなセグメントに分割します。
 ---
 
+
+
 # リファレンス: .chunk()
 
 `.chunk()` 関数は、さまざまな戦略やオプションを用いてドキュメントをより小さなセグメントに分割します。
+
+
 
 ## 例
 
@@ -40,99 +44,244 @@ const chunksWithMetadata = await doc.chunk({
 });
 ```
 
-## パラメーター
+
+
+## パラメータ
+
+以下のパラメータは、すべてのチャンク分割戦略で利用可能です。
+**重要:** 各戦略は、その特定の用途に関連するパラメータのサブセットのみを使用します。
 
 <PropertiesTable
   content={[
     {
       name: "strategy",
-      type: "'recursive' | 'character' | 'token' | 'markdown' | 'html' | 'json' | 'latex'",
+      type: "'recursive' | 'character' | 'token' | 'markdown' | 'semantic-markdown' | 'html' | 'json' | 'latex' | 'sentence'",
       isOptional: true,
       description:
-        "使用するチャンク化戦略。指定しない場合はドキュメントタイプに基づいてデフォルトが選択されます。チャンク化戦略によっては追加のオプションがあります。デフォルト: .md ファイル → 'markdown'、.html/.htm → 'html'、.json → 'json'、.tex → 'latex'、その他 → 'recursive'",
+        "使用するチャンク分割戦略。指定されていない場合、ドキュメントタイプに基づいてデフォルトが設定されます。チャンク分割戦略によって、追加のオプションがあります。デフォルト: .mdファイル → 'markdown'、.html/.htm → 'html'、.json → 'json'、.tex → 'latex'、その他 → 'recursive'",
+    },
+    {
+      name: "maxSize",
+      type: "number",
+      isOptional: true,
+      defaultValue: "4000",
+      description: "各チャンクの最大サイズ。**注意:** 一部の戦略設定（ヘッダー付きmarkdown、ヘッダー付きHTML）では、このパラメータは無視されます。",
     },
     {
       name: "size",
       type: "number",
       isOptional: true,
-      defaultValue: "512",
-      description: "各チャンクの最大サイズ",
+      description: "**非推奨:** 代わりに`maxSize`を使用してください。このパラメータは次のメジャーバージョンで削除されます。",
     },
     {
       name: "overlap",
       type: "number",
       isOptional: true,
       defaultValue: "50",
-      description: "チャンク間で重複する文字数またはトークン数。",
+      description: "チャンク間で重複する文字数/トークン数。",
     },
     {
-      name: "separator",
-      type: "string",
+      name: "lengthFunction",
+      type: "(text: string) => number",
       isOptional: true,
-      defaultValue: "\\n\\n",
-      description:
-        "分割に使用する文字。テキストコンテンツの場合、デフォルトはダブル改行です。",
-    },
-    {
-      name: "isSeparatorRegex",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "セパレーターが正規表現パターンかどうか",
+      description: "テキストの長さを計算する関数。デフォルトは文字数カウント。",
     },
     {
       name: "keepSeparator",
-      type: "'start' | 'end'",
+      type: "boolean | 'start' | 'end'",
       isOptional: true,
-      description: "セパレーターをチャンクの先頭または末尾に保持するかどうか",
+      description:
+        "チャンクの開始または終了でセパレータを保持するかどうか",
+    },
+    {
+      name: "addStartIndex",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "チャンクに開始インデックスメタデータを追加するかどうか。",
+    },
+    {
+      name: "stripWhitespace",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "チャンクから空白文字を除去するかどうか。",
     },
     {
       name: "extract",
       type: "ExtractParams",
       isOptional: true,
       description:
-        "メタデータ抽出の設定。詳細は[ExtractParams のリファレンス](./extract-params)を参照してください。",
+        "メタデータ抽出設定。",
     },
   ]}
 />
 
+`extract`パラメータの詳細については、[ExtractParamsリファレンス](/reference/rag/extract-params.mdx)を参照してください。
+
+
+
 ## 戦略固有のオプション
 
-戦略固有のオプションは、strategy パラメータと並んでトップレベルのパラメータとして渡されます。例えば：
+戦略固有のオプションは、strategy パラメータと同じトップレベルのパラメータとして渡します。例:
 
 ```typescript showLineNumbers copy
-// HTML戦略の例
+// Character 戦略の例
+const chunks = await doc.chunk({
+  strategy: "character",
+  separator: ".", // Character 固有のオプション
+  isSeparatorRegex: false, // Character 固有のオプション
+  maxSize: 300, // 一般的なオプション
+});
+
+// Recursive 戦略の例
+const chunks = await doc.chunk({
+  strategy: "recursive",
+  separators: ["\n\n", "\n", " "], // Recursive 固有のオプション
+  language: "markdown", // Recursive 固有のオプション
+  maxSize: 500, // 一般的なオプション
+});
+
+// Sentence 戦略の例
+const chunks = await doc.chunk({
+  strategy: "sentence",
+  maxSize: 450, // Sentence 戦略では必須
+  minSize: 50, // Sentence 固有のオプション
+  sentenceEnders: ["."], // Sentence 固有のオプション
+  fallbackToCharacters: false, // Sentence 固有のオプション
+  keepSeparator: true, // 一般的なオプション
+});
+
+// HTML 戦略の例
 const chunks = await doc.chunk({
   strategy: "html",
   headers: [
     ["h1", "title"],
     ["h2", "subtitle"],
-  ], // HTML固有のオプション
-  sections: [["div.content", "main"]], // HTML固有のオプション
-  size: 500, // 一般的なオプション
+  ], // HTML 固有のオプション
 });
 
-// Markdown戦略の例
+// Markdown 戦略の例
 const chunks = await doc.chunk({
   strategy: "markdown",
   headers: [
     ["#", "title"],
     ["##", "section"],
-  ], // Markdown固有のオプション
-  stripHeaders: true, // Markdown固有のオプション
-  overlap: 50, // 一般的なオプション
+  ], // Markdown 固有のオプション
+  stripHeaders: true, // Markdown 固有のオプション
 });
 
-// Token戦略の例
+// Semantic Markdown 戦略の例
+const chunks = await doc.chunk({
+  strategy: "semantic-markdown",
+  joinThreshold: 500, // Semantic Markdown 固有のオプション
+  modelName: "gpt-3.5-turbo", // Semantic Markdown 固有のオプション
+});
+
+// Token 戦略の例
 const chunks = await doc.chunk({
   strategy: "token",
-  encodingName: "gpt2", // Token固有のオプション
-  modelName: "gpt-3.5-turbo", // Token固有のオプション
-  size: 1000, // 一般的なオプション
+  encodingName: "gpt2", // Token 固有のオプション
+  modelName: "gpt-3.5-turbo", // Token 固有のオプション
+  maxSize: 1000, // 一般的なオプション
 });
 ```
 
-以下に記載されているオプションは、設定オブジェクトのトップレベルで直接渡され、別の options オブジェクト内にネストされません。
+以下のオプションは、別の options オブジェクトに入れず、設定オブジェクトのトップレベルに直接渡します。
+
+### Character
+
+<PropertiesTable
+  content={[
+    {
+      name: "separators",
+      type: "string[]",
+      isOptional: true,
+      description: "優先順で試す区切り文字の配列。最初の区切りで分割を試み、できなければ次にフォールバックします。",
+    },
+    {
+      name: "isSeparatorRegex",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "区切り文字が正規表現パターンかどうか",
+    },
+  ]}
+/>
+
+### Recursive
+
+<PropertiesTable
+  content={[
+    {
+      name: "separators",
+      type: "string[]",
+      isOptional: true,
+      description: "優先順で試す区切り文字の配列。最初の区切りで分割を試み、できなければ次にフォールバックします。",
+    },
+    {
+      name: "isSeparatorRegex",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "区切り文字が正規表現パターンかどうか",
+    },
+    {
+      name: "language",
+      type: "Language",
+      isOptional: true,
+      description: "言語固有の分割動作のためのプログラミング言語またはマークアップ言語。対応値は Language enum を参照してください。",
+    },
+  ]}
+/>
+
+### Sentence
+
+
+
+<PropertiesTable
+  content={[
+    {
+      name: "maxSize",
+      type: "number",
+      description: "各チャンクの最大サイズ（文章戦略では必須）",
+    },
+    {
+      name: "minSize",
+      type: "number",
+      isOptional: true,
+      defaultValue: "50",
+      description: "各チャンクの最小サイズ。これより小さいチャンクは、可能な場合に隣接するチャンクと結合されます。",
+    },
+    {
+      name: "targetSize",
+      type: "number",
+      isOptional: true,
+      description: "チャンクの推奨目標サイズ。デフォルトはmaxSizeの80%です。この戦略では、このサイズに近いチャンクの作成を試みます。",
+    },
+    {
+      name: "sentenceEnders",
+      type: "string[]",
+      isOptional: true,
+      defaultValue: "['.', '!', '?']",
+      description: "分割境界となる文末記号の配列。",
+    },
+    {
+      name: "fallbackToWords",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "maxSizeを超える文章に対して単語レベルの分割にフォールバックするかどうか。",
+    },
+    {
+      name: "fallbackToCharacters",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "maxSizeを超える単語に対して文字レベルの分割にフォールバックするかどうか。fallbackToWordsが有効な場合のみ適用されます。",
+    },
+  ]}
+/>
 
 ### HTML
 
@@ -142,13 +291,13 @@ const chunks = await doc.chunk({
       name: "headers",
       type: "Array<[string, string]>",
       description:
-        "ヘッダー単位で分割するための [セレクタ, メタデータキー] のペアの配列",
+        "ヘッダーベースの分割用の[セレクタ, メタデータキー]ペアの配列",
     },
     {
       name: "sections",
       type: "Array<[string, string]>",
       description:
-        "セクション単位で分割するための [セレクタ, メタデータキー] のペアの配列",
+        "セクションベースの分割用の[セレクタ, メタデータキー]ペアの配列",
     },
     {
       name: "returnEachLine",
@@ -159,6 +308,8 @@ const chunks = await doc.chunk({
   ]}
 />
 
+**重要:** HTML戦略を使用する場合、すべての一般オプションは無視されます。ヘッダーベースの分割には`headers`を、セクションベースの分割には`sections`を使用してください。両方を同時に使用した場合、`sections`は無視されます。
+
 ### Markdown
 
 <PropertiesTable
@@ -166,7 +317,8 @@ const chunks = await doc.chunk({
     {
       name: "headers",
       type: "Array<[string, string]>",
-      description: "[ヘッダーレベル, メタデータキー] のペアの配列",
+      isOptional: true,
+      description: "[ヘッダーレベル, メタデータキー]ペアの配列",
     },
     {
       name: "stripHeaders",
@@ -183,7 +335,51 @@ const chunks = await doc.chunk({
   ]}
 />
 
+**重要:** `headers`オプションを使用する場合、Markdown戦略はすべての一般オプションを無視し、Markdownヘッダー構造に基づいてコンテンツが分割されます。Markdownでサイズベースのチャンク化を使用するには、`headers`パラメータを省略してください。
+
+### Semantic Markdown
+
+<PropertiesTable
+  content={[
+    {
+      name: "joinThreshold",
+      type: "number",
+      isOptional: true,
+      defaultValue: "500",
+      description: "関連セクションを結合するための最大トークン数。この制限を個別に超えるセクションはそのまま残されますが、小さなセクションは結合後のサイズがこの閾値以下に収まる場合、兄弟または親セクションと結合されます。",
+    },
+    {
+      name: "modelName",
+      type: "string",
+      isOptional: true,
+      description: "トークン化用のモデル名。指定された場合、そのモデルの基盤となるトークン化`encodingName`が使用されます。",
+    },
+    {
+      name: "encodingName",
+      type: "string",
+      isOptional: true,
+      defaultValue: "cl100k_base",
+      description: "使用するトークンエンコーディングの名前。`modelName`が利用可能な場合はそこから派生されます。",
+    },
+    {
+      name: "allowedSpecial",
+      type: "Set<string> | 'all'",
+      isOptional: true,
+      description: "トークン化中に許可される特殊トークンのセット、またはすべての特殊トークンを許可する'all'",
+    },
+    {
+      name: "disallowedSpecial",
+      type: "Set<string> | 'all'",
+      isOptional: true,
+      defaultValue: "all",
+      description: "トークン化中に禁止する特殊トークンのセット、またはすべての特殊トークンを禁止する'all'",
+    },
+  ]}
+/>
+
 ### Token
+
+
 
 <PropertiesTable
   content={[
@@ -197,7 +393,19 @@ const chunks = await doc.chunk({
       name: "modelName",
       type: "string",
       isOptional: true,
-      description: "トークナイズに使用するモデル名",
+      description: "トークン化に使用するモデルの名前",
+    },
+    {
+      name: "allowedSpecial",
+      type: "Set<string> | 'all'",
+      isOptional: true,
+      description: "トークン化時に許可する特殊トークンのセット、または全ての特殊トークンを許可する場合は'all'",
+    },
+    {
+      name: "disallowedSpecial",
+      type: "Set<string> | 'all'",
+      isOptional: true,
+      description: "トークン化時に禁止する特殊トークンのセット、または全ての特殊トークンを禁止する場合は'all'",
     },
   ]}
 />
@@ -231,6 +439,12 @@ const chunks = await doc.chunk({
     },
   ]}
 />
+
+### Latex
+
+Latex戦略は上記の一般的なチャンク化オプションのみを使用します。数学的および学術文書に最適化されたLaTeX対応の分割を提供します。
+
+
 
 ## 戻り値
 

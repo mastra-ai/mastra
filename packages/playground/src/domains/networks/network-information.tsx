@@ -1,4 +1,4 @@
-import { useNetwork, useVNextNetwork } from '@/hooks/use-networks';
+import { useVNextNetwork } from '@/hooks/use-networks';
 import { NetworkDetails } from './network-details';
 import { NetworkAgents } from './network-agents';
 import { NetworkEndpoints } from './network-endpoints';
@@ -8,12 +8,11 @@ import { NetworkTools } from './network-tools';
 import { EntityHeader, PlaygroundTabs, Tab, TabContent, TabList } from '@mastra/playground-ui';
 import { NetworkIcon } from 'lucide-react';
 
-export function NetworkInformation({ networkId, isVNext }: { networkId: string; isVNext?: boolean }) {
-  const { network, isLoading } = useNetwork(networkId, !isVNext);
-  const { vNextNetwork, isLoading: isVNextNetworkLoading } = useVNextNetwork(networkId, isVNext);
+export function NetworkInformation({ networkId }: { networkId: string }) {
+  const { vNextNetwork, isLoading: isVNextNetworkLoading } = useVNextNetwork(networkId);
 
-  const networkToUse = isVNext ? vNextNetwork : network;
-  const isLoadingToUse = isVNext ? isVNextNetworkLoading : isLoading;
+  const networkToUse = vNextNetwork;
+  const isLoadingToUse = isVNextNetworkLoading;
 
   if (!networkToUse || isLoadingToUse) {
     return null;
@@ -28,33 +27,29 @@ export function NetworkInformation({ networkId, isVNext }: { networkId: string; 
           <TabList>
             <Tab value="details">Details</Tab>
             <Tab value="agents">Agents</Tab>
-            {isVNext ? (
-              <>
-                <Tab value="workflows">Workflows</Tab>
-                <Tab value="tools">Tools</Tab>
-              </>
-            ) : null}
+
+            <Tab value="workflows">Workflows</Tab>
+            <Tab value="tools">Tools</Tab>
+
             <Tab value="endpoints">Endpoints</Tab>
           </TabList>
 
           <TabContent value="details">
-            <NetworkDetails network={networkToUse} isVNext={isVNext} />
+            <NetworkDetails network={networkToUse} />
           </TabContent>
           <TabContent value="agents">
             <NetworkAgents network={networkToUse} />
           </TabContent>
-          {isVNext ? (
-            <>
-              <TabContent value="workflows">
-                <NetworkWorkflows network={networkToUse as GetVNextNetworkResponse} />
-              </TabContent>
-              <TabContent value="tools">
-                <NetworkTools network={networkToUse as GetVNextNetworkResponse} />
-              </TabContent>
-            </>
-          ) : null}
+
+          <TabContent value="workflows">
+            <NetworkWorkflows network={networkToUse as GetVNextNetworkResponse} />
+          </TabContent>
+          <TabContent value="tools">
+            <NetworkTools network={networkToUse as GetVNextNetworkResponse} />
+          </TabContent>
+
           <TabContent value="endpoints">
-            <NetworkEndpoints networkId={networkId} isVNext={isVNext} />
+            <NetworkEndpoints networkId={networkId} />
           </TabContent>
         </PlaygroundTabs>
       </div>

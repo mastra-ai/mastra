@@ -1,0 +1,157 @@
+---
+title: "モデルプロバイダー | はじめに | Mastra ドキュメント"
+description: "Mastra で各種モデルプロバイダーの設定と使用方法を学びましょう。"
+---
+
+import { Callout } from "nextra/components"
+
+
+# モデルプロバイダー
+
+モデルプロバイダーは、さまざまな言語モデルと対話するために使用されます。Mastra はモデルのルーティング層として[Vercel の AI SDK](https://sdk.vercel.ai)を使用し、多数のモデルに対して統一的な構文を提供します：
+
+```typescript showLineNumbers copy {1,7} filename="src/mastra/agents/weather-agent.ts"
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  name: "WeatherAgent",
+  instructions: "Instructions for the agent...",
+  model: openai("gpt-4-turbo"),
+});
+
+const result = await agent.generate("What is the weather like?");
+```
+
+## AI SDK のモデルプロバイダーの種類
+
+AI SDK のモデルプロバイダーは、大きく3つのカテゴリに分類できます。
+
+- [AI SDK チームがメンテナンスする公式プロバイダー](/docs/getting-started/model-providers#official-providers)
+- [OpenAI 互換プロバイダー](/docs/getting-started/model-providers#openai-compatible-providers)
+- [コミュニティプロバイダー](/docs/getting-started/model-providers#community-providers)
+
+> 利用可能なすべてのモデルプロバイダーの一覧は、[AI SDK ドキュメント](https://ai-sdk.dev/providers/ai-sdk-providers)で確認できます。
+
+<Callout>
+AI SDK のモデルプロバイダーは、Mastra プロジェクトにインストールして使うパッケージです。
+インストール時に選択したデフォルトのモデルプロバイダーがプロジェクトに追加されます。
+
+別のモデルプロバイダーを使う場合は、そのプロバイダーもプロジェクトにインストールする必要があります。
+</Callout>
+
+以下は、Mastra エージェントを各種モデルプロバイダーで利用するように構成する例です。
+
+### 公式プロバイダー
+
+公式のモデルプロバイダーは AI SDK チームによって管理されています。
+これらのパッケージには通常 `@ai-sdk/` のプレフィックスが付きます（例：`@ai-sdk/anthropic`、`@ai-sdk/openai` など）。
+
+```typescript showLineNumbers copy {1,7} filename="src/mastra/agents/weather-agent.ts"
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  name: "WeatherAgent",
+  instructions: "Instructions for the agent...",
+  model: openai("gpt-4-turbo"),
+});
+```
+
+追加の構成は、AI SDK プロバイダーからヘルパー関数をインポートして行えます。
+以下は OpenAI プロバイダーを使用した例です。
+
+```typescript showLineNumbers copy filename="src/mastra/agents/weather-agent.ts" {1,4-8,13}
+import { createOpenAI } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+const openai = createOpenAI({
+  baseUrl: "<your-custom-base-url>",
+  apiKey: "<your-custom-api-key>",
+  ...otherOptions,
+});
+
+const agent = new Agent({
+  name: "WeatherAgent",
+  instructions: "Instructions for the agent...",
+  model: openai("<model-name>"),
+});
+```
+
+### OpenAI 互換プロバイダー
+
+一部の言語モデルプロバイダーは OpenAI API を実装しています。これらのプロバイダーでは、[`@ai-sdk/openai-compatible`](https://www.npmjs.com/package/@ai-sdk/openai-compatible) を使用できます。
+
+一般的なセットアップとプロバイダーインスタンスの作成方法は次のとおりです。
+
+```typescript showLineNumbers copy filename="src/mastra/agents/weather-agent.ts" {1,4-14,19}
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { Agent } from "@mastra/core/agent";
+
+const openaiCompatible = createOpenAICompatible({
+  name: "<model-name>",
+  baseUrl: "<base-url>",
+  apiKey: "<api-key>",
+  headers: {},
+  queryParams: {},
+  fetch: async (url, options) => {
+    // custom fetch logic
+    return fetch(url, options);
+  },
+});
+
+const agent = new Agent({
+  name: "WeatherAgent",
+  instructions: "Instructions for the agent...",
+  model: openaiCompatible("<model-name>"),
+});
+```
+
+OpenAI 互換プロバイダーの詳細については、[AI SDK ドキュメント](https://ai-sdk.dev/providers/openai-compatible-providers)をご覧ください。
+
+### コミュニティプロバイダー
+
+AI SDK は [Language Model Specification](https://github.com/vercel/ai/tree/main/packages/provider/src/language-model/v1) を提供しています。
+この仕様に従えば、AI SDK と互換性のある独自のモデルプロバイダーを作成できます。
+
+コミュニティによる一部のプロバイダーはこの仕様を実装しており、AI SDK と互換性があります。
+ここでは、その一例として、[`ollama-ai-provider-v2`](https://github.com/nordwestt/ollama-ai-provider-v2) パッケージで提供されている Ollama プロバイダーを取り上げます。
+
+例:
+
+```typescript showLineNumbers copy filename="src/mastra/agents/weather-agent.ts" {1,7}
+import { ollama } from "ollama-ai-provider-v2";
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  name: "WeatherAgent",
+  instructions: "Instructions for the agent...",
+  model: ollama("llama3.2:latest"),
+});
+```
+
+Ollama プロバイダーは次のように設定することもできます:
+
+```typescript showLineNumbers copy filename="src/mastra/agents/weather-agent.ts" {1,4-7,12}
+import { createOllama } from "ollama-ai-provider-v2";
+import { Agent } from "@mastra/core/agent";
+
+const ollama = createOllama({
+  baseUrl: "<your-custom-base-url>",
+  ...otherOptions,
+});
+
+const agent = new Agent({
+  name: "WeatherAgent",
+  instructions: "Instructions for the agent...",
+  model: ollama("llama3.2:latest"),
+});
+```
+
+Ollama プロバイダーおよびその他のコミュニティプロバイダーの詳細は、[AI SDK ドキュメント](https://ai-sdk.dev/providers/community-providers)をご参照ください。
+
+<Callout>
+この例では Ollama プロバイダーの使用方法を示していますが、`openrouter` や `azure` など、他のプロバイダーも利用できます。
+</Callout>
+
+AI プロバイダーごとに設定可能なオプションは異なる場合があります。詳しくは [AI SDK ドキュメント](https://ai-sdk.dev/providers/ai-sdk-providers)をご参照ください。

@@ -1,0 +1,82 @@
+---
+title: "リファレンス: Workflow.else() | 条件分岐 | Mastra ドキュメント"
+description: "Mastra ワークフローにおける `.else()` メソッドのドキュメント。if 条件が偽の場合に代替の分岐を作成します。"
+---
+
+
+
+# Workflow.else()
+
+> 実験的
+
+`.else()` メソッドは、直前の `if` 条件が false と評価された場合に実行される、ワークフロー内の代替分岐を作成します。これにより、条件に応じてワークフローが異なる経路をたどることができます。
+
+
+
+## 使用方法
+
+```typescript copy showLineNumbers
+workflow
+  .step(startStep)
+  .if(async ({ context }) => {
+    const value = context.getStepResult<{ value: number }>("start")?.value;
+    return value < 10;
+  })
+  .then(ifBranchStep)
+  .else() // Alternative branch when the condition is false
+  .then(elseBranchStep)
+  .commit();
+```
+
+
+
+## パラメーター
+
+`else()` メソッドはパラメーターを受け取りません。
+
+
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "LegacyWorkflow",
+      description: "メソッドチェーン用のワークフローインスタンス",
+    },
+  ]}
+/>
+
+
+
+## 挙動
+
+- `else()` メソッドは、ワークフロー定義内で `if()` ブランチの後に続けて使用する必要があります
+- これは、直前の `if` 条件が false と評価された場合にのみ実行されるブランチを作成します
+- `.then()` を使って、`else()` の後に複数のステップをチェーンできます
+- `else` ブランチ内で追加の `if`/`else` 条件をネストすることができます
+
+
+
+## エラー処理
+
+`else()` メソッドは、直前に `if()` ステートメントが必要です。もし先行する `if` なしで使用しようとすると、エラーが発生します。
+
+```typescript
+try {
+  // これはエラーを投げます
+  workflow.step(someStep).else().then(anotherStep).commit();
+} catch (error) {
+  console.error(error); // "No active condition found"
+}
+```
+
+
+
+## 関連
+
+- [if リファレンス](./if.mdx)
+- [then リファレンス](./then.mdx)
+- [制御フローガイド](../../docs/workflows-legacy/control-flow.mdx)
+- [ステップ条件リファレンス](./step-condition.mdx)

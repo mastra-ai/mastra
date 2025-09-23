@@ -65,7 +65,3 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## Deployed url
 
 [https://bird-checker.vercel.app](https://bird-checker.vercel.app)
-
-## License
-
-[MIT](LICENSE)

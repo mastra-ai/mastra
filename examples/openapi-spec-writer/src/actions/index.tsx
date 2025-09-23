@@ -3,13 +3,6 @@
 import { BaseLogMessage } from "@mastra/core/logger";
 import { mastra } from "../mastra";
 
-const makePRToMastraWorkflow = mastra
-  .getWorkflow("makePRToMastraWorkflow")
-  .createRun();
-const openApiSpecGenWorkflow = mastra
-  .getWorkflow("openApiSpecGenWorkflow")
-  .createRun();
-
 export async function generateOpenApiSpec({
   url,
   crawlOptions,
@@ -31,6 +24,9 @@ export async function generateOpenApiSpec({
     }
 > {
   try {
+    const openApiSpecGenWorkflow = await mastra
+      .getWorkflow("openApiSpecGenWorkflow")
+      .createRunAsync();
     const res = await openApiSpecGenWorkflow.start({
       triggerData: {
         url,
@@ -67,6 +63,9 @@ export async function makeMastraPR({
   integrationName: string;
 }) {
   try {
+    const makePRToMastraWorkflow = await mastra
+      .getWorkflow("makePRToMastraWorkflow")
+      .createRunAsync();
     const res = await makePRToMastraWorkflow.start({
       triggerData: {
         integration_name: integrationName,

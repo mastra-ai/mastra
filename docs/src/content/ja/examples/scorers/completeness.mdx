@@ -1,0 +1,184 @@
+---
+title: "例: Completeness | Scorers | Mastra Docs"
+description: Completenessスコアラーを使用して、レスポンスがクエリのすべての側面をどの程度徹底的に扱っているかを評価する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+
+
+# Completeness Scorer
+
+`createCompletenessScorer`を使用して、レスポンスが入力クエリのすべての側面と要件を徹底的に満たしているかどうかを評価します。
+
+
+
+## インストール
+
+```bash copy
+npm install @mastra/evals
+```
+
+> 完全なAPIドキュメントと設定オプションについては、[`createCompletenessScorer`](/reference/scorers/completeness)を参照してください。
+
+
+
+## 高い完全性の例
+
+この例では、レスポンスがクエリのすべての側面を包括的に扱い、複数の次元をカバーする詳細な情報を提供しています。
+
+```typescript filename="src/example-high-completeness.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createCompletenessScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createCompletenessScorer({ model: openai("gpt-4o-mini") });
+
+const query = "Explain the process of photosynthesis, including the inputs, outputs, and stages involved.";
+const response =
+  "Photosynthesis is the process by which plants convert sunlight into chemical energy. Inputs: Carbon dioxide (CO2) from the air enters through stomata, water (H2O) is absorbed by roots, and sunlight provides energy captured by chlorophyll. The process occurs in two main stages: 1) Light-dependent reactions in the thylakoids convert light energy to ATP and NADPH while splitting water and releasing oxygen. 2) Light-independent reactions (Calvin cycle) in the stroma use ATP, NADPH, and CO2 to produce glucose. Outputs: Glucose (C6H12O6) serves as food for the plant, and oxygen (O2) is released as a byproduct. The overall equation is: 6CO2 + 6H2O + light energy → C6H12O6 + 6O2.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+### 高い完全性の出力
+
+この出力は、要求されたすべての側面（入力、出力、段階）に対応し、追加のコンテキストも提供しているため、高いスコアを受け取ります。
+
+```typescript
+{
+  score: 1,
+  reason: "The score is 1 because the response comprehensively addresses all aspects of the query: it explains what photosynthesis is, lists all inputs (CO2, H2O, sunlight), describes both stages in detail (light-dependent and light-independent reactions), specifies all outputs (glucose and oxygen), and even provides the chemical equation. No significant aspects are missing."
+}
+```
+
+
+
+## 部分的完全性の例
+
+この例では、レスポンスがいくつかの重要なポイントに対処していますが、重要な側面を見逃していたり、十分な詳細が不足しています。
+
+```typescript filename="src/example-partial-completeness.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createCompletenessScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createCompletenessScorer({ model: openai("gpt-4o-mini") });
+
+const query = "What are the benefits and drawbacks of remote work for both employees and employers?";
+const response =
+  "Remote work offers several benefits for employees including flexible schedules, no commuting time, and better work-life balance. It also reduces costs for office space and utilities for employers. However, remote work can lead to isolation and communication challenges for employees.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+### 部分的完全性の出力
+
+出力は従業員の利点といくつかの欠点をカバーしていますが、雇用者の欠点の包括的なカバレッジが不足しているため、中程度のスコアを受け取ります。
+
+```typescript
+{
+  score: 0.6,
+  reason: "The score is 0.6 because the response covers employee benefits (flexibility, no commuting, work-life balance) and one employer benefit (reduced costs), as well as some employee drawbacks (isolation, communication challenges). However, it fails to address potential drawbacks for employers such as reduced oversight, team cohesion challenges, or productivity monitoring difficulties."
+}
+```
+
+
+
+## 低完全性の例
+
+この例では、レスポンスがクエリに部分的にしか対応しておらず、いくつかの重要な側面を見逃しています。
+
+```typescript filename="src/example-low-completeness.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createCompletenessScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createCompletenessScorer({ model: openai("gpt-4o-mini") });
+
+const query = "Compare renewable and non-renewable energy sources in terms of cost, environmental impact, and sustainability.";
+const response =
+  "Renewable energy sources like solar and wind are becoming cheaper. They're better for the environment than fossil fuels.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+### 低完全性の出力
+
+この出力は低いスコアを受け取ります。なぜなら、コストと環境への影響について簡潔に触れているだけで、持続可能性について完全に言及しておらず、詳細な比較も欠けているからです。
+
+```typescript
+{
+  score: 0.2,
+  reason: "The score is 0.2 because the response only superficially touches on cost (renewable getting cheaper) and environmental impact (renewable better than fossil fuels) but provides no detailed comparison, fails to address sustainability aspects, doesn't discuss specific non-renewable sources, and lacks depth in all mentioned areas."
+}
+```
+
+
+
+## Scorer設定
+
+`CompletenessScorer`がレスポンスをスコアリングする方法は、オプションパラメータを設定することで調整できます。例えば、`scale`はスコアラーが返す最大可能スコアを設定します。
+
+```typescript showLineNumbers copy
+const scorer = createCompletenessScorer({ model: openai("gpt-4o-mini"), options: {
+  scale: 1
+});
+```
+> 設定オプションの完全なリストについては、[CompletenessScorer](/reference/scorers/completeness.mdx)を参照してください。
+
+
+
+## 結果の理解
+
+`.run()`は以下の形式で結果を返します：
+
+```typescript
+{
+  runId: string,
+  extractStepResult: {
+    inputElements: string[],
+    outputElements: string[],
+    missingElements: string[],
+    elementCounts: { input: number, output: number }
+  },
+  score: number
+}
+```
+
+### score
+
+0から1の間の完全性スコア：
+
+- **1.0**: クエリのすべての側面を包括的な詳細で徹底的に対処している。
+- **0.7–0.9**: 重要な側面のほとんどを適切な詳細でカバーしており、軽微な欠落がある。
+- **0.4–0.6**: いくつかの重要なポイントに対処しているが、重要な側面が欠けているか詳細が不足している。
+- **0.1–0.3**: クエリに部分的にしか対処しておらず、大きな欠落がある。
+- **0.0**: クエリに対処できていないか、無関係な情報を提供している。
+
+### runId
+このスコアラー実行の一意識別子。
+
+### extractStepResult
+抽出された要素とカバレッジの詳細を含むオブジェクト：
+- **inputElements**: 入力で見つかった主要要素（例：名詞、動詞、トピック、用語）。
+- **outputElements**: 出力で見つかった主要要素。
+- **missingElements**: 出力で見つからなかった入力要素。
+- **elementCounts**: 入力と出力の要素数。
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/scorers/completeness"
+/>

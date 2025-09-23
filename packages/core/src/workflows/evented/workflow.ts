@@ -100,10 +100,12 @@ export function createStep<
 
 export function createStep<
   TSchemaIn extends z.ZodType<any>,
+  TSuspendSchema extends z.ZodType<any>,
+  TResumeSchema extends z.ZodType<any>,
   TSchemaOut extends z.ZodType<any>,
-  TContext extends ToolExecutionContext<TSchemaIn>,
+  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema>,
 >(
-  tool: Tool<TSchemaIn, TSchemaOut, TContext> & {
+  tool: Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
     inputSchema: TSchemaIn;
     outputSchema: TSchemaOut;
     execute: (context: TContext) => Promise<any>;
@@ -220,13 +222,17 @@ export function createStep<
       id: params.id,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
-      execute: async ({ inputData, mastra, runtimeContext }) => {
+      suspendSchema: params.suspendSchema,
+      resumeSchema: params.resumeSchema,
+      execute: async ({ inputData, mastra, runtimeContext, suspend, resumeData }) => {
         return params.execute({
           context: inputData,
           mastra,
           runtimeContext,
           // TODO: Pass proper tracing context when evented workflows support tracing
           tracingContext: { currentSpan: undefined },
+          suspend,
+          resumeData,
         });
       },
     };
@@ -356,7 +362,17 @@ export class EventedRun<
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
-  }): Promise<WorkflowResult<TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
+    // Add validation checks
+    if (this.serializedStepGraph.length === 0) {
+      throw new Error(
+        'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
+      );
+    }
+    if (!this.executionGraph.steps) {
+      throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
+    }
+
     runtimeContext = runtimeContext ?? new RuntimeContext();
 
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
@@ -376,7 +392,7 @@ export class EventedRun<
       },
     });
 
-    const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
+    const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
       graph: this.executionGraph,
@@ -420,7 +436,7 @@ export class EventedRun<
       | string
       | string[];
     runtimeContext?: RuntimeContext;
-  }): Promise<WorkflowResult<TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
     );
@@ -445,14 +461,24 @@ export class EventedRun<
       { resume: { runtimeContextObj: snapshot?.runtimeContext, runtimeContext: params.runtimeContext } },
       { depth: null },
     );
+    // Start with the snapshot's runtime context (old values)
     const runtimeContextObj = snapshot?.runtimeContext ?? {};
-    const runtimeContext = params.runtimeContext ?? new RuntimeContext();
+    const runtimeContext = new RuntimeContext();
+
+    // First, set values from the snapshot
     for (const [key, value] of Object.entries(runtimeContextObj)) {
       runtimeContext.set(key, value);
     }
 
+    // Then, override with any values from the passed runtime context (new values take precedence)
+    if (params.runtimeContext) {
+      for (const [key, value] of params.runtimeContext.entries()) {
+        runtimeContext.set(key, value);
+      }
+    }
+
     const executionResultPromise = this.executionEngine
-      .execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
+      .execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
         runId: this.runId,
         graph: this.executionGraph,
