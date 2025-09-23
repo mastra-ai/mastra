@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
 import { existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { basename, join, relative } from 'path';
 import { getPackageInfo } from 'local-pkg';
 
 export function upsertMastraDir({ dir = process.cwd() }: { dir?: string }) {
@@ -65,4 +65,19 @@ export function slash(path: string) {
   }
 
   return path.replaceAll('\\', '/');
+}
+
+/**
+ * Make a Rollup-safe name: pathless, POSIX, and without parent/absolute segments
+ */
+export function rollupSafeName(name: string, rootDir: string) {
+  const rel = relative(rootDir, name);
+  let entry = slash(rel);
+  entry = entry.replace(/^(\.\.\/)+/, '');
+  entry = entry.replace(/^\/+/, '');
+  entry = entry.replace(/^[A-Za-z]:\//, '');
+  if (!entry) {
+    entry = slash(basename(name));
+  }
+  return entry;
 }

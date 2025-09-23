@@ -8,7 +8,7 @@ import * as path from 'node:path';
 import { rollup, type OutputChunk, type OutputAsset } from 'rollup';
 import { esbuild } from '../plugins/esbuild';
 import { aliasHono } from '../plugins/hono-alias';
-import { getCompiledDepCachePath, getPackageRootPath, slash } from '../utils';
+import { getCompiledDepCachePath, getPackageRootPath, rollupSafeName, slash } from '../utils';
 import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS, DEPRECATED_EXTERNALS } from './constants';
@@ -19,16 +19,7 @@ type VirtualDependency = {
 };
 
 function prepareEntryFileName(name: string, rootDir: string) {
-  /**
-   * The Rollup output.entryFileNames option doesn't allow relative (like `../../foo`) or absolute paths
-   * Since the current working directory is the project root, the resulting path won't have any `..` segments
-   */
-  const relativePath = path.relative(rootDir, name);
-
-  /**
-   * Use posix separators (/) for entry names, as Rollup expects that
-   */
-  return slash(relativePath);
+  return rollupSafeName(name, rootDir);
 }
 
 /**
