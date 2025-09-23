@@ -26,6 +26,8 @@ import type {
   StreamParams,
   UpdateModelParams,
   StreamVNextParams,
+  UpdateModelInModelListParams,
+  ReorderModelListParams,
   NetworkStreamParams,
 } from '../types';
 
@@ -76,6 +78,7 @@ async function executeToolCallAndRespond({
             threadId,
             runtimeContext: runtimeContext as RuntimeContext,
             tracingContext: { currentSpan: undefined },
+            suspend: async () => {},
           },
           {
             messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -286,6 +289,7 @@ export class Agent extends BaseResource {
               threadId,
               runtimeContext: runtimeContext as RuntimeContext,
               tracingContext: { currentSpan: undefined },
+              suspend: async () => {},
             },
             {
               messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -1220,6 +1224,7 @@ export class Agent extends BaseResource {
                     runtimeContext: processedParams.runtimeContext as RuntimeContext,
                     // TODO: Pass proper tracing context when client-js supports tracing
                     tracingContext: { currentSpan: undefined },
+                    suspend: async () => {},
                   },
                   {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -1496,6 +1501,7 @@ export class Agent extends BaseResource {
                     runtimeContext: processedParams.runtimeContext as RuntimeContext,
                     // TODO: Pass proper tracing context when client-js supports tracing
                     tracingContext: { currentSpan: undefined },
+                    suspend: async () => {},
                   },
                   {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -1633,6 +1639,30 @@ export class Agent extends BaseResource {
    */
   updateModel(params: UpdateModelParams): Promise<{ message: string }> {
     return this.request(`/api/agents/${this.agentId}/model`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Updates the model for the agent in the model list
+   * @param params - Parameters for updating the model
+   * @returns Promise containing the updated model
+   */
+  updateModelInModelList({ modelConfigId, ...params }: UpdateModelInModelListParams): Promise<{ message: string }> {
+    return this.request(`/api/agents/${this.agentId}/models/${modelConfigId}`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Reorders the models for the agent
+   * @param params - Parameters for reordering the model list
+   * @returns Promise containing the updated model list
+   */
+  reorderModelList(params: ReorderModelListParams): Promise<{ message: string }> {
+    return this.request(`/api/agents/${this.agentId}/models/reorder`, {
       method: 'POST',
       body: params,
     });

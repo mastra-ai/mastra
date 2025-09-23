@@ -14,6 +14,7 @@ import z from 'zod';
 import type { MessageList } from '../agent/message-list';
 import type { AISpan, AISpanType } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
+import type { Mastra } from '../mastra';
 import type { OutputProcessor } from '../processors';
 import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType, ModelManagerModelConfig } from '../stream/types';
@@ -52,7 +53,9 @@ export type LoopConfig = {
   prepareStep?: PrepareStepFunction<any>;
 };
 
-export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = {
+export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
+  mastra?: Mastra;
+  resumeContext?: any;
   models: ModelManagerModelConfig[];
   logger?: IMastraLogger;
   mode?: 'generate' | 'stream';
@@ -78,6 +81,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   downloadRetries?: number;
   downloadConcurrency?: number;
   llmAISpan?: AISpan<AISpanType.LLM_GENERATION>;
+  requireToolApproval?: boolean;
 };
 
 export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = LoopOptions<
@@ -89,12 +93,17 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema
   startTimestamp: number;
   modelStreamSpan: Span;
   _internal: StreamInternal;
+  streamState: {
+    serialize: () => any;
+    deserialize: (state: any) => void;
+  };
 };
 
 export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = {
   messageId: string;
   controller: ReadableStreamDefaultController<ChunkType>;
   writer: WritableStream<ChunkType>;
+  requireToolApproval?: boolean;
 } & LoopRun<Tools, OUTPUT>;
 
 export const RESOURCE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool']);
