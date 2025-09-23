@@ -12,7 +12,7 @@ export function createContentSimilarityScorer(
   return createScorer({
     name: 'Content Similarity Scorer',
     description:
-      'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
+      'Calculates content similarity between input and output messages using string comparison algorithms.',
     type: 'agent',
   })
     .preprocess(async ({ run }) => {
