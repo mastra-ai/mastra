@@ -222,7 +222,7 @@ const results = await vectorStore.hybridSearch(
     filter: {
       metadata: { status: 'active' },
     },
-  }
+  },
 );
 ```
 
@@ -404,32 +404,33 @@ pnpm test --coverage
 
 Performance on MacBook Pro M1 with 16GB RAM:
 
-| Operation | Vectors | Time | Throughput |
-|-----------|---------|------|------------|
-| Insert | 1,000 | ~0.5s | 2,000/s |
-| Insert | 10,000 | ~4s | 2,500/s |
-| Insert | 100,000 | ~35s | 2,857/s |
-| Query (top-10) | 100,000 | ~15ms | 66 qps |
-| Query (top-100) | 100,000 | ~25ms | 40 qps |
-| Filtered Query | 100,000 | ~30ms | 33 qps |
+| Operation       | Vectors | Time  | Throughput |
+| --------------- | ------- | ----- | ---------- |
+| Insert          | 1,000   | ~0.5s | 2,000/s    |
+| Insert          | 10,000  | ~4s   | 2,500/s    |
+| Insert          | 100,000 | ~35s  | 2,857/s    |
+| Query (top-10)  | 100,000 | ~15ms | 66 qps     |
+| Query (top-100) | 100,000 | ~25ms | 40 qps     |
+| Filtered Query  | 100,000 | ~30ms | 33 qps     |
 
 ## Comparison with Other Stores
 
-| Feature | DuckDB | PostgreSQL | Pinecone | Chroma |
-|---------|--------|------------|----------|--------|
-| Deployment | Embedded | Self-hosted | Cloud | Embedded |
-| Latency | Zero | Low | Network | Zero |
-| Scalability | Single-node | Multi-node | Infinite | Single-node |
-| Cost | Free | Server costs | Usage-based | Free |
-| Persistence | Yes | Yes | Yes | Yes |
-| Hybrid Search | Yes | Yes | No | Limited |
-| Parquet Import | Native | Via COPY | No | No |
+| Feature        | DuckDB      | PostgreSQL   | Pinecone    | Chroma      |
+| -------------- | ----------- | ------------ | ----------- | ----------- |
+| Deployment     | Embedded    | Self-hosted  | Cloud       | Embedded    |
+| Latency        | Zero        | Low          | Network     | Zero        |
+| Scalability    | Single-node | Multi-node   | Infinite    | Single-node |
+| Cost           | Free        | Server costs | Usage-based | Free        |
+| Persistence    | Yes         | Yes          | Yes         | Yes         |
+| Hybrid Search  | Yes         | Yes          | No          | Limited     |
+| Parquet Import | Native      | Via COPY     | No          | No          |
 
 ## Troubleshooting
 
 ### Common Issues
 
 1. **VSS Extension Not Found**
+
    ```typescript
    // The extension is installed automatically when creating the store
    const vectorStore = new DuckDBVector({
@@ -438,6 +439,7 @@ Performance on MacBook Pro M1 with 16GB RAM:
    ```
 
 2. **Memory Issues with Large Datasets**
+
    ```typescript
    const vectorStore = new DuckDBVector({
      memoryLimit: '8GB', // Increase memory limit

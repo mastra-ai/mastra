@@ -11,9 +11,7 @@ export function validateVector(vector: number[], expectedDimension: number): voi
   }
 
   if (vector.length !== expectedDimension) {
-    throw new Error(
-      `Vector dimension mismatch. Expected ${expectedDimension}, got ${vector.length}`
-    );
+    throw new Error(`Vector dimension mismatch. Expected ${expectedDimension}, got ${vector.length}`);
   }
 
   for (let i = 0; i < vector.length; i++) {
@@ -28,15 +26,13 @@ export function validateVector(vector: number[], expectedDimension: number): voi
  * Normalize vector to unit length (for cosine similarity)
  */
 export function normalizeVector(vector: number[]): number[] {
-  const magnitude = Math.sqrt(
-    vector.reduce((sum, val) => sum + val * val, 0)
-  );
+  const magnitude = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
 
   if (magnitude === 0) {
     throw new Error('Cannot normalize zero vector');
   }
 
-  return vector.map((val) => val / magnitude);
+  return vector.map(val => val / magnitude);
 }
 
 /**
@@ -118,10 +114,7 @@ export function dotProduct(a: number[], b: number[]): number {
 /**
  * Convert similarity score to distance
  */
-export function similarityToDistance(
-  similarity: number,
-  metric: 'cosine' | 'euclidean' | 'dot'
-): number {
+export function similarityToDistance(similarity: number, metric: 'cosine' | 'euclidean' | 'dot'): number {
   switch (metric) {
     case 'cosine':
       // Cosine similarity ranges from -1 to 1, convert to distance [0, 2]
@@ -167,14 +160,9 @@ export async function retry<T>(
     initialDelay?: number;
     maxDelay?: number;
     backoffFactor?: number;
-  } = {}
+  } = {},
 ): Promise<T> {
-  const {
-    maxRetries = 3,
-    initialDelay = 100,
-    maxDelay = 5000,
-    backoffFactor = 2,
-  } = options;
+  const { maxRetries = 3, initialDelay = 100, maxDelay = 5000, backoffFactor = 2 } = options;
 
   let lastError: Error | undefined;
   let delay = initialDelay;
@@ -189,7 +177,7 @@ export async function retry<T>(
         throw lastError;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      await new Promise(resolve => setTimeout(resolve, delay));
       delay = Math.min(delay * backoffFactor, maxDelay);
     }
   }
@@ -233,7 +221,7 @@ export function validateIndexName(name: string): void {
 
   if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name)) {
     throw new Error(
-      'Index name must start with a letter and contain only alphanumeric characters, underscores, and hyphens'
+      'Index name must start with a letter and contain only alphanumeric characters, underscores, and hyphens',
     );
   }
 
@@ -271,21 +259,13 @@ export function parseMetadata(metadataStr: string): any {
  * Check if value is a valid vector
  */
 export function isValidVector(value: any): boolean {
-  return (
-    Array.isArray(value) &&
-    value.length > 0 &&
-    value.every((v) => typeof v === 'number' && isFinite(v))
-  );
+  return Array.isArray(value) && value.length > 0 && value.every(v => typeof v === 'number' && isFinite(v));
 }
 
 /**
  * Calculate memory usage estimate for vectors
  */
-export function estimateMemoryUsage(
-  numVectors: number,
-  dimension: number,
-  includeIndex = true
-): number {
+export function estimateMemoryUsage(numVectors: number, dimension: number, includeIndex = true): number {
   // Each float is 4 bytes
   const vectorSize = dimension * 4;
   const totalVectorSize = numVectors * vectorSize;
@@ -309,7 +289,7 @@ export async function executeBatched<T, R>(
     batchSize?: number;
     parallel?: boolean;
     onProgress?: (processed: number, total: number) => void;
-  } = {}
+  } = {},
 ): Promise<R[]> {
   const { batchSize = 1000, parallel = true, onProgress } = options;
 
@@ -322,12 +302,10 @@ export async function executeBatched<T, R>(
       batches.map(async (batch, index) => {
         const result = await processor(batch);
         // Calculate processed count based on completed batches to avoid race condition
-        const completedItems = batches
-          .slice(0, index + 1)
-          .reduce((sum, b) => sum + b.length, 0);
+        const completedItems = batches.slice(0, index + 1).reduce((sum, b) => sum + b.length, 0);
         onProgress?.(completedItems, items.length);
         return result;
-      })
+      }),
     );
     return batchResults.flat();
   } else {

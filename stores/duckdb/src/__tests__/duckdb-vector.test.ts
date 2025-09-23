@@ -79,7 +79,7 @@ describe('DuckDBVector', () => {
         vectorStore.createIndex({
           indexName: 'test-index',
           dimension: 512,
-        })
+        }),
       ).rejects.toThrow('already exists');
     });
 
@@ -149,7 +149,7 @@ describe('DuckDBVector', () => {
       });
 
       expect(ids).toHaveLength(10);
-      expect(ids).toEqual(testData.map((v) => v.id));
+      expect(ids).toEqual(testData.map(v => v.id));
     });
 
     it('should upsert vectors with namespace', async () => {
@@ -245,7 +245,7 @@ describe('DuckDBVector', () => {
         },
       });
 
-      results.forEach((result) => {
+      results.forEach(result => {
         expect(result.metadata?.category).toBe('A');
       });
     });
@@ -265,14 +265,11 @@ describe('DuckDBVector', () => {
         queryVector: generateRandomVector(512),
         topK: 20,
         filter: {
-          $and: [
-            { metadata: { category: { $in: ['A', 'B'] } } },
-            { metadata: { score: { $gte: 50 } } },
-          ],
+          $and: [{ metadata: { category: { $in: ['A', 'B'] } } }, { metadata: { score: { $gte: 50 } } }],
         },
       });
 
-      results.forEach((result) => {
+      results.forEach(result => {
         expect(['A', 'B']).toContain(result.metadata?.category);
         expect(result.metadata?.score).toBeGreaterThanOrEqual(50);
       });
@@ -355,15 +352,10 @@ describe('DuckDBVector', () => {
         metadata: vectors.map(v => v.metadata),
       });
 
-      const results = await vectorStore.hybridSearch(
-        'test-index',
-        generateRandomVector(512),
-        'Test content',
-        {
-          vectorWeight: 0.7,
-          topK: 10,
-        }
-      );
+      const results = await vectorStore.hybridSearch('test-index', generateRandomVector(512), 'Test content', {
+        vectorWeight: 0.7,
+        topK: 10,
+      });
 
       expect(results).toHaveLength(10);
       expectScoreOrder(results);
@@ -382,10 +374,10 @@ describe('DuckDBVector', () => {
           await vectorStore.upsert({
             indexName: 'test-index',
             vectors: vectors.map(v => v.values),
-        ids: vectors.map(v => v.id),
-        metadata: vectors.map(v => v.metadata),
+            ids: vectors.map(v => v.id),
+            metadata: vectors.map(v => v.metadata),
           }),
-        'Batch upsert 1000 vectors'
+        'Batch upsert 1000 vectors',
       );
 
       expect(time).toBeLessThan(5000); // Should complete within 5 seconds
@@ -516,7 +508,7 @@ describe('DuckDBVector', () => {
           indexName: 'test-index',
           vectors: [invalidVector.values],
           ids: [invalidVector.id],
-        })
+        }),
       ).rejects.toThrow('dimension mismatch');
     });
 
@@ -525,7 +517,7 @@ describe('DuckDBVector', () => {
         vectorStore.query({
           indexName: 'non-existent',
           queryVector: generateRandomVector(512),
-        })
+        }),
       ).rejects.toThrow();
     });
 
@@ -586,7 +578,7 @@ describe('DuckDBVector', () => {
         },
       });
 
-      results.forEach((result) => {
+      results.forEach(result => {
         expect(result.metadata?.space_id).toBe('deposium_space_1');
       });
     });
@@ -599,7 +591,7 @@ describe('DuckDBVector', () => {
       });
 
       // Simulate Ollama embeddings (normalized)
-      const embeddings = generateTestVectors(50, 512).map((v) => ({
+      const embeddings = generateTestVectors(50, 512).map(v => ({
         ...v,
         metadata: {
           ...v.metadata,

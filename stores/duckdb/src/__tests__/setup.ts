@@ -74,14 +74,14 @@ export const createTestDatabase = async (): Promise<duckdb.Database> => {
 
   // Install VSS extension
   await new Promise<void>((resolve, reject) => {
-    conn.exec('INSTALL vss', (err) => {
+    conn.exec('INSTALL vss', err => {
       if (err) reject(err);
       else resolve();
     });
   });
 
   await new Promise<void>((resolve, reject) => {
-    conn.exec('LOAD vss', (err) => {
+    conn.exec('LOAD vss', err => {
       if (err) reject(err);
       else resolve();
     });
@@ -125,10 +125,7 @@ export const mockMetadata = {
 };
 
 // Performance testing utilities
-export const measureTime = async <T>(
-  fn: () => Promise<T>,
-  label?: string
-): Promise<{ result: T; time: number }> => {
+export const measureTime = async <T>(fn: () => Promise<T>, label?: string): Promise<{ result: T; time: number }> => {
   const start = performance.now();
   const result = await fn();
   const time = performance.now() - start;
@@ -152,15 +149,10 @@ export const measureMemory = (): { used: number; rss: number } => {
 };
 
 // Wait utility for async tests
-export const wait = (ms: number) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+export const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Assertion helpers
-export const expectVectorSimilarity = (
-  actual: number[],
-  expected: number[],
-  tolerance = 0.001
-) => {
+export const expectVectorSimilarity = (actual: number[], expected: number[], tolerance = 0.001) => {
   expect(actual.length).toBe(expected.length);
   for (let i = 0; i < actual.length; i++) {
     expect(Math.abs(actual[i]! - expected[i]!)).toBeLessThan(tolerance);

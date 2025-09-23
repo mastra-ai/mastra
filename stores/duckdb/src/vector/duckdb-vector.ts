@@ -123,11 +123,7 @@ export class DuckDBVector extends MastraVector {
   /**
    * Execute a SQL query
    */
-  private async execute(
-    conn: duckdb.Connection,
-    sql: string,
-    params: any[] = []
-  ): Promise<any[]> {
+  private async execute(conn: duckdb.Connection, sql: string, params: any[] = []): Promise<any[]> {
     return new Promise((resolve, reject) => {
       // DuckDB expects parameters as separate arguments, not an array
       const callback = (err: Error | null, result: any[]) => {
@@ -145,7 +141,9 @@ export class DuckDBVector extends MastraVector {
    */
   private async createDefaultTables(conn: duckdb.Connection): Promise<void> {
     // Create indexes table
-    await this.execute(conn, `
+    await this.execute(
+      conn,
+      `
       CREATE TABLE IF NOT EXISTS vector_indexes (
         name VARCHAR PRIMARY KEY,
         dimension INTEGER NOT NULL,
@@ -157,7 +155,8 @@ export class DuckDBVector extends MastraVector {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
-    `);
+    `,
+    );
   }
 
   /**
@@ -170,25 +169,27 @@ export class DuckDBVector extends MastraVector {
       const { indexName, dimension, metric = this.config.metric } = params;
 
       // Validate index doesn't exist
-      const existing = await this.execute(
-        conn,
-        'SELECT name FROM vector_indexes WHERE name = ?',
-        [indexName]
-      );
+      const existing = await this.execute(conn, 'SELECT name FROM vector_indexes WHERE name = ?', [indexName]);
 
       if (existing.length > 0) {
         throw new Error(`Index "${indexName}" already exists`);
       }
 
       // Create index metadata
-      await this.execute(conn, `
+      await this.execute(
+        conn,
+        `
         INSERT INTO vector_indexes (name, dimension, metric)
         VALUES (?, ?, ?)
-      `, [indexName, dimension, metric]);
+      `,
+        [indexName, dimension, metric],
+      );
 
       // Create vector table for this index
       const tableName = `vectors_${indexName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-      await this.execute(conn, `
+      await this.execute(
+        conn,
+        `
         CREATE TABLE IF NOT EXISTS ${tableName} (
           id VARCHAR PRIMARY KEY,
           vector FLOAT[${dimension}],
@@ -197,7 +198,8 @@ export class DuckDBVector extends MastraVector {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
-      `);
+      `,
+      );
 
       // Create HNSW index
       const metricMap: Record<string, string> = {
@@ -207,25 +209,30 @@ export class DuckDBVector extends MastraVector {
         dot: 'ip',
       };
 
-      await this.execute(conn, `
+      await this.execute(
+        conn,
+        `
         CREATE INDEX idx_${tableName}_hnsw
         ON ${tableName}
         USING HNSW (vector)
         WITH (metric = '${metricMap[metric] || 'cosine'}', M = 16, ef_construction = 128)
-      `);
+      `,
+      );
 
       // Create FTS index for hybrid search - Install FTS extension and create virtual table
       try {
         await this.execute(conn, `INSTALL fts;`);
         await this.execute(conn, `LOAD fts;`);
-        await this.execute(conn, `
+        await this.execute(
+          conn,
+          `
           PRAGMA create_fts_index('${tableName}', 'id', 'content');
-        `);
+        `,
+        );
       } catch (error) {
         // FTS might not be available, ignore for now
         console.warn('FTS extension not available for hybrid search:', error);
       }
-
     } finally {
       this.releaseConnection(conn);
     }
@@ -259,37 +266,37 @@ export class DuckDBVector extends MastraVector {
         validateVector(vectorData, this.config.dimensions);
 
         // Normalize vector if using cosine similarity
-        const normalizedVector = this.config.metric === 'cosine'
-          ? normalizeVector(vectorData)
-          : vectorData;
+        const normalizedVector = this.config.metric === 'cosine' ? normalizeVector(vectorData) : vectorData;
 
         // Upsert vector
-        await this.execute(conn, `
+        await this.execute(
+          conn,
+          `
           INSERT INTO ${tableName} (id, vector, content, metadata, updated_at)
           VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
           ON CONFLICT (id) DO UPDATE SET
             vector = EXCLUDED.vector,
             metadata = EXCLUDED.metadata,
             updated_at = EXCLUDED.updated_at
-        `, [
-          vectorId,
-          `[${normalizedVector.join(',')}]`,
-          metadataObj.content || '',
-          JSON.stringify(metadataObj),
-        ]);
+        `,
+          [vectorId, `[${normalizedVector.join(',')}]`, metadataObj.content || '', JSON.stringify(metadataObj)],
+        );
       }
 
       // Update vector count
-      await this.execute(conn, `
+      await this.execute(
+        conn,
+        `
         UPDATE vector_indexes
         SET total_vectors = (SELECT COUNT(*) FROM ${tableName}),
             updated_at = NOW()
         WHERE name = ?
-      `, [indexName]);
+      `,
+        [indexName],
+      );
 
       await this.execute(conn, 'COMMIT');
       return vectorIds;
-
     } catch (error) {
       await this.execute(conn, 'ROLLBACK');
       throw this.handleError(error, 'Failed to upsert vectors');
@@ -305,21 +312,13 @@ export class DuckDBVector extends MastraVector {
     const conn = await this.getConnection();
 
     try {
-      const {
-        indexName,
-        queryVector,
-        topK = 10,
-        filter,
-        includeVector = false,
-      } = params;
+      const { indexName, queryVector, topK = 10, filter, includeVector = false } = params;
 
       const tableName = this.getTableName(indexName);
 
       // Validate and normalize query vector
       validateVector(queryVector, this.config.dimensions);
-      const normalizedQuery = this.config.metric === 'cosine'
-        ? normalizeVector(queryVector)
-        : queryVector;
+      const normalizedQuery = this.config.metric === 'cosine' ? normalizeVector(queryVector) : queryVector;
 
       // Build filter SQL
       const filterBuilder = new DuckDBFilterBuilder();
@@ -354,15 +353,11 @@ export class DuckDBVector extends MastraVector {
         LIMIT ?
       `;
 
-      const queryParams = [
-        `[${normalizedQuery.join(',')}]`,
-        ...filterParams,
-        topK,
-      ];
+      const queryParams = [`[${normalizedQuery.join(',')}]`, ...filterParams, topK];
 
       const results = await this.execute(conn, sql, queryParams);
 
-      return results.map((row) => {
+      return results.map(row => {
         const result: QueryResult = {
           id: row.id,
           score: row.score,
@@ -373,7 +368,6 @@ export class DuckDBVector extends MastraVector {
         }
         return result;
       });
-
     } finally {
       this.releaseConnection(conn);
     }
@@ -386,11 +380,8 @@ export class DuckDBVector extends MastraVector {
     const conn = await this.getConnection();
 
     try {
-      const results = await this.execute(
-        conn,
-        'SELECT name FROM vector_indexes ORDER BY name'
-      );
-      return results.map((row) => row.name);
+      const results = await this.execute(conn, 'SELECT name FROM vector_indexes ORDER BY name');
+      return results.map(row => row.name);
     } finally {
       this.releaseConnection(conn);
     }
@@ -405,9 +396,13 @@ export class DuckDBVector extends MastraVector {
     try {
       const { indexName } = params;
 
-      const results = await this.execute(conn, `
+      const results = await this.execute(
+        conn,
+        `
         SELECT * FROM vector_indexes WHERE name = ?
-      `, [indexName]);
+      `,
+        [indexName],
+      );
 
       if (results.length === 0) {
         throw new Error(`Index "${indexName}" not found`);
@@ -420,7 +415,6 @@ export class DuckDBVector extends MastraVector {
         count: index.total_vectors,
         metric: index.metric as 'cosine' | 'euclidean' | 'dotproduct',
       };
-
     } finally {
       this.releaseConnection(conn);
     }
@@ -440,11 +434,7 @@ export class DuckDBVector extends MastraVector {
       await this.execute(conn, `DROP TABLE IF EXISTS ${tableName}`);
 
       // Remove from indexes table
-      await this.execute(conn,
-        'DELETE FROM vector_indexes WHERE name = ?',
-        [indexName]
-      );
-
+      await this.execute(conn, 'DELETE FROM vector_indexes WHERE name = ?', [indexName]);
     } finally {
       this.releaseConnection(conn);
     }
@@ -466,9 +456,7 @@ export class DuckDBVector extends MastraVector {
 
       if (vector) {
         validateVector(vector, this.config.dimensions);
-        const normalizedVector = this.config.metric === 'cosine'
-          ? normalizeVector(vector)
-          : vector;
+        const normalizedVector = this.config.metric === 'cosine' ? normalizeVector(vector) : vector;
         updates.push('vector = ?');
         updateParams.push(`[${normalizedVector.join(',')}]`);
       }
@@ -483,12 +471,15 @@ export class DuckDBVector extends MastraVector {
       updates.push('updated_at = NOW()');
       updateParams.push(id);
 
-      await this.execute(conn, `
+      await this.execute(
+        conn,
+        `
         UPDATE ${tableName}
         SET ${updates.join(', ')}
         WHERE id = ?
-      `, updateParams);
-
+      `,
+        updateParams,
+      );
     } finally {
       this.releaseConnection(conn);
     }
@@ -508,19 +499,26 @@ export class DuckDBVector extends MastraVector {
       const ids = Array.isArray(id) ? id : [id];
       const placeholders = ids.map(() => '?').join(',');
 
-      await this.execute(conn, `
+      await this.execute(
+        conn,
+        `
         DELETE FROM ${tableName}
         WHERE id IN (${placeholders})
-      `, ids);
+      `,
+        ids,
+      );
 
       // Update vector count
-      await this.execute(conn, `
+      await this.execute(
+        conn,
+        `
         UPDATE vector_indexes
         SET total_vectors = (SELECT COUNT(*) FROM ${tableName}),
             updated_at = NOW()
         WHERE name = ?
-      `, [indexName]);
-
+      `,
+        [indexName],
+      );
     } finally {
       this.releaseConnection(conn);
     }
@@ -529,10 +527,7 @@ export class DuckDBVector extends MastraVector {
   /**
    * Import vectors from Parquet file (Enhanced DuckDB-specific feature)
    */
-  async importFromParquet(
-    indexName: string,
-    options: ParquetImportOptions
-  ): Promise<number> {
+  async importFromParquet(indexName: string, options: ParquetImportOptions): Promise<number> {
     const conn = await this.getConnection();
 
     try {
@@ -563,15 +558,18 @@ export class DuckDBVector extends MastraVector {
       const result = await this.execute(conn, sql);
 
       // Update vector count
-      await this.execute(conn, `
+      await this.execute(
+        conn,
+        `
         UPDATE vector_indexes
         SET total_vectors = (SELECT COUNT(*) FROM ${tableName}),
             updated_at = NOW()
         WHERE name = ?
-      `, [indexName]);
+      `,
+        [indexName],
+      );
 
       return result.length;
-
     } finally {
       this.releaseConnection(conn);
     }
@@ -584,23 +582,19 @@ export class DuckDBVector extends MastraVector {
     indexName: string,
     queryVector: number[],
     textQuery: string,
-    options: DuckDBQueryOptions = {}
+    options: DuckDBQueryOptions = {},
   ): Promise<QueryResult[]> {
     const conn = await this.getConnection();
 
     try {
-      const {
-        vectorWeight = 0.7,
-      } = options;
+      const { vectorWeight = 0.7 } = options;
 
       const tableName = this.getTableName(indexName);
       const textWeight = 1 - vectorWeight;
 
       // Validate and normalize query vector
       validateVector(queryVector, this.config.dimensions);
-      const normalizedQuery = this.config.metric === 'cosine'
-        ? normalizeVector(queryVector)
-        : queryVector;
+      const normalizedQuery = this.config.metric === 'cosine' ? normalizeVector(queryVector) : queryVector;
 
       // Get similarity function
       const similarityFunc = this.getSimilarityFunction();
@@ -637,21 +631,15 @@ export class DuckDBVector extends MastraVector {
         LIMIT 10
       `;
 
-      const queryParams = [
-        `[${normalizedQuery.join(',')}]`,
-        textQuery,
-        vectorWeight,
-        textWeight,
-      ];
+      const queryParams = [`[${normalizedQuery.join(',')}]`, textQuery, vectorWeight, textWeight];
 
       const results = await this.execute(conn, sql, queryParams);
 
-      return results.map((row) => ({
+      return results.map(row => ({
         id: row.id,
         score: row.score,
         metadata: JSON.parse(row.metadata || '{}'),
       }));
-
     } finally {
       this.releaseConnection(conn);
     }

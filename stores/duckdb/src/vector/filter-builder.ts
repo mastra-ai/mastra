@@ -62,16 +62,12 @@ export class DuckDBFilterBuilder {
     // Process all keys in the filter object
     for (const [key, value] of Object.entries(filterObj)) {
       if (key === '$and' && Array.isArray(value)) {
-        const andConditions = value
-          .map((f: any) => this.buildFilter(f))
-          .filter(Boolean);
+        const andConditions = value.map((f: any) => this.buildFilter(f)).filter(Boolean);
         if (andConditions.length > 0) {
           conditions.push(`(${andConditions.join(' AND ')})`);
         }
       } else if (key === '$or' && Array.isArray(value)) {
-        const orConditions = value
-          .map((f: any) => this.buildFilter(f))
-          .filter(Boolean);
+        const orConditions = value.map((f: any) => this.buildFilter(f)).filter(Boolean);
         if (orConditions.length > 0) {
           conditions.push(`(${orConditions.join(' OR ')})`);
         }
@@ -100,8 +96,8 @@ export class DuckDBFilterBuilder {
     const jsonPath = field.startsWith('metadata.')
       ? `metadata->>'${field.substring(9)}'`
       : field === 'metadata' && typeof value === 'object'
-      ? null // Will be handled below
-      : field;
+        ? null // Will be handled below
+        : field;
 
     // If it's a metadata object, process each field
     if (field === 'metadata' && typeof value === 'object' && !Array.isArray(value)) {
@@ -261,21 +257,17 @@ export class DuckDBFilterBuilder {
 
         case '$containsAny':
           if (Array.isArray(value)) {
-            const orConditions = value.map(() =>
-              `json_array_contains(metadata->'${fieldName}', ?)`
-            );
+            const orConditions = value.map(() => `json_array_contains(metadata->'${fieldName}', ?)`);
             conditions.push(`(${orConditions.join(' OR ')})`);
-            this.params.push(...value.map((v) => JSON.stringify(v)));
+            this.params.push(...value.map(v => JSON.stringify(v)));
           }
           break;
 
         case '$containsAll':
           if (Array.isArray(value)) {
-            const andConditions = value.map(() =>
-              `json_array_contains(metadata->'${fieldName}', ?)`
-            );
+            const andConditions = value.map(() => `json_array_contains(metadata->'${fieldName}', ?)`);
             conditions.push(`(${andConditions.join(' AND ')})`);
-            this.params.push(...value.map((v) => JSON.stringify(v)));
+            this.params.push(...value.map(v => JSON.stringify(v)));
           }
           break;
       }
@@ -294,11 +286,7 @@ export class DuckDBFilterBuilder {
   /**
    * Build date range condition
    */
-  static buildDateRange(
-    field: string,
-    start?: Date | string,
-    end?: Date | string
-  ): FilterSQL {
+  static buildDateRange(field: string, start?: Date | string, end?: Date | string): FilterSQL {
     const conditions: string[] = [];
     const params: any[] = [];
 
