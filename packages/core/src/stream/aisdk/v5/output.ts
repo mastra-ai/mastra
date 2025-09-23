@@ -225,7 +225,15 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   }
 
   get reasoning() {
-    return this.#modelOutput.reasoning;
+    return this.#modelOutput.reasoning.then(reasoningChunk => {
+      return reasoningChunk.map(reasoningPart => {
+        return {
+          providerMetadata: reasoningPart.payload.providerMetadata,
+          text: reasoningPart.payload.text,
+          type: 'reasoning',
+        };
+      });
+    });
   }
 
   get warnings() {

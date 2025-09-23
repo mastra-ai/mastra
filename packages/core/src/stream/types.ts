@@ -499,7 +499,6 @@ export interface LanguageModelV2StreamResult {
 export type OnResult = (result: Omit<LanguageModelV2StreamResult, 'stream'>) => void;
 export type CreateStream = () => Promise<LanguageModelV2StreamResult>;
 
-// Type helpers for chunk payloads
 export type SourceChunk = BaseChunkType & { type: 'source'; payload: SourcePayload };
 export type FileChunk = BaseChunkType & { type: 'file'; payload: FilePayload };
 export type ToolCallChunk = BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload };
