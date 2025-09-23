@@ -18,6 +18,24 @@ export class DuckDBFilterBuilder {
   private params: any[] = [];
 
   /**
+   * Validate and escape field names to prevent SQL injection
+   */
+  private validateFieldName(field: string): string {
+    // Only allow alphanumeric, underscore, hyphen, and dot for nested paths
+    if (!/^[a-zA-Z0-9_.-]+$/.test(field)) {
+      throw new Error(`Invalid field name: ${field}. Only alphanumeric characters, underscores, hyphens, and dots are allowed.`);
+    }
+
+    // Additional check for SQL keywords
+    const sqlKeywords = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 'ALTER', 'EXEC', 'EXECUTE', 'UNION'];
+    if (sqlKeywords.includes(field.toUpperCase())) {
+      throw new Error(`Field name cannot be a SQL keyword: ${field}`);
+    }
+
+    return field;
+  }
+
+  /**
    * Build SQL WHERE clause from filter
    */
   build(filter?: BaseVectorFilter, namespace?: string): FilterSQL {
@@ -92,12 +110,15 @@ export class DuckDBFilterBuilder {
    * Build field condition
    */
   private buildFieldCondition(field: string, value: any): string {
+    // Validate field name first to prevent SQL injection
+    const safeField = this.validateFieldName(field);
+
     // Handle metadata fields specially
-    const jsonPath = field.startsWith('metadata.')
-      ? `metadata->>'${field.substring(9)}'`
-      : field === 'metadata' && typeof value === 'object'
+    const jsonPath = safeField.startsWith('metadata.')
+      ? `metadata->>'${this.validateFieldName(safeField.substring(9))}'`
+      : safeField === 'metadata' && typeof value === 'object'
         ? null // Will be handled below
-        : field;
+        : safeField;
 
     // If it's a metadata object, process each field
     if (field === 'metadata' && typeof value === 'object' && !Array.isArray(value)) {
@@ -132,22 +153,25 @@ export class DuckDBFilterBuilder {
     const conditions: string[] = [];
 
     for (const [key, value] of Object.entries(metadata)) {
+      // Validate the key to prevent SQL injection
+      const safeKey = this.validateFieldName(key);
+
       if (value === null || value === undefined) {
-        conditions.push(`metadata->>'${key}' IS NULL`);
+        conditions.push(`metadata->>'${safeKey}' IS NULL`);
       } else if (typeof value === 'object' && !Array.isArray(value)) {
         // Handle operators
-        const opCondition = this.buildOperatorCondition(`metadata->>'${key}'`, value);
+        const opCondition = this.buildOperatorCondition(`metadata->>'${safeKey}'`, value);
         if (opCondition) {
           conditions.push(opCondition);
         }
       } else if (Array.isArray(value)) {
         // Handle array values (IN clause)
         const placeholders = value.map(() => '?').join(',');
-        conditions.push(`metadata->>'${key}' IN (${placeholders})`);
+        conditions.push(`metadata->>'${safeKey}' IN (${placeholders})`);
         this.params.push(...value.map(String));
       } else {
         // Simple equality
-        conditions.push(`metadata->>'${key}' = ?`);
+        conditions.push(`metadata->>'${safeKey}' = ?`);
         this.params.push(String(value));
       }
     }
@@ -166,9 +190,10 @@ export class DuckDBFilterBuilder {
     let fieldName = '';
     const metadataMatch = jsonPath.match(/metadata->>'([^']+)'/);
     if (metadataMatch && metadataMatch[1]) {
-      fieldName = metadataMatch[1];
+      // Validate the extracted field name to prevent SQL injection
+      fieldName = this.validateFieldName(metadataMatch[1]);
     } else {
-      fieldName = jsonPath;
+      fieldName = this.validateFieldName(jsonPath);
     }
 
     for (const [op, value] of Object.entries(operators)) {
@@ -250,13 +275,15 @@ export class DuckDBFilterBuilder {
           break;
 
         case '$contains':
-          // For JSON arrays - use the fieldName for the JSON path
+          // For JSON arrays - use the validated fieldName for the JSON path
+          // fieldName is already validated above
           conditions.push(`json_array_contains(metadata->'${fieldName}', ?)`);
           this.params.push(JSON.stringify(value));
           break;
 
         case '$containsAny':
           if (Array.isArray(value)) {
+            // fieldName is already validated above
             const orConditions = value.map(() => `json_array_contains(metadata->'${fieldName}', ?)`);
             conditions.push(`(${orConditions.join(' OR ')})`);
             this.params.push(...value.map(v => JSON.stringify(v)));
@@ -265,6 +292,7 @@ export class DuckDBFilterBuilder {
 
         case '$containsAll':
           if (Array.isArray(value)) {
+            // fieldName is already validated above
             const andConditions = value.map(() => `json_array_contains(metadata->'${fieldName}', ?)`);
             conditions.push(`(${andConditions.join(' AND ')})`);
             this.params.push(...value.map(v => JSON.stringify(v)));
