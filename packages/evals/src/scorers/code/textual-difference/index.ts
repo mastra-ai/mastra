@@ -5,7 +5,7 @@ export function createTextualDifferenceScorer() {
   return createScorer({
     name: 'Textual Difference Scorer',
     description:
-      'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
+      'Calculate textual difference between input and output using sequence matching algorithms.',
     type: 'agent',
   })
     .preprocess(async ({ run }) => {
