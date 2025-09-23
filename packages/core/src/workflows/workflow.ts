@@ -466,7 +466,7 @@ export class Workflow<
    * @returns The workflow instance for chaining
    */
   sleep(duration: number | ExecuteFunction<z.infer<TPrevSchema>, number, any, any, TEngineType>) {
-    const id = `sleep_${this.#mastra?.generateId()}`;
+    const id = `sleep_${this.#mastra?.generateId() || randomUUID()}`;
 
     const opts: StepFlowEntry<TEngineType> =
       typeof duration === 'function'
