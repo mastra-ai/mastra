@@ -86,7 +86,7 @@ export function verifyNoObjectGeneratedError(
 }
 
 export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
-  describe('loopFn', () => {
+  describe.only('loopFn', () => {
     describe('result.object auto consume promise', () => {
       it('should resolve object promise without manual stream consumption', async () => {
         const result = loopFn({
@@ -1024,7 +1024,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           `);
         });
 
-        it.only("should be called when object doesn't match the schema", async () => {
+        it("should be called when object doesn't match the schema", async () => {
           let result: any;
           const output = loopFn({
             models: [

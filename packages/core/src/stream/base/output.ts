@@ -1,4 +1,5 @@
-import { ReadableStream, TransformStream } from 'stream/web';
+import type { ReadableStream } from 'stream/web';
+import { TransformStream } from 'stream/web';
 import type { SharedV2ProviderMetadata, LanguageModelV2CallWarning } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
 import { consumeStream } from 'ai-v5';
@@ -21,7 +22,6 @@ import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
-import { MastraError } from '../../error';
 
 export interface LanguageModelUsage {
   inputTokens?: number;
@@ -941,12 +941,14 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * Returns complete output including text, usage, tool calls, and all metadata.
    */
   async getFullOutput() {
-    await this.consumeStream({
-      onError: (error: any) => {
-        console.error(error);
-        throw error;
-      },
-    });
+    if (!this.#streamConsumed) {
+      await this.consumeStream({
+        onError: (error: any) => {
+          console.error(error);
+          throw error;
+        },
+      });
+    }
 
     let scoringData:
       | {

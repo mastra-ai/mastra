@@ -578,13 +578,23 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
         controller.enqueue({
           from: ChunkFrom.AGENT,
           runId: currentRunId ?? '',
-          type: 'object-validation-error',
+          type: 'error',
           payload: {
             error: finalResult.error,
           },
         });
         return;
       }
+
+      // const mastraError = new MastraError({
+      //   domain: 'AGENT',
+      //   category: 'SYSTEM',
+      //   id: 'OUTPUT_SCHEMA_VALIDATION_FAILED',
+      //   text: finalResult.error.message,
+      //   // details: {
+      //   //   message: finalResult.error.message,
+      //   // },
+      // });
 
       //   try {
       //     const mastraError = new MastraError({
