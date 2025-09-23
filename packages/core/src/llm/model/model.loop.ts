@@ -24,14 +24,26 @@ import type { ModelManagerModelConfig } from '../../stream/types';
 import { delay } from '../../utils';
 
 import type { ModelLoopStreamArgs } from './model.loop.types';
+import type { MastraModelOptions } from './shared.types';
 
 export class MastraLLMVNext extends MastraBase {
   #models: ModelManagerModelConfig[];
   #mastra?: Mastra;
+  #options?: MastraModelOptions;
   #firstModel: ModelManagerModelConfig;
 
-  constructor({ mastra, models }: { mastra?: Mastra; models: ModelManagerModelConfig[] }) {
+  constructor({
+    mastra,
+    models,
+    options,
+  }: {
+    mastra?: Mastra;
+    models: ModelManagerModelConfig[];
+    options?: MastraModelOptions;
+  }) {
     super({ name: 'aisdk' });
+
+    this.#options = options;
 
     if (mastra) {
       this.#mastra = mastra;
@@ -131,10 +143,11 @@ export class MastraLLMVNext extends MastraBase {
   }
 
   stream<Tools extends ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
+    resumeContext,
+    runId,
     stopWhen = stepCountIs(5),
     maxSteps,
     tools = {} as Tools,
-    runId,
     modelSettings,
     toolChoice = 'auto',
     telemetry_settings,
@@ -147,6 +160,7 @@ export class MastraLLMVNext extends MastraBase {
     providerOptions,
     tracingContext,
     messageList,
+    requireToolApproval,
     _internal,
     // ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT | undefined> {
@@ -186,11 +200,14 @@ export class MastraLLMVNext extends MastraBase {
         threadId,
         resourceId,
       },
-      isInternal: false,
+      tracingPolicy: this.#options?.tracingPolicy,
     });
 
     try {
       const loopOptions: LoopOptions<Tools, OUTPUT> = {
+        mastra: this.#mastra,
+        resumeContext,
+        runId,
         messageList,
         models: this.#models,
         tools: tools as Tools,
@@ -207,6 +224,7 @@ export class MastraLLMVNext extends MastraBase {
         outputProcessors,
         returnScorerData,
         llmAISpan,
+        requireToolApproval,
         options: {
           ...options,
           onStepFinish: async props => {
@@ -295,9 +313,11 @@ export class MastraLLMVNext extends MastraBase {
               attributes: {
                 finishReason: props?.finishReason,
                 usage: {
-                  promptTokens: props?.totalUsage?.inputTokens,
-                  completionTokens: props?.totalUsage?.outputTokens,
+                  inputTokens: props?.totalUsage?.inputTokens,
+                  outputTokens: props?.totalUsage?.outputTokens,
                   totalTokens: props?.totalUsage?.totalTokens,
+                  reasoningTokens: props?.totalUsage?.reasoningTokens,
+                  cachedInputTokens: props?.totalUsage?.cachedInputTokens,
                 },
               },
             });

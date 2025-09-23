@@ -128,6 +128,7 @@ describe('Agent Handlers', () => {
           name: 'test-multi-model-agent',
           instructions: 'test instructions',
           tools: {},
+          agents: {},
           workflows: {},
           provider: 'openai.responses',
           modelId: 'gpt-4o-mini',
@@ -228,6 +229,9 @@ describe('Agent Handlers', () => {
         agentId: 'test-multi-model-agent',
         runtimeContext,
       });
+      if (!result) {
+        expect.fail('Result should be defined');
+      }
       expect(result.modelList).toMatchObject([
         {
           id: expect.any(String),
@@ -443,7 +447,11 @@ describe('Agent Handlers', () => {
       const agent = mockMastra.getAgent('test-multi-model-agent');
       const modelList = await agent.getModelList();
 
-      const modelListIds = modelList!.map(m => m.id);
+      if (!modelList) {
+        expect.fail('Model list should be defined');
+      }
+
+      const modelListIds = modelList.map(m => m.id);
       const reversedModelListIds = modelListIds.reverse();
 
       await reorderAgentModelListHandler({

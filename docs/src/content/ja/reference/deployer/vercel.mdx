@@ -3,129 +3,22 @@ title: "Vercel デプロイヤー"
 description: "Mastraアプリケーションを Vercel にデプロイする VercelDeployer クラスのドキュメント。"
 ---
 
+
+
 # VercelDeployer
 
-VercelDeployerは、MastraアプリケーションをVercelにデプロイし、設定、環境変数の同期、およびデプロイプロセスを処理します。これは抽象Deployerクラスを拡張して、Vercel固有のデプロイ機能を提供します。
+`VercelDeployer`クラスは、スタンドアロンのMastraアプリケーションのVercelへのデプロイを処理します。設定、デプロイを管理し、Vercel固有の機能でベースの[Deployer](/reference/deployer/deployer)クラスを拡張します。
+
+
 
 ## 使用例
 
-```typescript
-import { Mastra } from "@mastra/core";
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
-const mastra = new Mastra({
-  deployer: new VercelDeployer({
-    teamSlug: "your-team-slug",
-    projectName: "your-project-name",
-    token: "your-vercel-token",
-  }),
-  // ... other Mastra configuration options
+export const mastra = new Mastra({
+  // ...
+  deployer: new VercelDeployer()
 });
 ```
-
-## パラメーター
-
-### コンストラクターのパラメーター
-
-<PropertiesTable
-  content={[
-    {
-      name: "teamSlug",
-      type: "string",
-      description: "あなたのVercelチームのスラッグ",
-      isOptional: false,
-    },
-    {
-      name: "projectName",
-      type: "string",
-      description:
-        "あなたのVercelプロジェクト名（存在しない場合は作成されます）。",
-      isOptional: false,
-    },
-    {
-      name: "token",
-      type: "string",
-      description: "あなたのVercel認証トークン。",
-      isOptional: false,
-    },
-  ]}
-/>
-
-### 環境変数
-
-VercelDeployerは複数のソースから環境変数を扱います：
-
-1. **環境ファイル**: `.env.production` および `.env` ファイルからの変数。
-2. **設定**: Mastraの設定を通じて渡された変数。
-3. **Vercelダッシュボード**: Vercelのウェブインターフェースを通じて管理できる変数。
-
-デプロイヤーはローカル開発環境とVercelの環境変数システム間で環境変数を自動的に同期し、本番、プレビュー、開発などすべてのデプロイ環境で一貫性を保ちます。
-
-## Mastraプロジェクトのリント
-
-Mastraプロジェクトをリントして、ビルドに問題がないことを確認します
-
-```bash
-npx mastra lint
-```
-
-## Mastraプロジェクトのビルド
-
-Vercelデプロイメント用にMastraプロジェクトをビルドするには：
-
-```bash
-npx mastra build
-```
-
-ビルドプロセスは`.mastra/output`ディレクトリに以下の出力構造を生成します：
-
-```
-.mastra/output/
-├── vercel.json     # Vercel設定
-└── index.mjs       # アプリケーションのエントリーポイント
-```
-
-### Vercel設定
-
-VercelDeployerは自動的に`.mastra/output`に以下の設定を含む`vercel.json`設定ファイルを生成します：
-
-```json
-{
-  "version": 2,
-  "installCommand": "npm install --omit=dev",
-  "builds": [
-    {
-      "src": "index.mjs",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": ["**"]
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "index.mjs"
-    }
-  ]
-}
-```
-
-## デプロイメントオプション
-
-ビルド後、Mastraアプリケーションの `.mastra/output` を以下のいずれかの方法でVercelにデプロイできます：
-
-1. **Vercel CLI**: Vercelの公式CLIツールを使って直接デプロイ
-
-   - CLIをインストール: `npm install -g vercel`
-   - 出力ディレクトリに移動: `cd .mastra/output`
-   - プレビュー環境にデプロイ: `vercel`
-   - 本番環境にデプロイ: `vercel --prod`
-
-2. **Vercelダッシュボード**: Gitリポジトリを接続するか、Vercelダッシュボードでビルド出力をドラッグ＆ドロップ
-
-> 出力ディレクトリ `.mastra/output` で `vercel dev` を実行することで、Mastraアプリケーションをローカルでテストすることもできます。
-
-## プラットフォームドキュメント
-
-- [Vercel](https://vercel.com/docs)

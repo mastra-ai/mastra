@@ -18,11 +18,10 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 export interface AgentsTableProps {
   agents: Record<string, GetAgentResponse>;
   isLoading: boolean;
-  computeLink: (agentId: string) => string;
 }
 
-export function AgentsTable({ agents, isLoading, computeLink }: AgentsTableProps) {
-  const { navigate } = useLinkComponent();
+export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
+  const { navigate, paths } = useLinkComponent();
   const projectData: AgentTableData[] = useMemo(
     () =>
       Object.keys(agents).map(key => {
@@ -38,7 +37,7 @@ export function AgentsTable({ agents, isLoading, computeLink }: AgentsTableProps
           repoUrl: undefined,
           tools: agent.tools,
           modelId: agent.modelId,
-          link: computeLink(key),
+          link: paths.agentLink(key),
           modelList: agent.modelList,
         };
       }),

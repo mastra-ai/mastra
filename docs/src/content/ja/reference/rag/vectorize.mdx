@@ -3,9 +3,13 @@ title: "リファレンス: Cloudflare ベクトルストア | ベクトルデ�
 description: Mastraの CloudflareVectorクラスに関するドキュメント。Cloudflare Vectorizeを使用したベクトル検索を提供します。
 ---
 
+
+
 # Cloudflare Vector Store
 
 CloudflareVectorクラスは、Cloudflareのエッジネットワークと統合されたベクトルデータベースサービスである[Cloudflare Vectorize](https://developers.cloudflare.com/vectorize/)を使用してベクトル検索を提供します。
+
+
 
 ## コンストラクタオプション
 
@@ -23,6 +27,8 @@ CloudflareVectorクラスは、Cloudflareのエッジネットワークと統合
     },
   ]}
 />
+
+
 
 ## メソッド
 
@@ -236,6 +242,8 @@ interface IndexStats {
   ]}
 />
 
+
+
 ### deleteVector()
 
 インデックス内の特定のIDに対するベクトルとそれに関連するメタデータを削除します。
@@ -255,6 +263,8 @@ interface IndexStats {
   ]}
 />
 
+
+
 ## レスポンスタイプ
 
 クエリ結果は以下の形式で返されます：
@@ -267,6 +277,8 @@ interface QueryResult {
   vector?: number[];
 }
 ```
+
+
 
 ## エラー処理
 
@@ -286,12 +298,16 @@ try {
 }
 ```
 
+
+
 ## 環境変数
 
 必要な環境変数：
 
 - `CLOUDFLARE_ACCOUNT_ID`: あなたのCloudflareアカウントID
 - `CLOUDFLARE_API_TOKEN`: Vectorize権限を持つCloudflare APIトークン
+
+
 
 ## 関連
 

@@ -10,6 +10,7 @@
     "lint-staged": "^16.1.6",
     "npm-run-all2": "^8.0.4",
     "prettier": "^3.6.2",
+    "semver": "^7.7.2",
     "turbo": "^2.5.6",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
@@ -87,7 +88,7 @@
     "typescript": "^5.8.3",
     "@types/node": "^20.17.57",
     "cookie": ">=0.7.2",
-    "tmp": ">=0.2.4"
+    "tmp": ">=0.2.5"
   },
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.12.4",

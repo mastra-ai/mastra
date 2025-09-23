@@ -1,41 +1,33 @@
 ---
 title: Mastra クライアントツール API
-description: client-js SDKを使用してMastraプラットフォームで利用可能なツールを操作および実行する方法を学びます。
+description: client-js SDK を使って、Mastra プラットフォームのツールと連携し、実行する方法を学びます。
 ---
 
-# ツールAPI
+# Tools API
 
-ツールAPIは、Mastraプラットフォームで利用可能なツールを操作および実行するためのメソッドを提供します。
+Tools API は、Mastra プラットフォームで利用可能なツールとの対話や実行を行うためのメソッドを提供します。
 
-## Mastraクライアントの初期化
+## すべてのツールを取得する
 
-```typescript
-import { MastraClient } from "@mastra/client-js";
-
-const client = new MastraClient();
-```
-
-## すべてのツールの取得
-
-利用可能なすべてのツールのリストを取得します：
+利用可能なツールの一覧を取得します:
 
 ```typescript
-const tools = await client.getTools();
+const tools = await mastraClient.getTools();
 ```
 
-## 特定のツールの操作
+## 特定のツールを扱う
 
-特定のツールのインスタンスを取得する：
+特定のツールのインスタンスを取得します。
 
 ```typescript
-const tool = client.getTool("tool-id");
+const tool = mastraClient.getTool("tool-id");
 ```
 
-## ツールメソッド
+## ツールのメソッド
 
 ### ツールの詳細を取得
 
-ツールの詳細情報を取得します：
+ツールの詳細情報を取得します:
 
 ```typescript
 const details = await tool.details();
@@ -43,7 +35,7 @@ const details = await tool.details();
 
 ### ツールの実行
 
-特定の引数でツールを実行します：
+指定した引数でツールを実行します：
 
 ```typescript
 const result = await tool.execute({
@@ -51,7 +43,7 @@ const result = await tool.execute({
     param1: "value1",
     param2: "value2",
   },
-  threadId: "thread-1", // Optional: Thread context
-  resourceid: "resource-1", // Optional: Resource identifier
+  threadId: "thread-1", // 省略可: スレッドのコンテキスト
+  resourceId: "resource-1", // 省略可: リソース識別子
 });
 ```

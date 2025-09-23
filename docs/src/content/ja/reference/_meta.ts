@@ -8,7 +8,6 @@ const meta: Meta = {
   agents: "エージェント",
   tools: "ツール",
   workflows: "ワークフロー",
-  networks: "ネットワーク",
   memory: "メモリ",
   storage: "ストレージ",
   rag: "RAG",

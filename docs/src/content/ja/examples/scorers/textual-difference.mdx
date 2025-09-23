@@ -1,0 +1,194 @@
+---
+title: "例: Textual Difference | Scorers | Mastra Docs"
+description: Textual Differenceスコアラーを使用してテキスト文字列間の類似性を評価する例。シーケンスの違いと変更を分析します。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+
+
+# Textual Difference Scorer
+
+`createTextualDifferenceScorer`を使用して、シーケンスの違いと編集操作を分析することで、2つのテキスト文字列間の類似性を評価します。
+
+
+
+## インストール
+
+```bash copy
+npm install @mastra/evals
+```
+
+> 完全なAPIドキュメントと設定オプションについては、[`createTextualDifferenceScorer`](/reference/scorers/textual-difference)を参照してください。
+
+
+
+## 差異なしの例
+
+この例では、テキストが完全に同じです。スコアラーは完全な類似性を識別し、完璧なスコアを付け、変更を検出しません。
+
+```typescript filename="src/example-no-differences.ts" showLineNumbers copy
+import { createTextualDifferenceScorer } from "@mastra/evals/scorers/code";
+
+const scorer = createTextualDifferenceScorer();
+
+const input = 'The quick brown fox jumps over the lazy dog';
+const output = 'The quick brown fox jumps over the lazy dog';
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: input }],
+  output: { role: 'assistant', text: output },
+});
+
+console.log('Score:', result.score);
+console.log('AnalyzeStepResult:', result.analyzeStepResult);
+```
+
+### 差異なしの出力
+
+スコアラーは高いスコアを返し、テキストが同一であることを示します。詳細情報では変更がゼロで、長さの差がないことが確認されます。
+
+```typescript
+{
+  score: 1,
+  analyzeStepResult: {
+    confidence: 1,
+    ratio: 1,
+    changes: 0,
+    lengthDiff: 0,
+  },
+}
+```
+
+
+
+## 軽微な差異の例
+
+この例では、テキストに小さな変化があります。スコアラーはこれらの軽微な差異を検出し、中程度の類似度スコアを返します。
+
+```typescript filename="src/example-minor-differences.ts" showLineNumbers copy
+import { createTextualDifferenceScorer } from "@mastra/evals/scorers/code";
+
+const scorer = createTextualDifferenceScorer();
+
+const input = 'Hello world! How are you?';
+const output = 'Hello there! How is it going?';
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: input }],
+  output: { role: 'assistant', text: output },
+});
+
+console.log('Score:', result.score);
+console.log('AnalyzeStepResult:', result.analyzeStepResult);
+```
+
+### 軽微な差異の出力
+
+スコアラーは、テキスト間の小さな変化を反映した中程度のスコアを返します。詳細情報には、観察された変更の数と長さの差が含まれます。
+
+```typescript
+{
+  score: 0.5925925925925926,
+  analyzeStepResult: {
+    confidence: 0.8620689655172413,
+    ratio: 0.5925925925925926,
+    changes: 5,
+    lengthDiff: 0.13793103448275862
+  }
+}
+```
+
+
+
+## 大きな違いの例
+
+この例では、テキストが大幅に異なります。スコアラーは広範囲にわたる変更を検出し、低い類似度スコアを返します。
+
+```typescript filename="src/example-major-differences.ts" showLineNumbers copy
+import { createTextualDifferenceScorer } from "@mastra/evals/scorers/code";
+
+const scorer = createTextualDifferenceScorer();
+
+const input = 'Python is a high-level programming language';
+const output = 'JavaScript is used for web development';
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: input }],
+  output: { role: 'assistant', text: output },
+});
+
+console.log('Score:', result.score);
+console.log('AnalyzeStepResult:', result.analyzeStepResult);
+```
+
+### 大きな違いの出力
+
+スコアラーは、テキスト間の大幅な違いにより低いスコアを返します。詳細な`analyzeStepResult`は、多数の変更と顕著な長さの違いを示しています。
+
+```typescript
+{
+  score: 0.3170731707317073,
+  analyzeStepResult: {
+    confidence: 0.8636363636363636,
+    ratio: 0.3170731707317073,
+    changes: 8,
+    lengthDiff: 0.13636363636363635
+  }
+}
+```
+
+
+
+## Scorer設定
+
+デフォルト設定で`TextualDifferenceScorer`インスタンスを作成できます。追加の設定は必要ありません。
+
+```typescript
+const scorer = createTextualDifferenceScorer();
+```
+
+> 設定オプションの完全なリストについては、[TextualDifferenceScorer](/reference/scorers/textual-difference.mdx)を参照してください。
+
+
+
+## 結果の理解
+
+`.run()` は以下の形式で結果を返します：
+
+```typescript
+{
+  runId: string,
+  analyzeStepResult: {
+    confidence: number,
+    ratio: number,
+    changes: number,
+    lengthDiff: number
+  },
+  score: number
+}
+```
+
+### score
+0から1の間のテキスト差異スコア：
+
+- **1.0**: 同一のテキスト – 差異は検出されませんでした。
+- **0.7–0.9**: 軽微な差異 – わずかな変更が必要です。
+- **0.4–0.6**: 中程度の差異 – 目立つ変更が必要です。
+- **0.1–0.3**: 大きな差異 – 大幅な変更が必要です。
+- **0.0**: 完全に異なるテキスト。
+
+### runId
+このスコアラー実行の一意識別子。
+
+### analyzeStepResult
+差異メトリクスを含むオブジェクト：
+- **confidence**: 長さの差に基づく信頼度スコア（高いほど良い）。
+- **ratio**: テキスト間の類似度比率（0-1）。
+- **changes**: テキストを一致させるために必要な編集操作の数。
+- **lengthDiff**: テキスト長の正規化された差異。
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/scorers/textual-difference"
+/>

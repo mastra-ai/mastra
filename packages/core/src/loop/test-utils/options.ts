@@ -75,6 +75,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           toolCallId: 'call-1',
           messages: expect.any(Array),
           writableStream: expect.any(Object),
+          resumeData: undefined,
+          suspend: expect.any(Function),
         },
       );
     });
@@ -555,10 +557,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               },
               "type": "finish-step",
               "usage": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
             },
@@ -1653,7 +1653,90 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 },
               ],
               "stepNumber": 0,
-              "steps": [],
+              "steps": [
+                DefaultStepResult {
+                  "content": [],
+                  "finishReason": undefined,
+                  "providerMetadata": undefined,
+                  "request": {},
+                  "response": {
+                    "headers": {
+                      "call": "1",
+                    },
+                    "id": "id-0",
+                    "messages": [],
+                    "modelId": "mock-model-id",
+                    "timestamp": 1970-01-01T00:00:00.000Z,
+                  },
+                  "usage": {
+                    "inputTokens": 3,
+                    "outputTokens": 10,
+                    "totalTokens": 13,
+                  },
+                  "warnings": [],
+                },
+                DefaultStepResult {
+                  "content": [],
+                  "finishReason": undefined,
+                  "providerMetadata": undefined,
+                  "request": {},
+                  "response": {
+                    "headers": {
+                      "call": "2",
+                    },
+                    "id": "id-1",
+                    "messages": [
+                      {
+                        "content": [
+                          {
+                            "input": {
+                              "value": "value",
+                            },
+                            "providerExecuted": undefined,
+                            "toolCallId": "call-1",
+                            "toolName": "tool1",
+                            "type": "tool-call",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                      {
+                        "content": [
+                          {
+                            "output": {
+                              "type": "text",
+                              "value": "result1",
+                            },
+                            "toolCallId": "call-1",
+                            "toolName": "tool1",
+                            "type": "tool-result",
+                          },
+                        ],
+                        "role": "tool",
+                      },
+                      {
+                        "content": [
+                          {
+                            "text": "Hello, world!",
+                            "type": "text",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                    ],
+                    "modelId": "mock-model-id",
+                    "timestamp": 1970-01-01T00:00:01.000Z,
+                  },
+                  "usage": {
+                    "cachedInputTokens": 3,
+                    "inputTokens": 3,
+                    "outputTokens": 10,
+                    "reasoningTokens": 10,
+                    "totalTokens": 23,
+                  },
+                  "warnings": [],
+                },
+              ],
             },
             {
               "messages": [
@@ -1712,40 +1795,14 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     "timestamp": 1970-01-01T00:00:00.000Z,
                   },
                   "usage": {
-                    "cachedInputTokens": undefined,
                     "inputTokens": 3,
                     "outputTokens": 10,
-                    "reasoningTokens": undefined,
                     "totalTokens": 13,
                   },
                   "warnings": [],
                 },
                 DefaultStepResult {
-                  "content": [
-                    {
-                      "input": {
-                        "value": "value",
-                      },
-                      "providerExecuted": undefined,
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-call",
-                    },
-                    {
-                      "input": {},
-                      "output": {
-                        "type": "text",
-                        "value": "result1",
-                      },
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-result",
-                    },
-                    {
-                      "text": "Hello, world!",
-                      "type": "text",
-                    },
-                  ],
+                  "content": [],
                   "finishReason": undefined,
                   "providerMetadata": undefined,
                   "request": {},
@@ -6386,20 +6443,16 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               },
               "type": "finish-step",
               "usage": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
             },
             {
               "finishReason": "stop",
               "totalUsage": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "type": "finish",
@@ -6906,10 +6959,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               },
               "type": "finish-step",
               "usage": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
             },

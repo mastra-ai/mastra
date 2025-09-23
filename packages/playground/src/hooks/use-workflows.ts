@@ -81,17 +81,6 @@ export const useLegacyWorkflow = (workflowId: string, enabled = true) => {
   });
 };
 
-export const useWorkflow = (workflowId: string, enabled = true) => {
-  const { runtimeContext } = usePlaygroundStore();
-  return useQuery({
-    gcTime: 0,
-    staleTime: 0,
-    queryKey: ['workflow', workflowId],
-    queryFn: () => client.getWorkflow(workflowId).details(runtimeContext),
-    enabled,
-  });
-};
-
 export const useExecuteWorkflow = () => {
   const createLegacyWorkflowRun = useMutation({
     mutationFn: async ({ workflowId, prevRunId }: { workflowId: string; prevRunId?: string }) => {
@@ -110,7 +99,7 @@ export const useExecuteWorkflow = () => {
     mutationFn: async ({ workflowId, prevRunId }: { workflowId: string; prevRunId?: string }) => {
       try {
         const workflow = client.getWorkflow(workflowId);
-        const { runId: newRunId } = await workflow.createRun({ runId: prevRunId });
+        const { runId: newRunId } = await workflow.createRunAsync({ runId: prevRunId });
         return { runId: newRunId };
       } catch (error) {
         console.error('Error creating workflow run:', error);
@@ -264,7 +253,7 @@ export const useStreamWorkflow = () => {
         runtimeContext.set(key as keyof RuntimeContext, value);
       });
       const workflow = client.getWorkflow(workflowId);
-      const stream = await workflow.streamVNext({ runId, inputData, runtimeContext });
+      const stream = await workflow.streamVNext({ runId, inputData, runtimeContext, closeOnSuspend: false });
 
       if (!stream) throw new Error('No stream returned');
 

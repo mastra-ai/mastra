@@ -166,7 +166,7 @@ interface StepStartPayload {
   [key: string]: any;
 }
 
-interface StepFinishPayload {
+export interface StepFinishPayload {
   id?: string;
   providerMetadata?: SharedV2ProviderMetadata;
   totalUsage?: LanguageModelV2Usage;
@@ -345,6 +345,18 @@ interface NetworkFinishPayload {
   isOneOff: boolean;
 }
 
+interface ToolCallApprovalPayload {
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, any>;
+}
+
+interface ToolCallSuspendedPayload {
+  toolCallId: string;
+  toolName: string;
+  suspendPayload: any;
+}
+
 export type NetworkChunkType =
   | (BaseChunkType & { type: 'routing-agent-start'; payload: RoutingAgentStartPayload })
   | (BaseChunkType & { type: 'routing-agent-end'; payload: RoutingAgentEndPayload })
@@ -372,6 +384,8 @@ export type ChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'source'; payload: SourcePayload })
   | (BaseChunkType & { type: 'file'; payload: FilePayload })
   | (BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload })
+  | (BaseChunkType & { type: 'tool-call-approval'; payload: ToolCallApprovalPayload })
+  | (BaseChunkType & { type: 'tool-call-suspended'; payload: ToolCallSuspendedPayload })
   | (BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload })
   | (BaseChunkType & { type: 'tool-call-input-streaming-start'; payload: ToolCallInputStreamingStartPayload })
   | (BaseChunkType & { type: 'tool-call-delta'; payload: ToolCallDeltaPayload })
