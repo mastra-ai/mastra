@@ -149,6 +149,11 @@ interface ErrorPayload {
   [key: string]: any;
 }
 
+interface ObjectValidationErrorPayload {
+  error: unknown;
+  [key: string]: any;
+}
+
 interface RawPayload {
   [key: string]: any;
 }
@@ -383,6 +388,7 @@ export type ChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'tool-call-input-streaming-end'; payload: ToolCallInputStreamingEndPayload })
   | (BaseChunkType & { type: 'finish'; payload: FinishPayload })
   | (BaseChunkType & { type: 'error'; payload: ErrorPayload })
+  | (BaseChunkType & { type: 'object-validation-error'; payload: ObjectValidationErrorPayload })
   | (BaseChunkType & { type: 'raw'; payload: RawPayload })
   | (BaseChunkType & { type: 'start'; payload: StartPayload })
   | (BaseChunkType & { type: 'step-start'; payload: StepStartPayload })
