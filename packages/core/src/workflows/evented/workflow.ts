@@ -239,7 +239,13 @@ export function createStep<
     outputSchema: params.outputSchema,
     resumeSchema: params.resumeSchema,
     suspendSchema: params.suspendSchema,
-    execute: params.execute,
+    execute: async (context) => {
+      const validatedInputData = params.inputSchema.parse(context.inputData);
+      return params.execute({
+        ...context,
+        inputData: validatedInputData,
+      });
+    },
   };
 }
 

@@ -278,7 +278,13 @@ export function createStep<
     suspendSchema: params.suspendSchema,
     scorers: params.scorers,
     retries: params.retries,
-    execute: params.execute.bind(params),
+    execute: async (context) => {
+      const validatedInputData = params.inputSchema.parse(context.inputData);
+      return params.execute.bind(params)({
+        ...context,
+        inputData: validatedInputData,
+      });
+    },
   };
 }
 
