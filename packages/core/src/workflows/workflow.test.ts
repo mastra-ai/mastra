@@ -6246,7 +6246,6 @@ describe('Workflow', () => {
         id: 'nested-workflow-a',
         inputSchema: counterWorkflow.inputSchema,
         outputSchema: z.object({ finalValue: z.number() }),
-        options: { validateSchemas: true },
       })
         .then(startStep)
         .then(otherStep)
@@ -6256,7 +6255,6 @@ describe('Workflow', () => {
         id: 'nested-workflow-b',
         inputSchema: counterWorkflow.inputSchema,
         outputSchema: z.object({ finalValue: z.number() }),
-        options: { validateSchemas: true },
       })
         .then(startStep)
         .map({

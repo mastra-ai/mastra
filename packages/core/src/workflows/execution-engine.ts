@@ -26,7 +26,7 @@ export interface ExecutionEngineOptions {
  */
 export abstract class ExecutionEngine extends MastraBase {
   protected mastra?: Mastra;
-  readonly options?: ExecutionEngineOptions;
+  public options?: ExecutionEngineOptions;
   constructor({ mastra, options }: { mastra?: Mastra; options?: ExecutionEngineOptions }) {
     super({ name: 'ExecutionEngine', component: RegisteredLogger.WORKFLOW });
     this.mastra = mastra;

@@ -878,6 +878,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           ),
           // Disable scorers must be explicitly set to false they are on by default
           scorers: disableScorers === false ? undefined : step.scorers,
+          validateSchemas: this.options?.validateSchemas,
         });
 
         if (step.scorers) {

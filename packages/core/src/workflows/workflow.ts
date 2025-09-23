@@ -369,7 +369,7 @@ export class Workflow<
   protected serializedStepFlow: SerializedStepFlowEntry[];
   protected executionEngine: ExecutionEngine;
   protected executionGraph: ExecutionGraph;
-  readonly options?: WorkflowOptions;
+  #options: WorkflowOptions;
   public retryConfig: {
     attempts?: number;
     delay?: number;
@@ -402,7 +402,7 @@ export class Workflow<
     this.#mastra = mastra;
     this.steps = {};
     this.stepDefs = steps;
-    this.options = options;
+    this.#options = options ?? { validateSchemas: false };
 
     if (!executionEngine) {
       // TODO: this should be configured using the Mastra class instance that's passed in
@@ -423,6 +423,10 @@ export class Workflow<
 
   get mastra() {
     return this.#mastra;
+  }
+
+  get options() {
+    return this.#options;
   }
 
   __registerMastra(mastra: Mastra) {
@@ -935,9 +939,9 @@ export class Workflow<
         serializedStepGraph: this.serializedStepGraph,
         disableScorers: options?.disableScorers,
         cleanup: () => this.#runs.delete(runIdToUse),
-        tracingPolicy: this.options?.tracingPolicy,
+        tracingPolicy: this.#options?.tracingPolicy,
         workflowSteps: this.steps,
-        validateSchemas: this.options?.validateSchemas,
+        validateSchemas: this.#options?.validateSchemas,
       });
 
     this.#runs.set(runIdToUse, run);
@@ -1013,6 +1017,7 @@ export class Workflow<
     runCount,
     tracingContext,
     writer,
+    validateSchemas,
   }: {
     runId?: string;
     inputData: z.infer<TInput>;
@@ -1036,8 +1041,21 @@ export class Workflow<
     runCount?: number;
     tracingContext?: TracingContext;
     writer?: WritableStream<ChunkType>;
+    validateSchemas?: boolean;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
+
+    if (validateSchemas) {
+      this.#options = {
+        ...(this.#options || {}),
+        validateSchemas,
+      };
+    }
+
+    this.executionEngine.options = {
+      ...(this.executionEngine.options || {}),
+      validateSchemas,
+    };
 
     const isResume = !!(resume?.steps && resume.steps.length > 0);
     const run = isResume ? await this.createRunAsync({ runId: resume.runId }) : await this.createRunAsync({ runId });
