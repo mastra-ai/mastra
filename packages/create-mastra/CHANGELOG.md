@@ -1,5 +1,13 @@
 # create-mastra
 
+## 0.13.2-alpha.3
+
+### Patch Changes
+
+- Add model fallback handlers and apis ([#7378](https://github.com/mastra-ai/mastra/pull/7378))
+
+- Fix DateTimePicker style issue ([#8106](https://github.com/mastra-ai/mastra/pull/8106))
+
 ## 0.13.2-alpha.2
 
 ## 0.13.2-alpha.1
