@@ -3,6 +3,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
+import type { AgentGenerateOptions } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import type { MastraMessageV1 } from '@mastra/core/memory';
 import { fastembed } from '@mastra/fastembed';
@@ -536,7 +537,7 @@ describe('Working Memory Tests', () => {
               enabled: true,
               schema: z.object({
                 city: z.string(),
-                temperature: z.number(),
+                temperature: z.number().describe('The number value of the temperature'),
               }),
             },
             lastMessages: 10,
@@ -635,7 +636,8 @@ describe('Working Memory Tests', () => {
               },
             },
           },
-        };
+          temperature: 0,
+        } satisfies AgentGenerateOptions<any, any>;
         await agent.generate('Now I am in Toronto and it is 80 degrees', generateOptions);
 
         await agent.generate('how are you doing?', generateOptions);
