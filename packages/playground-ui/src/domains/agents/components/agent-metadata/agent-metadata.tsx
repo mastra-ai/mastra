@@ -214,7 +214,7 @@ export const AgentMetadataScorerList = ({ entityId, entityType }: AgentMetadataS
     .filter(scorerKey => {
       const scorer = scorers[scorerKey];
       if (entityType === 'AGENT') {
-        return scorer.agentIds.includes(entityId);
+        return scorer.agentNames.includes(entityId);
       }
 
       return scorer.workflowIds.includes(entityId);
