@@ -648,17 +648,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
         });
       }
 
-      // Check if the inner stream encountered a tripwire and propagate it
       if (outputStream.tripwire) {
-        controller.enqueue({
-          type: 'tripwire',
-          runId,
-          from: ChunkFrom.AGENT,
-          payload: {
-            tripwireReason: outputStream.tripwireReason || 'Content blocked by output processor',
-          },
-        });
-
         // Set the step result to indicate abort
         runState.setState({
           stepResult: {
