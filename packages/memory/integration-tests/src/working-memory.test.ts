@@ -579,12 +579,12 @@ describe('Working Memory Tests', () => {
         await vector.turso.close();
       });
 
-      // TODO: This test is flakey, but it's blocking PR merges
-      it.skip('should accept valid working memory updates matching the schema', async () => {
+      it('should accept valid working memory updates matching the schema', async () => {
         const validMemory = { city: 'Austin', temperature: 85 };
         await agent.generate('I am in Austin and it is 85 degrees', {
           threadId: thread.id,
           resourceId,
+          temperature: 0,
         });
 
         const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
@@ -598,10 +598,12 @@ describe('Working Memory Tests', () => {
         await agent.generate('Now I am in Seattle and it is 60 degrees', {
           threadId: thread.id,
           resourceId,
+          temperature: 0,
         });
         await agent.generate('Now I am in Denver and it is 75 degrees', {
           threadId: thread.id,
           resourceId,
+          temperature: 0,
         });
 
         const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
