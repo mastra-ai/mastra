@@ -4,8 +4,7 @@ import { SequenceMatcher } from 'difflib';
 export function createTextualDifferenceScorer() {
   return createScorer({
     name: 'Textual Difference Scorer',
-    description:
-      'Calculate textual difference between input and output using sequence matching algorithms.',
+    description: 'Calculate textual difference between input and output using sequence matching algorithms.',
     type: 'agent',
   })
     .preprocess(async ({ run }) => {

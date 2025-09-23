@@ -11,8 +11,7 @@ export function createContentSimilarityScorer(
 ) {
   return createScorer({
     name: 'Content Similarity Scorer',
-    description:
-      'Calculates content similarity between input and output messages using string comparison algorithms.',
+    description: 'Calculates content similarity between input and output messages using string comparison algorithms.',
     type: 'agent',
   })
     .preprocess(async ({ run }) => {
