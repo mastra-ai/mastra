@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
 import type { StorageThreadType } from '@mastra/core/memory';
+import { describe, it, expect } from 'vitest';
 import { StoreMemoryUpstash } from './index';
 
 describe('StoreMemoryUpstash sorting functionality', () => {
