@@ -9,6 +9,7 @@ export interface ProviderConfig {
   apiKeyHeader?: string;
   name: string;
   models: string[];
+  docUrl?: string; // Optional documentation URL
 }
 
 export abstract class MastraModelGateway {

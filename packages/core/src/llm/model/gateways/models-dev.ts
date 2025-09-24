@@ -8,6 +8,7 @@ interface ModelsDevProviderInfo {
   env?: string[]; // Array of env var names
   api?: string; // Base API URL
   npm?: string; // NPM package name
+  doc?: string; // Documentation URL
 }
 
 interface ModelsDevResponse {
@@ -80,8 +81,8 @@ export class ModelsDevGateway extends MastraModelGateway {
       // Skip non-provider entries (if any)
       if (!providerInfo || typeof providerInfo !== 'object' || !providerInfo.models) continue;
 
-      // Normalize provider ID (convert hyphens to underscores for consistency)
-      const normalizedId = providerId.replace(/-/g, '_');
+      // Use provider ID as-is (keep hyphens for consistency)
+      const normalizedId = providerId;
 
       // Check if this is OpenAI-compatible based on npm package or overrides
       const isOpenAICompatible =
@@ -111,7 +112,8 @@ export class ModelsDevGateway extends MastraModelGateway {
         }
 
         // Get the API key env var from the provider info
-        const apiKeyEnvVar = providerInfo.env?.[0] || `${normalizedId.toUpperCase()}_API_KEY`;
+        // Convert hyphens to underscores for env var naming convention
+        const apiKeyEnvVar = providerInfo.env?.[0] || `${normalizedId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
 
         // Determine the API key header (special case for Anthropic)
         const apiKeyHeader = OPENAI_COMPATIBLE_OVERRIDES[normalizedId]?.apiKeyHeader || 'Authorization';
@@ -122,6 +124,7 @@ export class ModelsDevGateway extends MastraModelGateway {
           apiKeyHeader,
           name: providerInfo.name || providerId.charAt(0).toUpperCase() + providerId.slice(1),
           models: modelIds,
+          docUrl: providerInfo.doc, // Include documentation URL if available
         };
       } else {
         console.info(`Skipped provider ${providerInfo.name}`);
@@ -158,7 +161,7 @@ export class ModelsDevGateway extends MastraModelGateway {
     }
 
     // Check for custom base URL from env vars
-    const baseUrlEnvVar = `${provider.toUpperCase()}_BASE_URL`;
+    const baseUrlEnvVar = `${provider.toUpperCase().replace(/-/g, '_')}_BASE_URL`;
     const customBaseUrl = envVars[baseUrlEnvVar];
 
     return customBaseUrl || config.url;

@@ -128,6 +128,6 @@ export class NetlifyGateway extends MastraModelGateway {
       gemini: 'GEMINI_API_KEY',
     };
 
-    return mapping[provider] || `${provider.toUpperCase()}_API_KEY`;
+    return mapping[provider] || `${provider.toUpperCase().replace(/-/g, '_')}_API_KEY`;
   }
 }
