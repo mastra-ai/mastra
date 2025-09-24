@@ -13,6 +13,8 @@ import {
   useScorer,
   useScoresByScorerId,
   EntryListSkeleton,
+  getToNextEntryFn,
+  getToPreviousEntryFn,
 } from '@mastra/playground-ui';
 import { useParams, Link, useSearchParams } from 'react-router';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -129,33 +131,8 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
     setDialogIsOpen(true);
   };
 
-  const toNextItem = () => {
-    const currentIndex = scores.findIndex(item => item.id === selectedScoreId);
-    const nextItem = scores[currentIndex + 1];
-
-    if (nextItem) {
-      setSelectedScoreId(nextItem.id);
-    }
-  };
-
-  const toPreviousItem = () => {
-    const currentIndex = scores.findIndex(item => item.id === selectedScoreId);
-    const previousItem = scores[currentIndex - 1];
-
-    if (previousItem) {
-      setSelectedScoreId(previousItem.id);
-    }
-  };
-
-  const thereIsNextItem = () => {
-    const currentIndex = scores.findIndex(item => item.id === selectedScoreId);
-    return currentIndex < scores.length - 1;
-  };
-
-  const thereIsPreviousItem = () => {
-    const currentIndex = scores.findIndex(item => item.id === selectedScoreId);
-    return currentIndex > 0;
-  };
+  const toNextItem = getToNextEntryFn({ entries: scores, id: selectedScoreId, update: setSelectedScoreId });
+  const toPreviousItem = getToPreviousEntryFn({ entries: scores, id: selectedScoreId, update: setSelectedScoreId });
 
   return (
     <>
@@ -179,6 +156,7 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
               description={scorer?.scorer?.config?.description}
               icon={<GaugeIcon />}
             />
+
             <KeyValueList data={scoreInfo} LinkComponent={Link} isLoading={isLoadingAgents || isLoadingWorkflows} />
 
             <ScoresTools
@@ -192,21 +170,13 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
             {isScorerLoading ? (
               <EntryListSkeleton columns={scoresListColumns} />
             ) : (
-              <ScoresList scores={scores} pagination={pagination} onScoreClick={handleScoreClick} />
+              <ScoresList
+                scores={scores}
+                pagination={pagination}
+                onScoreClick={handleScoreClick}
+                onPageChange={setScoresPage}
+              />
             )}
-            {/* <EntryList
-              items={items}
-              selectedItemId={selectedScoreId}
-              onItemClick={handleOnListItem}
-              columns={listColumns}
-              isLoading={isScoresLoading}
-              page={scoresPage}
-              perPage={scoresPerPage}
-              hasMore={scoresHasMore}
-              total={scoresTotal || 0}
-              onNextPage={handleNextPage}
-              onPrevPage={handlePrevPage}
-            /> */}
           </div>
         </div>
       </MainContentLayout>
@@ -215,8 +185,8 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
         score={scores.find(s => s.id === selectedScoreId)!}
         isOpen={dialogIsOpen}
         onClose={() => setDialogIsOpen(false)}
-        onNext={thereIsNextItem() ? toNextItem : undefined}
-        onPrevious={thereIsPreviousItem() ? toPreviousItem : undefined}
+        onNext={toNextItem}
+        onPrevious={toPreviousItem}
         computeTraceLink={(traceId, spanId) => `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`}
       />
     </>

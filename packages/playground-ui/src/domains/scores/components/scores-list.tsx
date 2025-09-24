@@ -21,11 +21,10 @@ type ScoresToolsProps = {
     perPage: number;
     page: number;
   };
+  onPageChange?: (page: number) => void;
 };
 
-export function ScoresList({ scores, pagination }: ScoresToolsProps) {
-  const [scoresPage, setScoresPage] = useState<number>(0);
-
+export function ScoresList({ scores, pagination, onScoreClick, onPageChange }: ScoresToolsProps) {
   if (!scores) {
     return null;
   }
@@ -48,13 +47,13 @@ export function ScoresList({ scores, pagination }: ScoresToolsProps) {
 
   const handleNextPage = () => {
     if (scoresHasMore) {
-      setScoresPage(prev => prev + 1);
+      onPageChange?.(pagination.page + 1);
     }
   };
 
   const handlePrevPage = () => {
-    if (scoresPage > 0) {
-      setScoresPage(prev => prev - 1);
+    if (pagination?.page && pagination.page > 0) {
+      onPageChange?.(pagination.page - 1);
     }
   };
 
@@ -62,10 +61,10 @@ export function ScoresList({ scores, pagination }: ScoresToolsProps) {
     <EntryList>
       <EntryListTrim>
         <EntryListHeader columns={scoresListColumns} />
-        <EntryListEntries entries={entries} columns={scoresListColumns} />
+        <EntryListEntries entries={entries} columns={scoresListColumns} onEntryClick={onScoreClick} />
       </EntryListTrim>
       <EntryListPagination
-        currentPage={scoresPage}
+        currentPage={pagination?.page || 0}
         onNextPage={handleNextPage}
         onPrevPage={handlePrevPage}
         hasMore={scoresHasMore}
