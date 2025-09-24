@@ -1,7 +1,6 @@
 import {
   Breadcrumb,
   Crumb,
-  EntryList,
   Header,
   MainContentLayout,
   PageHeader,
@@ -145,6 +144,7 @@ export default function Scorer() {
       id: score.id,
       date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
       time: format(createdAtDate, 'h:mm:ss aaa'),
+      // @ts-expect-error
       input: score?.input?.inputMessages?.[0]?.content || '',
       entityId: score.entityId,
       score: score.score,
@@ -223,6 +223,7 @@ export default function Scorer() {
               icon={<GaugeIcon />}
             />
             <KeyValueList data={scoreInfo} LinkComponent={Link} isLoading={isLoadingAgents || isLoadingWorkflows} />
+
             <ScoresTools
               selectedEntity={selectedEntityOption}
               entityOptions={entityOptions}
@@ -230,6 +231,7 @@ export default function Scorer() {
               onReset={() => setSearchParams({ entity: 'all' })}
               isLoading={isScoresLoading || isLoadingAgents || isLoadingWorkflows}
             />
+
             <ScoresList scores={scores} isLoading={isScoresLoading} />
             {/* <EntryList
               items={items}

@@ -1,10 +1,10 @@
 import { cn } from '@/lib/utils';
 import React from 'react';
 
-type EntryListEdgingProps = {
+type EntryListTrimProps = {
   children: React.ReactNode;
 };
 
-export function EntryListEdging({ children }: EntryListEdgingProps) {
+export function EntryListTrim({ children }: EntryListTrimProps) {
   return <div className={cn('rounded-t-lg border border-border1')}>{children}</div>;
 }

@@ -98,7 +98,7 @@ export function EntryList({
               return (
                 <EntryListEntry
                   key={item.id}
-                  item={item}
+                  entry={item}
                   selectedItemId={selectedItemId}
                   onClick={isLoading ? undefined : onItemClick}
                   columns={columns}

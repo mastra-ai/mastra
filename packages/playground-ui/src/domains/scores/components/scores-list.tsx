@@ -1,10 +1,10 @@
 import { ClientScoreRowData } from '@mastra/client-js';
 import {
   EntryList,
-  EntryListEdging,
-  EntryListEntries,
+  EntryListTrim,
   EntryListHeader,
-  EntryListEntriesSkeleton,
+  EntryListSkeleton,
+  EntryListEntries,
 } from '@/components/ui/elements';
 import { format, isToday } from 'date-fns';
 
@@ -34,21 +34,23 @@ export function ScoresList({ scores, isLoading }: ScoresToolsProps) {
       id: score.id,
       date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
       time: format(createdAtDate, 'h:mm:ss aaa'),
+      // @ts-expect-error
       input: score?.input?.inputMessages?.[0]?.content || '',
       entityId: score.entityId,
       score: score.score,
     };
   });
 
+  if (true) {
+    return <EntryListSkeleton columns={entryListColumns} />;
+  }
+
   return (
     <EntryList>
-      <EntryListEdging>
+      <EntryListTrim>
         <EntryListHeader columns={entryListColumns} />
-        <EntryListEntriesSkeleton columns={entryListColumns} />
-
-        {/* {isLoading && <EntryListEntriesSkeleton columns={entryListColumns} />}
-        <EntryListEntries entries={entries} columns={entryListColumns} /> */}
-      </EntryListEdging>
+        <EntryListEntries entries={entries} columns={entryListColumns} />
+      </EntryListTrim>
     </EntryList>
   );
 }

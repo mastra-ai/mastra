@@ -1,20 +1,21 @@
 import { cn } from '@/lib/utils';
-import { Column, getColumnTemplate } from './shared';
+import { getColumnTemplate } from './shared';
+import { type Column } from './types';
 
 type EntryListEntryProps = {
-  item: any;
+  entry?: any;
+  children?: React.ReactNode;
   selectedItemId?: string;
   onClick?: (itemId: string) => void;
-  children?: React.ReactNode;
   columns?: Column[];
   isLoading?: boolean;
 };
 
-export function EntryListEntry({ item, selectedItemId, onClick, children, columns, isLoading }: EntryListEntryProps) {
-  const isSelected = selectedItemId === item.id;
+export function EntryListEntry({ entry, selectedItemId, onClick, children, columns, isLoading }: EntryListEntryProps) {
+  const isSelected = selectedItemId && selectedItemId === entry?.id;
 
   const handleClick = () => {
-    return onClick && onClick(item?.id);
+    return onClick && onClick(entry?.id);
   };
 
   return (
@@ -26,10 +27,10 @@ export function EntryListEntry({ item, selectedItemId, onClick, children, column
       <button
         onClick={handleClick}
         className={cn('grid w-full px-[1.5rem] gap-[2rem] text-left items-center min-h-[3rem]', {
-          'hover:bg-surface5': !isLoading,
+          'hover:bg-surface5': entry,
         })}
         style={{ gridTemplateColumns: getColumnTemplate(columns) }}
-        disabled={isLoading}
+        disabled={!entry}
       >
         {children}
       </button>
