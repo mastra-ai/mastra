@@ -353,12 +353,15 @@ onKeyDown={e => {
                   setProviderSearch(e.target.value);
                   setHighlightedProviderIndex(0);
                 }}
-                onClick={() => {
+onClick={e => {
+                  e.preventDefault(); // Prevent default click behavior
                   // Only open if not already open (prevents flashing)
-                  setShowProviderSuggestions(true);
-                  // Find the index of the currently selected provider
-                  const currentIndex = filteredProviders.findIndex(p => p.id === currentModelProvider);
-                  setHighlightedProviderIndex(currentIndex >= 0 ? currentIndex : 0);
+                  if (!showProviderSuggestions) {
+                    setShowProviderSuggestions(true);
+                    // Find the index of the currently selected provider
+                    const currentIndex = filteredProviders.findIndex(p => p.id === currentModelProvider);
+                    setHighlightedProviderIndex(currentIndex >= 0 ? currentIndex : 0);
+                  }
                 }}
                 placeholder="Search providers..."
               />
