@@ -5,7 +5,7 @@ type getToEntryFnParams = {
 };
 
 export function getToNextEntryFn({ entries, id, update }: getToEntryFnParams) {
-  const currentIndex = entries.findIndex(item => item.id === id);
+  const currentIndex = entries.findIndex(entry => entry.id === id);
   const thereIsNextItem = currentIndex < entries.length - 1;
 
   if (thereIsNextItem) {
@@ -19,7 +19,7 @@ export function getToNextEntryFn({ entries, id, update }: getToEntryFnParams) {
 }
 
 export function getToPreviousEntryFn({ entries, id, update }: getToEntryFnParams) {
-  const currentIndex = entries.findIndex(item => item.id === id);
+  const currentIndex = entries.findIndex(entry => entry.id === id);
   const thereIsPreviousItem = currentIndex > 0;
 
   if (thereIsPreviousItem) {

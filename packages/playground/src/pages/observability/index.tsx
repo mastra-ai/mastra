@@ -11,6 +11,8 @@ import {
   TraceDialog,
   parseError,
   EntryListSkeleton,
+  getToNextEntryFn,
+  getToPreviousEntryFn,
 } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
@@ -131,36 +133,19 @@ export default function Observability() {
     setDialogIsOpen(true);
   };
 
-  const toNextItem = () => {
-    const currentIndex = aiTraces.findIndex(item => item.traceId === selectedTraceId);
-    const nextItem = aiTraces[currentIndex + 1];
-
-    if (nextItem) {
-      setSelectedTraceId(nextItem.traceId);
-    }
-  };
-
-  const toPreviousItem = () => {
-    const currentIndex = aiTraces.findIndex(item => item.traceId === selectedTraceId);
-    const previousItem = aiTraces[currentIndex - 1];
-
-    if (previousItem) {
-      setSelectedTraceId(previousItem.traceId);
-    }
-  };
-
-  const thereIsNextItem = () => {
-    const currentIndex = aiTraces.findIndex(item => item.traceId === selectedTraceId);
-    return currentIndex < aiTraces.length - 1;
-  };
-
-  const thereIsPreviousItem = () => {
-    const currentIndex = aiTraces.findIndex(item => item.traceId === selectedTraceId);
-    return currentIndex > 0;
-  };
-
   const error = isAiTracesError ? parseError(aiTracesError) : undefined;
   const filtersApplied = selectedEntityOption?.value !== 'all' || selectedDateFrom || selectedDateTo;
+
+  const toNextItem = getToNextEntryFn({
+    entries: aiTraces.map(item => ({ id: item.traceId })),
+    id: selectedTraceId,
+    update: setSelectedTraceId,
+  });
+  const toPreviousItem = getToPreviousEntryFn({
+    entries: aiTraces.map(item => ({ id: item.traceId })),
+    id: selectedTraceId,
+    update: setSelectedTraceId,
+  });
 
   return (
     <>
@@ -212,8 +197,8 @@ export default function Observability() {
         traceDetails={aiTraces.find(t => t.traceId === selectedTraceId)}
         isOpen={dialogIsOpen}
         onClose={() => setDialogIsOpen(false)}
-        onNext={thereIsNextItem() ? toNextItem : undefined}
-        onPrevious={thereIsPreviousItem() ? toPreviousItem : undefined}
+        onNext={toNextItem}
+        onPrevious={toPreviousItem}
         isLoadingSpans={isLoadingAiTrace}
         onScorerTriggered={scorerName => {
           setDialogIsOpen(false);
