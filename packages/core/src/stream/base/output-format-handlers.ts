@@ -574,63 +574,26 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
       }
 
       const finalResult = await handler.validateAndTransformFinal(accumulatedText, previousObject);
+
       if (!finalResult.success) {
         controller.enqueue({
           from: ChunkFrom.AGENT,
           runId: currentRunId ?? '',
           type: 'error',
           payload: {
-            error: finalResult.error,
+            error: new MastraError(
+              {
+                domain: 'AGENT',
+                category: 'SYSTEM',
+                id: 'OUTPUT_SCHEMA_VALIDATION_FAILED',
+                text: finalResult.error.message,
+              },
+              { cause: finalResult.error },
+            ),
           },
         });
         return;
       }
-
-      // const mastraError = new MastraError({
-      //   domain: 'AGENT',
-      //   category: 'SYSTEM',
-      //   id: 'OUTPUT_SCHEMA_VALIDATION_FAILED',
-      //   text: finalResult.error.message,
-      //   // details: {
-      //   //   message: finalResult.error.message,
-      //   // },
-      // });
-
-      //   try {
-      //     const mastraError = new MastraError({
-      //       domain: 'AGENT',
-      //       category: 'SYSTEM',
-      //       id: 'OUTPUT_SCHEMA_VALIDATION_FAILED',
-      //       text: finalResult.error.message,
-      //       // details: {
-      //       //   message: finalResult.error.message,
-      //       // },
-      //     });
-
-      //     // console.log('mastraError', mastraError);
-
-      //     controller.enqueue({
-      //       from: ChunkFrom.AGENT,
-      //       runId: currentRunId ?? '',
-      //       type: 'object-validation-error',
-      //       payload: {
-      //         error: mastraError,
-      //       },
-      //     });
-      //   } catch (err) {
-      //     console.log('Error creating MastraError:', err);
-      //     // Fallback: enqueue with the original error
-      //     controller.enqueue({
-      //       from: ChunkFrom.AGENT,
-      //       runId: currentRunId ?? '',
-      //       type: 'object-validation-error',
-      //       payload: {
-      //         error: finalResult.error,
-      //       },
-      //     });
-      //   }
-      //   return;
-      // }
 
       controller.enqueue({
         from: ChunkFrom.AGENT,

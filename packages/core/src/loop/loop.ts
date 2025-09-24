@@ -2,7 +2,7 @@ import { generateId } from 'ai-v5';
 import type { ToolSet } from 'ai-v5';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { ConsoleLogger } from '../logger';
-import { MastraModelOutput } from '../stream/base/output';
+import { createDestructurableOutput, MastraModelOutput } from '../stream/base/output';
 import type { OutputSchema } from '../stream/base/schema';
 import { getRootSpan } from './telemetry';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
@@ -110,7 +110,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
 
   const stream = workflowLoopStream(workflowLoopProps);
 
-  return new MastraModelOutput({
+  const output = new MastraModelOutput({
     model: {
       modelId: firstModel.model.modelId,
       provider: firstModel.model.provider,
@@ -134,4 +134,6 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       tracingContext: { currentSpan: llmAISpan },
     },
   });
+
+  return createDestructurableOutput(output);
 }
