@@ -26,6 +26,7 @@ import type {
   StepResult,
   StepSuccess,
 } from './types';
+import { isEmpty } from 'radash';
 
 export type ExecutionContext = {
   workflowId: string;
@@ -716,9 +717,29 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const resumeTime = resume?.steps[0] === step.id ? Date.now() : undefined;
     const stepCallId = randomUUID();
 
+    let inputData = prevOutput;
+
+    let validationError: Error | undefined;
+
+    if (this.options?.validateInputs) {
+      const inputSchema = step.inputSchema;
+
+      const validatedInput = await inputSchema.safeParseAsync(prevOutput);
+
+      if (!validatedInput.success) {
+        const errorMessages = validatedInput.error.errors
+          .map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`)
+          ?.join('\n');
+
+        validationError = new Error('Step input validation failed: \n' + errorMessages);
+      } else {
+        inputData = isEmpty(validatedInput.data) ? prevOutput : validatedInput.data;
+      }
+    }
+
     const stepInfo = {
       ...stepResults[step.id],
-      ...(resume?.steps[0] === step.id ? { resumePayload: resume?.resumePayload } : { payload: prevOutput }),
+      ...(resume?.steps[0] === step.id ? { resumePayload: resume?.resumePayload } : { payload: inputData }),
       ...(startTime ? { startedAt: startTime } : {}),
       ...(resumeTime ? { resumedAt: resumeTime } : {}),
       status: 'running',
@@ -727,7 +748,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const stepAISpan = tracingContext.currentSpan?.createChildSpan({
       name: `workflow step: '${step.id}'`,
       type: AISpanType.WORKFLOW_STEP,
-      input: prevOutput,
+      input: inputData,
       attributes: {
         stepId: step.id,
       },
@@ -817,17 +838,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         let suspended: { payload: any } | undefined;
         let bailed: { payload: any } | undefined;
 
-        if (this.options?.validateInputs) {
-          const inputSchema = step.inputSchema;
-
-          const validatedInput = await inputSchema.safeParseAsync(prevOutput);
-
-          if (!validatedInput.success) {
-            const errorMessages = validatedInput.error.errors
-              .map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`)
-              ?.join('\n');
-            throw new Error('Step input validation failed: \n' + errorMessages);
-          }
+        if (validationError) {
+          throw validationError;
         }
 
         const result = await runStep({
@@ -836,7 +848,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           workflowId,
           mastra: this.mastra ? wrapMastra(this.mastra, { currentSpan: stepAISpan }) : undefined,
           runtimeContext,
-          inputData: prevOutput,
+          inputData,
           runCount: this.getOrGenerateRunCount(step.id),
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           tracingContext: { currentSpan: stepAISpan },
@@ -885,7 +897,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           await this.runScorers({
             scorers: step.scorers,
             runId,
-            input: prevOutput,
+            input: inputData,
             output: result,
             workflowId,
             stepId: step.id,

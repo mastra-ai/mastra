@@ -1384,7 +1384,7 @@ export class Run<
     tracingOptions,
     format,
   }: {
-    inputData?: z.infer<TInput>;
+    inputData?: z.input<TInput>;
     runtimeContext?: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
@@ -1407,6 +1407,37 @@ export class Run<
 
     const traceId = getValidTraceId(workflowAISpan);
 
+    const firstEntry = this.executionGraph.steps[0];
+
+    let inputDataToUse = inputData;
+
+    if (firstEntry && this.validateInputs) {
+      let inputSchema: z.ZodType<any> | undefined;
+
+      if (firstEntry.type === 'step' || firstEntry.type === 'foreach' || firstEntry.type === 'loop') {
+        const step = firstEntry.step;
+        inputSchema = step.inputSchema;
+      } else if (firstEntry.type === 'conditional' || firstEntry.type === 'parallel') {
+        const firstStep = firstEntry.steps[0];
+        if (firstStep && firstStep.type === 'step') {
+          inputSchema = firstStep.step.inputSchema;
+        }
+      }
+
+      if (inputSchema) {
+        const validatedInputData = await inputSchema.safeParseAsync(inputData);
+
+        if (!validatedInputData.success) {
+          throw new Error(
+            'Invalid input data: \n' +
+              validatedInputData.error.errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+          );
+        }
+
+        inputDataToUse = validatedInputData.data;
+      }
+    }
+
     const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
@@ -1414,7 +1445,7 @@ export class Run<
       disableScorers: this.disableScorers,
       graph: this.executionGraph,
       serializedStepGraph: this.serializedStepGraph,
-      input: inputData,
+      input: inputDataToUse,
       emitter: {
         emit: async (event: string, data: any) => {
           this.emitter.emit(event, data);
@@ -1457,7 +1488,7 @@ export class Run<
     tracingContext,
     tracingOptions,
   }: {
-    inputData?: z.infer<TInput>;
+    inputData?: z.input<TInput>;
     runtimeContext?: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
@@ -1484,7 +1515,7 @@ export class Run<
     onChunk,
     tracingContext,
   }: {
-    inputData?: z.infer<TInput>;
+    inputData?: z.input<TInput>;
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     onChunk?: (chunk: StreamEvent) => Promise<unknown>;
@@ -1630,7 +1661,7 @@ export class Run<
   async streamAsync({
     inputData,
     runtimeContext,
-  }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): Promise<{
+  }: { inputData?: z.input<TInput>; runtimeContext?: RuntimeContext } = {}): Promise<{
     stream: ReadableStream<StreamEvent>;
     getWorkflowState: () => Promise<WorkflowResult<TInput, TOutput, TSteps>>;
   }> {
@@ -1649,7 +1680,7 @@ export class Run<
     format,
     closeOnSuspend = true,
   }: {
-    inputData?: z.infer<TInput>;
+    inputData?: z.input<TInput>;
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     format?: 'aisdk' | 'mastra' | undefined;
@@ -1759,7 +1790,7 @@ export class Run<
     tracingContext,
     format,
   }: {
-    resumeData?: z.infer<TInput>;
+    resumeData?: z.input<TInput>;
     step?:
       | Step<string, any, any, any, any, TEngineType>
       | [...Step<string, any, any, any, any, TEngineType>[], Step<string, any, any, any, any, TEngineType>]
@@ -1923,7 +1954,7 @@ export class Run<
   }
 
   async resume<TResumeSchema extends z.ZodType<any>>(params: {
-    resumeData?: z.infer<TResumeSchema>;
+    resumeData?: z.input<TResumeSchema>;
     step?:
       | Step<string, any, any, TResumeSchema, any, TEngineType>
       | [...Step<string, any, any, any, any, TEngineType>[], Step<string, any, any, TResumeSchema, any, TEngineType>]
@@ -1939,7 +1970,7 @@ export class Run<
   }
 
   protected async _resume<TResumeSchema extends z.ZodType<any>>(params: {
-    resumeData?: z.infer<TResumeSchema>;
+    resumeData?: z.input<TResumeSchema>;
     step?:
       | Step<string, any, any, TResumeSchema, any, TEngineType>
       | [...Step<string, any, any, any, any, TEngineType>[], Step<string, any, any, TResumeSchema, any, TEngineType>]
@@ -2006,6 +2037,8 @@ export class Run<
       }
     }
 
+    let resumeDataToUse = params.resumeData;
+
     if (!params.runCount) {
       if (snapshot.status !== 'suspended') {
         throw new Error('This workflow run was not suspended');
@@ -2030,6 +2063,8 @@ export class Run<
                 .join('\n'),
           );
         }
+
+        resumeDataToUse = validatedResumeData.data;
       }
 
       if (!isStepSuspended) {
@@ -2059,7 +2094,7 @@ export class Run<
     const workflowAISpan = getOrCreateSpan({
       type: AISpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
-      input: params.resumeData,
+      input: resumeDataToUse,
       attributes: {
         workflowId: this.workflowId,
       },
@@ -2081,7 +2116,7 @@ export class Run<
         resume: {
           steps,
           stepResults,
-          resumePayload: params.resumeData,
+          resumePayload: resumeDataToUse,
           // @ts-ignore
           resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
         },
