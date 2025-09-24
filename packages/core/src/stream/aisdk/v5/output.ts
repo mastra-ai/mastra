@@ -1,7 +1,7 @@
 import type { ReadableStream } from 'stream/web';
 import { TransformStream } from 'stream/web';
 import { getErrorMessage } from '@ai-sdk/provider-v5';
-import { consumeStream, createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from 'ai-v5';
+import { createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from 'ai-v5';
 import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
 import type z from 'zod';
 import type { MessageList } from '../../../agent/message-list';
@@ -144,21 +144,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   }
 
   async consumeStream(options?: ConsumeStreamOptions): Promise<void> {
-    try {
-      await consumeStream({
-        stream: (this.fullStream as any).pipeThrough(
-          new TransformStream({
-            transform(chunk, controller) {
-              controller.enqueue(chunk);
-            },
-          }),
-        ) as any,
-        onError: options?.onError,
-      });
-    } catch (error) {
-      console.error('consumeStream error', error);
-      options?.onError?.(error);
-    }
+    await this.#modelOutput.consumeStream(options);
   }
 
   get sources() {
