@@ -47,7 +47,7 @@ export abstract class ScoresStorage extends MastraBase {
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
 
-  getScoresBySpan({
+  async getScoresBySpan({
     traceId,
     spanId,
     pagination: _pagination,
