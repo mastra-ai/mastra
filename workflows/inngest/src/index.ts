@@ -9,7 +9,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool, ToolStream } from '@mastra/core/tools';
-import { Workflow, Run, DefaultExecutionEngine } from '@mastra/core/workflows';
+import { getStepResult, Workflow, Run, DefaultExecutionEngine, validateStepInput } from '@mastra/core/workflows';
 import type {
   ExecuteFunction,
   ExecutionContext,
@@ -27,10 +27,11 @@ import type {
   StreamEvent,
   ChunkType,
   ExecutionEngineOptions,
+  StepWithComponent,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
-import type { Inngest, BaseContext, InngestFunction } from 'inngest';
+import type { Inngest, BaseContext, InngestFunction, RegisterOptions } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
 import { z } from 'zod';
 
@@ -66,6 +67,7 @@ export function serve({
   mastra,
   inngest,
   functions: userFunctions = [],
+  registerOptions,
 }: {
   mastra: Mastra;
   inngest: Inngest;
@@ -73,6 +75,7 @@ export function serve({
    * Optional array of additional functions to serve and register with Inngest.
    */
   functions?: InngestFunction.Like[];
+  registerOptions?: RegisterOptions;
 }): ReturnType<typeof inngestServe> {
   const wfs = mastra.getWorkflows();
   const workflowFunctions = Array.from(
@@ -88,6 +91,7 @@ export function serve({
   );
 
   return inngestServe({
+    ...registerOptions,
     client: inngest,
     functions: [...workflowFunctions, ...userFunctions],
   });
@@ -117,6 +121,7 @@ export class InngestRun<
         delay?: number;
       };
       cleanup?: () => void;
+      workflowSteps: Record<string, StepWithComponent>;
     },
     inngest: Inngest,
   ) {
@@ -210,10 +215,12 @@ export class InngestRun<
       },
     });
 
+    const inputDataToUse = await this._validateInput(inputData);
+
     const eventOutput = await this.inngest.send({
       name: `workflow.${this.workflowId}`,
       data: {
-        inputData,
+        inputData: inputDataToUse,
         runId: this.runId,
         resourceId: this.resourceId,
       },
@@ -273,17 +280,21 @@ export class InngestRun<
       runId: this.runId,
     });
 
+    const suspendedStep = this.workflowSteps[steps?.[0] ?? ''];
+
+    const resumeDataToUse = await this._validateResumeData(params.resumeData, suspendedStep);
+
     const eventOutput = await this.inngest.send({
       name: `workflow.${this.workflowId}`,
       data: {
-        inputData: params.resumeData,
+        inputData: resumeDataToUse,
         runId: this.runId,
         workflowId: this.workflowId,
         stepResults: snapshot?.context as any,
         resume: {
           steps,
           stepResults: snapshot?.context as any,
-          resumePayload: params.resumeData,
+          resumePayload: resumeDataToUse,
           // @ts-ignore
           resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
         },
@@ -494,6 +505,7 @@ export class InngestWorkflow<
           mastra: this.#mastra,
           retryConfig: this.retryConfig,
           cleanup: () => this.runs.delete(runIdToUse),
+          workflowSteps: this.steps,
         },
         this.inngest,
       );
@@ -661,10 +673,12 @@ export function createStep<
 
 export function createStep<
   TSchemaIn extends z.ZodType<any>,
+  TSuspendSchema extends z.ZodType<any>,
+  TResumeSchema extends z.ZodType<any>,
   TSchemaOut extends z.ZodType<any>,
-  TContext extends ToolExecutionContext<TSchemaIn>,
+  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema>,
 >(
-  tool: Tool<TSchemaIn, TSchemaOut, TContext> & {
+  tool: Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
     inputSchema: TSchemaIn;
     outputSchema: TSchemaOut;
     execute: (context: TContext) => Promise<any>;
@@ -778,12 +792,14 @@ export function createStep<
       id: params.id,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
-      execute: async ({ inputData, mastra, runtimeContext, tracingContext }) => {
+      execute: async ({ inputData, mastra, runtimeContext, tracingContext, suspend, resumeData }) => {
         return params.execute({
           context: inputData,
           mastra: wrapMastra(mastra, tracingContext),
           runtimeContext,
           tracingContext,
+          suspend,
+          resumeData,
         });
       },
     };
@@ -1057,19 +1073,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             currentSpan: sleepSpan,
           },
           getInitData: () => stepResults?.input as any,
-          getStepResult: (step: any) => {
-            if (!step?.id) {
-              return null;
-            }
-
-            const result = stepResults[step.id];
-            if (result?.status === 'success') {
-              return result.output;
-            }
-
-            return null;
-          },
-
+          getStepResult: getStepResult.bind(this, stepResults),
           // TODO: this function shouldn't have suspend probably?
           suspend: async (_suspendPayload: any): Promise<any> => {},
           bail: () => {},
@@ -1175,19 +1179,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             currentSpan: sleepUntilSpan,
           },
           getInitData: () => stepResults?.input as any,
-          getStepResult: (step: any) => {
-            if (!step?.id) {
-              return null;
-            }
-
-            const result = stepResults[step.id];
-            if (result?.status === 'success') {
-              return result.output;
-            }
-
-            return null;
-          },
-
+          getStepResult: getStepResult.bind(this, stepResults),
           // TODO: this function shouldn't have suspend probably?
           suspend: async (_suspendPayload: any): Promise<any> => {},
           bail: () => {},
@@ -1289,6 +1281,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       tracingPolicy: this.options?.tracingPolicy,
     });
 
+    const { inputData, validationError } = await validateStepInput({
+      prevOutput,
+      step,
+      validateInputs: this.options?.validateInputs ?? false,
+    });
+
     const startedAt = await this.inngestStep.run(
       `workflow.${executionContext.workflowId}.run.${executionContext.runId}.step.${step.id}.running_ev`,
       async () => {
@@ -1320,7 +1318,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           payload: {
             id: step.id,
             status: 'running',
-            payload: prevOutput,
+            payload: inputData,
             startedAt,
           },
         });
@@ -1345,7 +1343,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
           function: step.getFunction(),
           data: {
-            inputData: prevOutput,
+            inputData,
             runId: runId,
             resume: {
               runId: runId,
@@ -1363,7 +1361,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
           function: step.getFunction(),
           data: {
-            inputData: prevOutput,
+            inputData,
           },
         })) as any;
         result = invokeResp.result;
@@ -1538,25 +1536,22 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       let bailed: { payload: any } | undefined;
 
       try {
+        if (validationError) {
+          throw validationError;
+        }
+
         const result = await step.execute({
           runId: executionContext.runId,
           mastra: this.mastra!,
           runtimeContext,
           writableStream,
-          inputData: prevOutput,
+          inputData,
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           tracingContext: {
             currentSpan: stepAISpan,
           },
           getInitData: () => stepResults?.input as any,
-          getStepResult: (step: any) => {
-            const result = stepResults[step.id];
-            if (result?.status === 'success') {
-              return result.output;
-            }
-
-            return null;
-          },
+          getStepResult: getStepResult.bind(this, stepResults),
           suspend: async (suspendPayload: any) => {
             executionContext.suspendedPaths[step.id] = executionContext.executionPath;
             suspended = { payload: suspendPayload };
@@ -1583,14 +1578,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           output: result,
           startedAt,
           endedAt,
-          payload: prevOutput,
+          payload: inputData,
           resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
           resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
         };
       } catch (e) {
         execResults = {
           status: 'failed',
-          payload: prevOutput,
+          payload: inputData,
           error: e instanceof Error ? e.message : String(e),
           endedAt: Date.now(),
           startedAt,
@@ -1603,14 +1598,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         execResults = {
           status: 'suspended',
           suspendedPayload: suspended.payload,
-          payload: prevOutput,
+          payload: inputData,
           suspendedAt: Date.now(),
           startedAt,
           resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
           resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
         };
       } else if (bailed) {
-        execResults = { status: 'bailed', output: bailed.payload, payload: prevOutput, endedAt: Date.now(), startedAt };
+        execResults = { status: 'bailed', output: bailed.payload, payload: inputData, endedAt: Date.now(), startedAt };
       }
 
       if (execResults.status === 'failed') {
@@ -1675,7 +1670,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           await this.runScorers({
             scorers: step.scorers,
             runId: executionContext.runId,
-            input: prevOutput,
+            input: inputData,
             output: stepRes.result,
             workflowId: executionContext.workflowId,
             stepId: step.id,
@@ -1823,19 +1818,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                   currentSpan: evalSpan,
                 },
                 getInitData: () => stepResults?.input as any,
-                getStepResult: (step: any) => {
-                  if (!step?.id) {
-                    return null;
-                  }
-
-                  const result = stepResults[step.id];
-                  if (result?.status === 'success') {
-                    return result.output;
-                  }
-
-                  return null;
-                },
-
+                getStepResult: getStepResult.bind(this, stepResults),
                 // TODO: this function shouldn't have suspend probably?
                 suspend: async (_suspendPayload: any) => {},
                 bail: () => {},

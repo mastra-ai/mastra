@@ -156,7 +156,7 @@ export class Agent<
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
-  #workflows?: DynamicArgument<Record<string, Workflow>>;
+  #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
   #defaultGenerateOptions: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptions: DynamicArgument<AgentStreamOptions>;
   #defaultVNextStreamOptions: DynamicArgument<AgentExecutionOptions<any>>;
@@ -429,7 +429,7 @@ export class Agent<
 
   public async getWorkflows({
     runtimeContext = new RuntimeContext(),
-  }: { runtimeContext?: RuntimeContext } = {}): Promise<Record<string, Workflow>> {
+  }: { runtimeContext?: RuntimeContext } = {}): Promise<Record<string, Workflow<any, any, any, any, any, any>>> {
     let workflowRecord;
     if (typeof this.#workflows === 'function') {
       workflowRecord = await Promise.resolve(this.#workflows({ runtimeContext, mastra: this.#mastra }));
@@ -1506,6 +1506,7 @@ export class Agent<
           model: await this.getModel({ runtimeContext }),
           writableStream,
           tracingPolicy: this.#options?.tracingPolicy,
+          requireApproval: (tool as any).requireApproval,
         };
         return [k, makeCoreTool(tool, options)];
       }),
@@ -2508,9 +2509,9 @@ export class Agent<
     const scorerOutput: ScorerRunOutputForAgent = messageList.getPersisted.response.ui();
 
     if (Object.keys(scorers || {}).length > 0) {
-      for (const [id, scorerObject] of Object.entries(scorers)) {
+      for (const [_id, scorerObject] of Object.entries(scorers)) {
         runScorer({
-          scorerId: overrideScorers ? scorerObject.scorer.name : id,
+          scorerId: overrideScorers ? scorerObject.scorer.name : scorerObject.scorer.name,
           scorerObject: scorerObject,
           runId,
           input: scorerInput,
@@ -2977,11 +2978,10 @@ export class Agent<
     return finalOnFinish;
   }
 
-  async #execute<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' | undefined = undefined>({
-    methodType,
-    format = 'mastra',
-    ...options
-  }: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
+  async #execute<
+    OUTPUT extends OutputSchema | undefined = undefined,
+    FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
+  >({ methodType, format = 'mastra', resumeContext, ...options }: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
     const runtimeContext = options.runtimeContext || new RuntimeContext();
     const threadFromArgs = resolveThreadIdFromArgs({ threadId: options.threadId, memory: options.memory });
 
@@ -3072,6 +3072,7 @@ export class Agent<
       executeOnFinish: this.#executeOnFinish.bind(this),
       outputProcessors: this.#outputProcessors,
       llm,
+      getTelemetry: this.#mastra?.getTelemetry?.bind(this.#mastra),
     };
 
     // Create the workflow with all necessary context
@@ -3090,6 +3091,8 @@ export class Agent<
       memory,
       saveQueueManager,
       returnScorerData: options.returnScorerData,
+      requireToolApproval: options.requireToolApproval,
+      resumeContext,
     });
 
     const run = await executionWorkflow.createRunAsync();
@@ -3314,14 +3317,7 @@ export class Agent<
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
   > {
     const result = await this.streamVNext(messages, options);
-
-    if (result.tripwire) {
-      return result as unknown as FORMAT extends 'aisdk'
-        ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
-        : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
-    }
-
-    let fullOutput = await result.getFullOutput();
+    const fullOutput = await result.getFullOutput();
 
     const error = fullOutput.error;
 
@@ -3329,7 +3325,7 @@ export class Agent<
       throw error;
     }
 
-    return fullOutput as unknown as FORMAT extends 'aisdk'
+    return fullOutput as FORMAT extends 'aisdk'
       ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
   }
@@ -3441,6 +3437,102 @@ export class Agent<
     return result.result as unknown as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
   }
 
+  async resumeStreamVNext<
+    OUTPUT extends OutputSchema | undefined = undefined,
+    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
+  >(
+    resumeContext: any,
+    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
+  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
+    const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
+      runtimeContext: streamOptions?.runtimeContext,
+    });
+
+    let mergedStreamOptions = {
+      ...defaultStreamOptions,
+      ...streamOptions,
+      onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
+    };
+
+    // Map structuredOutput to output when maxSteps is explicitly set to 1
+    // This allows the new structuredOutput API to use the existing output implementation
+    let modelOverride: MastraLanguageModel | undefined;
+    if (mergedStreamOptions.structuredOutput && mergedStreamOptions.maxSteps === 1) {
+      // If structuredOutput has a model, use it to override the agent's model
+      if (mergedStreamOptions.structuredOutput.model) {
+        modelOverride = mergedStreamOptions.structuredOutput.model;
+      }
+
+      mergedStreamOptions = {
+        ...mergedStreamOptions,
+        output: mergedStreamOptions.structuredOutput.schema as OUTPUT,
+        structuredOutput: undefined, // Remove structuredOutput to avoid confusion downstream
+      };
+    }
+
+    const llm = await this.getLLM({
+      runtimeContext: mergedStreamOptions.runtimeContext,
+      model: modelOverride,
+    });
+
+    if (llm.getModel().specificationVersion !== 'v2') {
+      throw new MastraError({
+        id: 'AGENT_STREAM_VNEXT_V1_MODEL_NOT_SUPPORTED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'V1 models are not supported for streamVNext. Please use stream instead.',
+      });
+    }
+
+    const result = await this.#execute({
+      ...mergedStreamOptions,
+      messages: [],
+      resumeContext,
+      methodType: 'streamVNext',
+      model: modelOverride,
+    } as InnerAgentExecutionOptions<OUTPUT, FORMAT>);
+
+    if (result.status !== 'success') {
+      if (result.status === 'failed') {
+        throw new MastraError({
+          id: 'AGENT_STREAM_VNEXT_FAILED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: result.error.message,
+          details: {
+            error: result.error.message,
+          },
+        });
+      }
+      throw new MastraError({
+        id: 'AGENT_STREAM_VNEXT_UNKNOWN_ERROR',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'An unknown error occurred while streaming',
+      });
+    }
+
+    return result.result as unknown as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
+  }
+
+  async approveToolCall<
+    OUTPUT extends OutputSchema | undefined = undefined,
+    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
+  >(
+    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
+  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
+    return this.resumeStreamVNext({ approved: true }, streamOptions);
+  }
+
+  async declineToolCall<
+    OUTPUT extends OutputSchema | undefined = undefined,
+    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
+  >(
+    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
+  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
+    return this.resumeStreamVNext({ approved: false }, streamOptions);
+  }
+
   async generate(
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
@@ -3465,7 +3557,7 @@ export class Agent<
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
     if (!generateDeprecationWarningShown) {
       this.logger.warn(
-        "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 23rd, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
+        "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 30th, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
       );
       generateDeprecationWarningShown = true;
     }
@@ -3835,7 +3927,7 @@ export class Agent<
   > {
     if (!streamDeprecationWarningShown) {
       this.logger.warn(
-        "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 23rd, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
+        "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 30th, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
       );
       streamDeprecationWarningShown = true;
     }
