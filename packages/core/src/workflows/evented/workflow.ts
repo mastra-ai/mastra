@@ -399,8 +399,8 @@ export class EventedRun<
       serializedStepGraph: this.serializedStepGraph,
       input: inputData,
       emitter: {
-        emit: (event: string, data: any) => {
-          return this.emitter.emit(event, data);
+        emit: async (event: string, data: any): Promise<void> => {
+          this.emitter.emit(event, data);
         },
         on: (event: string, callback: (data: any) => void) => {
           this.emitter.on(event, callback);
@@ -491,8 +491,8 @@ export class EventedRun<
           resumePath,
         },
         emitter: {
-          emit: (event: string, data: any) => {
-            return this.emitter.emit(event, data);
+          emit: async (event: string, data: any) => {
+            this.emitter.emit(event, data);
           },
           on: (event: string, callback: (data: any) => void) => {
             this.emitter.on(event, callback);

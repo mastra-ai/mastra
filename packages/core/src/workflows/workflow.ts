@@ -217,20 +217,20 @@ export function createStep<
         }
 
         if (streamFormat === 'aisdk') {
-          emitter.emit('watch-v2', {
+          await emitter.emit('watch-v2', {
             type: 'tool-call-streaming-start',
             ...(toolData ?? {}),
           });
           for await (const chunk of stream) {
             if (chunk.type === 'text-delta') {
-              emitter.emit('watch-v2', {
+              await emitter.emit('watch-v2', {
                 type: 'tool-call-delta',
                 ...(toolData ?? {}),
                 argsTextDelta: chunk.textDelta,
               });
             }
           }
-          emitter.emit('watch-v2', {
+          await emitter.emit('watch-v2', {
             type: 'tool-call-streaming-finish',
             ...(toolData ?? {}),
           });
@@ -1381,8 +1381,8 @@ export class Run<
       serializedStepGraph: this.serializedStepGraph,
       input: inputData,
       emitter: {
-        emit: (event: string, data: any) => {
-          return this.emitter.emit(event, data);
+        emit: async (event: string, data: any) => {
+          this.emitter.emit(event, data);
         },
         on: (event: string, callback: (data: any) => void) => {
           this.emitter.on(event, callback);
@@ -2073,8 +2073,8 @@ export class Run<
         },
         format: params.format,
         emitter: {
-          emit: (event: string, data: any) => {
-            return this.emitter.emit(event, data);
+          emit: async (event: string, data: any) => {
+            this.emitter.emit(event, data);
           },
           on: (event: string, callback: (data: any) => void) => {
             this.emitter.on(event, callback);

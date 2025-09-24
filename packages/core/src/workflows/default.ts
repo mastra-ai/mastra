@@ -743,7 +743,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     });
 
     if (!skipEmits) {
-      emitter.emit('watch', {
+      await emitter.emit('watch', {
         type: 'watch',
         payload: {
           currentStep: {
@@ -765,7 +765,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         eventTimestamp: Date.now(),
       });
 
-      emitter.emit('watch-v2', {
+      await emitter.emit('watch-v2', {
         type: 'workflow-step-start',
         payload: {
           id: step.id,
@@ -776,7 +776,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
       // maybe we don't have listeners and stream was not locked
       if (writableStream?.locked) {
-        await once(emitter as NodeJS.EventEmitter, kWritableStreamUnlocked);
+        await once(emitter as unknown as NodeJS.EventEmitter, kWritableStreamUnlocked);
       }
     }
 

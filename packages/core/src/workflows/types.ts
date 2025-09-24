@@ -9,7 +9,7 @@ export type { ChunkType } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
 
 export type Emitter = {
-  emit: (event: string, data: any) => boolean;
+  emit: (event: string, data: any) => Promise<void>;
   on: (event: string, callback: (data: any) => void) => void;
   off: (event: string, callback: (data: any) => void) => void;
   once: (event: string, callback: (data: any) => void) => void;
