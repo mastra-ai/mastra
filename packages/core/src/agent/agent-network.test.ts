@@ -1,7 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai-v5';
-import { describe, it } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
+import { RESOURCE_TYPES } from '../loop/types';
 import { RuntimeContext } from '../runtime-context';
+import { MastraAgentNetworkStream } from '../stream/MastraAgentNetworkStream';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
 import { MockMemory } from './test-utils';
@@ -167,7 +170,188 @@ describe('Agent - network', () => {
     for await (const chunk of anStream) {
       console.log(chunk);
     }
+  });
 
-    console.log('SUH', anStream);
+  it('PARALLEL WORKFLOW WITH AGENT - reproduce stream error', async () => {
+    // Create a simple test agent with API key from env
+    const testAgent = new Agent({
+      id: 'test-parallel-agent',
+      name: 'test-parallel-agent',
+      instructions: 'You are a helpful assistant that responds with brief, concise answers. Answer in one sentence.',
+      model: openai('gpt-4o'),
+    });
+    const runId = randomUUID();
+
+    // Create main workflow with just a parallel step that invokes the agent
+    const mainWorkflow = createWorkflow({
+      id: 'test-parallel-workflow',
+      inputSchema: z.object({
+        task: z.string(),
+      }),
+      outputSchema: z.object({
+        task: z.string(),
+        resourceId: z.string(),
+        resourceType: RESOURCE_TYPES,
+        result: z.string(),
+        isComplete: z.boolean().optional(),
+        iteration: z.number(),
+      }),
+    })
+      .parallel([
+        createStep({
+          id: 'agent-execution-step',
+          inputSchema: z.object({
+            task: z.string(),
+          }),
+          outputSchema: z.object({
+            task: z.string(),
+            resourceId: z.string(),
+            resourceType: RESOURCE_TYPES,
+            result: z.string(),
+            isComplete: z.boolean().optional(),
+            iteration: z.number(),
+          }),
+          execute: async ({ inputData, writer }) => {
+            const runId = randomUUID();
+
+            await writer.write({
+              type: 'agent-execution-start',
+              payload: {
+                agentId: testAgent.id,
+                args: inputData,
+                runId,
+              },
+            });
+
+            try {
+              // This is where the stream error may occur
+              const result = await testAgent.streamVNext(inputData.task, {
+                runtimeContext,
+                runId,
+              });
+
+              // Consume the stream
+              for await (const chunk of result.fullStream) {
+                await writer.write({
+                  type: `agent-execution-event-${chunk.type}`,
+                  payload: chunk,
+                });
+              }
+
+              const text = await result.text;
+
+              await writer.write({
+                type: 'agent-execution-end',
+                payload: {
+                  task: inputData.task,
+                  agentId: testAgent.id,
+                  result: text,
+                  isComplete: true,
+                  iteration: 0,
+                },
+              });
+
+              return {
+                task: inputData.task,
+                resourceId: testAgent.id,
+                resourceType: 'agent' as const,
+                result: text,
+                isComplete: false,
+                iteration: 0,
+              };
+            } catch (error) {
+              // Re-throw to test error propagation
+              throw error;
+            }
+          },
+        }),
+      ])
+      .commit();
+
+    // Create and execute the workflow run
+    const run = await mainWorkflow.createRunAsync({
+      runId,
+    });
+
+    // Wrap with MastraAgentNetworkStream similar to agent.network()
+    const networkStream = new MastraAgentNetworkStream({
+      run,
+      createStream: () => {
+        return run.streamVNext({
+          inputData: {
+            task: 'What is 2+2?',
+          },
+        });
+      },
+    });
+
+    const chunks: any[] = [];
+
+    // Consume the network stream
+    for await (const chunk of networkStream) {
+      chunks.push(chunk);
+    }
+
+    const status = await networkStream.status;
+
+    // Expectations for successful execution
+    expect(status).toBeDefined();
+    expect(status).toBe('success');
+
+    // Verify we received chunks
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(chunks.length).toBe(15); // Based on the actual output
+
+    // Verify the sequence of events
+    const eventTypes = chunks.map(c => c?.type).filter(Boolean);
+
+    // First event should be agent-execution-start
+    expect(eventTypes[0]).toBe('agent-execution-start');
+    expect(chunks[0].payload.agentId).toBe('test-parallel-agent');
+
+    // Should have agent stream events
+    expect(eventTypes).toContain('agent-execution-event-start');
+    expect(eventTypes).toContain('agent-execution-event-step-start');
+    expect(eventTypes).toContain('agent-execution-event-text-start');
+    expect(eventTypes).toContain('agent-execution-event-text-end');
+    expect(eventTypes).toContain('agent-execution-event-step-finish');
+    expect(eventTypes).toContain('agent-execution-event-finish');
+
+    // Last event should be agent-execution-end
+    expect(eventTypes[eventTypes.length - 1]).toBe('agent-execution-end');
+    expect(chunks[chunks.length - 1].payload.result).toBe('2+2 equals 4.');
+
+    // Count text-delta events (should have multiple for streaming)
+    const textDeltaCount = eventTypes.filter(t => t === 'agent-execution-event-text-delta').length;
+    expect(textDeltaCount).toBeGreaterThan(0);
+
+    // Verify the text was assembled correctly
+    const textDeltas = chunks
+      .filter(c => c?.type === 'agent-execution-event-text-delta')
+      .map(c => c.payload.payload.text)
+      .join('');
+    expect(textDeltas).toBe('2+2 equals 4.');
+
+    // Verify complete event sequence
+    // Check first 4 events
+    expect(eventTypes.slice(0, 4)).toEqual([
+      'agent-execution-start',
+      'agent-execution-event-start',
+      'agent-execution-event-step-start',
+      'agent-execution-event-text-start',
+    ]);
+
+    // Check last 4 events
+    expect(eventTypes.slice(-4)).toEqual([
+      'agent-execution-event-text-end',
+      'agent-execution-event-step-finish',
+      'agent-execution-event-finish',
+      'agent-execution-end',
+    ]);
+
+    // Verify middle events are all text-delta and we have at least 1
+    const middleEvents = eventTypes.slice(4, -4);
+    expect(middleEvents.length).toBeGreaterThanOrEqual(1);
+    expect(middleEvents.every(type => type === 'agent-execution-event-text-delta')).toBe(true);
   });
 }, 120e3);

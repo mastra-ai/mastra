@@ -1,4 +1,5 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 import type { AISpan, TracingContext } from '../ai-tracing';
@@ -39,6 +40,14 @@ export type ExecutionContext = {
   executionSpan: Span;
   format?: 'aisdk' | 'mastra' | undefined;
 };
+
+/**
+ * Event used to indicate that watcher based writes unlocked writable stream
+ * Originally it was expected for the stream to finish writing when promise was awaited
+ * But since event emitter is synchronous, we need to wait for the writes to complete to safely
+ * pass the stream to the next step, where user may choose to use it
+ */
+export const kWritableStreamUnlocked = Symbol.for('@@default-execution-engine/stream-unlocked');
 
 /**
  * Default implementation of the ExecutionEngine using XState
@@ -734,7 +743,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     });
 
     if (!skipEmits) {
-      await emitter.emit('watch', {
+      emitter.emit('watch', {
         type: 'watch',
         payload: {
           currentStep: {
@@ -755,7 +764,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         },
         eventTimestamp: Date.now(),
       });
-      await emitter.emit('watch-v2', {
+
+      emitter.emit('watch-v2', {
         type: 'workflow-step-start',
         payload: {
           id: step.id,
@@ -763,6 +773,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           ...stepInfo,
         },
       });
+
+      // maybe we don't have listeners and stream was not locked
+      if (writableStream?.locked) {
+        await once(emitter as NodeJS.EventEmitter, kWritableStreamUnlocked);
+      }
     }
 
     await this.persistStepUpdate({

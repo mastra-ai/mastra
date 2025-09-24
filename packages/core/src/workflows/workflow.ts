@@ -19,7 +19,7 @@ import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
-import { DefaultExecutionEngine } from './default';
+import { DefaultExecutionEngine, kWritableStreamUnlocked } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
 import type {
@@ -217,20 +217,20 @@ export function createStep<
         }
 
         if (streamFormat === 'aisdk') {
-          await emitter.emit('watch-v2', {
+          emitter.emit('watch-v2', {
             type: 'tool-call-streaming-start',
             ...(toolData ?? {}),
           });
           for await (const chunk of stream) {
             if (chunk.type === 'text-delta') {
-              await emitter.emit('watch-v2', {
+              emitter.emit('watch-v2', {
                 type: 'tool-call-delta',
                 ...(toolData ?? {}),
                 argsTextDelta: chunk.textDelta,
               });
             }
           }
-          await emitter.emit('watch-v2', {
+          emitter.emit('watch-v2', {
             type: 'tool-call-streaming-finish',
             ...(toolData ?? {}),
           });
@@ -1337,7 +1337,7 @@ export class Run<
     this.abortController?.abort();
   }
 
-  async sendEvent(event: string, data: any) {
+  async sendEvent(event: string, data: any): Promise<void> {
     this.emitter.emit(`user-event-${event}`, data);
   }
 
@@ -1381,8 +1381,8 @@ export class Run<
       serializedStepGraph: this.serializedStepGraph,
       input: inputData,
       emitter: {
-        emit: async (event: string, data: any) => {
-          this.emitter.emit(event, data);
+        emit: (event: string, data: any) => {
+          return this.emitter.emit(event, data);
         },
         on: (event: string, callback: (data: any) => void) => {
           this.emitter.on(event, callback);
@@ -1637,27 +1637,46 @@ export class Run<
 
         let buffer: ChunkType[] = [];
         let isWriting = false;
+
+        // TODO: implement queues system
         const tryWrite = async () => {
-          const chunkToWrite = buffer;
+          let chunkToWrite: ChunkType[] | null = buffer;
           buffer = [];
 
           if (chunkToWrite.length === 0 || isWriting) {
             return;
           }
+
+          if (writable.locked) {
+            // user may be still writing to the stream, so we need to wait for it to be unlocked
+            queueMicrotask(tryWrite);
+            return;
+          }
           isWriting = true;
 
+          // acquires lock
           let watchWriter = writable.getWriter();
 
           try {
-            for (const chunk of chunkToWrite) {
-              await watchWriter.write(chunk);
+            while (chunkToWrite !== null) {
+              for (const chunk of chunkToWrite) {
+                await watchWriter.write(chunk);
+              }
+
+              // if there are more chunks to write, set the next chunk to write
+              // goal is to finish writing all chunks before continuing with execution as we get exclusive lock
+              if (buffer.length > 0) {
+                chunkToWrite = buffer;
+                buffer = [];
+              } else {
+                chunkToWrite = null;
+              }
             }
           } finally {
             watchWriter.releaseLock();
+            this.emitter.emit(kWritableStreamUnlocked);
           }
           isWriting = false;
-
-          setImmediate(tryWrite);
         };
 
         // TODO: fix this, watch-v2 doesn't have a type
@@ -1673,6 +1692,7 @@ export class Run<
             },
           });
 
+          // TODO: this may throw, needs to be gracefully handled
           await tryWrite();
         }, 'watch-v2');
 
@@ -1747,27 +1767,45 @@ export class Run<
 
         let buffer: ChunkType[] = [];
         let isWriting = false;
+        // TODO: exact copy of StreamVNext, DRY or implement queue system on top of web stream
         const tryWrite = async () => {
-          const chunkToWrite = buffer;
+          let chunkToWrite: ChunkType[] | null = buffer;
           buffer = [];
 
           if (chunkToWrite.length === 0 || isWriting) {
             return;
           }
+
+          if (writable.locked) {
+            // user may be still writing to the stream, so we need to wait for it to be unlocked
+            queueMicrotask(tryWrite);
+            return;
+          }
           isWriting = true;
 
+          // acquires lock
           let watchWriter = writable.getWriter();
 
           try {
-            for (const chunk of chunkToWrite) {
-              await watchWriter.write(chunk);
+            while (chunkToWrite !== null) {
+              for (const chunk of chunkToWrite) {
+                await watchWriter.write(chunk);
+              }
+
+              // if there are more chunks to write, set the next chunk to write
+              // goal is to finish writing all chunks before continuing with execution as we get exclusive lock
+              if (buffer.length > 0) {
+                chunkToWrite = buffer;
+                buffer = [];
+              } else {
+                chunkToWrite = null;
+              }
             }
           } finally {
             watchWriter.releaseLock();
+            this.emitter.emit(kWritableStreamUnlocked);
           }
           isWriting = false;
-
-          setImmediate(tryWrite);
         };
 
         // TODO: fix this, watch-v2 doesn't have a type
@@ -2036,8 +2074,7 @@ export class Run<
         format: params.format,
         emitter: {
           emit: (event: string, data: any) => {
-            this.emitter.emit(event, data);
-            return Promise.resolve();
+            return this.emitter.emit(event, data);
           },
           on: (event: string, callback: (data: any) => void) => {
             this.emitter.on(event, callback);
