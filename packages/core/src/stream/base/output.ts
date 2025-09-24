@@ -277,9 +277,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       .pipeThrough(
         new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
           transform: async (chunk, controller) => {
-            self.#bufferedChunks.push(chunk);
-            self.#emitter.emit('chunk', chunk);
-
             switch (chunk.type) {
               case 'object-result':
                 self.#bufferedObject = chunk.object;
@@ -444,9 +441,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 self.#delayedPromises.content.resolve([]);
                 self.#delayedPromises.reasoningDetails.resolve([]);
 
+                // Emit the tripwire chunk for listeners
+                self.#emitChunk(chunk);
                 // Pass the tripwire chunk through
                 controller.enqueue(chunk);
-
                 // Emit finish event for EventEmitter streams (since flush won't be called on terminate)
                 self.#emitter.emit('finish');
 
@@ -708,7 +706,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
                 break;
             }
-
+            self.#emitChunk(chunk);
             controller.enqueue(chunk);
           },
         }),
@@ -1212,6 +1210,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       reasoningTokens: this.#usageCount.reasoningTokens,
       cachedInputTokens: this.#usageCount.cachedInputTokens,
     };
+  }
+
+  #emitChunk(chunk: ChunkType<OUTPUT>) {
+    this.#bufferedChunks.push(chunk); // add to bufferedChunks for replay in new streams
+    this.#emitter.emit('chunk', chunk); // emit chunk for existing listener streams
   }
 
   #createEventedStream() {
