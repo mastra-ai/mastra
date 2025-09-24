@@ -3486,7 +3486,7 @@ export class Agent<
         id: 'AGENT_STREAM_VNEXT_V1_MODEL_NOT_SUPPORTED',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: 'V1 models are not supported for streamVNext. Please use stream instead.',
+        text: 'V1 models are not supported for stream. Please use streamLegacy instead.',
       });
     }
 
@@ -3576,7 +3576,7 @@ export class Agent<
 
     if (llm.getModel().specificationVersion !== 'v1') {
       this.logger.error(
-        'V2 models are not supported for the current version of generate. Please use generateVNext instead.',
+        'V2 models are not supported for generateLegacy. Please use generate instead.',
         {
           modelId: llm.getModel().modelId,
         },
@@ -3589,7 +3589,7 @@ export class Agent<
         details: {
           modelId: llm.getModel().modelId,
         },
-        text: 'V2 models are not supported for the current version of generate. Please use generateVNext instead.',
+        text: 'V2 models are not supported for generateLegacy. Please use generate instead.',
       });
     }
 
@@ -3914,7 +3914,7 @@ export class Agent<
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions, 'stream');
 
     if (llm.getModel().specificationVersion !== 'v1') {
-      this.logger.error('V2 models are not supported for stream. Please use streamVNext instead.', {
+      this.logger.error('V2 models are not supported for streamLegacy. Please use stream instead.', {
         modelId: llm.getModel().modelId,
       });
 
@@ -3925,7 +3925,7 @@ export class Agent<
         details: {
           modelId: llm.getModel().modelId,
         },
-        text: 'V2 models are not supported for stream. Please use streamVNext instead.',
+        text: 'V2 models are not supported for streamLegacy. Please use stream instead.',
       });
     }
 
