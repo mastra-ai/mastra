@@ -54,7 +54,7 @@ export class StepExecutor extends MastraBase {
     } = {
       ...stepResults[step.id],
       startedAt,
-      payload: inputData ?? {},
+      payload: (typeof params.foreachIdx === 'number' ? params.input : inputData) ?? {},
     };
 
     if (params.resumeData) {
