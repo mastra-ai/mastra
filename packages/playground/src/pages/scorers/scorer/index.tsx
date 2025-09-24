@@ -127,10 +127,6 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
   const pagination = scoresData?.pagination;
 
   const handleScoreClick = (id: string) => {
-    if (id === selectedScoreId) {
-      return setSelectedScoreId(undefined);
-    }
-
     setSelectedScoreId(id);
     setDialogIsOpen(true);
   };
@@ -176,6 +172,7 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
             ) : (
               <ScoresList
                 scores={scores}
+                selectedScoreId={selectedScoreId}
                 pagination={pagination}
                 onScoreClick={handleScoreClick}
                 onPageChange={setScoresPage}

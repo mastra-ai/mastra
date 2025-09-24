@@ -5,13 +5,13 @@ import React, { isValidElement } from 'react';
 
 type EntryListEntriesProps = {
   entries?: Record<string, any>[];
-  selectedItemId?: string;
+  selectedEntryId?: string;
   onEntryClick?: (item: string) => void;
   columns?: Column[];
   children?: React.ReactNode;
 };
 
-export function EntryListEntries({ entries, selectedItemId, columns, children, onEntryClick }: EntryListEntriesProps) {
+export function EntryListEntries({ entries, selectedEntryId, columns, children, onEntryClick }: EntryListEntriesProps) {
   return (
     <ul className="grid bg-surface3 overflow-y-auto">
       {entries
@@ -20,7 +20,7 @@ export function EntryListEntries({ entries, selectedItemId, columns, children, o
               <EntryListEntry
                 key={entry.id}
                 entry={entry}
-                selectedItemId={selectedItemId}
+                isSelected={selectedEntryId === entry.id}
                 columns={columns}
                 onClick={onEntryClick}
               >

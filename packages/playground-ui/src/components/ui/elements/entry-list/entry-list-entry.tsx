@@ -4,16 +4,14 @@ import { type Column } from './types';
 
 type EntryListEntryProps = {
   entry?: any;
+  isSelected?: boolean;
   children?: React.ReactNode;
-  selectedItemId?: string;
   onClick?: (itemId: string) => void;
   columns?: Column[];
   isLoading?: boolean;
 };
 
-export function EntryListEntry({ entry, selectedItemId, onClick, children, columns }: EntryListEntryProps) {
-  const isSelected = selectedItemId && selectedItemId === entry?.id;
-
+export function EntryListEntry({ entry, isSelected, onClick, children, columns }: EntryListEntryProps) {
   const handleClick = () => {
     return onClick && onClick(entry?.id);
   };
@@ -34,7 +32,8 @@ export function EntryListEntry({ entry, selectedItemId, onClick, children, colum
           'grid w-full px-[1.5rem] gap-[1.5rem] text-left items-center min-h-[3rem]',
           'focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_1px_rgba(24,251,111,.75)]',
           {
-            'hover:bg-surface5': entry,
+            // hover effect only not for skeleton and selected
+            'hover:bg-surface4': entry && !isSelected,
           },
         )}
         style={{ gridTemplateColumns: getColumnTemplate(columns) }}

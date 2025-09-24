@@ -18,6 +18,7 @@ export const scoresListColumns = [
 ];
 
 type ScoresListProps = {
+  selectedScoreId?: string;
   onScoreClick?: (id: string) => void;
   scores?: ClientScoreRowData[];
   pagination?: {
@@ -30,7 +31,14 @@ type ScoresListProps = {
   errorMsg?: string;
 };
 
-export function ScoresList({ scores, pagination, onScoreClick, onPageChange, errorMsg }: ScoresListProps) {
+export function ScoresList({
+  scores,
+  pagination,
+  onScoreClick,
+  onPageChange,
+  errorMsg,
+  selectedScoreId,
+}: ScoresListProps) {
   if (!scores) {
     return null;
   }
@@ -72,7 +80,12 @@ export function ScoresList({ scores, pagination, onScoreClick, onPageChange, err
         ) : (
           <>
             {entries.length > 0 ? (
-              <EntryListEntries entries={entries} columns={scoresListColumns} onEntryClick={onScoreClick} />
+              <EntryListEntries
+                entries={entries}
+                selectedEntryId={selectedScoreId}
+                columns={scoresListColumns}
+                onEntryClick={onScoreClick}
+              />
             ) : (
               <EntryListMessage message="No scores for this scorer yet" />
             )}

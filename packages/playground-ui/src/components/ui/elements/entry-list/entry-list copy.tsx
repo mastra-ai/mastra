@@ -99,7 +99,7 @@ export function EntryList({
                 <EntryListEntry
                   key={item.id}
                   entry={item}
-                  selectedItemId={selectedItemId}
+                  isSelected={selectedItemId === item.id}
                   onClick={isLoading ? undefined : onItemClick}
                   columns={columns}
                   isLoading={isLoading}
