@@ -92,9 +92,11 @@ type StepParams<
 
 type ToolStep<
   TSchemaIn extends z.ZodType<any>,
+  TSuspendSchema extends z.ZodType<any>,
+  TResumeSchema extends z.ZodType<any>,
   TSchemaOut extends z.ZodType<any>,
-  TContext extends ToolExecutionContext<TSchemaIn>,
-> = Tool<TSchemaIn, TSchemaOut, TContext> & {
+  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema>,
+> = Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
   inputSchema: TSchemaIn;
   outputSchema: TSchemaOut;
   execute: (context: TContext) => Promise<any>;
@@ -132,10 +134,12 @@ export function createStep<
 
 export function createStep<
   TSchemaIn extends z.ZodType<any>,
+  TSuspendSchema extends z.ZodType<any>,
+  TResumeSchema extends z.ZodType<any>,
   TSchemaOut extends z.ZodType<any>,
   TContext extends ToolExecutionContext<TSchemaIn>,
 >(
-  tool: ToolStep<TSchemaIn, TSchemaOut, TContext>,
+  tool: ToolStep<TSchemaIn, TSuspendSchema, TResumeSchema, TSchemaOut, TContext>,
 ): Step<string, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, DefaultEngineType>;
 
 export function createStep<
@@ -148,7 +152,7 @@ export function createStep<
   params:
     | StepParams<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>
     | Agent<any, any, any>
-    | ToolStep<TStepInput, TStepOutput, any>,
+    | ToolStep<TStepInput, TSuspendSchema, TResumeSchema, TStepOutput, any>,
 ): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType> {
   if (params instanceof Agent) {
     return {
@@ -258,12 +262,14 @@ export function createStep<
       id: params.id,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
-      execute: async ({ inputData, mastra, runtimeContext, tracingContext }) => {
+      execute: async ({ inputData, mastra, runtimeContext, tracingContext, suspend, resumeData }) => {
         return params.execute({
           context: inputData,
           mastra,
           runtimeContext,
           tracingContext,
+          suspend,
+          resumeData,
         });
       },
     };
@@ -1924,7 +1930,7 @@ export class Run<
     });
 
     if (!snapshot) {
-      throw new Error('No snapshot found for this workflow run');
+      throw new Error('No snapshot found for this workflow run: ' + this.workflowId + ' ' + this.runId);
     }
 
     // Auto-detect suspended steps if no step is provided

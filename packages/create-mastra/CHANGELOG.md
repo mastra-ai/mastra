@@ -1,5 +1,32 @@
 # create-mastra
 
+## 0.13.2
+
+### Patch Changes
+
+- dependencies updates: ([#8007](https://github.com/mastra-ai/mastra/pull/8007))
+  - Updated dependency [`fs-extra@^11.3.2` ↗︎](https://www.npmjs.com/package/fs-extra/v/11.3.2) (from `^11.3.1`, in `dependencies`)
+
+- Add model fallback handlers and apis ([#7378](https://github.com/mastra-ai/mastra/pull/7378))
+
+- Fix DateTimePicker style issue ([#8106](https://github.com/mastra-ai/mastra/pull/8106))
+
+- Fix getting tool link path from agent in playground ui tools page ([#8135](https://github.com/mastra-ai/mastra/pull/8135))
+
+## 0.13.2-alpha.4
+
+### Patch Changes
+
+- Fix getting tool link path from agent in playground ui tools page ([#8135](https://github.com/mastra-ai/mastra/pull/8135))
+
+## 0.13.2-alpha.3
+
+### Patch Changes
+
+- Add model fallback handlers and apis ([#7378](https://github.com/mastra-ai/mastra/pull/7378))
+
+- Fix DateTimePicker style issue ([#8106](https://github.com/mastra-ai/mastra/pull/8106))
+
 ## 0.13.2-alpha.2
 
 ## 0.13.2-alpha.1
