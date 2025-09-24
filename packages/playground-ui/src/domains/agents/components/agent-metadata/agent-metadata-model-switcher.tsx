@@ -39,8 +39,8 @@ export const AgentMetadataModelSwitcher = ({
   const [loading, setLoading] = useState(false);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [providersLoading, setProvidersLoading] = useState(true);
-  const [highlightedProviderIndex, setHighlightedProviderIndex] = useState(-1);
-  const [highlightedModelIndex, setHighlightedModelIndex] = useState(-1);
+  const [highlightedProviderIndex, setHighlightedProviderIndex] = useState(0);
+  const [highlightedModelIndex, setHighlightedModelIndex] = useState(0);
 
   // Ref for the model input to focus it
   const modelInputRef = useRef<HTMLInputElement>(null);
@@ -101,7 +101,7 @@ export const AgentMetadataModelSwitcher = ({
       );
     }
 
-// Sort by connection status - connected providers first
+    // Sort by connection status - connected providers first
     return filtered
       .sort((a, b) => {
         if (a.connected && !b.connected) return -1;
@@ -111,7 +111,26 @@ export const AgentMetadataModelSwitcher = ({
       .slice(0, searchTerm ? undefined : 20); // Show first 20 when no search
   }, [providers, providerSearch, isSearching]);
 
-// Auto-save when model changes
+  // Ensure highlighted provider index stays within bounds when filtered list changes
+  useEffect(() => {
+    if (highlightedProviderIndex >= filteredProviders.length && filteredProviders.length > 0) {
+      setHighlightedProviderIndex(0);
+    }
+  }, [filteredProviders.length, highlightedProviderIndex]);
+
+  // Ensure highlighted model index stays within bounds when filtered list changes
+  useEffect(() => {
+    const filteredModels = allModels.filter(
+      model =>
+        model.model.toLowerCase().includes(selectedModel.toLowerCase()) ||
+        model.providerName.toLowerCase().includes(selectedModel.toLowerCase()),
+    );
+    if (highlightedModelIndex >= filteredModels.length && filteredModels.length > 0) {
+      setHighlightedModelIndex(0);
+    }
+  }, [allModels, selectedModel, highlightedModelIndex]);
+
+  // Auto-save when model changes
   const handleModelSelect = async (modelId: string) => {
     setSelectedModel(modelId);
     setShowModelSuggestions(false);
@@ -133,20 +152,20 @@ export const AgentMetadataModelSwitcher = ({
     }
   };
 
-// Handle provider selection
+  // Handle provider selection
   const handleProviderSelect = async (provider: Provider) => {
     setSelectedProvider(provider.id);
     setProviderSearch('');
     setIsSearching(false);
     setShowProviderSuggestions(false);
     setHighlightedProviderIndex(-1);
-    
+
     // Only clear model selection when switching to a different provider
     if (provider.id !== currentModelProvider) {
       setSelectedModel('');
       setHighlightedModelIndex(0);
     }
-    
+
     // Only auto-focus model input if provider is connected
     if (provider.connected) {
       setTimeout(() => {
@@ -257,7 +276,7 @@ export const AgentMetadataModelSwitcher = ({
                   })()}
                 </>
               )}
-<Input
+              <Input
                 spellCheck="false"
                 ref={providerInputRef}
                 className={`w-full ${!isSearching && currentModelProvider ? 'pl-8 pr-8' : ''}`}
@@ -267,10 +286,11 @@ export const AgentMetadataModelSwitcher = ({
                     ? providerSearch
                     : providers.find(p => p.id === currentModelProvider)?.name || currentModelProvider || ''
                 }
-onKeyDown={e => {
-                  const filteredProviders = providers.filter(provider =>
-                    provider.name.toLowerCase().includes(providerSearch.toLowerCase()) ||
-                    provider.id.toLowerCase().includes(providerSearch.toLowerCase())
+                onKeyDown={e => {
+                  const filteredProviders = providers.filter(
+                    provider =>
+                      provider.name.toLowerCase().includes(providerSearch.toLowerCase()) ||
+                      provider.id.toLowerCase().includes(providerSearch.toLowerCase()),
                   );
 
                   if (!isSearching && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
@@ -278,13 +298,16 @@ onKeyDown={e => {
                     setIsSearching(true);
                     setProviderSearch('');
                     setHighlightedProviderIndex(0);
-                  } else if (showProviderSuggestions) {
+                  } else if (showProviderSuggestions && filteredProviders.length > 0) {
                     switch (e.key) {
                       case 'ArrowDown':
                         e.preventDefault();
-                        setHighlightedProviderIndex(prev => 
-                          prev < filteredProviders.length - 1 ? prev + 1 : 0
-                        );
+                        setHighlightedProviderIndex(prev => {
+                          // Ensure we stay within bounds and loop correctly
+                          const currentIndex = prev < 0 ? 0 : prev;
+                          const nextIndex = (currentIndex + 1) % filteredProviders.length;
+                          return nextIndex;
+                        });
                         // Auto-scroll to keep highlighted item visible
                         setTimeout(() => {
                           const highlightedElement = document.querySelector('[data-provider-highlighted="true"]');
@@ -293,9 +316,12 @@ onKeyDown={e => {
                         break;
                       case 'ArrowUp':
                         e.preventDefault();
-                        setHighlightedProviderIndex(prev => 
-                          prev > 0 ? prev - 1 : filteredProviders.length - 1
-                        );
+                        setHighlightedProviderIndex(prev => {
+                          // Ensure we stay within bounds and loop correctly
+                          const currentIndex = prev < 0 ? filteredProviders.length - 1 : prev;
+                          const nextIndex = (currentIndex - 1 + filteredProviders.length) % filteredProviders.length;
+                          return nextIndex;
+                        });
                         // Auto-scroll to keep highlighted item visible
                         setTimeout(() => {
                           const highlightedElement = document.querySelector('[data-provider-highlighted="true"]');
@@ -353,7 +379,7 @@ onKeyDown={e => {
                   setProviderSearch(e.target.value);
                   setHighlightedProviderIndex(0);
                 }}
-onClick={e => {
+                onClick={e => {
                   e.preventDefault(); // Prevent default click behavior
                   // Only open if not already open (prevents flashing)
                   if (!showProviderSuggestions) {
@@ -379,7 +405,7 @@ onClick={e => {
                 const isHighlighted = index === highlightedProviderIndex;
 
                 return (
-<div
+                  <div
                     key={provider.id}
                     data-provider-highlighted={isHighlighted}
                     className={`flex items-center gap-2 cursor-pointer hover:bg-surface5 p-2 rounded ${
@@ -388,7 +414,7 @@ onClick={e => {
                     onClick={() => handleProviderSelect(provider)}
                   >
                     <div className="relative">
-<ProviderLogo providerId={provider.id} size={20} />
+                      <ProviderLogo providerId={provider.id} size={20} />
                       <div
                         className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${
                           provider.connected ? 'bg-green-500' : 'bg-red-500'
@@ -416,21 +442,21 @@ onClick={e => {
 
         <Popover open={showModelSuggestions} onOpenChange={setShowModelSuggestions}>
           <PopoverTrigger asChild>
-<Input
+            <Input
               spellCheck="false"
               ref={modelInputRef}
               className="flex-1"
               type="text"
               value={selectedModel}
-onChange={e => {
+              onChange={e => {
                 setSelectedModel(e.target.value);
                 setHighlightedModelIndex(0);
               }}
-onFocus={() => {
+              onFocus={() => {
                 // Open dropdown but don't interfere with keyboard navigation
                 setShowModelSuggestions(true);
               }}
-onKeyDown={e => {
+              onKeyDown={e => {
                 const filteredModels = allModels.filter(item => {
                   if (currentModelProvider && item.provider !== currentModelProvider) {
                     return false;
@@ -448,30 +474,40 @@ onKeyDown={e => {
                   return;
                 }
 
-switch (e.key) {
+                switch (e.key) {
                   case 'ArrowDown':
                     e.preventDefault();
-                    setHighlightedModelIndex(prev => 
-                      prev < filteredModels.length - 1 ? prev + 1 : prev
-                    );
-                    // Auto-scroll to keep highlighted item visible
-                    setTimeout(() => {
-                      const highlightedElement = document.querySelector('[data-model-highlighted="true"]');
-                      highlightedElement?.scrollIntoView({ block: 'nearest' });
-                    }, 0);
+                    if (filteredModels.length > 0) {
+                      setHighlightedModelIndex(prev => {
+                        // Ensure we stay within bounds and loop correctly
+                        const currentIndex = prev < 0 ? 0 : prev;
+                        const nextIndex = (currentIndex + 1) % filteredModels.length;
+                        return nextIndex;
+                      });
+                      // Auto-scroll to keep highlighted item visible
+                      setTimeout(() => {
+                        const highlightedElement = document.querySelector('[data-model-highlighted="true"]');
+                        highlightedElement?.scrollIntoView({ block: 'nearest' });
+                      }, 0);
+                    }
                     break;
                   case 'ArrowUp':
                     e.preventDefault();
-                    setHighlightedModelIndex(prev => 
-                      prev > 0 ? prev - 1 : filteredModels.length - 1
-                    );
-                    // Auto-scroll to keep highlighted item visible
-                    setTimeout(() => {
-                      const highlightedElement = document.querySelector('[data-model-highlighted="true"]');
-                      highlightedElement?.scrollIntoView({ block: 'nearest' });
-                    }, 0);
+                    if (filteredModels.length > 0) {
+                      setHighlightedModelIndex(prev => {
+                        // Ensure we stay within bounds and loop correctly
+                        const currentIndex = prev < 0 ? filteredModels.length - 1 : prev;
+                        const nextIndex = (currentIndex - 1 + filteredModels.length) % filteredModels.length;
+                        return nextIndex;
+                      });
+                      // Auto-scroll to keep highlighted item visible
+                      setTimeout(() => {
+                        const highlightedElement = document.querySelector('[data-model-highlighted="true"]');
+                        highlightedElement?.scrollIntoView({ block: 'nearest' });
+                      }, 0);
+                    }
                     break;
-case 'Enter':
+                  case 'Enter':
                   case 'Tab':
                     e.preventDefault();
                     if (highlightedModelIndex >= 0 && highlightedModelIndex < filteredModels.length) {
@@ -512,7 +548,7 @@ case 'Enter':
                     break;
                 }
               }}
-onClick={() => {
+              onClick={() => {
                 // Only open if not already open (prevents flashing)
                 setShowModelSuggestions(true);
               }}
@@ -525,7 +561,7 @@ onClick={() => {
               onOpenAutoFocus={e => e.preventDefault()}
               className="flex flex-col gap-2 w-[var(--radix-popover-trigger-width)] max-h-[calc(var(--radix-popover-content-available-height)-50px)] overflow-y-auto"
             >
-{allModels
+              {allModels
                 .filter(item => {
                   // Filter by selected provider
                   if (currentModelProvider && item.provider !== currentModelProvider) {
@@ -539,15 +575,15 @@ onClick={() => {
                 })
                 .map((item, index) => {
                   const isHighlighted = index === highlightedModelIndex;
-                  
+
                   return (
-<div
+                    <div
                       key={`${item.provider}/${item.model}`}
                       data-model-highlighted={isHighlighted}
                       className={`flex items-center gap-2 cursor-pointer hover:bg-surface5 p-2 rounded ${
                         isHighlighted ? 'outline outline-2 outline-blue-500' : ''
                       }`}
-onMouseDown={e => {
+                      onMouseDown={e => {
                         e.preventDefault(); // Prevent focus from moving to input
                         e.stopPropagation(); // Prevent event bubbling
                         setSelectedModel(item.model);
@@ -586,7 +622,7 @@ onMouseDown={e => {
       {/* Show warning if selected provider is not connected */}
       {(() => {
         const currentProvider = providers.find(p => p.id === currentModelProvider);
-if (currentProvider && !currentProvider.connected) {
+        if (currentProvider && !currentProvider.connected) {
           return (
             <div className="mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
               <div className="flex items-start gap-2">
