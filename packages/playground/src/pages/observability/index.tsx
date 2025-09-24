@@ -3,7 +3,8 @@ import {
   HeaderTitle,
   Header,
   MainContentLayout,
-  EntryList,
+  TracesList,
+  tracesListColumns,
   PageHeader,
   EntityOptions,
   getShortId,
@@ -11,6 +12,7 @@ import {
   TracesTools,
   TraceDialog,
   parseError,
+  EntryListSkeleton,
 } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
@@ -20,23 +22,6 @@ import { useAITrace } from '@/domains/observability/hooks/use-ai-trace';
 import { format, isToday } from 'date-fns';
 import { useWorkflows } from '@/hooks/use-workflows';
 import { useNavigate, useSearchParams } from 'react-router';
-
-const listColumns = [
-  { name: 'shortId', label: 'ID', size: '6rem' },
-  { name: 'date', label: 'Date', size: '4.5rem' },
-  { name: 'time', label: 'Time', size: '6.5rem' },
-  { name: 'name', label: 'Name', size: '1fr' },
-  { name: 'entityId', label: 'Entity', size: '10rem' },
-  { name: 'status', label: 'Status', size: '3rem' },
-];
-
-type TraceItem = {
-  id: string;
-  date: string;
-  time: string;
-  name: string;
-  entityId: string;
-};
 
 export default function Observability() {
   const navigate = useNavigate();
@@ -60,7 +45,7 @@ export default function Observability() {
 
   const {
     data: aiTraces = [],
-    isLoading: isLoadingAiTraces,
+    isLoading: isTracesLoading,
     isFetchingNextPage,
     hasNextPage,
     setEndOfListElement,
@@ -82,6 +67,8 @@ export default function Observability() {
           }
         : undefined,
   });
+
+  console.log({ aiTraces });
 
   useEffect(() => {
     if (traceId) {
@@ -140,22 +127,7 @@ export default function Observability() {
     option?.value && setSearchParams({ entity: option?.value });
   };
 
-  const items: TraceItem[] = aiTraces.map(trace => {
-    const createdAtDate = new Date(trace.createdAt);
-    const isTodayDate = isToday(createdAtDate);
-
-    return {
-      id: trace.traceId,
-      shortId: getShortId(trace?.traceId) || 'n/a',
-      date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
-      time: format(createdAtDate, 'h:mm:ss aaa'),
-      name: trace?.name,
-      entityId: trace?.attributes?.agentId || trace?.attributes?.workflowId,
-      status: <EntryListEntryStatusCol status={trace?.attributes?.status} />,
-    };
-  });
-
-  const handleOnListItem = (id: string) => {
+  const handleTraceClick = (id: string) => {
     if (id === selectedTraceId) {
       return setSelectedTraceId(undefined);
     }
@@ -194,6 +166,10 @@ export default function Observability() {
 
   const error = isAiTracesError ? parseError(aiTracesError) : undefined;
 
+  console.log({ selectedEntityOption, selectedDateFrom, selectedDateTo });
+
+  const filtersApplied = selectedEntityOption?.value !== 'all' || selectedDateFrom || selectedDateTo;
+
   return (
     <>
       <MainContentLayout>
@@ -208,6 +184,7 @@ export default function Observability() {
               description="Explore observability traces for your entities"
               icon={<EyeIcon />}
             />
+
             <TracesTools
               onEntityChange={handleSelectedEntityChange}
               onReset={handleReset}
@@ -216,19 +193,21 @@ export default function Observability() {
               onDateChange={handleDataChange}
               selectedDateFrom={selectedDateFrom}
               selectedDateTo={selectedDateTo}
-              isLoading={isLoadingAiTraces || isLoadingAgents || isLoadingWorkflows}
+              isLoading={isTracesLoading || isLoadingAgents || isLoadingWorkflows}
             />
-            <EntryList
-              items={items}
-              selectedItemId={selectedTraceId}
-              onItemClick={handleOnListItem}
-              columns={listColumns}
-              isLoading={isLoadingAiTraces}
-              isLoadingNextPage={isFetchingNextPage}
-              hasMore={!!hasNextPage}
-              setEndOfListElement={setEndOfListElement}
-              errorMsg={error?.error}
-            />
+
+            {isTracesLoading ? (
+              <EntryListSkeleton columns={tracesListColumns} />
+            ) : (
+              <TracesList
+                traces={aiTraces}
+                selectedTraceId={selectedTraceId}
+                onTraceClick={handleTraceClick}
+                errorMsg={error?.error}
+                setEndOfListElement={setEndOfListElement}
+                filtersApplied={Boolean(filtersApplied)}
+              />
+            )}
           </div>
         </div>
       </MainContentLayout>

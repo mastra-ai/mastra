@@ -44,7 +44,7 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
   const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
   const {
     data: scoresData,
-    isLoading: isScoresLoading,
+    isLoading: isLoadingScores,
     error: scoresError,
   } = useScoresByScorerId({
     scorerId,
@@ -164,10 +164,10 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
               entityOptions={entityOptions}
               onEntityChange={handleSelectedEntityChange}
               onReset={() => setSearchParams({ entity: 'all' })}
-              isLoading={isScoresLoading || isLoadingAgents || isLoadingWorkflows}
+              isLoading={isLoadingScores || isLoadingAgents || isLoadingWorkflows}
             />
 
-            {isScorerLoading ? (
+            {isLoadingScores ? (
               <EntryListSkeleton columns={scoresListColumns} />
             ) : (
               <ScoresList
