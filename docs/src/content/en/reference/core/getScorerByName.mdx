@@ -21,7 +21,7 @@ const weatherAgent = mastra.getAgent('weatherAgent')
 await weatherAgent.generate('What is the weather in Rome', {
   scorers: {
     answerRelevancy: {
-      scorer: answerRelevancy,
+      scorer: relevancyScorer,
     },
   },
 });
