@@ -3,16 +3,16 @@ import { ArrowLeftIcon, ArrowRightIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type EntryListPaginationProps = {
-  page?: number;
+  currentPage?: number;
   hasMore?: boolean;
   onNextPage?: () => void;
   onPrevPage?: () => void;
 };
 
-export function EntryListPagination({ page, hasMore, onNextPage, onPrevPage }: EntryListPaginationProps) {
+export function EntryListPagination({ currentPage, hasMore, onNextPage, onPrevPage }: EntryListPaginationProps) {
   return (
     <div className={cn('flex pt-[1.5rem] items-center justify-center text-icon3 text-[0.875rem] gap-[2rem]')}>
-      <span>Page {page ? page + 1 : '1'}</span>
+      <span>Page {currentPage ? currentPage + 1 : '1'}</span>
       <div
         className={cn(
           'flex gap-[1rem]',
@@ -20,8 +20,8 @@ export function EntryListPagination({ page, hasMore, onNextPage, onPrevPage }: E
           ' [&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-icon3',
         )}
       >
-        {typeof page === 'number' && page > 0 && (
-          <button onClick={onPrevPage} disabled={page === 0}>
+        {typeof currentPage === 'number' && currentPage > 0 && (
+          <button onClick={onPrevPage} disabled={currentPage === 0}>
             <ArrowLeftIcon />
             Previous
           </button>

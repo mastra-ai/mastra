@@ -5,38 +5,22 @@ import {
   MainContentLayout,
   PageHeader,
   ScoresList,
+  scoresListColumns,
   ScoresTools,
   ScoreDialog,
   type ScoreEntityOption as EntityOptions,
   KeyValueList,
   useScorer,
   useScoresByScorerId,
+  EntryListSkeleton,
 } from '@mastra/playground-ui';
 import { useParams, Link, useSearchParams } from 'react-router';
 import { Skeleton } from '@/components/ui/skeleton';
 import { GaugeIcon } from 'lucide-react';
-import { format, isToday } from 'date-fns';
 import { useEffect, useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
 import { cn } from '@/lib/utils';
 import { useWorkflows } from '@/hooks/use-workflows';
-
-const listColumns = [
-  { name: 'date', label: 'Date', size: '4.5rem' },
-  { name: 'time', label: 'Time', size: '6.5rem' },
-  { name: 'input', label: 'Input', size: '1fr' },
-  { name: 'entityId', label: 'Entity', size: '10rem' },
-  { name: 'score', label: 'Score', size: '3rem' },
-];
-
-type ScoreItem = {
-  id: string;
-  date: string;
-  time: string;
-  input: string;
-  entityId: string;
-  score: number;
-};
 
 export interface ScorerProps {
   computeTraceLink: (traceId: string) => string;
@@ -46,21 +30,28 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
   const { scorerId } = useParams()! as { scorerId: string };
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedScoreId, setSelectedScoreId] = useState<string | undefined>();
-
-  const { scorer, isLoading: isScorerLoading } = useScorer(scorerId!);
-  const { data: agents, isLoading: isLoadingAgents } = useAgents();
-  const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
-
+  const [scoresPage, setScoresPage] = useState<number>(0);
   const [selectedEntityOption, setSelectedEntityOption] = useState<EntityOptions | undefined>({
     value: 'all',
     label: 'All',
     type: 'ALL' as const,
   });
+
+  const { scorer, isLoading: isScorerLoading } = useScorer(scorerId!);
+  const { data: agents, isLoading: isLoadingAgents } = useAgents();
+  const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
+  const { data: scoresData, isLoading: isScoresLoading } = useScoresByScorerId({
+    scorerId,
+    page: scoresPage,
+    entityId: selectedEntityOption?.value === 'all' ? undefined : selectedEntityOption?.value,
+    entityType: selectedEntityOption?.type === 'ALL' ? undefined : selectedEntityOption?.type,
+  });
+
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
 
   const agentOptions: EntityOptions[] =
-    scorer?.agentIds?.map(agentId => {
-      return { value: agentId, label: agentId, type: 'AGENT' as const };
+    scorer?.agentNames?.map(agentName => {
+      return { value: agentName, label: agentName, type: 'AGENT' as const };
     }) || [];
 
   const workflowOptions: EntityOptions[] =
@@ -126,35 +117,10 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
     option?.value && setSearchParams({ entity: option?.value });
   };
 
-  const [scoresPage, setScoresPage] = useState<number>(0);
-
-  const { data: scoresData, isLoading: isScoresLoading } = useScoresByScorerId({
-    scorerId,
-    page: scoresPage,
-    entityId: selectedEntityOption?.value === 'all' ? undefined : selectedEntityOption?.value,
-    entityType: selectedEntityOption?.type === 'ALL' ? undefined : selectedEntityOption?.type,
-  });
-
   const scores = scoresData?.scores || [];
-  const scoresTotal = scoresData?.pagination.total;
-  const scoresHasMore = scoresData?.pagination.hasMore;
-  const scoresPerPage = scoresData?.pagination.perPage;
+  const pagination = scoresData?.pagination;
 
-  const items: ScoreItem[] = scores.map(score => {
-    const createdAtDate = new Date(score.createdAt);
-    const isTodayDate = isToday(createdAtDate);
-
-    return {
-      id: score.id,
-      date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
-      time: format(createdAtDate, 'h:mm:ss aaa'),
-      input: JSON.stringify(score?.input),
-      entityId: score.entityId,
-      score: score.score,
-    };
-  });
-
-  const handleOnListItem = (id: string) => {
+  const handleScoreClick = (id: string) => {
     if (id === selectedScoreId) {
       return setSelectedScoreId(undefined);
     }
@@ -191,18 +157,6 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
     return currentIndex > 0;
   };
 
-  const handleNextPage = () => {
-    if (scoresHasMore) {
-      setScoresPage(prev => prev + 1);
-    }
-  };
-
-  const handlePrevPage = () => {
-    if (scoresPage > 0) {
-      setScoresPage(prev => prev - 1);
-    }
-  };
-
   return (
     <>
       <MainContentLayout>
@@ -235,7 +189,11 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
               isLoading={isScoresLoading || isLoadingAgents || isLoadingWorkflows}
             />
 
-            <ScoresList scores={scores} isLoading={isScoresLoading} />
+            {isScorerLoading ? (
+              <EntryListSkeleton columns={scoresListColumns} />
+            ) : (
+              <ScoresList scores={scores} pagination={pagination} onScoreClick={handleScoreClick} />
+            )}
             {/* <EntryList
               items={items}
               selectedItemId={selectedScoreId}

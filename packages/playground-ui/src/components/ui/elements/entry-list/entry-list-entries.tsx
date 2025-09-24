@@ -6,18 +6,24 @@ import React, { isValidElement } from 'react';
 type EntryListEntriesProps = {
   entries?: Record<string, any>[];
   selectedItemId?: string;
-  onItemClick?: (item: string) => void;
+  onEntryClick?: (item: string) => void;
   columns?: Column[];
   children?: React.ReactNode;
 };
 
-export function EntryListEntries({ entries, selectedItemId, columns, children }: EntryListEntriesProps) {
+export function EntryListEntries({ entries, selectedItemId, columns, children, onEntryClick }: EntryListEntriesProps) {
   return (
     <ul className="grid bg-surface3 overflow-y-auto">
       {entries
         ? entries.map(entry => {
             return (
-              <EntryListEntry key={entry.id} item={entry} selectedItemId={selectedItemId} columns={columns}>
+              <EntryListEntry
+                key={entry.id}
+                entry={entry}
+                selectedItemId={selectedItemId}
+                columns={columns}
+                onClick={onEntryClick}
+              >
                 {(columns || []).map((col, index) => {
                   const isValidReactElement = isValidElement(entry?.[col.name]);
                   const key = `${index}-${entry.id}`;

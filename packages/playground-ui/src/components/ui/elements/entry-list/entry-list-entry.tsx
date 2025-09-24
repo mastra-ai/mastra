@@ -11,7 +11,7 @@ type EntryListEntryProps = {
   isLoading?: boolean;
 };
 
-export function EntryListEntry({ entry, selectedItemId, onClick, children, columns, isLoading }: EntryListEntryProps) {
+export function EntryListEntry({ entry, selectedItemId, onClick, children, columns }: EntryListEntryProps) {
   const isSelected = selectedItemId && selectedItemId === entry?.id;
 
   const handleClick = () => {
@@ -20,15 +20,23 @@ export function EntryListEntry({ entry, selectedItemId, onClick, children, colum
 
   return (
     <li
-      className={cn('border-b text-[#ccc] border-border1 last:border-b-0 text-[0.875rem]', {
-        'bg-surface5': isSelected,
-      })}
+      className={cn(
+        'border-t text-[#ccc] border-border1 last:border-b-0 text-[0.875rem]',
+        '[&:last-child>button]:rounded-b-lg',
+        {
+          'bg-surface5': isSelected,
+        },
+      )}
     >
       <button
         onClick={handleClick}
-        className={cn('grid w-full px-[1.5rem] gap-[2rem] text-left items-center min-h-[3rem]', {
-          'hover:bg-surface5': entry,
-        })}
+        className={cn(
+          'grid w-full px-[1.5rem] gap-[1.5rem] text-left items-center min-h-[3rem]',
+          'focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_1px_rgba(24,251,111,.75)]',
+          {
+            'hover:bg-surface5': entry,
+          },
+        )}
         style={{ gridTemplateColumns: getColumnTemplate(columns) }}
         disabled={!entry}
       >

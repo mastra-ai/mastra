@@ -6,5 +6,5 @@ type EntryListTrimProps = {
 };
 
 export function EntryListTrim({ children }: EntryListTrimProps) {
-  return <div className={cn('rounded-t-lg border border-border1')}>{children}</div>;
+  return <div className={cn('rounded-lg border border-border1 overflow-clip')}>{children}</div>;
 }
