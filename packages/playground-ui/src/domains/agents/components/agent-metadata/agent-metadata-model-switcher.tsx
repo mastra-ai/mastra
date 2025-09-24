@@ -4,7 +4,7 @@ import Spinner from '@/components/ui/spinner';
 import { ProviderLogo } from './provider-logo';
 import { UpdateModelParams } from '@mastra/client-js';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Info } from 'lucide-react';
 import { useModelReset } from '../../context/model-reset-context';
 
 export interface AgentMetadataModelSwitcherProps {
@@ -20,6 +20,7 @@ interface Provider {
   name: string;
   envVar: string;
   connected: boolean;
+  docUrl?: string;
   models: string[];
 }
 
@@ -97,7 +98,7 @@ export const AgentMetadataModelSwitcher = ({
       );
     }
 
-    // Sort by connection status - connected providers first
+// Sort by connection status - connected providers first
     return filtered
       .sort((a, b) => {
         if (a.connected && !b.connected) return -1;
@@ -191,29 +192,48 @@ export const AgentMetadataModelSwitcher = ({
           <PopoverTrigger asChild>
             <div className="relative w-[180px]">
               {!isSearching && currentModelProvider && (
-                <div className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none z-10">
-                  <div className="relative">
-                    <ProviderLogo providerId={currentModelProvider} size={16} />
-                    {(() => {
-                      const provider = providers.find(p => p.id === currentModelProvider);
-                      if (provider) {
-                        return (
-                          <div
-                            className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
-                              provider.connected ? 'bg-green-500' : 'bg-red-500'
-                            }`}
-                            title={provider.connected ? 'Connected' : 'Not connected'}
-                          />
-                        );
-                      }
-                      return null;
-                    })()}
+                <>
+                  <div className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none z-10">
+                    <div className="relative">
+                      <ProviderLogo providerId={currentModelProvider} size={16} />
+                      {(() => {
+                        const provider = providers.find(p => p.id === currentModelProvider);
+                        if (provider) {
+                          return (
+                            <div
+                              className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
+                                provider.connected ? 'bg-green-500' : 'bg-red-500'
+                              }`}
+                              title={provider.connected ? 'Connected' : 'Not connected'}
+                            />
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
                   </div>
-                </div>
+                  {(() => {
+                    const provider = providers.find(p => p.id === currentModelProvider);
+                    if (provider?.docUrl) {
+                      return (
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10">
+                          <Info
+                            className="w-3.5 h-3.5 text-gray-500 hover:text-gray-700 cursor-pointer"
+                            onClick={e => {
+                              e.stopPropagation();
+                              window.open(provider.docUrl, '_blank');
+                            }}
+                          />
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </>
               )}
               <Input
                 spellCheck="false"
-                className={`w-full ${!isSearching && currentModelProvider ? 'pl-8' : ''}`}
+                className={`w-full ${!isSearching && currentModelProvider ? 'pl-8 pr-8' : ''}`}
                 type="text"
                 value={
                   isSearching
@@ -271,7 +291,7 @@ export const AgentMetadataModelSwitcher = ({
                     }}
                   >
                     <div className="relative">
-                      <ProviderLogo providerId={provider.id} size={20} />
+<ProviderLogo providerId={provider.id} size={20} />
                       <div
                         className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${
                           provider.connected ? 'bg-green-500' : 'bg-red-500'
@@ -283,6 +303,13 @@ export const AgentMetadataModelSwitcher = ({
                       <div className="text-sm font-medium">{provider.name}</div>
                       <div className="text-xs text-gray-500">{provider.id}</div>
                     </div>
+                    <Info
+                      className="w-4 h-4 text-gray-500 hover:text-gray-700 cursor-pointer"
+                      onClick={e => {
+                        e.stopPropagation();
+                        window.open(provider.docUrl || '#', '_blank');
+                      }}
+                    />
                   </div>
                 );
               })
@@ -354,7 +381,7 @@ export const AgentMetadataModelSwitcher = ({
       {/* Show warning if selected provider is not connected */}
       {(() => {
         const currentProvider = providers.find(p => p.id === currentModelProvider);
-        if (currentProvider && !currentProvider.connected) {
+if (currentProvider && !currentProvider.connected) {
           return (
             <div className="mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
               <div className="flex items-start gap-2">
