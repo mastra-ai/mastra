@@ -152,8 +152,8 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
         <div className={cn(`grid overflow-y-auto h-full`)}>
           <div className={cn('max-w-[100rem] w-full px-[3rem] mx-auto grid content-start gap-[2rem] h-full')}>
             <PageHeader
-              title={scorer?.scorer?.config?.name}
-              description={scorer?.scorer?.config?.description}
+              title={scorer?.scorer?.config?.name || 'loading'}
+              description={scorer?.scorer?.config?.description || 'loading'}
               icon={<GaugeIcon />}
             />
 
