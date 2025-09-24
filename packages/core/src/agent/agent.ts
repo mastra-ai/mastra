@@ -3443,7 +3443,7 @@ export class Agent<
     return result.result as unknown as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
   }
 
-  async resumeStream<
+  async resumeStreamVNext<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
   >(
@@ -3501,7 +3501,7 @@ export class Agent<
     if (result.status !== 'success') {
       if (result.status === 'failed') {
         throw new MastraError({
-          id: 'AGENT_STREAM_FAILED',
+          id: 'AGENT_STREAM_VNEXT_FAILED',
           domain: ErrorDomain.AGENT,
           category: ErrorCategory.USER,
           text: result.error.message,
@@ -3511,7 +3511,7 @@ export class Agent<
         });
       }
       throw new MastraError({
-        id: 'AGENT_STREAM_UNKNOWN_ERROR',
+        id: 'AGENT_STREAM_VNEXT_UNKNOWN_ERROR',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
         text: 'An unknown error occurred while streaming',
@@ -3527,7 +3527,7 @@ export class Agent<
   >(
     streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    return this.resumeStream({ approved: true }, streamOptions);
+    return this.resumeStreamVNext({ approved: true }, streamOptions);
   }
 
   async declineToolCall<
@@ -3536,7 +3536,7 @@ export class Agent<
   >(
     streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    return this.resumeStream({ approved: false }, streamOptions);
+    return this.resumeStreamVNext({ approved: false }, streamOptions);
   }
 
 
