@@ -42,7 +42,11 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
   const { scorer, isLoading: isScorerLoading } = useScorer(scorerId!);
   const { data: agents, isLoading: isLoadingAgents } = useAgents();
   const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
-  const { data: scoresData, isLoading: isScoresLoading } = useScoresByScorerId({
+  const {
+    data: scoresData,
+    isLoading: isScoresLoading,
+    error: scoresError,
+  } = useScoresByScorerId({
     scorerId,
     page: scoresPage,
     entityId: selectedEntityOption?.value === 'all' ? undefined : selectedEntityOption?.value,
@@ -175,6 +179,7 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
                 pagination={pagination}
                 onScoreClick={handleScoreClick}
                 onPageChange={setScoresPage}
+                errorMsg={scoresError?.message}
               />
             )}
           </div>

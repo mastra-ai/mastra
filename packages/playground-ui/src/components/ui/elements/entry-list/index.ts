@@ -9,6 +9,7 @@ export * from './entry-list-entry';
 export * from './entry-list-entry-col';
 export * from './entry-list-page-header';
 export * from './entry-list-pagination';
+export * from './entry-list-message';
 export * from './shared';
 export * from './types';
 export * from './helpers';

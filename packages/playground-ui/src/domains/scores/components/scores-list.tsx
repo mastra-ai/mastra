@@ -1,7 +1,12 @@
 import { ClientScoreRowData } from '@mastra/client-js';
-import { EntryList, EntryListTrim, EntryListHeader, EntryListEntries } from '@/components/ui/elements';
+import {
+  EntryList,
+  EntryListTrim,
+  EntryListHeader,
+  EntryListEntries,
+  EntryListMessage,
+} from '@/components/ui/elements';
 import { format, isToday } from 'date-fns';
-import { useState } from 'react';
 import { EntryListPagination } from '@/components/ui/elements/entry-list/entry-list-pagination';
 
 export const scoresListColumns = [
@@ -12,7 +17,7 @@ export const scoresListColumns = [
   { name: 'score', label: 'Score', size: '3rem' },
 ];
 
-type ScoresToolsProps = {
+type ScoresListProps = {
   onScoreClick?: (id: string) => void;
   scores?: ClientScoreRowData[];
   pagination?: {
@@ -22,9 +27,10 @@ type ScoresToolsProps = {
     page: number;
   };
   onPageChange?: (page: number) => void;
+  errorMsg?: string;
 };
 
-export function ScoresList({ scores, pagination, onScoreClick, onPageChange }: ScoresToolsProps) {
+export function ScoresList({ scores, pagination, onScoreClick, onPageChange, errorMsg }: ScoresListProps) {
   if (!scores) {
     return null;
   }
@@ -61,7 +67,17 @@ export function ScoresList({ scores, pagination, onScoreClick, onPageChange }: S
     <EntryList>
       <EntryListTrim>
         <EntryListHeader columns={scoresListColumns} />
-        <EntryListEntries entries={entries} columns={scoresListColumns} onEntryClick={onScoreClick} />
+        {errorMsg ? (
+          <EntryListMessage message={errorMsg} type="error" />
+        ) : (
+          <>
+            {entries.length > 0 ? (
+              <EntryListEntries entries={entries} columns={scoresListColumns} onEntryClick={onScoreClick} />
+            ) : (
+              <EntryListMessage message="No scores for this scorer yet" />
+            )}
+          </>
+        )}
       </EntryListTrim>
       <EntryListPagination
         currentPage={pagination?.page || 0}
