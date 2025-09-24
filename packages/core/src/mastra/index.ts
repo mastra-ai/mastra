@@ -159,11 +159,12 @@ export class Mastra<
 
   /**
    * Generate a unique identifier using the configured generator or default to crypto.randomUUID()
+   * @param context - Optional context information about where the ID is being generated
    * @returns A unique string ID
    */
-  public generateId(): string {
+  public generateId(context?: IdGeneratorContext): string {
     if (this.#idGenerator) {
-      const id = this.#idGenerator();
+      const id = this.#idGenerator(context);
       if (!id) {
         const error = new MastraError({
           id: 'MASTRA_ID_GENERATOR_RETURNED_EMPTY_STRING',
