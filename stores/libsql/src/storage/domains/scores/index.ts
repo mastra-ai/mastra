@@ -126,6 +126,7 @@ export class ScoresLibSQL extends ScoresStorage {
     return {
       id: row.id,
       traceId: row.traceId,
+      spanId: row.spanId,
       runId: row.runId,
       scorer: scorerValue,
       score: row.score,
@@ -216,6 +217,53 @@ export class ScoresLibSQL extends ScoresStorage {
       throw new MastraError(
         {
           id: 'LIBSQL_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    try {
+      const countSQLResult = await this.client.execute({
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE traceId = ? AND spanId = ?`,
+        args: [traceId, spanId],
+      });
+
+      const total = Number(countSQLResult.rows?.[0]?.count ?? 0);
+
+      const result = await this.client.execute({
+        sql: `SELECT * FROM ${TABLE_SCORERS} WHERE traceId = ? AND spanId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        args: [traceId, spanId, pagination.perPage + 1, pagination.page * pagination.perPage],
+      });
+
+      const hasMore = result.rows?.length > pagination.perPage;
+      const scores = result.rows?.slice(0, pagination.perPage).map(row => this.transformScoreRow(row)) ?? [];
+
+      console.log('scores', scores);
+      return {
+        scores,
+        pagination: {
+          total,
+          page: pagination.page,
+          perPage: pagination.perPage,
+          hasMore,
+        },
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_SCORES_BY_SPAN_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

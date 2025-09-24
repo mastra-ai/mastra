@@ -126,6 +126,7 @@ export class LibSQLStore extends MastraStorage {
       createTable: true,
       deleteMessages: true,
       aiTracing: true,
+      getScoresBySpan: true,
     };
   }
 
@@ -334,6 +335,18 @@ export class LibSQLStore extends MastraStorage {
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     return this.stores.scores.getScoresByEntityId({ entityId, entityType, pagination });
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    return this.stores.scores.getScoresBySpan({ traceId, spanId, pagination });
   }
 
   /**
