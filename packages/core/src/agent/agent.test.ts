@@ -658,7 +658,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           const agentOne = mastra.getAgent('userAgent');
 
           let toolCall;
-          const stream = await agentOne.streamVNext('Find the user with name - Dero Israel');
+          const stream = await agentOne.stream('Find the user with name - Dero Israel');
           for await (const _chunk of stream.fullStream) {
           }
           await new Promise(resolve => setTimeout(resolve, 1000));
@@ -715,7 +715,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             });
             toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
           } else {
-            const stream = await agentOne.streamVNext('Find the user with name - Dero Israel', {
+            const stream = await agentOne.stream('Find the user with name - Dero Israel', {
               requireToolApproval: true,
             });
             for await (const _chunk of stream.fullStream) {
@@ -773,7 +773,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             });
             toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
           } else {
-            const stream = await agentOne.streamVNext('Find the user with name - Dero Israel');
+            const stream = await agentOne.stream('Find the user with name - Dero Israel');
             for await (const _chunk of stream.fullStream) {
             }
             await new Promise(resolve => setTimeout(resolve, 1000));
@@ -820,7 +820,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
           const agentOne = mastra.getAgent('userAgent');
 
-          const stream = await agentOne.streamVNext('Find the user with name - Dero Israel');
+          const stream = await agentOne.stream('Find the user with name - Dero Israel');
           for await (const _chunk of stream.fullStream) {
           }
           await new Promise(resolve => setTimeout(resolve, 1000));
@@ -872,7 +872,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             });
             toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
           } else {
-            const stream = await agentOne.streamVNext(
+            const stream = await agentOne.stream(
               'First tell me about what tools you have. Then call the user tool to find the user with name - Dero Israel. Then tell me about what format you received the data and tell me what it would look like in human readable form.',
               {
                 requireToolApproval: true,
@@ -4427,9 +4427,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
     });
 
-    it('should combine instructions with system option in generateVNext', async () => {
+    it('should combine instructions with system option in generate', async () => {
       // This test verifies that both agent instructions and user-provided system messages
-      // are properly combined when using generateVNext
+      // are properly combined when using generate
       // For now, we're just testing that the functionality doesn't break
       // Full integration testing would require checking the actual messages sent to the LLM
 
@@ -4446,9 +4446,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       if (version === 'v2') {
         // This test only applies to V2
-        // Simply verify that generateVNext works with the system option
+        // Simply verify that generate works with the system option
         // without throwing errors
-        const response = await agent.generateVNext('Hello', {
+        const response = await agent.generate('Hello', {
           system: additionalSystem,
         });
 
@@ -4462,7 +4462,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should combine array instructions with array system option', async () => {
       // This test verifies that array instructions and array system messages
-      // are properly combined when using generateVNext
+      // are properly combined when using generate
 
       // Use CoreSystemMessage array instead of mixed array
       const agentInstructions: CoreSystemMessage[] = [
@@ -4481,9 +4481,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       if (version === 'v2') {
         // This test only applies to V2
-        // Simply verify that generateVNext works with array system option
+        // Simply verify that generate works with array system option
         // without throwing errors
-        const response = await agent.generateVNext('Hello', {
+        const response = await agent.generate('Hello', {
           system: additionalSystem,
         });
 
@@ -4555,8 +4555,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
         expect(response.text).toBe('Dummy response');
       } else {
-        // For v2, use generateVNext
-        const response = await agent.generateVNext('Hello', {
+        // For v2, use generate
+        const response = await agent.generate('Hello', {
           instructions: {
             role: 'system',
             content: 'Override instructions',
@@ -4631,7 +4631,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(instructions).toEqual(instructionsArray);
     });
 
-    it('should combine instructions with system option in streamVNext', async () => {
+    it('should combine instructions with system option in stream', async () => {
       if (version === 'v2') {
         const agent = new Agent({
           name: 'test-agent',
@@ -4644,7 +4644,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           content: 'Be concise in your responses.',
         };
 
-        const stream = await agent.streamVNext('Hello', {
+        const stream = await agent.stream('Hello', {
           system: additionalSystem,
         });
 
@@ -4669,8 +4669,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
         expect(response.text).toBe('Dummy response');
       } else {
-        // For v2, use generateVNext
-        const response = await agent.generateVNext('Hello', {
+        // For v2, use generate
+        const response = await agent.generate('Hello', {
           instructions: ['Override instruction 1', 'Override instruction 2'],
         });
         expect(response.text).toBe('Dummy response');
@@ -4725,7 +4725,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       if (version === 'v2') {
         try {
           // This will trigger the message list building
-          await agent.generateVNext('Hello');
+          await agent.generate('Hello');
 
           // Check all addSystem calls
           const systemMessageCalls = addSystemSpy.mock.calls.filter(call => {

@@ -1638,7 +1638,7 @@ export class Agent<
     resourceId?: string;
     runtimeContext: RuntimeContext;
     tracingContext?: TracingContext;
-    methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
+    methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
     format?: 'mastra' | 'aisdk';
   }) {
     const convertedWorkflowTools: Record<string, CoreTool> = {};
@@ -1667,13 +1667,13 @@ export class Agent<
               const run = await workflow.createRunAsync();
 
               let result: any;
-              if (methodType === 'generate') {
+              if (methodType === 'generate' || methodType === 'generateLegacy') {
                 result = await run.start({
                   inputData: context,
                   runtimeContext,
                   tracingContext: innerTracingContext,
                 });
-              } else if (methodType === 'stream') {
+              } else if (methodType === 'streamLegacy') {
                 const streamResult = run.stream({
                   inputData: context,
                   runtimeContext,
@@ -1689,7 +1689,7 @@ export class Agent<
                 }
 
                 result = await streamResult.getWorkflowState();
-              } else if (methodType === 'streamVNext') {
+              } else if (methodType === 'stream') {
                 // TODO: add support for format
                 const streamResult = run.streamVNext({
                   inputData: context,
@@ -1771,7 +1771,7 @@ export class Agent<
     runtimeContext: RuntimeContext;
     tracingContext?: TracingContext;
     writableStream?: WritableStream<ChunkType>;
-    methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
+methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
     format?: 'mastra' | 'aisdk';
   }): Promise<Record<string, CoreTool>> {
     let mastraProxy = undefined;
@@ -3307,228 +3307,7 @@ export class Agent<
     });
   }
 
-  async generateVNext<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' = 'mastra'>(
-    messages: MessageListInput,
-    options?: AgentExecutionOptions<OUTPUT, FORMAT>,
-  ): Promise<
-    FORMAT extends 'aisdk'
-      ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
-      : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
-  > {
-    const result = await this.streamVNext(messages, options);
 
-    if (result.tripwire) {
-      return result as unknown as FORMAT extends 'aisdk'
-        ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
-        : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
-    }
-
-    let fullOutput = await result.getFullOutput();
-
-    const error = fullOutput.error;
-
-    if (fullOutput.finishReason === 'error' && error) {
-      throw error;
-    }
-
-    return fullOutput as unknown as FORMAT extends 'aisdk'
-      ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
-      : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
-  }
-
-  async streamVNext<OUTPUT extends OutputSchema = undefined, FORMAT extends 'mastra' | 'aisdk' | undefined = undefined>(
-    messages: MessageListInput,
-    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
-  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
-      runtimeContext: streamOptions?.runtimeContext,
-    });
-
-    if (
-      (defaultStreamOptions.structuredOutput && defaultStreamOptions.output) ||
-      (streamOptions?.structuredOutput && streamOptions.output)
-    ) {
-      throw new MastraError({
-        id: 'AGENT_STREAM_VNEXT_STRUCTURED_OUTPUT_AND_OUTPUT_PROVIDED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'structuredOutput and output cannot be provided at the same time',
-      });
-    }
-
-    // If streamOptions has either output or structuredOutput, remove both from defaultStreamOptions
-    // to ensure streamOptions takes precedence and avoid union type conflicts
-    let adjustedDefaultStreamOptions = { ...defaultStreamOptions };
-    if (streamOptions?.structuredOutput || streamOptions?.output) {
-      const { output, structuredOutput, ...restDefaultOptions } = adjustedDefaultStreamOptions;
-      adjustedDefaultStreamOptions = restDefaultOptions as typeof defaultStreamOptions;
-    }
-
-    let mergedStreamOptions = {
-      ...adjustedDefaultStreamOptions,
-      ...(streamOptions ?? {}),
-      onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
-    };
-
-    // Map structuredOutput to output when maxSteps is explicitly set to 1
-    // This allows the new structuredOutput API to use the existing output implementation
-    let modelOverride: MastraLanguageModel | undefined;
-    if (mergedStreamOptions.structuredOutput && mergedStreamOptions.maxSteps === 1) {
-      // If structuredOutput has a model, use it to override the agent's model
-      if (mergedStreamOptions.structuredOutput.model) {
-        modelOverride = mergedStreamOptions.structuredOutput.model;
-      }
-
-      // assign structuredOutput.schema to output when maxSteps is explicitly set to 1
-      const { structuredOutput, ...optionsWithoutStructuredOutput } = mergedStreamOptions;
-      mergedStreamOptions = {
-        ...optionsWithoutStructuredOutput,
-        output: structuredOutput.schema as OUTPUT,
-      };
-    }
-
-    const llm = await this.getLLM({
-      runtimeContext: mergedStreamOptions.runtimeContext,
-      model: modelOverride,
-    });
-
-    if (llm.getModel().specificationVersion !== 'v2') {
-      const modelInfo = llm.getModel();
-      const modelId = modelInfo.modelId || 'unknown';
-      const provider = modelInfo.provider || 'unknown';
-
-      throw new MastraError({
-        id: 'AGENT_STREAM_VNEXT_V1_MODEL_NOT_SUPPORTED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `Agent "${this.name}" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with streamVNext. Please use AI SDK v5 models or call the stream() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`,
-        details: {
-          agentName: this.name,
-          modelId,
-          provider,
-          specificationVersion: modelInfo.specificationVersion,
-        },
-      });
-    }
-
-    const executeOptions = {
-      ...mergedStreamOptions,
-      messages,
-      methodType: 'streamVNext',
-      model: modelOverride,
-    } as InnerAgentExecutionOptions<OUTPUT, FORMAT>;
-
-    const result = await this.#execute(executeOptions);
-
-    if (result.status !== 'success') {
-      if (result.status === 'failed') {
-        throw new MastraError({
-          id: 'AGENT_STREAM_VNEXT_FAILED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: result.error.message,
-          details: {
-            error: result.error.message,
-          },
-        });
-      }
-      throw new MastraError({
-        id: 'AGENT_STREAM_VNEXT_UNKNOWN_ERROR',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'An unknown error occurred while streaming',
-      });
-    }
-
-    return result.result as unknown as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
-  }
-
-  async resumeStreamVNext<
-    OUTPUT extends OutputSchema | undefined = undefined,
-    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
-  >(
-    resumeContext: any,
-    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
-  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
-      runtimeContext: streamOptions?.runtimeContext,
-    });
-
-    let mergedStreamOptions = {
-      ...defaultStreamOptions,
-      ...streamOptions,
-      onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
-    };
-
-    // Map structuredOutput to output when maxSteps is explicitly set to 1
-    // This allows the new structuredOutput API to use the existing output implementation
-    let modelOverride: MastraLanguageModel | undefined;
-    if (mergedStreamOptions.structuredOutput && mergedStreamOptions.maxSteps === 1) {
-      // If structuredOutput has a model, use it to override the agent's model
-      if (mergedStreamOptions.structuredOutput.model) {
-        modelOverride = mergedStreamOptions.structuredOutput.model;
-      }
-
-      mergedStreamOptions = {
-        ...mergedStreamOptions,
-        output: mergedStreamOptions.structuredOutput.schema as OUTPUT,
-        structuredOutput: undefined, // Remove structuredOutput to avoid confusion downstream
-      };
-    }
-
-    const llm = await this.getLLM({
-      runtimeContext: mergedStreamOptions.runtimeContext,
-      model: modelOverride,
-    });
-
-    if (llm.getModel().specificationVersion !== 'v2') {
-      throw new MastraError({
-        id: 'AGENT_STREAM_VNEXT_V1_MODEL_NOT_SUPPORTED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'V1 models are not supported for streamVNext. Please use stream instead.',
-      });
-    }
-
-    const result = await this.#execute({
-      ...mergedStreamOptions,
-      messages: [],
-      resumeContext,
-      methodType: 'streamVNext',
-      model: modelOverride,
-    } as InnerAgentExecutionOptions<OUTPUT, FORMAT>);
-
-    if (result.status !== 'success') {
-      if (result.status === 'failed') {
-        throw new MastraError({
-          id: 'AGENT_STREAM_VNEXT_FAILED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: result.error.message,
-          details: {
-            error: result.error.message,
-          },
-        });
-      }
-      throw new MastraError({
-        id: 'AGENT_STREAM_VNEXT_UNKNOWN_ERROR',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'An unknown error occurred while streaming',
-      });
-    }
-
-    return result.result as unknown as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
-  }
-
-  async approveToolCall<
-    OUTPUT extends OutputSchema | undefined = undefined,
-    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
-  >(
-    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
-  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    return this.resumeStreamVNext({ approved: true }, streamOptions);
-  }
 
   async declineToolCall<
     OUTPUT extends OutputSchema | undefined = undefined,
@@ -3536,7 +3315,7 @@ export class Agent<
   >(
     streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    return this.resumeStreamVNext({ approved: false }, streamOptions);
+    return this.resumeStream({ approved: false }, streamOptions);
   }
 
   async generate(
@@ -3563,7 +3342,7 @@ export class Agent<
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
     if (!generateDeprecationWarningShown) {
       this.logger.warn(
-        "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 30th, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
+"Deprecation NOTICE:\ngenerateLegacy method is deprecated and will be removed September 30th, 2025. Please use generate() with V2 models.",
       );
       generateDeprecationWarningShown = true;
     }
@@ -3571,7 +3350,7 @@ export class Agent<
     return this.generateLegacy(messages, generateOptions);
   }
 
-  async generateLegacy(
+  async generate(
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateTextResult<any, undefined>>;
@@ -3607,7 +3386,7 @@ export class Agent<
 
     if (llm.getModel().specificationVersion !== 'v1') {
       this.logger.error(
-        'V2 models are not supported for the current version of generate. Please use generateVNext instead.',
+'V2 models are not supported for generateLegacy. Please use generate() instead. generateLegacy only supports V1 models.',
         {
           modelId: llm.getModel().modelId,
         },
@@ -3620,7 +3399,7 @@ export class Agent<
         details: {
           modelId: llm.getModel().modelId,
         },
-        text: 'V2 models are not supported for the current version of generate. Please use generateVNext instead.',
+text: 'V2 models are not supported for generateLegacy. Please use generate() instead. generateLegacy only supports V1 models.',
       });
     }
 
@@ -3933,7 +3712,7 @@ export class Agent<
   > {
     if (!streamDeprecationWarningShown) {
       this.logger.warn(
-        "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 30th, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
+"Deprecation NOTICE:\nstreamLegacy method is deprecated and will be removed September 30th, 2025. Please use stream() with V2 models.",
       );
       streamDeprecationWarningShown = true;
     }
@@ -3999,7 +3778,7 @@ export class Agent<
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions, 'stream');
 
     if (llm.getModel().specificationVersion !== 'v1') {
-      this.logger.error('V2 models are not supported for stream. Please use streamVNext instead.', {
+this.logger.error('V2 models are not supported for streamLegacy. Please use stream() instead. streamLegacy only supports V1 models.', {
         modelId: llm.getModel().modelId,
       });
 
@@ -4010,7 +3789,7 @@ export class Agent<
         details: {
           modelId: llm.getModel().modelId,
         },
-        text: 'V2 models are not supported for stream. Please use streamVNext instead.',
+text: 'V2 models are not supported for streamLegacy. Please use stream() instead. streamLegacy only supports V1 models.',
       });
     }
 

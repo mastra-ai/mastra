@@ -456,7 +456,7 @@ export function MastraRuntimeProvider({
           });
         } else {
           if (chatWithGenerateVNext) {
-            const response = await agent.generateVNext({
+            const response = await agent.generate({
               messages: [
                 {
                   role: 'user',
@@ -484,7 +484,7 @@ export function MastraRuntimeProvider({
             setIsRunning(false);
             return;
           } else {
-            const response = await agent.streamVNext({
+            const response = await agent.stream({
               messages: [
                 {
                   role: 'user',

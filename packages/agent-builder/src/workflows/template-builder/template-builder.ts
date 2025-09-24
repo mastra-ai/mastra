@@ -233,11 +233,11 @@ Return the actual exported names of the units, as well as the file names.`,
       });
 
       const result = isV2
-        ? await agent.generateVNext(prompt, {
+        ? await agent.generate(prompt, {
             output,
             maxSteps: 100,
           })
-        : await agent.generate(prompt, {
+        : await agent.generateLegacy(prompt, {
             experimental_output: output,
             maxSteps: 100,
           });

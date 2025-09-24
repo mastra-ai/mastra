@@ -23,7 +23,7 @@ export const AgentSettings = ({ modelVersion }: { modelVersion: string }) => {
     if (settings?.modelSettings?.chatWithNetwork) {
       radioValue = 'network';
     } else {
-      radioValue = settings?.modelSettings?.chatWithGenerateVNext ? 'generateVNext' : 'streamVNext';
+      radioValue = settings?.modelSettings?.chatWithGenerateVNext ? 'generate' : 'stream';
     }
   } else {
     radioValue = settings?.modelSettings?.chatWithGenerate ? 'generate' : 'stream';
@@ -41,8 +41,8 @@ export const AgentSettings = ({ modelVersion }: { modelVersion: string }) => {
                 modelSettings: {
                   ...settings?.modelSettings,
                   chatWithGenerate: value === 'generate',
-                  chatWithGenerateVNext: value === 'generateVNext',
-                  chatWithStreamVNext: value === 'streamVNext',
+                  chatWithGenerateVNext: value === 'generate',
+                  chatWithStreamVNext: value === 'stream',
                   chatWithNetwork: value === 'network',
                 },
               })
@@ -59,9 +59,9 @@ export const AgentSettings = ({ modelVersion }: { modelVersion: string }) => {
             )}
             {modelVersion === 'v2' && (
               <div className="flex items-center gap-2">
-                <RadioGroupItem value="generateVNext" id="generateVNext" className="text-icon6" />
-                <Label className="text-icon6 text-ui-md" htmlFor="generateVNext">
-                  Generate vNext
+                <RadioGroupItem value="generate" id="generate" className="text-icon6" />
+                <Label className="text-icon6 text-ui-md" htmlFor="generate">
+                  Generate
                 </Label>
               </div>
             )}
@@ -75,9 +75,9 @@ export const AgentSettings = ({ modelVersion }: { modelVersion: string }) => {
             )}
             {modelVersion === 'v2' && (
               <div className="flex items-center gap-2">
-                <RadioGroupItem value="streamVNext" id="streamVNext" className="text-icon6" />
-                <Label className="text-icon6 text-ui-md" htmlFor="streamVNext">
-                  Stream vNext
+                <RadioGroupItem value="stream" id="stream" className="text-icon6" />
+                <Label className="text-icon6 text-ui-md" htmlFor="stream">
+                  Stream
                 </Label>
               </div>
             )}

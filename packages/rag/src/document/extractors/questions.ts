@@ -79,7 +79,7 @@ export class QuestionsAnsweredExtractor extends BaseExtractor {
 
     let questionsText = '';
     if (this.llm.specificationVersion === 'v2') {
-      const result = await miniAgent.generateVNext([{ role: 'user', content: prompt }], { format: 'mastra' });
+      const result = await miniAgent.generate([{ role: 'user', content: prompt }], { format: 'mastra' });
       questionsText = result.text;
     } else {
       const result = await miniAgent.generate([{ role: 'user', content: prompt }]);

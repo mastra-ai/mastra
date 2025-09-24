@@ -73,7 +73,7 @@ export class KeywordExtractor extends BaseExtractor {
       });
 
       if (this.llm.specificationVersion === 'v2') {
-        const result = await miniAgent.generateVNext(
+        const result = await miniAgent.generate(
           [
             {
               role: 'user',

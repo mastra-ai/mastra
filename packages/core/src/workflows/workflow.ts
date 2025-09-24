@@ -205,7 +205,7 @@ export function createStep<
           });
           stream = fullStream as any;
         } else {
-          const modelOutput = await params.streamVNext(inputData.prompt, {
+          const modelOutput = await params.stream(inputData.prompt, {
             runtimeContext,
             onFinish: result => {
               streamPromise.resolve(result.text);

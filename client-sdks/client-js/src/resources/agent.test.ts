@@ -32,7 +32,7 @@ class TestAgent extends Agent {
   }
 }
 
-describe('Agent.streamVNext', () => {
+describe('Agent.stream', () => {
   let agent: TestAgent;
 
   beforeEach(() => {
@@ -63,8 +63,8 @@ describe('Agent.streamVNext', () => {
       output: outputSchema,
     };
 
-    // Act: Call streamVNext with the params
-    await agent.streamVNext(params);
+    // Act: Call stream with the params
+    await agent.stream(params);
 
     // Assert: Verify output schema transformation
     const expectedSchema = zodToJsonSchema(outputSchema);
@@ -77,8 +77,8 @@ describe('Agent.streamVNext', () => {
       messages: [] as any,
     };
 
-    // Act: Call streamVNext with the params
-    await agent.streamVNext(params);
+    // Act: Call stream with the params
+    await agent.stream(params);
 
     // Assert: Verify output is undefined
     expect(agent.lastProcessedParams?.output).toBeUndefined();
@@ -102,8 +102,8 @@ describe('Agent.streamVNext', () => {
       runtimeContext,
     };
 
-    // Act: Call streamVNext with the params
-    await agent.streamVNext(params);
+    // Act: Call stream with the params
+    await agent.stream(params);
 
     // Assert: Verify runtimeContext was converted to plain object
     expect(agent.lastProcessedParams?.runtimeContext).toEqual({
@@ -135,8 +135,8 @@ describe('Agent.streamVNext', () => {
       clientTools,
     };
 
-    // Act: Call streamVNext with the params
-    await agent.streamVNext(params);
+    // Act: Call stream with the params
+    await agent.stream(params);
 
     // Assert: Verify schemas were converted while preserving other properties
     expect(agent.lastProcessedParams?.clientTools).toEqual({
@@ -155,8 +155,8 @@ describe('Agent.streamVNext', () => {
       messages: [],
     };
 
-    // Act: Call streamVNext
-    const response = await agent.streamVNext(params);
+    // Act: Call stream
+    const response = await agent.stream(params);
 
     // Assert: Verify response structure
     expect(response).toBeInstanceOf(Response);
@@ -173,7 +173,7 @@ describe('Agent.streamVNext', () => {
     };
 
     // Act: Process the stream
-    const response = await agent.streamVNext(params);
+    const response = await agent.stream(params);
     await response.processDataStream({ onChunk });
 
     // Assert: Verify callback execution

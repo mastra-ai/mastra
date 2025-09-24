@@ -6,18 +6,16 @@ import { generateSystemPromptHandler } from '../../prompt';
 import { executeAgentToolHandler, getAgentToolHandler } from '../tools/handlers';
 import {
   generateHandler,
-  generateVNextHandler,
   getAgentByIdHandler,
   getAgentsHandler,
   getEvalsByAgentIdHandler,
   getLiveEvalsByAgentIdHandler,
   setAgentInstructionsHandler,
   streamGenerateHandler,
-  streamVNextGenerateHandler,
   updateAgentModelHandler,
   vNextBodyOptions,
   deprecatedStreamVNextHandler,
-  streamVNextUIMessageHandler,
+  streamUIMessageHandler,
   streamGenerateLegacyHandler,
   generateLegacyHandler,
   reorderAgentModelListHandler,
@@ -282,7 +280,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    generateVNextHandler,
+    generateHandler,
   );
 
   router.post(
@@ -320,7 +318,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    streamVNextGenerateHandler,
+    streamGenerateHandler,
   );
 
   router.post(
@@ -539,7 +537,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    streamVNextUIMessageHandler,
+    streamUIMessageHandler,
   );
 
   router.post(
