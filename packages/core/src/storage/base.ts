@@ -382,6 +382,11 @@ export abstract class MastraStorage extends MastraBase {
       schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
       ifNotExists: ['resourceId'],
     });
+    await this?.alterTable?.({
+      tableName: TABLE_SCORERS,
+      schema: TABLE_SCHEMAS[TABLE_SCORERS],
+      ifNotExists: ['spanId'],
+    });
   }
 
   async persistWorkflowSnapshot({
