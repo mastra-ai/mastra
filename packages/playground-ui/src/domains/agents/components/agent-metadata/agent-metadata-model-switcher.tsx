@@ -39,9 +39,12 @@ export const AgentMetadataModelSwitcher = ({
   const [loading, setLoading] = useState(false);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [providersLoading, setProvidersLoading] = useState(true);
+  const [highlightedProviderIndex, setHighlightedProviderIndex] = useState(-1);
+  const [highlightedModelIndex, setHighlightedModelIndex] = useState(-1);
 
   // Ref for the model input to focus it
   const modelInputRef = useRef<HTMLInputElement>(null);
+  const providerInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch providers from the server or use mock data for now
   useEffect(() => {
@@ -108,7 +111,7 @@ export const AgentMetadataModelSwitcher = ({
       .slice(0, searchTerm ? undefined : 20); // Show first 20 when no search
   }, [providers, providerSearch, isSearching]);
 
-  // Auto-save when model changes
+// Auto-save when model changes
   const handleModelSelect = async (modelId: string) => {
     setSelectedModel(modelId);
     setShowModelSuggestions(false);
@@ -127,6 +130,29 @@ export const AgentMetadataModelSwitcher = ({
       } finally {
         setLoading(false);
       }
+    }
+  };
+
+// Handle provider selection
+  const handleProviderSelect = async (provider: Provider) => {
+    setSelectedProvider(provider.id);
+    setProviderSearch('');
+    setIsSearching(false);
+    setShowProviderSuggestions(false);
+    setHighlightedProviderIndex(-1);
+    
+    // Only clear model selection when switching to a different provider
+    if (provider.id !== currentModelProvider) {
+      setSelectedModel('');
+      setHighlightedModelIndex(0);
+    }
+    
+    // Only auto-focus model input if provider is connected
+    if (provider.connected) {
+      setTimeout(() => {
+        modelInputRef.current?.focus();
+        modelInputRef.current?.click();
+      }, 100);
     }
   };
 
@@ -231,8 +257,9 @@ export const AgentMetadataModelSwitcher = ({
                   })()}
                 </>
               )}
-              <Input
+<Input
                 spellCheck="false"
+                ref={providerInputRef}
                 className={`w-full ${!isSearching && currentModelProvider ? 'pl-8 pr-8' : ''}`}
                 type="text"
                 value={
@@ -240,18 +267,98 @@ export const AgentMetadataModelSwitcher = ({
                     ? providerSearch
                     : providers.find(p => p.id === currentModelProvider)?.name || currentModelProvider || ''
                 }
-                onKeyDown={e => {
-                  if (!isSearching && e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+onKeyDown={e => {
+                  const filteredProviders = providers.filter(provider =>
+                    provider.name.toLowerCase().includes(providerSearch.toLowerCase()) ||
+                    provider.id.toLowerCase().includes(providerSearch.toLowerCase())
+                  );
+
+                  if (!isSearching && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                    // Only clear search when actually typing, not when tabbing
                     setIsSearching(true);
                     setProviderSearch('');
+                    setHighlightedProviderIndex(0);
+                  } else if (showProviderSuggestions) {
+                    switch (e.key) {
+                      case 'ArrowDown':
+                        e.preventDefault();
+                        setHighlightedProviderIndex(prev => 
+                          prev < filteredProviders.length - 1 ? prev + 1 : 0
+                        );
+                        // Auto-scroll to keep highlighted item visible
+                        setTimeout(() => {
+                          const highlightedElement = document.querySelector('[data-provider-highlighted="true"]');
+                          highlightedElement?.scrollIntoView({ block: 'nearest' });
+                        }, 0);
+                        break;
+                      case 'ArrowUp':
+                        e.preventDefault();
+                        setHighlightedProviderIndex(prev => 
+                          prev > 0 ? prev - 1 : filteredProviders.length - 1
+                        );
+                        // Auto-scroll to keep highlighted item visible
+                        setTimeout(() => {
+                          const highlightedElement = document.querySelector('[data-provider-highlighted="true"]');
+                          highlightedElement?.scrollIntoView({ block: 'nearest' });
+                        }, 0);
+                        break;
+                      case 'Enter':
+                        e.preventDefault();
+                        if (highlightedProviderIndex >= 0 && highlightedProviderIndex < filteredProviders.length) {
+                          const provider = filteredProviders[highlightedProviderIndex];
+                          handleProviderSelect(provider);
+                        }
+                        break;
+                      case 'Tab':
+                        // Only prevent default and handle Tab if NOT shift+tab
+                        if (!e.shiftKey) {
+                          e.preventDefault();
+                          if (highlightedProviderIndex >= 0 && highlightedProviderIndex < filteredProviders.length) {
+                            const provider = filteredProviders[highlightedProviderIndex];
+                            handleProviderSelect(provider);
+                          } else {
+                            // If no provider is highlighted, just close dropdown and let tab proceed
+                            setShowProviderSuggestions(false);
+                            setIsSearching(false);
+                            setProviderSearch('');
+                            setHighlightedProviderIndex(-1);
+                          }
+                        }
+                        // If shift+tab, let it proceed normally
+                        break;
+                      case 'Escape':
+                        e.preventDefault();
+                        setIsSearching(false);
+                        setProviderSearch('');
+                        setHighlightedProviderIndex(-1);
+                        setShowProviderSuggestions(false);
+                        break;
+                    }
+                  } else if (e.key === 'Tab') {
+                    // Handle Tab when dropdown is closed - just let it proceed normally
+                    return;
+                  }
+                }}
+                onFocus={() => {
+                  // Auto-open dropdown when focused
+                  if (!showProviderSuggestions) {
+                    setShowProviderSuggestions(true);
+                    // Find the index of the currently selected provider
+                    const currentIndex = filteredProviders.findIndex(p => p.id === currentModelProvider);
+                    setHighlightedProviderIndex(currentIndex >= 0 ? currentIndex : 0);
                   }
                 }}
                 onChange={e => {
                   setIsSearching(true);
                   setProviderSearch(e.target.value);
+                  setHighlightedProviderIndex(0);
                 }}
                 onClick={() => {
-                  setShowProviderSuggestions(!showProviderSuggestions);
+                  // Only open if not already open (prevents flashing)
+                  setShowProviderSuggestions(true);
+                  // Find the index of the currently selected provider
+                  const currentIndex = filteredProviders.findIndex(p => p.id === currentModelProvider);
+                  setHighlightedProviderIndex(currentIndex >= 0 ? currentIndex : 0);
                 }}
                 placeholder="Search providers..."
               />
@@ -264,31 +371,18 @@ export const AgentMetadataModelSwitcher = ({
             {filteredProviders.length === 0 ? (
               <div className="text-sm text-gray-500 p-2">No providers found</div>
             ) : (
-              filteredProviders.map(provider => {
+              filteredProviders.map((provider, index) => {
                 const isSelected = provider.id === currentModelProvider;
+                const isHighlighted = index === highlightedProviderIndex;
 
                 return (
-                  <div
+<div
                     key={provider.id}
+                    data-provider-highlighted={isHighlighted}
                     className={`flex items-center gap-2 cursor-pointer hover:bg-surface5 p-2 rounded ${
-                      isSelected ? 'bg-surface5' : ''
-                    }`}
-                    onClick={() => {
-                      setSelectedProvider(provider.id);
-                      setProviderSearch('');
-                      setIsSearching(false);
-                      setShowProviderSuggestions(false);
-                      if (provider.id !== currentModelProvider) {
-                        setSelectedModel('');
-                      }
-                      // Only auto-focus model input if provider is connected
-                      if (provider.connected) {
-                        setTimeout(() => {
-                          modelInputRef.current?.focus();
-                          modelInputRef.current?.click();
-                        }, 100);
-                      }
-                    }}
+                      isHighlighted ? 'outline outline-2 outline-blue-500' : ''
+                    } ${isSelected ? 'bg-surface5' : ''}`}
+                    onClick={() => handleProviderSelect(provider)}
                   >
                     <div className="relative">
 <ProviderLogo providerId={provider.id} size={20} />
@@ -319,7 +413,7 @@ export const AgentMetadataModelSwitcher = ({
 
         <Popover open={showModelSuggestions} onOpenChange={setShowModelSuggestions}>
           <PopoverTrigger asChild>
-            <Input
+<Input
               spellCheck="false"
               ref={modelInputRef}
               className="flex-1"
@@ -327,8 +421,79 @@ export const AgentMetadataModelSwitcher = ({
               value={selectedModel}
               onChange={e => {
                 setSelectedModel(e.target.value);
+                setHighlightedModelIndex(0);
               }}
-              onClick={() => {
+onKeyDown={e => {
+                const filteredModels = allModels.filter(item => {
+                  if (currentModelProvider && item.provider !== currentModelProvider) {
+                    return false;
+                  }
+                  if (selectedModel && !item.model.toLowerCase().includes(selectedModel.toLowerCase())) {
+                    return false;
+                  }
+                  return true;
+                });
+
+                // Handle Shift+Tab to go back to provider input
+                if (e.key === 'Tab' && e.shiftKey) {
+                  e.preventDefault();
+                  providerInputRef.current?.focus();
+                  return;
+                }
+
+switch (e.key) {
+                  case 'ArrowDown':
+                    e.preventDefault();
+                    setHighlightedModelIndex(prev => 
+                      prev < filteredModels.length - 1 ? prev + 1 : prev
+                    );
+                    // Auto-scroll to keep highlighted item visible
+                    setTimeout(() => {
+                      const highlightedElement = document.querySelector('[data-model-highlighted="true"]');
+                      highlightedElement?.scrollIntoView({ block: 'nearest' });
+                    }, 0);
+                    break;
+                  case 'ArrowUp':
+                    e.preventDefault();
+                    setHighlightedModelIndex(prev => 
+                      prev > 0 ? prev - 1 : filteredModels.length - 1
+                    );
+                    // Auto-scroll to keep highlighted item visible
+                    setTimeout(() => {
+                      const highlightedElement = document.querySelector('[data-model-highlighted="true"]');
+                      highlightedElement?.scrollIntoView({ block: 'nearest' });
+                    }, 0);
+                    break;
+                  case 'Enter':
+                  case 'Tab':
+                    e.preventDefault();
+                    if (highlightedModelIndex >= 0 && highlightedModelIndex < filteredModels.length) {
+                      const model = filteredModels[highlightedModelIndex];
+                      setSelectedModel(model.model);
+                      setShowModelSuggestions(false);
+                      handleModelSelect(model.model);
+// After selecting a model, focus the chat input
+                      setTimeout(() => {
+                        const chatInput = document.querySelector('textarea[data-chat-input]') as HTMLElement;
+                        if (!chatInput) {
+                          // Fallback to any textarea if specific selector not found
+                          const textarea = document.querySelector('textarea');
+                          textarea?.focus();
+                        } else {
+                          chatInput?.focus();
+                        }
+                      }, 100);
+                    }
+                    break;
+                  case 'Escape':
+                    e.preventDefault();
+                    setShowModelSuggestions(false);
+                    setHighlightedModelIndex(-1);
+                    break;
+                }
+              }}
+onClick={() => {
+                // Only open if not already open (prevents flashing)
                 setShowModelSuggestions(true);
               }}
               placeholder="Enter model name or select from suggestions..."
@@ -340,7 +505,7 @@ export const AgentMetadataModelSwitcher = ({
               onOpenAutoFocus={e => e.preventDefault()}
               className="flex flex-col gap-2 w-[var(--radix-popover-trigger-width)] max-h-[calc(var(--radix-popover-content-available-height)-50px)] overflow-y-auto"
             >
-              {allModels
+{allModels
                 .filter(item => {
                   // Filter by selected provider
                   if (currentModelProvider && item.provider !== currentModelProvider) {
@@ -352,21 +517,28 @@ export const AgentMetadataModelSwitcher = ({
                   }
                   return true;
                 })
-                .map(item => (
-                  <div
-                    key={`${item.provider}/${item.model}`}
-                    className="flex items-center gap-2 cursor-pointer hover:bg-surface5 p-2"
-                    onClick={() => {
-                      setSelectedModel(item.model);
-                      setShowModelSuggestions(false);
-                      handleModelSelect(item.model);
-                    }}
-                  >
-                    <ProviderLogo providerId={item.provider} size={16} />
-                    <span className="flex-1">{item.model}</span>
-                    <span className="text-xs text-gray-500">{item.providerName}</span>
-                  </div>
-                ))}
+                .map((item, index) => {
+                  const isHighlighted = index === highlightedModelIndex;
+                  
+                  return (
+<div
+                      key={`${item.provider}/${item.model}`}
+                      data-model-highlighted={isHighlighted}
+                      className={`flex items-center gap-2 cursor-pointer hover:bg-surface5 p-2 rounded ${
+                        isHighlighted ? 'outline outline-2 outline-blue-500' : ''
+                      }`}
+                      onClick={() => {
+                        setSelectedModel(item.model);
+                        setShowModelSuggestions(false);
+                        handleModelSelect(item.model);
+                      }}
+                    >
+                      <ProviderLogo providerId={item.provider} size={16} />
+                      <span className="flex-1">{item.model}</span>
+                      <span className="text-xs text-gray-500">{item.providerName}</span>
+                    </div>
+                  );
+                })}
             </PopoverContent>
           )}
         </Popover>
