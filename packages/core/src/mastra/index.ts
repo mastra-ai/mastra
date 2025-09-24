@@ -125,6 +125,7 @@ export class Mastra<
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
+  #internalMastraWorkflows: Record<string, Workflow> = {};
   // This is only used internally for server handlers that require temporary persistence
   #serverCache: MastraServerCache;
 
@@ -680,6 +681,37 @@ do:
 
     if (serialized) {
       return { name: workflow.name } as TWorkflows[TWorkflowId];
+    }
+
+    return workflow;
+  }
+
+  __registerInternalWorkflow(workflow: Workflow) {
+    workflow.__registerMastra(this);
+    workflow.__registerPrimitives({
+      logger: this.getLogger(),
+      storage: this.storage,
+    });
+    this.#internalMastraWorkflows[workflow.id] = workflow;
+  }
+
+  __hasInternalWorkflow(id: string): boolean {
+    return Object.values(this.#internalMastraWorkflows).some(workflow => workflow.id === id);
+  }
+
+  __getInternalWorkflow(id: string): Workflow {
+    const workflow = Object.values(this.#internalMastraWorkflows).find(a => a.id === id);
+    if (!workflow) {
+      throw new MastraError({
+        id: 'MASTRA_GET_INTERNAL_WORKFLOW_BY_ID_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.SYSTEM,
+        text: `Workflow with id ${String(id)} not found`,
+        details: {
+          status: 404,
+          workflowId: String(id),
+        },
+      });
     }
 
     return workflow;

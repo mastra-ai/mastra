@@ -1,13 +1,14 @@
 import type { CoreMessage, CoreSystemMessage } from 'ai';
 import { z } from 'zod';
 import type { UIMessageWithMetadata } from '../agent';
+import { AISpanType } from '../ai-tracing';
 import type { TracingContext } from '../ai-tracing';
 
 export type ScoringSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
 
 export type ScoringSource = 'LIVE' | 'TEST';
 
-export type ScoringEntityType = 'AGENT' | 'WORKFLOW';
+export type ScoringEntityType = 'AGENT' | 'WORKFLOW' | AISpanType;
 
 export type ScoringPrompts = {
   description: string;
@@ -124,10 +125,10 @@ export const saveScorePayloadSchema = z.object({
   input: z.any().optional(),
   output: z.any(),
   source: z.enum(['LIVE', 'TEST']),
-  entityType: z.enum(['AGENT', 'WORKFLOW']).optional(),
+  entityType: z.enum(['AGENT', 'WORKFLOW', ...Object.values(AISpanType)]).optional(),
+  scorer: z.record(z.string(), z.any()),
 
   traceId: z.string().optional(),
-  scorer: z.record(z.string(), z.any()).optional(),
   preprocessStepResult: z.record(z.string(), z.any()).optional(),
   extractStepResult: z.record(z.string(), z.any()).optional(),
   analyzeStepResult: z.record(z.string(), z.any()).optional(),

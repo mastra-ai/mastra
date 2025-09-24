@@ -97,6 +97,9 @@ const ToolEntity = ({ tool }: ToolEntityProps) => {
   const linkRef = useRef<HTMLAnchorElement>(null);
   const { Link, paths } = useLinkComponent();
 
+  // Determine the correct link: agent-specific tool page if tool has agents, otherwise general tool page
+  const toolLink = tool.agents.length > 0 ? paths.agentToolLink(tool.agents[0].id, tool.id) : paths.toolLink(tool.id);
+
   return (
     <Entity onClick={() => linkRef.current?.click()}>
       <EntityIcon>
@@ -105,7 +108,7 @@ const ToolEntity = ({ tool }: ToolEntityProps) => {
 
       <EntityContent>
         <EntityName>
-          <Link ref={linkRef} href={paths.toolLink(tool.id)}>
+          <Link ref={linkRef} href={toolLink}>
             {tool.id}
           </Link>
         </EntityName>
