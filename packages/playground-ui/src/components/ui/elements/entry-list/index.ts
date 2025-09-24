@@ -6,7 +6,7 @@ export * from './entry-list-trim';
 export * from './entry-list-entries';
 export * from './entry-list-entries-skeleton';
 export * from './entry-list-entry';
-export * from './entry-list-cell';
+export * from './entry-list-entry-col';
 export * from './entry-list-page-header';
 export * from './entry-list-pagination';
 export * from './shared';

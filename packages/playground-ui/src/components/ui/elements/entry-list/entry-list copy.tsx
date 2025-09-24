@@ -1,5 +1,5 @@
 import { ArrowLeftIcon, ArrowRightIcon, TriangleAlertIcon } from 'lucide-react';
-import { EntryListTextCell } from './entry-list-cell';
+import { EntryListEntryTextCol } from './entry-list-entry-col';
 import { EntryListEntry } from './entry-list-entry';
 import { getColumnTemplate } from './shared';
 import { type Column } from './types';
@@ -111,9 +111,9 @@ export function EntryList({
                     return isValidReactElement ? (
                       <React.Fragment key={key}>{item?.[col.name]}</React.Fragment>
                     ) : (
-                      <EntryListTextCell key={key} isLoading={isLoading}>
+                      <EntryListEntryTextCol key={key} isLoading={isLoading}>
                         {item?.[col.name]}
-                      </EntryListTextCell>
+                      </EntryListEntryTextCol>
                     );
                   })}
                 </EntryListEntry>

@@ -7,7 +7,7 @@ import {
   PageHeader,
   EntityOptions,
   getShortId,
-  EntryListStatusCell,
+  EntryListEntryStatusCol,
   TracesTools,
   TraceDialog,
   parseError,
@@ -151,7 +151,7 @@ export default function Observability() {
       time: format(createdAtDate, 'h:mm:ss aaa'),
       name: trace?.name,
       entityId: trace?.attributes?.agentId || trace?.attributes?.workflowId,
-      status: <EntryListStatusCell status={trace?.attributes?.status} key={`${trace?.traceId}-status`} />,
+      status: <EntryListEntryStatusCol status={trace?.attributes?.status} />,
     };
   });
 

@@ -1,4 +1,4 @@
-import { EntryListTextCell } from './entry-list-cell';
+import { EntryListEntryTextCol } from './entry-list-entry-col';
 import { EntryListEntry } from './entry-list-entry';
 import { type Column } from './types';
 import React, { isValidElement } from 'react';
@@ -31,7 +31,7 @@ export function EntryListEntries({ entries, selectedItemId, columns, children, o
                   return isValidReactElement ? (
                     <React.Fragment key={key}>{entry?.[col.name]}</React.Fragment>
                   ) : (
-                    <EntryListTextCell key={key}>{entry?.[col.name]}</EntryListTextCell>
+                    <EntryListEntryTextCol key={key}>{entry?.[col.name]}</EntryListEntryTextCol>
                   );
                 })}
               </EntryListEntry>
