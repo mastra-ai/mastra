@@ -17,8 +17,8 @@ export type ScoringPrompts = {
 
 export type ScoringInput = {
   runId?: string;
-  input?: Record<string, any>[];
-  output: Record<string, any>;
+  input?: any;
+  output: any;
   additionalContext?: Record<string, any>;
   runtimeContext?: Record<string, any>;
   tracingContext?: TracingContext;
@@ -27,8 +27,8 @@ export type ScoringInput = {
 export type ScoringHookInput = {
   runId?: string;
   scorer: Record<string, any>;
-  input: Record<string, any>[];
-  output: Record<string, any>;
+  input: any;
+  output: any;
   metadata?: Record<string, any>;
   additionalContext?: Record<string, any>;
   source: ScoringSource;
