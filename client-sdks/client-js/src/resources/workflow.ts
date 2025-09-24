@@ -532,7 +532,7 @@ export class Workflow extends BaseResource {
    * @param params - Object containing the optional runId, inputData and runtimeContext
    * @returns Promise containing the workflow execution results
    */
-  async stream(params: {
+  async streamVNext(params: {
     runId?: string;
     inputData: Record<string, any>;
     runtimeContext?: RuntimeContext;

@@ -325,68 +325,6 @@ export class AgentBuilder extends BaseResource {
     return response.body.pipeThrough(transformStream);
   }
 
-  /**
-   * Streams agent builder action progress in real-time using streaming.
-   * This calls `/api/agent-builder/:actionId/stream`.
-   */
-  async stream(params: AgentBuilderActionRequest, runId?: string) {
-    const searchParams = new URLSearchParams();
-    if (runId) {
-      searchParams.set('runId', runId);
-    }
-
-    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
-    const { runtimeContext: _, ...actionParams } = params;
-
-    const url = `/api/agent-builder/${this.actionId}/stream${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
-    const response: Response = await this.request(url, {
-      method: 'POST',
-      body: { ...actionParams, runtimeContext },
-      stream: true,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to stream agent builder action: ${response.statusText}`);
-    }
-
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    let failedChunk: string | undefined = undefined;
-
-    const transformStream = new TransformStream<ArrayBuffer, { type: string; payload: any }>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
-
-    // Pipe the response body through the transform stream
-    return response.body.pipeThrough(transformStream);
-  }
 
   /**
    * Watches an existing agent builder action run by runId.
