@@ -31,7 +31,7 @@ import type {
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
-import type { Inngest, BaseContext, InngestFunction } from 'inngest';
+import type { Inngest, BaseContext, InngestFunction, RegisterOptions } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
 import { z } from 'zod';
 
@@ -67,6 +67,7 @@ export function serve({
   mastra,
   inngest,
   functions: userFunctions = [],
+  registerOptions,
 }: {
   mastra: Mastra;
   inngest: Inngest;
@@ -74,6 +75,7 @@ export function serve({
    * Optional array of additional functions to serve and register with Inngest.
    */
   functions?: InngestFunction.Like[];
+  registerOptions?: RegisterOptions;
 }): ReturnType<typeof inngestServe> {
   const wfs = mastra.getWorkflows();
   const workflowFunctions = Array.from(
@@ -89,6 +91,7 @@ export function serve({
   );
 
   return inngestServe({
+    ...registerOptions,
     client: inngest,
     functions: [...workflowFunctions, ...userFunctions],
   });
