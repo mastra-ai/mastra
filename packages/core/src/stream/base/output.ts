@@ -822,13 +822,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     return this.#getDelayedPromise(this.#delayedPromises.steps);
   }
 
-  // teeStream() {
-  //   // Don't mutate #baseStream - this ensures consumeStream() works correctly for destructuring
-  //   // Trade-off: This may cause "ReadableStream is locked" for multiple stream accesses
-  //   const [teeStream] = this.#baseStream.tee();
-  //   return teeStream;
-  // }
-
   /**
    * Stream of all chunks. Provides complete control over stream processing.
    */
@@ -962,10 +955,21 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       await consumeStream({
         stream: this.#baseStream as globalThis.ReadableStream<any>,
         onError: error => {
+          // When the stream errors (including abort), we need to:
+          // 1. Mark the stream as finished so EventEmitter knows
+          // 2. Emit finish event so EventEmitter-based streams can close
+          // This prevents them from hanging indefinitely
+          this.#streamFinished = true;
+          this.#emitter.emit('finish');
+
+          // Then call the user's error handler if provided
           options?.onError?.(error);
         },
       });
     } catch (error) {
+      // Also handle errors that aren't caught by onError callback (e.g., if consumeStream itself throws)
+      this.#streamFinished = true;
+      this.#emitter.emit('finish');
       options?.onError?.(error);
     }
   }
