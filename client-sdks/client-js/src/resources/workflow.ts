@@ -260,7 +260,7 @@ export class Workflow extends BaseResource {
       resumeData?: Record<string, any>;
       runtimeContext?: RuntimeContext | Record<string, any>;
     }) => Promise<WorkflowRunResult>;
-    resumeStream: (params: {
+    resumeStreamVNext: (params: {
       step: string | string[];
       resumeData?: Record<string, any>;
       runtimeContext?: RuntimeContext | Record<string, any>;
@@ -312,12 +312,12 @@ export class Workflow extends BaseResource {
       }) => {
         return this.resumeAsync({ runId, step: p.step, resumeData: p.resumeData, runtimeContext: p.runtimeContext });
       },
-      resumeStream: async (p: {
+      resumeStreamVNext: async (p: {
         step: string | string[];
         resumeData?: Record<string, any>;
         runtimeContext?: RuntimeContext | Record<string, any>;
       }) => {
-        return this.resumeStream({
+        return this.resumeStreamVNext({
           runId,
           step: p.step,
           resumeData: p.resumeData,
@@ -546,7 +546,7 @@ export class Workflow extends BaseResource {
 
     const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
     const response: Response = await this.request(
-      `/api/workflows/${this.workflowId}/stream?${searchParams.toString()}`,
+      `/api/workflows/${this.workflowId}/streamVNext?${searchParams.toString()}`,
       {
         method: 'POST',
         body: { inputData: params.inputData, runtimeContext, closeOnSuspend: params.closeOnSuspend },
@@ -555,7 +555,7 @@ export class Workflow extends BaseResource {
     );
 
     if (!response.ok) {
-      throw new Error(`Failed to stream workflow: ${response.statusText}`);
+      throw new Error(`Failed to stream vNext workflow: ${response.statusText}`);
     }
 
     if (!response.body) {
@@ -625,11 +625,11 @@ export class Workflow extends BaseResource {
   }
 
   /**
-   * Resumes a suspended workflow step that uses stream asynchronously and returns a promise that resolves when the workflow is complete
+   * Resumes a suspended workflow step that uses streamVNext asynchronously and returns a promise that resolves when the workflow is complete
    * @param params - Object containing the runId, step, resumeData and runtimeContext
    * @returns Promise containing the workflow resume results
    */
-  resumeStream(params: {
+  resumeStreamVNext(params: {
     runId: string;
     step: string | string[];
     resumeData?: Record<string, any>;
