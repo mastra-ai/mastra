@@ -1,10 +1,11 @@
-import { Input } from '@/components/ui/input';
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { Input } from '@/components/ui/input';
 import Spinner from '@/components/ui/spinner';
 import { ProviderLogo } from './provider-logo';
 import { UpdateModelParams } from '@mastra/client-js';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertCircle } from 'lucide-react';
+import { useModelReset } from '../../context/model-reset-context';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
@@ -128,6 +129,43 @@ export const AgentMetadataModelSwitcher = ({
     }
   };
 
+  // Get the model reset context
+  const { registerResetFn } = useModelReset();
+
+  // Register reset callback with context
+  useEffect(() => {
+    const resetIfIncomplete = () => {
+      // Check if provider changed but no model selected
+      const providerChanged = currentModelProvider && currentModelProvider !== defaultProvider;
+      const modelEmpty = !selectedModel || selectedModel === '';
+
+      if (providerChanged && modelEmpty) {
+        console.log('Incomplete model selection detected, reverting to defaults');
+
+        // Reset to defaults
+        setSelectedProvider(defaultProvider);
+        setSelectedModel(defaultModel);
+
+        // Update back to default configuration
+        if (defaultProvider && defaultModel) {
+          updateModel({
+            provider: defaultProvider as UpdateModelParams['provider'],
+            modelId: defaultModel,
+          }).catch(error => {
+            console.error('Failed to reset model:', error);
+          });
+        }
+      }
+    };
+
+    registerResetFn(resetIfIncomplete);
+
+    // Cleanup on unmount
+    return () => {
+      registerResetFn(null);
+    };
+  }, [registerResetFn, currentModelProvider, selectedModel, defaultProvider, defaultModel, updateModel]);
+
   if (providersLoading) {
     return (
       <div className="flex items-center gap-2">
@@ -174,6 +212,7 @@ export const AgentMetadataModelSwitcher = ({
                 </div>
               )}
               <Input
+                spellCheck="false"
                 className={`w-full ${!isSearching && currentModelProvider ? 'pl-8' : ''}`}
                 type="text"
                 value={
@@ -254,6 +293,7 @@ export const AgentMetadataModelSwitcher = ({
         <Popover open={showModelSuggestions} onOpenChange={setShowModelSuggestions}>
           <PopoverTrigger asChild>
             <Input
+              spellCheck="false"
               ref={modelInputRef}
               className="flex-1"
               type="text"

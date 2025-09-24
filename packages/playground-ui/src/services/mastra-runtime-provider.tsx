@@ -18,6 +18,7 @@ import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
 import { MastraModelOutput } from '@mastra/core/stream';
 import { flushSync } from 'react-dom';
 import { mapWorkflowStreamChunkToWatchResult } from '@/domains/workflows/utils';
+import { useModelReset } from '@/domains/agents/context/model-reset-context';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -195,9 +196,13 @@ export function MastraRuntimeProvider({
   }, [initialMessages, threadId, memory]);
 
   const baseClient = useMastraClient();
+  const { triggerReset } = useModelReset();
 
   const onNew = async (message: AppendMessage) => {
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');
+
+    // Check and reset model if incomplete before sending message
+    triggerReset();
 
     const attachments = await convertToAIAttachments(message.attachments);
 

@@ -3,6 +3,7 @@ import {
   MainContentContent,
   AgentSettingsProvider,
   WorkingMemoryProvider,
+  ModelResetProvider,
 } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -65,30 +66,32 @@ function Agent() {
   const withSidebar = Boolean(memory?.result);
 
   return (
-    <AgentSettingsProvider agentId={agentId!}>
-      <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
-        <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
-          {withSidebar && (
-            <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
-          )}
+    <ModelResetProvider>
+      <AgentSettingsProvider agentId={agentId!}>
+        <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
+          <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
+            {withSidebar && (
+              <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
+            )}
 
-          <div className="grid overflow-y-auto relative bg-surface1 py-4">
-            <Chat
-              agentId={agentId!}
-              agentName={agent?.name}
-              modelVersion={agent?.modelVersion}
-              threadId={threadId!}
-              initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
-              memory={memory?.result}
-              refreshThreadList={refreshThreads}
-              onInputChange={setChatInputValue}
-            />
-          </div>
+            <div className="grid overflow-y-auto relative bg-surface1 py-4">
+              <Chat
+                agentId={agentId!}
+                agentName={agent?.name}
+                modelVersion={agent?.modelVersion}
+                threadId={threadId!}
+                initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
+                memory={memory?.result}
+                refreshThreadList={refreshThreads}
+                onInputChange={setChatInputValue}
+              />
+            </div>
 
-          <AgentInformation agentId={agentId!} chatInputValue={chatInputValue} />
-        </MainContentContent>
-      </WorkingMemoryProvider>
-    </AgentSettingsProvider>
+            <AgentInformation agentId={agentId!} chatInputValue={chatInputValue} />
+          </MainContentContent>
+        </WorkingMemoryProvider>
+      </AgentSettingsProvider>
+    </ModelResetProvider>
   );
 }
 
