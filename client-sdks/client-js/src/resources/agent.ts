@@ -24,6 +24,7 @@ import type {
   GetToolResponse,
   ClientOptions,
   StreamParams,
+  StreamLegacyParams,
   UpdateModelParams,
   UpdateModelInModelListParams,
   ReorderModelListParams,
@@ -721,7 +722,7 @@ export class Agent extends BaseResource {
    * @returns Promise containing the enhanced Response object with processDataStream method
    */
   async streamLegacy<T extends JSONSchema7 | ZodType | undefined = undefined>(
-    params: StreamParams<T>,
+    params: StreamLegacyParams<T>,
   ): Promise<
     Response & {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;

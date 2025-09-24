@@ -4,7 +4,7 @@ import { RuntimeContext as RuntimeContextClass } from '@mastra/core/runtime-cont
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { MastraClient } from '../client';
-import type { StreamVNextParams } from '../types';
+import type { StreamParams } from '../types';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { Agent } from './agent';
 
@@ -12,10 +12,10 @@ import { Agent } from './agent';
 global.fetch = vi.fn();
 
 class TestAgent extends Agent {
-  public lastProcessedParams: StreamVNextParams<any> | null = null;
+  public lastProcessedParams: StreamParams<any> | null = null;
 
   public async processStreamResponse_vNext(
-    params: StreamVNextParams<any>,
+    params: StreamParams<any>,
     writable: WritableStream<Uint8Array>,
   ): Promise<Response> {
     this.lastProcessedParams = params;
@@ -58,7 +58,7 @@ describe('Agent.stream', () => {
       age: z.number(),
     });
 
-    const params: StreamVNextParams<typeof outputSchema> = {
+    const params: StreamParams<typeof outputSchema> = {
       messages: [] as any,
       output: outputSchema,
     };
@@ -73,7 +73,7 @@ describe('Agent.stream', () => {
 
   it('should set processedParams.output to undefined when params.output is not provided', async () => {
     // Arrange: Create params without output schema
-    const params: StreamVNextParams<undefined> = {
+    const params: StreamParams<undefined> = {
       messages: [] as any,
     };
 
@@ -97,7 +97,7 @@ describe('Agent.stream', () => {
     // Ensure instanceof RuntimeContext succeeds so parseClientRuntimeContext converts it
     Object.setPrototypeOf(runtimeContext, RuntimeContextClass.prototype);
 
-    const params: StreamVNextParams<undefined> = {
+    const params: StreamParams<undefined> = {
       messages: [] as any,
       runtimeContext,
     };
@@ -130,7 +130,7 @@ describe('Agent.stream', () => {
       },
     };
 
-    const params: StreamVNextParams<undefined> = {
+    const params: StreamParams<undefined> = {
       messages: [] as any,
       clientTools,
     };
@@ -151,7 +151,7 @@ describe('Agent.stream', () => {
 
   it('should return a Response object with processDataStream method', async () => {
     // Arrange: Create minimal params
-    const params: StreamVNextParams<undefined> = {
+    const params: StreamParams<undefined> = {
       messages: [],
     };
 
@@ -168,7 +168,7 @@ describe('Agent.stream', () => {
   it('should invoke onChunk callback when processing stream data', async () => {
     // Arrange: Create callback and params
     const onChunk = vi.fn();
-    const params: StreamVNextParams<undefined> = {
+    const params: StreamParams<undefined> = {
       messages: [],
     };
 
