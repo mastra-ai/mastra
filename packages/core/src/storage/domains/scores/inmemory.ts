@@ -121,6 +121,7 @@ export class ScoresInMemory extends ScoresStorage {
     const scores = Array.from(this.scores.values()).filter(
       score => score.traceId === traceId && score.spanId === spanId,
     );
+    scores.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return {
       scores: scores.slice(pagination.page * pagination.perPage, (pagination.page + 1) * pagination.perPage),
       pagination: {
