@@ -91,16 +91,25 @@ export class DuckDBVector extends MastraVector {
 
         // Install and load extensions using a temporary connection
         const initConn = this.db.connect();
-        // Only allow whitelisted extensions
-        const allowedExtensions = ['vss', 'fts', 'parquet', 'json'];
+
+        // Use explicit commands for each extension to avoid string interpolation
+        // This pattern eliminates SQL injection risk by avoiding dynamic SQL entirely
+        const extensionCommands: Record<string, { install: string; load: string }> = {
+          'vss': { install: 'INSTALL vss', load: 'LOAD vss' },
+          'fts': { install: 'INSTALL fts', load: 'LOAD fts' },
+          'parquet': { install: 'INSTALL parquet', load: 'LOAD parquet' },
+          'json': { install: 'INSTALL json', load: 'LOAD json' },
+        };
+
         for (const ext of this.config.extensions) {
-          if (!allowedExtensions.includes(ext.toLowerCase())) {
-            throw new Error(`Extension '${ext}' is not allowed. Allowed: ${allowedExtensions.join(', ')}`);
+          const extLower = ext.toLowerCase();
+          const commands = extensionCommands[extLower];
+          if (!commands) {
+            throw new Error(`Extension '${ext}' is not allowed. Allowed: vss, fts, parquet, json`);
           }
-          // INSTALL and LOAD don't support parameterized queries in DuckDB
-          // But we've validated ext is in our whitelist, so it's safe
-          await this.execute(initConn, `INSTALL ${ext}`);
-          await this.execute(initConn, `LOAD ${ext}`);
+          // Execute pre-defined commands - no string interpolation
+          await this.execute(initConn, commands.install);
+          await this.execute(initConn, commands.load);
         }
 
         // Create default tables
@@ -253,50 +262,59 @@ export class DuckDBVector extends MastraVector {
       `,
       );
 
-      // Create HNSW index
-      const metricMap: Record<string, string> = {
-        cosine: 'cosine',
-        euclidean: 'l2sq',
-        dotproduct: 'ip',
-        dot: 'ip',
-      };
-
-      // Validate metric to prevent SQL injection
-      const validMetrics = ['cosine', 'euclidean', 'dot', 'dotproduct'];
-      if (!validMetrics.includes(metric)) {
-        throw new Error(`Invalid metric: ${metric}. Must be one of: ${validMetrics.join(', ')}`);
-      }
-
-      const hnswMetric = metricMap[metric];
-      if (!hnswMetric) {
-        throw new Error(`Invalid metric mapping for: ${metric}`);
-      }
-
+      // Create HNSW index with secure metric handling
       const hnswIndexName = `idx_${tableName}_hnsw`;
       const escapedIndexName = this.escapeIdentifier(hnswIndexName);
-      await this.execute(
-        conn,
-        `
-        CREATE INDEX ${escapedIndexName}
-        ON ${escapedTableName}
-        USING HNSW (vector)
-        WITH (metric = '${hnswMetric}', M = 16, ef_construction = 128)
-      `,
-      );
+
+      // Pre-defined SQL for each metric type to avoid injection
+      const metricIndexSQL: Record<string, string> = {
+        cosine: `
+          CREATE INDEX ${escapedIndexName}
+          ON ${escapedTableName}
+          USING HNSW (vector)
+          WITH (metric = 'cosine', M = 16, ef_construction = 128)
+        `,
+        euclidean: `
+          CREATE INDEX ${escapedIndexName}
+          ON ${escapedTableName}
+          USING HNSW (vector)
+          WITH (metric = 'l2sq', M = 16, ef_construction = 128)
+        `,
+        dot: `
+          CREATE INDEX ${escapedIndexName}
+          ON ${escapedTableName}
+          USING HNSW (vector)
+          WITH (metric = 'ip', M = 16, ef_construction = 128)
+        `,
+        dotproduct: `
+          CREATE INDEX ${escapedIndexName}
+          ON ${escapedTableName}
+          USING HNSW (vector)
+          WITH (metric = 'ip', M = 16, ef_construction = 128)
+        `,
+      };
+
+      const indexSQL = metricIndexSQL[metric];
+      if (!indexSQL) {
+        throw new Error(`Invalid metric: ${metric}. Must be one of: cosine, euclidean, dot, dotproduct`);
+      }
+
+      await this.execute(conn, indexSQL);
 
       // Create FTS index for hybrid search - Install FTS extension and create virtual table
       try {
-        await this.execute(conn, `INSTALL fts;`);
-        await this.execute(conn, `LOAD fts;`);
+        // Use explicit, pre-defined commands (no string interpolation)
+        await this.execute(conn, 'INSTALL fts');
+        await this.execute(conn, 'LOAD fts');
         // Validate table name format before using in PRAGMA (it's our generated name)
         if (!/^vectors_[a-zA-Z0-9_]+$/.test(tableName)) {
           throw new Error('Invalid table name format for FTS index');
         }
+        // Use the already escaped table name in the PRAGMA
+        // The table name has been validated and escaped, so it's safe to use
         await this.execute(
           conn,
-          `
-          PRAGMA create_fts_index('${tableName}', 'id', 'content');
-        `,
+          `PRAGMA create_fts_index(${escapedTableName}, 'id', 'content')`,
         );
       } catch (error) {
         // FTS might not be available, ignore for now
@@ -729,8 +747,8 @@ export class DuckDBVector extends MastraVector {
           text_scores AS (
             SELECT
               id,
-              fts_main_${tableName}.score as text_score
-            FROM fts_main_${tableName}(?)
+              fts_main_${escapedTableName.replace(/"/g, '')}.score as text_score
+            FROM fts_main_${escapedTableName.replace(/"/g, '')}(?)
           ),
           combined_scores AS (
             SELECT
