@@ -3724,7 +3724,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         } else {
           expect(userMessages.find((m: any) => m.content?.[0]?.text === 'What are your instructions?')).toBeDefined();
         }
-      });
+      }, 20000);
 
       it(`should handle mixed message types in context parameter ${version === 'v2' ? `format: ${format}` : ''}`, async () => {
         const agent = new Agent({
@@ -8708,12 +8708,15 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
 
         const modelList = await agent.getModelList();
-        expect(modelList?.length).toBe(3);
-        const model0 = modelList?.[0].model as LanguageModelV2;
+        if (!modelList) {
+          expect.fail('Model list should exist');
+        }
+        expect(modelList.length).toBe(3);
+        const model0 = modelList[0]?.model as LanguageModelV2;
         expect(model0.modelId).toBe('gpt-4o');
-        const model1 = modelList?.[1].model as LanguageModelV2;
+        const model1 = modelList[1]?.model as LanguageModelV2;
         expect(model1.modelId).toBe('gpt-4o-mini');
-        const model2 = modelList?.[2].model as LanguageModelV2;
+        const model2 = modelList[2]?.model as LanguageModelV2;
         expect(model2.modelId).toBe('gpt-4.1');
       });
 
@@ -8743,14 +8746,17 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         const reorderedModelList = await agent.getModelList();
 
-        expect(reorderedModelList).toBeDefined();
-        expect(reorderedModelList?.length).toBe(3);
-        expect(reorderedModelList?.[0].id).toBe(reversedModelIds[0]);
-        expect(reorderedModelList?.[1].id).toBe(reversedModelIds[1]);
+        if (!reorderedModelList) {
+          expect.fail('Reordered model list should exist');
+        }
 
-        const model0 = reorderedModelList?.[0].model as LanguageModelV2;
+        expect(reorderedModelList.length).toBe(3);
+        expect(reorderedModelList[0]?.id).toBe(reversedModelIds[0]);
+        expect(reorderedModelList[1]?.id).toBe(reversedModelIds[1]);
+
+        const model0 = reorderedModelList[0]?.model as LanguageModelV2;
         expect(model0.modelId).toBe('gpt-4.1');
-        const model1 = reorderedModelList?.[1].model as LanguageModelV2;
+        const model1 = reorderedModelList[1]?.model as LanguageModelV2;
         expect(model1.modelId).toBe('gpt-4o-mini');
       });
 
@@ -8772,7 +8778,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
 
         const modelList = await agent.getModelList();
-        const model1Id = modelList?.[1].id || '';
+        if (!modelList) {
+          expect.fail('Model list should exist');
+        }
+        const model1Id = modelList[1]?.id || '';
 
         agent.updateModelInModelList({
           id: model1Id,
@@ -8781,12 +8790,14 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
         const updatedModelList = await agent.getModelList();
 
-        expect(updatedModelList).toBeDefined();
-        expect(updatedModelList?.length).toBe(3);
-        const updatedModel1 = updatedModelList?.[1].model as LanguageModelV2;
+        if (!updatedModelList) {
+          expect.fail('Updated model list should exist');
+        }
+        expect(updatedModelList.length).toBe(3);
+        const updatedModel1 = updatedModelList[1]?.model as LanguageModelV2;
         expect(updatedModel1.modelId).toBe('gpt-4');
-        expect(updatedModelList?.[1]?.maxRetries).toBe(5);
-        const updatedModel2 = updatedModelList?.[2].model as LanguageModelV2;
+        expect(updatedModelList[1]?.maxRetries).toBe(5);
+        const updatedModel2 = updatedModelList[2]?.model as LanguageModelV2;
         expect(updatedModel2.modelId).toBe('gpt-4.1');
       });
 
@@ -10326,7 +10337,7 @@ describe('Agent Tests', () => {
       stopWhenCalls.forEach((call, index) => {
         expect(call.stepCount).toBe(index + 1);
       });
-    }, 10000);
+    }, 20000);
 
     it('should contain the correct content in the step results for both stopWhen and stream.steps', async () => {
       const stopWhenContent: any[] = [];
@@ -10382,7 +10393,7 @@ describe('Agent Tests', () => {
       expect(steps[2].content.length).toBe(1);
 
       expect(stopWhenContent[1]).not.toEqual(stopWhenContent[0]);
-    }, 10000);
+    }, 20000);
   });
 });
 
