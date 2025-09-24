@@ -108,4 +108,27 @@ export class ScoresInMemory extends ScoresStorage {
       },
     };
   }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    const scores = Array.from(this.scores.values()).filter(
+      score => score.traceId === traceId && score.spanId === spanId,
+    );
+    return {
+      scores: scores.slice(pagination.page * pagination.perPage, (pagination.page + 1) * pagination.perPage),
+      pagination: {
+        total: scores.length,
+        page: pagination.page,
+        perPage: pagination.perPage,
+        hasMore: scores.length > (pagination.page + 1) * pagination.perPage,
+      },
+    };
+  }
 }
