@@ -422,9 +422,13 @@ onClick={e => {
               className="flex-1"
               type="text"
               value={selectedModel}
-              onChange={e => {
+onChange={e => {
                 setSelectedModel(e.target.value);
                 setHighlightedModelIndex(0);
+              }}
+              onFocus={() => {
+                // Open dropdown but don't interfere with keyboard navigation
+                setShowModelSuggestions(true);
               }}
 onKeyDown={e => {
                 const filteredModels = allModels.filter(item => {
@@ -467,7 +471,7 @@ switch (e.key) {
                       highlightedElement?.scrollIntoView({ block: 'nearest' });
                     }, 0);
                     break;
-                  case 'Enter':
+case 'Enter':
                   case 'Tab':
                     e.preventDefault();
                     if (highlightedModelIndex >= 0 && highlightedModelIndex < filteredModels.length) {
@@ -475,7 +479,20 @@ switch (e.key) {
                       setSelectedModel(model.model);
                       setShowModelSuggestions(false);
                       handleModelSelect(model.model);
-// After selecting a model, focus the chat input
+                      // After selecting a model, focus the chat input
+                      setTimeout(() => {
+                        const chatInput = document.querySelector('textarea[data-chat-input]') as HTMLElement;
+                        if (!chatInput) {
+                          // Fallback to any textarea if specific selector not found
+                          const textarea = document.querySelector('textarea');
+                          textarea?.focus();
+                        } else {
+                          chatInput?.focus();
+                        }
+                      }, 100);
+                    } else {
+                      // If no model is highlighted, just close dropdown and proceed to chat input
+                      setShowModelSuggestions(false);
                       setTimeout(() => {
                         const chatInput = document.querySelector('textarea[data-chat-input]') as HTMLElement;
                         if (!chatInput) {
