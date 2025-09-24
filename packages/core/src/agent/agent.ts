@@ -1771,7 +1771,7 @@ export class Agent<
     runtimeContext: RuntimeContext;
     tracingContext?: TracingContext;
     writableStream?: WritableStream<ChunkType>;
-methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+    methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
     format?: 'mastra' | 'aisdk';
   }): Promise<Record<string, CoreTool>> {
     let mastraProxy = undefined;
@@ -3307,7 +3307,143 @@ methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
     });
   }
 
-  async resumeStreamVNext<
+  async generate<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' = 'mastra'>(
+    messages: MessageListInput,
+    options?: AgentExecutionOptions<OUTPUT, FORMAT>,
+  ): Promise<
+    FORMAT extends 'aisdk'
+      ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
+      : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
+  > {
+    const result = await this.stream(messages, options);
+
+    if (result.tripwire) {
+      return result as unknown as FORMAT extends 'aisdk'
+        ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
+        : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
+    }
+
+    let fullOutput = await result.getFullOutput();
+
+    const error = fullOutput.error;
+
+    if (fullOutput.finishReason === 'error' && error) {
+      throw error;
+    }
+
+    return fullOutput as unknown as FORMAT extends 'aisdk'
+      ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
+      : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
+  }
+
+  async stream<OUTPUT extends OutputSchema = undefined, FORMAT extends 'mastra' | 'aisdk' | undefined = undefined>(
+    messages: MessageListInput,
+    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
+  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
+    const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
+      runtimeContext: streamOptions?.runtimeContext,
+    });
+
+    if (
+      (defaultStreamOptions.structuredOutput && defaultStreamOptions.output) ||
+      (streamOptions?.structuredOutput && streamOptions.output)
+    ) {
+      throw new MastraError({
+        id: 'AGENT_STREAM_STRUCTURED_OUTPUT_AND_OUTPUT_PROVIDED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'structuredOutput and output cannot be provided at the same time',
+      });
+    }
+
+    // If streamOptions has either output or structuredOutput, remove both from defaultStreamOptions
+    // to ensure streamOptions takes precedence and avoid union type conflicts
+    let adjustedDefaultStreamOptions = { ...defaultStreamOptions };
+    if (streamOptions?.structuredOutput || streamOptions?.output) {
+      const { output, structuredOutput, ...restDefaultOptions } = adjustedDefaultStreamOptions;
+      adjustedDefaultStreamOptions = restDefaultOptions as typeof defaultStreamOptions;
+    }
+
+    let mergedStreamOptions = {
+      ...adjustedDefaultStreamOptions,
+      ...(streamOptions ?? {}),
+      onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
+    };
+
+    // Map structuredOutput to output when maxSteps is explicitly set to 1
+    // This allows the new structuredOutput API to use the existing output implementation
+    let modelOverride: MastraLanguageModel | undefined;
+    if (mergedStreamOptions.structuredOutput && mergedStreamOptions.maxSteps === 1) {
+      // If structuredOutput has a model, use it to override the agent's model
+      if (mergedStreamOptions.structuredOutput.model) {
+        modelOverride = mergedStreamOptions.structuredOutput.model;
+      }
+
+      // assign structuredOutput.schema to output when maxSteps is explicitly set to 1
+      const { structuredOutput, ...optionsWithoutStructuredOutput } = mergedStreamOptions;
+      mergedStreamOptions = {
+        ...optionsWithoutStructuredOutput,
+        output: structuredOutput.schema as OUTPUT,
+      };
+    }
+
+    const llm = await this.getLLM({
+      runtimeContext: mergedStreamOptions.runtimeContext,
+      model: modelOverride,
+    });
+
+    if (llm.getModel().specificationVersion !== 'v2') {
+      const modelInfo = llm.getModel();
+      const modelId = modelInfo.modelId || 'unknown';
+      const provider = modelInfo.provider || 'unknown';
+
+      throw new MastraError({
+        id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent \"${this.name}\" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with stream(). Please use AI SDK v5 models or call the streamLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`,
+        details: {
+          agentName: this.name,
+          modelId,
+          provider,
+          specificationVersion: modelInfo.specificationVersion,
+        },
+      });
+    }
+
+    const executeOptions = {
+      ...mergedStreamOptions,
+      messages,
+      methodType: 'stream',
+      model: modelOverride,
+    } as InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+
+    const result = await this.#execute(executeOptions);
+
+    if (result.status !== 'success') {
+      if (result.status === 'failed') {
+        throw new MastraError({
+          id: 'AGENT_STREAM_FAILED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: result.error.message,
+          details: {
+            error: result.error.message,
+          },
+        });
+      }
+      throw new MastraError({
+        id: 'AGENT_STREAM_UNKNOWN_ERROR',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'An unknown error occurred while streaming',
+      });
+    }
+
+    return result.result as unknown as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
+  }
+
+  async resumeStream<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
   >(
@@ -3350,7 +3486,7 @@ methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
         id: 'AGENT_STREAM_VNEXT_V1_MODEL_NOT_SUPPORTED',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: 'V1 models are not supported for streamVNext. Please use streamLegacy instead.',
+        text: 'V1 models are not supported for streamVNext. Please use stream instead.',
       });
     }
 
@@ -3365,7 +3501,7 @@ methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
     if (result.status !== 'success') {
       if (result.status === 'failed') {
         throw new MastraError({
-          id: 'AGENT_STREAM_VNEXT_FAILED',
+          id: 'AGENT_STREAM_FAILED',
           domain: ErrorDomain.AGENT,
           category: ErrorCategory.USER,
           text: result.error.message,
@@ -3375,14 +3511,14 @@ methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
         });
       }
       throw new MastraError({
-        id: 'AGENT_STREAM_VNEXT_UNKNOWN_ERROR',
+        id: 'AGENT_STREAM_UNKNOWN_ERROR',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
         text: 'An unknown error occurred while streaming',
       });
     }
 
-    return result.data as any;
+    return result.result as unknown as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
   }
 
   async approveToolCall<
@@ -3391,7 +3527,7 @@ methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   >(
     streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    return this.resumeStreamVNext({ approved: true }, streamOptions);
+    return this.resumeStream({ approved: true }, streamOptions);
   }
 
   async declineToolCall<
@@ -3400,42 +3536,11 @@ methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   >(
     streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    return this.resumeStreamVNext({ approved: false }, streamOptions);
+    return this.resumeStream({ approved: false }, streamOptions);
   }
 
-  async generate(
-    messages: MessageListInput,
-    args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
-  ): Promise<GenerateTextResult<any, undefined>>;
-  async generate<OUTPUT extends ZodSchema | JSONSchema7>(
-    messages: MessageListInput,
-    args?: AgentGenerateOptions<OUTPUT, undefined> & { output?: OUTPUT; experimental_output?: never },
-  ): Promise<GenerateObjectResult<OUTPUT>>;
-  async generate<EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7>(
-    messages: MessageListInput,
-    args?: AgentGenerateOptions<undefined, EXPERIMENTAL_OUTPUT> & {
-      output?: never;
-      experimental_output?: EXPERIMENTAL_OUTPUT;
-    },
-  ): Promise<GenerateTextResult<any, EXPERIMENTAL_OUTPUT>>;
-  async generate<
-    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  >(
-    messages: MessageListInput,
-    generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
-  ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
-    if (!generateDeprecationWarningShown) {
-      this.logger.warn(
-"Deprecation NOTICE:\ngenerateLegacy method is deprecated and will be removed September 30th, 2025. Please use generate() with V2 models.",
-      );
-      generateDeprecationWarningShown = true;
-    }
-    // @ts-expect-error - generic type issues
-    return this.generateLegacy(messages, generateOptions);
-  }
 
-  async generate(
+  async generateLegacy(
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateTextResult<any, undefined>>;
@@ -3471,7 +3576,7 @@ methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
 
     if (llm.getModel().specificationVersion !== 'v1') {
       this.logger.error(
-'V2 models are not supported for generateLegacy. Please use generate() instead. generateLegacy only supports V1 models.',
+        'V2 models are not supported for the current version of generate. Please use generateVNext instead.',
         {
           modelId: llm.getModel().modelId,
         },
@@ -3484,7 +3589,7 @@ methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
         details: {
           modelId: llm.getModel().modelId,
         },
-text: 'V2 models are not supported for generateLegacy. Please use generate() instead. generateLegacy only supports V1 models.',
+        text: 'V2 models are not supported for the current version of generate. Please use generateVNext instead.',
       });
     }
 
@@ -3750,60 +3855,6 @@ text: 'V2 models are not supported for generateLegacy. Please use generate() ins
       : GenerateObjectResult<OUTPUT>;
   }
 
-  async stream<
-    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  >(
-    messages: MessageListInput,
-    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: never; experimental_output?: never },
-  ): Promise<StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>>;
-  async stream<
-    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  >(
-    messages: MessageListInput,
-    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: OUTPUT; experimental_output?: never },
-  ): Promise<StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties>;
-  async stream<
-    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  >(
-    messages: MessageListInput,
-    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
-      output?: never;
-      experimental_output?: EXPERIMENTAL_OUTPUT;
-    },
-  ): Promise<
-    StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown> & {
-      partialObjectStream: StreamTextResult<
-        any,
-        OUTPUT extends ZodSchema
-          ? z.infer<OUTPUT>
-          : EXPERIMENTAL_OUTPUT extends ZodSchema
-            ? z.infer<EXPERIMENTAL_OUTPUT>
-            : unknown
-      >['experimental_partialOutputStream'];
-    }
-  >;
-  async stream<
-    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  >(
-    messages: MessageListInput,
-    streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
-  ): Promise<
-    | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
-    | (StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties)
-  > {
-    if (!streamDeprecationWarningShown) {
-      this.logger.warn(
-"Deprecation NOTICE:\nstreamLegacy method is deprecated and will be removed September 30th, 2025. Please use stream() with V2 models.",
-      );
-      streamDeprecationWarningShown = true;
-    }
-    // @ts-expect-error - generic type issues
-    return this.streamLegacy(messages, streamOptions);
-  }
 
   async streamLegacy<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
@@ -3863,7 +3914,7 @@ text: 'V2 models are not supported for generateLegacy. Please use generate() ins
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions, 'stream');
 
     if (llm.getModel().specificationVersion !== 'v1') {
-this.logger.error('V2 models are not supported for streamLegacy. Please use stream() instead. streamLegacy only supports V1 models.', {
+      this.logger.error('V2 models are not supported for stream. Please use streamVNext instead.', {
         modelId: llm.getModel().modelId,
       });
 
@@ -3874,7 +3925,7 @@ this.logger.error('V2 models are not supported for streamLegacy. Please use stre
         details: {
           modelId: llm.getModel().modelId,
         },
-text: 'V2 models are not supported for streamLegacy. Please use stream() instead. streamLegacy only supports V1 models.',
+        text: 'V2 models are not supported for stream. Please use streamVNext instead.',
       });
     }
 
