@@ -38,20 +38,30 @@ export class DrizzleStore extends MastraStorage {
   private db?: any; // Will be Drizzle instance
   private schema?: any; // Will be schema definitions
   private dialect: 'postgresql' | 'mysql' | 'sqlite';
+  private isInitialized: boolean = false;
 
   stores: StorageDomains;
 
   constructor(config: DrizzleConfig) {
     super({ name: 'DrizzleStore' });
     this.dialect = config.dialect;
-    // Store connection string if needed for later
-    void config.connectionString;
+
+    // For SQLite in-memory databases, disable init caching
+    // They need to recreate tables on each init
+    if (config.dialect === 'sqlite' && config.connectionString === ':memory:') {
+      this.shouldCacheInit = false;
+    }
 
     // Initialize with empty stores - will be populated in init()
     this.stores = {} as StorageDomains;
   }
 
   async init(): Promise<void> {
+    // Prevent duplicate initialization
+    if (this.isInitialized) {
+      return;
+    }
+
     // TODO: Initialize Drizzle connection based on dialect
     // For now, we'll just create the domain instances with null db/schema
 
@@ -82,12 +92,15 @@ export class DrizzleStore extends MastraStorage {
       legacyEvals,
     };
 
+    // Mark as initialized before calling super.init() to prevent concurrent initialization
+    this.isInitialized = true;
+
     await super.init();
   }
 
-  async shutdown(): Promise<void> {
-    // TODO: Close Drizzle connection
-    // Note: shutdown is not a method on MastraStorage, removing super call
+  async close(): Promise<void> {
+    // TODO: Close Drizzle connection when implemented
+    // This will depend on the specific dialect and connection type
   }
 
   /**
@@ -95,7 +108,7 @@ export class DrizzleStore extends MastraStorage {
    */
   getDb() {
     if (!this.db) {
-      throw new Error('Database not initialized. Call init() first.');
+      throw new Error('DrizzleStore: Database not initialized. Call init() first.');
     }
     return this.db;
   }
@@ -105,7 +118,7 @@ export class DrizzleStore extends MastraStorage {
    */
   getSchemas() {
     if (!this.schema) {
-      throw new Error('Schema not initialized. Call init() first.');
+      throw new Error('DrizzleStore: Schema not initialized. Call init() first.');
     }
     return this.schema;
   }
@@ -155,12 +168,10 @@ export class DrizzleStore extends MastraStorage {
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    if (!this.stores?.operations) throw new Error('Operations store not initialized');
     return this.stores.operations.clearTable({ tableName });
   }
 
   async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    if (!this.stores?.operations) throw new Error('Operations store not initialized');
     return this.stores.operations.dropTable({ tableName });
   }
 
@@ -169,28 +180,23 @@ export class DrizzleStore extends MastraStorage {
     schema: Record<string, StorageColumn>;
     ifNotExists: string[];
   }): Promise<void> {
-    if (!this.stores?.operations) throw new Error('Operations store not initialized');
     return this.stores.operations.alterTable(args);
   }
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    if (!this.stores?.operations) throw new Error('Operations store not initialized');
     return this.stores.operations.insert({ tableName, record });
   }
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    if (!this.stores?.operations) throw new Error('Operations store not initialized');
     return this.stores.operations.batchInsert({ tableName, records });
   }
 
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): Promise<R | null> {
-    if (!this.stores?.operations) throw new Error('Operations store not initialized');
     return this.stores.operations.load({ tableName, keys });
   }
 
   // Memory domain methods
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    if (!this.stores?.memory) throw new Error('Memory store not initialized');
     return this.stores.memory.getThreadById({ threadId });
   }
 
@@ -199,12 +205,10 @@ export class DrizzleStore extends MastraStorage {
     orderBy,
     sortDirection,
   }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
-    if (!this.stores?.memory) throw new Error('Memory store not initialized');
     return this.stores.memory.getThreadsByResourceId({ resourceId, orderBy, sortDirection });
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    if (!this.stores?.memory) throw new Error('Memory store not initialized');
     return this.stores.memory.saveThread({ thread });
   }
 
@@ -217,12 +221,10 @@ export class DrizzleStore extends MastraStorage {
     title: string;
     metadata: Record<string, unknown>;
   }): Promise<StorageThreadType> {
-    if (!this.stores?.memory) throw new Error('Memory store not initialized');
     return this.stores.memory.updateThread({ id, title, metadata });
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    if (!this.stores?.memory) throw new Error('Memory store not initialized');
     return this.stores.memory.deleteThread({ threadId });
   }
 
@@ -233,7 +235,6 @@ export class DrizzleStore extends MastraStorage {
       perPage: number;
     } & ThreadSortOptions,
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    if (!this.stores?.memory) throw new Error('Memory store not initialized');
     return this.stores.memory.getThreadsByResourceIdPaginated(args);
   }
 
@@ -243,7 +244,6 @@ export class DrizzleStore extends MastraStorage {
   async getMessages(
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
   ): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    if (!this.stores?.memory) throw new Error('Memory store not initialized');
     return this.stores.memory.getMessages(args as any);
   }
 
@@ -256,7 +256,6 @@ export class DrizzleStore extends MastraStorage {
     messageIds: string[];
     format?: 'v1' | 'v2';
   }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    if (!this.stores?.memory) throw new Error('Memory store not initialized');
     return this.stores.memory.getMessagesById({ messageIds, format });
   }
 
@@ -265,30 +264,25 @@ export class DrizzleStore extends MastraStorage {
   async saveMessages(
     args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
   ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
-    if (!this.stores?.memory) throw new Error('Memory store not initialized');
     return this.stores.memory.saveMessages(args as any);
   }
 
   async updateMessages(args: { messages: any[] }): Promise<MastraMessageV2[]> {
-    if (!this.stores?.memory) throw new Error('Memory store not initialized');
     return this.stores.memory.updateMessages(args);
   }
 
   async getMessagesPaginated(
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    if (!this.stores?.memory) throw new Error('Memory store not initialized');
     return this.stores.memory.getMessagesPaginated(args);
   }
 
   // Traces domain methods
   async getTraces(args: StorageGetTracesArg): Promise<Trace[]> {
-    if (!this.stores?.traces) throw new Error('Traces store not initialized');
     return this.stores.traces.getTraces(args);
   }
 
   async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {
-    if (!this.stores?.traces) throw new Error('Traces store not initialized');
     return this.stores.traces.getTracesPaginated(args);
   }
 
@@ -306,7 +300,6 @@ export class DrizzleStore extends MastraStorage {
     result: StepResult<any, any, any, any>;
     runtimeContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    if (!this.stores?.workflows) throw new Error('Workflows store not initialized');
     return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext });
   }
 
@@ -325,7 +318,6 @@ export class DrizzleStore extends MastraStorage {
       waitingPaths?: Record<string, number[]>;
     };
   }): Promise<WorkflowRunState | undefined> {
-    if (!this.stores?.workflows) throw new Error('Workflows store not initialized');
     return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
   }
 
@@ -337,23 +329,19 @@ export class DrizzleStore extends MastraStorage {
     offset?: number;
     resourceId?: string;
   }): Promise<WorkflowRuns> {
-    if (!this.stores?.workflows) throw new Error('Workflows store not initialized');
     return this.stores.workflows.getWorkflowRuns(args);
   }
 
   async getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {
-    if (!this.stores?.workflows) throw new Error('Workflows store not initialized');
     return this.stores.workflows.getWorkflowRunById(args);
   }
 
   // Scores domain methods
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
-    if (!this.stores?.scores) throw new Error('Scores store not initialized');
     return this.stores.scores.getScoreById({ id });
   }
 
   async saveScore(score: ValidatedSaveScorePayload): Promise<{ score: ScoreRowData }> {
-    if (!this.stores?.scores) throw new Error('Scores store not initialized');
     // ValidatedSaveScorePayload needs to be converted to the correct format for the scores domain
     // For now, pass it as-is and handle the conversion in the domain implementation
     return this.stores.scores.saveScore(score as any);
@@ -372,7 +360,6 @@ export class DrizzleStore extends MastraStorage {
     entityType?: string;
     source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    if (!this.stores?.scores) throw new Error('Scores store not initialized');
     return this.stores.scores.getScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
   }
 
@@ -383,7 +370,6 @@ export class DrizzleStore extends MastraStorage {
     runId: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    if (!this.stores?.scores) throw new Error('Scores store not initialized');
     return this.stores.scores.getScoresByRunId({ runId, pagination });
   }
 
@@ -396,7 +382,6 @@ export class DrizzleStore extends MastraStorage {
     entityId: string;
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    if (!this.stores?.scores) throw new Error('Scores store not initialized');
     return this.stores.scores.getScoresByEntityId({ entityId, entityType, pagination });
   }
 
@@ -407,12 +392,10 @@ export class DrizzleStore extends MastraStorage {
       type?: 'test' | 'live';
     } & PaginationArgs,
   ): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    if (!this.stores?.legacyEvals) throw new Error('Legacy evals store not initialized');
     return this.stores.legacyEvals.getEvals(options);
   }
 
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    if (!this.stores?.legacyEvals) throw new Error('Legacy evals store not initialized');
     return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
   }
 }
