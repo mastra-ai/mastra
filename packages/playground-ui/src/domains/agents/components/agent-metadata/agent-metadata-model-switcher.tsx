@@ -426,7 +426,7 @@ onChange={e => {
                 setSelectedModel(e.target.value);
                 setHighlightedModelIndex(0);
               }}
-              onFocus={() => {
+onFocus={() => {
                 // Open dropdown but don't interfere with keyboard navigation
                 setShowModelSuggestions(true);
               }}
@@ -547,10 +547,23 @@ onClick={() => {
                       className={`flex items-center gap-2 cursor-pointer hover:bg-surface5 p-2 rounded ${
                         isHighlighted ? 'outline outline-2 outline-blue-500' : ''
                       }`}
-                      onClick={() => {
+onMouseDown={e => {
+                        e.preventDefault(); // Prevent focus from moving to input
+                        e.stopPropagation(); // Prevent event bubbling
                         setSelectedModel(item.model);
                         setShowModelSuggestions(false);
                         handleModelSelect(item.model);
+                        // After selecting a model, focus the chat input
+                        setTimeout(() => {
+                          const chatInput = document.querySelector('textarea[data-chat-input]') as HTMLElement;
+                          if (!chatInput) {
+                            // Fallback to any textarea if specific selector not found
+                            const textarea = document.querySelector('textarea');
+                            textarea?.focus();
+                          } else {
+                            chatInput?.focus();
+                          }
+                        }, 100);
                       }}
                     >
                       <ProviderLogo providerId={item.provider} size={16} />
