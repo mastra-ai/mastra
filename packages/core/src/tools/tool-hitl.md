@@ -70,7 +70,9 @@ const findUserTool = createTool({
 
 # Tool suspension
 
-A tool can be suspended manually by calling the `suspend` function on the tool execution context. If a workflow is executed as a tool, the tool call will automatically be suspended when the workflow is suspended.
+A tool can be suspended manually by calling the `suspend` function on the tool execution context.
+
+In the future, if a workflow is executed as a tool, the tool call will automatically be suspended when the workflow is suspended.
 
 ```typescript
 const findUserTool = createTool({
