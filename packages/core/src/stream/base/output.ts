@@ -278,6 +278,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
         new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
           transform: async (chunk, controller) => {
             switch (chunk.type) {
+              case 'raw':
+                if (!self.#options.includeRawChunks) {
+                  return;
+                }
+                break;
               case 'object-result':
                 self.#bufferedObject = chunk.object;
                 // Only resolve if not already rejected by validation error
@@ -707,17 +712,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 break;
             }
             self.#emitChunk(chunk);
-            controller.enqueue(chunk);
-          },
-        }),
-      )
-      .pipeThrough(
-        new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
-          transform(chunk, controller) {
-            if (chunk.type === 'raw' && !self.#options.includeRawChunks) {
-              return;
-            }
-
             controller.enqueue(chunk);
           },
           flush: () => {
