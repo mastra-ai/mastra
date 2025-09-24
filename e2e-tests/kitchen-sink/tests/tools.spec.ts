@@ -9,7 +9,7 @@ test('has valid links', async ({ page }) => {
 
   await el.click();
 
-  await expect(page).toHaveURL('http://localhost:4111/tools/all/get-weather');
+  await expect(page).toHaveURL('http://localhost:4111/agents/weatherAgent/tools/get-weather');
   await expect(page.locator('h2')).toHaveText('get-weather');
 });
 
@@ -19,7 +19,7 @@ test('clicking on the tool box redirects to the tool page', async ({ page }) => 
   const el = await page.locator('text=Get current weather for a location');
   await el.click();
 
-  await expect(page).toHaveURL('http://localhost:4111/tools/all/get-weather');
+  await expect(page).toHaveURL('http://localhost:4111/agents/weatherAgent/tools/get-weather');
   await expect(page.locator('h2')).toHaveText('get-weather');
 });
 
