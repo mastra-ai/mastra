@@ -359,6 +359,7 @@ export class EventedRun<
     };
     cleanup?: () => void;
     workflowSteps: Record<string, StepWithComponent>;
+    validateInputs?: boolean;
   }) {
     super(params);
     this.serializedStepGraph = params.serializedStepGraph;
@@ -400,12 +401,14 @@ export class EventedRun<
       },
     });
 
+    const inputDataToUse = await this._validateInput(inputData);
+
     const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
       graph: this.executionGraph,
       serializedStepGraph: this.serializedStepGraph,
-      input: inputData,
+      input: inputDataToUse,
       emitter: {
         emit: async (event: string, data: any) => {
           this.emitter.emit(event, data);
@@ -485,17 +488,21 @@ export class EventedRun<
       }
     }
 
+    const suspendedStep = this.workflowSteps[steps?.[0] ?? ''];
+
+    const resumeDataToUse = await this._validateResumeData(params.resumeData, suspendedStep);
+
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
         runId: this.runId,
         graph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
-        input: params.resumeData,
+        input: resumeDataToUse,
         resume: {
           steps,
           stepResults: snapshot?.context as any,
-          resumePayload: params.resumeData,
+          resumePayload: resumeDataToUse,
           resumePath,
         },
         emitter: {

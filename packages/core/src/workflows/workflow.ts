@@ -1376,6 +1376,64 @@ export class Run<
     this.emitter.emit(`user-event-${event}`, data);
   }
 
+  protected async _validateInput(inputData: z.input<TInput>) {
+    const firstEntry = this.executionGraph.steps[0];
+    let inputDataToUse = inputData;
+
+    if (firstEntry && this.validateInputs) {
+      let inputSchema: z.ZodType<any> | undefined;
+
+      if (firstEntry.type === 'step' || firstEntry.type === 'foreach' || firstEntry.type === 'loop') {
+        const step = firstEntry.step;
+        inputSchema = step.inputSchema;
+      } else if (firstEntry.type === 'conditional' || firstEntry.type === 'parallel') {
+        const firstStep = firstEntry.steps[0];
+        if (firstStep && firstStep.type === 'step') {
+          inputSchema = firstStep.step.inputSchema;
+        }
+      }
+
+      if (inputSchema) {
+        const validatedInputData = await inputSchema.safeParseAsync(inputData);
+
+        if (!validatedInputData.success) {
+          throw new Error(
+            'Invalid input data: \n' +
+              validatedInputData.error.errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+          );
+        }
+
+        inputDataToUse = validatedInputData.data;
+      }
+    }
+
+    return inputDataToUse;
+  }
+
+  protected async _validateResumeData<TResumeSchema extends z.ZodType<any>>(
+    resumeData: z.input<TResumeSchema>,
+    suspendedStep?: StepWithComponent,
+  ) {
+    let resumeDataToUse = resumeData;
+
+    if (suspendedStep && suspendedStep.resumeSchema && this.validateInputs) {
+      const resumeSchema = suspendedStep.resumeSchema;
+
+      const validatedResumeData = await resumeSchema.safeParseAsync(resumeData);
+
+      if (!validatedResumeData.success) {
+        throw new Error(
+          'Invalid resume data: \n' +
+            validatedResumeData.error.errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+        );
+      }
+
+      resumeDataToUse = validatedResumeData.data;
+    }
+
+    return resumeDataToUse;
+  }
+
   protected async _start({
     inputData,
     runtimeContext,
@@ -1407,36 +1465,7 @@ export class Run<
 
     const traceId = getValidTraceId(workflowAISpan);
 
-    const firstEntry = this.executionGraph.steps[0];
-
-    let inputDataToUse = inputData;
-
-    if (firstEntry && this.validateInputs) {
-      let inputSchema: z.ZodType<any> | undefined;
-
-      if (firstEntry.type === 'step' || firstEntry.type === 'foreach' || firstEntry.type === 'loop') {
-        const step = firstEntry.step;
-        inputSchema = step.inputSchema;
-      } else if (firstEntry.type === 'conditional' || firstEntry.type === 'parallel') {
-        const firstStep = firstEntry.steps[0];
-        if (firstStep && firstStep.type === 'step') {
-          inputSchema = firstStep.step.inputSchema;
-        }
-      }
-
-      if (inputSchema) {
-        const validatedInputData = await inputSchema.safeParseAsync(inputData);
-
-        if (!validatedInputData.success) {
-          throw new Error(
-            'Invalid input data: \n' +
-              validatedInputData.error.errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
-          );
-        }
-
-        inputDataToUse = validatedInputData.data;
-      }
-    }
+    const inputDataToUse = await this._validateInput(inputData);
 
     const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -2037,8 +2066,6 @@ export class Run<
       }
     }
 
-    let resumeDataToUse = params.resumeData;
-
     if (!params.runCount) {
       if (snapshot.status !== 'suspended') {
         throw new Error('This workflow run was not suspended');
@@ -2048,31 +2075,16 @@ export class Run<
 
       const isStepSuspended = suspendedStepIds.includes(steps?.[0] ?? '');
 
-      const suspendedStep = this.workflowSteps[steps?.[0] ?? ''];
-
-      if (suspendedStep && suspendedStep.resumeSchema && this.validateInputs) {
-        const resumeSchema = suspendedStep.resumeSchema;
-
-        const validatedResumeData = await resumeSchema.safeParseAsync(params.resumeData);
-
-        if (!validatedResumeData.success) {
-          throw new Error(
-            'Invalid resume data: \n' +
-              validatedResumeData.error.errors
-                .map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`)
-                .join('\n'),
-          );
-        }
-
-        resumeDataToUse = validatedResumeData.data;
-      }
-
       if (!isStepSuspended) {
         throw new Error(
           `This workflow step "${steps?.[0]}" was not suspended. Available suspended steps: [${suspendedStepIds.join(', ')}]`,
         );
       }
     }
+
+    const suspendedStep = this.workflowSteps[steps?.[0] ?? ''];
+
+    const resumeDataToUse = await this._validateResumeData(params.resumeData, suspendedStep);
 
     let runtimeContextInput;
     if (params.runCount && params.runCount > 0 && params.runtimeContext) {

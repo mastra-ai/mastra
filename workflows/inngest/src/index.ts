@@ -9,7 +9,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool, ToolStream } from '@mastra/core/tools';
-import { getStepResult, Workflow, Run, DefaultExecutionEngine } from '@mastra/core/workflows';
+import { getStepResult, Workflow, Run, DefaultExecutionEngine, validateStepInput } from '@mastra/core/workflows';
 import type {
   ExecuteFunction,
   ExecutionContext,
@@ -215,10 +215,12 @@ export class InngestRun<
       },
     });
 
+    const inputDataToUse = await this._validateInput(inputData);
+
     const eventOutput = await this.inngest.send({
       name: `workflow.${this.workflowId}`,
       data: {
-        inputData,
+        inputData: inputDataToUse,
         runId: this.runId,
         resourceId: this.resourceId,
       },
@@ -278,17 +280,21 @@ export class InngestRun<
       runId: this.runId,
     });
 
+    const suspendedStep = this.workflowSteps[steps?.[0] ?? ''];
+
+    const resumeDataToUse = await this._validateResumeData(params.resumeData, suspendedStep);
+
     const eventOutput = await this.inngest.send({
       name: `workflow.${this.workflowId}`,
       data: {
-        inputData: params.resumeData,
+        inputData: resumeDataToUse,
         runId: this.runId,
         workflowId: this.workflowId,
         stepResults: snapshot?.context as any,
         resume: {
           steps,
           stepResults: snapshot?.context as any,
-          resumePayload: params.resumeData,
+          resumePayload: resumeDataToUse,
           // @ts-ignore
           resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
         },
@@ -1275,6 +1281,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       tracingPolicy: this.options?.tracingPolicy,
     });
 
+    const { inputData, validationError } = await validateStepInput({
+      prevOutput,
+      step,
+      validateInputs: this.options?.validateInputs ?? false,
+    });
+
     const startedAt = await this.inngestStep.run(
       `workflow.${executionContext.workflowId}.run.${executionContext.runId}.step.${step.id}.running_ev`,
       async () => {
@@ -1306,7 +1318,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           payload: {
             id: step.id,
             status: 'running',
-            payload: prevOutput,
+            payload: inputData,
             startedAt,
           },
         });
@@ -1331,7 +1343,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
           function: step.getFunction(),
           data: {
-            inputData: prevOutput,
+            inputData,
             runId: runId,
             resume: {
               runId: runId,
@@ -1349,7 +1361,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
           function: step.getFunction(),
           data: {
-            inputData: prevOutput,
+            inputData,
           },
         })) as any;
         result = invokeResp.result;
@@ -1524,12 +1536,16 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       let bailed: { payload: any } | undefined;
 
       try {
+        if (validationError) {
+          throw validationError;
+        }
+
         const result = await step.execute({
           runId: executionContext.runId,
           mastra: this.mastra!,
           runtimeContext,
           writableStream,
-          inputData: prevOutput,
+          inputData,
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           tracingContext: {
             currentSpan: stepAISpan,
@@ -1562,14 +1578,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           output: result,
           startedAt,
           endedAt,
-          payload: prevOutput,
+          payload: inputData,
           resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
           resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
         };
       } catch (e) {
         execResults = {
           status: 'failed',
-          payload: prevOutput,
+          payload: inputData,
           error: e instanceof Error ? e.message : String(e),
           endedAt: Date.now(),
           startedAt,
@@ -1582,14 +1598,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         execResults = {
           status: 'suspended',
           suspendedPayload: suspended.payload,
-          payload: prevOutput,
+          payload: inputData,
           suspendedAt: Date.now(),
           startedAt,
           resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
           resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
         };
       } else if (bailed) {
-        execResults = { status: 'bailed', output: bailed.payload, payload: prevOutput, endedAt: Date.now(), startedAt };
+        execResults = { status: 'bailed', output: bailed.payload, payload: inputData, endedAt: Date.now(), startedAt };
       }
 
       if (execResults.status === 'failed') {
@@ -1654,7 +1670,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           await this.runScorers({
             scorers: step.scorers,
             runId: executionContext.runId,
-            input: prevOutput,
+            input: inputData,
             output: stepRes.result,
             workflowId: executionContext.workflowId,
             stepId: step.id,

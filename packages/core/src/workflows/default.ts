@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
-import type z from 'zod';
 import type { AISpan, TracingContext } from '../ai-tracing';
 import { AISpanType, wrapMastra, selectFields } from '../ai-tracing';
 import type { RuntimeContext } from '../di';
@@ -26,7 +25,7 @@ import type {
   StepResult,
   StepSuccess,
 } from './types';
-import { isEmpty } from 'radash';
+import { validateStepInput } from './utils';
 
 export type ExecutionContext = {
   workflowId: string;
@@ -717,25 +716,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const resumeTime = resume?.steps[0] === step.id ? Date.now() : undefined;
     const stepCallId = randomUUID();
 
-    let inputData = prevOutput;
-
-    let validationError: Error | undefined;
-
-    if (this.options?.validateInputs) {
-      const inputSchema = step.inputSchema;
-
-      const validatedInput = await inputSchema.safeParseAsync(prevOutput);
-
-      if (!validatedInput.success) {
-        const errorMessages = validatedInput.error.errors
-          .map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`)
-          ?.join('\n');
-
-        validationError = new Error('Step input validation failed: \n' + errorMessages);
-      } else {
-        inputData = isEmpty(validatedInput.data) ? prevOutput : validatedInput.data;
-      }
-    }
+    const { inputData, validationError } = await validateStepInput({
+      prevOutput,
+      step,
+      validateInputs: this.options?.validateInputs ?? false,
+    });
 
     const stepInfo = {
       ...stepResults[step.id],
