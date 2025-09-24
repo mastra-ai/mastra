@@ -7,8 +7,6 @@ import {
   tracesListColumns,
   PageHeader,
   EntityOptions,
-  getShortId,
-  EntryListEntryStatusCol,
   TracesTools,
   TraceDialog,
   parseError,
@@ -19,7 +17,6 @@ import { useAgents } from '@/hooks/use-agents';
 import { EyeIcon } from 'lucide-react';
 import { useAITraces } from '@/domains/observability/hooks/use-ai-traces';
 import { useAITrace } from '@/domains/observability/hooks/use-ai-trace';
-import { format, isToday } from 'date-fns';
 import { useWorkflows } from '@/hooks/use-workflows';
 import { useNavigate, useSearchParams } from 'react-router';
 
@@ -67,8 +64,6 @@ export default function Observability() {
           }
         : undefined,
   });
-
-  console.log({ aiTraces });
 
   useEffect(() => {
     if (traceId) {
@@ -165,9 +160,6 @@ export default function Observability() {
   };
 
   const error = isAiTracesError ? parseError(aiTracesError) : undefined;
-
-  console.log({ selectedEntityOption, selectedDateFrom, selectedDateTo });
-
   const filtersApplied = selectedEntityOption?.value !== 'all' || selectedDateFrom || selectedDateTo;
 
   return (
@@ -206,6 +198,8 @@ export default function Observability() {
                 errorMsg={error?.error}
                 setEndOfListElement={setEndOfListElement}
                 filtersApplied={Boolean(filtersApplied)}
+                isFetchingNextPage={isFetchingNextPage}
+                hasNextPage={hasNextPage}
               />
             )}
           </div>
