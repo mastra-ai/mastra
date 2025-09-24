@@ -3,6 +3,8 @@ title: "Overview"
 description: Overview of scorers in Mastra, detailing their capabilities for evaluating AI outputs and measuring performance.
 ---
 
+import { Callout } from "nextra/components";
+
 # Scorers overview
 
 **Scorers** are evaluation tools that measure the quality, accuracy, or performance of AI-generated outputs. Scorers provide an automated way to assess whether your agents, workflows, or language models are producing the desired results by analyzing their responses against specific criteria.
@@ -129,6 +131,12 @@ export const contentWorkflow = createWorkflow({ ... })
 ## Trace evaluations
 
 In addition to live evaluations, you can use scorers to evaluate historical traces from your agent interactions and workflows. This is particularly useful for analyzing past performance, debugging issues, or running batch evaluations.
+
+<Callout type="info">
+**Observability Required**
+
+To score traces, you must first configure observability in your Mastra instance to collect trace data. See [AI Tracing documentation](../observability/ai-tracing) for setup instructions.
+</Callout>
 
 ### Scoring traces with the playground
 
