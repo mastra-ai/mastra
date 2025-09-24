@@ -20,7 +20,7 @@ export const ProviderStatusIndicator = ({ providerId, connected, envVar }: Provi
           <div className="text-xs mt-1">
             Set the{' '}
             <code className="px-1 py-0.5 bg-yellow-100 dark:bg-yellow-900/50 rounded">
-              {envVar || `${providerId.toUpperCase()}_API_KEY`}
+              {envVar || `${providerId.toUpperCase().replace(/-/g, '_')}_API_KEY`}
             </code>{' '}
             environment variable to use this provider.
           </div>
