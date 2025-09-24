@@ -55,6 +55,7 @@ export function cloneStep<TStepId extends string>(
     inputSchema: step.inputSchema,
     outputSchema: step.outputSchema,
     execute: step.execute,
+    component: step.component,
   };
 }
 
@@ -145,6 +146,7 @@ export function createStep<
   if (isAgent(params)) {
     return {
       id: params.name,
+      description: params.getDescription(),
       // @ts-ignore
       inputSchema: z.object({
         prompt: z.string(),
@@ -208,6 +210,7 @@ export function createStep<
           text: await streamPromise.promise,
         };
       },
+      component: params.component,
     };
   }
 
@@ -220,6 +223,7 @@ export function createStep<
       // TODO: tool probably should have strong id type
       // @ts-ignore
       id: params.id,
+      description: params.description,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
       suspendSchema: params.suspendSchema,
@@ -235,6 +239,7 @@ export function createStep<
           resumeData,
         });
       },
+      component: 'TOOL',
     };
   }
 
