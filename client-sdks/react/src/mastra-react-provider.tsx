@@ -1,6 +1,5 @@
-import { QueryClientProvider, QueryClientProviderProps } from '@/query-client-provider';
 import { MastraClientProvider, MastraClientProviderProps } from '@/mastra-client-context';
-type MastraReactProviderProps = QueryClientProviderProps & MastraClientProviderProps;
+type MastraReactProviderProps = MastraClientProviderProps;
 
 export const MastraReactProvider = ({ children, baseUrl, headers }: MastraReactProviderProps) => {
   return (

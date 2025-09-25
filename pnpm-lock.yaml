@@ -312,9 +312,6 @@ importers:
       '@mastra/client-js':
         specifier: workspace:*
         version: link:../client-js
-      '@tanstack/react-query':
-        specifier: ^5.81.5
-        version: 5.81.5(react@19.1.1)
       react:
         specifier: ^19.1.1
         version: 19.1.1

@@ -15,7 +15,6 @@
   ],
   "dependencies": {
     "@mastra/client-js": "workspace:*",
-    "@tanstack/react-query": "^5.81.5",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
