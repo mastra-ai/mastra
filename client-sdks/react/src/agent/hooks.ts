@@ -5,7 +5,7 @@ import { CoreUserMessage } from '@mastra/core/llm';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { UIMessage } from 'ai';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { toUIMessage } from './lib/toUIMessage';
 
 export interface MastraChatProps<TMessage> {
@@ -19,7 +19,6 @@ export interface StreamVNextArgs<TMessage> {
   threadId?: string;
   onChunk?: ({ chunk, conversation }: { chunk: ChunkType; conversation: TMessage[] }) => TMessage[];
   modelSettings?: ModelSettings;
-  signal?: AbortSignal;
 }
 
 export interface NetworkArgs<TMessage> {
@@ -28,10 +27,10 @@ export interface NetworkArgs<TMessage> {
   threadId?: string;
   onNetworkChunk: ({ chunk, conversation }: { chunk: NetworkChunkType; conversation: TMessage[] }) => TMessage[];
   modelSettings?: ModelSettings;
-  signal?: AbortSignal;
 }
 
 export const useMastraChat = <TMessage = UIMessage>({ agentId, initializeMessages }: MastraChatProps<TMessage>) => {
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [messages, setMessages] = useState<TMessage[]>(initializeMessages || []);
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
@@ -42,7 +41,6 @@ export const useMastraChat = <TMessage = UIMessage>({ agentId, initializeMessage
     threadId,
     onChunk,
     modelSettings,
-    signal,
   }: StreamVNextArgs<TMessage>) => {
     const {
       frequencyPenalty,
@@ -56,13 +54,14 @@ export const useMastraChat = <TMessage = UIMessage>({ agentId, initializeMessage
       providerOptions,
     } = modelSettings || {};
 
+    abortControllerRef.current = new AbortController();
     setIsRunning(true);
 
     // Create a new client instance with the abort signal
     // We can't use useMastraClient hook here, so we'll create the client directly
     const clientWithAbort = new MastraClient({
       ...baseClient!.options,
-      abortSignal: signal,
+      abortSignal: abortControllerRef.current.signal,
     });
 
     const agent = clientWithAbort.getAgent(agentId);
@@ -109,18 +108,18 @@ export const useMastraChat = <TMessage = UIMessage>({ agentId, initializeMessage
     threadId,
     onNetworkChunk,
     modelSettings,
-    signal,
   }: NetworkArgs<TMessage>) => {
     const { frequencyPenalty, presencePenalty, maxRetries, maxTokens, temperature, topK, topP, maxSteps } =
       modelSettings || {};
 
+    abortControllerRef.current = new AbortController();
     setIsRunning(true);
 
     // Create a new client instance with the abort signal
     // We can't use useMastraClient hook here, so we'll create the client directly
     const clientWithAbort = new MastraClient({
       ...baseClient!.options,
-      abortSignal: signal,
+      abortSignal: abortControllerRef.current.signal,
     });
 
     const agent = clientWithAbort.getAgent(agentId);
@@ -158,6 +157,10 @@ export const useMastraChat = <TMessage = UIMessage>({ agentId, initializeMessage
     isRunning,
     messages,
     setMessages,
-    cancelRun: () => setIsRunning(false),
+    cancelRun: async () => {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+      setIsRunning(false);
+    },
   };
 };
