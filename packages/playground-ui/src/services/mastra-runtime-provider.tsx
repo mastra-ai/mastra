@@ -334,7 +334,17 @@ export function MastraRuntimeProvider({
             { role: 'assistant', content: [] } as ThreadMessageLike,
           );
 
-          setMessages(currentConversation => [...currentConversation, latestMessage]);
+          setMessages(currentConversation => [
+            ...currentConversation,
+            {
+              ...latestMessage,
+              metadata: {
+                custom: {
+                  modelMetadata: generatedResponse.response.modelMetadata,
+                },
+              },
+            },
+          ]);
 
           if (generatedResponse.finishReason) {
             handleFinishReason(generatedResponse.finishReason);

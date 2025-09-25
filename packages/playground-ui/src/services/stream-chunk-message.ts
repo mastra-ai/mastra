@@ -235,6 +235,28 @@ export const handleStreamChunk = async ({
     }
 
     case 'finish': {
+      setMessages(currentConversation => {
+        // Get the last message (should be the assistant's message)
+        const lastMessage = currentConversation[currentConversation.length - 1];
+
+        // Only process if the last message is from the assistant
+        if (lastMessage && lastMessage.role === 'assistant') {
+          // Create a new message with the modelMetadata in metadata
+          const updatedMessage: ThreadMessageLike = {
+            ...lastMessage,
+            metadata: {
+              custom: {
+                modelMetadata: chunk.payload.metadata.modelMetadata,
+              },
+            },
+          };
+
+          // Replace the last message with the updated one
+          return [...currentConversation.slice(0, -1), updatedMessage];
+        }
+
+        return currentConversation;
+      });
       handleFinishReason(chunk.payload.finishReason);
       break;
     }

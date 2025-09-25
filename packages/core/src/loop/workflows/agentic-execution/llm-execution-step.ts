@@ -631,6 +631,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
           metadata: {
             providerMetadata: providerOptions,
             ...responseMetadata,
+            modelMetadata: runState.state.modelMetadata,
             headers: rawResponse?.headers,
             request,
           },

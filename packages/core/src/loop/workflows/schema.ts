@@ -125,6 +125,13 @@ export const llmIterationOutputSchema = z.object({
     id: z.string().optional(),
     model: z.string().optional(),
     modelId: z.string().optional(),
+    modelMetadata: z
+      .object({
+        modelId: z.string(),
+        modelVersion: z.string(),
+        modelProvider: z.string(),
+      })
+      .optional(),
     timestamp: z.date().optional(),
     providerMetadata: z.record(z.any()).optional(),
     headers: z.record(z.string()).optional(),

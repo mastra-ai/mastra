@@ -1,3 +1,4 @@
+import { GetAgentResponse } from '@mastra/client-js';
 import type { AiMessageType } from '@mastra/core/memory';
 
 export type Message = AiMessageType;
@@ -52,6 +53,7 @@ export interface ChatProps {
   settings?: AgentSettingsType;
   runtimeContext?: Record<string, any>;
   onInputChange?: (value: string) => void;
+  modelList?: GetAgentResponse['modelList'];
 }
 
 export type SpanStatus = {
