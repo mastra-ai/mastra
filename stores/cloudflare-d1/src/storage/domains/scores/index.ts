@@ -322,4 +322,75 @@ export class ScoresStorageD1 extends ScoresStorage {
       );
     }
   }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    try {
+      const fullTableName = this.operations.getTableName(TABLE_SCORERS);
+
+      // Get total count
+      const countQuery = createSqlBuilder()
+        .count()
+        .from(fullTableName)
+        .where('traceId = ?', traceId)
+        .andWhere('spanId = ?', spanId);
+      const countResult = await this.operations.executeQuery(countQuery.build());
+      const total = Array.isArray(countResult) ? Number(countResult?.[0]?.count ?? 0) : Number(countResult?.count ?? 0);
+
+      if (total === 0) {
+        return {
+          pagination: {
+            total: 0,
+            page: pagination.page,
+            perPage: pagination.perPage,
+            hasMore: false,
+          },
+          scores: [],
+        };
+      }
+
+      // Get paginated results
+      const limit = pagination.perPage + 1;
+      const selectQuery = createSqlBuilder()
+        .select('*')
+        .from(fullTableName)
+        .where('traceId = ?', traceId)
+        .andWhere('spanId = ?', spanId)
+        .orderBy('createdAt', 'DESC')
+        .limit(limit)
+        .offset(pagination.page * pagination.perPage);
+
+      const { sql, params } = selectQuery.build();
+      const results = await this.operations.executeQuery({ sql, params });
+      const rows = Array.isArray(results) ? results : [];
+
+      const scores = rows.slice(0, pagination.perPage).map(transformScoreRow);
+
+      return {
+        pagination: {
+          total,
+          page: pagination.page,
+          perPage: pagination.perPage,
+          hasMore: rows.length > pagination.perPage,
+        },
+        scores,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_D1_STORE_SCORES_GET_SCORES_BY_SPAN_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
 }
