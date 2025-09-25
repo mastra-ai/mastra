@@ -111,7 +111,7 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
       await this.service.entities.score.upsert(scoreData).go();
 
       const savedScore: ScoreRowData = {
-        ...validatedScore,
+        ...score,
         id: scoreId,
         createdAt: now,
         updatedAt: now,
