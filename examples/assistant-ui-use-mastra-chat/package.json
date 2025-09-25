@@ -1,0 +1,65 @@
+{
+  "name": "assistant-ui-starter",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "prettier": "prettier --check .",
+    "prettier:fix": "prettier --write ."
+  },
+  "prettier": {
+    "plugins": [
+      "prettier-plugin-tailwindcss"
+    ],
+    "tailwindStylesheet": "app/globals.css"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^2.0.35",
+    "@assistant-ui/react": "^0.11.18",
+    "@assistant-ui/react-ai-sdk": "^1.1.0",
+    "@assistant-ui/react-markdown": "^0.11.0",
+    "@mastra/react-hooks": "workspace:*",
+    "@mastra/playground-ui": "workspace:*",
+    "@radix-ui/react-avatar": "^1.1.10",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-separator": "^1.1.7",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "ai": "^5.0.52",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.23.19",
+    "lucide-react": "^0.544.0",
+    "motion": "^12.23.19",
+    "next": "15.5.4",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-shiki": "^0.8.0",
+    "remark-gfm": "^4.0.1",
+    "tailwind-merge": "^3.3.1",
+    "tw-animate-css": "^1.3.8",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.4",
+    "prettier": "^3.6.2",
+    "prettier-plugin-tailwindcss": "^0.6.14",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/react-hooks": "link:../../client-sdks/react",
+      "@mastra/playground-ui": "link:../../packages/playground-ui"
+    }
+  }
+}

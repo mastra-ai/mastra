@@ -44,7 +44,7 @@ export const toUIMessage = (chunk: ChunkType, conversation: UIMessage[]): Mastra
 
     case 'tool-output': {
       if (chunk.payload.output?.type.startsWith('workflow-')) {
-        return handleWorkflowChunk({
+        return toWorkflowUIMessage({
           workflowChunk: chunk.payload.output,
           conversation,
           entityName: chunk.payload.toolName,
@@ -246,13 +246,13 @@ const handleFinishReason = (finishReason: string) => {
   }
 };
 
-interface HandleWorkflowChunkOptions {
+interface ToWorkflowUIMessageArgs {
   workflowChunk: object;
   conversation: UIMessage[];
   entityName: string;
 }
 
-const handleWorkflowChunk = ({ workflowChunk, conversation, entityName }: HandleWorkflowChunkOptions): UIMessage[] => {
+const toWorkflowUIMessage = ({ workflowChunk, conversation, entityName }: ToWorkflowUIMessageArgs): UIMessage[] => {
   const lastMessage = conversation[conversation.length - 1];
   const parts = lastMessage.parts || [];
 

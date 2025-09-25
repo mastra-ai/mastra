@@ -46,3 +46,4 @@ export * from './components/ui/kbd';
 export * from './components/ui/collapsible';
 export * from './domains/conversation/index';
 export * from './lib/errors';
+export * from './components/assistant-ui/tools/tool-fallback';
