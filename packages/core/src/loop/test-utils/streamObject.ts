@@ -1061,7 +1061,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             output: z.object({ content: z.string() }),
             options: {
               onFinish: async event => {
-                console.log('onFinish called!!', event);
+                // console.log('onFinish called!!', event);
                 result = event;
               },
             },
@@ -1069,11 +1069,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             messageList: new MessageList(),
           });
 
-          console.log('result1', result);
           await output.consumeStream();
-          console.log('result2', result);
           await convertAsyncIterableToArray(output.objectStream);
-          console.log('result3', result);
 
           // consume expected error rejection
           await output.object.catch(err => {
@@ -1233,7 +1230,7 @@ Error message: Validation failed]`);
             output: z.object({ content: z.string() }),
             options: {
               onFinish: async event => {
-                console.log('onFinish called!!', event);
+                // console.log('onFinish called!!', event);
                 result = event;
               },
             },
@@ -1241,11 +1238,8 @@ Error message: Validation failed]`);
             messageList: new MessageList(),
           });
 
-          console.log('result1', result);
           await consumeStream();
-          console.log('result2', result);
           await convertAsyncIterableToArray(objectStream);
-          console.log('result3', result);
 
           // consume expected error rejection
           await object.catch(err => {
