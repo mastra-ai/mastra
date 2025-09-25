@@ -324,8 +324,9 @@ describe('Input and Output Processors with VNext Methods', () => {
 
       const stream = await agentWithStreamAbort.streamVNext('Stream abort test');
 
-      expect(stream.tripwire).toBe(true);
-      expect(stream.tripwireReason).toBe('Stream aborted');
+      const fullOutput = await stream.getFullOutput();
+      expect(fullOutput.tripwire).toBe(true);
+      expect(fullOutput.tripwireReason).toBe('Stream aborted');
 
       // Stream should be empty
       let textReceived = '';

@@ -276,6 +276,7 @@ export interface WorkflowRunState {
 
 export interface WorkflowOptions {
   tracingPolicy?: TracingPolicy;
+  validateInputs?: boolean;
 }
 
 export type WorkflowInfo = {
