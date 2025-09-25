@@ -64,7 +64,6 @@ type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
 export function createDestructurableOutput<OUTPUT extends OutputSchema = undefined>(
   output: MastraModelOutput<OUTPUT>,
 ): MastraModelOutput<OUTPUT> {
-  // Now that we've fixed teeStream() to not mutate #baseStream, we just need to bind methods
   return new Proxy(output, {
     get(target, prop, _receiver) {
       // Use target as receiver to preserve private member access

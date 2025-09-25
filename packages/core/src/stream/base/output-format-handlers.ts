@@ -559,7 +559,6 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
         return;
       }
 
-      // TODO: make sure stream ended with reason client tool-calls doesnt reject the object promise
       if (['tool-calls'].includes(finishReason ?? '')) {
         controller.enqueue({
           from: ChunkFrom.AGENT,
