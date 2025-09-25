@@ -281,4 +281,58 @@ export class ScoresStorageCloudflare extends ScoresStorage {
       return { pagination: { total: 0, page: 0, perPage: 100, hasMore: false }, scores: [] };
     }
   }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    try {
+      const keys = await this.operations.listKV(TABLE_SCORERS);
+      const scores: ScoreRowData[] = [];
+
+      for (const { name: key } of keys) {
+        const score = await this.operations.getKV(TABLE_SCORERS, key);
+        if (score && score.traceId === traceId && score.spanId === spanId) {
+          scores.push(transformScoreRow(score));
+        }
+      }
+
+      // Sort by createdAt desc
+      scores.sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateB - dateA;
+      });
+
+      const total = scores.length;
+      const start = pagination.page * pagination.perPage;
+      const end = start + pagination.perPage;
+      const pagedScores = scores.slice(start, end);
+
+      return {
+        pagination: {
+          total,
+          page: pagination.page,
+          perPage: pagination.perPage,
+          hasMore: end < total,
+        },
+        scores: pagedScores,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_SCORES_GET_SCORES_BY_SPAN_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to get scores by span: traceId=${traceId}, spanId=${spanId}`,
+        },
+        error,
+      );
+    }
+  }
 }
