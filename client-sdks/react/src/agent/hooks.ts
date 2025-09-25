@@ -4,7 +4,9 @@ import { MastraClient } from '@mastra/client-js';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { ChunkType, NetworkChunkType } from '@mastra/core/stream';
+import { UIMessage } from 'ai';
 import { useState } from 'react';
+import { toUIMessage } from './lib/toUIMessage';
 
 export interface MastraChatProps<TMessage> {
   agentId: string;
@@ -15,7 +17,7 @@ export interface StreamVNextArgs<TMessage> {
   coreUserMessages: CoreUserMessage[];
   runtimeContext?: RuntimeContext;
   threadId?: string;
-  onChunk: (chunk: ChunkType, conversation: TMessage[]) => TMessage[];
+  onChunk?: (chunk: ChunkType, conversation: TMessage[]) => TMessage[];
   modelSettings?: ModelSettings;
   signal?: AbortSignal;
 }
@@ -29,7 +31,7 @@ export interface NetworkArgs<TMessage> {
   signal?: AbortSignal;
 }
 
-export const useMastraChat = <TMessage>({ agentId, initializeMessages }: MastraChatProps<TMessage>) => {
+export const useMastraChat = <TMessage = UIMessage>({ agentId, initializeMessages }: MastraChatProps<TMessage>) => {
   const [messages, setMessages] = useState<TMessage[]>(initializeMessages || []);
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
@@ -90,7 +92,10 @@ export const useMastraChat = <TMessage>({ agentId, initializeMessages }: MastraC
 
     await response.processDataStream({
       onChunk: (chunk: ChunkType) => {
-        setMessages(prev => onChunk(chunk, prev));
+        setMessages(prev => {
+          const fn = onChunk || toUIMessage;
+          return fn(chunk, prev as any) as TMessage[];
+        });
         return Promise.resolve();
       },
     });
