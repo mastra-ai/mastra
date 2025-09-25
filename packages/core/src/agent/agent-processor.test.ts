@@ -1563,63 +1563,45 @@ describe('Input and Output Processors with VNext Methods', () => {
               format: 'mastra',
               structuredOutput: {
                 schema: ideaSchema,
-                // model,
+                model,
                 errorStrategy: 'strict',
               },
             },
           );
         }
 
-        for await (const chunk of result.fullStream) {
-          const timestamp = new Date().getTime();
-          if (!chunk.type.includes('delta')) {
-            console.log(timestamp, chunk);
-            continue;
-          }
-
-          if (chunk.type === 'text-delta') {
-            const cyanColorCode = '\x1b[36m';
-            const resetColorCode = '\x1b[0m';
-            process.stdout.write(cyanColorCode);
-            process.stdout.write(chunk.payload.text);
-            process.stdout.write(resetColorCode);
-            continue;
-          }
-
-          if (chunk.metadata?.from === 'structured-output') {
-            const redColorCode = '\x1b[31m';
-            const resetColorCode = '\x1b[0m';
-            process.stdout.write(redColorCode);
-            console.log(timestamp, 'structuring agent chunk in main stream\n', chunk);
-            process.stdout.write(resetColorCode);
-          }
+        for await (const _chunk of result.fullStream) {
+          // const timestamp = new Date().getTime();
+          // if (!chunk.type.includes('delta')) {
+          //   console.log(timestamp, chunk);
+          //   continue;
+          // }
+          // if (chunk.type === 'text-delta') {
+          //   const cyanColorCode = '\x1b[36m';
+          //   const resetColorCode = '\x1b[0m';
+          //   process.stdout.write(cyanColorCode);
+          //   process.stdout.write(chunk.payload.text);
+          //   process.stdout.write(resetColorCode);
+          //   continue;
+          // }
+          // if (chunk.metadata?.from === 'structured-output') {
+          //   const redColorCode = '\x1b[31m';
+          //   const resetColorCode = '\x1b[0m';
+          //   process.stdout.write(redColorCode);
+          //   console.log(timestamp, 'structuring agent chunk in main stream\n', chunk);
+          //   process.stdout.write(resetColorCode);
+          // }
         }
 
-        for await (const chunk of result.objectStream) {
-          console.log('object stream chunk', chunk);
-        }
-
-        // const iterateObjectStream = async () => {
-        //   for await (const chunk of result.objectStream) {
-        //     console.log('object', chunk);
-        //   }
-        // };
-
-        // const iterateTextStream = async () => {
-        //   for await (const chunk of result.textStream) {
-        //     console.log('text', chunk);
-        //   }
-        // };
-        // await Promise.all(
-        //   [iterateObjectStream(), iterateTextStream()],
-        // );
-
+        console.log('getting text');
         const resultText = await result.text;
+        console.log('getting object');
         const resultObj = await result.object;
+        console.log('got result object', resultObj);
 
         // Verify we have both natural text AND structured data
-        // expect(resultText).toBeTruthy();
-        // expect(resultText).toMatch(/food waste|restaurant|reduce|solution|innovative/i); // Should contain natural language
+        expect(resultText).toBeTruthy();
+        expect(resultText).toMatch(/food waste|restaurant|reduce|solution|innovative/i); // Should contain natural language
         expect(resultObj).toBeDefined();
 
         // Validate structured data
@@ -1642,8 +1624,8 @@ describe('Input and Output Processors with VNext Methods', () => {
     });
   }
 
-  // testStructuredOutput('aisdk', openai_v5('gpt-4o'));
-  // testStructuredOutput('mastra', openai('gpt-4o'));
+  testStructuredOutput('aisdk', openai_v5('gpt-4o'));
+  testStructuredOutput('mastra', openai('gpt-4o'));
   testStructuredOutput('mastra', openai_v5('gpt-4o'));
 });
 
