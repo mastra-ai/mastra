@@ -3,7 +3,13 @@ import { UIMessage } from 'ai';
 
 export type MastraUIMessage = UIMessage<any, any, any>;
 
-export const toUIMessage = (chunk: ChunkType, conversation: UIMessage[]): MastraUIMessage[] => {
+export const toUIMessage = ({
+  chunk,
+  conversation,
+}: {
+  chunk: ChunkType;
+  conversation: UIMessage[];
+}): MastraUIMessage[] => {
   switch (chunk.type) {
     default:
       return [...conversation];

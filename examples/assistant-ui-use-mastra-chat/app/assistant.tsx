@@ -36,8 +36,7 @@ export const Assistant = () => {
       return streamVNext({
         coreUserMessages: [{ role: "user", content: input }],
         signal: abortControllerRef.current.signal,
-        onChunk: (chunk, conversation) =>
-          toAssistantUIMessage({ chunk, conversation }),
+        onChunk: toAssistantUIMessage,
       });
     },
     onCancel: async () => {

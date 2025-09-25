@@ -17,7 +17,7 @@ export interface StreamVNextArgs<TMessage> {
   coreUserMessages: CoreUserMessage[];
   runtimeContext?: RuntimeContext;
   threadId?: string;
-  onChunk?: (chunk: ChunkType, conversation: TMessage[]) => TMessage[];
+  onChunk?: ({ chunk, conversation }: { chunk: ChunkType; conversation: TMessage[] }) => TMessage[];
   modelSettings?: ModelSettings;
   signal?: AbortSignal;
 }
@@ -26,7 +26,7 @@ export interface NetworkArgs<TMessage> {
   coreUserMessages: CoreUserMessage[];
   runtimeContext?: RuntimeContext;
   threadId?: string;
-  onNetworkChunk: (chunk: NetworkChunkType, conversation: TMessage[]) => TMessage[];
+  onNetworkChunk: ({ chunk, conversation }: { chunk: NetworkChunkType; conversation: TMessage[] }) => TMessage[];
   modelSettings?: ModelSettings;
   signal?: AbortSignal;
 }
@@ -94,7 +94,7 @@ export const useMastraChat = <TMessage = UIMessage>({ agentId, initializeMessage
       onChunk: (chunk: ChunkType) => {
         setMessages(prev => {
           const fn = onChunk || toUIMessage;
-          return fn(chunk, prev as any) as TMessage[];
+          return fn({ chunk, conversation: prev as any }) as TMessage[];
         });
         return Promise.resolve();
       },
@@ -144,7 +144,7 @@ export const useMastraChat = <TMessage = UIMessage>({ agentId, initializeMessage
 
     await response.processDataStream({
       onChunk: (chunk: NetworkChunkType) => {
-        setMessages(prev => onNetworkChunk(chunk, prev));
+        setMessages(conversation => onNetworkChunk({ chunk, conversation }));
         return Promise.resolve();
       },
     });
