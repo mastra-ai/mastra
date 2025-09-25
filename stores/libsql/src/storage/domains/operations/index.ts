@@ -641,13 +641,14 @@ export class StoreOperationsLibSQL extends StoreOperations {
                       sqlite_master
                     WHERE
                       type = 'index'
-                      AND tbl_name IN (${tableName ? `'${tableName}'` : allTableNames.map(name => `'${name}'`).join(',')})
+                      AND tbl_name IN (${tableName ? `?` : allTableNames.map(() => `?`).join(',')})
                     ORDER BY
                       tbl_name,
                       name;`;
 
       const tableIndexes = await this.client.execute({
         sql: query,
+        args: tableName ? [tableName] : allTableNames,
       });
 
       const indexDetails: IndexInfo[] = await Promise.all(
