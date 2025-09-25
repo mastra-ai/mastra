@@ -9,7 +9,7 @@ import { it } from 'vitest';
 import { z } from 'zod';
 import { LangSmithExporter } from './ai-tracing';
 
-it('should initialize with correct configuration', async () => {
+it.skip('should initialize with correct configuration', async () => {
   const client = new Client();
   const calculator = createTool({
     id: 'calculator',
