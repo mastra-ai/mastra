@@ -232,7 +232,6 @@ export function MastraRuntimeProvider({
 
     const input = message.content[0].text;
     setMessages(s => [...s, { role: 'user', content: input, attachments: message.attachments }]);
-    setIsRunning(true);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -445,6 +444,7 @@ export function MastraRuntimeProvider({
           });
         } else {
           if (chatWithGenerateVNext) {
+            setIsRunning(true);
             const response = await agent.generateVNext({
               messages: [
                 {
@@ -505,6 +505,7 @@ export function MastraRuntimeProvider({
         }
       } else {
         if (chatWithGenerate) {
+          setIsRunning(true);
           const generateResponse = await agent.generate({
             messages: [
               {
@@ -619,6 +620,7 @@ export function MastraRuntimeProvider({
             handleFinishReason(generateResponse.finishReason);
           }
         } else {
+          setIsRunning(true);
           const response = await agent.stream({
             messages: [
               {
