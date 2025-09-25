@@ -202,7 +202,7 @@ describe('Input and Output Processors with VNext Methods', () => {
         const result = await agentWithAbortProcessor.generateVNext('This should be aborted', {
           format,
         });
-        console.log('tripwire result', result);
+
         expect(result.tripwire).toBe(true);
 
         expect(result.tripwireReason).toBe('Tripwire triggered by abort-processor');
