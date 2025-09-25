@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
 import type { ScoreRowData } from '@mastra/core/scores';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
@@ -81,6 +82,7 @@ export class ScoresMSSQL extends ScoresStorage {
     try {
       // Generate ID like other storage implementations
       const scoreId = crypto.randomUUID();
+      const scoreData = saveScorePayloadSchema.parse(score);
 
       const {
         scorer,
@@ -93,7 +95,7 @@ export class ScoresMSSQL extends ScoresStorage {
         runtimeContext,
         entity,
         ...rest
-      } = score;
+      } = scoreData;
 
       await this.operations.insert({
         tableName: TABLE_SCORERS,

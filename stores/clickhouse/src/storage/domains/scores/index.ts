@@ -1,5 +1,6 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
@@ -76,10 +77,13 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     }
   }
 
-  async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
     try {
+      const id = crypto.randomUUID();
+      const scoreData = saveScorePayloadSchema.parse(score);
       const record = {
-        ...score,
+        ...scoreData,
+        id,
       };
       await this.client.insert({
         table: TABLE_SCORERS,
@@ -91,14 +95,15 @@ export class ScoresStorageClickhouse extends ScoresStorage {
           output_format_json_quote_64bit_integers: 0,
         },
       });
-      return { score };
+      const scoreFromDb = await this.getScoreById({ id });
+      return { score: scoreFromDb! };
     } catch (error) {
       throw new MastraError(
         {
           id: 'CLICKHOUSE_STORAGE_SAVE_SCORE_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { scoreId: score.id },
+          details: { runId: score.runId },
         },
         error,
       );
