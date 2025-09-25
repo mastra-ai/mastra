@@ -1,5 +1,6 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
 import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
 import type { StoreOperationsCloudflare } from '../operations';
@@ -52,9 +53,24 @@ export class ScoresStorageCloudflare extends ScoresStorage {
   }
 
   async saveScore(score: Omit<ScoreRowData, 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    let parsedScore: ValidatedSaveScorePayload;
+    try {
+      parsedScore = saveScorePayloadSchema.parse(score);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_SAVE_SCORE_FAILED_INVALID_SCORE_PAYLOAD',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { scoreId: score.id },
+        },
+        error,
+      );
+    }
+
     try {
       const id = crypto.randomUUID();
-      const { input, ...rest } = score;
+      const { input, ...rest } = parsedScore;
 
       // Serialize all object values to JSON strings
       const serializedRecord: Record<string, any> = {};
