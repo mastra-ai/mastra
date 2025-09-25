@@ -16,8 +16,8 @@ import type {
   ToolCallAttributes,
 } from '@mastra/core/ai-tracing';
 import { AISpanType, AITracingEventType } from '@mastra/core/ai-tracing';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Client, RunTree } from 'langsmith';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LangSmithExporter } from './ai-tracing';
 import type { LangSmithExporterConfig } from './ai-tracing';
 

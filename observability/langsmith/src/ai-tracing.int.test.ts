@@ -1,11 +1,11 @@
 import 'dotenv/config';
 
-import { it } from 'vitest';
-import { createTool } from '@mastra/core/tools';
-import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
-import { z } from 'zod';
 import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import { createTool } from '@mastra/core/tools';
+import { it } from 'vitest';
+import { z } from 'zod';
 import { LangSmithExporter } from './ai-tracing';
 
 it.skip('should initialize with correct configuration', async () => {
