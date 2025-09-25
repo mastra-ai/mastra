@@ -813,4 +813,109 @@ export const redirectList = [
     destination: "/:locale/reference/agents/network",
     permanent: true,
   },
+  {
+    source: "/:locale/docs/observability/tracing",
+    destination: "/:locale/docs/observability/otel-tracing",
+    permanent: true,
+  },
+  // AI Tracing documentation moved
+  {
+    source: "/:locale/docs/observability/ai-tracing",
+    destination: "/:locale/docs/observability/ai-tracing/overview",
+    permanent: true,
+  },
+  // Observability reference reorganization
+  {
+    source: "/:locale/reference/observability/logger",
+    destination: "/:locale/reference/observability/logging/pino-logger",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/otel-config",
+    destination: "/:locale/reference/observability/otel-tracing/otel-config",
+    permanent: true,
+  },
+  // OTLP Tracing provider redirects
+  {
+    source: "/:locale/reference/observability/providers/arize-ax",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/arize-ax",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/arize-phoenix",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/arize-phoenix",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/braintrust",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/braintrust",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/dash0",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/dash0",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/keywordsai",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/keywordsai",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/laminar",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/laminar",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/langfuse",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/langfuse",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/langsmith",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/langsmith",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/langwatch",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/langwatch",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/new-relic",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/new-relic",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/signoz",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/signoz",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/traceloop",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/traceloop",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers",
+    destination: "/:locale/reference/observability/otel-tracing/providers",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/index",
+    destination: "/:locale/reference/observability/otel-tracing/providers",
+    permanent: true,
+  },
 ];
