@@ -532,7 +532,7 @@ export function MastraRuntimeProvider({
         }
       } else {
         if (chatWithGenerate) {
-          const generateResponse = await agent.generate({
+          const generateResponse = await agent.generateLegacy({
             messages: [
               {
                 role: 'user',
@@ -646,7 +646,7 @@ export function MastraRuntimeProvider({
             handleFinishReason(generateResponse.finishReason);
           }
         } else {
-          const response = await agent.stream({
+          const response = await agent.streamLegacy({
             messages: [
               {
                 role: 'user',

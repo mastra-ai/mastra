@@ -529,7 +529,7 @@ export async function createNetworkLoop({
       //     ...toolData,
       // });
 
-      const stream = run.stream({
+      const stream = run.streamVNext({
         inputData: input,
         runtimeContext: runtimeContext,
       });
@@ -948,7 +948,7 @@ export async function networkLoop<
   return new MastraAgentNetworkStream({
     run,
     createStream: () => {
-      return run.stream({
+      return run.streamVNext({
         inputData: {
           task,
           resourceId: '',

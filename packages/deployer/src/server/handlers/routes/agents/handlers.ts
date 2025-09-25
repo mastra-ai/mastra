@@ -8,9 +8,9 @@ import {
   generateHandler as getOriginalGenerateHandler,
   streamGenerateHandler as getOriginalStreamGenerateHandler,
   updateAgentModelHandler as getOriginalUpdateAgentModelHandler,
+  streamUIMessageHandler as getOriginalStreamUIMessageHandler,
   generateLegacyHandler as getOriginalGenerateLegacyHandler,
   streamGenerateLegacyHandler as getOriginalStreamGenerateLegacyHandler,
-  streamUIMessageHandler as getOriginalStreamUIMessageHandler,
   reorderAgentModelListHandler as getOriginalReorderAgentModelListHandler,
   updateAgentModelInModelListHandler as getOriginalUpdateAgentModelInModelListHandler,
   streamNetworkHandler as getOriginalStreamNetworkHandler,
@@ -159,7 +159,7 @@ export async function generateHandler(c: Context) {
     const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const body = await c.req.json();
 
-    const result = await getOriginalGenerateHandler({
+const result = await getOriginalGenerateHandler({
       mastra,
       agentId,
       runtimeContext,
@@ -169,10 +169,9 @@ export async function generateHandler(c: Context) {
 
     return c.json(result);
   } catch (error) {
-    return handleError(error, 'Error generating from agent');
+return handleError(error, 'Error generating from agent');
   }
 }
-
 
 export async function streamGenerateLegacyHandler(c: Context): Promise<Response | undefined> {
   try {
@@ -195,22 +194,51 @@ export async function streamGenerateLegacyHandler(c: Context): Promise<Response 
   }
 }
 
+
 export async function streamGenerateHandler(c: Context): Promise<Response | undefined> {
   try {
     const mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const body = await c.req.json();
+    const logger = mastra.getLogger();
 
-    const streamResponse = await getOriginalStreamGenerateHandler({
-      mastra,
-      agentId,
-      runtimeContext,
-      body,
-      abortSignal: c.req.raw.signal,
-    });
+    c.header('Transfer-Encoding', 'chunked');
 
-    return streamResponse;
+    return stream(
+      c,
+      async stream => {
+        try {
+const streamResponse = await getOriginalStreamGenerateHandler({
+            mastra,
+            agentId,
+            runtimeContext,
+            body,
+            abortSignal: c.req.raw.signal,
+          });
+
+          const reader = streamResponse.fullStream.getReader();
+
+          stream.onAbort(() => {
+            void reader.cancel('request aborted');
+          });
+
+          let chunkResult;
+          while ((chunkResult = await reader.read()) && !chunkResult.done) {
+            await stream.write(`data: ${JSON.stringify(chunkResult.value)}\n\n`);
+          }
+
+          await stream.write('data: [DONE]\n\n');
+        } catch (err) {
+logger.error('Error in stream generate: ' + ((err as Error)?.message ?? 'Unknown error'));
+        }
+
+        await stream.close();
+      },
+      async err => {
+        logger.error('Error in watch stream: ' + err?.message);
+      },
+    );
   } catch (error) {
     return handleError(error, 'Error streaming from agent');
   }
@@ -272,7 +300,7 @@ export async function streamUIMessageHandler(c: Context): Promise<Response | und
     const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const body = await c.req.json();
 
-    const streamResponse = await getOriginalStreamUIMessageHandler({
+const streamResponse = await getOriginalStreamUIMessageHandler({
       mastra,
       agentId,
       runtimeContext,
@@ -342,9 +370,9 @@ export async function deprecatedStreamVNextHandler(c: Context) {
   return c.json(
     {
       error: 'This endpoint is deprecated',
-      message: 'The /streamVNext endpoint has been deprecated. Please use /stream instead.',
+      message: 'The /streamVNext endpoint has been deprecated. Please use an alternative streaming endpoint.',
       deprecated_endpoint: '/api/agents/:agentId/streamVNext',
-      replacement_endpoint: '/api/agents/:agentId/stream',
+replacement_endpoint: '/api/agents/:agentId/stream',
     },
     410, // 410 Gone status code for deprecated endpoints
   );

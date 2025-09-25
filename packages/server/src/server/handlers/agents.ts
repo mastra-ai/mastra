@@ -361,7 +361,7 @@ export async function generateLegacyHandler({
 
     validateBody({ messages });
 
-    const result = await agent.generate(messages, {
+    const result = await agent.generateLegacy(messages, {
       ...rest,
       abortSignal,
       // @ts-expect-error TODO fix types
@@ -457,7 +457,7 @@ export async function streamGenerateLegacyHandler({
 
     validateBody({ messages });
 
-    const streamResult = await agent.stream(messages, {
+    const streamResult = await agent.streamLegacy(messages, {
       ...rest,
       abortSignal,
       // @ts-expect-error TODO fix types

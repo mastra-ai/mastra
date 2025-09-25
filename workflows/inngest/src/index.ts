@@ -11,6 +11,7 @@ import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool, ToolStream } from '@mastra/core/tools';
 import { getStepResult, Workflow, Run, DefaultExecutionEngine } from '@mastra/core/workflows';
 import type {
+  StepWithComponent,
   ExecuteFunction,
   ExecutionContext,
   ExecutionEngine,
@@ -117,6 +118,7 @@ export class InngestRun<
         delay?: number;
       };
       cleanup?: () => void;
+      workflowSteps: Record<string, StepWithComponent>;
     },
     inngest: Inngest,
   ) {
@@ -494,6 +496,7 @@ export class InngestWorkflow<
           mastra: this.#mastra,
           retryConfig: this.retryConfig,
           cleanup: () => this.runs.delete(runIdToUse),
+          workflowSteps: this.steps,
         },
         this.inngest,
       );
@@ -752,7 +755,7 @@ export function createStep<
             await emitter.emit('watch-v2', {
               type: 'tool-call-delta',
               ...(toolData ?? {}),
-              argsTextDelta: chunk.textDelta,
+              argsTextDelta: chunk.payload.text,
             });
           }
         }
