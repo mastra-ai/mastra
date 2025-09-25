@@ -28,7 +28,6 @@ import type {
   StreamEvent,
   ChunkType,
   ExecutionEngineOptions,
-  StepWithComponent,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
