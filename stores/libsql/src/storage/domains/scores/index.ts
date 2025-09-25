@@ -1,6 +1,7 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
 import { TABLE_SCORERS, ScoresStorage, safelyParseJSON } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsLibSQL } from '../operations';
@@ -163,6 +164,27 @@ export class ScoresLibSQL extends ScoresStorage {
   }
 
   async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    let parsedScore: ValidatedSaveScorePayload;
+    try {
+      parsedScore = saveScorePayloadSchema.parse(score);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_SAVE_SCORE_FAILED_INVALID_SCORE_PAYLOAD',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            scorer: score.scorer.name,
+            entityId: score.entityId,
+            entityType: score.entityType,
+            traceId: score.traceId || '',
+            spanId: score.spanId || '',
+          },
+        },
+        error,
+      );
+    }
+
     try {
       const id = crypto.randomUUID();
 
@@ -172,7 +194,7 @@ export class ScoresLibSQL extends ScoresStorage {
           id,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          ...score,
+          ...parsedScore,
         },
       });
 
