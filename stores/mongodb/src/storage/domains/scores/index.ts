@@ -386,4 +386,63 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       );
     }
   }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    try {
+      const query = { traceId, spanId };
+      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const total = await collection.countDocuments(query);
+      const currentOffset = pagination.page * pagination.perPage;
+
+      if (total === 0) {
+        return {
+          scores: [],
+          pagination: {
+            total: 0,
+            page: pagination.page,
+            perPage: pagination.perPage,
+            hasMore: false,
+          },
+        };
+      }
+
+      const documents = await collection
+        .find(query)
+        .sort({ createdAt: 'desc' })
+        .skip(currentOffset)
+        .limit(pagination.perPage)
+        .toArray();
+
+      const scores = documents.map(row => transformScoreRow(row));
+      const hasMore = currentOffset + scores.length < total;
+
+      return {
+        scores,
+        pagination: {
+          total,
+          page: pagination.page,
+          perPage: pagination.perPage,
+          hasMore,
+        },
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_GET_SCORES_BY_SPAN_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { traceId, spanId, page: pagination.page, perPage: pagination.perPage },
+        },
+        error,
+      );
+    }
+  }
 }
