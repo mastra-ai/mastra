@@ -1,5 +1,5 @@
 ---
-'@mastra/langsmith': major
+'@mastra/langsmith': patch
 ---
 
 Initial commit
