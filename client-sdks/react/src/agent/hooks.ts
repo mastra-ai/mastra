@@ -11,7 +11,7 @@ export interface MastraChatProps<TMessage> {
   initializeMessages?: () => TMessage[];
 }
 
-export interface StreamVNextArgs<TMessage> {
+export interface StreamArgs<TMessage> {
   coreUserMessages: CoreUserMessage[];
   runtimeContext?: RuntimeContext;
   threadId?: string;
@@ -34,14 +34,14 @@ export const useMastraChat = <TMessage>({ agentId, initializeMessages }: MastraC
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
 
-  const streamVNext = async ({
+const stream = async ({
     coreUserMessages,
     runtimeContext,
     threadId,
     onChunk,
     modelSettings,
     signal,
-  }: StreamVNextArgs<TMessage>) => {
+  }: StreamArgs<TMessage>) => {
     const {
       frequencyPenalty,
       presencePenalty,
@@ -65,7 +65,7 @@ export const useMastraChat = <TMessage>({ agentId, initializeMessages }: MastraC
 
     const agent = clientWithAbort.getAgent(agentId);
 
-    const response = await agent.streamVNext({
+const response = await agent.stream({
       messages: coreUserMessages,
       runId: agentId,
       modelSettings: {
@@ -85,7 +85,7 @@ export const useMastraChat = <TMessage>({ agentId, initializeMessages }: MastraC
 
     if (!response.body) {
       setIsRunning(false);
-      throw new Error('[StreamVNext] No response body');
+throw new Error('[Stream] No response body');
     }
 
     await response.processDataStream({
@@ -147,9 +147,9 @@ export const useMastraChat = <TMessage>({ agentId, initializeMessages }: MastraC
     setIsRunning(false);
   };
 
-  return {
+return {
     network,
-    streamVNext,
+    stream,
     isRunning,
     messages,
     setMessages,

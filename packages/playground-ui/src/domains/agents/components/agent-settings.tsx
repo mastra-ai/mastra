@@ -23,7 +23,7 @@ export const AgentSettings = ({ modelVersion }: { modelVersion: string }) => {
     if (settings?.modelSettings?.chatWithNetwork) {
       radioValue = 'network';
     } else {
-      radioValue = settings?.modelSettings?.chatWithGenerateVNext ? 'generate' : 'stream';
+radioValue = settings?.modelSettings?.chatWithGenerate ? 'generate' : 'stream';
     }
   } else {
     radioValue = settings?.modelSettings?.chatWithGenerate ? 'generate' : 'stream';
@@ -40,9 +40,8 @@ export const AgentSettings = ({ modelVersion }: { modelVersion: string }) => {
                 ...settings,
                 modelSettings: {
                   ...settings?.modelSettings,
-                  chatWithGenerate: value === 'generate',
-                  chatWithGenerateVNext: value === 'generate',
-                  chatWithStreamVNext: value === 'stream',
+chatWithGenerate: value === 'generate',
+                  chatWithStream: value === 'stream',
                   chatWithNetwork: value === 'network',
                 },
               })

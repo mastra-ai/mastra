@@ -178,10 +178,10 @@ export function MastraRuntimeProvider({
   const {
     messages,
     setMessages,
-    streamVNext,
+stream,
     network,
     cancelRun,
-    isRunning: isRunningStreamVNext,
+    isRunning: isRunningStream,
   } = useMastraChat<ThreadMessageLike>({
     agentId,
     initializeMessages: () => (memory ? initializeMessageState(initialMessages || []) : []),
@@ -201,7 +201,7 @@ export function MastraRuntimeProvider({
     topP,
     instructions,
     chatWithGenerate,
-    chatWithGenerateVNext,
+    chatWithStream,
     chatWithNetwork,
     providerOptions,
   } = settings?.modelSettings ?? {};
@@ -460,7 +460,7 @@ export function MastraRuntimeProvider({
             },
           });
         } else {
-          if (chatWithGenerateVNext) {
+if (chatWithGenerate) {
             setIsRunning(true);
             const response = await agent.generate({
               messages: [
@@ -490,7 +490,7 @@ export function MastraRuntimeProvider({
             setIsRunning(false);
             return;
           } else {
-            await streamVNext({
+await stream({
               coreUserMessages: [
                 {
                   role: 'user',
@@ -893,7 +893,7 @@ export function MastraRuntimeProvider({
   const { adapters, isReady } = useAdapters(agentId);
 
   const runtime = useExternalStoreRuntime({
-    isRunning: isRunning || isRunningStreamVNext,
+isRunning: isRunning || isRunningStream,
     messages,
     convertMessage,
     onNew,

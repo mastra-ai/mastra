@@ -29,12 +29,12 @@ Always return just the number, no explanation.`,
 
     const model = await this.agent.getModel();
 
-    let response: string;
+let response: string;
     if (model.specificationVersion === 'v2') {
       const responseText = await this.agent.generate(prompt);
       response = responseText.text;
     } else {
-      const responseText = await this.agent.generate(prompt);
+      const responseText = await this.agent.generateLegacy(prompt);
       response = responseText.text;
     }
     return parseFloat(response);
