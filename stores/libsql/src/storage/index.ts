@@ -132,7 +132,6 @@ export class LibSQLStore extends MastraStorage {
   }
 
   async init(): Promise<void> {
-    console.log('LibSQLStore init');
     await super.init();
 
     // Create automatic performance indexes by default

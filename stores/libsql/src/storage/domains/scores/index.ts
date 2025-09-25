@@ -250,7 +250,6 @@ export class ScoresLibSQL extends ScoresStorage {
       const hasMore = result.rows?.length > pagination.perPage;
       const scores = result.rows?.slice(0, pagination.perPage).map(row => this.transformScoreRow(row)) ?? [];
 
-      console.log('scores', scores);
       return {
         scores,
         pagination: {
