@@ -360,6 +360,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 // chunk.payload.totalUsage = self.totalUsage;
                 self.#warnings = chunk.payload.stepResult.warnings || [];
 
+                if (chunk.payload.metadata.request) {
+                  self.#request = chunk.payload.metadata.request;
+                }
+
                 const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
 
                 const stepResult: LLMStepResult = {
