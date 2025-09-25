@@ -37,8 +37,6 @@ export const columns: ColumnDef<WorkflowTableData>[] = [
           <Badge icon={<Footprints />} className="!h-button-md">
             {row.original.stepsCount} step{row.original.stepsCount > 1 ? 's' : ''}
           </Badge>
-
-          {row.original.isLegacy ? <Badge className="!text-foreground/80 !h-button-md">Legacy</Badge> : null}
         </div>
       </Cell>
     ),
