@@ -30,10 +30,10 @@ Always return just the number, no explanation.`,
     const model = await this.agent.getModel();
     let response;
 
-    if (model.specificationVersion === 'v2') {
+if (model.specificationVersion === 'v2') {
       response = await this.agent.generate(prompt);
     } else {
-      response = await this.agent.generate(prompt);
+      response = await this.agent.generateLegacy(prompt);
     }
 
     return parseFloat(response.text);
