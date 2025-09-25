@@ -8,17 +8,19 @@ import {
   SideDialogHeader,
   SideDialogHeading,
 } from '@/components/ui/elements';
-import { PanelLeftIcon, HashIcon, EyeIcon, ChevronsLeftRightEllipsisIcon } from 'lucide-react';
+import { PanelLeftIcon, HashIcon, EyeIcon, ChevronsLeftRightEllipsisIcon, GaugeIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { TraceTimeline } from './trace-timeline';
 import { TraceSpanUsage } from './trace-span-usage';
 import { useLinkComponent } from '@/lib/framework';
 import { AISpanRecord } from '@mastra/core';
-import { getTraceInfo, getSpanInfo } from './helpers';
+import { getSpanInfo, useTraceInfo } from './helpers';
 import { SpanDialog } from './span-dialog';
 import { SpanDetails } from './span-details';
 import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
 import { UISpan } from '../types';
+import { ScorersDropdown } from '@/domains/scores/components/scorers-dropdown';
+import { ScoreTable } from '@/domains/scores/components/score-table';
 
 type TraceDialogProps = {
   traceSpans?: AISpanRecord[];
@@ -29,6 +31,10 @@ type TraceDialogProps = {
   onNext?: () => void;
   onPrevious?: () => void;
   isLoadingSpans?: boolean;
+  computeAgentsLink?: () => string;
+  computeWorkflowsLink?: () => string;
+  onScorerTriggered: (scorerName: string, traceId: string, spanId?: string) => void;
+  initialSpanId?: string;
 };
 
 export function TraceDialog({
@@ -40,12 +46,17 @@ export function TraceDialog({
   onNext,
   onPrevious,
   isLoadingSpans,
+  computeAgentsLink,
+  computeWorkflowsLink,
+  onScorerTriggered,
+  initialSpanId,
 }: TraceDialogProps) {
   const { Link } = useLinkComponent();
-  const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
-  const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(undefined);
+  const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(Boolean(initialSpanId));
+  const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(initialSpanId);
   const [combinedView, setCombinedView] = useState<boolean>(false);
   const selectedSpan = traceSpans.find(span => span.spanId === selectedSpanId);
+  const traceInfo = useTraceInfo(traceDetails);
 
   const hierarchicalSpans = useMemo(() => {
     return formatHierarchicalSpans(traceSpans);
@@ -102,8 +113,14 @@ export function TraceDialog({
     return currentIndex > 0;
   };
 
-  const traceInfo = getTraceInfo(traceDetails);
   const selectedSpanInfo = getSpanInfo({ span: selectedSpan, withTraceId: !combinedView, withSpanId: combinedView });
+
+  let entityType;
+  if (traceDetails?.attributes?.agentId) {
+    entityType = 'Agent';
+  } else if (traceDetails?.attributes?.workflowId) {
+    entityType = 'Workflow';
+  }
 
   return (
     <>
@@ -126,7 +143,7 @@ export function TraceDialog({
             'grid-rows-[auto_1fr_1fr]': selectedSpan && combinedView,
           })}
         >
-          <SideDialogHeader className="flex gap-[1rem] items-baseline pr-[2.5rem]">
+          <SideDialogHeader className="pr-[2.5rem]">
             <SideDialogHeading>
               <EyeIcon /> {traceDetails?.name}
             </SideDialogHeading>
@@ -137,6 +154,17 @@ export function TraceDialog({
           </SideDialogHeader>
 
           <div className={cn('overflow-y-auto pb-[2.5rem]')}>
+            {traceDetails && (
+              <div>
+                <ScorersDropdown
+                  trace={traceDetails}
+                  spanId={selectedSpanId}
+                  onScorerTriggered={onScorerTriggered}
+                  entityType={entityType}
+                />
+              </div>
+            )}
+
             {traceDetails?.metadata?.usage && (
               <TraceSpanUsage
                 traceUsage={traceDetails?.metadata?.usage}
@@ -145,6 +173,7 @@ export function TraceDialog({
               />
             )}
             <KeyValueList data={traceInfo} LinkComponent={Link} className="mt-[2rem]" />
+
             <TraceTimeline
               hierarchicalSpans={hierarchicalSpans}
               spans={traceSpans}
@@ -153,6 +182,21 @@ export function TraceDialog({
               isLoading={isLoadingSpans}
               className="pr-[2.5rem] pt-[2.5rem]"
             />
+
+            {traceDetails?.links?.length > 0 && (
+              <div className="pt-[2.5rem] pr-[2.5rem]">
+                <SideDialogHeading as="h2" className="pb-[1rem]">
+                  <GaugeIcon /> Scores
+                </SideDialogHeading>
+
+                <div className="bg-surface2 rounded-lg overflow-hidden border-sm border-border1">
+                  <ScoreTable
+                    scores={traceDetails?.links}
+                    onItemClick={scorerName => onScorerTriggered(scorerName, traceDetails!.traceId, selectedSpanId)}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {selectedSpan && combinedView && (
@@ -184,9 +228,11 @@ export function TraceDialog({
 
               <div className="grid grid-cols-[20rem_1fr] gap-[1rem] overflow-y-auto">
                 <div className="overflow-y-auto grid content-start p-[1.5rem] pl-0 gap-[2rem]">
-                  <SideDialogHeading as="h2">
-                    <ChevronsLeftRightEllipsisIcon /> {selectedSpan?.name}
-                  </SideDialogHeading>
+                  <div>
+                    <SideDialogHeading as="h2">
+                      <ChevronsLeftRightEllipsisIcon /> {selectedSpan?.name}
+                    </SideDialogHeading>
+                  </div>
                   {selectedSpan?.attributes?.usage && (
                     <TraceSpanUsage
                       spanUsage={selectedSpan.attributes.usage}
@@ -196,7 +242,7 @@ export function TraceDialog({
                   <KeyValueList data={selectedSpanInfo} LinkComponent={Link} />
                 </div>
                 <div className="overflow-y-auto pr-[2.5rem] pt-[2rem]">
-                  <SpanDetails span={selectedSpan} />
+                  <SpanDetails span={selectedSpan} onScorerTriggered={onScorerTriggered} />
                 </div>
               </div>
             </div>
@@ -204,15 +250,22 @@ export function TraceDialog({
         </div>
       </SideDialog>
 
-      <SpanDialog
-        span={selectedSpan}
-        isOpen={Boolean(dialogIsOpen && selectedSpanId && !combinedView)}
-        onClose={() => setDialogIsOpen(false)}
-        onNext={thereIsNextSpan() ? toNextSpan : undefined}
-        onPrevious={thereIsPreviousSpan() ? toPreviousSpan : undefined}
-        onViewToggle={() => setCombinedView(!combinedView)}
-        spanInfo={selectedSpanInfo}
-      />
+      {traceDetails && (
+        <SpanDialog
+          trace={traceDetails}
+          span={selectedSpan}
+          isOpen={Boolean(dialogIsOpen && selectedSpanId && !combinedView)}
+          onClose={() => {
+            setDialogIsOpen(false);
+            setSelectedSpanId(undefined);
+          }}
+          onNext={thereIsNextSpan() ? toNextSpan : undefined}
+          onPrevious={thereIsPreviousSpan() ? toPreviousSpan : undefined}
+          onViewToggle={() => setCombinedView(!combinedView)}
+          spanInfo={selectedSpanInfo}
+          onScorerTriggered={onScorerTriggered}
+        />
+      )}
     </>
   );
 }

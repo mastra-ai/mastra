@@ -16,13 +16,7 @@ export default function Tools() {
       </Header>
 
       <MainContentContent isCentered={isEmpty}>
-        <ToolList
-          tools={tools}
-          agents={agentsRecord}
-          isLoading={isLoadingAgents || isLoadingTools}
-          computeLink={(toolId, agentId) => (agentId ? `/tools/${agentId}/${toolId}` : `/tools/all/${toolId}`)}
-          computeAgentLink={(_, agentId) => `/agents/${agentId}/chat`}
-        />
+        <ToolList tools={tools} agents={agentsRecord} isLoading={isLoadingAgents || isLoadingTools} />
       </MainContentContent>
     </MainContentLayout>
   );

@@ -1,7 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { MastraAITracing } from './base';
-import { DefaultAITracing, SensitiveDataFilter } from './default';
 import { CloudExporter, DefaultExporter } from './exporters';
 import {
   clearAITracingRegistry,
@@ -10,18 +7,14 @@ import {
   unregisterAITracing,
   hasAITracing,
   getDefaultAITracing,
-  setAITracingSelector,
   getSelectedAITracing,
   setupAITracing,
   shutdownAITracingRegistry,
+  setSelector,
 } from './registry';
-import type {
-  AITracingInstanceConfig,
-  AISpanOptions,
-  AISpan,
-  TracingSelector,
-  AITracingSelectorContext,
-} from './types';
+import { SensitiveDataFilter } from './span_processors';
+import { DefaultAITracing, BaseAITracing } from './tracers';
+import type { AISpan, CreateSpanOptions, ConfigSelector, ConfigSelectorOptions, TracingConfig } from './types';
 import { AISpanType, SamplingStrategyType, AITracingEventType } from './types';
 
 describe('AI Tracing Registry', () => {
@@ -167,25 +160,25 @@ describe('AI Tracing Registry', () => {
       registerAITracing('console', tracing1);
       registerAITracing('langfuse', tracing2);
 
-      const selector: TracingSelector = (context, _availableTracers) => {
+      const selector: ConfigSelector = (context, _availableTracers) => {
         // For testing, we'll simulate routing based on runtime context
         if (context.runtimeContext?.['environment'] === 'production') return 'langfuse';
         if (context.runtimeContext?.['environment'] === 'development') return 'console';
         return undefined; // Fall back to default
       };
 
-      setAITracingSelector(selector);
+      setSelector(selector);
 
-      const prodContext: AITracingSelectorContext = {
+      const prodOptions: ConfigSelectorOptions = {
         runtimeContext: { environment: 'production' } as any,
       };
 
-      const devContext: AITracingSelectorContext = {
+      const devOptions: ConfigSelectorOptions = {
         runtimeContext: { environment: 'development' } as any,
       };
 
-      expect(getSelectedAITracing(prodContext)).toBe(tracing2); // langfuse
-      expect(getSelectedAITracing(devContext)).toBe(tracing1); // console
+      expect(getSelectedAITracing(prodOptions)).toBe(tracing2); // langfuse
+      expect(getSelectedAITracing(devOptions)).toBe(tracing1); // console
     });
 
     it('should fall back to default when selector returns invalid name', () => {
@@ -197,14 +190,14 @@ describe('AI Tracing Registry', () => {
 
       registerAITracing('default', tracing1, true); // Explicitly set as default
 
-      const selector: TracingSelector = (_context, _availableTracers) => 'non-existent';
-      setAITracingSelector(selector);
+      const selector: ConfigSelector = (_context, _availableTracers) => 'non-existent';
+      setSelector(selector);
 
-      const context: AITracingSelectorContext = {
+      const options: ConfigSelectorOptions = {
         runtimeContext: undefined,
       };
 
-      expect(getSelectedAITracing(context)).toBe(tracing1); // Falls back to default
+      expect(getSelectedAITracing(options)).toBe(tracing1); // Falls back to default
     });
 
     it('should handle default tracing behavior', () => {
@@ -233,7 +226,7 @@ describe('AI Tracing Registry', () => {
 
   describe('Mastra Integration', () => {
     it('should configure AI tracing with simple config', async () => {
-      const instanceConfig: AITracingInstanceConfig = {
+      const tracingConfig: TracingConfig = {
         serviceName: 'test-service',
         name: 'test-instance',
         exporters: [],
@@ -241,7 +234,7 @@ describe('AI Tracing Registry', () => {
 
       setupAITracing({
         configs: {
-          test: instanceConfig,
+          test: tracingConfig,
         },
       });
 
@@ -254,14 +247,14 @@ describe('AI Tracing Registry', () => {
     });
 
     it('should use ALWAYS sampling by default when sampling is not specified', async () => {
-      const instanceConfig: AITracingInstanceConfig = {
+      const tracingConfig: TracingConfig = {
         serviceName: 'default-sampling-test',
         name: 'default-sampling-instance',
       };
 
       setupAITracing({
         configs: {
-          test: instanceConfig,
+          test: tracingConfig,
         },
       });
 
@@ -270,8 +263,8 @@ describe('AI Tracing Registry', () => {
     });
 
     it('should configure AI tracing with custom implementation', async () => {
-      class CustomAITracing extends MastraAITracing {
-        protected createSpan<TType extends AISpanType>(options: AISpanOptions<TType>): AISpan<TType> {
+      class CustomAITracing extends BaseAITracing {
+        protected createSpan<TType extends AISpanType>(options: CreateSpanOptions<TType>): AISpan<TType> {
           // Custom implementation - just return a mock span for testing
           return {
             id: 'custom-span-id',
@@ -283,6 +276,7 @@ describe('AI Tracing Registry', () => {
             startTime: new Date(),
             aiTracing: this,
             isEvent: false,
+            isValid: true,
             end: () => {},
             error: () => {},
             update: () => {},
@@ -315,8 +309,8 @@ describe('AI Tracing Registry', () => {
     });
 
     it('should support mixed configuration (config + instance)', async () => {
-      class CustomAITracing extends MastraAITracing {
-        protected createSpan<TType extends AISpanType>(_options: AISpanOptions<TType>): AISpan<TType> {
+      class CustomAITracing extends BaseAITracing {
+        protected createSpan<TType extends AISpanType>(_options: CreateSpanOptions<TType>): AISpan<TType> {
           return {} as AISpan<TType>; // Mock implementation
         }
       }
@@ -353,8 +347,8 @@ describe('AI Tracing Registry', () => {
     it('should handle registry shutdown during Mastra shutdown', async () => {
       let shutdownCalled = false;
 
-      class TestAITracing extends MastraAITracing {
-        protected createSpan<TType extends AISpanType>(_options: AISpanOptions<TType>): AISpan<TType> {
+      class TestAITracing extends BaseAITracing {
+        protected createSpan<TType extends AISpanType>(_options: CreateSpanOptions<TType>): AISpan<TType> {
           return {} as AISpan<TType>;
         }
 
@@ -387,7 +381,7 @@ describe('AI Tracing Registry', () => {
     });
 
     it('should prevent duplicate registration across multiple Mastra instances', () => {
-      const config: AITracingInstanceConfig = {
+      const tracingConfig: TracingConfig = {
         serviceName: 'test-service',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
@@ -395,7 +389,7 @@ describe('AI Tracing Registry', () => {
 
       setupAITracing({
         configs: {
-          duplicate: config,
+          duplicate: tracingConfig,
         },
       });
 
@@ -403,14 +397,14 @@ describe('AI Tracing Registry', () => {
       expect(() => {
         setupAITracing({
           configs: {
-            duplicate: config,
+            duplicate: tracingConfig,
           },
         });
       }).toThrow("AI Tracing instance 'duplicate' already registered");
     });
 
     it('should support selector function configuration', async () => {
-      const selector: TracingSelector = (context, _availableTracers) => {
+      const selector: ConfigSelector = (context, _availableTracers) => {
         if (context.runtimeContext?.['service'] === 'agent') return 'langfuse';
         if (context.runtimeContext?.['service'] === 'workflow') return 'datadog';
         return undefined; // Use default
@@ -435,22 +429,22 @@ describe('AI Tracing Registry', () => {
       });
 
       // Test selector functionality
-      const agentContext: AITracingSelectorContext = {
+      const agentOptions: ConfigSelectorOptions = {
         runtimeContext: { service: 'agent' } as any,
       };
 
-      const workflowContext: AITracingSelectorContext = {
+      const workflowOptions: ConfigSelectorOptions = {
         runtimeContext: { service: 'workflow' } as any,
       };
 
-      const genericContext: AITracingSelectorContext = {
+      const genericOptions: ConfigSelectorOptions = {
         runtimeContext: undefined,
       };
 
       // Verify selector routes correctly
-      expect(getSelectedAITracing(agentContext)).toBe(getAITracing('langfuse'));
-      expect(getSelectedAITracing(workflowContext)).toBe(getAITracing('datadog'));
-      expect(getSelectedAITracing(genericContext)).toBe(getDefaultAITracing()); // Falls back to default (console)
+      expect(getSelectedAITracing(agentOptions)).toBe(getAITracing('langfuse'));
+      expect(getSelectedAITracing(workflowOptions)).toBe(getAITracing('datadog'));
+      expect(getSelectedAITracing(genericOptions)).toBe(getDefaultAITracing()); // Falls back to default (console)
     });
   });
 
@@ -496,7 +490,7 @@ describe('AI Tracing Registry', () => {
     });
 
     it('should handle minimal config with just selector', () => {
-      const selector: TracingSelector = () => undefined;
+      const selector: ConfigSelector = () => undefined;
 
       expect(() => {
         setupAITracing({
@@ -753,7 +747,7 @@ describe('AI Tracing Registry', () => {
     });
 
     it('should work with selector when default config is enabled', async () => {
-      const selector: TracingSelector = (context, _availableTracers) => {
+      const selector: ConfigSelector = (context, _availableTracers) => {
         if (context.runtimeContext?.['useDefault'] === true) return 'default';
         return 'custom';
       };
@@ -769,19 +763,19 @@ describe('AI Tracing Registry', () => {
         configSelector: selector,
       });
 
-      const defaultContext: AITracingSelectorContext = {
+      const defaultOptions: ConfigSelectorOptions = {
         runtimeContext: { useDefault: true } as any,
       };
 
-      const customContext: AITracingSelectorContext = {
+      const customOptions: ConfigSelectorOptions = {
         runtimeContext: { useDefault: false } as any,
       };
 
       // Should route to default config
-      expect(getSelectedAITracing(defaultContext)).toBe(getAITracing('default'));
+      expect(getSelectedAITracing(defaultOptions)).toBe(getAITracing('default'));
 
       // Should route to custom config
-      expect(getSelectedAITracing(customContext)).toBe(getAITracing('custom'));
+      expect(getSelectedAITracing(customOptions)).toBe(getAITracing('custom'));
     });
 
     it('should handle CloudExporter gracefully when token is missing', async () => {

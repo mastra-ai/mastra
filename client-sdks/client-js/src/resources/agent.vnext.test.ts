@@ -117,12 +117,12 @@ describe('Agent vNext', () => {
       new Response(JSON.stringify(mockJson), { status: 200, headers: { 'content-type': 'application/json' } }),
     );
 
-    const result = await agent.generateVNext({ prompt: 'hello' } as any);
+    const result = await agent.generateVNext('hello');
     expect(result).toEqual(mockJson);
     expect(global.fetch).toHaveBeenCalledWith(
       'http://localhost:4111/api/agents/agent-1/generate/vnext',
       expect.objectContaining({
-        body: '{"prompt":"hello"}',
+        body: '{"messages":"hello"}',
         credentials: undefined,
         headers: {
           Authorization: 'Bearer test-key',

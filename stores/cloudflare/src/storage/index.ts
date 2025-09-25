@@ -289,6 +289,7 @@ export class CloudflareStore extends MastraStorage {
   async persistWorkflowSnapshot(params: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
     return this.stores.workflows.persistWorkflowSnapshot(params);

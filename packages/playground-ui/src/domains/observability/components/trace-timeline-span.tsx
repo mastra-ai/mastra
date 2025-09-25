@@ -110,7 +110,7 @@ export function TraceTimelineSpan({
                       : 'none',
                 }}
               >
-                {(span.latency / 1000).toFixed(2)}&nbsp;s
+                {(span.latency / 1000).toFixed(3)}&nbsp;s
               </span>
             </span>
           </div>
@@ -118,7 +118,7 @@ export function TraceTimelineSpan({
             <div
               className={cn('bg-icon1 h-full absolute rounded-full')}
               style={{
-                width: `${percentageSpanLatency}%`,
+                width: percentageSpanLatency ? `${percentageSpanLatency}%` : '2px',
                 left: `${percentageSpanStartTime}%`,
                 backgroundColor: spanUI?.color,
               }}

@@ -1,5 +1,29 @@
 # @mastra/schema-compat
 
+## 0.11.4
+
+### Patch Changes
+
+- Fixes an issue when the OpenAI reasoning schema compatibility layer was calling defaultValue() as a function, which works in Zod v3 but fails in Zod v4 where defaultValue is stored directly as a value. ([#8090](https://github.com/mastra-ai/mastra/pull/8090))
+
+## 0.11.4-alpha.0
+
+### Patch Changes
+
+- Fixes an issue when the OpenAI reasoning schema compatibility layer was calling defaultValue() as a function, which works in Zod v3 but fails in Zod v4 where defaultValue is stored directly as a value. ([#8090](https://github.com/mastra-ai/mastra/pull/8090))
+
+## 0.11.3
+
+### Patch Changes
+
+- Change SchemaCompat zodToJsonSchema ref strategy from none to relative, leading to less schema warnings and smaller converted schema sizes ([#7697](https://github.com/mastra-ai/mastra/pull/7697))
+
+## 0.11.3-alpha.0
+
+### Patch Changes
+
+- Change SchemaCompat zodToJsonSchema ref strategy from none to relative, leading to less schema warnings and smaller converted schema sizes ([#7697](https://github.com/mastra-ai/mastra/pull/7697))
+
 ## 0.11.2
 
 ### Patch Changes

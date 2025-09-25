@@ -2,6 +2,7 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
+import type { TracingPolicy } from '../../ai-tracing';
 import type { ScoringData } from './base.types';
 import type { OpenAICompatibleModelId } from './provider-registry.generated';
 
@@ -36,3 +37,9 @@ export type MastraLanguageModel = LanguageModelV1 | LanguageModelV2;
 // - { id: "custom", url: "...", apiKey: "..." } (custom endpoint)
 // - LanguageModelV1/V2 (existing AI SDK models)
 export type MastraModelConfig = MastraLanguageModel | OpenAICompatibleModelId | (string & {}) | OpenAICompatibleConfig;
+
+export type MastraLanguageModelV2 = LanguageModelV2;
+
+export type MastraModelOptions = {
+  tracingPolicy?: TracingPolicy;
+};

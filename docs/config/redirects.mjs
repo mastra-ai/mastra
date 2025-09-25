@@ -146,11 +146,6 @@ export const redirectList = [
     permanent: true,
   },
   {
-    source: "/:locale/docs/workflows/00-overview",
-    destination: "/:locale/docs/workflows/overview",
-    permanent: true,
-  },
-  {
     source: "/:locale/docs/workflows/index",
     destination: "/:locale/docs/workflows/overview",
     permanent: true,
@@ -214,16 +209,6 @@ export const redirectList = [
   {
     source: "/:locale/examples/rag/filter-rag",
     destination: "/:locale/examples/rag/usage/filter-rag",
-    permanent: true,
-  },
-  {
-    source: "/:locale/workflows",
-    destination: "/:locale/docs/workflows/overview",
-    permanent: true,
-  },
-  {
-    source: "/:locale/workflows/:path*",
-    destination: "/:locale/docs/workflows/:path*",
     permanent: true,
   },
   {
@@ -689,11 +674,6 @@ export const redirectList = [
     permanent: true,
   },
   {
-    source: "/:locale/reference/workflows/streamVNext",
-    destination: "/:locale/reference/workflows/run-methods/streamVNext",
-    permanent: true,
-  },
-  {
     source: "/:locale/reference/workflows/resume",
     destination: "/:locale/reference/workflows/run-methods/resume",
     permanent: true,
@@ -701,11 +681,6 @@ export const redirectList = [
   {
     source: "/:locale/reference/workflows/watch",
     destination: "/:locale/reference/workflows/run-methods/watch",
-    permanent: true,
-  },
-  {
-    source: "/:locale/reference/workflows/stream",
-    destination: "/:locale/reference/workflows/run-methods/stream",
     permanent: true,
   },
   {
@@ -796,6 +771,151 @@ export const redirectList = [
   {
     source: "/:locale/reference/workflows/waitForEvent",
     destination: "/:locale/reference/workflows/workflow-methods/waitForEvent",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/templates",
+    destination: "/:locale/reference/templates/overview",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/agents/stream",
+    destination: "/:locale/reference/streaming/agents/stream",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/agents/streamVNext",
+    destination: "/:locale/reference/streaming/agents/streamVNext",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/agents/ChunkType",
+    destination: "/:locale/reference/streaming/ChunkType",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/agents/MastraModelOutput",
+    destination: "/:locale/reference/streaming/agents/MastraModelOutput",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/run-methods/stream",
+    destination: "/:locale/reference/streaming/workflows/stream",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/run-methods/streamVNext",
+    destination: "/:locale/reference/streaming/workflows/streamVNext",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/networks/agent-network",
+    destination: "/:locale/reference/agents/network",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/observability/tracing",
+    destination: "/:locale/docs/observability/otel-tracing",
+    permanent: true,
+  },
+  // AI Tracing documentation moved
+  {
+    source: "/:locale/docs/observability/ai-tracing",
+    destination: "/:locale/docs/observability/ai-tracing/overview",
+    permanent: true,
+  },
+  // Observability reference reorganization
+  {
+    source: "/:locale/reference/observability/logger",
+    destination: "/:locale/reference/observability/logging/pino-logger",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/otel-config",
+    destination: "/:locale/reference/observability/otel-tracing/otel-config",
+    permanent: true,
+  },
+  // OTLP Tracing provider redirects
+  {
+    source: "/:locale/reference/observability/providers/arize-ax",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/arize-ax",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/arize-phoenix",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/arize-phoenix",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/braintrust",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/braintrust",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/dash0",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/dash0",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/keywordsai",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/keywordsai",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/laminar",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/laminar",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/langfuse",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/langfuse",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/langsmith",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/langsmith",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/langwatch",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/langwatch",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/new-relic",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/new-relic",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/signoz",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/signoz",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/traceloop",
+    destination:
+      "/:locale/reference/observability/otel-tracing/providers/traceloop",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers",
+    destination: "/:locale/reference/observability/otel-tracing/providers",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/providers/index",
+    destination: "/:locale/reference/observability/otel-tracing/providers",
     permanent: true,
   },
 ];

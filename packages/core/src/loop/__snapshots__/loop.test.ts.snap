@@ -64,6 +64,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "usage": {
@@ -133,6 +135,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:10.000Z,
     },
     "usage": {
@@ -255,6 +259,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "usage": {
@@ -324,6 +330,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:10.000Z,
     },
     "usage": {
@@ -402,6 +410,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "usage": {
@@ -471,6 +481,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:10.000Z,
     },
     "usage": {
@@ -593,6 +605,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "usage": {
@@ -662,6 +676,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:10.000Z,
     },
     "usage": {
@@ -695,6 +711,8 @@ exports[`Loop Tests > AISDK v5 > generateText > result.response > should contain
     },
   ],
   "modelId": "test-response-model-id",
+  "modelProvider": "mock-provider",
+  "modelVersion": "v2",
   "timestamp": 1970-01-01T00:00:10.000Z,
 }
 `;
@@ -718,6 +736,8 @@ exports[`Loop Tests > AISDK v5 > generateText > result.response > should contain
     },
   ],
   "modelId": "test-response-model-id",
+  "modelProvider": "mock-provider",
+  "modelVersion": "v2",
   "timestamp": 1970-01-01T00:00:10.000Z,
   "uiMessages": [
     {
@@ -795,9 +815,7 @@ exports[`Loop Tests > AISDK v5 > generateText > result.response.messages > shoul
 exports[`Loop Tests > AISDK v5 > generateText > result.sources > should contain sources 1`] = `
 [
   {
-    "filename": undefined,
     "id": "123",
-    "mediaType": undefined,
     "providerMetadata": {
       "provider": {
         "custom": "value",
@@ -809,9 +827,7 @@ exports[`Loop Tests > AISDK v5 > generateText > result.sources > should contain 
     "url": "https://example.com",
   },
   {
-    "filename": undefined,
     "id": "456",
-    "mediaType": undefined,
     "providerMetadata": {
       "provider": {
         "custom": "value2",
@@ -1172,20 +1188,16 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
     },
     "type": "finish-step",
     "usage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
   },
   {
     "finishReason": "stop",
     "totalUsage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
     "type": "finish",
@@ -1228,20 +1240,16 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
     },
     "type": "finish-step",
     "usage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
   },
   {
     "finishReason": "stop",
     "totalUsage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
     "type": "finish",
@@ -1290,20 +1298,16 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
     },
     "type": "finish-step",
     "usage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
   },
   {
     "finishReason": "stop",
     "totalUsage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
     "type": "finish",
@@ -1412,9 +1416,7 @@ exports[`Loop Tests > AISDK v5 > result.reasoningText > should contain reasoning
 exports[`Loop Tests > AISDK v5 > result.sources > should contain sources 1`] = `
 [
   {
-    "filename": undefined,
     "id": "123",
-    "mediaType": undefined,
     "providerMetadata": {
       "provider": {
         "custom": "value",
@@ -1426,9 +1428,7 @@ exports[`Loop Tests > AISDK v5 > result.sources > should contain sources 1`] = `
     "url": "https://example.com",
   },
   {
-    "filename": undefined,
     "id": "456",
-    "mediaType": undefined,
     "providerMetadata": {
       "provider": {
         "custom": "value2",
@@ -1454,6 +1454,7 @@ exports[`Loop Tests > AISDK v5 > result.textStream > should not include reasonin
 exports[`Loop Tests > AISDK v5 > result.toUIMessageStream > should mask error messages by default 1`] = `
 [
   {
+    "messageId": "msg-0",
     "type": "start",
   },
   {
@@ -1475,6 +1476,7 @@ exports[`Loop Tests > AISDK v5 > result.toUIMessageStream > should mask error me
 exports[`Loop Tests > AISDK v5 > result.toUIMessageStream > should send tool call, tool call stream start, tool call deltas, and tool result stream parts 1`] = `
 [
   {
+    "messageId": "msg-0",
     "type": "start",
   },
   {
@@ -1521,6 +1523,7 @@ exports[`Loop Tests > AISDK v5 > result.toUIMessageStream > should send tool cal
 exports[`Loop Tests > AISDK v5 > result.toUIMessageStream > should support custom error messages 1`] = `
 [
   {
+    "messageId": "msg-0",
     "type": "start",
   },
   {
@@ -1541,7 +1544,7 @@ exports[`Loop Tests > AISDK v5 > result.toUIMessageStream > should support custo
 
 exports[`Loop Tests > AISDK v5 > result.toUIMessageStreamResponse > should mask error messages by default 1`] = `
 [
-  "data: {"type":"start"}
+  "data: {"type":"start","messageId":"id-0"}
 
 ",
   "data: {"type":"start-step"}
@@ -1564,7 +1567,7 @@ exports[`Loop Tests > AISDK v5 > result.toUIMessageStreamResponse > should mask 
 
 exports[`Loop Tests > AISDK v5 > result.toUIMessageStreamResponse > should support custom error messages 1`] = `
 [
-  "data: {"type":"start"}
+  "data: {"type":"start","messageId":"id-0"}
 
 ",
   "data: {"type":"start-step"}
@@ -1842,20 +1845,16 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
     },
     "type": "finish-step",
     "usage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
   },
   {
     "finishReason": "stop",
     "totalUsage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
     "type": "finish",

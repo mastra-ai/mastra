@@ -7,11 +7,12 @@ import type { ChunkType } from '../stream/types';
 import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
 import type { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
-import type { Emitter } from './types';
+import type { Emitter, StepResult } from './types';
 import type { Workflow } from './workflow';
 
 export type ExecuteFunctionParams<TStepInput, TResumeSchema, TSuspendSchema, EngineType> = {
   runId: string;
+  resourceId?: string;
   workflowId: string;
   mastra: Mastra;
   runtimeContext: RuntimeContext;
@@ -23,9 +24,10 @@ export type ExecuteFunctionParams<TStepInput, TResumeSchema, TSuspendSchema, Eng
   getInitData<T extends Workflow<any, any, any, any, any>>(): T extends undefined
     ? unknown
     : z.infer<NonNullable<T['inputSchema']>>;
-  getStepResult<T extends Step<any, any, any>>(
+  getStepResult<T extends Step<any, any, any, any, any, any>>(
     stepId: T,
   ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
+  getStepResult(stepId: string): any;
   // TODO: should this be a schema you can define on the step?
   suspend(suspendPayload: TSuspendSchema): Promise<any>;
   bail(result: any): any;
@@ -39,6 +41,7 @@ export type ExecuteFunctionParams<TStepInput, TResumeSchema, TSuspendSchema, Eng
   engine: EngineType;
   abortSignal: AbortSignal;
   writer: ToolStream<ChunkType>;
+  validateSchemas?: boolean;
 };
 
 export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
@@ -69,4 +72,20 @@ export interface Step<
   >;
   scorers?: DynamicArgument<MastraScorers>;
   retries?: number;
+  component?: string;
 }
+
+export const getStepResult = (stepResults: Record<string, StepResult<any, any, any, any>>, step: any) => {
+  let result;
+  if (typeof step === 'string') {
+    result = stepResults[step];
+  } else {
+    if (!step?.id) {
+      return null;
+    }
+
+    result = stepResults[step.id];
+  }
+
+  return result?.status === 'success' ? result.output : null;
+};

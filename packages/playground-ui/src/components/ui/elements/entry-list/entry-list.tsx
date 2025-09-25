@@ -4,7 +4,7 @@ import { EntryListItem } from './entry-list-item';
 import { getColumnTemplate, type Column } from './shared';
 
 import { cn } from '@/lib/utils';
-import { isValidElement } from 'react';
+import React, { isValidElement } from 'react';
 
 export function EntryList({
   items: dataItems,
@@ -36,7 +36,7 @@ export function EntryList({
   perPage?: number;
   columns?: Column[];
   searchTerm?: string;
-  setEndOfListElement: (element: HTMLDivElement | null) => void;
+  setEndOfListElement?: (element: HTMLDivElement | null) => void;
   errorMsg?: string;
 }) {
   const loadingItems: Record<string, any>[] = Array.from({ length: 3 }).map((_, index) => {
@@ -103,13 +103,14 @@ export function EntryList({
                   columns={columns}
                   isLoading={isLoading}
                 >
-                  {(columns || []).map(col => {
+                  {(columns || []).map((col, index) => {
                     const isValidReactElement = isValidElement(item?.[col.name]);
+                    const key = `${index}-${item.id}`;
 
                     return isValidReactElement ? (
-                      item?.[col.name]
+                      <React.Fragment key={key}>{item?.[col.name]}</React.Fragment>
                     ) : (
-                      <EntryListTextCell key={col.name} isLoading={isLoading}>
+                      <EntryListTextCell key={key} isLoading={isLoading}>
                         {item?.[col.name]}
                       </EntryListTextCell>
                     );
@@ -130,7 +131,7 @@ export function EntryList({
           )}
 
           {typeof page === 'number' && typeof perPage === 'number' && typeof total === 'number' && (
-            <div className={cn('flex items-center justify-center text-icon3 text-[0.875rem] gap-[2rem]')}>
+            <div className={cn('flex pt-[1.5rem] items-center justify-center text-icon3 text-[0.875rem] gap-[2rem]')}>
               <span>Page {page ? page + 1 : '1'}</span>
               <div
                 className={cn(

@@ -154,4 +154,20 @@ describe('Agent - network', () => {
       console.log(chunk);
     }
   });
+
+  it('LOOP - execute a single agent then workflow', async () => {
+    const anStream = await network.network(
+      'Research dolphins then execute workflow1 based on the location where dolphins live',
+      {
+        runtimeContext,
+        maxSteps: 3,
+      },
+    );
+
+    for await (const chunk of anStream) {
+      console.log(chunk);
+    }
+
+    console.log('SUH', anStream);
+  });
 }, 120e3);
