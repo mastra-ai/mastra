@@ -106,6 +106,7 @@ export class LangSmithExporter implements AITracingExporter {
   }
 
   private async handleSpanStarted(span: AnyExportedAISpan): Promise<void> {
+    this.logger.debug('LangSmith exporter: handleSpanStarted', span.id, span.name);
     if (span.isRootSpan) {
       this.initializeRootSpan(span);
     }
@@ -135,12 +136,13 @@ export class LangSmithExporter implements AITracingExporter {
       langsmithRunTree = langsmithParent.createChild(payload);
     }
 
-    await langsmithRunTree.postRun();
-
     spanData.spans.set(span.id, langsmithRunTree);
+
+    await langsmithRunTree.postRun();
   }
 
   private async handleSpanUpdateOrEnd(span: AnyExportedAISpan, isEnd: boolean): Promise<void> {
+    this.logger.debug('LangSmith exporter: handleSpanUpdateOrEnd', span.id, span.name, 'isEnd:', isEnd);
     const method = isEnd ? 'handleSpanEnd' : 'handleSpanUpdate';
 
     const spanData = this.getSpanData({ span, method });
@@ -162,7 +164,6 @@ export class LangSmithExporter implements AITracingExporter {
       return;
     }
 
-    // langsmithRunTree.log(this.buildRunTreePayload(span));
     const updatePayload = this.buildRunTreePayload(span);
     langsmithRunTree.metadata = {
       ...langsmithRunTree.metadata,
