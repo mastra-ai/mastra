@@ -1,7 +1,7 @@
 import type { StepResult, ToolSet } from 'ai-v5';
 import { InternalSpans } from '../../../ai-tracing';
 import type { OutputSchema } from '../../../stream/base/schema';
-import type { ChunkType, StepFinishPayload } from '../../../stream/types';
+import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createWorkflow } from '../../../workflows';
 import type { LoopRun } from '../../types';
@@ -128,7 +128,8 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
           type: 'step-finish',
           runId,
           from: ChunkFrom.AGENT,
-          payload: typedInputData as StepFinishPayload,
+          // @ts-ignore TODO: Look into the proper types for this
+          payload: typedInputData,
         });
       }
 

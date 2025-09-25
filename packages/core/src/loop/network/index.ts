@@ -6,7 +6,7 @@ import { MessageList } from '../../agent/message-list';
 import type { MastraMessageV2, MessageListInput } from '../../agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { RuntimeContext } from '../../runtime-context';
-import type { OutputSchema } from '../../stream';
+import type { ChunkType, OutputSchema } from '../../stream';
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
 import { createStep, createWorkflow } from '../../workflows';
 import { zodToJsonSchema } from '../../zod-to-json';
@@ -584,7 +584,7 @@ export async function createNetworkLoop({
 
       // let result: any;
       // let stepResults: Record<string, any> = {};
-      let chunks: any[] = [];
+      let chunks: ChunkType[] = [];
       for await (const chunk of stream) {
         chunks.push(chunk);
         await writer?.write({
