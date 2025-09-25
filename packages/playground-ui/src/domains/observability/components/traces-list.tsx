@@ -1,12 +1,12 @@
 import {
   EntryList,
-  EntryListEntries,
-  EntryListEntry,
-  EntryListEntryStatusCol,
-  EntryListEntryTextCol,
-  EntryListHeader,
-  EntryListMessage,
-  EntryListTrim,
+  // EntryListEntries,
+  // EntryListEntry,
+  // EntryListEntryStatusCol,
+  // EntryListEntryTextCol,
+  // EntryListHeader,
+  // EntryListMessage,
+  // EntryListTrim,
   getShortId,
 } from '@/components/ui/elements';
 import { EntryListNextPageLoading } from '@/components/ui/elements/entry-list/entry-list-next-page-loading';
@@ -48,14 +48,14 @@ export function TracesList({
 
   return (
     <EntryList>
-      <EntryListTrim>
-        <EntryListHeader columns={tracesListColumns} />
+      <EntryList.Trim>
+        <EntryList.Header columns={tracesListColumns} />
         {errorMsg ? (
-          <EntryListMessage message={errorMsg} type="error" />
+          <EntryList.Message message={errorMsg} type="error" />
         ) : (
           <>
             {traces.length > 0 ? (
-              <EntryListEntries>
+              <EntryList.Entries>
                 {traces.map(trace => {
                   const createdAtDate = new Date(trace.createdAt);
                   const isTodayDate = isToday(createdAtDate);
@@ -71,7 +71,7 @@ export function TracesList({
                   };
 
                   return (
-                    <EntryListEntry
+                    <EntryList.Entry
                       key={entry.id}
                       entry={entry}
                       isSelected={selectedTraceId === trace.traceId}
@@ -81,26 +81,24 @@ export function TracesList({
                       {(tracesListColumns || []).map((col, index) => {
                         const key = `${index}-${trace.traceId}`;
                         return col.name === 'status' ? (
-                          <EntryListEntryStatusCol key={key} status={entry?.[col.name as keyof typeof entry]} />
+                          <EntryList.EntryStatus key={key} status={entry?.[col.name as keyof typeof entry]} />
                         ) : (
-                          <EntryListEntryTextCol key={key}>
-                            {entry?.[col.name as keyof typeof entry]}
-                          </EntryListEntryTextCol>
+                          <EntryList.EntryText key={key}>{entry?.[col.name as keyof typeof entry]}</EntryList.EntryText>
                         );
                       })}
-                    </EntryListEntry>
+                    </EntryList.Entry>
                   );
                 })}
-              </EntryListEntries>
+              </EntryList.Entries>
             ) : (
-              <EntryListMessage
+              <EntryList.Message
                 message={filtersApplied ? 'No traces found for applied filters' : 'No traces found yet'}
               />
             )}
           </>
         )}
-      </EntryListTrim>
-      <EntryListNextPageLoading
+      </EntryList.Trim>
+      <EntryList.NextPageLoading
         setEndOfListElement={setEndOfListElement}
         loadingText="Loading more traces..."
         noMoreDataText="All traces loaded"

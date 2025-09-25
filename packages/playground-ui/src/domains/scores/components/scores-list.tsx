@@ -1,15 +1,6 @@
 import { ClientScoreRowData } from '@mastra/client-js';
-import {
-  EntryList,
-  EntryListTrim,
-  EntryListHeader,
-  EntryListEntries,
-  EntryListMessage,
-  EntryListEntry,
-  EntryListEntryTextCol,
-} from '@/components/ui/elements';
+import { EntryList } from '@/components/ui/elements';
 import { format, isToday } from 'date-fns';
-import { EntryListPagination } from '@/components/ui/elements/entry-list/entry-list-pagination';
 
 export const scoresListColumns = [
   { name: 'date', label: 'Date', size: '4.5rem' },
@@ -61,14 +52,14 @@ export function ScoresList({
 
   return (
     <EntryList>
-      <EntryListTrim>
-        <EntryListHeader columns={scoresListColumns} />
+      <EntryList.Trim>
+        <EntryList.Header columns={scoresListColumns} />
         {errorMsg ? (
-          <EntryListMessage message={errorMsg} type="error" />
+          <EntryList.Message message={errorMsg} type="error" />
         ) : (
           <>
             {scores.length > 0 ? (
-              <EntryListEntries>
+              <EntryList.Entries>
                 {scores.map(score => {
                   const createdAtDate = new Date(score.createdAt);
                   const isTodayDate = isToday(createdAtDate);
@@ -83,7 +74,7 @@ export function ScoresList({
                   };
 
                   return (
-                    <EntryListEntry
+                    <EntryList.Entry
                       key={entry.id}
                       entry={entry}
                       isSelected={selectedScoreId === score.id}
@@ -93,22 +84,20 @@ export function ScoresList({
                       {(scoresListColumns || []).map((col, index) => {
                         const key = `${index}-${score.id}`;
                         return (
-                          <EntryListEntryTextCol key={key}>
-                            {entry?.[col.name as keyof typeof entry]}
-                          </EntryListEntryTextCol>
+                          <EntryList.EntryText key={key}>{entry?.[col.name as keyof typeof entry]}</EntryList.EntryText>
                         );
                       })}
-                    </EntryListEntry>
+                    </EntryList.Entry>
                   );
                 })}
-              </EntryListEntries>
+              </EntryList.Entries>
             ) : (
-              <EntryListMessage message="No scores for this scorer yet" />
+              <EntryList.Message message="No scores for this scorer yet" />
             )}
           </>
         )}
-      </EntryListTrim>
-      <EntryListPagination
+      </EntryList.Trim>
+      <EntryList.Pagination
         currentPage={pagination?.page || 0}
         onNextPage={handleNextPage}
         onPrevPage={handlePrevPage}
