@@ -1535,7 +1535,7 @@ describe('Input and Output Processors with VNext Methods', () => {
         }, 40000);
       });
 
-      it.only('should work with streamVNext', async () => {
+      it('should work with streamVNext', async () => {
         const ideaSchema = z.object({
           idea: z.string().describe('The creative idea'),
           category: z.enum(['technology', 'business', 'art', 'science', 'other']).describe('Category of the idea'),
