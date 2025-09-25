@@ -129,3 +129,5 @@
     @apply bg-background text-foreground;
   }
 }
+
+@import "@mastra/playground-ui/style.css";
