@@ -84,7 +84,7 @@ export class MongoDBStore extends MastraStorage {
       hasColumn: false,
       createTable: false,
       deleteMessages: false,
-      getScoresBySpan: false,
+      getScoresBySpan: true,
     };
   }
 
