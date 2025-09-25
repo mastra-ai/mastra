@@ -101,11 +101,35 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
         'step-start',
         'step-finish',
       ];
+
       // Stream object chunks directly into the main stream
       for await (const chunk of structuringAgentStream.fullStream) {
         if (excludedChunkTypes.includes(chunk.type)) {
           continue;
         }
+        if (chunk.type === 'error') {
+          this.handleError('Structuring failed', 'Internal agent did not generate structured output', abort);
+
+          if (this.errorStrategy === 'warn') {
+            // avoid enqueuing the error chunk to the main agent stream
+            break;
+          }
+          if (this.errorStrategy === 'fallback' && this.fallbackValue !== undefined) {
+            const fallbackChunk: ChunkType<OUTPUT> = {
+              runId: chunk.runId,
+              from: ChunkFrom.AGENT,
+              type: 'object-result',
+              object: this.fallbackValue,
+              metadata: {
+                from: 'structured-output',
+                fallback: true,
+              },
+            };
+            controller.enqueue(fallbackChunk);
+            break;
+          }
+        }
+
         const newChunk = {
           ...chunk,
           metadata: {
@@ -473,10 +497,9 @@ The input text may be in any format (sentences, bullet points, paragraphs, etc.)
   private handleError(context: string, error: string, abort: (reason?: string) => never): void {
     const message = `[StructuredOutputProcessor] ${context}: ${error}`;
 
-    console.error(`ERROR from StructuredOutputProcessor: ${message}`);
-
     switch (this.errorStrategy) {
       case 'strict':
+        console.error(message);
         abort(message);
         break;
       case 'warn':
