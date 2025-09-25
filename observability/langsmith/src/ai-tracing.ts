@@ -14,9 +14,10 @@ import type {
 } from '@mastra/core/ai-tracing';
 import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
 import { ConsoleLogger } from '@mastra/core/logger';
-import { RunTree, Client, type ClientConfig, type RunTreeConfig } from 'langsmith';
-import { normalizeUsageMetrics } from './metrics';
+import type { ClientConfig, RunTreeConfig } from 'langsmith';
+import { Client, RunTree } from 'langsmith';
 import type { KVMap } from 'langsmith/schemas';
+import { normalizeUsageMetrics } from './metrics';
 
 export interface LangSmithExporterConfig extends ClientConfig {
   /** Logger level for diagnostic messages (default: 'warn') */
@@ -361,10 +362,10 @@ export class LangSmithExporter implements AITracingExporter {
 
     // End all active spans
     for (const [_traceId, spanData] of this.traceMap) {
-      for (const [_spanId, span] of spanData.spans) {
-        span.end();
+      for (const [_spanId, runTree] of spanData.spans) {
+        await runTree.end();
+        await runTree.patchRun();
       }
-      // Loggers don't have an explicit shutdown method
     }
     this.traceMap.clear();
   }
