@@ -179,7 +179,7 @@ async function runSingleOutputsTest(
 
     // Check if model is V1 or V2 and use appropriate method
     const isV2Model = 'specificationVersion' in model && model.specificationVersion === 'v2';
-    const response = isV2Model 
+    const response = isV2Model
       ? await agent.generate(allSchemas[schemaName].description, generateOptions)
       : await agent.generateLegacy(allSchemas[schemaName].description, generateOptions);
 

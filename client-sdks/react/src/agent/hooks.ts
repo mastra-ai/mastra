@@ -34,7 +34,7 @@ export const useMastraChat = <TMessage>({ agentId, initializeMessages }: MastraC
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
 
-const stream = async ({
+  const stream = async ({
     coreUserMessages,
     runtimeContext,
     threadId,
@@ -65,7 +65,7 @@ const stream = async ({
 
     const agent = clientWithAbort.getAgent(agentId);
 
-const response = await agent.stream({
+    const response = await agent.stream({
       messages: coreUserMessages,
       runId: agentId,
       modelSettings: {
@@ -85,7 +85,7 @@ const response = await agent.stream({
 
     if (!response.body) {
       setIsRunning(false);
-throw new Error('[Stream] No response body');
+      throw new Error('[Stream] No response body');
     }
 
     await response.processDataStream({
@@ -147,7 +147,7 @@ throw new Error('[Stream] No response body');
     setIsRunning(false);
   };
 
-return {
+  return {
     network,
     stream,
     isRunning,

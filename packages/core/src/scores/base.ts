@@ -552,7 +552,7 @@ class MastraScorer<
       // GenerateReason output must be a string
     } else if (scorerStep.name === 'generateReason') {
       let result;
-if (model.specificationVersion === 'v2') {
+      if (model.specificationVersion === 'v2') {
         result = await judge.generate(prompt, { tracingContext });
       } else {
         result = await judge.generateLegacy(prompt, { tracingContext });

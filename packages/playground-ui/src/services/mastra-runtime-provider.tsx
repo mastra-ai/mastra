@@ -178,7 +178,7 @@ export function MastraRuntimeProvider({
   const {
     messages,
     setMessages,
-stream,
+    stream,
     network,
     cancelRun,
     isRunning: isRunningStream,
@@ -460,7 +460,7 @@ stream,
             },
           });
         } else {
-if (chatWithGenerate) {
+          if (chatWithGenerate) {
             setIsRunning(true);
             const response = await agent.generate({
               messages: [
@@ -490,7 +490,7 @@ if (chatWithGenerate) {
             setIsRunning(false);
             return;
           } else {
-await stream({
+            await stream({
               coreUserMessages: [
                 {
                   role: 'user',
@@ -893,7 +893,7 @@ await stream({
   const { adapters, isReady } = useAdapters(agentId);
 
   const runtime = useExternalStoreRuntime({
-isRunning: isRunning || isRunningStream,
+    isRunning: isRunning || isRunningStream,
     messages,
     convertMessage,
     onNew,

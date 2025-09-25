@@ -330,7 +330,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       let response;
 
-if (version === 'v1') {
+      if (version === 'v1') {
         response = await agentOne.generateLegacy('Who won the 2016 US presidential election?');
       } else {
         response = await agentOne.generate('Who won the 2016 US presidential election?');
@@ -358,7 +358,7 @@ if (version === 'v1') {
 
       let response;
 
-if (version === 'v1') {
+      if (version === 'v1') {
         response = await agentOne.streamLegacy('Who won the 2016 US presidential election?');
       } else {
         response = await agentOne.stream('Who won the 2016 US presidential election?');
@@ -391,7 +391,7 @@ if (version === 'v1') {
       const agentOne = mastra.getAgent('electionAgent');
 
       let response;
-if (version === 'v1') {
+      if (version === 'v1') {
         response = await agentOne.generateLegacy('Who won the 2012 US presidential election?', {
           output: z.object({
             winner: z.string(),
@@ -424,7 +424,7 @@ if (version === 'v1') {
       const agentOne = mastra.getAgent('electionAgent');
 
       let response;
-if (version === 'v1') {
+      if (version === 'v1') {
         response = await agentOne.generateLegacy('Give me the winners of 2012 and 2016 US presidential elections', {
           output: z.array(
             z.object({
@@ -471,7 +471,7 @@ if (version === 'v1') {
       const agentOne = mastra.getAgent('electionAgent');
 
       let response;
-if (version === 'v1') {
+      if (version === 'v1') {
         response = await agentOne.generateLegacy('Give me the winners of 2012 and 2016 US presidential elections', {
           output: {
             type: 'object',
@@ -535,7 +535,7 @@ if (version === 'v1') {
       const agentOne = mastra.getAgent('electionAgent');
 
       let response;
-if (version === 'v1') {
+      if (version === 'v1') {
         response = await agentOne.streamLegacy('Who won the 2012 US presidential election?', {
           output: z.object({
             winner: z.string(),
@@ -599,7 +599,7 @@ if (version === 'v1') {
 
       let toolCall;
       let response;
-if (version === 'v1') {
+      if (version === 'v1') {
         response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
           maxSteps: 2,
           toolChoice: 'required',
@@ -709,7 +709,7 @@ if (version === 'v1') {
 
           let toolCall;
           let response;
-if (version === 'v1') {
+          if (version === 'v1') {
             response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
               maxSteps: 2,
               toolChoice: 'required',
@@ -767,7 +767,7 @@ if (version === 'v1') {
 
           let toolCall;
           let response;
-if (version === 'v1') {
+          if (version === 'v1') {
             response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
               maxSteps: 2,
               toolChoice: 'required',
@@ -866,7 +866,7 @@ if (version === 'v1') {
 
           let toolCall;
           let response;
-if (version === 'v1') {
+          if (version === 'v1') {
             response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
               maxSteps: 2,
               toolChoice: 'required',
@@ -923,7 +923,7 @@ if (version === 'v1') {
       });
 
       let result;
-if (version === 'v1') {
+      if (version === 'v1') {
         result = await userAgent.generateLegacy('Make it green', {
           clientTools: {
             changeColor: {
@@ -963,7 +963,7 @@ if (version === 'v1') {
 
       let result;
 
-if (version === 'v1') {
+      if (version === 'v1') {
         result = await userAgent.streamLegacy('Make it green', {
           clientTools: {
             changeColor: {
@@ -1029,7 +1029,7 @@ if (version === 'v1') {
       let res;
       let toolCall;
 
-if (version === 'v1') {
+      if (version === 'v1') {
         res = await agentOne.generateLegacy(
           'Use the \"findUserTool\" to Find the user with name - Joe and return the name and email',
         );
@@ -1063,7 +1063,7 @@ if (version === 'v1') {
 
       let response;
 
-if (version === 'v1') {
+      if (version === 'v1') {
         response = await agent.generateLegacy('Call testTool 10 times.', {
           toolChoice: 'required',
         });
@@ -1086,7 +1086,7 @@ if (version === 'v1') {
 
       let response;
 
-if (version === 'v1') {
+      if (version === 'v1') {
         response = await agent.generateLegacy('Call testTool 10 times.', {
           toolChoice: 'required',
           maxSteps: 7,
@@ -1128,7 +1128,7 @@ if (version === 'v1') {
       agent.__setLogger(noopLogger);
 
       let response;
-if (version === 'v1') {
+      if (version === 'v1') {
         response = await agent.generateLegacy('Please call the flakey tool with input "test data"', {
           maxSteps: 5,
         });
@@ -1198,7 +1198,7 @@ if (version === 'v1') {
       let response;
       let toolCall;
 
-if (version === 'v1') {
+      if (version === 'v1') {
         response = await agentOne.generateLegacy('Call testTool', {
           toolChoice: 'required',
         });
@@ -1361,7 +1361,7 @@ if (version === 'v1') {
         memory: mockMemory,
       });
 
-if (version === 'v1') {
+      if (version === 'v1') {
         // Generate a response that will trigger title generation
         await agent.generateLegacy('What is the weather like today?', {
           memory: {
@@ -1552,7 +1552,7 @@ if (version === 'v1') {
       const runtimeContext = new RuntimeContext();
       runtimeContext.set('userTier', 'premium');
 
-if (version === 'v1') {
+      if (version === 'v1') {
         await agent.generateLegacy('Test message', {
           memory: {
             resource: 'user-1',
@@ -1743,7 +1743,7 @@ if (version === 'v1') {
         model: standardModel,
       });
 
-if (version === 'v1') {
+      if (version === 'v1') {
         await agent.generateLegacy('Test message');
       } else {
         await agent.generate('Test message');
@@ -1916,7 +1916,7 @@ if (version === 'v1') {
         memory: mockMemory,
       });
 
-if (version === 'v1') {
+      if (version === 'v1') {
         await agent.generateLegacy('Test message', {
           memory: {
             resource: 'user-1',
@@ -2032,7 +2032,7 @@ if (version === 'v1') {
       agent.__setLogger(noopLogger);
 
       // This should not throw, title generation happens async
-if (version === 'v1') {
+      if (version === 'v1') {
         await agent.generateLegacy('Test message', {
           memory: {
             resource: 'user-1',
@@ -2209,7 +2209,7 @@ if (version === 'v1') {
         memory: mockMemory,
       });
 
-if (version === 'v1') {
+      if (version === 'v1') {
         await agent.generateLegacy('Test message', {
           memory: {
             resource: 'user-1',
@@ -2414,7 +2414,7 @@ if (version === 'v1') {
       const japaneseContext = new RuntimeContext();
       japaneseContext.set('language', 'ja');
 
-if (version === 'v1') {
+      if (version === 'v1') {
         await agent.generateLegacy('Test message', {
           memory: {
             resource: 'user-1',
@@ -2588,7 +2588,7 @@ if (version === 'v1') {
         memory: mockMemory,
       });
 
-if (version === 'v1') {
+      if (version === 'v1') {
         await agent.generateLegacy('What is the weather like today?', {
           memory: {
             resource: 'user-1',
@@ -2729,7 +2729,7 @@ if (version === 'v1') {
         memory: mockMemory,
       });
 
-if (version === 'v1') {
+      if (version === 'v1') {
         await agent.generateLegacy('Test message', {
           memory: {
             resource: 'user-1',
@@ -3078,7 +3078,7 @@ if (version === 'v1') {
 
       agent.__setLogger(noopLogger);
 
-if (version === 'v1') {
+      if (version === 'v1') {
         await agent.generateLegacy('Test message', {
           memory: {
             resource: 'user-1',
@@ -3867,7 +3867,7 @@ if (version === 'v1') {
         memory: mockMemory,
       });
 
-if (version === 'v1') {
+      if (version === 'v1') {
         await agent.generateLegacy('hello', {
           memory: {
             resource: 'user-1',
@@ -3997,7 +3997,7 @@ if (version === 'v1') {
       });
 
       let res;
-if (version === 'v1') {
+      if (version === 'v1') {
         res = await agent.streamLegacy('hello', {
           memory: {
             resource: 'user-1',
@@ -4036,7 +4036,7 @@ if (version === 'v1') {
         memory: mockMemory,
       });
 
-if (version === 'v1') {
+      if (version === 'v1') {
         await agent.generateLegacy('hello', {
           resourceId: 'user-1',
           threadId: 'thread-1',
@@ -4064,7 +4064,7 @@ if (version === 'v1') {
       });
 
       let stream;
-if (version === 'v1') {
+      if (version === 'v1') {
         stream = await agent.streamLegacy('hello', {
           resourceId: 'user-1',
           threadId: 'thread-1',
@@ -4155,7 +4155,7 @@ if (version === 'v1') {
       runtimeContext.set('info', 'test-info');
 
       let response;
-if (version === 'v1') {
+      if (version === 'v1') {
         response = await agent.generateLegacy('hello', { runtimeContext });
       } else {
         response = await agent.generate('hello', { runtimeContext });
@@ -4176,7 +4176,7 @@ if (version === 'v1') {
       });
 
       let response;
-if (version === 'v1') {
+      if (version === 'v1') {
         response = await agent.generateLegacy('hello');
       } else {
         response = await agent.generate('hello');
@@ -4199,7 +4199,7 @@ if (version === 'v1') {
       });
 
       let response;
-if (version === 'v1') {
+      if (version === 'v1') {
         response = await agent.generateLegacy('hello');
       } else {
         response = await agent.generate('hello');
@@ -4547,7 +4547,7 @@ if (version === 'v1') {
         model: dummyModel,
       });
 
-if (version === 'v1') {
+      if (version === 'v1') {
         const response = await agent.generateLegacy('Hello', {
           instructions: {
             role: 'system',
@@ -4664,7 +4664,7 @@ if (version === 'v1') {
         model: dummyModel,
       });
 
-if (version === 'v1') {
+      if (version === 'v1') {
         const response = await agent.generateLegacy('Hello', {
           instructions: ['Override instruction 1', 'Override instruction 2'],
         });
@@ -4956,7 +4956,7 @@ if (version === 'v1') {
         let stepCount = 0;
         let caught = false;
         try {
-if (version === 'v1') {
+          if (version === 'v1') {
             await agent.generateLegacy(
               'Please echo this and then use the error tool. Be verbose and take multiple steps.',
               {
@@ -4976,23 +4976,20 @@ if (version === 'v1') {
               },
             );
           } else {
-            await agent.generate(
-              'Please echo this and then use the error tool. Be verbose and take multiple steps.',
-              {
-                threadId: 'thread-partial-rescue-generate',
-                resourceId: 'resource-partial-rescue-generate',
-                savePerStep: true,
-                onStepFinish: (result: any) => {
-                  if (result.toolCalls && result.toolCalls.length > 1) {
-                    throw new Error('Model attempted parallel tool calls; test requires sequential tool calls');
-                  }
-                  stepCount++;
-                  if (stepCount === 2) {
-                    throw new Error('Simulated error in onStepFinish');
-                  }
-                },
+            await agent.generate('Please echo this and then use the error tool. Be verbose and take multiple steps.', {
+              threadId: 'thread-partial-rescue-generate',
+              resourceId: 'resource-partial-rescue-generate',
+              savePerStep: true,
+              onStepFinish: (result: any) => {
+                if (result.toolCalls && result.toolCalls.length > 1) {
+                  throw new Error('Model attempted parallel tool calls; test requires sequential tool calls');
+                }
+                stepCount++;
+                if (stepCount === 2) {
+                  throw new Error('Simulated error in onStepFinish');
+                }
               },
-            );
+            });
           }
         } catch (err: any) {
           caught = true;
@@ -5318,7 +5315,7 @@ if (version === 'v1') {
 
       let errorCaught = false;
       try {
-if (version === 'v1') {
+        if (version === 'v1') {
           await agent.generateLegacy('trigger error', {
             memory: {
               resource: 'user-err',
@@ -5701,7 +5698,7 @@ if (version === 'v1') {
 
         let capturedStep: any = null;
 
-if (version === 'v1') {
+        if (version === 'v1') {
           const stream = await agent.streamLegacy('test message', {
             threadId: 'test-thread-7050',
             resourceId: 'test-resource-7050',
@@ -5775,7 +5772,7 @@ if (version === 'v1') {
         });
 
         let stream;
-if (version === 'v1') {
+        if (version === 'v1') {
           stream = await agent.streamLegacy('no progress', {
             threadId: 'thread-2',
             resourceId: 'resource-2',
@@ -5814,7 +5811,7 @@ if (version === 'v1') {
         });
 
         let stream;
-if (version === 'v1') {
+        if (version === 'v1') {
           stream = await agent.streamLegacy('interrupt before step', {
             threadId: 'thread-3',
             resourceId: 'resource-3',
@@ -5876,7 +5873,7 @@ if (version === 'v1') {
         let errorCaught = false;
 
         let stream;
-try {
+        try {
           if (version === 'v1') {
             stream = await agent.streamLegacy('trigger error', {
               memory: {
@@ -5930,7 +5927,7 @@ try {
         let result;
         let request;
 
-if (version === 'v1') {
+        if (version === 'v1') {
           result = await agent.streamLegacy(`hello!`);
         } else {
           result = await agent.stream(`hello!`);
@@ -5977,7 +5974,7 @@ if (version === 'v1') {
         });
 
         let result;
-if (version === 'v1') {
+        if (version === 'v1') {
           result = await agent.streamLegacy([
             { role: `user`, content: `hello!` },
             { role: 'assistant', content: 'hi, how are you?' },
@@ -6057,7 +6054,7 @@ if (version === 'v1') {
         });
 
         let result;
-if (version === 'v1') {
+        if (version === 'v1') {
           result = await agent.streamLegacy([{ role: 'user', content: "I'm good, how are you?" }], {
             memory: {
               thread: '1',
@@ -6143,7 +6140,7 @@ if (version === 'v1') {
         });
 
         let firstResponse;
-if (version === 'v1') {
+        if (version === 'v1') {
           firstResponse = await agent.generateLegacy('What is the weather in London?', {
             threadId,
             resourceId,
@@ -6195,7 +6192,7 @@ if (version === 'v1') {
         expect(firstResponse.text).toContain('65');
 
         let secondResponse;
-if (version === 'v1') {
+        if (version === 'v1') {
           secondResponse = await agent.generateLegacy('What was the tool you just used?', {
             memory: {
               thread: threadId,
@@ -6602,7 +6599,7 @@ if (version === 'v1') {
       runtimeContext.set('environment', 'test');
 
       let response;
-if (version === 'v1') {
+      if (version === 'v1') {
         response = await agent.generateLegacy('test message', {
           memory: {
             resource: 'user-1',
@@ -6815,7 +6812,7 @@ if (version === 'v1') {
         },
       ];
 
-if (version === 'v1') {
+      if (version === 'v1') {
         await agent.generateLegacy(testMessages, {
           threadId: 'test-thread',
           resourceId: 'test-resource',
@@ -6919,7 +6916,7 @@ if (version === 'v1') {
         },
       ];
 
-if (version === 'v1') {
+      if (version === 'v1') {
         const stream = await agent.streamLegacy(testMessages, {
           threadId: 'test-thread',
           resourceId: 'test-resource',
@@ -7028,7 +7025,7 @@ if (version === 'v1') {
         },
       ];
 
-if (version === 'v1') {
+      if (version === 'v1') {
         const stream = await agent.streamLegacy(testMessages);
         // Consume the stream to trigger the model call
         for await (const _chunk of stream.textStream) {
@@ -7129,7 +7126,7 @@ if (version === 'v1') {
         },
       ];
 
-if (version === 'v1') {
+      if (version === 'v1') {
         await agent.generateLegacy(testMessages);
       } else {
         await agent.generate(testMessages);
@@ -7209,7 +7206,7 @@ if (version === 'v1') {
         model: testModel,
       });
 
-// Test generate with system option
+      // Test generate with system option
       if (version === 'v1') {
         await agent.generateLegacy('Hello', {
           system: 'You must respond in JSON format',
@@ -7298,7 +7295,7 @@ if (version === 'v1') {
         model: testModel,
       });
 
-// Test stream with system option
+      // Test stream with system option
       if (version === 'v1') {
         const streamResult = await agent.streamLegacy('Hello', {
           system: 'Always be concise',
@@ -7385,7 +7382,7 @@ if (version === 'v1') {
         model: testModel,
       });
 
-if (version === 'v1') {
+      if (version === 'v1') {
         await agent.generateLegacy('Hello', {
           instructions: 'Override instructions',
           system: 'Additional system context',
@@ -8285,7 +8282,7 @@ if (version === 'v1') {
 
         // Test valid content
         let validResult;
-if (version === 'v1') {
+        if (version === 'v1') {
           validResult = await agentWithValidator.generateLegacy('This is appropriate content');
         } else {
           validResult = await agentWithValidator.generate('This is appropriate content');
@@ -8294,7 +8291,7 @@ if (version === 'v1') {
 
         // Test invalid content
         let invalidResult;
-if (version === 'v1') {
+        if (version === 'v1') {
           invalidResult = await agentWithValidator.generateLegacy('This contains inappropriate content');
         } else {
           invalidResult = await agentWithValidator.generate('This contains inappropriate content');
@@ -8376,7 +8373,7 @@ if (version === 'v1') {
         },
       ];
 
-if (version === 'v1') {
+      if (version === 'v1') {
         await agent.generateLegacy(messagesWithMetadata, {
           memory: {
             resource: 'customer-12345',
@@ -8448,7 +8445,7 @@ if (version === 'v1') {
       ];
 
       let stream;
-if (version === 'v1') {
+      if (version === 'v1') {
         stream = await agent.streamLegacy(messagesWithMetadata, {
           memory: {
             resource: 'user-mobile',
@@ -8538,7 +8535,7 @@ if (version === 'v1') {
         },
       ];
 
-if (version === 'v1') {
+      if (version === 'v1') {
         await agent.generateLegacy(mixedMessages, {
           memory: {
             resource: 'mixed-user',
@@ -9518,7 +9515,7 @@ if (version === 'v1') {
       });
 
       let result;
-if (version === 'v1') {
+      if (version === 'v1') {
         result = await agent.generateLegacy('Make it green', {
           returnScorerData: true,
         });
@@ -9546,7 +9543,7 @@ if (version === 'v1') {
       });
 
       let result;
-if (version === 'v1') {
+      if (version === 'v1') {
         result = await agent.generateLegacy('Make it green', {
           returnScorerData: false,
         });
@@ -9567,7 +9564,7 @@ if (version === 'v1') {
       });
 
       let result;
-if (version === 'v1') {
+      if (version === 'v1') {
         result = await agent.generateLegacy('Make it green');
       } else {
         result = await agent.generate('Make it green');
@@ -9668,7 +9665,7 @@ if (version === 'v1') {
 
     it(`${version} - should call scorers when provided in stream options`, async () => {
       let result: any;
-if (version === 'v1') {
+      if (version === 'v1') {
         result = await agent.streamLegacy('Hello world', {
           scorers: {
             scorer1: { scorer: mastra.getScorer('scorer1') },
@@ -9694,7 +9691,7 @@ if (version === 'v1') {
     });
 
     it(`${version} - can use scorer name for scorer config for generate`, async () => {
-if (version === 'v1') {
+      if (version === 'v1') {
         await agent.generateLegacy('Hello world', {
           scorers: {
             scorer1: { scorer: scorer1.name },
@@ -9927,7 +9924,7 @@ if (version === 'v1') {
         finishData = data;
       };
 
-if (version === 'v1') {
+      if (version === 'v1') {
         result = await agent.streamLegacy('How are you?', {
           onFinish,
         });
