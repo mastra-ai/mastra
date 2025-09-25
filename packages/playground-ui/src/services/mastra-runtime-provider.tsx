@@ -86,6 +86,7 @@ const convertToAIAttachments = async (attachments: AppendMessage['attachments'])
 };
 
 const initializeMessageState = (initialMessages: Message[]) => {
+  // @ts-expect-error - TODO: fix the ThreadMessageLike type, it's missing some properties like "data" from the role.
   const convertedMessages: ThreadMessageLike[] = initialMessages
     ?.map((message: Message) => {
       let content;
@@ -151,7 +152,7 @@ const initializeMessageState = (initialMessages: Message[]) => {
       return {
         ...message,
         content: [...formattedParts, ...attachmentsAsContentParts],
-      } as ThreadMessageLike;
+      };
     })
     .filter(Boolean);
 
@@ -220,7 +221,7 @@ export function MastraRuntimeProvider({
     topP,
     maxTokens,
     instructions,
-    providerOptions: providerOptions as any,
+    providerOptions,
   };
 
   const baseClient = useMastraClient();
@@ -544,11 +545,11 @@ export function MastraRuntimeProvider({
             instructions,
             runtimeContext: runtimeContextInstance,
             ...(memory ? { threadId, resourceId: agentId } : {}),
-            providerOptions: providerOptions as any,
+            providerOptions,
           });
           if (generateResponse.response && 'messages' in generateResponse.response) {
             const latestMessage = generateResponse.response.messages.reduce(
-              (acc, message) => {
+              (acc: ThreadMessageLike, message) => {
                 const _content = Array.isArray(acc.content) ? acc.content : [];
                 if (typeof message.content === 'string') {
                   return {
@@ -561,7 +562,7 @@ export function MastraRuntimeProvider({
                         text: message.content,
                       },
                     ],
-                  } as ThreadMessageLike;
+                  };
                 }
                 if (message.role === 'assistant') {
                   const toolCallContent = Array.isArray(message.content)
@@ -585,7 +586,7 @@ export function MastraRuntimeProvider({
                       content: containsToolCall
                         ? [...(reasoningContent ? [reasoningContent] : []), ...newContent]
                         : [..._content, ...(reasoningContent ? [reasoningContent] : []), toolCallContent],
-                    } as ThreadMessageLike;
+                    };
                   }
 
                   const textContent = Array.isArray(message.content)
@@ -596,7 +597,7 @@ export function MastraRuntimeProvider({
                     return {
                       ...acc,
                       content: [..._content, ...(reasoningContent ? [reasoningContent] : []), textContent],
-                    } as ThreadMessageLike;
+                    };
                   }
                 }
 
@@ -622,19 +623,19 @@ export function MastraRuntimeProvider({
                             ..._content,
                             { type: 'tool-result', toolCallId: toolResult.toolCallId, result: toolResult.result },
                           ],
-                    } as ThreadMessageLike;
+                    };
                   }
 
                   return {
                     ...acc,
                     content: [..._content, toolResult],
-                  } as ThreadMessageLike;
+                  };
                 }
                 return acc;
               },
-              { role: 'assistant', content: [] } as ThreadMessageLike,
+              { role: 'assistant', content: [] },
             );
-            setMessages(currentConversation => [...currentConversation, latestMessage]);
+            setMessages(currentConversation => [...currentConversation, latestMessage as ThreadMessageLike]);
             handleFinishReason(generateResponse.finishReason);
           }
         } else {
@@ -659,7 +660,7 @@ export function MastraRuntimeProvider({
             instructions,
             runtimeContext: runtimeContextInstance,
             ...(memory ? { threadId, resourceId: agentId } : {}),
-            providerOptions: providerOptions as any,
+            providerOptions,
           });
 
           if (!response.body) {
@@ -872,7 +873,7 @@ export function MastraRuntimeProvider({
 
       setMessages(currentConversation => [
         ...currentConversation,
-        { role: 'assistant', content: [{ type: 'text', text: `${error}` as string }] },
+        { role: 'assistant', content: [{ type: 'text', text: `${error}` }] },
       ]);
     } finally {
       // Clean up the abort controller reference
