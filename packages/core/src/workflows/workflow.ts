@@ -157,6 +157,7 @@ export function createStep<
   if (params instanceof Agent) {
     return {
       id: params.name,
+      description: params.getDescription(),
       // @ts-ignore
       inputSchema: z.object({
         prompt: z.string(),
@@ -248,6 +249,7 @@ export function createStep<
           text: await streamPromise.promise,
         };
       },
+      component: params.component,
     };
   }
 
@@ -260,6 +262,7 @@ export function createStep<
       // TODO: tool probably should have strong id type
       // @ts-ignore
       id: params.id,
+      description: params.description,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
       execute: async ({ inputData, mastra, runtimeContext, tracingContext, suspend, resumeData }) => {
@@ -272,6 +275,7 @@ export function createStep<
           resumeData,
         });
       },
+      component: 'TOOL',
     };
   }
 
@@ -299,6 +303,7 @@ export function cloneStep<TStepId extends string>(
     outputSchema: step.outputSchema,
     execute: step.execute,
     retries: step.retries,
+    component: step.component,
   };
 }
 

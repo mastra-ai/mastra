@@ -298,7 +298,7 @@ const aiSdkStream = await agent.stream("message for agent", {
       type: "TelemetrySettings",
       isOptional: true,
       description:
-        "Settings for telemetry collection during streaming.",
+        "Settings for OTLP telemetry collection during streaming (not AI tracing).",
       properties: [
         {
           parameters: [{
@@ -516,8 +516,40 @@ const aiSdkStream = await agent.stream("message for agent", {
       description: "Runtime context for dependency injection and contextual information.",
     },
     {
-      name: "stopWhen",
-      type: "StopCondition | StopCondition[]",
+      name: "tracingContext",
+      type: "TracingContext",
+      isOptional: true,
+      description: "AI tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+      properties: [
+        {
+          parameters: [{
+            name: "currentSpan",
+            type: "AISpan",
+            isOptional: true,
+            description: "Current AI span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution."
+          }]
+        }
+      ]
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "Options for AI tracing configuration.",
+      properties: [
+        {
+          parameters: [{
+            name: "metadata",
+            type: "Record<string, any>",
+            isOptional: true,
+            description: "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags."
+          }]
+        }
+      ]
+    },
+    {
+      name: "maxTokens",
+      type: "number",
       isOptional: true,
       description: "Condition(s) that determine when to stop the agent's execution. Can be a single condition or array of conditions.",
     },
@@ -532,6 +564,12 @@ const aiSdkStream = await agent.stream("message for agent", {
       name: "stream",
       type: "MastraModelOutput<Output> | AISDKV5OutputStream<Output>",
       description: "Returns a streaming interface based on the format parameter. When format is 'mastra' (default), returns MastraModelOutput. When format is 'aisdk', returns AISDKV5OutputStream for AI SDK v5 compatibility.",
+    },
+    {
+      name: "traceId",
+      type: "string",
+      isOptional: true,
+      description: "The trace ID associated with this execution when AI tracing is enabled. Use this to correlate logs and debug execution flow.",
     },
   ]}
 />
