@@ -3,13 +3,13 @@ import { asSchema, isDeepEqualData, jsonSchema, parsePartialJson } from 'ai-v5';
 import type { JSONSchema7, Schema } from 'ai-v5';
 import type z3 from 'zod/v3';
 import type z4 from 'zod/v4';
+import { MastraError } from '../../error';
 import type { ProcessorRunnerMode } from '../../processors/runner';
 import { safeValidateTypes } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
 import type { ChunkType } from '../types';
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput, ZodLikePartialSchema } from './schema';
-import { MastraError } from '../../error';
 
 interface ProcessPartialChunkParams {
   /** Text accumulated from streaming so far */
