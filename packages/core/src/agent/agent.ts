@@ -3394,8 +3394,6 @@ export class Agent<
       });
     }
 
-    // return result.result.toDestructurable()
-
     return result.result as unknown as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
   }
 
