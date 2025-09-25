@@ -4,11 +4,13 @@ import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
+import { Client } from 'langsmith';
 import { it } from 'vitest';
 import { z } from 'zod';
 import { LangSmithExporter } from './ai-tracing';
 
-it.skip('should initialize with correct configuration', async () => {
+it('should initialize with correct configuration', async () => {
+  const client = new Client();
   const calculator = createTool({
     id: 'calculator',
     description: 'Add two numbers',
@@ -30,7 +32,7 @@ it.skip('should initialize with correct configuration', async () => {
       configs: {
         langsmith: {
           serviceName: 'ai',
-          exporters: [new LangSmithExporter({ logLevel: 'debug' })],
+          exporters: [new LangSmithExporter({ logLevel: 'debug', client })],
         },
       },
     },
@@ -43,4 +45,8 @@ it.skip('should initialize with correct configuration', async () => {
   // Use streamVNext for streaming responses
   const stream = await mastra.getAgent('agent').streamVNext('What is 21 + 21? Use tools if needed.');
   console.log(await stream.text);
+
+  // TODO: Flush properly
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  await client.awaitPendingTraceBatches();
 }, 30000);
