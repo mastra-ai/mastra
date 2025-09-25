@@ -21,6 +21,9 @@ import type {
   AISpanRecord,
   AITraceRecord,
   AITracesPaginatedArg,
+  IndexInfo,
+  CreateIndexOptions,
+  StorageIndexStats,
 } from '@mastra/core/storage';
 
 import type { Trace } from '@mastra/core/telemetry';
@@ -33,10 +36,16 @@ import { ScoresLibSQL } from './domains/scores';
 import { TracesLibSQL } from './domains/traces';
 import { WorkflowsLibSQL } from './domains/workflows';
 
+export type { CreateIndexOptions, IndexInfo } from '@mastra/core/storage';
+
 export type LibSQLConfig =
   | {
       url: string;
       authToken?: string;
+      /**
+       * Schema name for prefixing index names (optional)
+       */
+      schemaName?: string;
       /**
        * Maximum number of retries for write operations if an SQLITE_BUSY error occurs.
        * @default 5
@@ -51,6 +60,7 @@ export type LibSQLConfig =
     }
   | {
       client: Client;
+      schemaName?: string;
       maxRetries?: number;
       initialBackoffMs?: number;
     };
@@ -59,6 +69,7 @@ export class LibSQLStore extends MastraStorage {
   private client: Client;
   private readonly maxRetries: number;
   private readonly initialBackoffMs: number;
+  private schema: string;
 
   stores: StorageDomains;
 
@@ -67,6 +78,7 @@ export class LibSQLStore extends MastraStorage {
 
     this.maxRetries = config.maxRetries ?? 5;
     this.initialBackoffMs = config.initialBackoffMs ?? 100;
+    this.schema = ('schemaName' in config && config.schemaName) || 'public';
 
     if ('url' in config) {
       // need to re-init every time for in memory dbs or the tables might not exist
@@ -98,6 +110,7 @@ export class LibSQLStore extends MastraStorage {
       client: this.client,
       maxRetries: this.maxRetries,
       initialBackoffMs: this.initialBackoffMs,
+      schemaName: this.schema,
     });
 
     const scores = new ScoresLibSQL({ client: this.client, operations });
@@ -118,6 +131,19 @@ export class LibSQLStore extends MastraStorage {
     };
   }
 
+  async init(): Promise<void> {
+    console.log('LibSQLStore init');
+    await super.init();
+
+    // Create automatic performance indexes by default
+    // This is done after table creation and is safe to run multiple times
+    try {
+      await (this.stores.operations as StoreOperationsLibSQL).createAutomaticIndexes();
+    } catch (indexError) {
+      this.logger.warn('Failed to create indexes:', indexError);
+    }
+  }
+
   public get supports() {
     return {
       selectByIncludeResourceScope: true,
@@ -127,6 +153,7 @@ export class LibSQLStore extends MastraStorage {
       deleteMessages: true,
       aiTracing: true,
       getScoresBySpan: true,
+      indexManagement: true,
     };
   }
 
@@ -508,6 +535,22 @@ export class LibSQLStore extends MastraStorage {
     records: { traceId: string; spanId: string; updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>> }[];
   }): Promise<void> {
     return this.stores.observability!.batchUpdateAISpans(args);
+  }
+
+  async createIndex(args: CreateIndexOptions): Promise<void> {
+    return this.stores.operations!.createIndex(args);
+  }
+
+  async dropIndex(indexName: string): Promise<void> {
+    return this.stores.operations!.dropIndex(indexName);
+  }
+
+  async listIndexes(tableName?: string): Promise<IndexInfo[]> {
+    return this.stores.operations!.listIndexes(tableName);
+  }
+
+  async describeIndex(indexName: string): Promise<StorageIndexStats> {
+    return this.stores.operations!.describeIndex(indexName);
   }
 }
 

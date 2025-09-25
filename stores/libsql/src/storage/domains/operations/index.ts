@@ -1,7 +1,23 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, StoreOperations, TABLE_AI_SPANS } from '@mastra/core/storage';
-import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import {
+  TABLE_WORKFLOW_SNAPSHOT,
+  StoreOperations,
+  TABLE_AI_SPANS,
+  TABLE_THREADS,
+  TABLE_MESSAGES,
+  TABLE_TRACES,
+  TABLE_EVALS,
+  TABLE_SCORERS,
+  TABLE_SCHEMAS,
+} from '@mastra/core/storage';
+import type {
+  StorageColumn,
+  TABLE_NAMES,
+  CreateIndexOptions,
+  IndexInfo,
+  StorageIndexStats,
+} from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import {
   createExecuteWriteOperationWithRetry,
@@ -12,6 +28,7 @@ import {
 
 export class StoreOperationsLibSQL extends StoreOperations {
   private client: Client;
+  public schemaName?: string;
   /**
    * Maximum number of retries for write operations if an SQLITE_BUSY error occurs.
    * @default 5
@@ -28,13 +45,16 @@ export class StoreOperationsLibSQL extends StoreOperations {
     client,
     maxRetries,
     initialBackoffMs,
+    schemaName,
   }: {
     client: Client;
     maxRetries?: number;
     initialBackoffMs?: number;
+    schemaName?: string;
   }) {
     super();
     this.client = client;
+    this.schemaName = schemaName;
 
     this.maxRetries = maxRetries ?? 5;
     this.initialBackoffMs = initialBackoffMs ?? 100;
@@ -502,5 +522,237 @@ export class StoreOperationsLibSQL extends StoreOperations {
         e,
       );
     }
+  }
+
+  /**
+   * Create a new index on a table
+   */
+  async createIndex(options: CreateIndexOptions): Promise<void> {
+    const { name, table, columns, unique = false, where, opclass, tablespace, method, concurrent } = options;
+
+    if (opclass || tablespace || method || concurrent) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_LIBSQL_CREATE_INDEX_OPTION_NOT_SUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: {
+          opclass: opclass ?? '',
+          tablespace: tablespace ?? '',
+          method: method ?? '',
+          concurrent: concurrent ?? '',
+        },
+      });
+    }
+
+    try {
+      // Check if index already exists
+      const indexExists = await this.client.execute({
+        sql: `SELECT name FROM sqlite_master WHERE type='index' AND name=?`,
+        args: [name],
+      });
+
+      if (indexExists.rows && indexExists.rows.length > 0) {
+        // Index already exists, skip creation
+        return;
+      }
+
+      // Build index creation SQL
+      const uniqueStr = unique ? 'UNIQUE ' : '';
+
+      // Handle columns with optional DESC/ASC modifiers
+      const columnsStr = columns
+        .map(col => {
+          // Handle columns with DESC/ASC modifiers
+          if (col.includes(' DESC') || col.includes(' ASC')) {
+            const [colName, ...modifiers] = col.split(' ');
+            if (!colName) {
+              throw new Error(`Invalid column specification: ${col}`);
+            }
+            return `"${parseSqlIdentifier(colName, 'column name')}" ${modifiers.join(' ')}`;
+          }
+          return `"${parseSqlIdentifier(col, 'column name')}"`;
+        })
+        .join(', ');
+
+      const whereStr = where ? ` WHERE ${where}` : '';
+      const tableName = parseSqlIdentifier(table, 'table name');
+
+      const sql = `CREATE ${uniqueStr}INDEX "${name}" ON ${tableName} (${columnsStr})${whereStr}`;
+
+      await this.client.execute(sql);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_LIBSQL_INDEX_CREATE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName: options.name,
+            tableName: options.table,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Drop an existing index
+   */
+  async dropIndex(indexName: string): Promise<void> {
+    try {
+      const indexExists = await this.client.execute({
+        sql: `SELECT name FROM sqlite_master WHERE type='index' AND name=?`,
+        args: [indexName],
+      });
+
+      if (!indexExists.rows || indexExists.rows.length === 0) {
+        return;
+      }
+
+      const sql = `DROP INDEX IF EXISTS "${indexName}"`;
+      await this.client.execute(sql);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_LIBSQL_INDEX_DROP_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * List indexes for a specific table or all tables
+   */
+  async listIndexes(tableName?: string): Promise<IndexInfo[]> {
+    try {
+      const allTableNames = Object.keys(TABLE_SCHEMAS);
+      const query = `SELECT
+                      name,
+                      tbl_name AS table_name,
+                      sql AS definition
+                    FROM
+                      sqlite_master
+                    WHERE
+                      type = 'index'
+                      AND tbl_name IN (${tableName ? `'${tableName}'` : allTableNames.map(name => `'${name}'`).join(',')})
+                    ORDER BY
+                      tbl_name,
+                      name;`;
+
+      const tableIndexes = await this.client.execute({
+        sql: query,
+      });
+
+      const indexDetails: IndexInfo[] = await Promise.all(
+        tableIndexes.rows.map(async index => {
+          const [indexList, columnInfo] = await Promise.all([
+            this.client.execute(`PRAGMA index_list('${index.table_name}')`),
+            this.client.execute(`PRAGMA index_info('${index.name}')`),
+          ]);
+
+          return {
+            name: index.name as string,
+            unique: indexList.rows.find(idx => idx.name === index.name)?.unique === 1 || false,
+            columns: columnInfo.rows.map(col => col.name as string),
+            table: index.table_name as string,
+            size: 'Unavailable for libsql',
+            definition: index.definition as string,
+          };
+        }),
+      );
+
+      return indexDetails;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_LIBSQL_INDEX_LIST_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName: tableName || 'all_tables',
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Creates automatic indexes for optimal query performance
+   * These composite indexes cover both filtering and sorting in single index
+   */
+  async createAutomaticIndexes(): Promise<void> {
+    try {
+      const schemaPrefix = `${this.schemaName ? `${this.schemaName}_` : ''}mastra_`;
+      const indexes: CreateIndexOptions[] = [
+        // Composite index for threads (filter + sort)
+        {
+          name: `${schemaPrefix}threads_resourceid_createdat_idx`,
+          table: TABLE_THREADS,
+          columns: ['resourceId', 'createdAt DESC'],
+        },
+        // Composite index for messages (filter + sort)
+        {
+          name: `${schemaPrefix}messages_thread_id_createdat_idx`,
+          table: TABLE_MESSAGES,
+          columns: ['thread_id', 'createdAt DESC'],
+        },
+        // Composite index for traces (filter + sort)
+        {
+          name: `${schemaPrefix}traces_name_starttime_idx`,
+          table: TABLE_TRACES,
+          columns: ['name', 'startTime DESC'],
+        },
+        // Composite index for evals (filter + sort)
+        {
+          name: `${schemaPrefix}mastra_evals_agent_name_created_at_idx`,
+          table: TABLE_EVALS,
+          columns: ['agent_name', 'created_at DESC'],
+        },
+        // Composite index for scores (filter + sort)
+        {
+          name: `${schemaPrefix}mastra_scores_trace_id_span_id_createdat_idx`,
+          table: TABLE_SCORERS,
+          columns: ['traceId', 'spanId', 'createdAt DESC'],
+        },
+      ];
+
+      for (const indexOptions of indexes) {
+        try {
+          await this.createIndex(indexOptions);
+        } catch (error) {
+          // Log but continue with other indexes
+          this.logger?.warn?.(`Failed to create index ${indexOptions.name}:`, error);
+        }
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_LIBSQL_STORE_CREATE_PERFORMANCE_INDEXES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async describeIndex(indexName: string): Promise<StorageIndexStats> {
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIBSQL_STORE_DESCRIBE_INDEX_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `LibSQL does not support describing indexes`,
+      details: {
+        indexName,
+      },
+    });
   }
 }
