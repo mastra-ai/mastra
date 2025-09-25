@@ -1,6 +1,7 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
 import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsClickhouse } from '../operations';
@@ -77,6 +78,21 @@ export class ScoresStorageClickhouse extends ScoresStorage {
   }
 
   async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+    let parsedScore: ValidatedSaveScorePayload;
+    try {
+      parsedScore = saveScorePayloadSchema.parse(score);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_SAVE_SCORE_FAILED_INVALID_SCORE_PAYLOAD',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { scoreId: score.id },
+        },
+        error,
+      );
+    }
+
     try {
       const record = {
         ...score,
