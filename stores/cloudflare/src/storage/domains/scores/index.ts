@@ -70,11 +70,10 @@ export class ScoresStorageCloudflare extends ScoresStorage {
 
     try {
       const id = crypto.randomUUID();
-      const { input, ...rest } = parsedScore;
 
       // Serialize all object values to JSON strings
       const serializedRecord: Record<string, any> = {};
-      for (const [key, value] of Object.entries(rest)) {
+      for (const [key, value] of Object.entries(parsedScore)) {
         if (value !== null && value !== undefined) {
           if (typeof value === 'object') {
             serializedRecord[key] = JSON.stringify(value);
