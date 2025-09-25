@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import { safelyParseJSON, ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
@@ -141,6 +142,27 @@ export class ScoresPG extends ScoresStorage {
   }
 
   async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    let parsedScore: ValidatedSaveScorePayload;
+    try {
+      parsedScore = saveScorePayloadSchema.parse(score);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_SAVE_SCORE_FAILED_INVALID_SCORE_PAYLOAD',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            scorer: score.scorer.name,
+            entityId: score.entityId,
+            entityType: score.entityType,
+            traceId: score.traceId || '',
+            spanId: score.spanId || '',
+          },
+        },
+        error,
+      );
+    }
+
     try {
       // Generate ID like other storage implementations
       const id = crypto.randomUUID();
@@ -156,7 +178,7 @@ export class ScoresPG extends ScoresStorage {
         runtimeContext,
         entity,
         ...rest
-      } = score;
+      } = parsedScore;
 
       await this.operations.insert({
         tableName: TABLE_SCORERS,
