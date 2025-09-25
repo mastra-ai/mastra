@@ -2,7 +2,6 @@ import { EventEmitter } from 'events';
 import { ReadableStream, TransformStream } from 'stream/web';
 import type { SharedV2ProviderMetadata, LanguageModelV2CallWarning } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
-import { consumeStream } from 'ai-v5';
 import type { FinishReason, TelemetrySettings } from 'ai-v5';
 import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
@@ -14,7 +13,7 @@ import type { OutputProcessor } from '../../processors';
 import type { ProcessorRunnerMode } from '../../processors/runner';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
-import { DelayedPromise } from '../aisdk/v5/compat';
+import { consumeStream, DelayedPromise } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import { reasoningDetailsFromMessages, transformSteps } from '../aisdk/v5/output-helpers';
@@ -955,21 +954,12 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       await consumeStream({
         stream: this.#baseStream as globalThis.ReadableStream<any>,
         onError: error => {
-          // When the stream errors (including abort), we need to:
-          // 1. Mark the stream as finished so EventEmitter knows
-          // 2. Emit finish event so EventEmitter-based streams can close
-          // This prevents them from hanging indefinitely
-          this.#streamFinished = true;
-          this.#emitter.emit('finish');
-
-          // Then call the user's error handler if provided
+          this.#emitter.emit('error', error);
           options?.onError?.(error);
         },
       });
     } catch (error) {
-      // Also handle errors that aren't caught by onError callback (e.g., if consumeStream itself throws)
-      this.#streamFinished = true;
-      this.#emitter.emit('finish');
+      this.#emitter.emit('error', error);
       options?.onError?.(error);
     }
   }
@@ -1217,14 +1207,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
   #createEventedStream() {
     const self = this;
+
     return new ReadableStream<ChunkType<OUTPUT>>({
       start(controller) {
-        // Start consuming stream if not already started
-        if (!self.#consumptionStarted) {
-          void self.consumeStream();
-        }
-
-        // Replay buffered chunks
+        // Replay existing buffered chunks
         self.#bufferedChunks.forEach(chunk => {
           controller.enqueue(chunk);
         });
@@ -1235,7 +1221,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
           return;
         }
 
-        // Listen for chunks and stream finish
+        // Listen for new chunks and stream finish
         const chunkHandler = (chunk: ChunkType<OUTPUT>) => {
           controller.enqueue(chunk);
         };
@@ -1243,15 +1229,33 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
         const finishHandler = () => {
           self.#emitter.off('chunk', chunkHandler);
           self.#emitter.off('finish', finishHandler);
+          self.#emitter.off('error', errorHandler);
           controller.close();
+        };
+
+        const errorHandler = (error: Error) => {
+          self.#emitter.off('chunk', chunkHandler);
+          self.#emitter.off('finish', finishHandler);
+          self.#emitter.off('error', errorHandler);
+          controller.error(error);
         };
 
         self.#emitter.on('chunk', chunkHandler);
         self.#emitter.on('finish', finishHandler);
+        self.#emitter.on('error', errorHandler);
+      },
+
+      async pull(_controller) {
+        // Only start consumption when someone is actively reading the stream
+        // This preserves backpressure and allows proper abort handling
+        if (!self.#consumptionStarted) {
+          void self.consumeStream();
+        }
       },
 
       cancel() {
-        // Cleanup happens in the handlers above when they're removed
+        // Stream was cancelled, clean up
+        self.#emitter.removeAllListeners();
       },
     });
   }
