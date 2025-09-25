@@ -1,7 +1,9 @@
 import {
   EntryList,
   EntryListEntries,
+  EntryListEntry,
   EntryListEntryStatusCol,
+  EntryListEntryTextCol,
   EntryListHeader,
   EntryListMessage,
   EntryListTrim,
@@ -44,21 +46,6 @@ export function TracesList({
     return null;
   }
 
-  const entries = traces.map(trace => {
-    const createdAtDate = new Date(trace.createdAt);
-    const isTodayDate = isToday(createdAtDate);
-
-    return {
-      id: trace.traceId,
-      shortId: getShortId(trace?.traceId) || 'n/a',
-      date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
-      time: format(createdAtDate, 'h:mm:ss aaa'),
-      name: trace?.name,
-      entityId: trace?.attributes?.agentId || trace?.attributes?.workflowId,
-      status: <EntryListEntryStatusCol status={trace?.attributes?.status} />,
-    };
-  });
-
   return (
     <EntryList>
       <EntryListTrim>
@@ -67,13 +54,44 @@ export function TracesList({
           <EntryListMessage message={errorMsg} type="error" />
         ) : (
           <>
-            {entries.length > 0 ? (
-              <EntryListEntries
-                entries={entries}
-                selectedEntryId={selectedTraceId}
-                columns={tracesListColumns}
-                onEntryClick={onTraceClick}
-              />
+            {traces.length > 0 ? (
+              <EntryListEntries>
+                {traces.map(trace => {
+                  const createdAtDate = new Date(trace.createdAt);
+                  const isTodayDate = isToday(createdAtDate);
+
+                  const entry = {
+                    id: trace.traceId,
+                    shortId: getShortId(trace?.traceId) || 'n/a',
+                    date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
+                    time: format(createdAtDate, 'h:mm:ss aaa'),
+                    name: trace?.name,
+                    entityId: trace?.attributes?.agentId || trace?.attributes?.workflowId,
+                    status: trace?.attributes?.status,
+                  };
+
+                  return (
+                    <EntryListEntry
+                      key={entry.id}
+                      entry={entry}
+                      isSelected={selectedTraceId === trace.traceId}
+                      columns={tracesListColumns}
+                      onClick={onTraceClick}
+                    >
+                      {(tracesListColumns || []).map((col, index) => {
+                        const key = `${index}-${trace.traceId}`;
+                        return col.name === 'status' ? (
+                          <EntryListEntryStatusCol key={key} status={entry?.[col.name as keyof typeof entry]} />
+                        ) : (
+                          <EntryListEntryTextCol key={key}>
+                            {entry?.[col.name as keyof typeof entry]}
+                          </EntryListEntryTextCol>
+                        );
+                      })}
+                    </EntryListEntry>
+                  );
+                })}
+              </EntryListEntries>
             ) : (
               <EntryListMessage
                 message={filtersApplied ? 'No traces found for applied filters' : 'No traces found yet'}

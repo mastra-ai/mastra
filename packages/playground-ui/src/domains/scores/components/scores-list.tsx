@@ -5,6 +5,8 @@ import {
   EntryListHeader,
   EntryListEntries,
   EntryListMessage,
+  EntryListEntry,
+  EntryListEntryTextCol,
 } from '@/components/ui/elements';
 import { format, isToday } from 'date-fns';
 import { EntryListPagination } from '@/components/ui/elements/entry-list/entry-list-pagination';
@@ -45,20 +47,6 @@ export function ScoresList({
 
   const scoresHasMore = pagination?.hasMore;
 
-  const entries = scores.map(score => {
-    const createdAtDate = new Date(score.createdAt);
-    const isTodayDate = isToday(createdAtDate);
-
-    return {
-      id: score.id,
-      date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
-      time: format(createdAtDate, 'h:mm:ss aaa'),
-      input: JSON.stringify(score?.input),
-      entityId: score.entityId,
-      score: score.score,
-    };
-  });
-
   const handleNextPage = () => {
     if (scoresHasMore) {
       onPageChange?.(pagination.page + 1);
@@ -79,13 +67,41 @@ export function ScoresList({
           <EntryListMessage message={errorMsg} type="error" />
         ) : (
           <>
-            {entries.length > 0 ? (
-              <EntryListEntries
-                entries={entries}
-                selectedEntryId={selectedScoreId}
-                columns={scoresListColumns}
-                onEntryClick={onScoreClick}
-              />
+            {scores.length > 0 ? (
+              <EntryListEntries>
+                {scores.map(score => {
+                  const createdAtDate = new Date(score.createdAt);
+                  const isTodayDate = isToday(createdAtDate);
+
+                  const entry = {
+                    id: score.id,
+                    date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
+                    time: format(createdAtDate, 'h:mm:ss aaa'),
+                    input: JSON.stringify(score?.input),
+                    entityId: score.entityId,
+                    score: score.score,
+                  };
+
+                  return (
+                    <EntryListEntry
+                      key={entry.id}
+                      entry={entry}
+                      isSelected={selectedScoreId === score.id}
+                      columns={scoresListColumns}
+                      onClick={onScoreClick}
+                    >
+                      {(scoresListColumns || []).map((col, index) => {
+                        const key = `${index}-${score.id}`;
+                        return (
+                          <EntryListEntryTextCol key={key}>
+                            {entry?.[col.name as keyof typeof entry]}
+                          </EntryListEntryTextCol>
+                        );
+                      })}
+                    </EntryListEntry>
+                  );
+                })}
+              </EntryListEntries>
             ) : (
               <EntryListMessage message="No scores for this scorer yet" />
             )}

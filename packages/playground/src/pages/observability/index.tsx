@@ -136,12 +136,12 @@ export default function Observability() {
   const error = isAiTracesError ? parseError(aiTracesError) : undefined;
   const filtersApplied = selectedEntityOption?.value !== 'all' || selectedDateFrom || selectedDateTo;
 
-  const toNextItem = getToNextEntryFn({
+  const toNextTrace = getToNextEntryFn({
     entries: aiTraces.map(item => ({ id: item.traceId })),
     id: selectedTraceId,
     update: setSelectedTraceId,
   });
-  const toPreviousItem = getToPreviousEntryFn({
+  const toPreviousTrace = getToPreviousEntryFn({
     entries: aiTraces.map(item => ({ id: item.traceId })),
     id: selectedTraceId,
     update: setSelectedTraceId,
@@ -197,8 +197,8 @@ export default function Observability() {
         traceDetails={aiTraces.find(t => t.traceId === selectedTraceId)}
         isOpen={dialogIsOpen}
         onClose={() => setDialogIsOpen(false)}
-        onNext={toNextItem}
-        onPrevious={toPreviousItem}
+        onNext={toNextTrace}
+        onPrevious={toPreviousTrace}
         isLoadingSpans={isLoadingAiTrace}
         onScorerTriggered={scorerName => {
           setDialogIsOpen(false);

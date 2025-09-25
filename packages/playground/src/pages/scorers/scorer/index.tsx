@@ -131,8 +131,8 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
     setDialogIsOpen(true);
   };
 
-  const toNextItem = getToNextEntryFn({ entries: scores, id: selectedScoreId, update: setSelectedScoreId });
-  const toPreviousItem = getToPreviousEntryFn({ entries: scores, id: selectedScoreId, update: setSelectedScoreId });
+  const toNextScore = getToNextEntryFn({ entries: scores, id: selectedScoreId, update: setSelectedScoreId });
+  const toPreviousScore = getToPreviousEntryFn({ entries: scores, id: selectedScoreId, update: setSelectedScoreId });
 
   return (
     <>
@@ -187,8 +187,8 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
         score={scores.find(s => s.id === selectedScoreId)!}
         isOpen={dialogIsOpen}
         onClose={() => setDialogIsOpen(false)}
-        onNext={toNextItem}
-        onPrevious={toPreviousItem}
+        onNext={toNextScore}
+        onPrevious={toPreviousScore}
         computeTraceLink={(traceId, spanId) => `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`}
       />
     </>
