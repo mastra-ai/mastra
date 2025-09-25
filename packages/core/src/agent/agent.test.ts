@@ -4957,21 +4957,24 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let caught = false;
         try {
           if (version === 'v1') {
-            await agent.generateLegacy('Please echo this and then use the error tool. Be verbose and take multiple steps.', {
-              threadId: 'thread-partial-rescue-generate',
-              resourceId: 'resource-partial-rescue-generate',
-              experimental_continueSteps: true,
-              savePerStep: true,
-              onStepFinish: (result: any) => {
-                if (result.toolCalls && result.toolCalls.length > 1) {
-                  throw new Error('Model attempted parallel tool calls; test requires sequential tool calls');
-                }
-                stepCount++;
-                if (stepCount === 2) {
-                  throw new Error('Simulated error in onStepFinish');
-                }
+            await agent.generateLegacy(
+              'Please echo this and then use the error tool. Be verbose and take multiple steps.',
+              {
+                threadId: 'thread-partial-rescue-generate',
+                resourceId: 'resource-partial-rescue-generate',
+                experimental_continueSteps: true,
+                savePerStep: true,
+                onStepFinish: (result: any) => {
+                  if (result.toolCalls && result.toolCalls.length > 1) {
+                    throw new Error('Model attempted parallel tool calls; test requires sequential tool calls');
+                  }
+                  stepCount++;
+                  if (stepCount === 2) {
+                    throw new Error('Simulated error in onStepFinish');
+                  }
+                },
               },
-            });
+            );
           } else {
             await agent.generateLegacy(
               'Please echo this and then use the error tool. Be verbose and take multiple steps.',
@@ -9828,8 +9831,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       // Call stream with empty options - should still use defaultStreamOptions
-      const result =
-        version === 'v1' ? await agent.stream('How are you?', {}) : await agent.stream('How are you?', {});
+      const result = version === 'v1' ? await agent.stream('How are you?', {}) : await agent.stream('How are you?', {});
 
       // Consume the stream to trigger onFinish
       if (version === 'v1') {

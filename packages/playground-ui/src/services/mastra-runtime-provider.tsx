@@ -489,7 +489,7 @@ export function MastraRuntimeProvider({
             handleGenerateResponse(response);
             setIsRunning(false);
             return;
-} else {
+          } else {
             await streamVNext({
               coreUserMessages: [
                 {
@@ -638,7 +638,7 @@ export function MastraRuntimeProvider({
             setMessages(currentConversation => [...currentConversation, latestMessage as ThreadMessageLike]);
             handleFinishReason(generateResponse.finishReason);
           }
-} else {
+        } else {
           setIsRunning(true);
           const response = await agent.streamLegacy({
             messages: [

@@ -3315,7 +3315,7 @@ export class Agent<
       ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
   > {
-const result = await this.stream(messages, options);
+    const result = await this.stream(messages, options);
     const fullOutput = await result.getFullOutput();
 
     const error = fullOutput.error;
@@ -3532,7 +3532,6 @@ const result = await this.stream(messages, options);
     return this.resumeStreamVNext({ approved: false }, streamOptions);
   }
 
-
   async generateLegacy(
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
@@ -3568,12 +3567,9 @@ const result = await this.stream(messages, options);
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedGenerateOptions, 'generate');
 
     if (llm.getModel().specificationVersion !== 'v1') {
-      this.logger.error(
-        'V2 models are not supported for generateLegacy. Please use generate instead.',
-        {
-          modelId: llm.getModel().modelId,
-        },
-      );
+      this.logger.error('V2 models are not supported for generateLegacy. Please use generate instead.', {
+        modelId: llm.getModel().modelId,
+      });
 
       throw new MastraError({
         id: 'AGENT_GENERATE_V2_MODEL_NOT_SUPPORTED',
@@ -3847,7 +3843,6 @@ const result = await this.stream(messages, options);
       ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
       : GenerateObjectResult<OUTPUT>;
   }
-
 
   async streamLegacy<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,

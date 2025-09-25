@@ -239,7 +239,7 @@ export async function createNetworkLoop({
                           }
                       `;
 
-completionResult = await routingAgent.generate([{ role: 'assistant', content: completionPrompt }], {
+        completionResult = await routingAgent.generate([{ role: 'assistant', content: completionPrompt }], {
           structuredOutput: {
             schema: completionSchema,
           },

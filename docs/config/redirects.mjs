@@ -813,7 +813,7 @@ export const redirectList = [
     destination: "/:locale/reference/agents/network",
     permanent: true,
   },
-// VNext to new standard methods redirects
+  // VNext to new standard methods redirects
   {
     source: "/:locale/reference/agents/generateVNext",
     destination: "/:locale/reference/agents/generate",

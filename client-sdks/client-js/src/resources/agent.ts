@@ -204,7 +204,6 @@ export class Agent extends BaseResource {
     return this.request(`/api/agents/${this.agentId}${runtimeContextQueryString(runtimeContext)}`);
   }
 
-
   /**
    * Generates a response from the agent
    * @param params - Generation parameters including prompt
