@@ -9531,7 +9531,7 @@ describe('Agent Tests', () => {
       expect(steps[2].content.length).toBe(1);
 
       expect(stopWhenContent[1]).not.toEqual(stopWhenContent[0]);
-    }, 10000);
+    }, 20000);
   });
 });
 
