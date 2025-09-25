@@ -56,6 +56,7 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
       id: scoreId,
       scorerId: score.scorerId,
       traceId: score.traceId || '',
+      spanId: score.spanId || '',
       runId: score.runId,
       scorer: typeof score.scorer === 'string' ? score.scorer : JSON.stringify(score.scorer),
       preprocessStepResult:
@@ -284,6 +285,59 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { entityId, entityType, page: pagination.page, perPage: pagination.perPage },
+        },
+        error,
+      );
+    }
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    this.logger.debug('Getting scores by span', { traceId, spanId, pagination });
+
+    try {
+      // Query scores by trace ID and span ID using the GSI
+      const query = this.service.entities.score.query.bySpan({ entity: 'score', traceId, spanId });
+
+      // Get all scores for this trace and span ID
+      const results = await query.go();
+      const allScores = results.data.map((data: any) => this.parseScoreData(data));
+
+      // Sort by createdAt DESC (newest first)
+      allScores.sort((a: ScoreRowData, b: ScoreRowData) => b.createdAt.getTime() - a.createdAt.getTime());
+
+      // Apply pagination in memory
+      const startIndex = pagination.page * pagination.perPage;
+      const endIndex = startIndex + pagination.perPage;
+      const paginatedScores = allScores.slice(startIndex, endIndex);
+
+      // Calculate pagination info
+      const total = allScores.length;
+      const hasMore = endIndex < total;
+
+      return {
+        scores: paginatedScores,
+        pagination: {
+          total,
+          page: pagination.page,
+          perPage: pagination.perPage,
+          hasMore,
+        },
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_DYNAMODB_STORE_GET_SCORES_BY_SPAN_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { traceId, spanId, page: pagination.page, perPage: pagination.perPage },
         },
         error,
       );
