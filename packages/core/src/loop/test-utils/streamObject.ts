@@ -1061,7 +1061,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             output: z.object({ content: z.string() }),
             options: {
               onFinish: async event => {
-                // console.log('onFinish called!!', event);
                 result = event;
               },
             },
@@ -1230,7 +1229,6 @@ Error message: Validation failed]`);
             output: z.object({ content: z.string() }),
             options: {
               onFinish: async event => {
-                // console.log('onFinish called!!', event);
                 result = event;
               },
             },
