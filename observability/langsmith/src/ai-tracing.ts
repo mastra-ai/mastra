@@ -315,7 +315,7 @@ export class LangSmithExporter implements AITracingExporter {
       if (llmAttr.model !== undefined) {
         // Note - this should map to a model name recognized by LangSmith
         // eg “gpt-4o-mini”, “claude-3-opus-20240307”, etc.
-        payload.metadata.ls_model = llmAttr.model;
+        payload.metadata.ls_model_name = llmAttr.model;
       }
 
       // Provider goes to metadata (if provided by attributes)

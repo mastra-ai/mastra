@@ -418,7 +418,7 @@ describe('LangSmithExporter', () => {
         outputs: { content: 'Hi there!' },
         metadata: {
           mastra_span_type: 'llm_generation',
-          ls_model: 'gpt-4',
+          ls_model_name: 'gpt-4',
           ls_provider: 'openai',
           provider: 'openai',
           usage_metadata: {
@@ -458,7 +458,7 @@ describe('LangSmithExporter', () => {
         client: mockClient,
         metadata: {
           mastra_span_type: 'llm_generation',
-          ls_model: 'gpt-3.5-turbo',
+          ls_model_name: 'gpt-3.5-turbo',
           usage_metadata: {},
         },
       });
@@ -535,7 +535,7 @@ describe('LangSmithExporter', () => {
       expect(mockRunTree.metadata).toEqual(
         expect.objectContaining({
           mastra_span_type: 'llm_generation',
-          ls_model: 'gpt-4',
+          ls_model_name: 'gpt-4',
           usage_metadata: {
             total_tokens: 150,
           },
