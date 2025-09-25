@@ -1,15 +1,9 @@
 import type { LLMGenerationAttributes } from '@mastra/core/ai-tracing';
 /**
- * BraintrustUsageMetrics
+ * LangSmithUsageMetrics
  *
- * Canonical metric keys expected by Braintrust for LLM usage accounting.
- * These map various provider/SDK-specific usage fields to a common schema.
- * - prompt_tokens: input-side tokens (aka inputTokens/promptTokens)
- * - completion_tokens: output-side tokens (aka outputTokens/completionTokens)
- * - tokens: total tokens (provided or derived)
- * - completion_reasoning_tokens: reasoning tokens, when available
- * - prompt_cached_tokens: tokens served from cache (provider-specific)
- * - prompt_cache_creation_tokens: tokens used to create cache (provider-specific)
+ * Canonical metric keys expected by LangSmith for LLM usage accounting.
+ * See: https://docs.langchain.com/langsmith/log-llm-trace#provide-token-and-cost-information
  */
 export interface LangSmithUsageMetrics {
   input_tokens?: number;
@@ -24,7 +18,6 @@ export interface LangSmithUsageMetrics {
   [key: string]: number | { [key: string]: number } | undefined;
 }
 
-// See: https://docs.langchain.com/langsmith/log-llm-trace#provide-token-and-cost-information
 export function normalizeUsageMetrics(llmAttr: LLMGenerationAttributes): LangSmithUsageMetrics {
   const metrics: LangSmithUsageMetrics = {};
 
