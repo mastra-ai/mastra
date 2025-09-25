@@ -10,14 +10,13 @@ import { getValidTraceId } from '../../ai-tracing';
 import type { TracingContext } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import type { OutputProcessor } from '../../processors';
-import type { ProcessorRunnerMode } from '../../processors/runner';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
 import { consumeStream, DelayedPromise } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import { reasoningDetailsFromMessages, transformSteps } from '../aisdk/v5/output-helpers';
-import { ChunkFrom, type BufferedByStep, type ChunkType, type StepBufferItem } from '../types';
+import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
@@ -53,7 +52,7 @@ type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   includeRawChunks?: boolean;
   output?: OUTPUT;
   outputProcessors?: OutputProcessor[];
-  outputProcessorRunnerMode?: ProcessorRunnerMode;
+  isLLMExecutionStep?: boolean;
   returnScorerData?: boolean;
   tracingContext?: TracingContext;
 };
@@ -167,7 +166,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * The processor runner for this stream.
    */
   public processorRunner?: ProcessorRunner;
-  private outputProcessorRunnerMode: ProcessorRunnerMode = false;
   /**
    * The message list for this stream.
    */
@@ -214,10 +212,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       });
     }
 
-    if (options.outputProcessorRunnerMode) {
-      this.outputProcessorRunnerMode = options.outputProcessorRunnerMode;
-    }
-
     this.messageList = messageList;
 
     const self = this;
@@ -225,7 +219,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     // Apply output processors if they exist
     let processedStream = stream;
     const processorRunner = this.processorRunner;
-    if (processorRunner && options.outputProcessorRunnerMode === `inner`) {
+    if (processorRunner && options.isLLMExecutionStep) {
       const processorStates = new Map<string, ProcessorState>();
 
       processedStream = stream.pipeThrough(
@@ -268,7 +262,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.#baseStream = processedStream
       .pipeThrough(
         createObjectStreamTransformer({
-          outputProcessorRunnerMode: self.#options.outputProcessorRunnerMode,
+          isLLMExecutionStep: self.#options.isLLMExecutionStep,
           schema: self.#options.output,
         }),
       )
@@ -480,27 +474,12 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 chunk.payload.output.usage = self.#usageCount as any;
 
                 try {
-                  if (self.processorRunner && self.outputProcessorRunnerMode === `outer`) {
+                  if (self.processorRunner && !self.#options.isLLMExecutionStep) {
                     self.messageList = await self.processorRunner.runOutputProcessors(self.messageList);
                     const outputText = self.messageList.get.response.aiV4
                       .core()
                       .map(m => MessageList.coreContentToString(m.content))
                       .join('\n');
-
-                    const messages = self.messageList.get.response.v2();
-                    const messagesWithStructuredData = messages.filter(
-                      msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
-                    );
-                    // TODO: do we still need this messagesWithStructuredData stuff?
-                    if (
-                      messagesWithStructuredData[0] &&
-                      messagesWithStructuredData[0].content.metadata?.structuredOutput
-                    ) {
-                      const structuredOutput = messagesWithStructuredData[0].content.metadata.structuredOutput;
-                      self.#delayedPromises.object.resolve(structuredOutput as InferSchemaOutput<OUTPUT>);
-                    } else if (!self.#options.output && self.#delayedPromises.object.status.type !== 'resolved') {
-                      self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
-                    }
 
                     self.#delayedPromises.text.resolve(outputText);
                     self.#delayedPromises.finishReason.resolve(self.#finishReason);
@@ -518,24 +497,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                     const textContent = self.#bufferedText.join('');
                     self.#delayedPromises.text.resolve(textContent);
                     self.#delayedPromises.finishReason.resolve(self.#finishReason);
-
-                    // Check for structuredOutput in metadata (from output processors in stream mode)
-                    const messages = self.messageList.get.response.v2();
-                    const messagesWithStructuredData = messages.filter(
-                      msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
-                    );
-
-                    if (
-                      messagesWithStructuredData[0] &&
-                      // this is to make typescript happy
-                      messagesWithStructuredData[0].content.metadata?.structuredOutput
-                    ) {
-                      const structuredOutput = messagesWithStructuredData[0].content.metadata.structuredOutput;
-                      self.#delayedPromises.object.resolve(structuredOutput as InferSchemaOutput<OUTPUT>);
-                    } else if (!self.#options.output && self.#delayedPromises.object.status.type !== 'resolved') {
-                      // Resolve object promise to avoid hanging
-                      self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
-                    }
                   }
                 } catch (error) {
                   if (error instanceof TripWire) {

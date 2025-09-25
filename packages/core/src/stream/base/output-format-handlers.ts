@@ -4,7 +4,6 @@ import type { JSONSchema7, Schema } from 'ai-v5';
 import type z3 from 'zod/v3';
 import type z4 from 'zod/v4';
 import { MastraError } from '../../error';
-import type { ProcessorRunnerMode } from '../../processors/runner';
 import { safeValidateTypes } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
 import type { ChunkType } from '../types';
@@ -491,10 +490,10 @@ function createOutputHandler<OUTPUT extends OutputSchema = undefined>({
  * - Always passes through original chunks for downstream processing
  */
 export function createObjectStreamTransformer<OUTPUT extends OutputSchema = undefined>({
-  outputProcessorRunnerMode,
+  isLLMExecutionStep,
   schema,
 }: {
-  outputProcessorRunnerMode?: ProcessorRunnerMode;
+  isLLMExecutionStep?: boolean;
   schema?: OUTPUT;
 }) {
   const transformedSchema = getTransformedSchema(schema);
@@ -505,11 +504,9 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
   let finishReason: string | undefined;
   let currentRunId: string | undefined;
 
-  const runInProcessorRunnerMode: ProcessorRunnerMode = 'inner';
-
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
-      if (outputProcessorRunnerMode !== runInProcessorRunnerMode || !schema) {
+      if (!isLLMExecutionStep || !schema) {
         // Bypassing processing in inner stream, only process object chunks in outer stream
         // OR if there is no output schema provided
         controller.enqueue(chunk);
@@ -555,7 +552,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
     async flush(controller) {
       // Bypass final validation if there is no output schema provided
       // or if we are not in result mode (outer stream)
-      if (outputProcessorRunnerMode !== runInProcessorRunnerMode || !schema) {
+      if (!isLLMExecutionStep || !schema) {
         return;
       }
 

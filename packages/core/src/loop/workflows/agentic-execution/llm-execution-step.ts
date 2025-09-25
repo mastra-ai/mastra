@@ -564,7 +564,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
             includeRawChunks,
             output,
             outputProcessors,
-            outputProcessorRunnerMode: 'inner',
+            isLLMExecutionStep: true,
             tracingContext,
           },
         });
