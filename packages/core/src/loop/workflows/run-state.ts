@@ -4,6 +4,11 @@ import type { StreamInternal } from '../types';
 type State = {
   stepResult: Record<string, any> | undefined;
   responseMetadata: Record<string, any> | undefined;
+  modelMetadata: {
+    modelId: string;
+    modelVersion: string;
+    modelProvider: string;
+  };
   hasToolCallStreaming: boolean;
   hasErrored: boolean;
   reasoningDeltas: string[];
@@ -21,9 +26,12 @@ export class AgenticRunState {
         id: _internal?.generateId?.(),
         timestamp: _internal?.currentDate?.(),
         modelId: model.modelId,
+        headers: undefined,
+      },
+      modelMetadata: {
+        modelId: model.modelId,
         modelVersion: model.specificationVersion,
         modelProvider: model.provider,
-        headers: undefined,
       },
       isReasoning: false,
       isStreaming: false,
