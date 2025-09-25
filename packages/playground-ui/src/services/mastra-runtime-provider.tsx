@@ -368,7 +368,6 @@ export function MastraRuntimeProvider({
             runtimeContext: runtimeContextInstance,
             threadId,
             modelSettings: modelSettingsArgs,
-            signal: controller.signal,
             onNetworkChunk: ({ chunk, conversation }) => {
               if (chunk.type.startsWith('agent-execution-event-')) {
                 const agentChunk = chunk.payload;
@@ -497,7 +496,6 @@ export function MastraRuntimeProvider({
 
                 return next;
               },
-              signal: controller.signal,
             });
 
             return;
