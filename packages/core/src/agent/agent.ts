@@ -3072,6 +3072,7 @@ export class Agent<
       executeOnFinish: this.#executeOnFinish.bind(this),
       outputProcessors: this.#outputProcessors,
       llm,
+      getTelemetry: this.#mastra?.getTelemetry?.bind(this.#mastra),
     };
 
     // Create the workflow with all necessary context
@@ -3315,14 +3316,7 @@ export class Agent<
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
   > {
     const result = await this.streamVNext(messages, options);
-
-    if (result.tripwire) {
-      return result as unknown as FORMAT extends 'aisdk'
-        ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
-        : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
-    }
-
-    let fullOutput = await result.getFullOutput();
+    const fullOutput = await result.getFullOutput();
 
     const error = fullOutput.error;
 

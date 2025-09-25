@@ -111,4 +111,4 @@ export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   requireToolApproval?: boolean;
 } & LoopRun<Tools, OUTPUT>;
 
-export const RESOURCE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool']);
+export const PRIMITIVE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool']);

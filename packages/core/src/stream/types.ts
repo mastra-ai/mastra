@@ -443,7 +443,7 @@ export type NetworkChunkType =
   | (BaseChunkType & { type: 'network-execution-event-step-finish'; payload: NetworkStepFinishPayload })
   | (BaseChunkType & { type: 'network-execution-event-finish'; payload: NetworkFinishPayload })
   | (BaseChunkType & { type: `agent-execution-event-${string}`; payload: unknown })
-  | (BaseChunkType & { type: `workflow-execution-event-${string}`; payload: unknown });
+  | (BaseChunkType & { type: `workflow-execution-event-${string}`; payload: object });
 
 // Strongly typed chunk type (currently only OUTPUT is strongly typed, tools use dynamic types)
 export type TypedChunkType<OUTPUT extends OutputSchema = undefined> =
