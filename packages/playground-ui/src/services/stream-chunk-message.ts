@@ -7,14 +7,9 @@ import { ChunkType } from '@mastra/core';
 export interface HandleStreamChunkOptions {
   conversation: ThreadMessageLike[];
   chunk: ChunkType;
-  refreshWorkingMemory: () => Promise<void>;
 }
 
-export const handleStreamChunk = ({
-  chunk,
-  conversation,
-  refreshWorkingMemory,
-}: HandleStreamChunkOptions): ThreadMessageLike[] => {
+export const handleStreamChunk = ({ chunk, conversation }: HandleStreamChunkOptions): ThreadMessageLike[] => {
   switch (chunk.type) {
     default:
       return [...conversation];
@@ -190,15 +185,6 @@ export const handleStreamChunk = ({
         // Replace the last message with the updated one
         return [...conversation.slice(0, -1), updatedMessage];
       }
-
-      // try {
-      //   const toolName = _sideEffects.toolCallIdToName.current[chunk.payload.toolCallId];
-      //   if (toolName === 'updateWorkingMemory' && chunk.payload.result?.success) {
-      //     // refreshWorkingMemory?.();
-      //   }
-      // } finally {
-      //   // Clean up
-      // }
 
       return [...conversation];
     }

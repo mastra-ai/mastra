@@ -398,14 +398,18 @@ export function MastraRuntimeProvider({
                     },
                   },
                   conversation,
-                  refreshWorkingMemory,
                 });
               } else if (chunk.type === 'tool-execution-end') {
-                return handleStreamChunk({
+                const next = handleStreamChunk({
                   chunk: { ...chunk, type: 'tool-result' },
                   conversation,
-                  refreshWorkingMemory,
                 });
+
+                if (chunk.payload?.toolName === 'updateWorkingMemory' && chunk.payload.result?.success) {
+                  refreshWorkingMemory?.();
+                }
+
+                return next;
               } else if (chunk.type.startsWith('workflow-execution-event-')) {
                 const workflowChunk = chunk.payload;
                 if (!currentEntityId) return conversation;
@@ -435,7 +439,7 @@ export function MastraRuntimeProvider({
                   { role: 'assistant', content: [{ type: 'text', text: chunk?.payload?.result || '' }] },
                 ];
               } else {
-                return handleStreamChunk({ chunk, conversation, refreshWorkingMemory });
+                return handleStreamChunk({ chunk, conversation });
               }
             },
           });
@@ -480,7 +484,19 @@ export function MastraRuntimeProvider({
               runtimeContext: runtimeContextInstance,
               threadId,
               modelSettings: modelSettingsArgs,
-              onChunk: (chunk, conversation) => handleStreamChunk({ chunk, conversation, refreshWorkingMemory }),
+              onChunk: (chunk, conversation) => {
+                const next = handleStreamChunk({ chunk, conversation });
+
+                if (
+                  chunk.type === 'tool-result' &&
+                  chunk.payload?.toolName === 'updateWorkingMemory' &&
+                  chunk.payload.result?.success
+                ) {
+                  refreshWorkingMemory?.();
+                }
+
+                return next;
+              },
               signal: controller.signal,
             });
 
