@@ -272,16 +272,15 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
 
     // let stepCounter = 1;
     const responseFormat = getResponseFormat(this.#options.output);
-    const fullStream = this.#modelOutput.fullStream;
 
-    const transformedStream = fullStream.pipeThrough(
+    return this.#modelOutput.fullStream.pipeThrough(
       new TransformStream<
         ChunkType<OUTPUT> | NonNullable<OutputChunkType>,
         TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>
       >({
         transform(chunk, controller) {
           // TODO: check this works with new changes to structured output stream merging
-          if (responseFormat?.type === 'json' && chunk.type === 'object') {
+          if (responseFormat?.type === 'json' && (chunk.type === 'object' || chunk.type === 'object-result')) {
             /**
              * Pass through 'object' chunks that were created by
              * createObjectStreamTransformer in base/output.ts.
@@ -322,13 +321,16 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
           }
         },
       }),
-    );
-
-    return transformedStream as any as AIV5FullStreamType<OUTPUT>;
+    ) as any as AIV5FullStreamType<OUTPUT>;
   }
 
   async getFullOutput() {
-    await this.consumeStream();
+    await this.consumeStream({
+      onError: (error: any) => {
+        console.error(error);
+        throw error;
+      },
+    });
 
     const object = await this.object;
 
