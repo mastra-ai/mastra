@@ -1,33 +1,25 @@
 import { EventEmitter } from 'events';
 import { ReadableStream, TransformStream } from 'stream/web';
-import type { SharedV2ProviderMetadata, LanguageModelV2CallWarning } from '@ai-sdk/provider-v5';
-import type { Span } from '@opentelemetry/api';
-import type { FinishReason, TelemetrySettings } from 'ai-v5';
 import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
-import type { AIV5Type } from '../../agent/message-list/types';
 import { getValidTraceId } from '../../ai-tracing';
-import type { TracingContext } from '../../ai-tracing';
 import { MastraBase } from '../../base';
-import type { OutputProcessor } from '../../processors';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
-import { consumeStream, DelayedPromise } from '../aisdk/v5/compat';
+import type { WorkflowRunStatus } from '../../workflows';
+import { DelayedPromise, consumeStream } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
-import { reasoningDetailsFromMessages, transformSteps } from '../aisdk/v5/output-helpers';
-import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
+import type {
+  ChunkType,
+  LanguageModelUsage,
+  LLMStepResult,
+  MastraModelOutputOptions,
+  MastraOnFinishCallbackArgs,
+} from '../types';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
-
-export interface LanguageModelUsage {
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
-  reasoningTokens?: number;
-  cachedInputTokens?: number;
-}
 
 export class JsonToSseTransformStream extends TransformStream<unknown, string> {
   constructor() {
@@ -42,20 +34,6 @@ export class JsonToSseTransformStream extends TransformStream<unknown, string> {
   }
 }
 
-type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
-  runId: string;
-  rootSpan?: Span;
-  telemetry_settings?: TelemetrySettings;
-  toolCallStreaming?: boolean;
-  onFinish?: (event: Record<string, any>) => Promise<void> | void;
-  onStepFinish?: (event: Record<string, any>) => Promise<void> | void;
-  includeRawChunks?: boolean;
-  output?: OUTPUT;
-  outputProcessors?: OutputProcessor[];
-  isLLMExecutionStep?: boolean;
-  returnScorerData?: boolean;
-  tracingContext?: TracingContext;
-};
 /**
  * Helper function to create a destructurable version of MastraModelOutput.
  * This wraps the output to ensure properties maintain their context when destructured.
@@ -80,72 +58,77 @@ export function createDestructurableOutput<OUTPUT extends OutputSchema = undefin
 }
 
 export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
+  #status: WorkflowRunStatus = 'running';
   #aisdkv5: AISDKV5OutputStream<OUTPUT>;
   #error: Error | string | { message: string; stack: string } | undefined;
   #baseStream: ReadableStream<ChunkType<OUTPUT>>;
   #bufferedChunks: ChunkType<OUTPUT>[] = [];
   #streamFinished = false;
   #emitter = new EventEmitter();
-  #bufferedSteps: StepBufferItem[] = [];
-  #bufferedReasoningDetails: Record<
-    string,
-    {
-      type: string;
-      text: string;
-      providerMetadata: SharedV2ProviderMetadata;
-    }
-  > = {};
-  #bufferedByStep: BufferedByStep = {
+  #bufferedSteps: LLMStepResult[] = [];
+  #bufferedReasoningDetails: Record<string, LLMStepResult['reasoning'][number]> = {};
+  #bufferedByStep: LLMStepResult = {
     text: '',
-    reasoning: '',
+    reasoning: [],
     sources: [],
     files: [],
     toolCalls: [],
     toolResults: [],
-    msgCount: 0,
+    dynamicToolCalls: [],
+    dynamicToolResults: [],
+    staticToolCalls: [],
+    staticToolResults: [],
+    content: [],
+    usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+    warnings: [],
+    request: {},
+    response: {
+      id: '',
+      timestamp: new Date(),
+      modelId: '',
+      messages: [],
+      uiMessages: [],
+    },
+    reasoningText: '',
+    providerMetadata: undefined,
+    finishReason: undefined,
   };
-  #bufferedText: string[] = [];
+  #bufferedText: LLMStepResult['text'][] = [];
   #bufferedObject: InferSchemaOutput<OUTPUT> | undefined;
-  #bufferedTextChunks: Record<string, string[]> = {};
-  #bufferedSources: any[] = [];
-  #bufferedReasoning: string[] = [];
-  #bufferedFiles: any[] = [];
-  #toolCallArgsDeltas: Record<string, string[]> = {};
+  #bufferedTextChunks: Record<string, LLMStepResult['text'][]> = {};
+  #bufferedSources: LLMStepResult['sources'] = [];
+  #bufferedReasoning: LLMStepResult['reasoning'] = [];
+  #bufferedFiles: LLMStepResult['files'] = [];
+  #toolCallArgsDeltas: Record<string, LLMStepResult['text'][]> = {};
   #toolCallDeltaIdNameMap: Record<string, string> = {};
-  #toolCalls: any[] = []; // TODO: add type
-  #toolResults: any[] = []; // TODO: add type
-  #warnings: LanguageModelV2CallWarning[] = [];
-  #finishReason: FinishReason | string | undefined;
-  #request: Record<string, any> | undefined;
-  #usageCount: LanguageModelUsage = {};
+  #toolCalls: LLMStepResult['toolCalls'] = [];
+  #toolResults: LLMStepResult['toolResults'] = [];
+  #warnings: LLMStepResult['warnings'] = [];
+  #finishReason: LLMStepResult['finishReason'] = undefined;
+  #request: LLMStepResult['request'] = {};
+  #usageCount: LLMStepResult['usage'] = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
   #tripwire = false;
   #tripwireReason = '';
 
   #delayedPromises = {
+    suspendPayload: new DelayedPromise<any>(),
     object: new DelayedPromise<InferSchemaOutput<OUTPUT>>(),
-    finishReason: new DelayedPromise<FinishReason | string | undefined>(),
-    usage: new DelayedPromise<LanguageModelUsage>(),
-    warnings: new DelayedPromise<LanguageModelV2CallWarning[]>(),
-    providerMetadata: new DelayedPromise<Record<string, any> | undefined>(),
-    response: new DelayedPromise<Record<string, any>>(), // TODO: add type
-    request: new DelayedPromise<Record<string, any>>(), // TODO: add type
-    text: new DelayedPromise<string>(),
-    reasoning: new DelayedPromise<string>(),
+    finishReason: new DelayedPromise<LLMStepResult['finishReason']>(),
+    usage: new DelayedPromise<LLMStepResult['usage']>(),
+    warnings: new DelayedPromise<LLMStepResult['warnings']>(),
+    providerMetadata: new DelayedPromise<LLMStepResult['providerMetadata']>(),
+    response: new DelayedPromise<LLMStepResult['response']>(),
+    request: new DelayedPromise<LLMStepResult['request']>(),
+    text: new DelayedPromise<LLMStepResult['text']>(),
+    reasoning: new DelayedPromise<LLMStepResult['reasoning']>(),
     reasoningText: new DelayedPromise<string | undefined>(),
-    sources: new DelayedPromise<any[]>(), // TODO: add type
-    files: new DelayedPromise<any[]>(), // TODO: add type
-    toolCalls: new DelayedPromise<any[]>(), // TODO: add type
-    toolResults: new DelayedPromise<any[]>(), // TODO: add type
-    steps: new DelayedPromise<StepBufferItem[]>(),
-    totalUsage: new DelayedPromise<LanguageModelUsage>(),
-    content: new DelayedPromise<AIV5Type.StepResult<any>['content']>(),
-    reasoningDetails: new DelayedPromise<
-      {
-        type: string;
-        text: string;
-        providerMetadata: SharedV2ProviderMetadata;
-      }[]
-    >(),
+    sources: new DelayedPromise<LLMStepResult['sources']>(),
+    files: new DelayedPromise<LLMStepResult['files']>(),
+    toolCalls: new DelayedPromise<LLMStepResult['toolCalls']>(),
+    toolResults: new DelayedPromise<LLMStepResult['toolResults']>(),
+    steps: new DelayedPromise<LLMStepResult[]>(),
+    totalUsage: new DelayedPromise<LLMStepResult['usage']>(),
+    content: new DelayedPromise<LLMStepResult['content']>(),
   };
 
   #consumptionStarted = false;
@@ -202,6 +185,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.#model = _model;
 
     this.messageId = messageId;
+
     // Create processor runner if outputProcessors are provided
     if (options.outputProcessors?.length) {
       this.processorRunner = new ProcessorRunner({
@@ -236,11 +220,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               processorStates.set(STRUCTURED_OUTPUT_PROCESSOR_NAME, structuredOutputProcessorState);
             }
 
-            const {
-              part: processed,
-              blocked,
-              reason,
-            } = await processorRunner.processPart(chunk as any, processorStates);
+            const { part: processed, blocked, reason } = await processorRunner.processPart(chunk, processorStates);
             if (blocked) {
               // Emit a tripwire chunk so downstream knows about the abort
               controller.enqueue({
@@ -270,6 +250,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
         new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
           transform: async (chunk, controller) => {
             switch (chunk.type) {
+              case 'tool-call-suspended':
+              case 'tool-call-approval':
+                self.#status = 'suspended';
+                self.#delayedPromises.suspendPayload.resolve(chunk.payload);
+                break;
               case 'raw':
                 if (!self.#options.includeRawChunks) {
                   return;
@@ -313,37 +298,57 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               case 'reasoning-start':
                 self.#bufferedReasoningDetails[chunk.payload.id] = {
                   type: 'reasoning',
-                  text: '',
-                  providerMetadata: chunk.payload.providerMetadata || {},
+                  runId: chunk.runId,
+                  from: chunk.from,
+                  payload: {
+                    id: chunk.payload.id,
+                    providerMetadata: chunk.payload.providerMetadata,
+                    text: '',
+                  },
                 };
                 break;
               case 'reasoning-delta': {
-                self.#bufferedReasoning.push(chunk.payload.text);
-                self.#bufferedByStep.reasoning += chunk.payload.text;
+                self.#bufferedReasoning.push({
+                  type: 'reasoning',
+                  runId: chunk.runId,
+                  from: chunk.from,
+                  payload: chunk.payload,
+                });
+                self.#bufferedByStep.reasoning.push({
+                  type: 'reasoning',
+                  runId: chunk.runId,
+                  from: chunk.from,
+                  payload: chunk.payload,
+                });
 
                 const bufferedReasoning = self.#bufferedReasoningDetails[chunk.payload.id];
                 if (bufferedReasoning) {
-                  bufferedReasoning.text += chunk.payload.text;
+                  bufferedReasoning.payload.text += chunk.payload.text;
                   if (chunk.payload.providerMetadata) {
-                    bufferedReasoning.providerMetadata = chunk.payload.providerMetadata;
+                    bufferedReasoning.payload.providerMetadata = chunk.payload.providerMetadata;
                   }
                 }
-
                 break;
               }
+
               case 'reasoning-end': {
                 const bufferedReasoning = self.#bufferedReasoningDetails[chunk.payload.id];
                 if (chunk.payload.providerMetadata && bufferedReasoning) {
-                  bufferedReasoning.providerMetadata = chunk.payload.providerMetadata;
+                  bufferedReasoning.payload.providerMetadata = chunk.payload.providerMetadata;
                 }
                 break;
               }
               case 'tool-call':
                 self.#toolCalls.push(chunk);
                 self.#bufferedByStep.toolCalls.push(chunk);
-                if (chunk.payload?.output?.from === 'AGENT' && chunk.payload?.output?.type === 'finish') {
-                  const finishPayload = chunk.payload?.output.payload;
-                  self.updateUsageCount(finishPayload.usage);
+                const toolCallPayload = chunk.payload;
+                // @ts-ignore TODO: What does this mean??? Why is there a nested output, what is the type supposed to be
+                if (toolCallPayload?.output?.from === 'AGENT' && toolCallPayload?.output?.type === 'finish') {
+                  // @ts-ignore TODO: What does this mean??? Why is there a nested output, what is the type supposed to be
+                  const finishPayload = toolCallPayload.output.payload;
+                  if (finishPayload?.usage) {
+                    self.updateUsageCount(finishPayload.usage);
+                  }
                 }
                 break;
               case 'tool-result':
@@ -351,43 +356,57 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 self.#bufferedByStep.toolResults.push(chunk);
                 break;
               case 'step-finish': {
-                self.updateUsageCount(chunk.payload.output.usage as Record<string, number>);
+                self.updateUsageCount(chunk.payload.output.usage);
                 // chunk.payload.totalUsage = self.totalUsage;
                 self.#warnings = chunk.payload.stepResult.warnings || [];
 
-                if (chunk.payload.metadata.request) {
-                  self.#request = chunk.payload.metadata.request;
-                }
-
-                const reasoningDetails = reasoningDetailsFromMessages(
-                  chunk.payload.messages.all.slice(self.#bufferedByStep.msgCount),
-                );
-
                 const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
 
-                const stepResult: StepBufferItem = {
+                const stepResult: LLMStepResult = {
                   stepType: self.#bufferedSteps.length === 0 ? 'initial' : 'tool-result',
-                  text: self.#bufferedByStep.text,
-                  reasoning: self.#bufferedByStep.reasoning || undefined,
                   sources: self.#bufferedByStep.sources,
                   files: self.#bufferedByStep.files,
                   toolCalls: self.#bufferedByStep.toolCalls,
                   toolResults: self.#bufferedByStep.toolResults,
-                  warnings: self.#warnings,
-                  reasoningDetails: reasoningDetails,
-                  providerMetadata: providerMetadata,
-                  experimental_providerMetadata: providerMetadata,
-                  isContinued: chunk.payload.stepResult.isContinued,
-                  logprobs: chunk.payload.stepResult.logprobs,
-                  finishReason: chunk.payload.stepResult.reason,
-                  response: { ...otherMetadata, messages: chunk.payload.messages.nonUser } as any,
-                  request: request,
-                  usage: chunk.payload.output.usage,
+
                   content: messageList.get.response.aiV5.modelContent(-1),
-                  object:
-                    self.#delayedPromises.object.status.type === 'resolved'
-                      ? self.#delayedPromises.object.status.value
-                      : undefined,
+                  text: self.#bufferedByStep.text,
+                  reasoningText: self.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join(''),
+                  reasoning: self.#bufferedByStep.reasoning,
+                  get staticToolCalls() {
+                    return self.#bufferedByStep.toolCalls.filter(
+                      part => part.type === 'tool-call' && part.payload?.dynamic === false,
+                    );
+                  },
+                  get dynamicToolCalls() {
+                    return self.#bufferedByStep.toolCalls.filter(
+                      part => part.type === 'tool-call' && part.payload?.dynamic === true,
+                    );
+                  },
+                  get staticToolResults() {
+                    return self.#bufferedByStep.toolResults.filter(
+                      part => part.type === 'tool-result' && part.payload?.dynamic === false,
+                    );
+                  },
+                  get dynamicToolResults() {
+                    return self.#bufferedByStep.toolResults.filter(
+                      part => part.type === 'tool-result' && part.payload?.dynamic === true,
+                    );
+                  },
+                  finishReason: chunk.payload.stepResult.reason,
+                  usage: chunk.payload.output.usage,
+                  warnings: self.#warnings,
+                  request: request || {},
+                  response: {
+                    id: chunk.payload.id || '',
+                    timestamp: (chunk.payload.metadata?.timestamp as Date) || new Date(),
+                    modelId:
+                      (chunk.payload.metadata?.modelId as string) || (chunk.payload.metadata?.model as string) || '',
+                    ...otherMetadata,
+                    messages: chunk.payload.messages?.nonUser || [],
+                    uiMessages: messageList.get.response.aiV5.ui(),
+                  },
+                  providerMetadata: providerMetadata,
                 };
 
                 await options?.onStepFinish?.({
@@ -399,12 +418,29 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
                 self.#bufferedByStep = {
                   text: '',
-                  reasoning: '',
+                  reasoning: [],
                   sources: [],
                   files: [],
                   toolCalls: [],
                   toolResults: [],
-                  msgCount: chunk.payload.messages.all.length,
+                  dynamicToolCalls: [],
+                  dynamicToolResults: [],
+                  staticToolCalls: [],
+                  staticToolResults: [],
+                  content: [],
+                  usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+                  warnings: [],
+                  request: {},
+                  response: {
+                    id: '',
+                    timestamp: new Date(),
+                    modelId: '',
+                    messages: [],
+                    uiMessages: [],
+                  },
+                  reasoningText: '',
+                  providerMetadata: undefined,
+                  finishReason: undefined,
                 };
 
                 break;
@@ -414,7 +450,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 self.#tripwire = true;
                 self.#tripwireReason = chunk.payload?.tripwireReason || 'Content blocked';
                 self.#finishReason = 'other';
-
                 // Mark stream as finished for EventEmitter
                 self.#streamFinished = true;
 
@@ -425,9 +460,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 self.#delayedPromises.usage.resolve(self.#usageCount);
                 self.#delayedPromises.warnings.resolve(self.#warnings);
                 self.#delayedPromises.providerMetadata.resolve(undefined);
-                self.#delayedPromises.response.resolve({});
+                self.#delayedPromises.response.resolve({} as LLMStepResult['response']);
                 self.#delayedPromises.request.resolve({});
-                self.#delayedPromises.reasoning.resolve('');
+                self.#delayedPromises.reasoning.resolve([]);
                 self.#delayedPromises.reasoningText.resolve(undefined);
                 self.#delayedPromises.sources.resolve([]);
                 self.#delayedPromises.files.resolve([]);
@@ -436,7 +471,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 self.#delayedPromises.steps.resolve(self.#bufferedSteps);
                 self.#delayedPromises.totalUsage.resolve(self.#usageCount);
                 self.#delayedPromises.content.resolve([]);
-                self.#delayedPromises.reasoningDetails.resolve([]);
 
                 // Emit the tripwire chunk for listeners
                 self.#emitChunk(chunk);
@@ -444,16 +478,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 controller.enqueue(chunk);
                 // Emit finish event for EventEmitter streams (since flush won't be called on terminate)
                 self.#emitter.emit('finish');
-
                 // Terminate the stream
                 controller.terminate();
                 return;
               case 'finish':
-                // Mark consumption as started (if we're processing chunks, consumption has started)
-                self.#consumptionStarted = true;
-                // Mark stream as finished for EventEmitter
-                self.#streamFinished = true;
-
+                self.#status = 'success';
                 if (chunk.payload.stepResult.reason) {
                   self.#finishReason = chunk.payload.stepResult.reason;
                 }
@@ -471,7 +500,17 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
                 this.populateUsageCount(chunk.payload.output.usage as Record<string, number>);
 
-                chunk.payload.output.usage = self.#usageCount as any;
+                chunk.payload.output.usage = {
+                  inputTokens: self.#usageCount.inputTokens ?? 0,
+                  outputTokens: self.#usageCount.outputTokens ?? 0,
+                  totalTokens: self.#usageCount.totalTokens ?? 0,
+                  ...(self.#usageCount.reasoningTokens !== undefined && {
+                    reasoningTokens: self.#usageCount.reasoningTokens,
+                  }),
+                  ...(self.#usageCount.cachedInputTokens !== undefined && {
+                    cachedInputTokens: self.#usageCount.cachedInputTokens,
+                  }),
+                };
 
                 try {
                   if (self.processorRunner && !self.#options.isLLMExecutionStep) {
@@ -518,12 +557,15 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 self.#delayedPromises.usage.resolve(self.#usageCount);
                 self.#delayedPromises.warnings.resolve(self.#warnings);
                 self.#delayedPromises.providerMetadata.resolve(chunk.payload.metadata?.providerMetadata);
-                self.#delayedPromises.response.resolve(response);
+                self.#delayedPromises.response.resolve(response as LLMStepResult['response']);
                 self.#delayedPromises.request.resolve(self.#request || {});
                 self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
-                self.#delayedPromises.reasoning.resolve(self.#bufferedReasoning.join(''));
-                const reasoningText = self.#bufferedReasoning.length > 0 ? self.#bufferedReasoning.join('') : undefined;
+                const reasoningText =
+                  self.#bufferedReasoning.length > 0
+                    ? self.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join('')
+                    : undefined;
                 self.#delayedPromises.reasoningText.resolve(reasoningText);
+                self.#delayedPromises.reasoning.resolve(Object.values(self.#bufferedReasoningDetails || {}));
                 self.#delayedPromises.sources.resolve(self.#bufferedSources);
                 self.#delayedPromises.files.resolve(self.#bufferedFiles);
                 self.#delayedPromises.toolCalls.resolve(self.#toolCalls);
@@ -531,46 +573,46 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 self.#delayedPromises.steps.resolve(self.#bufferedSteps);
                 self.#delayedPromises.totalUsage.resolve(self.#getTotalUsage());
                 self.#delayedPromises.content.resolve(messageList.get.response.aiV5.stepContent());
-                self.#delayedPromises.reasoningDetails.resolve(Object.values(self.#bufferedReasoningDetails || {}));
+                self.#delayedPromises.suspendPayload.resolve(undefined);
 
                 const baseFinishStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
 
                 if (baseFinishStep) {
-                  const { stepType: _stepType, isContinued: _isContinued } = baseFinishStep;
-
-                  const onFinishPayload = {
-                    ...(self.#model.modelId && self.#model.provider && self.#model.version
-                      ? { model: self.#model }
-                      : {}),
+                  const onFinishPayload: MastraOnFinishCallbackArgs<OUTPUT> = {
+                    // StepResult properties from baseFinishStep
+                    providerMetadata: baseFinishStep.providerMetadata,
                     text: baseFinishStep.text,
                     warnings: baseFinishStep.warnings ?? [],
                     finishReason: chunk.payload.stepResult.reason,
-                    // TODO: we should add handling for step IDs in message list so you can retrieve step content by step id. And on finish should the content here be from all steps?
                     content: messageList.get.response.aiV5.stepContent(),
                     request: await self.request,
                     error: self.error,
-                    reasoning: await self.aisdk.v5.reasoning,
-                    reasoningText: await self.aisdk.v5.reasoningText,
-                    sources: await self.aisdk.v5.sources,
-                    files: await self.aisdk.v5.files,
-                    steps: transformSteps({ steps: self.#bufferedSteps }),
-                    response: { ...(await self.response), messages: messageList.get.response.aiV5.model() },
+                    reasoning: await self.reasoning,
+                    reasoningText: await self.reasoningText,
+                    sources: await self.sources,
+                    files: await self.files,
+                    steps: self.#bufferedSteps,
+                    response: {
+                      ...(await self.response),
+                      ...baseFinishStep.response,
+                      messages: messageList.get.response.aiV5.model(),
+                    },
                     usage: chunk.payload.output.usage,
                     totalUsage: self.#getTotalUsage(),
-                    toolCalls: await self.aisdk.v5.toolCalls,
-                    toolResults: await self.aisdk.v5.toolResults,
-                    staticToolCalls: (await self.aisdk.v5.toolCalls).filter(
-                      (toolCall: any) => toolCall.dynamic === false,
+                    toolCalls: await self.toolCalls,
+                    toolResults: await self.toolResults,
+                    staticToolCalls: (await self.toolCalls).filter(toolCall => toolCall?.payload?.dynamic === false),
+                    staticToolResults: (await self.toolResults).filter(
+                      toolResult => toolResult?.payload?.dynamic === false,
                     ),
-                    staticToolResults: (await self.aisdk.v5.toolResults).filter(
-                      (toolResult: any) => toolResult.dynamic === false,
+                    dynamicToolCalls: (await self.toolCalls).filter(toolCall => toolCall?.payload?.dynamic === true),
+                    dynamicToolResults: (await self.toolResults).filter(
+                      toolResult => toolResult?.payload?.dynamic === true,
                     ),
-                    dynamicToolCalls: (await self.aisdk.v5.toolCalls).filter(
-                      (toolCall: any) => toolCall.dynamic === true,
-                    ),
-                    dynamicToolResults: (await self.aisdk.v5.toolResults).filter(
-                      (toolResult: any) => toolResult.dynamic === true,
-                    ),
+                    // Custom properties (not part of standard callback)
+                    ...(self.#model.modelId && self.#model.provider && self.#model.version
+                      ? { model: self.#model }
+                      : {}),
                     object:
                       self.#delayedPromises.object.status.type === 'rejected'
                         ? undefined
@@ -634,14 +676,16 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                     ...(baseFinishStep?.toolCalls && options?.telemetry_settings?.recordOutputs !== false
                       ? {
                           'stream.response.toolCalls': JSON.stringify(
-                            baseFinishStep?.toolCalls?.map(chunk => {
-                              return {
-                                type: 'tool-call',
-                                toolCallId: chunk.payload.toolCallId,
-                                args: chunk.payload.args,
-                                toolName: chunk.payload.toolName,
-                              };
-                            }),
+                            baseFinishStep?.toolCalls
+                              ?.map(toolCall => {
+                                return {
+                                  type: 'tool-call',
+                                  toolCallId: toolCall.payload?.toolCallId,
+                                  args: toolCall.payload?.args,
+                                  toolName: toolCall.payload?.toolName,
+                                };
+                              })
+                              .filter(Boolean),
                           ),
                         }
                       : {}),
@@ -649,14 +693,12 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
                   options.rootSpan.end();
                 }
-
                 break;
 
               case 'error':
-                // Mark stream as finished for EventEmitter
-                self.#streamFinished = true;
-
-                self.#error = chunk.payload.error as any;
+                self.#error = chunk.payload.error as Error | string | { message: string; stack: string };
+                self.#status = 'failed';
+                self.#streamFinished = true; // Mark stream as finished for EventEmitter
 
                 // Reject all delayed promises on error
                 const error =
@@ -723,18 +765,17 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   }
 
   /**
-   * Resolves to complete reasoning text for models that support reasoning.
+   * Resolves to reasoning parts array for models that support reasoning.
    */
   get reasoning() {
     return this.#getDelayedPromise(this.#delayedPromises.reasoning);
   }
 
+  /**
+   * Resolves to complete reasoning text for models that support reasoning.
+   */
   get reasoningText() {
     return this.#getDelayedPromise(this.#delayedPromises.reasoningText);
-  }
-
-  get reasoningDetails() {
-    return this.#getDelayedPromise(this.#delayedPromises.reasoningDetails);
   }
 
   get sources() {
@@ -747,6 +788,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
   get steps() {
     return this.#getDelayedPromise(this.#delayedPromises.steps);
+  }
+
+  get suspendPayload() {
+    return this.#getDelayedPromise(this.#delayedPromises.suspendPayload);
   }
 
   /**
@@ -881,9 +926,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     try {
       await consumeStream({
         stream: this.#baseStream as globalThis.ReadableStream<any>,
-        onError: error => {
-          options?.onError?.(error);
-        },
+        onError: options?.onError,
       });
     } catch (error) {
       options?.onError?.(error);
@@ -896,7 +939,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   async getFullOutput() {
     if (!this.#consumptionStarted) {
       await this.consumeStream({
-        onError: (error: any) => {
+        onError: (error: unknown) => {
           console.error(error);
           throw error;
         },
@@ -1178,5 +1221,55 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
         self.#emitter.removeAllListeners();
       },
     });
+  }
+
+  get status() {
+    return this.#status;
+  }
+
+  serializeState() {
+    return {
+      status: this.#status,
+      bufferedSteps: this.#bufferedSteps,
+      bufferedReasoningDetails: this.#bufferedReasoningDetails,
+      bufferedByStep: this.#bufferedByStep,
+      bufferedText: this.#bufferedText,
+      bufferedTextChunks: this.#bufferedTextChunks,
+      bufferedSources: this.#bufferedSources,
+      bufferedReasoning: this.#bufferedReasoning,
+      bufferedFiles: this.#bufferedFiles,
+      toolCallArgsDeltas: this.#toolCallArgsDeltas,
+      toolCallDeltaIdNameMap: this.#toolCallDeltaIdNameMap,
+      toolCalls: this.#toolCalls,
+      toolResults: this.#toolResults,
+      warnings: this.#warnings,
+      finishReason: this.#finishReason,
+      request: this.#request,
+      usageCount: this.#usageCount,
+      tripwire: this.#tripwire,
+      tripwireReason: this.#tripwireReason,
+    };
+  }
+
+  deserializeState(state: any) {
+    this.#status = state.status;
+    this.#bufferedSteps = state.bufferedSteps;
+    this.#bufferedReasoningDetails = state.bufferedReasoningDetails;
+    this.#bufferedByStep = state.bufferedByStep;
+    this.#bufferedText = state.bufferedText;
+    this.#bufferedTextChunks = state.bufferedTextChunks;
+    this.#bufferedSources = state.bufferedSources;
+    this.#bufferedReasoning = state.bufferedReasoning;
+    this.#bufferedFiles = state.bufferedFiles;
+    this.#toolCallArgsDeltas = state.toolCallArgsDeltas;
+    this.#toolCallDeltaIdNameMap = state.toolCallDeltaIdNameMap;
+    this.#toolCalls = state.toolCalls;
+    this.#toolResults = state.toolResults;
+    this.#warnings = state.warnings;
+    this.#finishReason = state.finishReason;
+    this.#request = state.request;
+    this.#usageCount = state.usageCount;
+    this.#tripwire = state.tripwire;
+    this.#tripwireReason = state.tripwireReason;
   }
 }

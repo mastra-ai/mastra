@@ -46,7 +46,7 @@ export interface LLMIterationOutput<Tools extends ToolSet = ToolSet> {
   dynamicToolCalls?: DynamicToolCall[];
   staticToolResults?: StaticToolResult<Tools>[];
   dynamicToolResults?: DynamicToolResult[];
-  usage?: LanguageModelUsage;
+  usage: LanguageModelUsage;
   steps: StepResult<Tools>[];
   // object?: InferSchemaOutput<OUTPUT>;
 }

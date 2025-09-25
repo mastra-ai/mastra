@@ -1,4 +1,10 @@
-import { useAgent, useModelProviders, useUpdateAgentModel } from '@/hooks/use-agents';
+import {
+  useAgent,
+  useModelProviders,
+  useReorderModelList,
+  useUpdateAgentModel,
+  useUpdateModelInModelList,
+} from '@/hooks/use-agents';
 import { AgentLogs } from './agent-logs';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -16,13 +22,14 @@ import { useMemory } from '@/hooks/use-memory';
 import { AgentMemory } from './agent-memory';
 import { useState, useEffect } from 'react';
 import { AgentPromptEnhancer } from './agent-instructions-enhancer';
-import { GetScorerResponse } from '@mastra/client-js';
 
 export function AgentInformation({ agentId }: { agentId: string }) {
   const { data: agent, isLoading } = useAgent(agentId);
   const { data: modelProviders } = useModelProviders();
   const { mutateAsync: updateModel } = useUpdateAgentModel(agentId);
-  const { memory, isLoading: isMemoryLoading } = useMemory(agentId);
+  const { mutate: reorderModelList } = useReorderModelList(agentId);
+  const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
+  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { settings, setSettings } = useAgentSettings();
 
   // Persist tab selection
@@ -72,15 +79,14 @@ export function AgentInformation({ agentId }: { agentId: string }) {
             {isLoading && <Skeleton className="h-full" />}
             {agent && (
               <AgentMetadata
+                agentId={agentId}
                 agent={agent}
                 updateModel={updateModel}
+                updateModelInModelList={updateModelInModelList}
+                reorderModelList={reorderModelList}
                 modelProviders={modelProviders || []}
                 hasMemoryEnabled={Boolean(memory?.result)}
-                computeAgentLink={() => `/agents/${agentId}`}
-                computeToolLink={tool => `/tools/${agentId}/${tool.id}`}
-                computeWorkflowLink={workflowId => `/workflows/${workflowId}/graph`}
                 promptSlot={<AgentPromptEnhancer agentId={agentId} />}
-                computeScorerLink={(scorerId: string) => `/scorers/${scorerId}`}
               />
             )}
           </TabContent>

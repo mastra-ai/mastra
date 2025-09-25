@@ -17,11 +17,10 @@ import { useLinkComponent } from '@/lib/framework';
 export interface NetworkTableProps {
   networks: GetVNextNetworkResponse[];
   isLoading: boolean;
-  computeLink: (networkId: string) => string;
 }
 
-export const NetworkTable = ({ networks, isLoading, computeLink }: NetworkTableProps) => {
-  const { navigate } = useLinkComponent();
+export const NetworkTable = ({ networks, isLoading }: NetworkTableProps) => {
+  const { navigate, paths } = useLinkComponent();
   const allNetworks: NetworkTableColumn[] = useMemo(
     () => [
       ...(networks?.map(network => ({
@@ -62,7 +61,7 @@ export const NetworkTable = ({ networks, isLoading, computeLink }: NetworkTableP
         </Thead>
         <Tbody>
           {rows.map(row => (
-            <Row key={row.id} onClick={() => navigate(computeLink(row.original.id))} className="cursor-pointer">
+            <Row key={row.id} onClick={() => navigate(paths.networkLink(row.original.id))} className="cursor-pointer">
               {row.getVisibleCells().map(cell => (
                 <React.Fragment key={cell.id}>
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}

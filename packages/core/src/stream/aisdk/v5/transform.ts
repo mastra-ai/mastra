@@ -4,12 +4,13 @@ import type {
   LanguageModelV2Usage,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
-import type { CoreMessage, ObjectStreamPart, TextStreamPart, ToolSet } from 'ai-v5';
+import type { ModelMessage, ObjectStreamPart, TextStreamPart, ToolSet } from 'ai-v5';
+import type { AIV5ResponseMessage } from '../../../agent/message-list';
 import type { ChunkType } from '../../types';
 import { ChunkFrom } from '../../types';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './file';
 
-type StreamPart =
+export type StreamPart =
   | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
   | {
       type: 'finish';
@@ -17,9 +18,9 @@ type StreamPart =
       usage: LanguageModelV2Usage;
       providerMetadata: SharedV2ProviderMetadata;
       messages: {
-        all: CoreMessage[];
-        user: CoreMessage[];
-        nonUser: CoreMessage[];
+        all: ModelMessage[];
+        user: ModelMessage[];
+        nonUser: AIV5ResponseMessage[];
       };
     };
 
@@ -30,7 +31,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         type: 'response-metadata',
         runId: ctx.runId,
         from: ChunkFrom.AGENT,
-        payload: value,
+        payload: { ...value },
       };
     case 'text-start':
       return {
@@ -343,7 +344,7 @@ export function convertMastraChunkToAISDKv5({
         type: 'finish',
         finishReason: chunk.payload.stepResult.reason,
         totalUsage: chunk.payload.output.usage,
-      } as any;
+      };
     }
     case 'reasoning-start':
       return {
@@ -379,16 +380,26 @@ export function convertMastraChunkToAISDKv5({
         providerMetadata: chunk.payload.providerMetadata,
       };
     case 'source':
-      return {
-        type: 'source',
-        id: chunk.payload.id,
-        sourceType: chunk.payload.sourceType,
-        filename: chunk.payload.filename,
-        mediaType: chunk.payload.mimeType,
-        title: chunk.payload.title,
-        url: chunk.payload.url,
-        providerMetadata: chunk.payload.providerMetadata,
-      } as any;
+      if (chunk.payload.sourceType === 'url') {
+        return {
+          type: 'source',
+          sourceType: 'url',
+          id: chunk.payload.id,
+          url: chunk.payload.url!,
+          title: chunk.payload.title,
+          providerMetadata: chunk.payload.providerMetadata,
+        };
+      } else {
+        return {
+          type: 'source',
+          sourceType: 'document',
+          id: chunk.payload.id,
+          mediaType: chunk.payload.mimeType!,
+          title: chunk.payload.title,
+          filename: chunk.payload.filename,
+          providerMetadata: chunk.payload.providerMetadata,
+        };
+      }
     case 'file':
       if (mode === 'generate') {
         return {
@@ -442,8 +453,13 @@ export function convertMastraChunkToAISDKv5({
       const { request: _request, providerMetadata, ...rest } = chunk.payload.metadata;
       return {
         type: 'finish-step',
-        response: rest as any,
-        usage: chunk.payload.output.usage, // ?
+        response: {
+          id: chunk.payload.id || '',
+          timestamp: new Date(),
+          modelId: (rest.modelId as string) || '',
+          ...rest,
+        },
+        usage: chunk.payload.output.usage,
         finishReason: chunk.payload.stepResult.reason,
         providerMetadata,
       };
@@ -508,9 +524,9 @@ export function convertMastraChunkToAISDKv5({
     default:
       if (chunk.type && 'payload' in chunk && chunk.payload) {
         return {
-          type: chunk.type,
+          type: chunk.type as string,
           ...(chunk.payload || {}),
-        } as any;
+        } as OutputChunkType;
       }
       return;
   }

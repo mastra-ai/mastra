@@ -1,13 +1,14 @@
 import type { StepResult, ToolSet } from 'ai-v5';
 import { InternalSpans } from '../../../ai-tracing';
 import type { OutputSchema } from '../../../stream/base/schema';
-import type { ChunkType, StepFinishPayload } from '../../../stream/types';
+import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createWorkflow } from '../../../workflows';
 import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
+import { isControllerOpen } from '../stream';
 
 interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>
   extends LoopRun<Tools, OUTPUT> {
@@ -124,13 +125,16 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       }
 
       if (typedInputData.stepResult?.reason !== 'abort') {
-        const stepFinishChunk = {
-          type: 'step-finish' as const,
-          runId,
-          from: ChunkFrom.AGENT,
-          payload: typedInputData as unknown as StepFinishPayload<ToolSet, OUTPUT>,
-        };
-        controller.enqueue(stepFinishChunk);
+        // Only enqueue if controller is still open
+        if (isControllerOpen(controller)) {
+          controller.enqueue({
+            type: 'step-finish',
+            runId,
+            from: ChunkFrom.AGENT,
+            // @ts-ignore TODO: Look into the proper types for this
+            payload: typedInputData,
+          });
+        }
       }
 
       modelStreamSpan.setAttributes({
