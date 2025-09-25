@@ -6,6 +6,14 @@ import { ChunkFrom } from '../../stream/types';
 import type { LoopRun } from '../types';
 import { createAgenticLoopWorkflow } from './agentic-loop';
 
+/**
+ * Check if a ReadableStreamDefaultController is open and can accept data.
+ * Controllers are closed when desiredSize is 0 or null (errored).
+ */
+export function isControllerOpen(controller: ReadableStreamDefaultController<any>): boolean {
+  return controller.desiredSize !== 0 && controller.desiredSize !== null;
+}
+
 export function workflowLoopStream<
   Tools extends ToolSet = ToolSet,
   OUTPUT extends OutputSchema | undefined = undefined,
