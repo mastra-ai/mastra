@@ -17,7 +17,7 @@ import { consumeStream, DelayedPromise } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import { reasoningDetailsFromMessages, transformSteps } from '../aisdk/v5/output-helpers';
-import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
+import { ChunkFrom, type BufferedByStep, type ChunkType, type StepBufferItem } from '../types';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
@@ -921,12 +921,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       await consumeStream({
         stream: this.#baseStream as globalThis.ReadableStream<any>,
         onError: error => {
-          this.#emitter.emit('error', error);
           options?.onError?.(error);
         },
       });
     } catch (error) {
-      this.#emitter.emit('error', error);
       options?.onError?.(error);
     }
   }
@@ -1147,6 +1145,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   _getImmediateFinishReason() {
     return this.#finishReason;
   }
+  /** @internal  */
+  _getBaseStream() {
+    return this.#baseStream;
+  }
 
   #getTotalUsage(): LanguageModelUsage {
     let total = this.#usageCount.totalTokens;
@@ -1196,25 +1198,15 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
         const finishHandler = () => {
           self.#emitter.off('chunk', chunkHandler);
           self.#emitter.off('finish', finishHandler);
-          self.#emitter.off('error', errorHandler);
           controller.close();
-        };
-
-        const errorHandler = (error: Error) => {
-          self.#emitter.off('chunk', chunkHandler);
-          self.#emitter.off('finish', finishHandler);
-          self.#emitter.off('error', errorHandler);
-          controller.error(error);
         };
 
         self.#emitter.on('chunk', chunkHandler);
         self.#emitter.on('finish', finishHandler);
-        self.#emitter.on('error', errorHandler);
       },
 
-      async pull(_controller) {
+      pull(_controller) {
         // Only start consumption when someone is actively reading the stream
-        // This preserves backpressure and allows proper abort handling
         if (!self.#consumptionStarted) {
           void self.consumeStream();
         }
