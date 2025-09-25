@@ -14,9 +14,7 @@ import { Badge } from "@/components/ui/badge";
 interface ModelData {
   model: string;
   imageInput: boolean;
-  objectGeneration: boolean;
   toolUsage: boolean;
-  toolStreaming: boolean;
   audioInput?: boolean;
   videoInput?: boolean;
   reasoning?: boolean;
@@ -127,21 +125,7 @@ export function ProviderModelsTable({
               </TableCell>
             )}
             <TableCell className="text-center">
-              {model.objectGeneration ? (
-                <Check className="dark:text-green-400 text-[var(--light-green-accent-2)] inline-block w-[18px] h-[18px]" />
-              ) : (
-                <Cross className="inline-block w-[18px] h-[18px]" />
-              )}
-            </TableCell>
-            <TableCell className="text-center">
               {model.toolUsage ? (
-                <Check className="dark:text-green-400 text-[var(--light-green-accent-2)] inline-block w-[18px] h-[18px]" />
-              ) : (
-                <Cross className="inline-block w-[18px] h-[18px]" />
-              )}
-            </TableCell>
-            <TableCell className="text-center">
-              {model.toolStreaming ? (
                 <Check className="dark:text-green-400 text-[var(--light-green-accent-2)] inline-block w-[18px] h-[18px]" />
               ) : (
                 <Cross className="inline-block w-[18px] h-[18px]" />
