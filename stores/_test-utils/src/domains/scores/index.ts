@@ -32,7 +32,7 @@ async function createScores(
 }
 
 export function createScoresTest({ storage }: { storage: MastraStorage }) {
-  describe.only('Score Operations', () => {
+  describe('Score Operations', () => {
     beforeEach(async () => {
       await storage.clearTable({ tableName: TABLE_SCORERS });
     });
