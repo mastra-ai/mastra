@@ -49,7 +49,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
   responseFromModel,
   includeRawChunks,
 }: ProcessOutputStreamOptions<OUTPUT>) {
-  for await (const chunk of outputStream.fullStream) {
+  for await (const chunk of outputStream._getBaseStream()) {
     if (!chunk) {
       continue;
     }
@@ -365,7 +365,8 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
 function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): ExecuteStreamModelManager<T> {
   return async callback => {
     let index = 0;
-    let finalResult: any;
+    let finalResult: T | undefined;
+
     let done = false;
     for (const modelConfig of models) {
       index++;
@@ -395,7 +396,10 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
         }
       }
     }
-
+    if (typeof finalResult === 'undefined') {
+      console.error('Exhausted all fallback models and reached the maximum number of retries.');
+      throw new Error('Exhausted all fallback models and reached the maximum number of retries.');
+    }
     return finalResult;
   };
 }
