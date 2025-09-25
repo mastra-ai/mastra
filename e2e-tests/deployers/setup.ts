@@ -33,6 +33,7 @@ export default async function setup(project: TestProject) {
       '--filter="@mastra/deployer-cloudflare"',
       '--filter="@mastra/deployer-vercel"',
       '--filter="@mastra/deployer-netlify"',
+      '--filter="@mastra/pg"',
     ],
     tag,
     rootDir,

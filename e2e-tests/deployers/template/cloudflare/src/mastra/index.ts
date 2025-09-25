@@ -4,6 +4,11 @@ import { weatherWorkflow } from './workflows/weather-workflow';
 import { weatherAgent } from './agents/weather-agent';
 import { CloudflareDeployer } from '@mastra/deployer-cloudflare';
 import { testRoute } from './api/route/test';
+import { PostgresStore } from '@mastra/pg';
+
+const storage = new PostgresStore({
+  connectionString: 'test-connection-string',
+});
 
 export const mastra = new Mastra({
   workflows: { weatherWorkflow },
@@ -17,10 +22,11 @@ export const mastra = new Mastra({
     projectName: 'hello-mastra',
     env: {
       NODE_ENV: 'production',
-      API_KEY: 'test',
+      API_KEY: 'test-api-key',
     },
   }),
   server: {
     apiRoutes: [testRoute],
   },
+  storage,
 });
