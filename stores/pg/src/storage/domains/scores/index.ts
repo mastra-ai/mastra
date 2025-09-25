@@ -291,4 +291,51 @@ export class ScoresPG extends ScoresStorage {
       );
     }
   }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema });
+      const countSQLResult = await this.client.oneOrNone<{ count: string }>(
+        `SELECT COUNT(*) as count FROM ${tableName} WHERE "traceId" = $1 AND "spanId" = $2`,
+        [traceId, spanId],
+      );
+
+      const total = Number(countSQLResult?.count ?? 0);
+
+      const result = await this.client.manyOrNone<ScoreRowData>(
+        `SELECT * FROM ${tableName} WHERE "traceId" = $1 AND "spanId" = $2 ORDER BY "createdAt" DESC LIMIT $3 OFFSET $4`,
+        [traceId, spanId, pagination.perPage + 1, pagination.page * pagination.perPage],
+      );
+
+      const hasMore = result.length > pagination.perPage;
+      const scores = result.slice(0, pagination.perPage).map(row => transformScoreRow(row)) ?? [];
+
+      return {
+        scores,
+        pagination: {
+          total,
+          page: pagination.page,
+          perPage: pagination.perPage,
+          hasMore,
+        },
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_SPAN_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
 }

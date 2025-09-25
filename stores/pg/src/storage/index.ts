@@ -233,6 +233,7 @@ export class PostgresStore extends MastraStorage {
       deleteMessages: true,
       aiTracing: false,
       indexManagement: true,
+      getScoresBySpan: true,
     };
   }
 
@@ -575,5 +576,16 @@ export class PostgresStore extends MastraStorage {
       entityType: _entityType,
       pagination: _pagination,
     });
+  }
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    return this.stores.scores.getScoresBySpan({ traceId, spanId, pagination });
   }
 }
