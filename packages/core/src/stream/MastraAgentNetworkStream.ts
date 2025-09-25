@@ -75,7 +75,11 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
             const innerChunk = chunk.payload.output;
             const innerChunkType = innerChunk.payload.output;
 
-            controller.enqueue(innerChunkType);
+            if (innerChunk && innerChunkType) {
+              controller.enqueue(innerChunkType);
+            } else {
+              controller.enqueue(innerChunk);
+            }
           }
         }
 

@@ -410,7 +410,7 @@ export class EventedRun<
       serializedStepGraph: this.serializedStepGraph,
       input: inputDataToUse,
       emitter: {
-        emit: async (event: string, data: any) => {
+        emit: async (event: string, data: any): Promise<void> => {
           this.emitter.emit(event, data);
         },
         on: (event: string, callback: (data: any) => void) => {
@@ -506,9 +506,8 @@ export class EventedRun<
           resumePath,
         },
         emitter: {
-          emit: (event: string, data: any) => {
+          emit: async (event: string, data: any) => {
             this.emitter.emit(event, data);
-            return Promise.resolve();
           },
           on: (event: string, callback: (data: any) => void) => {
             this.emitter.on(event, callback);
@@ -600,7 +599,7 @@ export class EventedRun<
     });
   }
 
-  async sendEvent(eventName: string, data: any) {
+  override async sendEvent(eventName: string, data: any): Promise<void> {
     await this.mastra?.pubsub.publish('workflows', {
       type: `workflow.user-event.${eventName}`,
       runId: this.runId,
