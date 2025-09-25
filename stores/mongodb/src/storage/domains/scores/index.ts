@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringEntityType, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
 import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsMongoDB } from '../operations';
@@ -79,6 +80,7 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     entityType: row.entityType as ScoringEntityType,
     scorerId: row.scorerId as string,
     traceId: row.traceId as string,
+    spanId: row.spanId as string,
     runId: row.runId as string,
     scorer: scorerValue,
     preprocessStepResult: preprocessStepResultValue,
@@ -133,42 +135,60 @@ export class ScoresStorageMongoDB extends ScoresStorage {
   }
 
   async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    let validatedScore: ValidatedSaveScorePayload;
+    try {
+      validatedScore = saveScorePayloadSchema.parse(score);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_SAVE_SCORE_VALIDATION_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
     try {
       const now = new Date();
       const scoreId = `score-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       const scoreData = {
         id: scoreId,
-        entityId: score.entityId,
-        entityType: score.entityType,
-        scorerId: score.scorerId,
-        traceId: score.traceId || '',
-        runId: score.runId,
-        scorer: typeof score.scorer === 'string' ? safelyParseJSON(score.scorer) : score.scorer,
+        entityId: validatedScore.entityId,
+        entityType: validatedScore.entityType,
+        scorerId: validatedScore.scorerId,
+        traceId: validatedScore.traceId || '',
+        spanId: validatedScore.spanId || '',
+        runId: validatedScore.runId,
+        scorer:
+          typeof validatedScore.scorer === 'string' ? safelyParseJSON(validatedScore.scorer) : validatedScore.scorer,
         preprocessStepResult:
-          typeof score.preprocessStepResult === 'string'
-            ? safelyParseJSON(score.preprocessStepResult)
-            : score.preprocessStepResult,
+          typeof validatedScore.preprocessStepResult === 'string'
+            ? safelyParseJSON(validatedScore.preprocessStepResult)
+            : validatedScore.preprocessStepResult,
         analyzeStepResult:
-          typeof score.analyzeStepResult === 'string'
-            ? safelyParseJSON(score.analyzeStepResult)
-            : score.analyzeStepResult,
-        score: score.score,
-        reason: score.reason,
-        preprocessPrompt: score.preprocessPrompt,
-        generateScorePrompt: score.generateScorePrompt,
-        generateReasonPrompt: score.generateReasonPrompt,
-        analyzePrompt: score.analyzePrompt,
-        reasonPrompt: score.reasonPrompt,
-        input: typeof score.input === 'string' ? safelyParseJSON(score.input) : score.input,
-        output: typeof score.output === 'string' ? safelyParseJSON(score.output) : score.output,
-        additionalContext: score.additionalContext,
+          typeof validatedScore.analyzeStepResult === 'string'
+            ? safelyParseJSON(validatedScore.analyzeStepResult)
+            : validatedScore.analyzeStepResult,
+        score: validatedScore.score,
+        reason: validatedScore.reason,
+        preprocessPrompt: validatedScore.preprocessPrompt,
+        generateScorePrompt: validatedScore.generateScorePrompt,
+        generateReasonPrompt: validatedScore.generateReasonPrompt,
+        analyzePrompt: validatedScore.analyzePrompt,
+        input: typeof validatedScore.input === 'string' ? safelyParseJSON(validatedScore.input) : validatedScore.input,
+        output:
+          typeof validatedScore.output === 'string' ? safelyParseJSON(validatedScore.output) : validatedScore.output,
+        additionalContext: validatedScore.additionalContext,
         runtimeContext:
-          typeof score.runtimeContext === 'string' ? safelyParseJSON(score.runtimeContext) : score.runtimeContext,
-        entity: typeof score.entity === 'string' ? safelyParseJSON(score.entity) : score.entity,
-        source: score.source,
-        resourceId: score.resourceId || '',
-        threadId: score.threadId || '',
+          typeof validatedScore.runtimeContext === 'string'
+            ? safelyParseJSON(validatedScore.runtimeContext)
+            : validatedScore.runtimeContext,
+        entity:
+          typeof validatedScore.entity === 'string' ? safelyParseJSON(validatedScore.entity) : validatedScore.entity,
+        source: validatedScore.source,
+        resourceId: validatedScore.resourceId || '',
+        threadId: validatedScore.threadId || '',
         createdAt: now,
         updatedAt: now,
       };
