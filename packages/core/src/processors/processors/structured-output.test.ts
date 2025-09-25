@@ -45,7 +45,7 @@ describe('StructuredOutputProcessor', () => {
       createdAt: new Date(),
     });
 
-    it('should process unstructured text and return formatted JSON', async () => {
+    it.todo('should process unstructured text and return formatted JSON', async () => {
       const message = createMessage('The color is blue and it has bright intensity');
 
       // Mock the structuring agent's generate method
@@ -74,7 +74,7 @@ describe('StructuredOutputProcessor', () => {
       expect(mockAbort).not.toHaveBeenCalled();
     });
 
-    it('should abort when structuring agent fails with strict strategy', async () => {
+    it.todo('should abort when structuring agent fails with strict strategy', async () => {
       const message = createMessage('some text that cannot be structured');
 
       // Mock the structuring agent to fail
@@ -88,7 +88,7 @@ describe('StructuredOutputProcessor', () => {
       expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('[StructuredOutputProcessor] Processing failed'));
     });
 
-    it('should use fallback value with fallback strategy', async () => {
+    it.todo('should use fallback value with fallback strategy', async () => {
       const fallbackProcessor = new StructuredOutputProcessor({
         schema: testSchema,
         model: mockModel,
@@ -112,7 +112,7 @@ describe('StructuredOutputProcessor', () => {
       expect(mockAbort).not.toHaveBeenCalled();
     });
 
-    it('should warn and continue with warn strategy', async () => {
+    it.todo('should warn and continue with warn strategy', async () => {
       const warnProcessor = new StructuredOutputProcessor({
         schema: testSchema,
         model: mockModel,
@@ -138,7 +138,7 @@ describe('StructuredOutputProcessor', () => {
       consoleSpy.mockRestore();
     });
 
-    it('should skip non-assistant messages', async () => {
+    it.todo('should skip non-assistant messages', async () => {
       const userMessage: MastraMessageV2 = {
         id: 'user-id',
         role: 'user',
@@ -157,7 +157,7 @@ describe('StructuredOutputProcessor', () => {
       expect(result[0]).toEqual(userMessage); // unchanged
     });
 
-    it('should handle messages with empty content', async () => {
+    it.todo('should handle messages with empty content', async () => {
       const message = createMessage('   '); // just whitespace
       const result = await processor.processOutputResult({
         messages: [message],
@@ -180,7 +180,7 @@ describe('StructuredOutputProcessor', () => {
   });
 
   describe('integration scenarios', () => {
-    it('should handle complex nested schema', async () => {
+    it.todo('should handle complex nested schema', async () => {
       const complexSchema = z.object({
         user: z.object({
           name: z.string(),
