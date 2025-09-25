@@ -297,7 +297,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
             totalUsage: chunk.payload.totalUsage,
             headers: responseFromModel.rawResponse?.headers,
             messageId,
-            isContinued: !['stop', 'error'].includes(chunk.payload.reason),
+            isContinued: !['stop', 'error'].includes(chunk.payload.stepResult.reason),
             request: responseFromModel.request,
           },
         });
@@ -527,7 +527,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
                   type: 'step-start',
                   payload: {
                     request: request || {},
-                    warnings: [],
+                    warnings: warnings || [],
                     messageId: messageId,
                   },
                 });
@@ -629,7 +629,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
             isContinued: false,
           },
           metadata: {
-            providerMetadata: providerOptions,
+            providerMetadata: runState.state.providerOptions,
             ...responseMetadata,
             headers: rawResponse?.headers,
             request,
@@ -710,7 +710,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
       steps.push(
         new DefaultStepResult({
           warnings: outputStream._getImmediateWarnings(),
-          providerMetadata: providerOptions,
+          providerMetadata: runState.state.providerOptions,
           finishReason: runState.state.stepResult?.reason,
           content: currentIterationContent,
           response: { ...responseMetadata, ...rawResponse, messages: messageList.get.response.aiV5.model() },
