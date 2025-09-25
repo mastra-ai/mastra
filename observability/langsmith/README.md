@@ -25,8 +25,6 @@ const mastra = new Mastra({
         exporters: [
           new LangSmithExporter({
             apiKey: process.env.LANGSMITH_API_KEY, // Defaults to process.env.LANGSMITH_API_KEY
-            projectName: process.env.LANGSMITH_PROJECT, // optional
-            endpoint: process.env.LANGSMITH_ENDPOINT, // optional
           }),
         ],
       },
