@@ -3,9 +3,17 @@ title: "エージェントでのツールの使用 | エージェント | Mastra
 description: ツールの作成方法、Mastraエージェントへの追加方法、およびMCPサーバーからのツールの統合方法について学びます。
 ---
 
-# エージェントでツールを使用する
 
-ツールは、エージェントやワークフローによって実行できる型付き関数です。各ツールには、その入力を定義するスキーマ、ロジックを実装する実行関数、およびオプションで設定された統合へのアクセスがあります。
+
+# エージェントでのツールの使用
+
+ツールは、エージェントやワークフローによって実行できる型付き関数です。各ツールには、入力を定義するスキーマ、ロジックを実装するエグゼキューター関数、および設定されたインテグレーションへのオプションのアクセスがあります。
+
+Mastraは、エージェントにツールを提供するための2つのパターンをサポートしています：
+- **直接割り当て**: 初期化時に利用可能な静的ツール
+- **関数ベース**: ランタイムコンテキストに基づいて解決される動的ツール  
+
+
 
 ## ツールの作成
 
@@ -31,6 +39,8 @@ export const weatherInfo = createTool({
 
 ツールの作成と設計の詳細については、[ツールの概要](/docs/tools-mcp/overview)をご覧ください。
 
+
+
 ## エージェントにツールを追加する
 
 ツールをエージェントで利用可能にするには、エージェントの設定の `tools` プロパティに追加します。
@@ -53,11 +63,13 @@ export const weatherAgent = new Agent({
 
 エージェントを呼び出すと、設定されたツールを指示内容とユーザーのプロンプトに基づいて使用するかどうかを判断できるようになります。
 
-## エージェントにMCPツールを追加する
 
-[Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction)は、AIモデルが外部ツールやリソースを発見し、相互作用するための標準化された方法を提供します。Mastraエージェントをサードパーティが提供するツールを使用するためにMCPサーバーに接続することができます。
 
-MCPの概念やMCPクライアントとサーバーの設定方法の詳細については、[MCP概要](/docs/tools-mcp/mcp-overview)をご覧ください。
+## AgentにMCPツールを追加する
+
+[Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction)は、AIモデルが外部ツールやリソースを発見し、それらと相互作用するための標準化された方法を提供します。MastraエージェントをMCPサーバーに接続して、サードパーティが提供するツールを使用できます。
+
+MCPの概念やMCPクライアントとサーバーの設定方法の詳細については、[MCP概要](/docs/tools-mcp/mcp-overview)を参照してください。
 
 ### インストール
 
@@ -69,16 +81,14 @@ npm install @mastra/mcp@latest
 
 ### MCPツールの使用
 
-選択肢が多すぎるMCPサーバーレジストリから選ぶのを助けるために、[MCP Registry Registry](https://mastra.ai/mcp-registry-registry)を作成しました。
+選択できるMCPサーバーレジストリが非常に多いため、MCPサーバーを見つけるのに役立つ[MCP Registry Registry](https://mastra.ai/mcp-registry-registry)を作成しました。
 
-エージェントで使用したいサーバーが見つかったら、Mastraの`MCPClient`をインポートしてサーバー設定を追加します。
+エージェントで使用したいサーバーが決まったら、Mastraの`MCPClient`をインポートし、サーバー設定を追加します。
 
 ```typescript filename="src/mastra/mcp.ts" {1,7-16}
 import { MCPClient } from "@mastra/mcp";
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 
-// Configure MCPClient to connect to your server(s)
+// MCPClientを設定してサーバーに接続
 export const mcp = new MCPClient({
   servers: {
     filesystem: {
@@ -96,21 +106,61 @@ export const mcp = new MCPClient({
 次に、エージェントをサーバーツールに接続します：
 
 ```typescript filename="src/mastra/agents/mcpAgent.ts" {7}
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
 import { mcp } from "../mcp";
-// Create an agent and add tools from the MCP client
+
+// エージェントを作成し、MCPクライアントからツールを追加
 const agent = new Agent({
   name: "Agent with MCP Tools",
-  instructions: "You can use tools from connected MCP servers.",
+  instructions: "接続されたMCPサーバーからツールを使用できます。",
   model: openai("gpt-4o-mini"),
   tools: await mcp.getTools(),
 });
 ```
 
-`MCPClient`の設定や静的および動的MCPサーバー設定の違いについての詳細は、[MCP概要](/docs/tools-mcp/mcp-overview)をご覧ください。
+同じリポジトリ内で接続する必要があるMCPサーバーを消費するエージェントを作成する場合は、競合状態を防ぐために常に関数ベースのツールを使用してください。
 
-## MCPリソースへのアクセス
+```typescript filename="src/mastra/agents/selfReferencingAgent.ts"
+import { Agent } from "@mastra/core/agent";
+import { MCPServer } from "@mastra/mcp";
+import { MCPClient } from "@mastra/mcp";
+import { openai } from "@ai-sdk/openai";
 
-ツールに加えて、MCPサーバーはリソース（アプリケーションで取得して使用できるデータやコンテンツ）も公開できます。
+const myAgent = new Agent({
+  name: "My Agent",
+  description: "HTTP MCPサーバーからツールを使用できるエージェント", 
+  instructions: "リモート計算ツールを使用できます。",
+  model: openai("gpt-4o-mini"),
+  tools: async () => {
+    // ツールは初期化時ではなく、必要な時に解決される
+    const mcpClient = new MCPClient({
+      servers: {
+        myServer: {
+          url: new URL("http://localhost:4111/api/mcp/mcpServer/mcp"),
+        },
+      },
+    });
+    return await mcpClient.getTools();
+  },
+});
+
+// サーバー起動後にツールが解決されるため、これは機能する
+export const mcpServer = new MCPServer({
+  name: "My MCP Server",
+  agents: {
+    myAgent
+  },
+});
+```
+
+`MCPClient`の設定と静的および動的MCPサーバー設定の違いの詳細については、[MCP概要](/docs/tools-mcp/mcp-overview)を参照してください。
+
+
+
+## MCP リソースへのアクセス
+
+ツールに加えて、MCPサーバーはリソース（アプリケーションで取得・使用できるデータやコンテンツ）も公開できます。
 
 ```typescript filename="src/mastra/resources.ts" {3-8}
 import { mcp } from "./mcp";
@@ -127,4 +177,74 @@ if (resources.filesystem) {
 }
 ```
 
-各リソースにはURI、名前、説明、MIMEタイプがあります。`getResources()`メソッドはエラーを適切に処理します - サーバーが失敗したり、リソースをサポートしていない場合、結果から除外されます。
+各リソースには、URI、名前、説明、MIMEタイプがあります。`getResources()`メソッドはエラーを適切に処理します - サーバーが失敗したり、リソースをサポートしていない場合、結果から除外されます。
+
+
+
+## MCP プロンプトへのアクセス
+
+MCP サーバーはプロンプトも公開できます。プロンプトは、エージェント向けの構造化されたメッセージテンプレートや会話コンテキストを表します。
+
+### プロンプトの一覧表示
+
+```typescript filename="src/mastra/prompts.ts"
+import { mcp } from "./mcp";
+
+// 接続されているすべての MCP サーバーからプロンプトを取得
+const prompts = await mcp.prompts.list();
+
+// 特定のサーバーからプロンプトにアクセス
+if (prompts.weather) {
+  const prompt = prompts.weather.find(
+    (p) => p.name === "current"
+  );
+  console.log(`Prompt: ${prompt?.name}`);
+}
+```
+
+各プロンプトには名前、説明、および（オプションの）バージョンがあります。
+
+### プロンプトとそのメッセージの取得
+
+```typescript filename="src/mastra/prompts.ts"
+const { prompt, messages } = await mcp.prompts.get({ serverName: "weather", name: "current" });
+console.log(prompt);    // { name: "current", version: "v1", ... }
+console.log(messages);  // [ { role: "assistant", content: { type: "text", text: "..." } }, ... ]
+```
+
+
+
+## MCPServerを介してAgentをToolとして公開する
+
+MCPサーバーからツールを使用することに加えて、あなたのMastra Agent自体をMastraの`MCPServer`を使用して任意のMCP互換クライアントにツールとして公開することができます。
+
+`Agent`インスタンスが`MCPServer`の設定に提供されると：
+
+- 自動的に呼び出し可能なツールに変換されます。
+- ツールは`ask_<agentKey>`という名前になります。ここで`<agentKey>`は、`MCPServer`の`agents`設定にエージェントを追加する際に使用した識別子です。
+- エージェントの`description`プロパティ（空でない文字列である必要があります）がツールの説明を生成するために使用されます。
+
+これにより、他のAIモデルやMCPクライアントが、あなたのMastra Agentを標準的なツールであるかのように、通常は質問を「尋ねる」ことで対話できるようになります。
+
+**Agentを含む`MCPServer`設定の例：**
+
+```typescript filename="src/mastra/mcp.ts"
+import { Agent } from "@mastra/core/agent";
+import { MCPServer } from "@mastra/mcp";
+import { openai } from "@ai-sdk/openai";
+import { weatherInfo } from "../tools/weatherInfo";
+import { generalHelper } from "../agents/generalHelper";
+
+const server = new MCPServer({
+  name: "My Custom Server with Agent-Tool",
+  version: "1.0.0",
+  tools: {
+    weatherInfo,
+  },
+  agents: { generalHelper }, // 'ask_generalHelper'ツールを公開
+});
+```
+
+エージェントが`MCPServer`によってツールに正常に変換されるためには、そのコンストラクタ設定で`description`プロパティが空でない文字列に設定されている必要があります。説明が欠けているか空の場合、`MCPServer`は初期化中にエラーをスローします。
+
+`MCPServer`の設定と構成の詳細については、[MCPServerリファレンスドキュメント](/reference/tools/mcp-server)を参照してください。

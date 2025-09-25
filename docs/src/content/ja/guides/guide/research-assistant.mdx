@@ -1,107 +1,95 @@
 ---
-title: "リサーチペーパーアシスタントの構築 | Mastra RAG ガイド"
-description: RAG を活用して学術論文を分析し、質問に答える AI リサーチアシスタントの作成ガイド。
+title: "研究論文アシスタントの作成 | Mastra RAG ガイド"
+description: RAG を用いて学術論文を分析し、質問に回答する AI リサーチアシスタントの構築方法を解説するガイド。
 ---
 
-import { Steps } from "nextra/components";
+import { Steps, Callout } from "nextra/components";
 
-# RAGを使ったリサーチペーパーアシスタントの構築
 
-このガイドでは、Retrieval Augmented Generation（RAG）を活用して、学術論文を分析し、その内容に関する具体的な質問に答えるAIリサーチアシスタントを作成します。
 
-例として、基礎的なTransformer論文である[Attention Is All You Need](https://arxiv.org/html/1706.03762)を使用します。
+# RAG を用いたリサーチペーパーアシスタントの構築
 
-## RAGコンポーネントの理解
+このガイドでは、学術論文を分析し、その内容に関する特定の質問に Retrieval Augmented Generation（RAG）を用いて回答できる AI リサーチアシスタントを作成します。
 
-RAGがどのように機能するか、そして各コンポーネントをどのように実装するかを理解しましょう。
+例として、基盤となる Transformer 論文[「Attention Is All You Need」](https://arxiv.org/html/1706.03762)を使用します。データベースには、ローカルの LibSQL データベースを使用します。
 
-1. ナレッジストア／インデックス
 
-   - テキストをベクトル表現に変換する
-   - コンテンツの数値表現を作成する
-   - 実装方法：OpenAIのtext-embedding-3-smallを使って埋め込みを作成し、PgVectorに保存します
 
-2. リトリーバー
+## 前提条件
 
-   - 類似度検索によって関連するコンテンツを見つける
-   - クエリの埋め込みと保存されたベクトルをマッチングする
-   - 実装方法：PgVectorを使って保存された埋め込みに対して類似度検索を行います
+- Node.js `v20.0` 以降がインストールされていること
+- 対応する [モデルプロバイダー](/docs/getting-started/model-providers) から取得した API キー
+- 既存の Mastra プロジェクト（新規プロジェクトをセットアップする場合は、[インストールガイド](/docs/getting-started/installation) に従ってください）
 
-3. ジェネレーター
-   - 取得したコンテンツをLLMで処理する
-   - 文脈に基づいた応答を生成する
-   - 実装方法：GPT-4o-miniを使い、取得したコンテンツに基づいて回答を生成します
 
-私たちの実装では、以下のことを行います：
 
-1. Transformer論文を埋め込みに変換する
-2. それらをPgVectorに保存し、素早く取得できるようにする
-3. 類似度検索を使って関連するセクションを見つける
-4. 取得した文脈を使って正確な応答を生成する
+## RAG の仕組み
 
-## プロジェクト構成
+RAG がどのように機能し、各コンポーネントをどのように実装するかを見ていきましょう。
 
-```
-research-assistant/
-├── src/
-│   ├── mastra/
-│   │   ├── agents/
-│   │   │   └── researchAgent.ts
-│   │   └── index.ts
-│   ├── index.ts
-│   └── store.ts
-├── package.json
-└── .env
-```
+### Knowledge Store/Index
+
+- テキストをベクトル表現に変換する
+- コンテンツを数値ベクトルとして表現する
+- **実装**: OpenAI の `text-embedding-3-small` を使って埋め込みを作成し、LibSQLVector に保存します
+
+### Retriever
+
+- 類似度検索で関連コンテンツを見つける
+- クエリの埋め込みを保存済みベクトルと照合する
+- **実装**: LibSQLVector を使って保存済み埋め込みに対する類似度検索を実行します
+
+### Generator
+
+- 取得したコンテンツを LLM で処理する
+- 文脈に即した応答を生成する
+- **実装**: 取得したコンテンツに基づいて GPT-4o-mini で回答を生成します
+
+この実装では次のことを行います:
+
+1. Transformer 論文を埋め込みに変換する
+2. 高速な検索のために LibSQLVector に保存する
+3. 類似度検索で関連セクションを見つける
+4. 取得した文脈に基づいて正確な応答を生成する
+
+
+
+## エージェントの作成
+
+エージェントの挙動を定義し、Mastra プロジェクトに接続して、ベクターストアを作成します。
 
 <Steps>
-  ### プロジェクトの初期化と依存関係のインストール
 
-まず、プロジェクト用の新しいディレクトリを作成し、その中に移動します。
+### 追加の依存関係をインストールする
 
-```bash
-mkdir research-assistant
-cd research-assistant
-```
-
-新しい Node.js プロジェクトを初期化し、必要な依存関係をインストールします。
+[インストールガイド](/docs/getting-started/installation)の実行後、追加の依存関係をインストールします:
 
 ```bash copy
-npm init -y
-npm install @mastra/core@latest @mastra/rag@latest @mastra/pg@latest @ai-sdk/openai@latest ai@latest zod@latest
+npm install @mastra/rag@latest ai@^4.0.0
 ```
 
-APIアクセスやデータベース接続のための環境変数を設定します。
+<Callout type="info">
+  Mastra は現在、AI SDK の v5 をサポートしていません（[サポートスレッド](https://github.com/mastra-ai/mastra/issues/5470)を参照）。このガイドでは v4 を使用してください。
+</Callout>
 
-```bash filename=".env" copy
-OPENAI_API_KEY=your_openai_api_key
-POSTGRES_CONNECTION_STRING=your_connection_string
-```
+### エージェントを定義する
 
-プロジェクトに必要なファイルを作成します。
+ここでは RAG 対応のリサーチアシスタントを作成します。エージェントは次を使用します:
 
-```bash copy
-mkdir -p src/mastra/agents
-touch src/mastra/agents/researchAgent.ts
-touch src/mastra/index.ts src/store.ts src/index.ts
-```
+- 論文中の関連コンテンツを見つけるためにベクターストア上でセマンティック検索を行う [Vector Query Tool](/reference/tools/vector-query-tool)
+- クエリの理解と回答生成のための GPT-4o-mini
+- 論文の分析方法、取得コンテンツの効果的な活用、限界の認識を指示するカスタムインストラクション
 
-### Research Assistant エージェントの作成
+新しいファイル `src/mastra/agents/researchAgent.ts` を作成し、エージェントを定義します:
 
-次に、RAG対応のリサーチアシスタントを作成します。このエージェントは以下を利用します。
-
-- [Vector Query Tool](/reference/tools/vector-query-tool) を使い、ベクトルストア上でセマンティック検索を行い、論文内の関連コンテンツを見つけます。
-- GPT-4o-mini を用いてクエリの理解と応答の生成を行います
-- 論文の分析方法、取得したコンテンツの効果的な活用方法、制限事項の認識についてエージェントを導くカスタムインストラクション
-
-```ts copy showLineNumbers filename="src/mastra/agents/researchAgent.ts"
+```ts copy filename="src/mastra/agents/researchAgent.ts"
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { createVectorQueryTool } from "@mastra/rag";
 
-// Create a tool for semantic search over our paper embeddings
+// Create a tool for semantic search over the paper embeddings
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: "pgVector",
+  vectorStoreName: "libSqlVector",
   indexName: "papers",
   model: openai.embedding("text-embedding-3-small"),
 });
@@ -120,33 +108,122 @@ export const researchAgent = new Agent({
 });
 ```
 
-### Mastra インスタンスとベクトルストアのセットアップ
+### ベクターストアを作成する
 
-```ts copy showLineNumbers filename="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { PgVector } from "@mastra/pg";
+プロジェクトのルートで `pwd` コマンドを実行して絶対パスを取得します。パスは次のようになる場合があります:
 
-import { researchAgent } from "./agents/researchAgent";
+```bash
+> pwd
+/Users/your-name/guides/research-assistant
+```
 
-// Initialize Mastra instance
-const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
+`src/mastra/index.ts` ファイルで、既存のファイルと設定に次を追加します:
+
+```ts copy filename="src/mastra/index.ts" {2, 4-6, 9}
+import { Mastra } from "@mastra/core/mastra";
+import { LibSQLVector } from "@mastra/libsql";
+
+const libSqlVector = new LibSQLVector({
+  connectionUrl: "file:/Users/your-name/guides/research-assistant/vector.db",
+});
+
 export const mastra = new Mastra({
-  agents: { researchAgent },
-  vectors: { pgVector },
+  vectors: { libSqlVector },
 });
 ```
 
+`connectionUrl` には `pwd` コマンドで取得した絶対パスを使用してください。これにより、`vector.db` ファイルがプロジェクトのルートに作成されます。
+
+<Callout>
+  このガイドではローカルの LibSQL ファイルへのハードコードされた絶対パスを使用していますが、本番環境では適しません。リモートの永続データベースを使用してください。
+</Callout>
+
+### Mastra にエージェントを登録する
+
+`src/mastra/index.ts` ファイルで、Mastra にエージェントを追加します:
+
+```ts copy filename="src/mastra/index.ts" {3, 10}
+import { Mastra } from "@mastra/core/mastra";
+import { LibSQLVector } from "@mastra/libsql";
+import { researchAgent } from "./agents/researchAgent";
+
+const libSqlVector = new LibSQLVector({
+  connectionUrl: "file:/Users/your-name/guides/research-assistant/vector.db",
+});
+
+export const mastra = new Mastra({
+  agents: { researchAgent },
+  vectors: { libSqlVector },
+});
+```
+
+</Steps>
+
+
+
+## ドキュメントの処理
+
+このセクションでは、論文を取得して小さなチャンクに分割し、各チャンクに対して埋め込みを生成し、それらの情報をベクターデータベースに保存します。
+
+<Steps>
+
 ### 論文の読み込みと処理
 
-このステップでは、初期ドキュメント処理を行います。具体的には：
+このステップでは、URL を指定して論文を取得し、ドキュメントオブジェクトに変換したうえで、扱いやすい小さなチャンクに分割します。チャンクに分割することで、処理がより高速かつ効率的になります。
 
-1. 論文をURLから取得
-2. ドキュメントオブジェクトに変換
-3. より良い処理のために小さなチャンクに分割
+新しいファイル `src/store.ts` を作成し、次を追加します:
 
-```ts copy showLineNumbers filename="src/store.ts"
-import { openai } from "@ai-sdk/openai";
+```ts copy filename="src/store.ts"
 import { MDocument } from "@mastra/rag";
+
+// Load the paper
+const paperUrl = "https://arxiv.org/html/1706.03762";
+const response = await fetch(paperUrl);
+const paperText = await response.text();
+
+// Create document and chunk it
+const doc = MDocument.fromText(paperText);
+const chunks = await doc.chunk({
+  strategy: "recursive",
+  maxSize: 512,
+  overlap: 50,
+  separators: ["\n\n", "\n", " "],
+});
+
+console.log("Number of chunks:", chunks.length);
+```
+
+ターミナルでファイルを実行します:
+
+```bash copy
+npx bun src/store.ts
+```
+
+次のような出力が得られるはずです:
+
+```bash
+Number of chunks: 892
+```
+
+### 埋め込みの作成と保存
+
+最後に、RAG 用に次の準備を行います。
+
+1. 各テキストチャンクの埋め込みを生成する
+2. 埋め込みを保持するベクターストアのインデックスを作成する
+3. 埋め込みとメタデータ（元のテキストとソース情報）の両方をベクターデータベースに保存する
+
+<Callout>
+  このメタデータは、ベクターストアが関連する一致を見つけたときに、実際のコンテンツを返すために不可欠です。
+</Callout>
+
+これにより、エージェントは関連情報を効率よく検索・取得できます。
+
+`src/store.ts` ファイルを開き、次を追加します:
+
+```ts copy filename="src/store.ts" {2-4, 20-99}
+import { MDocument } from "@mastra/rag";
+import { openai } from "@ai-sdk/openai";
 import { embedMany } from "ai";
 import { mastra } from "./mastra";
 
@@ -159,28 +236,11 @@ const paperText = await response.text();
 const doc = MDocument.fromText(paperText);
 const chunks = await doc.chunk({
   strategy: "recursive",
-  size: 512,
+  maxSize: 512,
   overlap: 50,
-  separator: "\n",
+  separators: ["\n\n", "\n", " "],
 });
 
-console.log("Number of chunks:", chunks.length);
-// Number of chunks: 893
-```
-
-### 埋め込みの作成と保存
-
-最後に、RAG用にコンテンツを準備します。手順は以下の通りです。
-
-1. 各テキストチャンクの埋め込みを生成
-2. 埋め込みを格納するベクトルストアインデックスを作成
-3. 埋め込みとメタデータ（元のテキストやソース情報）をベクトルデータベースに保存
-
-> **注**: このメタデータは、ベクトルストアが関連する一致を見つけた際に、実際のコンテンツを返すために重要です。
-
-これにより、エージェントは効率的に関連情報を検索・取得できるようになります。
-
-```ts copy showLineNumbers{23} filename="src/store.ts"
 // Generate embeddings
 const { embeddings } = await embedMany({
   model: openai.embedding("text-embedding-3-small"),
@@ -188,9 +248,9 @@ const { embeddings } = await embedMany({
 });
 
 // Get the vector store instance from Mastra
-const vectorStore = mastra.getVector("pgVector");
+const vectorStore = mastra.getVector("libSqlVector");
 
-// Create an index for our paper chunks
+// Create an index for paper chunks
 await vectorStore.createIndex({
   indexName: "papers",
   dimension: 1536,
@@ -207,28 +267,29 @@ await vectorStore.upsert({
 });
 ```
 
-これにより、以下の処理が行われます：
+最後に、スクリプトをもう一度実行して埋め込みを保存します:
 
-1. 論文をURLから読み込みます
-2. 論文を扱いやすいチャンクに分割します
-3. 各チャンクの埋め込みを生成します
-4. 埋め込みとテキストの両方をベクトルデータベースに保存します
-
-スクリプトを実行して埋め込みを保存するには、以下を実行します：
-
-```bash
+```bash copy
 npx bun src/store.ts
 ```
 
-### アシスタントをテストする
+操作が成功すれば、ターミナルには出力やエラーは表示されません。
 
-リサーチアシスタントをさまざまなクエリでテストしてみましょう：
+</Steps>
 
-```ts filename="src/index.ts" showLineNumbers copy
+
+
+## アシスタントをテストする
+
+ベクターデータベースに埋め込みが一通り揃ったので、リサーチアシスタントをさまざまな種類のクエリでテストできます。
+
+新しいファイル `src/ask-agent.ts` を作成し、いくつかの種類のクエリを追加します:
+
+```ts filename="src/ask-agent.ts" copy
 import { mastra } from "./mastra";
 const agent = mastra.getAgent("researchAgent");
 
-// Basic query about concepts
+// 基本的な概念に関するクエリ
 const query1 =
   "What problems does sequence modeling face with neural networks?";
 const response1 = await agent.generate(query1);
@@ -236,15 +297,15 @@ console.log("\nQuery:", query1);
 console.log("Response:", response1.text);
 ```
 
-スクリプトを実行します：
+スクリプトを実行します:
 
 ```bash copy
-npx bun src/index.ts
+npx bun src/ask-agent.ts
 ```
 
-次のような出力が表示されるはずです：
+次のような出力が表示されます:
 
-```
+```bash
 Query: What problems does sequence modeling face with neural networks?
 Response: Sequence modeling with neural networks faces several key challenges:
 1. Vanishing and exploding gradients during training, especially with long sequences
@@ -253,17 +314,20 @@ Response: Sequence modeling with neural networks faces several key challenges:
 4. Challenges in parallelizing computations, resulting in longer training times
 ```
 
-別の質問も試してみましょう：
+別の質問も試してみましょう:
 
-```ts filename="src/index.ts" showLineNumbers{10} copy
-// Query about specific findings
+```ts filename="src/ask-agent.ts" copy
+import { mastra } from "./mastra";
+const agent = mastra.getAgent("researchAgent");
+
+// 具体的な知見に関するクエリ
 const query2 = "What improvements were achieved in translation quality?";
 const response2 = await agent.generate(query2);
 console.log("\nQuery:", query2);
 console.log("Response:", response2.text);
 ```
 
-出力例：
+出力:
 
 ```
 Query: What improvements were achieved in translation quality?
@@ -272,21 +336,21 @@ BLEU points improvement over previously reported models on the WMT 2014 English-
 task, while also reducing training costs.
 ```
 
-### アプリケーションを公開する
+### アプリケーションを提供する
 
-Mastraサーバーを起動して、リサーチアシスタントをAPI経由で利用できるようにします：
+Mastra サーバーを起動して、API 経由でリサーチアシスタントを公開します:
 
 ```bash
 mastra dev
 ```
 
-リサーチアシスタントは以下のURLで利用可能になります：
+リサーチアシスタントは次のエンドポイントで利用できます:
 
 ```
 http://localhost:4111/api/agents/researchAgent/generate
 ```
 
-curlでテストするには：
+curl でテストします:
 
 ```bash
 curl -X POST http://localhost:4111/api/agents/researchAgent/generate \
@@ -298,13 +362,13 @@ curl -X POST http://localhost:4111/api/agents/researchAgent/generate \
   }'
 ```
 
-</Steps>
+
 
 ## 高度なRAGの例
 
-より高度なRAG技術の例を以下でご覧ください：
+より高度なRAG手法の例をご覧ください:
 
-- メタデータを使って結果をフィルタリングする[Filter RAG](/examples/rag/usage/filter-rag)
-- 情報密度を最適化する[Cleanup RAG](/examples/rag/usage/cleanup-rag)
-- ワークフローを用いた複雑な推論クエリのための[Chain of Thought RAG](/examples/rag/usage/cot-rag)
-- 結果の関連性を向上させる[Rerank RAG](/examples/rag/usage/rerank-rag)
+- [Filter RAG](/examples/rag/usage/filter-rag): メタデータによる結果のフィルタリング
+- [Cleanup RAG](/examples/rag/usage/cleanup-rag): 情報密度の最適化
+- [Chain of Thought RAG](/examples/rag/usage/cot-rag): ワークフローを用いた複雑な推論クエリの処理
+- [Rerank RAG](/examples/rag/usage/rerank-rag): 結果の関連性の向上

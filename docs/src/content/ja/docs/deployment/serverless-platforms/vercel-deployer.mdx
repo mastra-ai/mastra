@@ -1,0 +1,105 @@
+---
+title: "Vercel Deployer"
+description: "Mastra VercelDeployerを使用してMastraアプリケーションをVercelにデプロイする方法を学ぶ"
+---
+
+import { FileTree } from "nextra/components";
+
+
+
+# VercelDeployer
+
+`VercelDeployer`クラスは、スタンドアロンのMastraアプリケーションのVercelへのデプロイを処理します。設定、デプロイを管理し、Vercel固有の機能でベースの[Deployer](/reference/deployer/deployer)クラスを拡張します。
+
+
+
+## インストール
+
+```bash copy
+npm install @mastra/deployer-vercel@latest
+```
+
+
+
+## 使用例
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { VercelDeployer } from "@mastra/deployer-vercel";
+
+export const mastra = new Mastra({
+  // ...
+  deployer: new VercelDeployer()
+});
+```
+
+> 利用可能なすべての設定オプションについては、[VercelDeployer](/reference/deployer/vercel) APIリファレンスを参照してください。
+
+
+
+## 継続的インテグレーション
+
+MastraプロジェクトのGitリポジトリをVercelに接続した後、プロジェクト設定を更新します。Vercelダッシュボードで、**Settings** > **Build and Deployment**に移動し、**Framework settings**の下で以下を設定します：
+
+- **Build command**: `npm run build` (オプション)
+
+### 環境変数
+
+初回デプロイメントの前に、アプリケーションで使用される環境変数を必ず追加してください。例えば、LLMとしてOpenAIを使用している場合、Vercelプロジェクト設定で`OPENAI_API_KEY`を設定する必要があります。
+
+> 詳細については[Environment variables](https://vercel.com/docs/environment-variables)を参照してください。
+
+これで、GitHubリポジトリの設定されたブランチにプッシュするたびに自動デプロイメントが実行されるようにプロジェクトが設定されました。
+
+
+
+## 手動デプロイ
+
+[Vercel CLI](https://vercel.com/docs/cli)を使用した手動デプロイも可能です。Vercel CLIをインストールした後、プロジェクトルートから以下のコマンドを実行してアプリケーションをデプロイします。
+
+```bash copy
+npm run build && vercel --prod --prebuilt --archive=tgz
+```
+
+> プロジェクトルートから`vercel dev`を実行して、Mastraアプリケーションをローカルでテストすることもできます。
+
+
+
+## ビルド出力
+
+`VercelDeployer`を使用したMastraアプリケーションのビルド出力には、プロジェクト内のすべてのエージェント、ツール、ワークフローと、Vercel上でアプリケーションを実行するために必要なMastra固有のファイルが含まれます。
+
+<FileTree>
+  <FileTree.Folder name=".vercel" defaultOpen>
+    <FileTree.Folder name="output" defaultOpen>
+      <FileTree.Folder name="functions" defaultOpen>
+        <FileTree.Folder name="index.func" defaultOpen>
+          <FileTree.File name="index.mjs" />
+        </FileTree.Folder>
+      </FileTree.Folder>
+      <FileTree.File name="config.json" />
+    </FileTree.Folder>
+  </FileTree.Folder>
+  <FileTree.File name="package.json" />
+</FileTree>
+
+
+`VercelDeployer`は、`.vercel/output`内に以下の設定を含む`config.json`設定ファイルを自動的に生成します：
+
+```json
+{
+  "version": 3,
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/"
+    }
+  ]
+}
+```
+
+
+
+## 次のステップ
+
+- [Mastra Client SDK](/docs/client-js/overview)

@@ -1,102 +1,201 @@
 ---
-title: "例: 並列実行 | Workflows | Mastra Docs"
-description: ワークフロー内で複数の独立したタスクをMastraを使って並列に実行する例。
+title: "例: 並列実行 | ワークフロー | Mastra ドキュメント"
+description: ワークフロー内で複数の独立したタスクを並列実行するために Mastra を使う例。
 ---
 
-import { GithubLink } from "@/components/github-link";
 
-# ステップによる並列実行
 
-AIアプリケーションを構築する際、効率を向上させるために複数の独立したタスクを同時に処理する必要がよくあります。
+# 並列実行
 
-## 制御フローダイアグラム
+多くのワークフローでは、複数の処理を同時に実行する必要があります。これらの例では、`.parallel()` を使ってステップやワークフローを並行実行し、その結果を統合する方法を示します。
 
-この例では、各ブランチが独自のデータフローと依存関係を処理しながら、ステップを並列で実行するワークフローの構成方法を示します。
 
-制御フローダイアグラムは次のとおりです：
 
-<img
-  src="/parallel-chains.png"
-  alt="並列ステップを含むワークフローのダイアグラム"
-  width={600}
-/>
+## ステップを使った並列実行
 
-## ステップの作成
+この例では、ワークフローは `.parallel()` を使って `step1` と `step2` を実行します。各ステップは同じ入力を受け取り、独立して実行されます。出力はステップの `id` ごとに名前空間化され、まとめて `step3` に渡されます。`step3` は結果を合成し、最終的な値を返します。
 
-まず、ステップを作成し、ワークフローを初期化しましょう。
-
-```ts showLineNumbers copy
-import { Step, Workflow } from "@mastra/core/workflows";
+```typescript filename="src/mastra/workflows/example-parallel-steps.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
-const stepOne = new Step({
-  id: "stepOne",
-  execute: async ({ context }) => ({
-    doubledValue: context.triggerData.inputValue * 2,
+const step1 = createStep({
+  id: "step-1",
+  description: "passes value from input to output",
+  inputSchema: z.object({
+    value: z.number()
   }),
-});
-
-const stepTwo = new Step({
-  id: "stepTwo",
-  execute: async ({ context }) => {
-    if (context.steps.stepOne.status !== "success") {
-      return { incrementedValue: 0 };
-    }
-
-    return { incrementedValue: context.steps.stepOne.output.doubledValue + 1 };
-  },
-});
-
-const stepThree = new Step({
-  id: "stepThree",
-  execute: async ({ context }) => ({
-    tripledValue: context.triggerData.inputValue * 3,
+  outputSchema: z.object({
+    value: z.number()
   }),
+  execute: async ({ inputData }) => {
+    const { value } = inputData;
+    return {
+      value
+    };
+  }
 });
 
-const stepFour = new Step({
-  id: "stepFour",
-  execute: async ({ context }) => {
-    if (context.steps.stepThree.status !== "success") {
-      return { isEven: false };
-    }
-
-    return { isEven: context.steps.stepThree.output.tripledValue % 2 === 0 };
-  },
-});
-
-const myWorkflow = new Workflow({
-  name: "my-workflow",
-  triggerSchema: z.object({
-    inputValue: z.number(),
+const step2 = createStep({
+  id: "step-2",
+  description: "passes value from input to output",
+  inputSchema: z.object({
+    value: z.number()
   }),
+  outputSchema: z.object({
+    value: z.number()
+  }),
+  execute: async ({ inputData }) => {
+    const { value } = inputData;
+    return {
+      value
+    };
+  }
 });
+
+const step3 = createStep({
+  id: "step-3",
+  description: "sums values from step-1 and step-2",
+  inputSchema: z.object({
+    "step-1": z.object({ value: z.number() }),
+    "step-2": z.object({ value: z.number() })
+  }),
+  outputSchema: z.object({
+    value: z.number()
+  }),
+  execute: async ({ inputData }) => {
+    return {
+      value: inputData["step-1"].value + inputData["step-2"].value
+    };
+  }
+});
+
+export const parallelSteps = createWorkflow({
+  id: "parallel-workflow",
+  description: "A workflow that runs steps in parallel plus a final step",
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    value: z.number()
+  })
+})
+  .parallel([step1, step2])
+  .then(step3)
+  .commit();
 ```
 
-## ステップの連結と並列化
 
-これで、ワークフローにステップを追加できるようになりました。`.then()` メソッドはステップを連結するために使われますが、`.step()` メソッドはステップをワークフローに追加するために使われます。
 
-```ts showLineNumbers copy
-myWorkflow
-  .step(stepOne)
-  .then(stepTwo) // chain one
-  .step(stepThree)
-  .then(stepFour) // chain two
+
+## ワークフローによる並列実行
+
+この例では、`.parallel()` を使って `workflow1` と `workflow2` の2つのワークフローを同時に実行します。各ワークフローは、入力値をそのまま返す単一のステップを含みます。出力はワークフローの `id` ごとに名前空間化され、`step3` に渡されます。`step3` は結果を合算して最終的な値を返します。
+
+```typescript filename="src/mastra/workflows/example-parallel-workflows.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  id: "step-1",
+  description: "passes value from input to output",
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    value: z.number()
+  }),
+  execute: async ({ inputData }) => {
+    const { value } = inputData;
+    return {
+      value
+    };
+  }
+});
+
+const step2 = createStep({
+  id: "step-2",
+  description: "passes value from input to output",
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    value: z.number()
+  }),
+  execute: async ({ inputData }) => {
+    const { value } = inputData;
+    return {
+      value
+    };
+  }
+});
+
+const step3 = createStep({
+  id: "step-3",
+  description: "sums values from step-1 and step-2",
+  inputSchema: z.object({
+    "workflow-1": z.object({ value: z.number() }),
+    "workflow-2": z.object({ value: z.number() })
+  }),
+  outputSchema: z.object({
+    value: z.number()
+  }),
+  execute: async ({ inputData }) => {
+    return {
+      value: inputData["workflow-1"].value + inputData["workflow-2"].value
+    };
+  }
+});
+
+export const workflow1 = createWorkflow({
+  id: "workflow-1",
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    value: z.number()
+  })
+})
+  .then(step1)
   .commit();
 
-const { start } = myWorkflow.createRun();
+export const workflow2 = createWorkflow({
+  id: "workflow-2",
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    value: z.number()
+  })
+})
+  .then(step2)
+  .commit();
 
-const result = await start({ triggerData: { inputValue: 3 } });
+export const parallelWorkflows = createWorkflow({
+  id: "parallel-workflow",
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    value: z.number()
+  })
+})
+  .parallel([workflow1, workflow2])
+  .then(step3)
+  .commit();
 ```
 
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-parallel-steps"
-  }
-/>
+
+
+## 関連項目
+
+- [ワークフローの実行](./running-workflows.mdx)
+
+
+
+## ワークフロー（レガシー）
+
+以下のリンクでは、レガシーなワークフローに関するドキュメント例を参照できます。
+
+- [ステップを用いた並列実行](/examples/workflows_legacy/parallel-steps)
+

@@ -3,9 +3,13 @@ title: "Mastra Deployer"
 description: Mastraアプリケーションのパッケージングおよびデプロイを扱うDeployer抽象クラスのドキュメント。
 ---
 
+
+
 # Deployer
 
-Deployerは、Mastraアプリケーションのデプロイを担当し、コードのパッケージング、環境ファイルの管理、Honoフレームワークを使用したアプリケーションの提供を行います。具体的な実装では、特定のデプロイ先に合わせたdeployメソッドを定義する必要があります。
+Deployerは、コードのパッケージ化、環境ファイルの管理、Honoフレームワークを使用したアプリケーションの提供により、スタンドアロンMastraアプリケーションのデプロイメントを処理します。具体的な実装では、特定のデプロイメントターゲット用のdeployメソッドを定義する必要があります。
+
+
 
 ## 使用例
 
@@ -31,6 +35,8 @@ class CustomDeployer extends Deployer {
   }
 }
 ```
+
+
 
 ## パラメーター
 
@@ -67,6 +73,8 @@ class CustomDeployer extends Deployer {
   ]}
 />
 
+
+
 ## メソッド
 
 <PropertiesTable
@@ -85,6 +93,8 @@ class CustomDeployer extends Deployer {
     },
   ]}
 />
+
+
 
 ## Bundler から継承されたメソッド
 
@@ -118,6 +128,8 @@ Deployer クラスは、Bundler クラスから以下の主要なメソッドを
     },
   ]}
 />
+
+
 
 ## コアコンセプト
 
