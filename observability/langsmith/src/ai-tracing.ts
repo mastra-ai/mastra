@@ -35,7 +35,7 @@ type SpanData = {
 const DEFAULT_SPAN_TYPE = 'chain';
 
 // Exceptions to the default mapping
-const SPAN_TYPE_EXCEPTIONS: Partial<Record<AISpanType, string>> = {
+const SPAN_TYPE_EXCEPTIONS: Partial<Record<AISpanType, 'llm' | 'tool' | 'chain'>> = {
   [AISpanType.LLM_GENERATION]: 'llm',
   [AISpanType.LLM_CHUNK]: 'llm',
   [AISpanType.TOOL_CALL]: 'tool',
@@ -46,7 +46,7 @@ const SPAN_TYPE_EXCEPTIONS: Partial<Record<AISpanType, string>> = {
 
 // Mapping function - returns valid LangSmith span types
 function mapSpanType(spanType: AISpanType): 'llm' | 'tool' | 'chain' {
-  return (SPAN_TYPE_EXCEPTIONS[spanType] as any) ?? DEFAULT_SPAN_TYPE;
+  return SPAN_TYPE_EXCEPTIONS[spanType] ?? DEFAULT_SPAN_TYPE;
 }
 
 function isKVMap(value: unknown): value is KVMap {
