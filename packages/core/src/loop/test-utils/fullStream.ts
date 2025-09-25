@@ -532,9 +532,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             "warnings": [],
           },
           {
-            "filename": undefined,
             "id": "123",
-            "mediaType": undefined,
             "providerMetadata": {
               "provider": {
                 "custom": "value",
@@ -562,9 +560,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             "type": "text-end",
           },
           {
-            "filename": undefined,
             "id": "456",
-            "mediaType": undefined,
             "providerMetadata": {
               "provider": {
                 "custom": "value2",

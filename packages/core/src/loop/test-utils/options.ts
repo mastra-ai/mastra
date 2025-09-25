@@ -4117,9 +4117,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             "type": "tool-input-delta",
           },
           {
-            "filename": undefined,
             "id": "123",
-            "mediaType": undefined,
             "providerMetadata": {
               "provider": {
                 "custom": "value",
