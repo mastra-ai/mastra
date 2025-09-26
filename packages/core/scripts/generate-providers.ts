@@ -56,7 +56,7 @@ export type ModelForProvider<P extends Provider> = ProviderModels[P][number];
  * OpenAI-compatible model ID type
  * Full provider/model paths (e.g., "openai/gpt-4o", "anthropic/claude-3-5-sonnet-20241022")
  */
-export type OpenAICompatibleModelId = {[P in Provider]: \`\${P}/\${ModelForProvider<P>}\`}[Provider];
+export type ModelRouterModelId = {[P in Provider]: \`\${P}/\${ModelForProvider<P>}\`}[Provider] | (string & {});
 
 
 /**
@@ -125,7 +125,7 @@ export function parseModelString(modelString: string): { provider: string | null
 /**
  * Type guard to check if a string is a valid OpenAI-compatible model ID
  */
-export function isValidModelId(modelId: string): modelId is OpenAICompatibleModelId {
+export function isValidModelId(modelId: string): modelId is ModelRouterModelId {
   const { provider } = parseModelString(modelId);
   return provider !== null && isProviderRegistered(provider);
 }
@@ -146,9 +146,7 @@ export function isValidModelId(modelId: string): modelId is OpenAICompatibleMode
 // Main execution
 async function main() {
   // Configure which gateways to use
-  const gateways: MastraModelGateway[] = [
-    new ModelsDevGateway(),
-  ];
+  const gateways: MastraModelGateway[] = [new ModelsDevGateway()];
 
   await generateProviderRegistry(gateways);
 }

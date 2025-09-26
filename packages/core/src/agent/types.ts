@@ -17,7 +17,7 @@ import type {
   StreamTextOnStepFinishCallback,
   StreamObjectOnFinishCallback,
 } from '../llm/model/base.types';
-import type { OpenAICompatibleModelId } from '../llm/model/provider-registry.generated';
+import type { ModelRouterModelId } from '../llm/model/provider-registry.generated';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MastraLanguageModel, MemoryConfig, StorageThreadType } from '../memory/types';
@@ -79,9 +79,10 @@ export interface AgentConfig<
   description?: string;
   instructions: DynamicAgentInstructions;
   model:
-    | DynamicArgument<MastraLanguageModel | OpenAICompatibleModelId>
+    | ModelRouterModelId
+    | DynamicArgument<MastraLanguageModel | ModelRouterModelId>
     | {
-        model: DynamicArgument<MastraLanguageModel | OpenAICompatibleModelId>;
+        model: DynamicArgument<MastraLanguageModel | ModelRouterModelId>;
         maxRetries?: number; //defaults to 0
         enabled?: boolean; //defaults to true
       }[];

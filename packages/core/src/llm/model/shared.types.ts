@@ -4,7 +4,7 @@ import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 import type { TracingPolicy } from '../../ai-tracing';
 import type { ScoringData } from './base.types';
-import type { OpenAICompatibleModelId } from './provider-registry.generated';
+import type { ModelRouterModelId } from './provider-registry.generated';
 
 export type inferOutput<Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Output extends ZodSchema
   ? z.infer<Output>
@@ -36,7 +36,7 @@ export type MastraLanguageModel = LanguageModelV1 | LanguageModelV2;
 // - { id: "openai/gpt-4o", apiKey: "..." } (config object)
 // - { id: "custom", url: "...", apiKey: "..." } (custom endpoint)
 // - LanguageModelV1/V2 (existing AI SDK models)
-export type MastraModelConfig = MastraLanguageModel | OpenAICompatibleModelId | (string & {}) | OpenAICompatibleConfig;
+export type MastraModelConfig = MastraLanguageModel | ModelRouterModelId | OpenAICompatibleConfig;
 
 export type MastraLanguageModelV2 = LanguageModelV2;
 

@@ -9,7 +9,7 @@ import type {
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
 import { parseModelString, getProviderConfig } from './provider-registry.generated';
-import type { OpenAICompatibleModelId } from './provider-registry.generated';
+import type { ModelRouterModelId } from './provider-registry.generated';
 import type { OpenAICompatibleConfig } from './shared.types';
 
 // Helper function to resolve API key from environment
@@ -128,7 +128,7 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
   private url: string;
   private headers: Record<string, string>;
 
-  constructor(config: OpenAICompatibleModelId | OpenAICompatibleConfig | string) {
+  constructor(config: ModelRouterModelId | OpenAICompatibleConfig | string) {
     // Parse configuration
     let parsedConfig: OpenAICompatibleConfig;
 
