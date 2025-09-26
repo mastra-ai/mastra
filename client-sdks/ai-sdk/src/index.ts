@@ -144,7 +144,7 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
         throw new Error(`Agent ${agentToUse} not found`);
       }
 
-      const result = await agentObj.streamVNext<OUTPUT, 'aisdk'>(messages, {
+      const result = await agentObj.stream<OUTPUT, 'aisdk'>(messages, {
         ...defaultOptions,
         ...rest,
         format: 'aisdk',

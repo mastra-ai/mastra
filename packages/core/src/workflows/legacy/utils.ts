@@ -278,7 +278,7 @@ export function agentToStep<
         telemetry: realMastra.getTelemetry(),
       });
 
-      const result = await agent.generate(context.inputData.prompt, {
+      const result = await agent.generateLegacy(context.inputData.prompt, {
         runId,
         resourceId: context.inputData.resourceId,
         threadId: context.inputData.threadId,

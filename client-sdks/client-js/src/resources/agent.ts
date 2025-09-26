@@ -24,8 +24,8 @@ import type {
   GetToolResponse,
   ClientOptions,
   StreamParams,
+  StreamLegacyParams,
   UpdateModelParams,
-  StreamVNextParams,
   UpdateModelInModelListParams,
   ReorderModelListParams,
   NetworkStreamParams,
@@ -46,13 +46,13 @@ async function executeToolCallAndRespond({
   runtimeContext,
   respondFn,
 }: {
-  params: StreamVNextParams<any>;
+  params: StreamParams<any>;
   response: Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
   runId?: string;
   resourceId?: string;
   threadId?: string;
   runtimeContext?: RuntimeContext<any>;
-  respondFn: Agent['generateVNext'];
+  respondFn: Agent['generate'];
 }) {
   if (response.finishReason === 'tool-calls') {
     const toolCalls = (
@@ -207,31 +207,6 @@ export class Agent extends BaseResource {
    * @param params - Generation parameters including prompt
    * @returns Promise containing the generated response
    */
-  async generate(
-    params: GenerateParams<undefined> & { output?: never; experimental_output?: never },
-  ): Promise<GenerateReturn<any, undefined, undefined>>;
-  async generate<Output extends JSONSchema7 | ZodType>(
-    params: GenerateParams<Output> & { output: Output; experimental_output?: never },
-  ): Promise<GenerateReturn<any, Output, undefined>>;
-  async generate<StructuredOutput extends JSONSchema7 | ZodType>(
-    params: GenerateParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
-  ): Promise<GenerateReturn<any, undefined, StructuredOutput>>;
-  async generate<
-    Output extends JSONSchema7 | ZodType | undefined = undefined,
-    StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
-  >(params: GenerateParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
-    console.warn(
-      "Deprecation NOTICE:\Generate method will switch to use generateVNext implementation September 30th, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
-    );
-    // @ts-expect-error - generic type issues
-    return this.generateLegacy(params);
-  }
-
-  /**
-   * Generates a response from the agent
-   * @param params - Generation parameters including prompt
-   * @returns Promise containing the generated response
-   */
   async generateLegacy(
     params: GenerateParams<undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateReturn<any, undefined, undefined>>;
@@ -323,20 +298,20 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async generateVNext<OUTPUT extends OutputSchema = undefined>(
+  async generate<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
-    options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
   // Backward compatibility overload
-  async generateVNext<OUTPUT extends OutputSchema = undefined>(
-    params: StreamVNextParams<OUTPUT>,
+  async generate<OUTPUT extends OutputSchema = undefined>(
+    params: StreamParams<OUTPUT>,
   ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
-  async generateVNext<OUTPUT extends OutputSchema = undefined>(
-    messagesOrParams: MessageListInput | StreamVNextParams<OUTPUT>,
-    options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>,
+  async generate<OUTPUT extends OutputSchema = undefined>(
+    messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
     // Handle both new signature (messages, options) and old signature (single param object)
-    let params: StreamVNextParams<OUTPUT>;
+    let params: StreamParams<OUTPUT>;
     if (typeof messagesOrParams === 'object' && 'messages' in messagesOrParams) {
       // Old signature: single parameter object
       params = messagesOrParams;
@@ -345,7 +320,7 @@ export class Agent extends BaseResource {
       params = {
         messages: messagesOrParams as MessageListInput,
         ...options,
-      } as StreamVNextParams<OUTPUT>;
+      } as StreamParams<OUTPUT>;
     }
     const processedParams = {
       ...params,
@@ -360,10 +335,10 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    const { runId, resourceId, threadId, runtimeContext } = processedParams as StreamVNextParams;
+    const { runId, resourceId, threadId, runtimeContext } = processedParams as StreamParams;
 
     const response = await this.request<ReturnType<MastraModelOutput['getFullOutput']>>(
-      `/api/agents/${this.agentId}/generate/vnext`,
+      `/api/agents/${this.agentId}/generate`,
       {
         method: 'POST',
         body: processedParams,
@@ -378,7 +353,7 @@ export class Agent extends BaseResource {
         resourceId,
         threadId,
         runtimeContext: runtimeContext as RuntimeContext<any>,
-        respondFn: this.generateVNext.bind(this),
+        respondFn: this.generate.bind(this),
       }) as unknown as Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
     }
 
@@ -735,18 +710,6 @@ export class Agent extends BaseResource {
    * @param params - Stream parameters including prompt
    * @returns Promise containing the enhanced Response object with processDataStream method
    */
-  async stream<T extends JSONSchema7 | ZodType | undefined = undefined>(
-    params: StreamParams<T>,
-  ): Promise<
-    Response & {
-      processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
-    }
-  > {
-    console.warn(
-      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 30th, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
-    );
-    return this.streamLegacy(params);
-  }
 
   /**
    * Streams a response from the agent
@@ -754,7 +717,7 @@ export class Agent extends BaseResource {
    * @returns Promise containing the enhanced Response object with processDataStream method
    */
   async streamLegacy<T extends JSONSchema7 | ZodType | undefined = undefined>(
-    params: StreamParams<T>,
+    params: StreamLegacyParams<T>,
   ): Promise<
     Response & {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
@@ -1139,7 +1102,7 @@ export class Agent extends BaseResource {
   }
 
   async processStreamResponse_vNext(processedParams: any, writable: any) {
-    const response: Response = await this.request(`/api/agents/${this.agentId}/stream/vnext`, {
+    const response: Response = await this.request(`/api/agents/${this.agentId}/stream`, {
       method: 'POST',
       body: processedParams,
       stream: true,
@@ -1333,9 +1296,9 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async streamVNext<OUTPUT extends OutputSchema = undefined>(
+  async stream<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
-    options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1346,8 +1309,8 @@ export class Agent extends BaseResource {
     }
   >;
   // Backward compatibility overload
-  async streamVNext<OUTPUT extends OutputSchema = undefined>(
-    params: StreamVNextParams<OUTPUT>,
+  async stream<OUTPUT extends OutputSchema = undefined>(
+    params: StreamParams<OUTPUT>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1357,9 +1320,9 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   >;
-  async streamVNext<OUTPUT extends OutputSchema = undefined>(
-    messagesOrParams: MessageListInput | StreamVNextParams<OUTPUT>,
-    options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>,
+  async stream<OUTPUT extends OutputSchema = undefined>(
+    messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1370,7 +1333,7 @@ export class Agent extends BaseResource {
     }
   > {
     // Handle both new signature (messages, options) and old signature (single param object)
-    let params: StreamVNextParams<OUTPUT>;
+    let params: StreamParams<OUTPUT>;
     if (typeof messagesOrParams === 'object' && 'messages' in messagesOrParams) {
       // Old signature: single parameter object
       params = messagesOrParams;
@@ -1379,7 +1342,7 @@ export class Agent extends BaseResource {
       params = {
         messages: messagesOrParams as MessageListInput,
         ...options,
-      } as StreamVNextParams<OUTPUT>;
+      } as StreamParams<OUTPUT>;
     }
     const processedParams = {
       ...params,

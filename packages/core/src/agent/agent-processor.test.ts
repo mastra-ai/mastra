@@ -21,7 +21,7 @@ const createMessage = (text: string, role: 'user' | 'assistant' = 'user'): Mastr
   createdAt: new Date(),
 });
 
-describe('Input and Output Processors with VNext Methods', () => {
+describe('Input and Output Processors', () => {
   let mockModel: MockLanguageModelV2;
 
   beforeEach(() => {
@@ -96,7 +96,7 @@ describe('Input and Output Processors with VNext Methods', () => {
     });
   });
 
-  describe('Input Processors with generateVNext', () => {
+  describe('Input Processors with generate', () => {
     it('should run input processors before generation', async () => {
       const processor = {
         name: 'test-processor',
@@ -113,7 +113,7 @@ describe('Input and Output Processors with VNext Methods', () => {
         inputProcessors: [processor],
       });
 
-      const result = await agentWithProcessor.generateVNext('Hello world');
+      const result = await agentWithProcessor.generate('Hello world');
 
       // The processor should have added a message
       expect((result.response.messages[0].content[0] as any).text).toContain('processed:');
@@ -144,7 +144,7 @@ describe('Input and Output Processors with VNext Methods', () => {
         inputProcessors: [processor1, processor2],
       });
 
-      const result = await agentWithProcessors.generateVNext('Hello');
+      const result = await agentWithProcessors.generate('Hello');
 
       expect((result.response.messages[0].content[0] as any).text).toContain('First processor');
       expect((result.response.messages[0].content[0] as any).text).toContain('Second processor');
@@ -175,7 +175,7 @@ describe('Input and Output Processors with VNext Methods', () => {
         inputProcessors: [processor1, processor2],
       });
 
-      const result = await agentWithAsyncProcessors.generateVNext('Test async');
+      const result = await agentWithAsyncProcessors.generate('Test async');
 
       // Processors run sequentially, so "First processor" should appear before "Second processor"
       expect((result.response.messages[0].content[0] as any).text).toContain('First processor');
@@ -199,7 +199,7 @@ describe('Input and Output Processors with VNext Methods', () => {
       });
 
       async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const result = await agentWithAbortProcessor.generateVNext('This should be aborted', {
+        const result = await agentWithAbortProcessor.generate('This should be aborted', {
           format,
         });
 
@@ -231,7 +231,7 @@ describe('Input and Output Processors with VNext Methods', () => {
       });
 
       async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const result = await agentWithCustomAbort.generateVNext('Custom abort test', {
+        const result = await agentWithCustomAbort.generate('Custom abort test', {
           format,
         });
 
@@ -270,14 +270,14 @@ describe('Input and Output Processors with VNext Methods', () => {
         inputProcessors: [abortProcessor, shouldNotRunProcessor],
       });
 
-      const result = await agentWithAbortSequence.generateVNext('Abort sequence test');
+      const result = await agentWithAbortSequence.generate('Abort sequence test');
 
       expect(result.tripwire).toBe(true);
       expect(secondProcessorExecuted).toBe(false);
     });
   });
 
-  describe('Input Processors with streamVNext', () => {
+  describe('Input Processors with stream', () => {
     it('should handle input processors with streaming', async () => {
       const streamProcessor = {
         name: 'stream-processor',
@@ -294,7 +294,7 @@ describe('Input and Output Processors with VNext Methods', () => {
         inputProcessors: [streamProcessor],
       });
 
-      const stream = await agentWithStreamProcessor.streamVNext('Stream test');
+      const stream = await agentWithStreamProcessor.stream('Stream test');
 
       let fullText = '';
       for await (const chunk of stream.fullStream) {
@@ -322,7 +322,7 @@ describe('Input and Output Processors with VNext Methods', () => {
         inputProcessors: [streamAbortProcessor],
       });
 
-      const stream = await agentWithStreamAbort.streamVNext('Stream abort test');
+      const stream = await agentWithStreamAbort.stream('Stream abort test');
 
       const fullOutput = await stream.getFullOutput();
       expect(fullOutput.tripwire).toBe(true);
@@ -360,7 +360,7 @@ describe('Input and Output Processors with VNext Methods', () => {
         },
       });
 
-      const result = await agentWithDynamicProcessors.generateVNext('Test dynamic', {
+      const result = await agentWithDynamicProcessors.generate('Test dynamic', {
         runtimeContext,
       });
 
@@ -389,7 +389,7 @@ describe('Input and Output Processors with VNext Methods', () => {
         inputProcessors: [messageModifierProcessor],
       });
 
-      const result = await agentWithModifier.generateVNext('Original user message');
+      const result = await agentWithModifier.generate('Original user message');
 
       expect((result.response.messages[0].content[0] as any).text).toContain('MODIFIED: Original message was received');
       expect((result.response.messages[0].content[0] as any).text).toContain('Original user message');
@@ -428,11 +428,11 @@ describe('Input and Output Processors with VNext Methods', () => {
       });
 
       // Test valid content
-      const validResult = await agentWithValidator.generateVNext('This is appropriate content');
+      const validResult = await agentWithValidator.generate('This is appropriate content');
       expect((validResult.response.messages[0].content[0] as any).text).toContain('Content validated');
 
       // Test invalid content
-      const invalidResult = await agentWithValidator.generateVNext('This contains inappropriate content');
+      const invalidResult = await agentWithValidator.generate('This contains inappropriate content');
       expect(invalidResult.tripwire).toBe(true);
       expect(invalidResult.tripwireReason).toBe('Content validation failed');
     });
@@ -445,14 +445,14 @@ describe('Input and Output Processors with VNext Methods', () => {
         inputProcessors: [],
       });
 
-      const result = await agentWithEmptyProcessors.generateVNext('No processors test');
+      const result = await agentWithEmptyProcessors.generate('No processors test');
 
       expect((result.response.messages[0].content[0] as any).text).toContain('processed:');
       expect((result.response.messages[0].content[0] as any).text).toContain('No processors test');
     });
   });
 
-  describe('Output Processors with generateVNext', () => {
+  describe('Output Processors with generate', () => {
     it('should process final text through output processors', async () => {
       let processedText = '';
 
@@ -509,7 +509,7 @@ describe('Input and Output Processors with VNext Methods', () => {
       });
 
       async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const result = await agent.generateVNext('Hello', {
+        const result = await agent.generate('Hello', {
           format,
         });
 
@@ -595,7 +595,7 @@ describe('Input and Output Processors with VNext Methods', () => {
       });
 
       async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const result = await agent.generateVNext('Test', {
+        const result = await agent.generate('Test', {
           format,
         });
 
@@ -660,7 +660,7 @@ describe('Input and Output Processors with VNext Methods', () => {
 
       async function testWithFormat(format: 'aisdk' | 'mastra') {
         // Should return tripwire result when processor aborts
-        const result = await agent.generateVNext('Generate inappropriate content', {
+        const result = await agent.generate('Generate inappropriate content', {
           format,
         });
 
@@ -726,7 +726,7 @@ describe('Input and Output Processors with VNext Methods', () => {
       });
 
       async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const result = await agent.generateVNext('Test incomplete processors', {
+        const result = await agent.generate('Test incomplete processors', {
           format,
         });
 
@@ -739,7 +739,7 @@ describe('Input and Output Processors with VNext Methods', () => {
     });
   });
 
-  describe('Output Processors with streamVNext', () => {
+  describe('Output Processors with stream', () => {
     it('should process text chunks through output processors in real-time', async () => {
       class TestOutputProcessor implements Processor {
         readonly name = 'test-output-processor';
@@ -773,7 +773,7 @@ describe('Input and Output Processors with VNext Methods', () => {
       });
 
       async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const stream = await agent.streamVNext('Hello', {
+        const stream = await agent.stream('Hello', {
           format,
         });
 
@@ -818,7 +818,7 @@ describe('Input and Output Processors with VNext Methods', () => {
       });
 
       async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const stream = await agent.streamVNext('Hello', {
+        const stream = await agent.stream('Hello', {
           format,
         });
 
@@ -862,7 +862,7 @@ describe('Input and Output Processors with VNext Methods', () => {
       });
 
       async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const stream = await agent.streamVNext('Hello', {
+        const stream = await agent.stream('Hello', {
           format,
         });
         const chunks: any[] = [];
@@ -945,7 +945,7 @@ describe('Input and Output Processors with VNext Methods', () => {
       });
 
       async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const stream = await agent.streamVNext('Test', {
+        const stream = await agent.stream('Test', {
           format,
         });
 
@@ -970,7 +970,7 @@ describe('Input and Output Processors with VNext Methods', () => {
   });
 
   describe('Custom Output with Processors', () => {
-    it('should process streamed structured output through output processors with streamVNext', async () => {
+    it('should process streamed structured output through output processors with stream', async () => {
       let processedChunks: string[] = [];
       let finalProcessedObject: any = null;
 
@@ -1060,7 +1060,7 @@ describe('Input and Output Processors with VNext Methods', () => {
       });
 
       async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const response = await agent.streamVNext('Who won the 2012 US presidential election?', {
+        const response = await agent.stream('Who won the 2012 US presidential election?', {
           output: z.object({
             winner: z.string(),
             year: z.string(),
@@ -1104,7 +1104,7 @@ describe('Input and Output Processors with VNext Methods', () => {
   });
 
   describe('Tripwire Functionality', () => {
-    describe('generateVNext method', () => {
+    describe('generate method', () => {
       it('should handle processor abort with default message', async () => {
         const abortProcessor = {
           name: 'abort-output-processor',
@@ -1145,7 +1145,7 @@ describe('Input and Output Processors with VNext Methods', () => {
         });
 
         async function testWithFormat(format: 'aisdk' | 'mastra') {
-          const result = await agent.generateVNext('Hello', {
+          const result = await agent.generate('Hello', {
             format,
           });
 
@@ -1160,7 +1160,7 @@ describe('Input and Output Processors with VNext Methods', () => {
       });
     });
 
-    describe('streamVNext method', () => {
+    describe('stream method', () => {
       it('should handle processor abort with default message', async () => {
         const abortProcessor = {
           name: 'abort-stream-output-processor',
@@ -1181,7 +1181,7 @@ describe('Input and Output Processors with VNext Methods', () => {
         });
 
         async function testWithFormat(format: 'aisdk' | 'mastra') {
-          const stream = await agent.streamVNext('Hello', {
+          const stream = await agent.stream('Hello', {
             format,
           });
           const chunks: any[] = [];
@@ -1223,7 +1223,7 @@ describe('Input and Output Processors with VNext Methods', () => {
         });
 
         async function testWithFormat(format: 'aisdk' | 'mastra') {
-          const stream = await agent.streamVNext('Custom abort test', {
+          const stream = await agent.stream('Custom abort test', {
             format,
           });
           const chunks: any[] = [];
@@ -1274,7 +1274,7 @@ describe('Input and Output Processors with VNext Methods', () => {
           let result;
 
           if (model.specificationVersion === 'v1') {
-            result = await agent.generate(
+            result = await agent.generateLegacy(
               'Tell me about a vibrant sunset orange color. What are its properties and how does it make people feel?.',
               {
                 structuredOutput: {
@@ -1285,7 +1285,7 @@ describe('Input and Output Processors with VNext Methods', () => {
               },
             );
           } else {
-            result = await agent.generateVNext(
+            result = await agent.generate(
               'Tell me about a vibrant sunset orange color. What are its properties and how does it make people feel? Keep your response really short.',
               {
                 structuredOutput: {
@@ -1359,7 +1359,7 @@ describe('Input and Output Processors with VNext Methods', () => {
           let result;
 
           if (model.specificationVersion === 'v1') {
-            result = await agent.generate(`Analyze this article and extract key information:\n\n${articleText}`, {
+            result = await agent.generateLegacy(`Analyze this article and extract key information:\n\n${articleText}`, {
               structuredOutput: {
                 schema: articleSchema,
                 model,
@@ -1367,7 +1367,7 @@ describe('Input and Output Processors with VNext Methods', () => {
               },
             });
           } else {
-            result = await agent.generateVNext(`Analyze this article and extract key information:\n\n${articleText}`, {
+            result = await agent.generate(`Analyze this article and extract key information:\n\n${articleText}`, {
               structuredOutput: {
                 schema: articleSchema,
                 model,
@@ -1436,7 +1436,7 @@ describe('Input and Output Processors with VNext Methods', () => {
           let result;
 
           if (model.specificationVersion === 'v1') {
-            result = await agent.generate('Tell me about the weather today in a casual way.', {
+            result = await agent.generateLegacy('Tell me about the weather today in a casual way.', {
               structuredOutput: {
                 schema: strictSchema,
                 model,
@@ -1445,7 +1445,7 @@ describe('Input and Output Processors with VNext Methods', () => {
               },
             });
           } else {
-            result = await agent.generateVNext('Tell me about the weather today in a casual way.', {
+            result = await agent.generate('Tell me about the weather today in a casual way.', {
               structuredOutput: {
                 schema: strictSchema,
                 model: new MockLanguageModelV2({
@@ -1488,7 +1488,7 @@ describe('Input and Output Processors with VNext Methods', () => {
           let result;
 
           if (model.specificationVersion === 'v1') {
-            result = await agent.generate(
+            result = await agent.generateLegacy(
               'Come up with an innovative solution for reducing food waste in restaurants.',
               {
                 structuredOutput: {
@@ -1499,7 +1499,7 @@ describe('Input and Output Processors with VNext Methods', () => {
               },
             );
           } else {
-            result = await agent.generateVNext(
+            result = await agent.generate(
               'Come up with an innovative solution for reducing food waste in restaurants.',
               {
                 structuredOutput: {
@@ -1536,7 +1536,7 @@ describe('Input and Output Processors with VNext Methods', () => {
         }, 40000);
       });
 
-      it('should work with streamVNext', async () => {
+      it('should work with stream', async () => {
         const ideaSchema = z.object({
           idea: z.string().describe('The creative idea'),
           category: z.enum(['technology', 'business', 'art', 'science', 'other']).describe('Category of the idea'),
@@ -1555,7 +1555,7 @@ describe('Input and Output Processors with VNext Methods', () => {
         if (model.specificationVersion === 'v1') {
           return;
         } else {
-          result = await agent.streamVNext(
+          result = await agent.stream(
             `
                 Come up with an innovative solution for reducing food waste in restaurants. 
                 Make sure to include an idea, category, feasibility, and resources.
@@ -1656,7 +1656,7 @@ describe('v1 model - output processors', () => {
         outputProcessors: [new TestOutputProcessor()],
       });
 
-      const result = await agent.generate('Hello');
+      const result = await agent.generateLegacy('Hello');
 
       // The output processors should modify the returned result
       expect(result.text).toBe('This is a TEST response with TEST words');
@@ -1722,7 +1722,7 @@ describe('v1 model - output processors', () => {
         outputProcessors: [new ReplaceProcessor(), new AddPrefixProcessor()],
       });
 
-      const result = await agent.generate('Test');
+      const result = await agent.generateLegacy('Test');
 
       // The output processors should modify the returned result
       expect(result.text).toBe('[PROCESSED] HELLO world');
@@ -1764,7 +1764,7 @@ describe('v1 model - output processors', () => {
       });
 
       // Should return tripwire result when processor aborts
-      const result = await agent.generate('Generate inappropriate content');
+      const result = await agent.generateLegacy('Generate inappropriate content');
 
       expect(result.tripwire).toBe(true);
       expect(result.tripwireReason).toBe('Content flagged as inappropriate');
@@ -1814,7 +1814,7 @@ describe('v1 model - output processors', () => {
         outputProcessors: [new CompleteProcessor()],
       });
 
-      const result = await agent.generate('Test');
+      const result = await agent.generateLegacy('Test');
 
       // The output processors should modify the returned result
       expect(result.text).toBe('Original response [COMPLETE]');
@@ -1877,7 +1877,7 @@ describe('v1 model - output processors', () => {
         outputProcessors: [new TestStructuredOutputProcessor()],
       });
 
-      const result = await agent.generate('Who won the 2012 US presidential election?', {
+      const result = await agent.generateLegacy('Who won the 2012 US presidential election?', {
         output: z.object({
           winner: z.string(),
           year: z.string(),
@@ -1970,7 +1970,7 @@ describe('v1 model - output processors', () => {
         outputProcessors: [new FirstProcessor(), new SecondProcessor()],
       });
 
-      const result = await agent.generate('Say hello', {
+      const result = await agent.generateLegacy('Say hello', {
         output: z.object({
           message: z.string(),
         }),
@@ -2019,7 +2019,7 @@ describe('v1 model - output processors', () => {
           outputProcessors: [abortProcessor],
         });
 
-        const result = await agent.generate('Hello');
+        const result = await agent.generateLegacy('Hello');
 
         expect(result.tripwire).toBe(true);
         expect(result.tripwireReason).toBe('Tripwire triggered by abort-output-processor');
@@ -2050,7 +2050,7 @@ describe('v1 model - output processors', () => {
           outputProcessors: [customAbortProcessor],
         });
 
-        const result = await agent.generate('Custom abort test');
+        const result = await agent.generateLegacy('Custom abort test');
 
         expect(result.tripwire).toBe(true);
         expect(result.tripwireReason).toBe('Custom output abort reason');
@@ -2098,7 +2098,7 @@ describe('v1 model - output processors', () => {
           outputProcessors: [abortProcessor, shouldNotRunProcessor],
         });
 
-        const result = await agent.generate('Abort sequence test');
+        const result = await agent.generateLegacy('Abort sequence test');
 
         expect(result.tripwire).toBe(true);
         expect(result.tripwireReason).toBe('Stop here');

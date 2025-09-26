@@ -36,7 +36,7 @@ describe('Agent vNext', () => {
     vi.clearAllMocks();
   });
 
-  it('streamVNext: completes when server sends finish without tool calls', async () => {
+  it('stream: completes when server sends finish without tool calls', async () => {
     // step-start -> text-delta -> step-finish -> finish: stop
     const sseChunks = [
       { type: 'step-start', payload: { messageId: 'm1' } },
@@ -47,7 +47,7 @@ describe('Agent vNext', () => {
 
     (global.fetch as any).mockResolvedValueOnce(sseResponse(sseChunks));
 
-    const resp = await agent.streamVNext({ messages: 'hi' });
+    const resp = await agent.stream({ messages: 'hi' });
 
     // Verify stream can be consumed without errors
     let receivedChunks = 0;
@@ -60,12 +60,12 @@ describe('Agent vNext', () => {
 
     // Verify request
     expect(global.fetch).toHaveBeenCalledWith(
-      'http://localhost:4111/api/agents/agent-1/stream/vnext',
+      'http://localhost:4111/api/agents/agent-1/stream',
       expect.objectContaining({ method: 'POST' }),
     );
   });
 
-  it('streamVNext: executes client tool and triggers recursive call on finish reason tool-calls', async () => {
+  it('stream: executes client tool and triggers recursive call on finish reason tool-calls', async () => {
     const toolCallId = 'call_1';
 
     // First cycle: emit tool-call and finish with tool-calls
@@ -101,14 +101,17 @@ describe('Agent vNext', () => {
       execute: executeSpy,
     });
 
-    const resp = await agent.streamVNext({ messages: 'weather?', clientTools: { weatherTool } });
+    const resp = await agent.stream({ messages: 'weather?', clientTools: { weatherTool } });
 
     await resp.processDataStream({ onChunk: async _chunk => {} });
 
     // Client tool executed
     expect(executeSpy).toHaveBeenCalledTimes(1);
+    console.log((global.fetch as any).mock.calls);
     // Recursive request made
-    expect((global.fetch as any).mock.calls.filter((c: any[]) => (c?.[0] as string).includes('/vnext')).length).toBe(2);
+    expect((global.fetch as any).mock.calls.filter((c: any[]) => (c?.[0] as string).includes('/stream')).length).toBe(
+      2,
+    );
   });
 
   it('generate: returns JSON using mocked fetch', async () => {
@@ -117,10 +120,10 @@ describe('Agent vNext', () => {
       new Response(JSON.stringify(mockJson), { status: 200, headers: { 'content-type': 'application/json' } }),
     );
 
-    const result = await agent.generateVNext('hello');
+    const result = await agent.generate('hello');
     expect(result).toEqual(mockJson);
     expect(global.fetch).toHaveBeenCalledWith(
-      'http://localhost:4111/api/agents/agent-1/generate/vnext',
+      'http://localhost:4111/api/agents/agent-1/generate',
       expect.objectContaining({
         body: '{"messages":"hello"}',
         credentials: undefined,
@@ -134,7 +137,7 @@ describe('Agent vNext', () => {
     );
   });
 
-  it('streamVNext: supports structuredOutput without explicit model', async () => {
+  it('stream: supports structuredOutput without explicit model', async () => {
     // Mock response with structured output
     const sseChunks = [
       { type: 'step-start', payload: { messageId: 'm1' } },
@@ -151,7 +154,7 @@ describe('Agent vNext', () => {
       age: z.number(),
     });
 
-    const resp = await agent.streamVNext({
+    const resp = await agent.stream({
       messages: 'Create a person object',
       structuredOutput: {
         schema: personSchema,
@@ -170,7 +173,7 @@ describe('Agent vNext', () => {
 
     // Verify request contains structuredOutput in the body
     expect(global.fetch).toHaveBeenCalledWith(
-      'http://localhost:4111/api/agents/agent-1/stream/vnext',
+      'http://localhost:4111/api/agents/agent-1/stream',
       expect.objectContaining({
         method: 'POST',
         body: expect.stringMatching(/structuredOutput/),
@@ -194,7 +197,7 @@ describe('Agent vNext', () => {
     expect(requestBody.structuredOutput).not.toHaveProperty('model');
   });
 
-  it('generateVNext: supports structuredOutput without explicit model', async () => {
+  it('generate: supports structuredOutput without explicit model', async () => {
     const mockJson = {
       id: 'gen-1',
       object: { name: 'Jane', age: 25 },
@@ -211,7 +214,7 @@ describe('Agent vNext', () => {
       age: z.number(),
     });
 
-    const result = await agent.generateVNext({
+    const result = await agent.generate({
       messages: 'Create a person object',
       structuredOutput: {
         schema: personSchema,
@@ -224,7 +227,7 @@ describe('Agent vNext', () => {
 
     // Verify request contains structuredOutput in the body
     expect(global.fetch).toHaveBeenCalledWith(
-      'http://localhost:4111/api/agents/agent-1/generate/vnext',
+      'http://localhost:4111/api/agents/agent-1/generate',
       expect.objectContaining({
         method: 'POST',
         body: expect.stringMatching(/structuredOutput/),

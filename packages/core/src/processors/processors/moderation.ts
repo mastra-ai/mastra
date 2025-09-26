@@ -251,7 +251,7 @@ export class ModerationProcessor implements Processor {
       });
       let response;
       if (model.specificationVersion === 'v2') {
-        response = await this.moderationAgent.generateVNext(prompt, {
+        response = await this.moderationAgent.generate(prompt, {
           output: schema,
           modelSettings: {
             temperature: 0,
@@ -259,7 +259,7 @@ export class ModerationProcessor implements Processor {
           tracingContext,
         });
       } else {
-        response = await this.moderationAgent.generate(prompt, {
+        response = await this.moderationAgent.generateLegacy(prompt, {
           output: schema,
           temperature: 0,
           tracingContext,

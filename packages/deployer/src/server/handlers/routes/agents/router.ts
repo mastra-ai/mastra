@@ -6,18 +6,16 @@ import { generateSystemPromptHandler } from '../../prompt';
 import { executeAgentToolHandler, getAgentToolHandler } from '../tools/handlers';
 import {
   generateHandler,
-  generateVNextHandler,
   getAgentByIdHandler,
   getAgentsHandler,
   getEvalsByAgentIdHandler,
   getLiveEvalsByAgentIdHandler,
   setAgentInstructionsHandler,
   streamGenerateHandler,
-  streamVNextGenerateHandler,
   updateAgentModelHandler,
   vNextBodyOptions,
   deprecatedStreamVNextHandler,
-  streamVNextUIMessageHandler,
+  streamUIMessageHandler,
   streamGenerateLegacyHandler,
   generateLegacyHandler,
   reorderAgentModelListHandler,
@@ -282,15 +280,16 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    generateVNextHandler,
+    generateHandler,
   );
 
   router.post(
     '/:agentId/stream/vnext',
     bodyLimit(bodyLimitOptions),
     describeRoute({
-      description: 'Generate a response from an agent',
+      description: '[DEPRECATED] This endpoint is deprecated. Please use /stream instead.',
       tags: ['agents'],
+      deprecated: true,
       parameters: [
         {
           name: 'agentId',
@@ -320,7 +319,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    streamVNextGenerateHandler,
+    streamGenerateHandler,
   );
 
   router.post(
@@ -508,6 +507,45 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
     '/:agentId/stream/vnext/ui',
     bodyLimit(bodyLimitOptions),
     describeRoute({
+      description: '[DEPRECATED] This endpoint is deprecated. Please use /stream/ui instead.',
+      tags: ['agents'],
+      deprecated: true,
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: vNextBodyOptions,
+              required: ['messages'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Streamed response',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    streamUIMessageHandler,
+  );
+
+  router.post(
+    '/:agentId/stream/ui',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
       description: 'Stream a response from an agent',
       tags: ['agents'],
       parameters: [
@@ -539,7 +577,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    streamVNextUIMessageHandler,
+    streamUIMessageHandler,
   );
 
   router.post(

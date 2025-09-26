@@ -5,8 +5,8 @@ export const NetworkCallout = () => {
     <Callout type="important">
       <b>Experimental Feature</b>
       <p>
-        .network() leverages the experimental feature `streamVNext()` and is
-        only compatible with AI SDK v5 models.
+        .network() leverages the new `stream()` method and is only compatible
+        with AI SDK v5 models.
       </p>
     </Callout>
   );

@@ -11,6 +11,7 @@ import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool, ToolStream } from '@mastra/core/tools';
 import { getStepResult, Workflow, Run, DefaultExecutionEngine, validateStepInput } from '@mastra/core/workflows';
 import type {
+  StepWithComponent,
   ExecuteFunction,
   ExecutionContext,
   ExecutionEngine,
@@ -27,7 +28,6 @@ import type {
   StreamEvent,
   ChunkType,
   ExecutionEngineOptions,
-  StepWithComponent,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
@@ -765,7 +765,7 @@ export function createStep<
             await emitter.emit('watch-v2', {
               type: 'tool-call-delta',
               ...(toolData ?? {}),
-              argsTextDelta: chunk.textDelta,
+              argsTextDelta: chunk.payload.text,
             });
           }
         }

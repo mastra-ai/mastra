@@ -58,7 +58,7 @@ export class MastraWorkflowStream<
       if ('inputTokens' in usage) {
         this.#usageCount.inputTokens += parseInt(usage?.inputTokens?.toString() ?? '0', 10);
         this.#usageCount.outputTokens += parseInt(usage?.outputTokens?.toString() ?? '0', 10);
-        // we need to handle both formats because you can use a V1 model inside a streamVNext workflow
+        // we need to handle both formats because you can use a V1 model inside a stream workflow
       } else if ('promptTokens' in usage) {
         this.#usageCount.inputTokens += parseInt(usage?.promptTokens?.toString() ?? '0', 10);
         this.#usageCount.outputTokens += parseInt(usage?.completionTokens?.toString() ?? '0', 10);

@@ -85,7 +85,7 @@ export class AgentBuilder extends Agent {
    * Enhanced generate method with AgentBuilder-specific configuration
    * Overrides the base Agent generate method to provide additional project context
    */
-  generate: Agent['generate'] = async (
+  generateLegacy: Agent['generateLegacy'] = async (
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     generateOptions: (GenerateAgentOptions & AgentGenerateOptions<any, any>) | undefined = {},
   ): Promise<any> => {
@@ -113,14 +113,14 @@ export class AgentBuilder extends Agent {
       projectPath: this.builderConfig.projectPath,
     });
 
-    return super.generate(messages, enhancedOptions);
+    return super.generateLegacy(messages, enhancedOptions);
   };
 
   /**
    * Enhanced stream method with AgentBuilder-specific configuration
    * Overrides the base Agent stream method to provide additional project context
    */
-  stream: Agent['stream'] = async (
+  streamLegacy: Agent['streamLegacy'] = async (
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     streamOptions: (GenerateAgentOptions & AgentStreamOptions<any, any>) | undefined = {},
   ): Promise<any> => {
@@ -147,14 +147,14 @@ export class AgentBuilder extends Agent {
       projectPath: this.builderConfig.projectPath,
     });
 
-    return super.stream(messages, enhancedOptions);
+    return super.streamLegacy(messages, enhancedOptions);
   };
 
   /**
    * Enhanced stream method with AgentBuilder-specific configuration
    * Overrides the base Agent stream method to provide additional project context
    */
-  async streamVNext<OUTPUT extends OutputSchema = undefined, FORMAT extends 'mastra' | 'aisdk' | undefined = undefined>(
+  async stream<OUTPUT extends OutputSchema = undefined, FORMAT extends 'mastra' | 'aisdk' | undefined = undefined>(
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
@@ -181,10 +181,10 @@ export class AgentBuilder extends Agent {
       projectPath: this.builderConfig.projectPath,
     });
 
-    return super.streamVNext(messages, enhancedOptions);
+    return super.stream(messages, enhancedOptions);
   }
 
-  async generateVNext<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' = 'mastra'>(
+  async generate<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' = 'mastra'>(
     messages: MessageListInput,
     options?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<
@@ -215,6 +215,6 @@ export class AgentBuilder extends Agent {
       projectPath: this.builderConfig.projectPath,
     });
 
-    return super.generateVNext(messages, enhancedOptions);
+    return super.generate(messages, enhancedOptions);
   }
 }

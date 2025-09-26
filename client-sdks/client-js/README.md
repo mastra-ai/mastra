@@ -53,10 +53,10 @@ const client = new MastraClient({
 - `getAgents()`: Get all available agents
 - `getAgent(agentId)`: Get a specific agent instance
   - `agent.details()`: Get agent details
-  - `agent.generate(params)`: Generate a response (deprecated)
-  - `agent.generateVNext(params)`: Improved API for generating a response
-  - `agent.stream(params)`: Stream a response (deprecated)
-  - `agent.streamVNext(params)`: Improved API for streaming a response
+- `agent.generate(params)`: Generate a response
+  - `agent.generateLegacy(params)`: Legacy API for generating a response (V1 models)
+  - `agent.stream(params)`: Stream a response
+  - `agent.streamLegacy(params)`: Legacy API for streaming a response (V1 models)
   - `agent.getTool(toolId)`: Get agent tool details
   - `agent.evals()`: Get agent evaluations
   - `agent.liveEvals()`: Get live evaluations

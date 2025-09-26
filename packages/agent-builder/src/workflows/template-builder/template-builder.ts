@@ -233,11 +233,11 @@ Return the actual exported names of the units, as well as the file names.`,
       });
 
       const result = isV2
-        ? await agent.generateVNext(prompt, {
+        ? await agent.generate(prompt, {
             output,
             maxSteps: 100,
           })
-        : await agent.generate(prompt, {
+        : await agent.generateLegacy(prompt, {
             experimental_output: output,
             maxSteps: 100,
           });
@@ -1161,7 +1161,7 @@ Start by listing your tasks and work through them systematically!
 
       // Process tasks systematically
       const isV2 = model.specificationVersion === 'v2';
-      const result = isV2 ? await agentBuilder.streamVNext(prompt) : await agentBuilder.stream(prompt);
+      const result = isV2 ? await agentBuilder.stream(prompt) : await agentBuilder.streamLegacy(prompt);
 
       // Extract actual conflict resolution details from agent execution
       const actualResolutions: Array<{
@@ -1438,10 +1438,10 @@ Previous iterations may have fixed some issues, so start by re-running validateC
         const isV2 = model.specificationVersion === 'v2';
         const output = z.object({ success: z.boolean() });
         const result = isV2
-          ? await validationAgent.streamVNext(iterationPrompt, {
+          ? await validationAgent.stream(iterationPrompt, {
               output,
             })
-          : await validationAgent.stream(iterationPrompt, {
+          : await validationAgent.streamLegacy(iterationPrompt, {
               experimental_output: output,
             });
 

@@ -1058,7 +1058,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    *
    * @example
    * ```typescript
-   * const stream = await agent.streamVNext("Extract data", {
+   * const stream = await agent.stream("Extract data", {
    *   output: z.object({ name: z.string(), age: z.number() })
    * });
    * // partial json chunks
@@ -1127,7 +1127,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    *
    * @example
    * ```typescript
-   * const stream = await agent.streamVNext("Extract data", {
+   * const stream = await agent.stream("Extract data", {
    *   output: z.object({ name: z.string(), age: z.number() })
    * });
    * // final validated json

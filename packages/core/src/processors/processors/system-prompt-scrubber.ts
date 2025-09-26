@@ -250,12 +250,12 @@ export class SystemPromptScrubber implements Processor {
       });
 
       if (model.specificationVersion === 'v2') {
-        result = await this.detectionAgent.generateVNext(text, {
+        result = await this.detectionAgent.generate(text, {
           output: schema,
           tracingContext,
         });
       } else {
-        result = await this.detectionAgent.generate(text, {
+        result = await this.detectionAgent.generateLegacy(text, {
           output: schema,
           tracingContext,
         });
