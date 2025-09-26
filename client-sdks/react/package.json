@@ -28,8 +28,7 @@
   "dependencies": {
     "@mastra/client-js": "workspace:*",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1",
-    "zod": "^4.1.9"
+    "react-dom": "^19.1.1"
   },
   "devDependencies": {
     "@assistant-ui/react": "^0.10.45",
