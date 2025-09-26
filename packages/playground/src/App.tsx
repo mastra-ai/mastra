@@ -25,12 +25,7 @@ import MCPServerToolExecutor from './pages/mcps/tool';
 
 import { McpServerPage } from './pages/mcps/[serverId]';
 
-import {
-  LinkComponentProvider,
-  LinkComponentProviderProps,
-  MastraClientProvider,
-  PlaygroundQueryClient,
-} from '@mastra/playground-ui';
+import { LinkComponentProvider, LinkComponentProviderProps, PlaygroundQueryClient } from '@mastra/playground-ui';
 import VNextNetwork from './pages/networks/network/v-next';
 import { NavigateTo } from './lib/react-router';
 import { Link } from './lib/framework';
@@ -39,6 +34,7 @@ import Scorer from './pages/scorers/scorer';
 import Observability from './pages/observability';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
+import { MastraReactProvider } from '@mastra/react-hooks';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
@@ -70,9 +66,9 @@ const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
 
 function App() {
   return (
-    <PlaygroundQueryClient>
-      <PostHogProvider>
-        <MastraClientProvider>
+    <MastraReactProvider>
+      <PlaygroundQueryClient>
+        <PostHogProvider>
           <BrowserRouter>
             <LinkComponentWrapper>
               <Routes>
@@ -187,9 +183,9 @@ function App() {
               </Routes>
             </LinkComponentWrapper>
           </BrowserRouter>
-        </MastraClientProvider>
-      </PostHogProvider>
-    </PlaygroundQueryClient>
+        </PostHogProvider>
+      </PlaygroundQueryClient>
+    </MastraReactProvider>
   );
 }
 

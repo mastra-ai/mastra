@@ -1,5 +1,5 @@
 const meta = {
-  index: "Overview",
+  index: "OTLP Providers",
   "arize-ax": "Arize AX",
   "arize-phoenix": "Arize Phoenix",
   dash0: "Dash0",
