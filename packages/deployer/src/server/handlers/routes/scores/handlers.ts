@@ -7,6 +7,7 @@ import {
   getScoresByEntityIdHandler as getOriginalScoresByEntityIdHandler,
   saveScoreHandler as getOriginalSaveScoreHandler,
   getScorerHandler as getOriginalScorerHandler,
+  getScoresBySpan as getOriginalScoresBySpanHandler,
 } from '@mastra/server/handlers/scores';
 import type { Context } from 'hono';
 import { handleError } from '../../error';
@@ -117,5 +118,27 @@ export async function saveScoreHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error saving score');
+  }
+}
+
+export async function getScoresBySpan(c: Context) {
+  const mastra = c.get('mastra');
+  const traceId = c.req.param('traceId');
+  const spanId = c.req.param('spanId');
+  const page = parseInt(c.req.query('page') || '0');
+  const perPage = parseInt(c.req.query('perPage') || '10');
+  const pagination: StoragePagination = { page, perPage };
+
+  try {
+    const scores = await getOriginalScoresBySpanHandler({
+      mastra,
+      traceId,
+      spanId,
+      pagination,
+    });
+
+    return c.json(scores);
+  } catch (error) {
+    return handleError(error, 'Error getting scores by span');
   }
 }
