@@ -129,6 +129,13 @@ export const mastra = new Mastra({
       isOptional: true,
       defaultValue: "{ externals: [], sourcemap: false, transpilePackages: [] }",
     },
+    {
+      name: "scorers",
+      type: "Record<string, MastraScorer>",
+        description: "Scorers to register for scoring traces and overriding default scorers used during agent generation or workflow execution. Structured as a key-value pair, with keys being the scorer name and values being the scorer instance.",
+      isOptional: true,
+      defaultValue: "{}",
+    },
   ]}
 />
 

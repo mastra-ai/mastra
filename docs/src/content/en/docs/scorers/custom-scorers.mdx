@@ -31,7 +31,7 @@ You can mix and match approaches within a single scorer - for example, use a fun
 
 ### Initializing a Scorer
 
-Every scorer starts with the `createScorer` factory function, which requires a name and description, and optionally accepts a judge configuration for LLM-based steps.
+Every scorer starts with the `createScorer` factory function, which requires a name and description, and optionally accepts a type specification and judge configuration.
 
 ```typescript
 import { createScorer } from '@mastra/core/scores';
@@ -53,6 +53,21 @@ const glutenCheckerScorer = createScorer({
 ```
 
 The judge configuration is only needed if you plan to use prompt objects in any step. Individual steps can override this default configuration with their own judge settings.
+
+#### Agent Type for Agent Evaluation
+
+For type safety and compatibility with both live agent scoring and trace scoring, use `type: 'agent'` when creating scorers for agent evaluation. This allows you to use the same scorer for an agent and also use it to score traces:
+
+```typescript
+const myScorer = createScorer({
+  // ...
+  type: 'agent', // Automatically handles agent input/output types
+})
+.generateScore(({ run, results }) => {
+  // run.output is automatically typed as ScorerRunOutputForAgent
+  // run.input is automatically typed as ScorerRunInputForAgent
+});
+```
 
 ### Step-by-Step Breakdown
 
