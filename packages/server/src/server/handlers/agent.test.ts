@@ -15,7 +15,6 @@ import {
   getEvalsByAgentIdHandler,
   getLiveEvalsByAgentIdHandler,
   generateHandler,
-  streamGenerateHandler,
   updateAgentModelHandler,
   reorderAgentModelListHandler,
   updateAgentModelInModelListHandler,
