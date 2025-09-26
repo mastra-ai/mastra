@@ -507,7 +507,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
       if (!isLLMExecutionStep || !schema) {
-        // Bypassing processing in inner stream, only process object chunks in outer stream
+        // Bypassing processing if we are not in the LLM execution step (inner stream)
         // OR if there is no output schema provided
         controller.enqueue(chunk);
         return;
@@ -551,7 +551,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
 
     async flush(controller) {
       // Bypass final validation if there is no output schema provided
-      // or if we are not in result mode (outer stream)
+      // or if we are not in the LLM execution step (inner stream)
       if (!isLLMExecutionStep || !schema) {
         return;
       }
