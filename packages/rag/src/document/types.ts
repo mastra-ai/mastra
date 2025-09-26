@@ -1,3 +1,4 @@
+import type { MastraLanguageModel } from '@mastra/core';
 import type { TiktokenEncoding, TiktokenModel } from 'js-tiktoken';
 import type {
   TitleExtractorsArgs,
@@ -40,6 +41,8 @@ export type ExtractParams = {
   summary?: SummaryExtractArgs | boolean;
   questions?: QuestionAnswerExtractArgs | boolean;
   keywords?: KeywordExtractArgs | boolean;
+  // Optional language model to use for extraction tasks
+  llm?: MastraLanguageModel;
 };
 
 export type BaseChunkOptions = {
