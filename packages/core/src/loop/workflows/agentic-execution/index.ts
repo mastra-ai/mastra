@@ -53,25 +53,28 @@ export function createAgenticExecutionWorkflow<
     },
   })
     .then(llmExecutionStep)
-    .map(async ({ inputData }) => {
-      const typedInputData = inputData as LLMIterationData<Tools>;
-      if (modelStreamSpan && telemetry_settings?.recordOutputs !== false && typedInputData.output.toolCalls?.length) {
-        modelStreamSpan.setAttribute(
-          'stream.response.toolCalls',
-          JSON.stringify(
-            typedInputData.output.toolCalls?.map(toolCall => {
-              return {
-                toolCallId: toolCall.toolCallId,
-                // @ts-ignore TODO: look into the type here
-                args: toolCall.args,
-                toolName: toolCall.toolName,
-              };
-            }),
-          ),
-        );
-      }
-      return typedInputData.output.toolCalls || [];
-    })
+    .map(
+      async ({ inputData }) => {
+        const typedInputData = inputData as LLMIterationData<Tools>;
+        if (modelStreamSpan && telemetry_settings?.recordOutputs !== false && typedInputData.output.toolCalls?.length) {
+          modelStreamSpan.setAttribute(
+            'stream.response.toolCalls',
+            JSON.stringify(
+              typedInputData.output.toolCalls?.map(toolCall => {
+                return {
+                  toolCallId: toolCall.toolCallId,
+                  // @ts-ignore TODO: look into the type here
+                  args: toolCall.args,
+                  toolName: toolCall.toolName,
+                };
+              }),
+            ),
+          );
+        }
+        return typedInputData.output.toolCalls || [];
+      },
+      { id: 'map-tool-calls' },
+    )
     .foreach(toolCallStep, { concurrency: 10 })
     .then(llmMappingStep)
     .commit();

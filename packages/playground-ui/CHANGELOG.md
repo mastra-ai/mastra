@@ -1,5 +1,75 @@
 # @mastra/playground-ui
 
+## 6.2.2
+
+### Patch Changes
+
+- dependencies updates: ([#7980](https://github.com/mastra-ai/mastra/pull/7980))
+  - Updated dependency [`zod@^4.1.8` ↗︎](https://www.npmjs.com/package/zod/v/4.1.8) (from `^4.1.5`, in `dependencies`)
+
+- dependencies updates: ([#8019](https://github.com/mastra-ai/mastra/pull/8019))
+  - Updated dependency [`motion@^12.23.13` ↗︎](https://www.npmjs.com/package/motion/v/12.23.13) (from `^12.23.12`, in `dependencies`)
+
+- dependencies updates: ([#8034](https://github.com/mastra-ai/mastra/pull/8034))
+  - Updated dependency [`zod@^4.1.9` ↗︎](https://www.npmjs.com/package/zod/v/4.1.9) (from `^4.1.8`, in `dependencies`)
+
+- dependencies updates: ([#8050](https://github.com/mastra-ai/mastra/pull/8050))
+  - Updated dependency [`@xyflow/react@^12.8.5` ↗︎](https://www.npmjs.com/package/@xyflow/react/v/12.8.5) (from `^12.8.4`, in `dependencies`)
+
+- show the tool-output stream in the playground for streamVNext ([#7983](https://github.com/mastra-ai/mastra/pull/7983))
+
+- Get rid off swr one for all ([#7931](https://github.com/mastra-ai/mastra/pull/7931))
+
+- Fix DateTimePicker style issue ([#8106](https://github.com/mastra-ai/mastra/pull/8106))
+
+- Fix navigating between scores and entity types ([#8129](https://github.com/mastra-ai/mastra/pull/8129))
+
+- Fix getting tool link path from agent in playground ui tools page ([#8135](https://github.com/mastra-ai/mastra/pull/8135))
+
+- Update Peerdeps for packages based on core minor bump ([#8025](https://github.com/mastra-ai/mastra/pull/8025))
+
+- Add UI for scoring traces ([#8089](https://github.com/mastra-ai/mastra/pull/8089))
+
+- Updated dependencies [[`cf34503`](https://github.com/mastra-ai/mastra/commit/cf345031de4e157f29087946449e60b965e9c8a9), [`6b4b1e4`](https://github.com/mastra-ai/mastra/commit/6b4b1e4235428d39e51cbda9832704c0ba70ab32), [`3469fca`](https://github.com/mastra-ai/mastra/commit/3469fca7bb7e5e19369ff9f7044716a5e4b02585), [`a61f23f`](https://github.com/mastra-ai/mastra/commit/a61f23fbbca4b88b763d94f1d784c47895ed72d7), [`4b339b8`](https://github.com/mastra-ai/mastra/commit/4b339b8141c20d6a6d80583c7e8c5c05d8c19492), [`8f56160`](https://github.com/mastra-ai/mastra/commit/8f56160fd45c740076529148b9c225f6842d43b0), [`d1dc606`](https://github.com/mastra-ai/mastra/commit/d1dc6067b0557a71190b68d56ee15b48c26d2411), [`c45298a`](https://github.com/mastra-ai/mastra/commit/c45298a0a0791db35cf79f1199d77004da0704cb), [`c4a8204`](https://github.com/mastra-ai/mastra/commit/c4a82046bfd241d6044e234bc5917d5a01fe6b55), [`d3bd4d4`](https://github.com/mastra-ai/mastra/commit/d3bd4d482a685bbb67bfa89be91c90dca3fa71ad), [`c591dfc`](https://github.com/mastra-ai/mastra/commit/c591dfc1e600fae1dedffe239357d250e146378f), [`1920c5c`](https://github.com/mastra-ai/mastra/commit/1920c5c6d666f687785c73021196aa551e579e0d), [`b6a3b65`](https://github.com/mastra-ai/mastra/commit/b6a3b65d830fa0ca7754ad6481661d1f2c878f21), [`af3abb6`](https://github.com/mastra-ai/mastra/commit/af3abb6f7c7585d856e22d27f4e7d2ece2186b9a), [`282379f`](https://github.com/mastra-ai/mastra/commit/282379fafed80c6417fe1e791087110decd481ca)]:
+  - @mastra/core@0.18.0
+  - @mastra/client-js@0.13.2
+
+## 6.2.2-alpha.4
+
+### Patch Changes
+
+- Fix getting tool link path from agent in playground ui tools page ([#8135](https://github.com/mastra-ai/mastra/pull/8135))
+
+## 6.2.2-alpha.3
+
+### Patch Changes
+
+- Fix DateTimePicker style issue ([#8106](https://github.com/mastra-ai/mastra/pull/8106))
+
+- Fix navigating between scores and entity types ([#8129](https://github.com/mastra-ai/mastra/pull/8129))
+
+- Add UI for scoring traces ([#8089](https://github.com/mastra-ai/mastra/pull/8089))
+
+- Updated dependencies [[`4b339b8`](https://github.com/mastra-ai/mastra/commit/4b339b8141c20d6a6d80583c7e8c5c05d8c19492), [`8f56160`](https://github.com/mastra-ai/mastra/commit/8f56160fd45c740076529148b9c225f6842d43b0), [`c591dfc`](https://github.com/mastra-ai/mastra/commit/c591dfc1e600fae1dedffe239357d250e146378f), [`1920c5c`](https://github.com/mastra-ai/mastra/commit/1920c5c6d666f687785c73021196aa551e579e0d), [`b6a3b65`](https://github.com/mastra-ai/mastra/commit/b6a3b65d830fa0ca7754ad6481661d1f2c878f21), [`af3abb6`](https://github.com/mastra-ai/mastra/commit/af3abb6f7c7585d856e22d27f4e7d2ece2186b9a), [`282379f`](https://github.com/mastra-ai/mastra/commit/282379fafed80c6417fe1e791087110decd481ca)]:
+  - @mastra/core@0.18.0-alpha.3
+  - @mastra/client-js@0.13.2-alpha.3
+
+## 6.2.2-alpha.2
+
+### Patch Changes
+
+- dependencies updates: ([#8034](https://github.com/mastra-ai/mastra/pull/8034))
+  - Updated dependency [`zod@^4.1.9` ↗︎](https://www.npmjs.com/package/zod/v/4.1.9) (from `^4.1.8`, in `dependencies`)
+
+- dependencies updates: ([#8050](https://github.com/mastra-ai/mastra/pull/8050))
+  - Updated dependency [`@xyflow/react@^12.8.5` ↗︎](https://www.npmjs.com/package/@xyflow/react/v/12.8.5) (from `^12.8.4`, in `dependencies`)
+
+- Update Peerdeps for packages based on core minor bump ([#8025](https://github.com/mastra-ai/mastra/pull/8025))
+
+- Updated dependencies [[`cf34503`](https://github.com/mastra-ai/mastra/commit/cf345031de4e157f29087946449e60b965e9c8a9), [`6b4b1e4`](https://github.com/mastra-ai/mastra/commit/6b4b1e4235428d39e51cbda9832704c0ba70ab32), [`3469fca`](https://github.com/mastra-ai/mastra/commit/3469fca7bb7e5e19369ff9f7044716a5e4b02585), [`c4a8204`](https://github.com/mastra-ai/mastra/commit/c4a82046bfd241d6044e234bc5917d5a01fe6b55)]:
+  - @mastra/core@0.18.0-alpha.2
+  - @mastra/client-js@0.13.2-alpha.2
+
 ## 6.2.2-alpha.1
 
 ### Patch Changes

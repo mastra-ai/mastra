@@ -238,4 +238,322 @@ describe('Memory with PostgresStore Integration', () => {
       expect(result2.messages, 'perPage larger than total should return all 3 messages').toHaveLength(3);
     });
   });
+
+  describe('PostgreSQL Vector Index Configuration', () => {
+    it('should support HNSW index configuration', async () => {
+      const hnswMemory = new Memory({
+        storage: new PostgresStore(config),
+        vector: new PgVector({ connectionString }),
+        embedder: fastembed,
+        options: {
+          lastMessages: 5,
+          semanticRecall: {
+            topK: 3,
+            messageRange: 2,
+            indexConfig: {
+              type: 'hnsw',
+              metric: 'dotproduct',
+              hnsw: {
+                m: 16,
+                efConstruction: 64,
+              },
+            },
+          },
+        },
+      });
+
+      const threadId = randomUUID();
+      const resourceId = randomUUID();
+
+      // Create thread first
+      await hnswMemory.createThread({
+        threadId,
+        resourceId,
+      });
+
+      // Save a message to trigger index creation
+      await hnswMemory.saveMessages({
+        messages: [
+          {
+            id: randomUUID(),
+            content: 'Test message for HNSW index',
+            role: 'user',
+            createdAt: new Date(),
+            threadId,
+            resourceId,
+            type: 'text',
+          },
+        ],
+      });
+
+      // Query to verify the index works
+      const result = await hnswMemory.query({
+        threadId,
+        resourceId,
+        selectBy: {
+          vectorSearchString: 'HNSW test',
+        },
+      });
+
+      expect(result.messages).toBeDefined();
+    });
+
+    it('should support IVFFlat index configuration with custom lists', async () => {
+      const ivfflatMemory = new Memory({
+        storage: new PostgresStore(config),
+        vector: new PgVector({ connectionString }),
+        embedder: fastembed,
+        options: {
+          lastMessages: 5,
+          semanticRecall: {
+            topK: 2,
+            messageRange: 1,
+            indexConfig: {
+              type: 'ivfflat',
+              metric: 'cosine',
+              ivf: {
+                lists: 500,
+              },
+            },
+          },
+        },
+      });
+
+      const threadId = randomUUID();
+      const resourceId = randomUUID();
+
+      // Create thread first
+      await ivfflatMemory.createThread({
+        threadId,
+        resourceId,
+      });
+
+      // Save a message to trigger index creation
+      await ivfflatMemory.saveMessages({
+        messages: [
+          {
+            id: randomUUID(),
+            content: 'Test message for IVFFlat index',
+            role: 'user',
+            createdAt: new Date(),
+            threadId,
+            resourceId,
+            type: 'text',
+          },
+        ],
+      });
+
+      // Query to verify the index works
+      const result = await ivfflatMemory.query({
+        threadId,
+        resourceId,
+        selectBy: {
+          vectorSearchString: 'IVFFlat test',
+        },
+      });
+
+      expect(result.messages).toBeDefined();
+    });
+
+    it('should support flat (no index) configuration', async () => {
+      const flatMemory = new Memory({
+        storage: new PostgresStore(config),
+        vector: new PgVector({ connectionString }),
+        embedder: fastembed,
+        options: {
+          lastMessages: 5,
+          semanticRecall: {
+            topK: 2,
+            messageRange: 1,
+            indexConfig: {
+              type: 'flat',
+              metric: 'euclidean',
+            },
+          },
+        },
+      });
+
+      const threadId = randomUUID();
+      const resourceId = randomUUID();
+
+      // Create thread first
+      await flatMemory.createThread({
+        threadId,
+        resourceId,
+      });
+
+      // Save a message to trigger index creation
+      await flatMemory.saveMessages({
+        messages: [
+          {
+            id: randomUUID(),
+            content: 'Test message for flat scan',
+            role: 'user',
+            createdAt: new Date(),
+            threadId,
+            resourceId,
+            type: 'text',
+          },
+        ],
+      });
+
+      // Query to verify the index works
+      const result = await flatMemory.query({
+        threadId,
+        resourceId,
+        selectBy: {
+          vectorSearchString: 'flat scan test',
+        },
+      });
+
+      expect(result.messages).toBeDefined();
+    });
+
+    it('should handle index configuration changes', async () => {
+      // Start with IVFFlat
+      const memory1 = new Memory({
+        storage: new PostgresStore(config),
+        vector: new PgVector({ connectionString }),
+        embedder: fastembed,
+        options: {
+          semanticRecall: {
+            topK: 3,
+            indexConfig: {
+              type: 'ivfflat',
+              metric: 'cosine',
+            },
+          },
+        },
+      });
+
+      const threadId = randomUUID();
+      const resourceId = randomUUID();
+
+      await memory1.createThread({ threadId, resourceId });
+      await memory1.saveMessages({
+        messages: [
+          {
+            id: randomUUID(),
+            content: 'First configuration',
+            role: 'user',
+            createdAt: new Date(),
+            threadId,
+            resourceId,
+            type: 'text',
+          },
+        ],
+      });
+
+      // Now switch to HNSW - should trigger index recreation
+      const memory2 = new Memory({
+        storage: new PostgresStore(config),
+        vector: new PgVector({ connectionString }),
+        embedder: fastembed,
+        options: {
+          semanticRecall: {
+            topK: 3,
+            indexConfig: {
+              type: 'hnsw',
+              metric: 'dotproduct',
+              hnsw: { m: 16, efConstruction: 64 },
+            },
+          },
+        },
+      });
+
+      await memory2.saveMessages({
+        messages: [
+          {
+            id: randomUUID(),
+            content: 'Second configuration with HNSW',
+            role: 'user',
+            createdAt: new Date(),
+            threadId,
+            resourceId,
+            type: 'text',
+          },
+        ],
+      });
+
+      // Query should work with new index
+      const result = await memory2.query({
+        query: 'configuration',
+        threadId,
+        resourceId,
+      });
+      expect(result.messages).toBeDefined();
+    });
+
+    it('should preserve existing index when no config provided', async () => {
+      // First, create with HNSW
+      const memory1 = new Memory({
+        storage: new PostgresStore(config),
+        vector: new PgVector({ connectionString }),
+        embedder: fastembed,
+        options: {
+          semanticRecall: {
+            topK: 3,
+            indexConfig: {
+              type: 'hnsw',
+              metric: 'dotproduct',
+              hnsw: { m: 16, efConstruction: 64 },
+            },
+          },
+        },
+      });
+
+      const threadId = randomUUID();
+      const resourceId = randomUUID();
+
+      await memory1.createThread({ threadId, resourceId });
+      await memory1.saveMessages({
+        messages: [
+          {
+            id: randomUUID(),
+            content: 'HNSW index created',
+            role: 'user',
+            createdAt: new Date(),
+            threadId,
+            resourceId,
+            type: 'text',
+          },
+        ],
+      });
+
+      // Create another memory instance without index config - should preserve HNSW
+      const memory2 = new Memory({
+        storage: new PostgresStore(config),
+        vector: new PgVector({ connectionString }),
+        embedder: fastembed,
+        options: {
+          semanticRecall: {
+            topK: 3,
+            // No indexConfig - should preserve existing HNSW
+          },
+        },
+      });
+
+      await memory2.saveMessages({
+        messages: [
+          {
+            id: randomUUID(),
+            content: 'Should still use HNSW index',
+            role: 'user',
+            createdAt: new Date(),
+            threadId,
+            resourceId,
+            type: 'text',
+          },
+        ],
+      });
+
+      // Query should work with preserved HNSW index
+      const result = await memory2.query({
+        query: 'index',
+        threadId,
+        resourceId,
+      });
+      expect(result.messages).toBeDefined();
+    });
+  });
 });

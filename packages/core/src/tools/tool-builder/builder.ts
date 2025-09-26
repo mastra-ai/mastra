@@ -272,6 +272,7 @@ export class CoreToolBuilder extends MastraBase {
       description: this.originalTool.description,
       parameters: this.getParameters(),
       outputSchema: this.getOutputSchema(),
+      requireApproval: this.options.requireApproval,
       execute: this.originalTool.execute
         ? this.createExecute(
             this.originalTool,

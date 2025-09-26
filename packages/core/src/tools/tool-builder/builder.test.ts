@@ -887,6 +887,7 @@ describe('Tool Input Validation', () => {
       },
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
+      suspend: async () => {},
     });
 
     expect(result).toEqual({
@@ -904,6 +905,7 @@ describe('Tool Input Validation', () => {
       },
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
+      suspend: async () => {},
     });
 
     expect(result).toEqual({
@@ -922,6 +924,7 @@ describe('Tool Input Validation', () => {
       },
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
+      suspend: async () => {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -940,6 +943,7 @@ describe('Tool Input Validation', () => {
       },
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
+      suspend: async () => {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -959,6 +963,7 @@ describe('Tool Input Validation', () => {
       },
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
+      suspend: async () => {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -977,6 +982,7 @@ describe('Tool Input Validation', () => {
         age: 30,
       },
       runtimeContext: new RuntimeContext(),
+      suspend: async () => {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -996,6 +1002,7 @@ describe('Tool Input Validation', () => {
       },
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
+      suspend: async () => {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -1016,6 +1023,7 @@ describe('Tool Input Validation', () => {
       },
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
+      suspend: async () => {},
     });
 
     expect(result).toHaveProperty('error', true);

@@ -124,6 +124,9 @@ export type AgentExecutionOptions<
 
   /** Callback function called before each step of multi-step execution */
   prepareStep?: PrepareStepFunction<any>;
+
+  /** Require approval for all tool calls */
+  requireToolApproval?: boolean;
 } & OutputOptions<OUTPUT>;
 
 type OutputOptions<OUTPUT extends OutputSchema = undefined> =
@@ -150,4 +153,6 @@ export type InnerAgentExecutionOptions<
   methodType: 'generate' | 'stream' | 'streamVNext';
   /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
   model?: MastraLanguageModel;
+  /** Internal: Whether the execution is a resume */
+  resumeContext?: any;
 };

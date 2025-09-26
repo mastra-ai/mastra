@@ -1,7 +1,7 @@
 const meta = {
-  providers: "Providers",
-  logger: "PinoLogger",
-  "otel-config": "OTelConfig",
+  logging: "Logging",
+  "ai-tracing": "AI Tracing",
+  "otel-tracing": "OTEL Tracing",
 };
 
 export default meta;

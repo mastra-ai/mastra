@@ -48,10 +48,14 @@ export function TraceTimeline({
         </div>
       ) : (
         <div
-          className={cn('grid items-start content-start gap-y-[2px]', 'xl:gap-x-[1rem] xl:py-[1rem]', {
-            'xl:grid-cols-[3fr_auto]': !overallEndTime,
-            'xl:grid-cols-[3fr_2fr]': overallEndTime,
-          })}
+          className={cn(
+            'grid items-start content-start gap-y-[2px] bg-surface2 rounded-lg overflow-hidden pl-[1.5rem] py-[1.5rem]',
+            'xl:gap-x-[1rem] xl:py-[1rem]',
+            {
+              'xl:grid-cols-[3fr_auto]': !overallEndTime,
+              'xl:grid-cols-[3fr_2fr]': overallEndTime,
+            },
+          )}
         >
           {hierarchicalSpans?.map(span => (
             <TraceTimelineSpan

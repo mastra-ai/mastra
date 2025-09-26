@@ -11,12 +11,21 @@ interface StreamStepOptions<FORMAT extends 'aisdk' | 'mastra' | undefined = unde
   runId: string;
   returnScorerData?: boolean;
   format?: FORMAT;
+  requireToolApproval?: boolean;
+  resumeContext?: any;
 }
 
 export function createStreamStep<
   OUTPUT extends OutputSchema | undefined = undefined,
   FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({ capabilities, runId, returnScorerData, format = 'mastra' as FORMAT }: StreamStepOptions<FORMAT>) {
+>({
+  capabilities,
+  runId,
+  returnScorerData,
+  format = 'mastra' as FORMAT,
+  requireToolApproval,
+  resumeContext,
+}: StreamStepOptions<FORMAT>) {
   return createStep({
     id: 'stream-text-step',
     inputSchema: z.any(), // tried to type this in various ways but it's too complex
@@ -47,6 +56,8 @@ export function createStreamStep<
         outputProcessors: processors,
         returnScorerData,
         tracingContext,
+        requireToolApproval,
+        resumeContext,
         _internal: {
           generateId: capabilities.generateMessageId,
         },

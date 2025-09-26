@@ -1,4 +1,10 @@
-import { useAgent, useModelProviders, useUpdateAgentModel } from '@/hooks/use-agents';
+import {
+  useAgent,
+  useModelProviders,
+  useReorderModelList,
+  useUpdateAgentModel,
+  useUpdateModelInModelList,
+} from '@/hooks/use-agents';
 import { AgentLogs } from './agent-logs';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -21,6 +27,8 @@ export function AgentInformation({ agentId }: { agentId: string }) {
   const { data: agent, isLoading } = useAgent(agentId);
   const { data: modelProviders } = useModelProviders();
   const { mutateAsync: updateModel } = useUpdateAgentModel(agentId);
+  const { mutate: reorderModelList } = useReorderModelList(agentId);
+  const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { settings, setSettings } = useAgentSettings();
 
@@ -74,6 +82,8 @@ export function AgentInformation({ agentId }: { agentId: string }) {
                 agentId={agentId}
                 agent={agent}
                 updateModel={updateModel}
+                updateModelInModelList={updateModelInModelList}
+                reorderModelList={reorderModelList}
                 modelProviders={modelProviders || []}
                 hasMemoryEnabled={Boolean(memory?.result)}
                 promptSlot={<AgentPromptEnhancer agentId={agentId} />}

@@ -142,11 +142,12 @@ export class MastraLLMVNext extends MastraBase {
     ];
   }
 
-  stream<Tools extends ToolSet, OUTPUT extends OutputSchema = undefined>({
+  stream<Tools extends ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
+    resumeContext,
+    runId,
     stopWhen = stepCountIs(5),
     maxSteps,
     tools = {} as Tools,
-    runId,
     modelSettings,
     toolChoice = 'auto',
     telemetry_settings,
@@ -159,6 +160,7 @@ export class MastraLLMVNext extends MastraBase {
     providerOptions,
     tracingContext,
     messageList,
+    requireToolApproval,
     _internal,
     // ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT | undefined> {
@@ -203,6 +205,9 @@ export class MastraLLMVNext extends MastraBase {
 
     try {
       const loopOptions: LoopOptions<Tools, OUTPUT> = {
+        mastra: this.#mastra,
+        resumeContext,
+        runId,
         messageList,
         models: this.#models,
         tools: tools as Tools,
@@ -219,6 +224,7 @@ export class MastraLLMVNext extends MastraBase {
         outputProcessors,
         returnScorerData,
         llmAISpan,
+        requireToolApproval,
         options: {
           ...options,
           onStepFinish: async props => {

@@ -75,6 +75,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           toolCallId: 'call-1',
           messages: expect.any(Array),
           writableStream: expect.any(Object),
+          resumeData: undefined,
+          suspend: expect.any(Function),
         },
       );
     });

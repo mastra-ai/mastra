@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import type { ZodLikeSchema } from '../types/zod-compat';
 
 export interface ValidationError<T = any> {
   error: true;
@@ -14,7 +15,7 @@ export interface ValidationError<T = any> {
  * @returns The validation error object if validation fails, undefined if successful
  */
 export function validateToolInput<T = any>(
-  schema: z.ZodSchema<T> | undefined,
+  schema: ZodLikeSchema | undefined,
   input: unknown,
   toolId?: string,
 ): { data: T | unknown; error?: ValidationError<T> } {
@@ -24,7 +25,7 @@ export function validateToolInput<T = any>(
 
   // Store validation results to avoid duplicate validation
   type ValidationAttempt = {
-    result: z.SafeParseReturnType<any, T>;
+    result: { success: boolean; data?: any; error?: any };
     data: unknown;
     structure: 'direct' | 'context' | 'inputData';
   };

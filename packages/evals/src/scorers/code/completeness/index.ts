@@ -1,5 +1,4 @@
 import { createScorer } from '@mastra/core/scores';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
 import nlp from 'compromise';
 
 function normalizeString(str: string): string {
@@ -74,10 +73,11 @@ function calculateCoverage({ original, simplified }: { original: string[]; simpl
 }
 
 export function createCompletenessScorer() {
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
-    name: 'Completeness',
+  return createScorer({
+    name: 'Completeness Scorer',
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
+    type: 'agent',
   })
     .preprocess(async ({ run }) => {
       const isInputInvalid =

@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { columns } from './columns';
 import { AgentTableData } from './types';
 import { useLinkComponent } from '@/lib/framework';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 export interface AgentsTableProps {
   agents: Record<string, GetAgentResponse>;
@@ -37,6 +38,7 @@ export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
           tools: agent.tools,
           modelId: agent.modelId,
           link: paths.agentLink(key),
+          modelList: agent.modelList,
         };
       }),
     [agents],
@@ -59,26 +61,28 @@ export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
 
   return (
     <ScrollableContainer>
-      <Table>
-        <Thead className="sticky top-0">
-          {ths.headers.map(header => (
-            <Th key={header.id} style={{ width: header.index === 0 ? 'auto' : header.column.getSize() }}>
-              {flexRender(header.column.columnDef.header, header.getContext())}
-            </Th>
-          ))}
-        </Thead>
-        <Tbody>
-          {rows.map(row => (
-            <Row key={row.id} onClick={() => navigate(row.original.link)}>
-              {row.getVisibleCells().map(cell => (
-                <React.Fragment key={cell.id}>
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </React.Fragment>
-              ))}
-            </Row>
-          ))}
-        </Tbody>
-      </Table>
+      <TooltipProvider>
+        <Table>
+          <Thead className="sticky top-0">
+            {ths.headers.map(header => (
+              <Th key={header.id} style={{ width: header.index === 0 ? 'auto' : header.column.getSize() }}>
+                {flexRender(header.column.columnDef.header, header.getContext())}
+              </Th>
+            ))}
+          </Thead>
+          <Tbody>
+            {rows.map(row => (
+              <Row key={row.id} onClick={() => navigate(row.original.link)}>
+                {row.getVisibleCells().map(cell => (
+                  <React.Fragment key={cell.id}>
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </React.Fragment>
+                ))}
+              </Row>
+            ))}
+          </Tbody>
+        </Table>
+      </TooltipProvider>
     </ScrollableContainer>
   );
 }

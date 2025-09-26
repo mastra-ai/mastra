@@ -3,6 +3,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
+import type { AgentGenerateOptions } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import type { MastraMessageV1 } from '@mastra/core/memory';
 import { fastembed } from '@mastra/fastembed';
@@ -536,7 +537,7 @@ describe('Working Memory Tests', () => {
               enabled: true,
               schema: z.object({
                 city: z.string(),
-                temperature: z.number(),
+                temperature: z.number().describe('The number value of the temperature'),
               }),
             },
             lastMessages: 10,
@@ -578,12 +579,12 @@ describe('Working Memory Tests', () => {
         await vector.turso.close();
       });
 
-      // TODO: This test is flakey, but it's blocking PR merges
-      it.skip('should accept valid working memory updates matching the schema', async () => {
+      it('should accept valid working memory updates matching the schema', async () => {
         const validMemory = { city: 'Austin', temperature: 85 };
         await agent.generate('I am in Austin and it is 85 degrees', {
           threadId: thread.id,
           resourceId,
+          temperature: 0,
         });
 
         const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
@@ -597,10 +598,12 @@ describe('Working Memory Tests', () => {
         await agent.generate('Now I am in Seattle and it is 60 degrees', {
           threadId: thread.id,
           resourceId,
+          temperature: 0,
         });
         await agent.generate('Now I am in Denver and it is 75 degrees', {
           threadId: thread.id,
           resourceId,
+          temperature: 0,
         });
 
         const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
@@ -635,7 +638,8 @@ describe('Working Memory Tests', () => {
               },
             },
           },
-        };
+          temperature: 0,
+        } satisfies AgentGenerateOptions<any, any>;
         await agent.generate('Now I am in Toronto and it is 80 degrees', generateOptions);
 
         await agent.generate('how are you doing?', generateOptions);

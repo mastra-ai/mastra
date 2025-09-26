@@ -41,6 +41,7 @@ export type ExecuteFunctionParams<TStepInput, TResumeSchema, TSuspendSchema, Eng
   engine: EngineType;
   abortSignal: AbortSignal;
   writer: ToolStream<ChunkType>;
+  validateSchemas?: boolean;
 };
 
 export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (

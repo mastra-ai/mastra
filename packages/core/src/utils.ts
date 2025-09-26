@@ -230,6 +230,7 @@ export interface ToolOptions {
   agentName?: string;
   model?: MastraLanguageModel;
   writableStream?: WritableStream<ChunkType>;
+  requireApproval?: boolean;
 }
 
 /**

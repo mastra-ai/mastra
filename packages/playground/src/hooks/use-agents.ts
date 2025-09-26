@@ -1,5 +1,5 @@
 import { client } from '@/lib/client';
-import { UpdateModelParams } from '@mastra/client-js';
+import { ReorderModelListParams, UpdateModelInModelListParams, UpdateModelParams } from '@mastra/client-js';
 import { usePlaygroundStore } from '@mastra/playground-ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -41,6 +41,33 @@ export const useUpdateAgentModel = (agentId: string) => {
     },
     onError: err => {
       console.error('Error updating model', err);
+    },
+  });
+};
+
+export const useReorderModelList = (agentId: string) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: ReorderModelListParams) => client.getAgent(agentId).reorderModelList(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+    },
+    onError: err => {
+      console.error('Error reordering model list', err);
+    },
+  });
+};
+
+export const useUpdateModelInModelList = (agentId: string) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: UpdateModelInModelListParams) =>
+      client.getAgent(agentId).updateModelInModelList(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+    },
+    onError: err => {
+      console.error('Error updating model in model list', err);
     },
   });
 };

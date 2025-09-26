@@ -51,13 +51,14 @@ export function createContextRelevanceScorerLLM({
     throw new Error('Context array cannot be empty if provided');
   }
 
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer({
     name: 'Context Relevance (LLM)',
     description: 'Evaluates how relevant and useful the provided context was for generating the agent response',
     judge: {
       model,
       instructions: CONTEXT_RELEVANCE_INSTRUCTIONS,
     },
+    type: 'agent',
   })
     .analyze({
       description: 'Analyze the relevance and utility of provided context',

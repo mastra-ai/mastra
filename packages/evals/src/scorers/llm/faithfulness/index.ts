@@ -1,6 +1,5 @@
 import type { LanguageModel } from '@mastra/core/llm';
 import { createScorer } from '@mastra/core/scores';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
 import { z } from 'zod';
 import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
 import {
@@ -22,13 +21,14 @@ export function createFaithfulnessScorer({
   model: LanguageModel;
   options?: FaithfulnessMetricOptions;
 }) {
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer({
     name: 'Faithfulness Scorer',
     description: 'A scorer that evaluates the faithfulness of an LLM output to an input',
     judge: {
       model,
       instructions: FAITHFULNESS_AGENT_INSTRUCTIONS,
     },
+    type: 'agent',
   })
     .preprocess({
       description: 'Extract relevant statements from the LLM output',

@@ -55,4 +55,14 @@ export class Observability extends BaseResource {
     const queryString = searchParams.toString();
     return this.request(`/api/observability/traces${queryString ? `?${queryString}` : ''}`);
   }
+
+  score(params: {
+    scorerName: string;
+    targets: Array<{ traceId: string; spanId?: string }>;
+  }): Promise<{ status: string; message: string }> {
+    return this.request(`/api/observability/traces/score`, {
+      method: 'POST',
+      body: { ...params },
+    });
+  }
 }

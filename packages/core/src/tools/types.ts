@@ -1,12 +1,13 @@
 import type { ToolExecutionOptions, Tool, Schema } from 'ai';
 import type { ToolCallOptions, Tool as ToolV5 } from 'ai-v5';
 import type { JSONSchema7Type } from 'json-schema';
-import type { ZodSchema, z } from 'zod';
+import type { ZodSchema } from 'zod';
 
 import type { IAction, IExecutionContext, MastraUnion } from '../action';
 import type { TracingContext } from '../ai-tracing';
 import type { Mastra } from '../mastra';
 import type { RuntimeContext } from '../runtime-context';
+import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
 import type { ToolStream } from './stream';
 
 export type VercelTool = Tool;
@@ -52,25 +53,39 @@ export type InternalCoreTool = {
     }
 );
 
-export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema | undefined = undefined>
-  extends IExecutionContext<TSchemaIn> {
+export interface ToolExecutionContext<
+  TSchemaIn extends ZodLikeSchema | undefined = undefined,
+  TSuspendSchema extends ZodLikeSchema = any,
+  TResumeSchema extends ZodLikeSchema = any,
+> extends IExecutionContext<TSchemaIn> {
   mastra?: MastraUnion;
   runtimeContext: RuntimeContext;
   writer?: ToolStream<any>;
   tracingContext?: TracingContext;
+  suspend: (suspendPayload: InferZodLikeSchema<TSuspendSchema>) => Promise<any>;
+  resumeData?: InferZodLikeSchema<TResumeSchema>;
 }
 
 export interface ToolAction<
-  TSchemaIn extends z.ZodSchema | undefined = undefined,
-  TSchemaOut extends z.ZodSchema | undefined = undefined,
-  TContext extends ToolExecutionContext<TSchemaIn> = ToolExecutionContext<TSchemaIn>,
+  TSchemaIn extends ZodLikeSchema | undefined = undefined,
+  TSchemaOut extends ZodLikeSchema | undefined = undefined,
+  TSuspendSchema extends ZodLikeSchema = any,
+  TResumeSchema extends ZodLikeSchema = any,
+  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema> = ToolExecutionContext<
+    TSchemaIn,
+    TSuspendSchema,
+    TResumeSchema
+  >,
 > extends IAction<string, TSchemaIn, TSchemaOut, TContext, ToolInvocationOptions> {
+  suspendSchema?: TSuspendSchema;
+  resumeSchema?: TResumeSchema;
   description: string;
   execute?: (
     context: TContext,
     options?: ToolInvocationOptions,
-  ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
+  ) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown>;
   mastra?: Mastra;
+  requireApproval?: boolean;
   onInputStart?: (options: ToolCallOptions) => void | PromiseLike<void>;
   onInputDelta?: (
     options: {
@@ -79,7 +94,7 @@ export interface ToolAction<
   ) => void | PromiseLike<void>;
   onInputAvailable?: (
     options: {
-      input: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> : unknown;
+      input: InferZodLikeSchema<TSchemaIn>;
     } & ToolCallOptions,
   ) => void | PromiseLike<void>;
 }

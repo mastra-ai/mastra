@@ -30,6 +30,9 @@ const meta = {
   voice: {
     title: "Voice",
   },
+  observability: {
+    title: "Observability",
+  },
   deployment: {
     title: "Deployment",
   },

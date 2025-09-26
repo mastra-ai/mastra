@@ -71,11 +71,40 @@ type WorkingMemoryNone = BaseWorkingMemory & {
 
 export type WorkingMemory = TemplateWorkingMemory | SchemaWorkingMemory | WorkingMemoryNone;
 
+/**
+ * Vector index configuration (PostgreSQL-specific)
+ *
+ * Note: These configuration options are currently only supported when using
+ * PostgreSQL with pgvector as the vector store. Other vector stores (Pinecone,
+ * Qdrant, Chroma, etc.) will ignore these settings.
+ */
+export type VectorIndexConfig = {
+  /** Index type - only supported by PostgreSQL/pgvector */
+  type?: 'ivfflat' | 'hnsw' | 'flat';
+  /** Distance metric - supported by all vector stores */
+  metric?: 'cosine' | 'euclidean' | 'dotproduct';
+  /** IVFFlat configuration (PostgreSQL only) */
+  ivf?: {
+    lists?: number;
+  };
+  /** HNSW configuration (PostgreSQL only) */
+  hnsw?: {
+    m?: number;
+    efConstruction?: number;
+  };
+};
+
 export type SemanticRecall = {
   topK: number;
   messageRange: number | { before: number; after: number };
   scope?: 'thread' | 'resource';
+  /**
+   * Vector index configuration (PostgreSQL/pgvector specific).
+   * Other vector stores will use their default index configurations.
+   */
+  indexConfig?: VectorIndexConfig;
 };
+
 export type MemoryConfig = {
   lastMessages?: number | false;
   semanticRecall?: boolean | SemanticRecall;

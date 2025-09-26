@@ -159,7 +159,7 @@ export abstract class MastraMemory extends MastraBase {
     return {};
   }
 
-  protected async createEmbeddingIndex(dimensions?: number): Promise<{ indexName: string }> {
+  protected async createEmbeddingIndex(dimensions?: number, config?: MemoryConfig): Promise<{ indexName: string }> {
     const defaultDimensions = 1536;
     const isDefault = dimensions === defaultDimensions;
     const usedDimensions = dimensions ?? defaultDimensions;
@@ -171,10 +171,28 @@ export abstract class MastraMemory extends MastraBase {
     if (typeof this.vector === `undefined`) {
       throw new Error(`Tried to create embedding index but no vector db is attached to this Memory instance.`);
     }
-    await this.vector.createIndex({
+
+    // Get index configuration from memory config
+    const semanticConfig = typeof config?.semanticRecall === 'object' ? config.semanticRecall : undefined;
+    const indexConfig = semanticConfig?.indexConfig;
+
+    // Base parameters that all vector stores support
+    const createParams: any = {
       indexName,
       dimension: usedDimensions,
-    });
+      ...(indexConfig?.metric && { metric: indexConfig.metric }),
+    };
+
+    // Add PG-specific configuration if provided
+    // Only PG vector store will use these parameters
+    if (indexConfig && (indexConfig.type || indexConfig.ivf || indexConfig.hnsw)) {
+      createParams.indexConfig = {};
+      if (indexConfig.type) createParams.indexConfig.type = indexConfig.type;
+      if (indexConfig.ivf) createParams.indexConfig.ivf = indexConfig.ivf;
+      if (indexConfig.hnsw) createParams.indexConfig.hnsw = indexConfig.hnsw;
+    }
+
+    await this.vector.createIndex(createParams);
     return { indexName };
   }
 

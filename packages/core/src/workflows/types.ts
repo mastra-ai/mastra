@@ -276,6 +276,7 @@ export interface WorkflowRunState {
 
 export interface WorkflowOptions {
   tracingPolicy?: TracingPolicy;
+  validateInputs?: boolean;
 }
 
 export type WorkflowInfo = {
@@ -429,6 +430,7 @@ export type WorkflowResult<
               z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
             >;
       };
+      suspendPayload: any;
       suspended: [string[], ...string[][]];
     } & TracingProperties);
 

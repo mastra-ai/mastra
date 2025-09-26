@@ -99,7 +99,15 @@ describe('Scores Handlers', () => {
         pagination,
       });
 
-      expect(result).toEqual([]);
+      expect(result).toEqual({
+        pagination: {
+          hasMore: false,
+          page: 0,
+          perPage: 0,
+          total: 0,
+        },
+        scores: [],
+      });
     });
 
     it('should handle storage errors gracefully', async () => {
@@ -179,7 +187,15 @@ describe('Scores Handlers', () => {
         pagination,
       });
 
-      expect(result).toEqual([]);
+      expect(result).toEqual({
+        pagination: {
+          hasMore: false,
+          page: 0,
+          perPage: 0,
+          total: 0,
+        },
+        scores: [],
+      });
     });
 
     it('should handle storage errors gracefully', async () => {
