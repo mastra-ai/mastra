@@ -4,4 +4,4 @@
 'create-mastra': patch
 ---
 
-Add conditional chaining to scorer.worknames return
+Add conditional chaining to scorer.agentNames return
