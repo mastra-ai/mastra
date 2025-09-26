@@ -38,6 +38,7 @@ export type ScoringHookInput = {
   tracingContext?: TracingContext;
   structuredOutput?: boolean;
   traceId?: string;
+  spanId?: string;
   resourceId?: string;
   threadId?: string;
 };
@@ -129,6 +130,7 @@ export const saveScorePayloadSchema = z.object({
   scorer: z.record(z.string(), z.any()),
 
   traceId: z.string().optional(),
+  spanId: z.string().optional(),
   preprocessStepResult: z.record(z.string(), z.any()).optional(),
   extractStepResult: z.record(z.string(), z.any()).optional(),
   analyzeStepResult: z.record(z.string(), z.any()).optional(),
