@@ -434,7 +434,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     } catch (error) {
       // Log warning but continue with basic behavior (no custom column mapping)
       console.warn(
-        `Schema detection failed for table ${String(indexName)}, using basic upsert behavior: ${error instanceof Error ? error.message : String(error)}`,
+        `Schema detection failed for table "${indexName}" in schema "${this.schema || 'public'}", using basic upsert behavior: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
 
@@ -456,8 +456,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         // Build dynamic SQL based on available columns (handles null tableSchema gracefully)
         const { query, values } = this.buildUpsertQuery({
           tableName,
-          vectorId: vectorIds[i]!, // Use non-null assertion since we know the array has the right length
-          vector: vectors[i]!, // Same for vectors[i]
+          vectorId: vectorIds[i]!,
+          vector: vectors[i]!,
           columnValues,
           remainingMetadata,
           vectorType,
