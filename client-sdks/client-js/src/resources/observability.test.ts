@@ -1,6 +1,6 @@
+import type { AISpanType } from '@mastra/core/ai-tracing';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
-import { AISpanType } from '@mastra/core/ai-tracing';
 
 // Mock fetch globally
 global.fetch = vi.fn();
