@@ -197,7 +197,7 @@ describe('Memory Streaming Tests', () => {
       const { result } = renderHook(() => {
         const chat = useChat({
           transport: new DefaultChatTransport({
-            api: `http://localhost:${port}/api/agents/test/stream/vnext/ui`,
+            api: `http://localhost:${port}/api/agents/test/stream/ui`,
             prepareSendMessagesRequest({ messages }) {
               return {
                 body: {
@@ -270,7 +270,7 @@ describe('Memory Streaming Tests', () => {
       const { result } = renderHook(() => {
         const chat = useChat({
           transport: new DefaultChatTransport({
-            api: `http://localhost:${port}/api/agents/test/stream/vnext/ui`,
+            api: `http://localhost:${port}/api/agents/test/stream/ui`,
             prepareSendMessagesRequest({ messages }) {
               return {
                 body: {
