@@ -1,5 +1,19 @@
 # @mastra/core
 
+## 0.19.0-alpha.1
+
+### Minor Changes
+
+- Add spanId column to scores table ([#8154](https://github.com/mastra-ai/mastra/pull/8154))
+
+### Patch Changes
+
+- Fix score input and output types ([#8153](https://github.com/mastra-ai/mastra/pull/8153))
+
+- Bring back ToolInvocationOptions for createTool execute function ([#8206](https://github.com/mastra-ai/mastra/pull/8206))
+
+- fixNetworkChunkType ([#8210](https://github.com/mastra-ai/mastra/pull/8210))
+
 ## 0.18.1-alpha.0
 
 ### Patch Changes
