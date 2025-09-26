@@ -751,6 +751,8 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "modelProvider": "mock-provider",
                 "modelVersion": "v2",
               },
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
               "timestamp": 1970-01-01T00:00:00.000Z,
               "uiMessages": [
                 {
