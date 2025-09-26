@@ -6,7 +6,6 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { AISpanRecord, AITraceRecord, MastraStorage } from '../../storage';
 import { createStep, createWorkflow } from '../../workflows/evented';
 import type { MastraScorer, ScorerRun } from '../base';
-import type { ScoreRowData } from '../types';
 import { saveScorePayloadSchema } from '../types';
 import { transformTraceToScorerInput, transformTraceToScorerOutput } from './utils';
 
