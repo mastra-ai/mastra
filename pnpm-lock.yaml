@@ -318,9 +318,6 @@ importers:
       react-dom:
         specifier: ^19.1.1
         version: 19.1.1(react@19.1.1)
-      zod:
-        specifier: ^4.1.9
-        version: 4.1.9
     devDependencies:
       '@assistant-ui/react':
         specifier: ^0.10.45
