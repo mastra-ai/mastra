@@ -6856,6 +6856,11 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      const workflowSteps = workflow.steps;
+
+      expect(workflowSteps['random-tool']?.component).toBe('TOOL');
+      expect(workflowSteps['random-tool']?.description).toBe('random-tool');
     });
   });
 
@@ -9056,6 +9061,7 @@ describe('Workflow', () => {
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions',
+        description: 'test-agent-1 description',
         model: new MockLanguageModelV1({
           doStream: async () => ({
             stream: simulateReadableStream({
@@ -9077,6 +9083,7 @@ describe('Workflow', () => {
       const agent2 = new Agent({
         name: 'test-agent-2',
         instructions: 'test agent instructions',
+        description: 'test-agent-2 description',
         model: new MockLanguageModelV1({
           doStream: async () => ({
             stream: simulateReadableStream({
@@ -9161,6 +9168,13 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      const workflowSteps = workflow.steps;
+
+      expect(workflowSteps['test-agent-1']?.description).toBe('test-agent-1 description');
+      expect(workflowSteps['test-agent-2']?.description).toBe('test-agent-2 description');
+      expect(workflowSteps['test-agent-1']?.component).toBe('AGENT');
+      expect(workflowSteps['test-agent-2']?.component).toBe('AGENT');
     });
 
     it('should be able to use an agent in parallel', async () => {
@@ -9694,6 +9708,11 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      const workflowSteps = counterWorkflow.steps;
+
+      expect(workflowSteps['nested-workflow-a']?.component).toBe('WORKFLOW');
+      expect(workflowSteps['nested-workflow-b']?.component).toBe('WORKFLOW');
     });
 
     it('should be able clone workflows as steps', async () => {

@@ -6,6 +6,7 @@ import {
   TABLE_MESSAGES,
   TABLE_TRACES,
   TABLE_EVALS,
+  TABLE_SCORERS,
 } from '@mastra/core/storage';
 import type {
   StorageColumn,
@@ -634,6 +635,12 @@ export class StoreOperationsPG extends StoreOperations {
           name: `${schemaPrefix}mastra_evals_agent_name_created_at_idx`,
           table: TABLE_EVALS,
           columns: ['agent_name', 'created_at DESC'],
+        },
+        // Composite index for scores (filter + sort)
+        {
+          name: `${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`,
+          table: TABLE_SCORERS,
+          columns: ['trace_id', 'span_id', 'created_at DESC'],
         },
       ];
 
