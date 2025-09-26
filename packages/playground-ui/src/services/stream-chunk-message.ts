@@ -13,40 +13,59 @@ export interface HandleStreamChunkOptions {
 
 export const handleStreamChunk = ({ chunk, conversation }: HandleStreamChunkOptions): ThreadMessageLike[] => {
   switch (chunk.type) {
-    default:
-      return [...conversation];
-
-    case 'text-start': {
+    case 'start': {
       const newMessage: ThreadMessageLike = {
         role: 'assistant',
-        content: [{ type: 'text', text: '' }],
+        content: [],
       };
 
       return [...conversation, newMessage];
     }
 
+    case 'text-start':
     case 'text-delta': {
+      // Always add a new last text chunk if one doesn't exist yet to maintain content ordering
       const lastMessage = conversation[conversation.length - 1];
-      if (lastMessage && lastMessage.role === 'assistant' && Array.isArray(lastMessage.content)) {
-        const updatedContent = lastMessage.content.map(part => {
-          if (typeof part === 'object' && part.type === 'text') {
-            return {
-              ...part,
-              text: part.text + chunk.payload.text,
-            };
-          }
-          return part;
-        });
-
-        const updatedMessage: ThreadMessageLike = {
-          ...lastMessage,
-          content: updatedContent,
-        };
-
-        return [...conversation.slice(0, -1), updatedMessage];
+      if (
+        lastMessage &&
+        lastMessage.role === 'assistant' &&
+        typeof lastMessage.content !== `string` &&
+        (lastMessage.content.length === 0 || lastMessage.content[lastMessage.content.length - 1]?.type !== `text`)
+      ) {
+        return [
+          ...conversation.slice(0, -1),
+          {
+            ...lastMessage,
+            content: [...lastMessage.content, { type: 'text', text: '' }],
+          },
+        ];
       }
 
-      return [...conversation];
+      // if we're text start then all we need is the empty text part above
+      if (chunk.type === `text-start`) return conversation;
+
+      // otherwise continue to append the text deltas
+      if (typeof lastMessage.content === `string`) {
+        return [
+          ...conversation.slice(0, -1),
+          {
+            ...lastMessage,
+            content: lastMessage.content + chunk.payload.text,
+          },
+        ];
+      }
+
+      const lastPart = lastMessage.content[lastMessage.content.length - 1];
+
+      if (lastPart.type !== `text`) return conversation; // for TS! this is actually garunteed because we set the last part to be type text if it's not
+
+      return [
+        ...conversation.slice(0, -1),
+        {
+          ...lastMessage,
+          content: [...lastMessage.content.slice(0, -1), { ...lastPart, text: lastPart.text + chunk.payload.text }],
+        },
+      ];
     }
 
     case 'tool-output': {
@@ -245,6 +264,9 @@ export const handleStreamChunk = ({ chunk, conversation }: HandleStreamChunkOpti
 
       return [...conversation, newMessage];
     }
+
+    default:
+      return [...conversation];
   }
 };
 
