@@ -2471,9 +2471,9 @@ export class Agent<
     const scorerOutput: ScorerRunOutputForAgent = messageList.getPersisted.response.ui();
 
     if (Object.keys(scorers || {}).length > 0) {
-      for (const [id, scorerObject] of Object.entries(scorers)) {
+      for (const [_id, scorerObject] of Object.entries(scorers)) {
         runScorer({
-          scorerId: overrideScorers ? scorerObject.scorer.name : id,
+          scorerId: overrideScorers ? scorerObject.scorer.name : scorerObject.scorer.name,
           scorerObject: scorerObject,
           runId,
           input: scorerInput,
