@@ -1,4 +1,5 @@
 import { mastra } from "@/src/mastra";
+import { convertMessages } from "@mastra/core/agent";
 import { NextResponse } from "next/server";
 
 const myAgent = mastra.getAgent("weatherAgent");
@@ -8,5 +9,7 @@ export async function GET() {
     threadId: "2",
   });
 
-  return NextResponse.json(result?.uiMessages || []);
+  return NextResponse.json(
+    convertMessages(result?.uiMessages || []).to("AIV5.UI"),
+  );
 }

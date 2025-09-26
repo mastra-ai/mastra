@@ -1,10 +1,11 @@
 import type { WritableStream } from 'stream/web';
 import type { ToolsInput } from '@mastra/core/agent';
 import { RuntimeContext as RuntimeContextClass } from '@mastra/core/runtime-context';
+import { createTool } from '@mastra/core/tools';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { MastraClient } from '../client';
-import type { StreamParams } from '../types';
+import type { StreamParams, ClientOptions } from '../types';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { Agent } from './agent';
 
@@ -445,5 +446,179 @@ describe('Agent Client Methods', () => {
         headers: expect.objectContaining(clientOptions.headers),
       }),
     );
+  });
+});
+
+describe('Agent - Storage Duplicate Messages Issue', () => {
+  let agent: Agent;
+  let mockRequest: ReturnType<typeof vi.fn>;
+
+  const mockClientOptions: ClientOptions = {
+    baseUrl: 'https://api.test.com',
+  };
+
+  beforeEach(() => {
+    mockRequest = vi.fn();
+    agent = new Agent(mockClientOptions, 'test-agent-id');
+    // Replace the request method with our mock
+    agent['request'] = mockRequest;
+  });
+
+  it('should not re-send the original user message when executing client-side tools', async () => {
+    const clientTool = createTool({
+      id: 'clientTool',
+      description: 'A client-side tool',
+      execute: vi.fn().mockResolvedValue('Tool result'),
+      inputSchema: undefined,
+    });
+
+    const initialMessage = 'Test message';
+
+    // First call returns tool-calls
+    mockRequest.mockResolvedValueOnce({
+      finishReason: 'tool-calls',
+      toolCalls: [
+        {
+          toolName: 'clientTool',
+          args: { test: 'args' },
+          toolCallId: 'tool-1',
+        },
+      ],
+      response: {
+        messages: [
+          {
+            role: 'assistant',
+            content: '',
+            toolCalls: [
+              {
+                toolName: 'clientTool',
+                args: { test: 'args' },
+                toolCallId: 'tool-1',
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    // Second call (after tool execution) returns final response
+    mockRequest.mockResolvedValueOnce({
+      finishReason: 'stop',
+      response: {
+        messages: [
+          {
+            role: 'assistant',
+            content: 'Final response',
+          },
+        ],
+      },
+    });
+
+    await agent.generate(initialMessage, {
+      clientTools: { clientTool },
+    });
+
+    // Check that the second request was called with the correct messages
+    expect(mockRequest).toHaveBeenCalledTimes(2);
+    const secondCallArgs = mockRequest.mock.calls[1][1];
+    const messagesInSecondCall = secondCallArgs.body.messages;
+
+    // The messages sent in the second call should NOT include the original user message
+    // It should only have the assistant's tool call response and the tool result
+    // This prevents duplicate user messages from being stored
+    const userMessages = messagesInSecondCall.filter(msg => msg.role === 'user');
+
+    // Should be no user messages in the second call
+    expect(userMessages).toHaveLength(0);
+
+    // Should have assistant message with tool call and tool result
+    expect(messagesInSecondCall).toHaveLength(2);
+    expect(messagesInSecondCall[0].role).toBe('assistant');
+    expect(messagesInSecondCall[1].role).toBe('tool');
+  });
+
+  it('should handle multiple tool calls without duplicating the user message', async () => {
+    const clientTool = createTool({
+      id: 'clientTool',
+      description: 'A client-side tool',
+      execute: vi
+        .fn()
+        .mockResolvedValueOnce('First result')
+        .mockResolvedValueOnce('Second result')
+        .mockResolvedValueOnce('Third result')
+        .mockResolvedValueOnce('Fourth result'),
+      inputSchema: undefined,
+    });
+
+    const initialMessage = 'Test message that triggers 4 tool calls';
+
+    // Simulate 4 tool call iterations
+    for (let i = 0; i < 4; i++) {
+      mockRequest.mockResolvedValueOnce({
+        finishReason: 'tool-calls',
+        toolCalls: [
+          {
+            toolName: 'clientTool',
+            args: { iteration: i + 1 },
+            toolCallId: `tool-${i + 1}`,
+          },
+        ],
+        response: {
+          messages: [
+            {
+              role: 'assistant',
+              content: '',
+              toolCalls: [
+                {
+                  toolName: 'clientTool',
+                  args: { iteration: i + 1 },
+                  toolCallId: `tool-${i + 1}`,
+                },
+              ],
+            },
+          ],
+        },
+      });
+    }
+
+    // Final response after 4 tool calls
+    mockRequest.mockResolvedValueOnce({
+      finishReason: 'stop',
+      response: {
+        messages: [
+          {
+            role: 'assistant',
+            content: 'Final response after 4 tool calls',
+          },
+        ],
+      },
+    });
+
+    await agent.generate(initialMessage, {
+      clientTools: { clientTool },
+    });
+
+    // The agent should have made 5 requests total (1 initial + 4 tool calls)
+    expect(mockRequest).toHaveBeenCalledTimes(5);
+
+    // Check each recursive call to ensure no user messages are being re-sent
+    for (let i = 1; i < 5; i++) {
+      const callArgs = mockRequest.mock.calls[i][1];
+      const messagesInCall = callArgs.body.messages;
+
+      const userMessages = messagesInCall.filter(msg => msg.role === 'user');
+
+      // No user messages should be in any of the recursive calls
+      expect(userMessages).toHaveLength(0);
+
+      // Each recursive call should only contain the latest assistant response and tool result
+      // Not the accumulated history (that's already on the server)
+      const assistantMessages = messagesInCall.filter(msg => msg.role === 'assistant');
+      const toolMessages = messagesInCall.filter(msg => msg.role === 'tool');
+
+      // Should always have just the last assistant message and the new tool result
+      expect(assistantMessages).toHaveLength(1);
+      expect(toolMessages).toHaveLength(1);
+    }
   });
 });
