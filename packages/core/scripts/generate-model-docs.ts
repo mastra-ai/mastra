@@ -29,8 +29,9 @@ function formatProviderName(name: string): string {
     opencode: 'OpenCode',
   };
 
-  if (specialCases[name.toLowerCase()]) {
-    return specialCases[name.toLowerCase()];
+  const result = specialCases[name.toLowerCase()];
+  if (result) {
+    return result;
   }
 
   // Default: capitalize first letter
@@ -190,7 +191,7 @@ async function generateProviderPage(provider: ProviderInfo): Promise<string> {
   const modelCount = provider.models.length;
 
   // Get documentation URL if available
-  const rawDocUrl = (PROVIDER_REGISTRY[provider.id] as any).docUrl;
+  const rawDocUrl = (PROVIDER_REGISTRY as any)[provider.id]?.docUrl;
   const docUrl = cleanDocumentationUrl(rawDocUrl);
 
   // Create intro with optional documentation link
@@ -337,81 +338,7 @@ function generateGatewayPage(gatewayName: string, providers: ProviderInfo[]): st
   const displayName = formatProviderName(gatewayName);
   const totalModels = providers.reduce((sum, p) => sum + p.models.length, 0);
 
-  let sections: string;
-
-  // Special handling for Vercel (standalone gateway without base providers)
-  if (gatewayName === 'vercel' && providers.length === 1 && !providers[0].baseProvider) {
-    const provider = providers[0];
-    const modelList = provider.models
-      .slice(0, 10)
-      .map(m => `  - \`${m}\``)
-      .join('\n');
-    const hasMore = provider.models.length > 10;
-
-    sections = `
-## Available Models
-
-Vercel AI Gateway provides access to ${provider.models.length} models from various providers:
-
-${modelList}${hasMore ? `\n  - ... and ${provider.models.length - 10} more models` : ''}
-
-Use any model with the \`vercel/\` prefix followed by the provider and model name:
-
-\`\`\`typescript
-// Examples
-model: "vercel/deepseek/deepseek-r1"
-model: "vercel/meta/llama-4-scout"  
-model: "vercel/openai/gpt-4o"
-\`\`\`
-`;
-  } else {
-    // Regular handling for other gateways (Netlify)
-    sections = providers
-      .map(provider => {
-        const baseProviderName = provider.baseProvider || 'unknown';
-        const modelList = provider.models
-          .slice(0, 5)
-          .map(m => `    - \`${m}\``)
-          .join('\n');
-        const hasMore = provider.models.length > 5;
-
-        return `
-## ${provider.name}
-
-Use ${baseProviderName} models through ${gatewayName} gateway:
-
-\`\`\`typescript
-model: "${provider.id}/${provider.models[0]}"
-\`\`\`
-
-### Available Models (${provider.models.length})
-
-${modelList}${hasMore ? `\n    - ... and ${provider.models.length - 5} more` : ''}
-`;
-      })
-      .join('\n');
-  }
-
-  const benefits =
-    gatewayName === 'netlify'
-      ? `- **Caching**: Automatic response caching for repeated queries
-- **Analytics**: Track usage across all models  
-- **Rate Limiting**: Built-in rate limiting and quotas
-- **Fallbacks**: Automatic fallback to other providers`
-      : gatewayName === 'vercel'
-        ? `- **Observability**: Built-in request tracking
-- **Edge Runtime**: Optimized for edge deployments
-- **Model Routing**: Automatic model selection based on availability
-- **Multiple Providers**: Access models from many providers through one gateway`
-        : `- **Observability**: Built-in request tracking
-- **Edge Runtime**: Optimized for edge deployments
-- **Model Routing**: Automatic model selection based on availability`;
-
-  // Adjust provider count for Vercel (it's one gateway serving many providers)
-  const providerCount =
-    gatewayName === 'vercel' && providers.length === 1 && !providers[0].baseProvider
-      ? 'multiple'
-      : providers.length.toString();
+  // Unused variables removed - sections, benefits, providerCount were defined but not used in the template
   // Get documentation URL if available
   // Special override for Vercel to use the AI SDK documentation
   let rawDocUrl: string | undefined;
@@ -420,10 +347,10 @@ ${modelList}${hasMore ? `\n    - ... and ${provider.models.length - 5} more` : '
     rawDocUrl = 'https://ai-sdk.dev/providers/ai-sdk-providers';
   } else if (providers[0] && !providers[0].baseProvider) {
     // For standalone gateways like groq, openrouter, etc.
-    rawDocUrl = (PROVIDER_REGISTRY[providers[0].id] as any).docUrl;
+    rawDocUrl = (PROVIDER_REGISTRY as any)[providers[0].id]?.docUrl;
   } else if (providers[0]) {
     // For prefixed gateways like netlify/openai
-    rawDocUrl = (PROVIDER_REGISTRY[providers[0].id] as any).docUrl;
+    rawDocUrl = (PROVIDER_REGISTRY as any)[providers[0].id]?.docUrl;
   }
 
   const docUrl = cleanDocumentationUrl(rawDocUrl);
@@ -643,33 +570,33 @@ async function generateDocs() {
   // Generate index page
   const indexContent = generateIndexPage(grouped);
   await fs.writeFile(path.join(docsDir, 'index.mdx'), indexContent);
-  console.log('✅ Generated models/index.mdx');
+  console.info('✅ Generated models/index.mdx');
 
   // Generate gateways overview page
   const gatewaysIndexContent = generateGatewaysIndexPage(grouped);
   await fs.writeFile(path.join(gatewaysDir, 'index.mdx'), gatewaysIndexContent);
-  console.log('✅ Generated gateways/index.mdx');
+  console.info('✅ Generated gateways/index.mdx');
 
   // Generate providers overview page
   const providersIndexContent = generateProvidersIndexPage(grouped);
   await fs.writeFile(path.join(providersDir, 'index.mdx'), providersIndexContent);
-  console.log('✅ Generated providers/index.mdx');
+  console.info('✅ Generated providers/index.mdx');
 
   // Generate individual provider pages
   for (const provider of [...grouped.popular, ...grouped.other]) {
     const content = await generateProviderPage(provider);
     await fs.writeFile(path.join(providersDir, `${provider.id}.mdx`), content);
-    console.log(`✅ Generated providers/${provider.id}.mdx`);
+    console.info(`✅ Generated providers/${provider.id}.mdx`);
   }
 
   // Generate individual gateway pages
   for (const [gatewayName, providers] of grouped.gateways) {
     const content = generateGatewayPage(gatewayName, providers);
     await fs.writeFile(path.join(gatewaysDir, `${gatewayName}.mdx`), content);
-    console.log(`✅ Generated gateways/${gatewayName}.mdx`);
+    console.info(`✅ Generated gateways/${gatewayName}.mdx`);
   }
 
-  console.log(`
+  console.info(`
 📚 Documentation generated successfully!
    - ${grouped.popular.length + grouped.other.length} provider pages + 1 overview
    - ${grouped.gateways.size} gateway pages + 1 overview
