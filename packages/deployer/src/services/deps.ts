@@ -73,6 +73,10 @@ export class Deps extends MastraBase {
       // so we need to use our sanitizedName instead.
       destinationFlag = `--out ${destination}/${sanitizedName}-%v.tgz`;
     }
+    if(this.packageManager === 'bun') {
+      // bun uses --destination instead of --pack-destination
+      destinationFlag = `--destination ${destination}`;
+    }
 
     return cpLogger({
       cmd: `${this.packageManager} pack ${destinationFlag}`,
