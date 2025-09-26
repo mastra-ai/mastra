@@ -74,7 +74,6 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
       scorer: typeof validatedScore.scorer === 'string' ? validatedScore.scorer : JSON.stringify(validatedScore.scorer),
       preprocessStepResult:
         typeof validatedScore.preprocessStepResult === 'string'
-        typeof validatedScore.preprocessStepResult === 'string'
           ? validatedScore.preprocessStepResult
           : JSON.stringify(validatedScore.preprocessStepResult),
       analyzeStepResult:

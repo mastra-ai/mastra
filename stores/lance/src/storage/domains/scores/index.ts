@@ -36,7 +36,7 @@ export class StoreScoresLance extends ScoresStorage {
       const allowedFields = new Set(schema.fields.map((f: any) => f.name));
       // Filter out fields not in schema
       const filteredScore: Record<string, any> = {};
-      (Object.keys(score) as (keyof ScoreRowData)[]).forEach(key => {
+      (Object.keys(validatedScore) as (keyof ScoreRowData)[]).forEach(key => {
         if (allowedFields.has(key)) {
           filteredScore[key] = score[key];
         }
