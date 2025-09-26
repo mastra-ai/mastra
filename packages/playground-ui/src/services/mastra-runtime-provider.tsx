@@ -11,20 +11,15 @@ import { RuntimeContext } from '@mastra/core/di';
 import { ChatProps, Message } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@/lib/file/toBase64';
-import { useMastraClient } from '@mastra/react-hooks';
+import { toStreamAssistantUIMessage, toNetworkAssistantUIMessage, useMastraClient } from '@mastra/react';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
-import { MastraModelOutput, ReadonlyJSONObject } from '@mastra/core/stream';
+import { MastraModelOutput } from '@mastra/core/stream';
 
 import { handleNetworkMessageFromMemory } from './agent-network-message';
-import {
-  createRootToolAssistantMessage,
-  handleAgentChunk,
-  handleStreamChunk,
-  handleWorkflowChunk,
-} from './stream-chunk-message';
-import { ModelSettings, useMastraChat } from '@mastra/react-hooks';
+
+import { ModelSettings, useAgent } from '@mastra/react';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -174,17 +169,15 @@ export function MastraRuntimeProvider({
 }> &
   ChatProps) {
   const [isRunning, setIsRunning] = useState(false);
+  const [messages, setMessages] = useState<ThreadMessageLike[]>(() => initializeMessageState(initialMessages ?? []));
 
   const {
-    messages,
-    setMessages,
     streamVNext,
     network,
     cancelRun,
     isRunning: isRunningStreamVNext,
-  } = useMastraChat<ThreadMessageLike>({
+  } = useAgent({
     agentId,
-    initializeMessages: () => (memory ? initializeMessageState(initialMessages || []) : []),
   });
 
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
@@ -373,90 +366,18 @@ export function MastraRuntimeProvider({
             runtimeContext: runtimeContextInstance,
             threadId,
             modelSettings: modelSettingsArgs,
-            signal: controller.signal,
-            onNetworkChunk: (chunk, conversation) => {
-              if (chunk.type.startsWith('agent-execution-event-')) {
-                const agentChunk = chunk.payload;
-
-                if (!currentEntityId) return conversation;
-
-                return handleAgentChunk({ agentChunk, conversation, entityName: currentEntityId });
-              } else if (chunk.type === 'tool-execution-start') {
-                const { args: argsData } = chunk.payload;
-
-                const nestedArgs = argsData.args || {};
-                const mastraMetadata = argsData.__mastraMetadata || {};
-                const selectionReason = argsData.selectionReason || '';
-
-                return handleStreamChunk({
-                  chunk: {
-                    ...chunk,
-                    type: 'tool-call',
-                    payload: {
-                      ...chunk.payload,
-                      toolCallId: argsData.toolCallId || 'unknown',
-                      toolName: argsData.toolName || 'unknown',
-                      args: {
-                        ...nestedArgs,
-                        __mastraMetadata: {
-                          ...mastraMetadata,
-                          networkMetadata: {
-                            selectionReason,
-                            input: nestedArgs as ReadonlyJSONObject,
-                          },
-                        },
-                      },
-                    },
-                  },
-                  conversation,
-                });
-              } else if (chunk.type === 'tool-execution-end') {
-                const next = handleStreamChunk({
-                  chunk: { ...chunk, type: 'tool-result' },
-                  conversation,
-                });
-
-                if (
-                  chunk.payload?.toolName === 'updateWorkingMemory' &&
-                  typeof chunk.payload.result === 'object' &&
-                  'success' in chunk.payload.result! &&
-                  chunk.payload.result?.success
-                ) {
-                  refreshWorkingMemory?.();
-                }
-
-                return next;
-              } else if (chunk.type.startsWith('workflow-execution-event-')) {
-                const workflowChunk = chunk.payload as object;
-
-                if (!currentEntityId) return conversation;
-
-                return handleWorkflowChunk({ workflowChunk, conversation, entityName: currentEntityId });
-              } else if (chunk.type === 'workflow-execution-start' || chunk.type === 'agent-execution-start') {
-                currentEntityId = chunk.payload?.args?.primitiveId;
-
-                const runId = chunk.payload.runId;
-
-                if (!currentEntityId || !runId) return conversation;
-
-                return createRootToolAssistantMessage({
-                  entityName: currentEntityId,
-                  conversation,
-                  runId,
-                  chunk,
-                  from: chunk.type === 'agent-execution-start' ? 'AGENT' : 'WORKFLOW',
-                  networkMetadata: {
-                    selectionReason: chunk?.payload?.args?.selectionReason || '',
-                    input: chunk?.payload?.args?.prompt,
-                  },
-                });
-              } else if (chunk.type === 'network-execution-event-step-finish') {
-                return [
-                  ...conversation,
-                  { role: 'assistant', content: [{ type: 'text', text: chunk?.payload?.result || '' }] },
-                ];
-              } else {
-                return handleStreamChunk({ chunk, conversation });
+            onNetworkChunk: ({ chunk }) => {
+              setMessages(currentConversation =>
+                toNetworkAssistantUIMessage({ chunk, conversation: currentConversation }),
+              );
+              if (
+                chunk.type === 'tool-execution-end' &&
+                chunk.payload?.toolName === 'updateWorkingMemory' &&
+                typeof chunk.payload.result === 'object' &&
+                'success' in chunk.payload.result! &&
+                chunk.payload.result?.success
+              ) {
+                refreshWorkingMemory?.();
               }
             },
           });
@@ -502,8 +423,10 @@ export function MastraRuntimeProvider({
               runtimeContext: runtimeContextInstance,
               threadId,
               modelSettings: modelSettingsArgs,
-              onChunk: (chunk, conversation) => {
-                const next = handleStreamChunk({ chunk, conversation });
+              onChunk: ({ chunk }) => {
+                setMessages(currentConversation =>
+                  toStreamAssistantUIMessage({ chunk, conversation: currentConversation }),
+                );
 
                 if (
                   chunk.type === 'tool-result' &&
@@ -514,10 +437,7 @@ export function MastraRuntimeProvider({
                 ) {
                   refreshWorkingMemory?.();
                 }
-
-                return next;
               },
-              signal: controller.signal,
             });
 
             return;

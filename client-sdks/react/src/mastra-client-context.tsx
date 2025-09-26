@@ -21,7 +21,7 @@ export const useMastraClient = () => useContext(MastraClientContext);
 
 const createMastraClient = (baseUrl?: string, mastraClientHeaders: Record<string, string> = {}) => {
   return new MastraClient({
-    baseUrl: baseUrl || '',
+    baseUrl: baseUrl || 'http://localhost:4111',
     // only add the header if the baseUrl is not provided i.e it's a local dev environment
     headers: !baseUrl ? { ...mastraClientHeaders, 'x-mastra-dev-playground': 'true' } : mastraClientHeaders,
   });

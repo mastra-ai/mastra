@@ -4,33 +4,31 @@ import { MastraClient } from '@mastra/client-js';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { ChunkType, NetworkChunkType } from '@mastra/core/stream';
-import { useState } from 'react';
 
-export interface MastraChatProps<TMessage> {
+import { useRef, useState } from 'react';
+
+export interface MastraChatProps {
   agentId: string;
-  initializeMessages?: () => TMessage[];
 }
 
-export interface StreamVNextArgs<TMessage> {
+export interface StreamVNextArgs {
   coreUserMessages: CoreUserMessage[];
   runtimeContext?: RuntimeContext;
   threadId?: string;
-  onChunk: (chunk: ChunkType, conversation: TMessage[]) => TMessage[];
+  onChunk?: ({ chunk }: { chunk: ChunkType }) => void;
   modelSettings?: ModelSettings;
-  signal?: AbortSignal;
 }
 
-export interface NetworkArgs<TMessage> {
+export interface NetworkArgs {
   coreUserMessages: CoreUserMessage[];
   runtimeContext?: RuntimeContext;
   threadId?: string;
-  onNetworkChunk: (chunk: NetworkChunkType, conversation: TMessage[]) => TMessage[];
+  onNetworkChunk?: ({ chunk }: { chunk: NetworkChunkType }) => void;
   modelSettings?: ModelSettings;
-  signal?: AbortSignal;
 }
 
-export const useMastraChat = <TMessage>({ agentId, initializeMessages }: MastraChatProps<TMessage>) => {
-  const [messages, setMessages] = useState<TMessage[]>(initializeMessages || []);
+export const useAgent = ({ agentId }: MastraChatProps) => {
+  const abortControllerRef = useRef<AbortController | null>(null);
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
 
@@ -40,8 +38,7 @@ export const useMastraChat = <TMessage>({ agentId, initializeMessages }: MastraC
     threadId,
     onChunk,
     modelSettings,
-    signal,
-  }: StreamVNextArgs<TMessage>) => {
+  }: StreamVNextArgs) => {
     const {
       frequencyPenalty,
       presencePenalty,
@@ -54,13 +51,14 @@ export const useMastraChat = <TMessage>({ agentId, initializeMessages }: MastraC
       providerOptions,
     } = modelSettings || {};
 
+    abortControllerRef.current = new AbortController();
     setIsRunning(true);
 
     // Create a new client instance with the abort signal
     // We can't use useMastraClient hook here, so we'll create the client directly
     const clientWithAbort = new MastraClient({
       ...baseClient!.options,
-      abortSignal: signal,
+      abortSignal: abortControllerRef.current.signal,
     });
 
     const agent = clientWithAbort.getAgent(agentId);
@@ -90,7 +88,7 @@ export const useMastraChat = <TMessage>({ agentId, initializeMessages }: MastraC
 
     await response.processDataStream({
       onChunk: (chunk: ChunkType) => {
-        setMessages(prev => onChunk(chunk, prev));
+        onChunk?.({ chunk });
         return Promise.resolve();
       },
     });
@@ -104,18 +102,18 @@ export const useMastraChat = <TMessage>({ agentId, initializeMessages }: MastraC
     threadId,
     onNetworkChunk,
     modelSettings,
-    signal,
-  }: NetworkArgs<TMessage>) => {
+  }: NetworkArgs) => {
     const { frequencyPenalty, presencePenalty, maxRetries, maxTokens, temperature, topK, topP, maxSteps } =
       modelSettings || {};
 
+    abortControllerRef.current = new AbortController();
     setIsRunning(true);
 
     // Create a new client instance with the abort signal
     // We can't use useMastraClient hook here, so we'll create the client directly
     const clientWithAbort = new MastraClient({
       ...baseClient!.options,
-      abortSignal: signal,
+      abortSignal: abortControllerRef.current.signal,
     });
 
     const agent = clientWithAbort.getAgent(agentId);
@@ -139,7 +137,7 @@ export const useMastraChat = <TMessage>({ agentId, initializeMessages }: MastraC
 
     await response.processDataStream({
       onChunk: (chunk: NetworkChunkType) => {
-        setMessages(prev => onNetworkChunk(chunk, prev));
+        onNetworkChunk?.({ chunk });
         return Promise.resolve();
       },
     });
@@ -151,8 +149,10 @@ export const useMastraChat = <TMessage>({ agentId, initializeMessages }: MastraC
     network,
     streamVNext,
     isRunning,
-    messages,
-    setMessages,
-    cancelRun: () => setIsRunning(false),
+    cancelRun: async () => {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+      setIsRunning(false);
+    },
   };
 };
