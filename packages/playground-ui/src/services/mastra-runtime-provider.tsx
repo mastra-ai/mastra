@@ -433,7 +433,7 @@ export function MastraRuntimeProvider({
 
                 return handleWorkflowChunk({ workflowChunk, conversation, entityName: currentEntityId });
               } else if (chunk.type === 'workflow-execution-start' || chunk.type === 'agent-execution-start') {
-                currentEntityId = (chunk.payload?.args as any)?.primitiveId; // TODO: fix networkchunk type cc @DanielSLew
+                currentEntityId = chunk.payload?.args?.primitiveId;
 
                 const runId = chunk.payload.runId;
 
