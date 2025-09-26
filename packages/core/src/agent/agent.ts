@@ -27,6 +27,7 @@ import type {
   StreamTextResult,
 } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
+import { OpenAICompatibleModel } from '../llm/model/openai-compatible';
 import type {
   TripwireProperties,
   MastraLanguageModel,
@@ -34,8 +35,6 @@ import type {
   MastraModelConfig,
   OpenAICompatibleConfig,
 } from '../llm/model/shared.types';
-import { OpenAICompatibleModel } from '../llm/model/openai-compatible';
-import type { OpenAICompatibleModelId } from '../llm/model/provider-registry.generated';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
@@ -759,25 +758,12 @@ export class Agent<
     model,
   }: {
     runtimeContext?: RuntimeContext;
-    model?:
-      | MastraLanguageModel
-      | OpenAICompatibleModelId
-      | DynamicArgument<MastraLanguageModel | OpenAICompatibleModelId>;
+    model?: DynamicArgument<MastraModelConfig>;
   } = {}): MastraLLM | Promise<MastraLLM> {
     // If model is provided, resolve it; otherwise use the agent's model
-    const modelToUse = model
-      ? typeof model === 'function'
-        ? model({ runtimeContext, mastra: this.#mastra })
-        : model
-      : this.getModel({ runtimeContext });
+    const modelToUse = this.getModel({ modelConfig: model, runtimeContext });
 
-    return resolveMaybePromise(modelToUse, modelConfig => {
-      // Resolve model configuration to actual LanguageModel
-      const resolvedModel =
-        typeof modelConfig === 'object' && 'specificationVersion' in modelConfig
-          ? (modelConfig as MastraLanguageModel)
-          : this.resolveModelConfig(modelConfig);
-
+    return resolveMaybePromise(modelToUse, resolvedModel => {
       let llm: MastraLLM | Promise<MastraLLM>;
       if (resolvedModel.specificationVersion === 'v2') {
         llm = this.prepareModels(runtimeContext, resolvedModel).then(models => {
@@ -826,7 +812,7 @@ export class Agent<
    */
   private async resolveModelConfig(
     modelConfig: DynamicArgument<MastraModelConfig>,
-    runtimeContext: RuntimeContext = new RuntimeContext(),
+    runtimeContext: RuntimeContext,
   ): Promise<MastraLanguageModel> {
     // If it's already a LanguageModel, return it
     if (typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) {
@@ -865,10 +851,12 @@ export class Agent<
    * @param options Options for getting the model
    * @returns A promise that resolves to the model
    */
-  public getModel({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
+  public getModel({
+    runtimeContext = new RuntimeContext(),
+    modelConfig = this.model,
+  }: { runtimeContext?: RuntimeContext; modelConfig?: Agent['model'] } = {}):
     | MastraLanguageModel
     | Promise<MastraLanguageModel> {
-    const modelConfig = this.model;
     if (!Array.isArray(modelConfig)) return this.resolveModelConfig(modelConfig, runtimeContext);
 
     if (modelConfig.length === 0 || !modelConfig[0]) {
@@ -885,7 +873,7 @@ export class Agent<
       this.logger.error(mastraError.toString());
       throw mastraError;
     }
-    return this.resolveModelConfig(modelConfig[0].model);
+    return this.resolveModelConfig(modelConfig[0].model, runtimeContext);
   }
 
   public async getModelList(
@@ -2895,10 +2883,7 @@ export class Agent<
 
     const models = await Promise.all(
       this.model.map(async modelConfig => {
-        const model =
-          typeof modelConfig.model === 'function'
-            ? await modelConfig.model({ runtimeContext, mastra: this.#mastra })
-            : modelConfig.model;
+        const model = await this.resolveModelConfig(modelConfig, runtimeContext);
 
         if (model.specificationVersion !== 'v2') {
           const mastraError = new MastraError({
