@@ -74,7 +74,7 @@ export class Observability extends BaseResource {
 
     const queryString = searchParams.toString();
     return this.request(
-      `/api/observability/traces/${encodeURIComponent(traceId)}/${encodeURIComponent(spanId)}${queryString ? `?${queryString}` : ''}`,
+      `/api/observability/traces/${encodeURIComponent(traceId)}/${encodeURIComponent(spanId)}/scores${queryString ? `?${queryString}` : ''}`,
     );
   }
 

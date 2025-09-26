@@ -101,7 +101,7 @@ export function observabilityRouter() {
   );
 
   router.get(
-    '/traces/:traceId/:spanId',
+    '/traces/:traceId/:spanId/scores',
     describeRoute({
       description: 'Get scores by trace ID and span ID',
       tags: ['scores'],

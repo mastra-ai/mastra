@@ -249,7 +249,7 @@ describe('Observability Methods', () => {
       });
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces/trace-123/span-456`,
+        `${clientOptions.baseUrl}/api/observability/traces/trace-123/span-456/scores`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -267,7 +267,7 @@ describe('Observability Methods', () => {
       });
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces/trace-123/span-456?page=2&perPage=10`,
+        `${clientOptions.baseUrl}/api/observability/traces/trace-123/span-456/scores?page=2&perPage=10`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -283,7 +283,7 @@ describe('Observability Methods', () => {
       });
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces/trace%20with%20spaces/span%2Fwith%2Fslashes`,
+        `${clientOptions.baseUrl}/api/observability/traces/trace%20with%20spaces/span%2Fwith%2Fslashes/scores`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
