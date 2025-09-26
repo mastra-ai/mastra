@@ -8,6 +8,7 @@ import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
+import { isControllerOpen } from '../stream';
 
 interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>
   extends LoopRun<Tools, OUTPUT> {
@@ -124,13 +125,16 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       }
 
       if (typedInputData.stepResult?.reason !== 'abort') {
-        controller.enqueue({
-          type: 'step-finish',
-          runId,
-          from: ChunkFrom.AGENT,
-          // @ts-ignore TODO: Look into the proper types for this
-          payload: typedInputData,
-        });
+        // Only enqueue if controller is still open
+        if (isControllerOpen(controller)) {
+          controller.enqueue({
+            type: 'step-finish',
+            runId,
+            from: ChunkFrom.AGENT,
+            // @ts-ignore TODO: Look into the proper types for this
+            payload: typedInputData,
+          });
+        }
       }
 
       modelStreamSpan.setAttributes({
