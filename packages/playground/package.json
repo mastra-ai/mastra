@@ -75,8 +75,8 @@
   "devDependencies": {
     "@eslint/js": "^9.35.0",
     "@microsoft/api-extractor": "^7.52.8",
-    "@types/react": "^19.1.9",
-    "@types/react-dom": "^19.1.7",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^4.6.0",
     "autoprefixer": "^10.4.21",
     "eslint-plugin-react-hooks": "^5.2.0",
