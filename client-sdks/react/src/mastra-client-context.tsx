@@ -3,7 +3,7 @@ import { MastraClient } from '@mastra/client-js';
 
 type MastraClientContextType = MastraClient;
 
-const MastraClientContext = createContext<MastraClientContextType | undefined>(undefined);
+const MastraClientContext = createContext<MastraClientContextType>({} as MastraClientContextType);
 
 export interface MastraClientProviderProps {
   children: ReactNode;

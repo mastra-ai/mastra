@@ -13,15 +13,14 @@ export function postgresStoreInstanceChecker(): Plugin {
         plugins: [postgresStoreInstanceCheckerBabel],
       });
 
-      if (!result?.code) {
-        throw new Error(
-          'postgres-store-instance-checker plugin did not return code, there is likely a bug in the plugin.',
-        );
+      // If Babel didn't transform anything or returned no code, pass through original source.
+      if (!result || typeof result.code !== 'string') {
+        return null;
       }
 
       return {
         code: result.code,
-        map: result?.map,
+        map: result.map ?? null,
       };
     },
   };

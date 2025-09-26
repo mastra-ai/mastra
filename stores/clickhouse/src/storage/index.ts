@@ -106,6 +106,7 @@ export class ClickhouseStore extends MastraStorage {
     hasColumn: boolean;
     createTable: boolean;
     deleteMessages: boolean;
+    getScoresBySpan: boolean;
   } {
     return {
       selectByIncludeResourceScope: true,
@@ -113,6 +114,7 @@ export class ClickhouseStore extends MastraStorage {
       hasColumn: true,
       createTable: true,
       deleteMessages: false,
+      getScoresBySpan: true,
     };
   }
 
@@ -450,6 +452,18 @@ export class ClickhouseStore extends MastraStorage {
     source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     return this.stores.scores.getScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    return this.stores.scores.getScoresBySpan({ traceId, spanId, pagination });
   }
 
   async close(): Promise<void> {

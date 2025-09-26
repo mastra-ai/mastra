@@ -1,6 +1,3 @@
-import type { ToolExecutionOptions } from 'ai';
-import type { ToolCallOptions } from 'ai-v5';
-
 import type { Mastra } from '../mastra';
 import type { ZodLikeSchema } from '../types/zod-compat';
 import type { ToolAction, ToolExecutionContext, ToolInvocationOptions } from './types';
@@ -83,7 +80,7 @@ export function createTool<
   ? Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
       inputSchema: TSchemaIn;
       outputSchema: TSchemaOut;
-      execute: (context: TContext, options: ToolExecutionOptions | ToolCallOptions) => Promise<any>;
+      execute: (context: TContext, options: ToolInvocationOptions) => Promise<any>;
     }
   : Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> {
   return new Tool(opts) as any;

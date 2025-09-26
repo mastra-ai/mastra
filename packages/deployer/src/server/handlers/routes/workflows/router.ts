@@ -796,7 +796,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
   router.post(
     '/:workflowId/start',
     describeRoute({
-      description: 'Create and start a new workflow run',
+      description: 'Start an existing workflow run',
       tags: ['workflows'],
       parameters: [
         {

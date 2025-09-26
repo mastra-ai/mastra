@@ -1,5 +1,32 @@
 # @mastra/core
 
+## 0.18.1-alpha.0
+
+### Patch Changes
+
+- Remove legacy helpers ([#8017](https://github.com/mastra-ai/mastra/pull/8017))
+
+- add a way to hide the deploy mastra cloud button ([#8137](https://github.com/mastra-ai/mastra/pull/8137))
+
+- fix cloudflare deployer build ([#8105](https://github.com/mastra-ai/mastra/pull/8105))
+
+- When an error would happen in a function like onStepResult, there are other code that executes synchronously and will execute after the controller already closes. We need to make sure we're only trying to enqueue chunks when the controller is still open. ([#8186](https://github.com/mastra-ai/mastra/pull/8186))
+
+- Fix generateVNext tripwire return value ([#8122](https://github.com/mastra-ai/mastra/pull/8122))
+
+- Fixed createTool types due totight coupling to Zod's internal structure, which changed between v3 and v4. Instead of checking for exact Zod types, we now use structural typing - checking for the presence of parse/safeParse methods ([#8150](https://github.com/mastra-ai/mastra/pull/8150))
+
+- Fixes agent.network() memory tools (working memory, vector search) as well as fixes tool calling and workflow calling in general. Various clean up for the agent.network() code path. ([#8157](https://github.com/mastra-ai/mastra/pull/8157))
+
+- Add input data validation to workflow step execution ([#7779](https://github.com/mastra-ai/mastra/pull/7779))
+  Add resume data validation to resume workflow method
+  Add input data validation to start workflow method
+  Use default value from inputSchema/resumeSchema
+
+- Add types in the streamVNext codepath, fixes for various issues across multiple packages surfaced from type issues, align return types. ([#8010](https://github.com/mastra-ai/mastra/pull/8010))
+
+- When step is created from agent or tool, add the description and component key to show that ([#8151](https://github.com/mastra-ai/mastra/pull/8151))
+
 ## 0.18.0
 
 ### Minor Changes

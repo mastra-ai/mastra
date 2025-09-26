@@ -114,6 +114,7 @@ export abstract class MastraStorage extends MastraBase {
     deleteMessages: boolean;
     aiTracing?: boolean;
     indexManagement?: boolean;
+    getScoresBySpan?: boolean;
   } {
     return {
       selectByIncludeResourceScope: false,
@@ -123,6 +124,7 @@ export abstract class MastraStorage extends MastraBase {
       deleteMessages: false,
       aiTracing: false,
       indexManagement: false,
+      getScoresBySpan: false,
     };
   }
 
@@ -382,6 +384,11 @@ export abstract class MastraStorage extends MastraBase {
       schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
       ifNotExists: ['resourceId'],
     });
+    await this?.alterTable?.({
+      tableName: TABLE_SCORERS,
+      schema: TABLE_SCHEMAS[TABLE_SCORERS],
+      ifNotExists: ['spanId'],
+    });
   }
 
   async persistWorkflowSnapshot({
@@ -499,6 +506,23 @@ export abstract class MastraStorage extends MastraBase {
     entityId: string;
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination: _pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'SCORES_STORAGE_GET_SCORES_BY_SPAN_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      details: { traceId, spanId },
+    });
+  }
 
   abstract getEvals(
     options: {

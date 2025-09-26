@@ -197,6 +197,8 @@ describe('DynamoDBStore', () => {
           { AttributeName: 'gsi5sk', AttributeType: 'S' },
           { AttributeName: 'gsi6pk', AttributeType: 'S' },
           { AttributeName: 'gsi6sk', AttributeType: 'S' },
+          { AttributeName: 'gsi7pk', AttributeType: 'S' },
+          { AttributeName: 'gsi7sk', AttributeType: 'S' },
         ],
         KeySchema: [
           { AttributeName: 'pk', KeyType: 'HASH' },
@@ -248,6 +250,14 @@ describe('DynamoDBStore', () => {
             KeySchema: [
               { AttributeName: 'gsi6pk', KeyType: 'HASH' },
               { AttributeName: 'gsi6sk', KeyType: 'RANGE' },
+            ],
+            Projection: { ProjectionType: 'ALL' },
+          },
+          {
+            IndexName: 'gsi7',
+            KeySchema: [
+              { AttributeName: 'gsi7pk', KeyType: 'HASH' },
+              { AttributeName: 'gsi7sk', KeyType: 'RANGE' },
             ],
             Projection: { ProjectionType: 'ALL' },
           },

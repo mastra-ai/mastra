@@ -1,6 +1,7 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
 import { TABLE_SCORERS, ScoresStorage, safelyParseJSON } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsLibSQL } from '../operations';
@@ -126,6 +127,7 @@ export class ScoresLibSQL extends ScoresStorage {
     return {
       id: row.id,
       traceId: row.traceId,
+      spanId: row.spanId,
       runId: row.runId,
       scorer: scorerValue,
       score: row.score,
@@ -162,6 +164,27 @@ export class ScoresLibSQL extends ScoresStorage {
   }
 
   async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    let parsedScore: ValidatedSaveScorePayload;
+    try {
+      parsedScore = saveScorePayloadSchema.parse(score);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_SAVE_SCORE_FAILED_INVALID_SCORE_PAYLOAD',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            scorer: score.scorer.name,
+            entityId: score.entityId,
+            entityType: score.entityType,
+            traceId: score.traceId || '',
+            spanId: score.spanId || '',
+          },
+        },
+        error,
+      );
+    }
+
     try {
       const id = crypto.randomUUID();
 
@@ -171,7 +194,7 @@ export class ScoresLibSQL extends ScoresStorage {
           id,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          ...score,
+          ...parsedScore,
         },
       });
 
@@ -216,6 +239,52 @@ export class ScoresLibSQL extends ScoresStorage {
       throw new MastraError(
         {
           id: 'LIBSQL_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    try {
+      const countSQLResult = await this.client.execute({
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE traceId = ? AND spanId = ?`,
+        args: [traceId, spanId],
+      });
+
+      const total = Number(countSQLResult.rows?.[0]?.count ?? 0);
+
+      const result = await this.client.execute({
+        sql: `SELECT * FROM ${TABLE_SCORERS} WHERE traceId = ? AND spanId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        args: [traceId, spanId, pagination.perPage + 1, pagination.page * pagination.perPage],
+      });
+
+      const hasMore = result.rows?.length > pagination.perPage;
+      const scores = result.rows?.slice(0, pagination.perPage).map(row => this.transformScoreRow(row)) ?? [];
+
+      return {
+        scores,
+        pagination: {
+          total,
+          page: pagination.page,
+          perPage: pagination.perPage,
+          hasMore,
+        },
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_SCORES_BY_SPAN_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

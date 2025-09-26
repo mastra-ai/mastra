@@ -179,6 +179,7 @@ export class LanceStorage extends MastraStorage {
       hasColumn: true,
       createTable: true,
       deleteMessages: false,
+      getScoresBySpan: true,
     };
   }
 
@@ -492,5 +493,17 @@ export class LanceStorage extends MastraStorage {
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     return this.stores.scores.getScoresByEntityId({ entityId, entityType, pagination });
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    return this.stores.scores.getScoresBySpan({ traceId, spanId, pagination });
   }
 }

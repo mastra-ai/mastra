@@ -815,9 +815,7 @@ exports[`Loop Tests > AISDK v5 > generateText > result.response.messages > shoul
 exports[`Loop Tests > AISDK v5 > generateText > result.sources > should contain sources 1`] = `
 [
   {
-    "filename": undefined,
     "id": "123",
-    "mediaType": undefined,
     "providerMetadata": {
       "provider": {
         "custom": "value",
@@ -829,9 +827,7 @@ exports[`Loop Tests > AISDK v5 > generateText > result.sources > should contain 
     "url": "https://example.com",
   },
   {
-    "filename": undefined,
     "id": "456",
-    "mediaType": undefined,
     "providerMetadata": {
       "provider": {
         "custom": "value2",
@@ -1420,9 +1416,7 @@ exports[`Loop Tests > AISDK v5 > result.reasoningText > should contain reasoning
 exports[`Loop Tests > AISDK v5 > result.sources > should contain sources 1`] = `
 [
   {
-    "filename": undefined,
     "id": "123",
-    "mediaType": undefined,
     "providerMetadata": {
       "provider": {
         "custom": "value",
@@ -1434,9 +1428,7 @@ exports[`Loop Tests > AISDK v5 > result.sources > should contain sources 1`] = `
     "url": "https://example.com",
   },
   {
-    "filename": undefined,
     "id": "456",
-    "mediaType": undefined,
     "providerMetadata": {
       "provider": {
         "custom": "value2",

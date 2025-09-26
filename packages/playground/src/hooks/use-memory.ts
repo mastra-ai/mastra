@@ -2,7 +2,7 @@ import { toast } from 'sonner';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { MemorySearchResponse, MemorySearchParams } from '@/types/memory';
-import { useMastraClient } from '@mastra/playground-ui';
+import { useMastraClient } from '@mastra/react-hooks';
 
 export const useMemory = (agentId?: string) => {
   const client = useMastraClient();

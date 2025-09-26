@@ -87,6 +87,12 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
+  public get supports() {
+    const supports = super.supports;
+    supports.getScoresBySpan = true;
+    return supports;
+  }
+
   constructor(config: CloudflareStoreConfig) {
     super({ name: 'Cloudflare' });
 
@@ -448,6 +454,18 @@ export class CloudflareStore extends MastraStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     return this.stores.scores.getScoresByScorerId({ scorerId, entityId, entityType, source, pagination });
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    return this.stores.scores.getScoresBySpan({ traceId, spanId, pagination });
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {

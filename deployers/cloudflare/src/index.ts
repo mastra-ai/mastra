@@ -109,8 +109,8 @@ export class CloudflareDeployer extends Deployer {
       fetch: async (request, env, context) => {
         const _mastra = mastra();
 
-        if (mastra.getStorage()) {
-          mastra.__registerInternalWorkflow(scoreTracesWorkflow);
+        if (_mastra.getStorage()) {
+          _mastra.__registerInternalWorkflow(scoreTracesWorkflow);
         }
 
         registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {

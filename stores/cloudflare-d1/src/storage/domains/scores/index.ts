@@ -1,5 +1,6 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
 import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
 import type Cloudflare from 'cloudflare';
@@ -66,14 +67,28 @@ export class ScoresStorageD1 extends ScoresStorage {
   }
 
   async saveScore(score: Omit<ScoreRowData, 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    let parsedScore: ValidatedSaveScorePayload;
+    try {
+      parsedScore = saveScorePayloadSchema.parse(score);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_D1_STORE_SCORES_SAVE_SCORE_FAILED_INVALID_SCORE_PAYLOAD',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { scoreId: score.id },
+        },
+        error,
+      );
+    }
+
     try {
       const id = crypto.randomUUID();
       const fullTableName = this.operations.getTableName(TABLE_SCORERS);
-      const { input, ...rest } = score;
 
       // Serialize all object values to JSON strings
       const serializedRecord: Record<string, any> = {};
-      for (const [key, value] of Object.entries(rest)) {
+      for (const [key, value] of Object.entries(parsedScore)) {
         if (value !== null && value !== undefined) {
           if (typeof value === 'object') {
             serializedRecord[key] = JSON.stringify(value);
@@ -86,7 +101,6 @@ export class ScoresStorageD1 extends ScoresStorage {
       }
 
       serializedRecord.id = id;
-      serializedRecord.input = JSON.stringify(input);
       serializedRecord.createdAt = new Date().toISOString();
       serializedRecord.updatedAt = new Date().toISOString();
 
@@ -315,6 +329,77 @@ export class ScoresStorageD1 extends ScoresStorage {
       throw new MastraError(
         {
           id: 'CLOUDFLARE_D1_STORE_SCORES_GET_SCORES_BY_ENTITY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    try {
+      const fullTableName = this.operations.getTableName(TABLE_SCORERS);
+
+      // Get total count
+      const countQuery = createSqlBuilder()
+        .count()
+        .from(fullTableName)
+        .where('traceId = ?', traceId)
+        .andWhere('spanId = ?', spanId);
+      const countResult = await this.operations.executeQuery(countQuery.build());
+      const total = Array.isArray(countResult) ? Number(countResult?.[0]?.count ?? 0) : Number(countResult?.count ?? 0);
+
+      if (total === 0) {
+        return {
+          pagination: {
+            total: 0,
+            page: pagination.page,
+            perPage: pagination.perPage,
+            hasMore: false,
+          },
+          scores: [],
+        };
+      }
+
+      // Get paginated results
+      const limit = pagination.perPage + 1;
+      const selectQuery = createSqlBuilder()
+        .select('*')
+        .from(fullTableName)
+        .where('traceId = ?', traceId)
+        .andWhere('spanId = ?', spanId)
+        .orderBy('createdAt', 'DESC')
+        .limit(limit)
+        .offset(pagination.page * pagination.perPage);
+
+      const { sql, params } = selectQuery.build();
+      const results = await this.operations.executeQuery({ sql, params });
+      const rows = Array.isArray(results) ? results : [];
+
+      const scores = rows.slice(0, pagination.perPage).map(transformScoreRow);
+
+      return {
+        pagination: {
+          total,
+          page: pagination.page,
+          perPage: pagination.perPage,
+          hasMore: rows.length > pagination.perPage,
+        },
+        scores,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_D1_STORE_SCORES_GET_SCORES_BY_SPAN_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

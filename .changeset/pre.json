@@ -72,7 +72,24 @@
     "@mastra/voice-playai": "0.11.6",
     "@mastra/voice-sarvam": "0.11.6",
     "@mastra/voice-speechify": "0.11.6",
-    "@mastra/inngest": "0.14.1"
+    "@mastra/inngest": "0.14.1",
+    "@mastra/react-hooks": "0.0.1-alpha.0",
+    "@mastra/langsmith": "0.0.0"
   },
-  "changesets": []
+  "changesets": [
+    "brave-boats-cut",
+    "chilly-times-rule",
+    "cool-facts-rest",
+    "full-vans-stay",
+    "legal-badgers-rush",
+    "nice-coats-wash",
+    "quiet-symbols-move",
+    "ready-falcons-dance",
+    "rich-bats-juggle",
+    "tame-bottles-strive",
+    "tasty-singers-slide",
+    "thick-mails-happen",
+    "weak-cars-share",
+    "wide-coins-stop"
+  ]
 }

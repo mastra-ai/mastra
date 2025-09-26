@@ -14,6 +14,7 @@ function getSteps(steps: Record<string, StepWithComponent>, path?: string) {
       resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
       suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
       isWorkflow: step.component === 'WORKFLOW',
+      component: step.component,
     };
 
     if (step.component === 'WORKFLOW' && step.steps) {
@@ -37,6 +38,7 @@ export function getWorkflowInfo(workflow: Workflow): WorkflowInfo {
         outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
         resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
         suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
+        component: step.component,
       };
       return acc;
     }, {}),

@@ -1,7 +1,7 @@
 const meta = {
-  logging: "Logging",
   "ai-tracing": "AI Tracing",
   "otel-tracing": "OTEL Tracing",
+  logging: "Logging",
 };
 
 export default meta;

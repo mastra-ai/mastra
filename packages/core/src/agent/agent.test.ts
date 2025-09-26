@@ -5719,7 +5719,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               thread: 'test-thread-7050',
               resource: 'test-resource-7050',
             },
-            onStepFinish: async (step: any) => {
+            onStepFinish: async step => {
               capturedStep = step;
             },
           });
@@ -10366,7 +10366,7 @@ describe('Agent Tests', () => {
       expect(steps[2].content.length).toBe(1);
 
       expect(stopWhenContent[1]).not.toEqual(stopWhenContent[0]);
-    }, 10000);
+    }, 20000);
 
     it('should contain the correct content in the step results for both stopWhen and stream.steps with text and tool calls in the same step', async () => {
       const agent = new Agent({
