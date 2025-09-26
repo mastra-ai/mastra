@@ -1,6 +1,7 @@
 import type { Connection } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
 import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import { getTableSchema, processResultWithTypeConversion } from '../utils';
@@ -13,6 +14,20 @@ export class StoreScoresLance extends ScoresStorage {
   }
 
   async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+    let validatedScore: ValidatedSaveScorePayload;
+    try {
+      validatedScore = saveScorePayloadSchema.parse(score);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LANCE_STORAGE_SAVE_SCORE_FAILED',
+          text: 'Failed to save score in LanceStorage',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
     try {
       const id = crypto.randomUUID();
       const table = await this.client.openTable(TABLE_SCORERS);
@@ -232,6 +247,54 @@ export class StoreScoresLance extends ScoresStorage {
         {
           id: 'LANCE_STORAGE_GET_SCORES_BY_ENTITY_ID_FAILED',
           text: 'Failed to get scores by entityId and entityType in LanceStorage',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { error: error?.message },
+        },
+        error,
+      );
+    }
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    try {
+      const table = await this.client.openTable(TABLE_SCORERS);
+      const { page = 0, perPage = 10 } = pagination || {};
+      const offset = page * perPage;
+
+      // Query for scores with the given traceId and spanId
+      const query = table.query().where(`\`traceId\` = '${traceId}' AND \`spanId\` = '${spanId}'`).limit(perPage);
+      if (offset > 0) query.offset(offset);
+      const records = await query.toArray();
+      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
+      const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
+
+      // Get total count for pagination
+      const allRecords = await table.query().where(`\`traceId\` = '${traceId}' AND \`spanId\` = '${spanId}'`).toArray();
+      const total = allRecords.length;
+
+      return {
+        pagination: {
+          page,
+          perPage,
+          total,
+          hasMore: offset + scores.length < total,
+        },
+        scores,
+      };
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'LANCE_STORAGE_GET_SCORES_BY_SPAN_FAILED',
+          text: 'Failed to get scores by traceId and spanId in LanceStorage',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { error: error?.message },
