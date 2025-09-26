@@ -72,6 +72,7 @@ export interface Step<
   >;
   scorers?: DynamicArgument<MastraScorers>;
   retries?: number;
+  component?: string;
 }
 
 export const getStepResult = (stepResults: Record<string, StepResult<any, any, any, any>>, step: any) => {
