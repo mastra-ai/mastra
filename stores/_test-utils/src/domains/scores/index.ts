@@ -128,8 +128,8 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
         });
 
         expect(result.scores.length).toBe(1);
-        expect(result.scores[0].traceId).toBe(traceId);
-        expect(result.scores[0].spanId).toBe(spanId);
+        expect(result.scores[0]?.traceId).toBe(traceId);
+        expect(result.scores[0]?.spanId).toBe(spanId);
         expect(result.pagination.total).toBe(1);
         expect(result.pagination.hasMore).toBe(false);
       });
