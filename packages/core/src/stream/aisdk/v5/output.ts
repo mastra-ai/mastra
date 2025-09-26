@@ -6,7 +6,6 @@ import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStr
 import type z from 'zod';
 import type { MessageList } from '../../../agent/message-list';
 import type { MastraModelOutput } from '../../base/output';
-import { getResponseFormat } from '../../base/schema';
 import type { OutputSchema } from '../../base/schema';
 import type { ChunkType } from '../../types';
 import type { ConsumeStreamOptions } from './compat';
@@ -281,7 +280,6 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
     let hasStarted: boolean = false;
 
     // let stepCounter = 1;
-    const responseFormat = getResponseFormat(this.#options.output);
 
     return this.#modelOutput.fullStream.pipeThrough(
       new TransformStream<
@@ -289,11 +287,9 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
         TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>
       >({
         transform(chunk, controller) {
-          // TODO: check this works with new changes to structured output stream merging
-          if (responseFormat?.type === 'json' && (chunk.type === 'object' || chunk.type === 'object-result')) {
+          if (chunk.type === 'object') {
             /**
-             * Pass through 'object' chunks that were created by
-             * createObjectStreamTransformer in base/output.ts.
+             * Pass through 'object' chunks
              */
             controller.enqueue(chunk as TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>);
             return;
