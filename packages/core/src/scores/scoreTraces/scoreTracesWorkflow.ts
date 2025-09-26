@@ -150,8 +150,7 @@ export async function runScorerOnTarget({
     scorerId: scorer.name,
   };
 
-  const savedScoreRecord = await validateAndSaveScore({ storage, scorerResult });
-  await attachScoreToSpan({ storage, span, scoreRecord: savedScoreRecord });
+  await validateAndSaveScore({ storage, scorerResult });
 }
 
 async function validateAndSaveScore({ storage, scorerResult }: { storage: MastraStorage; scorerResult: ScorerRun }) {
@@ -183,30 +182,6 @@ function buildScorerRun({
 
   runPayload.tracingContext = tracingContext;
   return runPayload;
-}
-
-async function attachScoreToSpan({
-  storage,
-  span,
-  scoreRecord,
-}: {
-  storage: MastraStorage;
-  span: AISpanRecord;
-  scoreRecord: ScoreRowData;
-}) {
-  const existingLinks = span.links || [];
-  const link = {
-    type: 'score',
-    scoreId: scoreRecord.id,
-    scorerName: scoreRecord.scorer.name,
-    score: scoreRecord.score,
-    createdAt: scoreRecord.createdAt,
-  };
-  await storage.updateAISpan({
-    spanId: span.spanId,
-    traceId: span.traceId,
-    updates: { links: [...existingLinks, link] },
-  });
 }
 
 export const scoreTracesWorkflow = createWorkflow({
