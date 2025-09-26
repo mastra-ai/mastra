@@ -79,7 +79,7 @@ export type {
 } from './model/base.types';
 export type { TripwireProperties, MastraModelConfig, OpenAICompatibleConfig } from './model/shared.types';
 export { OpenAICompatibleModel } from './model/openai-compatible';
-export { PROVIDER_REGISTRY, parseModelString, getProviderConfig } from './model/provider-registry';
+export { PROVIDER_REGISTRY, parseModelString, getProviderConfig } from './model/provider-registry.generated';
 
 export type OutputType = StructuredOutput | ZodSchema | JSONSchema7 | undefined;
 
