@@ -39,6 +39,7 @@ import Scorer from './pages/scorers/scorer';
 import Observability from './pages/observability';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
+import { MastraReactProvider } from '@mastra/react-hooks';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
@@ -70,126 +71,128 @@ const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
 
 function App() {
   return (
-    <PlaygroundQueryClient>
-      <PostHogProvider>
-        <MastraClientProvider>
-          <BrowserRouter>
-            <LinkComponentWrapper>
-              <Routes>
-                <Route
-                  element={
-                    <Layout>
-                      <Outlet />
-                    </Layout>
-                  }
-                >
-                  <Route path="/templates" element={<Templates />} />
-                  <Route path="/templates/:templateSlug" element={<Template />} />
-                </Route>
-                <Route
-                  element={
-                    <Layout>
-                      <Outlet />
-                    </Layout>
-                  }
-                >
-                  <Route path="/scorers" element={<Scorers />} />
+    <MastraReactProvider>
+      <PlaygroundQueryClient>
+        <PostHogProvider>
+          <MastraClientProvider>
+            <BrowserRouter>
+              <LinkComponentWrapper>
+                <Routes>
                   <Route
-                    path="/scorers/:scorerId"
-                    element={<Scorer computeTraceLink={traceId => `/observability?traceId=${traceId}`} />}
-                  />
-                </Route>
-                <Route
-                  element={
-                    <Layout>
-                      <Outlet />
-                    </Layout>
-                  }
-                >
-                  <Route path="/observability" element={<Observability />} />
-                </Route>
-                <Route
-                  element={
-                    <Layout>
-                      <Outlet />
-                    </Layout>
-                  }
-                >
-                  <Route path="/networks" element={<Networks />} />
-                  <Route
-                    path="/networks/v-next/:networkId"
-                    element={<NavigateTo to="/networks/v-next/:networkId/chat" />}
-                  />
-                  <Route
-                    path="/networks/v-next/:networkId"
                     element={
-                      <NetworkLayout>
+                      <Layout>
                         <Outlet />
-                      </NetworkLayout>
+                      </Layout>
                     }
                   >
-                    <Route path="chat" element={<VNextNetwork />} />
-                    <Route path="chat/:threadId" element={<VNextNetwork />} />
+                    <Route path="/templates" element={<Templates />} />
+                    <Route path="/templates/:templateSlug" element={<Template />} />
                   </Route>
-                  <Route path="/networks/:networkId" element={<NavigateTo to="/networks/:networkId/chat" />} />
-                </Route>
-
-                <Route
-                  element={
-                    <Layout>
-                      <Outlet />
-                    </Layout>
-                  }
-                >
-                  <Route path="/agents" element={<Agents />} />
-                  <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
-                  <Route path="/agents/:agentId/tools/:toolId" element={<AgentTool />} />
                   <Route
-                    path="/agents/:agentId"
                     element={
-                      <AgentLayout>
+                      <Layout>
                         <Outlet />
-                      </AgentLayout>
+                      </Layout>
                     }
                   >
-                    <Route path="chat" element={<Agent />} />
-                    <Route path="chat/:threadId" element={<Agent />} />
-                    <Route path="evals" element={<AgentEvalsPage />} />
-                    <Route path="traces" element={<AgentTracesPage />} />
+                    <Route path="/scorers" element={<Scorers />} />
+                    <Route
+                      path="/scorers/:scorerId"
+                      element={<Scorer computeTraceLink={traceId => `/observability?traceId=${traceId}`} />}
+                    />
                   </Route>
-                  <Route path="/tools" element={<Tools />} />
-
-                  <Route path="/tools/all/:toolId" element={<Tool />} />
-                  <Route path="/mcps" element={<MCPs />} />
-
-                  <Route path="/mcps/:serverId" element={<McpServerPage />} />
-                  <Route path="/mcps/:serverId/tools/:toolId" element={<MCPServerToolExecutor />} />
-
-                  <Route path="/workflows" element={<Workflows />} />
-                  <Route path="/workflows/:workflowId" element={<NavigateTo to="/workflows/:workflowId/graph" />} />
-
                   <Route
-                    path="/workflows/:workflowId"
                     element={
-                      <WorkflowLayout>
+                      <Layout>
                         <Outlet />
-                      </WorkflowLayout>
+                      </Layout>
                     }
                   >
-                    <Route path="traces" element={<WorkflowTracesPage />} />
-                    <Route path="/workflows/:workflowId/graph" element={<Workflow />} />
-                    <Route path="/workflows/:workflowId/graph/:runId" element={<Workflow />} />
+                    <Route path="/observability" element={<Observability />} />
+                  </Route>
+                  <Route
+                    element={
+                      <Layout>
+                        <Outlet />
+                      </Layout>
+                    }
+                  >
+                    <Route path="/networks" element={<Networks />} />
+                    <Route
+                      path="/networks/v-next/:networkId"
+                      element={<NavigateTo to="/networks/v-next/:networkId/chat" />}
+                    />
+                    <Route
+                      path="/networks/v-next/:networkId"
+                      element={
+                        <NetworkLayout>
+                          <Outlet />
+                        </NetworkLayout>
+                      }
+                    >
+                      <Route path="chat" element={<VNextNetwork />} />
+                      <Route path="chat/:threadId" element={<VNextNetwork />} />
+                    </Route>
+                    <Route path="/networks/:networkId" element={<NavigateTo to="/networks/:networkId/chat" />} />
                   </Route>
 
-                  <Route path="/" element={<NavigateTo to="/agents" />} />
-                  <Route path="/runtime-context" element={<RuntimeContext />} />
-                </Route>
-              </Routes>
-            </LinkComponentWrapper>
-          </BrowserRouter>
-        </MastraClientProvider>
-      </PostHogProvider>
-    </PlaygroundQueryClient>
+                  <Route
+                    element={
+                      <Layout>
+                        <Outlet />
+                      </Layout>
+                    }
+                  >
+                    <Route path="/agents" element={<Agents />} />
+                    <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
+                    <Route path="/agents/:agentId/tools/:toolId" element={<AgentTool />} />
+                    <Route
+                      path="/agents/:agentId"
+                      element={
+                        <AgentLayout>
+                          <Outlet />
+                        </AgentLayout>
+                      }
+                    >
+                      <Route path="chat" element={<Agent />} />
+                      <Route path="chat/:threadId" element={<Agent />} />
+                      <Route path="evals" element={<AgentEvalsPage />} />
+                      <Route path="traces" element={<AgentTracesPage />} />
+                    </Route>
+                    <Route path="/tools" element={<Tools />} />
+
+                    <Route path="/tools/all/:toolId" element={<Tool />} />
+                    <Route path="/mcps" element={<MCPs />} />
+
+                    <Route path="/mcps/:serverId" element={<McpServerPage />} />
+                    <Route path="/mcps/:serverId/tools/:toolId" element={<MCPServerToolExecutor />} />
+
+                    <Route path="/workflows" element={<Workflows />} />
+                    <Route path="/workflows/:workflowId" element={<NavigateTo to="/workflows/:workflowId/graph" />} />
+
+                    <Route
+                      path="/workflows/:workflowId"
+                      element={
+                        <WorkflowLayout>
+                          <Outlet />
+                        </WorkflowLayout>
+                      }
+                    >
+                      <Route path="traces" element={<WorkflowTracesPage />} />
+                      <Route path="/workflows/:workflowId/graph" element={<Workflow />} />
+                      <Route path="/workflows/:workflowId/graph/:runId" element={<Workflow />} />
+                    </Route>
+
+                    <Route path="/" element={<NavigateTo to="/agents" />} />
+                    <Route path="/runtime-context" element={<RuntimeContext />} />
+                  </Route>
+                </Routes>
+              </LinkComponentWrapper>
+            </BrowserRouter>
+          </MastraClientProvider>
+        </PostHogProvider>
+      </PlaygroundQueryClient>
+    </MastraReactProvider>
   );
 }
 
