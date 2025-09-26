@@ -82,14 +82,14 @@ for await (const chunk of stream.textStream) {
 
 Streaming from a workflow returns a sequence of structured events describing the run lifecycle, rather than incremental text chunks. This event-based format makes it possible to track and respond to workflow progress in real time once a run is created using `.createRunAsync()`.
 
-### Using `Run.stream()`
+### Using `Run.streamVNext()`
 
 This is the experimental API. It returns a `ReadableStream` of events directly.
 
 ```typescript {3,9} showLineNumbers copy
 const run = await testWorkflow.createRunAsync();
 
-const stream = await run.stream({
+const stream = await run.streamVNext({
   inputData: {
     value: "initial data"
   }
@@ -100,7 +100,7 @@ for await (const chunk of stream) {
 }
 ```
 
-> See [Run.stream()](../../reference/workflows/run-methods/stream.mdx) for more information.
+> See [Run.streamVNext()](../../reference/workflows/run-methods/streamVNext.mdx) for more information.
 
 ### Output from `Run.stream()`
 

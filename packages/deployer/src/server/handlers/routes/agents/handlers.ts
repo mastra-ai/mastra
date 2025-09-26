@@ -369,8 +369,8 @@ export async function deprecatedStreamVNextHandler(c: Context) {
   return c.json(
     {
       error: 'This endpoint is deprecated',
-      message: 'The /streamVNext endpoint has been deprecated. Please use an alternative streaming endpoint.',
-      deprecated_endpoint: '/api/agents/:agentId/streamVNext',
+      message: 'The /stream/vnext endpoint has been deprecated. Please use an alternative streaming endpoint.',
+      deprecated_endpoint: '/api/agents/:agentId/stream/vnext',
       replacement_endpoint: '/api/agents/:agentId/stream',
     },
     410, // 410 Gone status code for deprecated endpoints

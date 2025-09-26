@@ -830,16 +830,6 @@ export const redirectList = [
     permanent: true,
   },
   {
-    source: "/:locale/reference/workflows/run-methods/streamVNext",
-    destination: "/:locale/reference/workflows/run-methods/stream",
-    permanent: true,
-  },
-  {
-    source: "/:locale/reference/streaming/workflows/streamVNext",
-    destination: "/:locale/reference/streaming/workflows/stream",
-    permanent: true,
-  },
-  {
     source: "/:locale/docs/observability/tracing",
     destination: "/:locale/docs/observability/otel-tracing",
     permanent: true,

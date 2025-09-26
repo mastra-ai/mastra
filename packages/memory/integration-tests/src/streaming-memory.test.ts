@@ -71,7 +71,7 @@ describe('Memory Streaming Tests', () => {
     expect(response1).toContain('70 degrees');
 
     // Second weather check
-    const stream2 = await agent.stream('what is the weather in Seattle?', {
+    const stream2 = await agent.streamLegacy('what is the weather in Seattle?', {
       threadId,
       resourceId,
     });
@@ -112,7 +112,7 @@ describe('Memory Streaming Tests', () => {
       },
     });
 
-    await agent.generate('Hello, world!', {
+    await agent.generateLegacy('Hello, world!', {
       threadId,
       resourceId,
     });
@@ -245,11 +245,11 @@ describe('Memory Streaming Tests', () => {
       let error: Error | null = null;
       const threadId = randomUUID();
 
-      await weatherAgent.generate(`hi`, {
+      await weatherAgent.generateLegacy(`hi`, {
         threadId,
         resourceId,
       });
-      await weatherAgent.generate(`LA weather`, { threadId, resourceId });
+      await weatherAgent.generateLegacy(`LA weather`, { threadId, resourceId });
 
       const agentMemory = (await weatherAgent.getMemory())!;
       const initialMessages = (await agentMemory.query({ threadId })).uiMessages;
