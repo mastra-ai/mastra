@@ -176,7 +176,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
    * Detects and caches table schema information
    */
   private async detectTableSchema(indexName: string): Promise<TableSchema> {
-    const cacheKey = `${this.schema || 'public'}.${indexName}`;
+    // Validate indexName to prevent SQL injection
+    const validatedIndexName = parseSqlIdentifier(indexName, 'table name');
+    const cacheKey = `${this.schema || 'public'}.${validatedIndexName}`;
 
     // Return cached schema if available
     if (this.tableSchemaCache.has(cacheKey)) {
@@ -211,10 +213,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           ORDER BY ordinal_position
         `;
 
-        const result = await client.query(schemaQuery, [schemaName, indexName]);
+        const result = await client.query(schemaQuery, [schemaName, validatedIndexName]);
 
         if (result.rows.length === 0) {
-          throw new Error(`Table "${indexName}" does not exist in schema "${schemaName}"`);
+          throw new Error(`Table "${validatedIndexName}" does not exist in schema "${schemaName}"`);
         }
 
         const columns: TableColumn[] = result.rows.map(row => ({
@@ -577,10 +579,12 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     const updateClauses = [`embedding = $2::${vectorType}`, 'metadata = $3::jsonb'];
 
     for (const [columnName, value] of Object.entries(columnValues)) {
-      columns.push(`"${columnName}"`);
+      // Validate column name to prevent SQL injection
+      const validatedColumnName = parseSqlIdentifier(columnName, 'column name');
+      columns.push(`"${validatedColumnName}"`);
       values.push(value);
       placeholders.push(`$${paramIndex}`);
-      updateClauses.push(`"${columnName}" = $${paramIndex}`);
+      updateClauses.push(`"${validatedColumnName}" = $${paramIndex}`);
       paramIndex++;
     }
 
@@ -671,9 +675,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
     // Validate inputs
     try {
-      if (!indexName.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)) {
-        throw new Error('Invalid index name format');
-      }
+      parseSqlIdentifier(indexName, 'index name');
       if (!Number.isInteger(dimension) || dimension <= 0) {
         throw new Error('Dimension must be a positive integer');
       }
