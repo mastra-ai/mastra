@@ -99,7 +99,7 @@ export class TracesStorageD1 extends TracesStorage {
         createSqlBuilder().select('*').from(fullTableName).where('1=1').build(),
       );
 
-      console.log('allDataResult', allDataResult);
+      console.info('allDataResult', allDataResult);
 
       const countResult = (await this.operations.executeQuery(countQuery.build())) as {
         count: number;

@@ -1,14 +1,15 @@
 import type {
-  ModelMessage,
-  UIMessage,
   ToolSet,
   DeepPartial,
   streamText,
   StreamTextOnFinishCallback as OriginalStreamTextOnFinishCallback,
   StreamTextOnStepFinishCallback as OriginalStreamTextOnStepFinishCallback,
+  ModelMessage,
+  UIMessage,
 } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema } from 'zod';
+import type { ZodSchema } from 'zod';
+import type { MessageList } from '../../agent';
 import type { TracingContext } from '../../ai-tracing';
 import type { LoopOptions } from '../../loop/types';
 import type { StructuredOutputOptions, OutputProcessor } from '../../processors';
@@ -33,17 +34,14 @@ export type StreamTextOnStepFinishCallback<Tools extends ToolSet> = (
   event: Parameters<OriginalStreamTextOnStepFinishCallback<Tools>>[0] & { runId: string },
 ) => Promise<void> | void;
 
-export type ModelLoopStreamArgs<
-  TOOLS extends ToolSet,
-  OUTPUT extends OutputSchema | undefined = undefined,
-  STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-> = {
-  messages: UIMessage[] | ModelMessage[];
-  structuredOutput?: STRUCTURED_OUTPUT extends z.ZodTypeAny ? StructuredOutputOptions<STRUCTURED_OUTPUT> : never;
+export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT extends OutputSchema = undefined> = {
+  messages?: UIMessage[] | ModelMessage[];
+  structuredOutput?: OUTPUT extends OutputSchema ? StructuredOutputOptions<OUTPUT> : never;
   outputProcessors?: OutputProcessor[];
   runtimeContext: RuntimeContext;
   tracingContext: TracingContext;
   resourceId?: string;
   threadId?: string;
   returnScorerData?: boolean;
-} & Omit<LoopOptions<TOOLS, OUTPUT>, 'model' | 'messageList'>;
+  messageList: MessageList;
+} & Omit<LoopOptions<TOOLS, OUTPUT>, 'models' | 'messageList'>;

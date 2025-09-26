@@ -1,51 +1,92 @@
 ---
-title: "リファレンス: Langfuse 統合 | Mastra オブザーバビリティ ドキュメント"
-description: LLM アプリケーション向けのオープンソースオブザーバビリティプラットフォームである Mastra と Langfuse を統合するためのドキュメント。
+title: "リファレンス: Langfuse統合 | Mastra観測可能性ドキュメント"
+description: LLMアプリケーション向けのオープンソース観測可能性プラットフォームであるMastraとLangfuseを統合するためのドキュメント。
 ---
+
+
 
 # Langfuse
 
-Langfuseは、LLMアプリケーション向けに特別に設計されたオープンソースのオブザーバビリティプラットフォームです。
+LangfuseはLLMアプリケーション専用に設計されたオープンソースの可観測性プラットフォームです。
 
-> **注**: 現在、AI関連の呼び出しのみが詳細なテレメトリーデータを含みます。他の操作はトレースを作成しますが、情報は限られています。
+> **注意**: 現在、AI関連の呼び出しのみが詳細なテレメトリデータを含みます。その他の操作はトレースを作成しますが、情報は限定的です。
+
+
 
 ## 設定
 
-LangfuseをMastraと一緒に使用するには、次の環境変数を設定する必要があります:
+MastraでLangfuseを使用するには、環境変数を使用するか、Mastra設定で直接設定することができます。
+
+### 環境変数を使用する
+
+以下の環境変数を設定してください：
 
 ```env
-LANGFUSE_PUBLIC_KEY=your_public_key
-LANGFUSE_SECRET_KEY=your_secret_key
-LANGFUSE_BASEURL=https://cloud.langfuse.com  # オプション - デフォルトはcloud.langfuse.com
+OTEL_EXPORTER_OTLP_ENDPOINT="https://cloud.langfuse.com/api/public/otel/v1/traces" # 🇪🇺 EUデータリージョン
+# OTEL_EXPORTER_OTLP_ENDPOINT="https://us.cloud.langfuse.com/api/public/otel/v1/traces" # 🇺🇸 USデータリージョン
+
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic ${AUTH_STRING}"
 ```
 
-**重要**: テレメトリーエクスポート設定を構成する際、Langfuseの統合が正しく機能するためには、`traceName`パラメータを`"ai"`に設定する必要があります。
+ここで`AUTH_STRING`は、パブリックキーとシークレットキーのbase64エンコードされた組み合わせです（以下を参照）。
+
+### AUTH_STRINGの生成
+
+認証では、LangfuseのAPIキーを使用したベーシック認証を使用します。base64エンコードされた認証文字列は以下を使用して生成できます：
+
+```bash
+echo -n "pk-lf-1234567890:sk-lf-1234567890" | base64
+```
+
+GNUシステムで長いAPIキーの場合、自動折り返しを防ぐために`-w 0`を追加する必要がある場合があります：
+
+```bash
+echo -n "pk-lf-1234567890:sk-lf-1234567890" | base64 -w 0
+```
+
+
 
 ## 実装
 
-こちらは、MastraをLangfuseで使用するための設定方法です：
+OpenTelemetryでLangfuseを使用するようにMastraを設定する方法は以下の通りです：
 
 ```typescript
 import { Mastra } from "@mastra/core";
-import { LangfuseExporter } from "langfuse-vercel";
 
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: "ai", // this must be set to "ai" so that the LangfuseExporter thinks it's an AI SDK trace
     enabled: true,
     export: {
-      type: "custom",
-      exporter: new LangfuseExporter({
-        publicKey: process.env.LANGFUSE_PUBLIC_KEY,
-        secretKey: process.env.LANGFUSE_SECRET_KEY,
-        baseUrl: process.env.LANGFUSE_BASEURL,
-      }),
+      type: 'otlp',
+      endpoint: 'https://cloud.langfuse.com/api/public/otel/v1/traces', // または任意のエンドポイント
+      headers: {
+        Authorization: `Basic ${AUTH_STRING}`, // base64エンコードされた認証文字列
+      },
     },
   },
 });
 ```
 
+または、環境変数を使用している場合は、設定を簡素化できます：
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  // ... other config
+  telemetry: {
+    enabled: true,
+    export: {
+      type: 'otlp',
+      // エンドポイントとヘッダーはOTEL_EXPORTER_OTLP_*環境変数から読み取られます
+    },
+  },
+});
+```
+
+
+
 ## ダッシュボード
 
-設定が完了すると、[cloud.langfuse.com](https://cloud.langfuse.com) のLangfuseダッシュボードでトレースと分析を表示できます。
+設定が完了すると、[cloud.langfuse.com](https://cloud.langfuse.com)のLangfuseダッシュボードでトレースと分析を表示できます。

@@ -33,8 +33,8 @@ await agent.getInstructions();
   content={[
     {
       name: "instructions",
-      type: "string | Promise<string>",
-      description: "The instructions configured for the agent, either as a direct string or a promise that resolves to the instructions.",
+      type: "SystemMessage | Promise<SystemMessage>",
+      description: "The instructions configured for the agent. SystemMessage can be: string | string[] | CoreSystemMessage | CoreSystemMessage[] | SystemModelMessage | SystemModelMessage[]. Returns either directly or as a promise that resolves to the instructions.",
     },
   ]}
 />
@@ -64,4 +64,4 @@ await agent.getInstructions({
 ## Related
 
 - [Agents overview](../../docs/agents/overview.mdx)
-- [Runtime variables](../../docs/agents/runtime-variables.mdx)
+- [Agent Runtime Context](../../docs/agents/runtime-context.mdx)

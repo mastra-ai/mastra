@@ -24,7 +24,7 @@ export class Observability extends BaseResource {
   getTraces(params: AITracesPaginatedArg): Promise<GetAITracesResponse> {
     const { pagination, filters } = params;
     const { page, perPage, dateRange } = pagination || {};
-    const { name, spanType } = filters || {};
+    const { name, spanType, entityId, entityType } = filters || {};
     const searchParams = new URLSearchParams();
 
     if (page !== undefined) {
@@ -39,6 +39,11 @@ export class Observability extends BaseResource {
     if (spanType !== undefined) {
       searchParams.set('spanType', String(spanType));
     }
+    if (entityId && entityType) {
+      searchParams.set('entityId', entityId);
+      searchParams.set('entityType', entityType);
+    }
+
     if (dateRange) {
       const dateRangeStr = JSON.stringify({
         start: dateRange.start instanceof Date ? dateRange.start.toISOString() : dateRange.start,
@@ -49,5 +54,15 @@ export class Observability extends BaseResource {
 
     const queryString = searchParams.toString();
     return this.request(`/api/observability/traces${queryString ? `?${queryString}` : ''}`);
+  }
+
+  score(params: {
+    scorerName: string;
+    targets: Array<{ traceId: string; spanId?: string }>;
+  }): Promise<{ status: string; message: string }> {
+    return this.request(`/api/observability/traces/score`, {
+      method: 'POST',
+      body: { ...params },
+    });
   }
 }

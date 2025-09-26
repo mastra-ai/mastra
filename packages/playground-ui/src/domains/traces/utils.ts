@@ -81,6 +81,14 @@ export const allowedAiSpanAttributes = [
   'ai.response.text',
   'ai.response.timestamp',
   'componentName',
+  // new format
+  'ai.usage.inputTokens',
+  'ai.usage.outputTokens',
+  // Legacy format
   'ai.usage.promptTokens',
   'ai.usage.completionTokens',
+  // Common fields
+  'ai.usage.totalTokens',
+  'ai.usage.reasoningTokens',
+  'ai.usage.cachedInputTokens',
 ];

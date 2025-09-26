@@ -3,81 +3,17 @@
  * used in AI tracing and observability.
  */
 
-import type { RuntimeContext } from '../di';
+import type { RuntimeContext } from '../runtime-context';
 import { getSelectedAITracing } from './registry';
-import type { AISpan, AISpanType, AISpanTypeMap, TracingContext } from './types';
-
-/**
- * Cleans an object by testing each key-value pair for circular references.
- * Problematic values are replaced with error messages for debugging.
- * @param obj - Object to clean
- * @returns Cleaned object with circular references marked
- */
-export function shallowCleanObject(obj: Record<string, any>): Record<string, any> {
-  const cleaned: Record<string, any> = {};
-
-  for (const [key, value] of Object.entries(obj)) {
-    try {
-      JSON.stringify(value);
-      cleaned[key] = value;
-    } catch (error) {
-      // Use the actual error message for debugging
-      cleaned[key] = `[${error instanceof Error ? error.message : String(error)}]`;
-    }
-  }
-
-  return cleaned;
-}
-
-/**
- * Cleans an array by applying object cleaning to each item.
- * @param arr - Array to clean
- * @returns Cleaned array with problematic items marked
- */
-export function shallowCleanArray(arr: any[]): any[] {
-  return arr.map(item => {
-    if (item && typeof item === 'object' && !Array.isArray(item)) {
-      // Apply object cleaning to each array item
-      return shallowCleanObject(item);
-    }
-
-    // For primitives, nested arrays, etc. - test directly
-    try {
-      JSON.stringify(item);
-      return item;
-    } catch (error) {
-      return `[${error instanceof Error ? error.message : String(error)}]`;
-    }
-  });
-}
-
-/**
- * Safely cleans any value by removing circular references and marking problematic data.
- * Provides detailed error information to help identify issues in source code.
- * @param value - Value to clean (object, array, primitive, etc.)
- * @returns Cleaned value with circular references marked
- */
-export function shallowClean(value: any): any {
-  if (value === null || value === undefined) {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    return shallowCleanArray(value);
-  }
-
-  if (typeof value === 'object') {
-    return shallowCleanObject(value);
-  }
-
-  // Primitives, functions, etc. - test directly
-  try {
-    JSON.stringify(value);
-    return value;
-  } catch (error) {
-    return `[${error instanceof Error ? error.message : String(error)}]`;
-  }
-}
+import type {
+  AISpan,
+  AISpanTypeMap,
+  AnyAISpan,
+  TracingContext,
+  TracingOptions,
+  TracingPolicy,
+  AISpanType,
+} from './types';
 
 /**
  * Removes specific keys from an object.
@@ -149,6 +85,21 @@ function setNestedValue(obj: any, path: string, value: any): void {
 }
 
 /**
+ * Extracts the trace ID from a span if it is valid.
+ *
+ * This helper is typically used to safely retrieve the `traceId` from a span object,
+ * while gracefully handling invalid spans — such as no-op spans — by returning `undefined`.
+ *
+ * A span is considered valid if `span.isValid` is `true`.
+ *
+ * @param span - The span object to extract the trace ID from. May be `undefined`.
+ * @returns The `traceId` if the span is valid, otherwise `undefined`.
+ */
+export function getValidTraceId(span?: AnyAISpan): string | undefined {
+  return span?.isValid ? span.traceId : undefined;
+}
+
+/**
  * Creates or gets a child span from existing tracing context or starts a new trace.
  * This helper consolidates the common pattern of creating spans that can either be:
  * 1. Children of an existing span (when tracingContext.currentSpan exists)
@@ -163,10 +114,17 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
   input?: any;
   attributes?: AISpanTypeMap[T];
   metadata?: Record<string, any>;
+  tracingPolicy?: TracingPolicy;
+  tracingOptions?: TracingOptions;
   tracingContext?: TracingContext;
   runtimeContext?: RuntimeContext;
 }): AISpan<T> | undefined {
   const { type, attributes, tracingContext, runtimeContext, ...rest } = options;
+
+  const metadata = {
+    ...(rest.metadata ?? {}),
+    ...(rest.tracingOptions?.metadata ?? {}),
+  };
 
   // If we have a current span, create a child span
   if (tracingContext?.currentSpan) {
@@ -174,6 +132,7 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
       type,
       attributes,
       ...rest,
+      metadata,
     });
   }
 
@@ -182,12 +141,14 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
     runtimeContext: runtimeContext,
   });
 
-  return aiTracing?.startSpan({
+  return aiTracing?.startSpan<T>({
     type,
     attributes,
-    startOptions: {
-      runtimeContext,
-    },
     ...rest,
+    metadata,
+    customSamplerOptions: {
+      runtimeContext,
+      metadata,
+    },
   });
 }

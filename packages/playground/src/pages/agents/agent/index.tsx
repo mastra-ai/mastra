@@ -1,10 +1,11 @@
 import {
-  AgentChat as Chat,
+  AgentChat,
   MainContentContent,
   AgentSettingsProvider,
   WorkingMemoryProvider,
+  ThreadInputProvider,
 } from '@mastra/playground-ui';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
 
@@ -12,25 +13,23 @@ import { AgentInformation } from '@/domains/agents/agent-information';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { useAgent } from '@/hooks/use-agents';
 import { useMemory, useMessages, useThreads } from '@/hooks/use-memory';
-import type { Message } from '@/types';
 
 function Agent() {
   const { agentId, threadId } = useParams();
   const [searchParams] = useSearchParams();
   const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);
-  const { memory } = useMemory(agentId!);
+  const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
-  const [chatInputValue, setChatInputValue] = useState('');
-  const { messages, isLoading: isMessagesLoading } = useMessages({
+  const { data: messages, isLoading: isMessagesLoading } = useMessages({
     agentId: agentId!,
     threadId: threadId!,
     memory: !!memory?.result,
   });
   const {
-    threads,
+    data: threads,
     isLoading: isThreadsLoading,
-    mutate: refreshThreads,
-  } = useThreads({ resourceid: agentId!, agentId: agentId!, isMemoryEnabled: !!memory?.result });
+    refetch: refreshThreads,
+  } = useThreads({ resourceId: agentId!, agentId: agentId!, isMemoryEnabled: !!memory?.result });
 
   useEffect(() => {
     if (memory?.result && (!threadId || threadId === 'new')) {
@@ -67,26 +66,34 @@ function Agent() {
   return (
     <AgentSettingsProvider agentId={agentId!}>
       <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
-        <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
-          {withSidebar && (
-            <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
-          )}
+        <ThreadInputProvider>
+          <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
+            {withSidebar && (
+              <AgentSidebar
+                agentId={agentId!}
+                threadId={threadId!}
+                threads={threads || []}
+                isLoading={isThreadsLoading}
+              />
+            )}
 
-          <div className="grid overflow-y-auto relative bg-surface1 py-4">
-            <Chat
-              agentId={agentId!}
-              agentName={agent?.name}
-              modelVersion={agent?.modelVersion}
-              threadId={threadId!}
-              initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
-              memory={memory?.result}
-              refreshThreadList={refreshThreads}
-              onInputChange={setChatInputValue}
-            />
-          </div>
+            <div className="grid overflow-y-auto relative bg-surface1 py-4">
+              {isMessagesLoading ? null : (
+                <AgentChat
+                  agentId={agentId!}
+                  agentName={agent?.name}
+                  modelVersion={agent?.modelVersion}
+                  threadId={threadId!}
+                  initialMessages={messages?.uiMessages || []}
+                  memory={memory?.result}
+                  refreshThreadList={refreshThreads}
+                />
+              )}
+            </div>
 
-          <AgentInformation agentId={agentId!} chatInputValue={chatInputValue} />
-        </MainContentContent>
+            <AgentInformation agentId={agentId!} />
+          </MainContentContent>
+        </ThreadInputProvider>
       </WorkingMemoryProvider>
     </AgentSettingsProvider>
   );

@@ -17,12 +17,13 @@ import { BraintrustExporter } from '@mastra/braintrust';
 const mastra = new Mastra({
   ...,
   observability: {
-    instances: {
+    configs: {
       braintrust: {
         serviceName: 'service',
         exporters: [
           new BraintrustExporter({
             apiKey: process.env.BRAINTRUST_API_KEY,
+            projectName: "mastra-tracing", // optional
             endpoint: process.env.BRAINTRUST_ENDPOINT, // optional
           }),
         ],
@@ -41,7 +42,3 @@ const mastra = new Mastra({
 - **Error tracking**: Automatic error status and message tracking
 - **Hierarchical traces**: Maintains parent-child relationships
 - **Event span support**: Zero-duration spans for event-type traces
-
-## License
-
-Apache 2.0

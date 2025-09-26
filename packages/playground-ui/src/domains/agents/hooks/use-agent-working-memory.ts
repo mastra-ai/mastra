@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useMastraClient } from '@/contexts/mastra-client-context';
+import { useMastraClient } from '@mastra/react-hooks';
 
 function parseJsonString(jsonString: string): any {
   try {

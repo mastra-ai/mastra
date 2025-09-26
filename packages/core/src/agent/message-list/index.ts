@@ -11,17 +11,18 @@ import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
 import { convertDataContentToBase64String } from './prompt/data-content';
 import { downloadAssetsFromMessages } from './prompt/download-assets';
 import {
-  imageContentToString,
-  imageContentToDataUri,
-  getImageCacheKey,
-  parseDataUri,
+  categorizeFileData,
   createDataUri,
+  getImageCacheKey,
+  imageContentToDataUri,
+  imageContentToString,
+  parseDataUri,
 } from './prompt/image-utils';
 import type { AIV4Type, AIV5Type } from './types';
 import { getToolName } from './utils/ai-v5/tool';
 
 type AIV5LanguageModelV2Message = LanguageModelV2Prompt[0];
-type AIV5ResponseMessage = AIV5.StepResult<any>['response']['messages'][number];
+export type AIV5ResponseMessage = AIV5.StepResult<any>['response']['messages'][number];
 
 type MastraMessageShared = {
   id: string;
@@ -430,7 +431,140 @@ export class MessageList {
         this.aiV5UIMessagesToAIV5ModelMessages(this.response.aiV5.ui()).filter(
           m => m.role === `tool` || m.role === `assistant`,
         ),
-      modelContent: (): AIV5Type.StepResult<any>['content'] => {
+      modelContent: (stepNumber?: number): AIV5Type.StepResult<any>['content'] => {
+        if (typeof stepNumber === 'number') {
+          const uiMessages = this.response.aiV5.ui();
+          const uiMessagesParts = uiMessages.flatMap(item => item.parts);
+
+          // Find step boundaries by looking for step-start markers
+          const stepBoundaries: number[] = [];
+          uiMessagesParts.forEach((part, index) => {
+            if (part.type === 'step-start') {
+              stepBoundaries.push(index);
+            }
+          });
+
+          // Handle -1 to get the last step (the current/most recent step)
+          if (stepNumber === -1) {
+            // For tool-only steps without step-start markers, we need different logic
+            // Each tool part represents a complete step (tool call + result)
+            const toolParts = uiMessagesParts.filter(p => p.type?.startsWith('tool-'));
+            const hasStepStart = stepBoundaries.length > 0;
+
+            if (!hasStepStart && toolParts.length > 0) {
+              // No step-start markers but we have tool parts
+              // Each tool part is a separate step, so return only the last tool
+              const lastToolPart = toolParts[toolParts.length - 1];
+              if (!lastToolPart) {
+                return [];
+              }
+              const lastToolIndex = uiMessagesParts.indexOf(lastToolPart);
+              const previousToolPart = toolParts[toolParts.length - 2];
+              const previousToolIndex = previousToolPart ? uiMessagesParts.indexOf(previousToolPart) : -1;
+
+              const startIndex = previousToolIndex + 1;
+              const stepParts = uiMessagesParts.slice(startIndex, lastToolIndex + 1);
+
+              const stepUiMessages: AIV5Type.UIMessage[] = [
+                {
+                  id: 'last-step',
+                  role: 'assistant',
+                  parts: stepParts,
+                },
+              ];
+              const modelMessages = AIV5.convertToModelMessages(this.sanitizeV5UIMessages(stepUiMessages));
+              return modelMessages.flatMap(this.response.aiV5.stepContent);
+            }
+
+            // Count total steps (1 + number of step-start markers)
+            const totalSteps = stepBoundaries.length + 1;
+
+            // Get the content for the last step using the regular step logic
+            if (totalSteps === 1 && !hasStepStart) {
+              // Only one step, return all content
+              const stepUiMessages: AIV5Type.UIMessage[] = [
+                {
+                  id: 'last-step',
+                  role: 'assistant',
+                  parts: uiMessagesParts,
+                },
+              ];
+              const modelMessages = AIV5.convertToModelMessages(this.sanitizeV5UIMessages(stepUiMessages));
+              return modelMessages.flatMap(this.response.aiV5.stepContent);
+            }
+
+            // Multiple steps - get content after the last step-start marker
+            const lastStepStart = stepBoundaries[stepBoundaries.length - 1];
+            if (lastStepStart === undefined) {
+              return [];
+            }
+            const stepParts = uiMessagesParts.slice(lastStepStart + 1);
+
+            if (stepParts.length === 0) {
+              return [];
+            }
+
+            const stepUiMessages: AIV5Type.UIMessage[] = [
+              {
+                id: 'last-step',
+                role: 'assistant',
+                parts: stepParts,
+              },
+            ];
+
+            const modelMessages = AIV5.convertToModelMessages(this.sanitizeV5UIMessages(stepUiMessages));
+            return modelMessages.flatMap(this.response.aiV5.stepContent);
+          }
+
+          // Step 1 is everything before the first step-start
+          if (stepNumber === 1) {
+            const firstStepStart = stepBoundaries[0] ?? uiMessagesParts.length;
+            if (firstStepStart === 0) {
+              // No content before first step-start
+              return [];
+            }
+
+            const stepParts = uiMessagesParts.slice(0, firstStepStart);
+            const stepUiMessages: AIV5Type.UIMessage[] = [
+              {
+                id: 'step-1',
+                role: 'assistant',
+                parts: stepParts,
+              },
+            ];
+
+            // Convert to model messages without adding extra step-start markers
+            const modelMessages = AIV5.convertToModelMessages(this.sanitizeV5UIMessages(stepUiMessages));
+            return modelMessages.flatMap(this.response.aiV5.stepContent);
+          }
+
+          // For steps 2+, content is between (stepNumber-1)th and stepNumber-th step-start markers
+          const stepIndex = stepNumber - 2; // -2 because step 2 is at index 0 in boundaries
+          if (stepIndex < 0 || stepIndex >= stepBoundaries.length) {
+            return [];
+          }
+
+          const startIndex = (stepBoundaries[stepIndex] ?? 0) + 1; // Start after the step-start marker
+          const endIndex = stepBoundaries[stepIndex + 1] ?? uiMessagesParts.length;
+
+          if (startIndex >= endIndex) {
+            return [];
+          }
+
+          const stepParts = uiMessagesParts.slice(startIndex, endIndex);
+          const stepUiMessages: AIV5Type.UIMessage[] = [
+            {
+              id: `step-${stepNumber}`,
+              role: 'assistant',
+              parts: stepParts,
+            },
+          ];
+
+          // Convert to model messages without adding extra step-start markers
+          const modelMessages = AIV5.convertToModelMessages(this.sanitizeV5UIMessages(stepUiMessages));
+          return modelMessages.flatMap(this.response.aiV5.stepContent);
+        }
+
         return this.response.aiV5.model().map(this.response.aiV5.stepContent).flat();
       },
       stepContent: (message?: AIV5Type.ModelMessage): AIV5Type.StepResult<any>['content'] => {
@@ -584,7 +718,7 @@ export class MessageList {
     if (tag && !this.isDuplicateSystem(coreMessage, tag)) {
       this.taggedSystemMessages[tag] ||= [];
       this.taggedSystemMessages[tag].push(coreMessage);
-    } else if (!this.isDuplicateSystem(coreMessage)) {
+    } else if (!tag && !this.isDuplicateSystem(coreMessage)) {
       this.systemMessages.push(coreMessage);
     }
   }
@@ -1366,6 +1500,28 @@ export class MessageList {
                 data: part.data.toString(),
                 mimeType: part.mimeType,
               });
+            } else if (typeof part.data === 'string') {
+              const categorized = categorizeFileData(part.data, part.mimeType);
+
+              if (categorized.type === 'url' || categorized.type === 'dataUri') {
+                // It's a URL or data URI, use it directly
+                parts.push({
+                  type: 'file',
+                  data: part.data,
+                  mimeType: categorized.mimeType || 'image/png',
+                });
+              } else {
+                // Raw data, convert to base64
+                try {
+                  parts.push({
+                    type: 'file',
+                    mimeType: categorized.mimeType || 'image/png',
+                    data: convertDataContentToBase64String(part.data),
+                  });
+                } catch (error) {
+                  console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
+                }
+              }
             } else {
               // If it's binary data, convert to base64 and add to parts
               try {
@@ -1973,18 +2129,35 @@ export class MessageList {
             switch (p.type) {
               case 'text':
                 return p;
-              case 'file':
+              case 'file': {
                 // Skip file parts that came from experimental_attachments
                 // They will be restored separately from __originalExperimentalAttachments
-                if (attachmentUrls.has(p.url)) {
+
+                // AIV5 file parts can have either 'url' or 'data' field
+                // 'url' field is used when converting from V2 to V3
+                // 'data' field is used in native AIV5 UIMessages
+                const fileDataSource =
+                  'url' in p && typeof p.url === 'string'
+                    ? p.url
+                    : 'data' in p && typeof p.data === 'string'
+                      ? p.data
+                      : undefined;
+
+                if (!fileDataSource) {
                   return null;
                 }
+
+                if (attachmentUrls.has(fileDataSource)) {
+                  return null;
+                }
+
                 return {
                   type: 'file',
                   mimeType: p.mediaType,
-                  data: p.url,
+                  data: fileDataSource,
                   providerMetadata: p.providerMetadata,
                 };
+              }
               case 'reasoning':
                 if (p.text === '') return null;
                 return {
@@ -2028,10 +2201,12 @@ export class MessageList {
     // Restore original content from metadata if it exists
     const originalContent = (v3Msg.content.metadata as any)?.__originalContent;
     if (originalContent !== undefined) {
-      if (
-        typeof originalContent !== `string` ||
-        v2Msg.content.parts.every(p => p.type === `step-start` || p.type === `text`)
-      ) {
+      // Only restore original content if:
+      // 1. It's a string (simple text content), OR
+      // 2. We only have text/step-start parts (no file, tool, reasoning parts)
+      const hasOnlyTextOrStepStart = v2Msg.content.parts.every(p => p.type === `step-start` || p.type === `text`);
+
+      if (typeof originalContent === `string` || hasOnlyTextOrStepStart) {
         v2Msg.content.content = originalContent;
       }
     }
@@ -2042,6 +2217,52 @@ export class MessageList {
     const originalAttachments = (v3Msg.content.metadata as any)?.__originalExperimentalAttachments;
     if (originalAttachments && Array.isArray(originalAttachments)) {
       v2Msg.content.experimental_attachments = originalAttachments || [];
+    }
+
+    // For AI SDK V4 compatibility: External URLs in file parts may need to be in experimental_attachments
+    // However, we should preserve file parts that have providerMetadata for proper roundtrip conversion
+    // Also preserve file parts that came from AI SDK v5 format (which have URLs in file parts)
+    // We can detect V5 format by checking if __originalContent is an array with file parts
+    const originalContentIsV5 =
+      Array.isArray((v3Msg.content.metadata as any)?.__originalContent) &&
+      (v3Msg.content.metadata as any)?.__originalContent.some((part: any) => part.type === 'file');
+
+    const urlFileParts = originalContentIsV5
+      ? []
+      : v2Msg.content.parts.filter(
+          p =>
+            p.type === 'file' &&
+            typeof p.data === 'string' &&
+            (p.data.startsWith('http://') || p.data.startsWith('https://')) &&
+            !p.providerMetadata, // Don't move if it has providerMetadata (needed for roundtrip)
+        );
+
+    if (urlFileParts.length > 0) {
+      // Initialize experimental_attachments if not present
+      if (!v2Msg.content.experimental_attachments) {
+        v2Msg.content.experimental_attachments = [];
+      }
+
+      // Move URL file parts without providerMetadata to experimental_attachments
+      for (const urlPart of urlFileParts) {
+        if (urlPart.type === 'file') {
+          v2Msg.content.experimental_attachments.push({
+            url: urlPart.data,
+            contentType: urlPart.mimeType,
+          });
+        }
+      }
+
+      // Remove URL file parts (without providerMetadata) from parts array
+      v2Msg.content.parts = v2Msg.content.parts.filter(
+        p =>
+          !(
+            p.type === 'file' &&
+            typeof p.data === 'string' &&
+            (p.data.startsWith('http://') || p.data.startsWith('https://')) &&
+            !p.providerMetadata
+          ),
+      );
     }
 
     // Set toolInvocations on V2
@@ -2149,15 +2370,21 @@ export class MessageList {
           break;
 
         case 'file': {
-          // Check if it's an external URL (http/https)
-          if (typeof part.data === 'string' && (part.data.startsWith('http://') || part.data.startsWith('https://'))) {
-            // External URLs should use the 'url' field
+          // Categorize the file data
+          const categorized =
+            typeof part.data === 'string'
+              ? categorizeFileData(part.data, part.mimeType)
+              : { type: 'raw' as const, mimeType: part.mimeType, data: part.data };
+
+          if (categorized.type === 'url' && typeof part.data === 'string') {
+            // It's a URL, use the 'url' field directly
             parts.push({
               type: 'file',
               url: part.data,
-              mediaType: part.mimeType || 'image/png',
+              mediaType: categorized.mimeType || 'image/png',
               providerMetadata: part.providerMetadata,
             });
+            fileUrls.add(part.data);
           } else {
             // For AI SDK V5 compatibility with inline images (especially Google Gemini),
             // file parts need a 'data' field with base64 content (without data URI prefix)
@@ -2167,9 +2394,16 @@ export class MessageList {
             // Parse data URI if present to extract base64 content and MIME type
             if (typeof part.data === 'string') {
               const parsed = parseDataUri(part.data);
-              filePartData = parsed.base64Content;
-              if (parsed.isDataUri && parsed.mimeType) {
-                extractedMimeType = extractedMimeType || parsed.mimeType;
+
+              if (parsed.isDataUri) {
+                // It's already a data URI, extract the base64 content and MIME type
+                filePartData = parsed.base64Content;
+                if (parsed.mimeType) {
+                  extractedMimeType = extractedMimeType || parsed.mimeType;
+                }
+              } else {
+                // It's not a data URI, treat it as raw base64 or plain text
+                filePartData = part.data;
               }
             } else {
               filePartData = part.data;
@@ -2178,8 +2412,15 @@ export class MessageList {
             // Ensure we always have a valid MIME type - default to image/png for better compatibility
             const finalMimeType = extractedMimeType || 'image/png';
 
-            // Create a data URI from the base64 data
-            const dataUri = createDataUri(filePartData, finalMimeType);
+            // Only create a data URI if it's not already one
+            let dataUri: string;
+            if (typeof filePartData === 'string' && filePartData.startsWith('data:')) {
+              // Already a data URI
+              dataUri = filePartData;
+            } else {
+              // Create a data URI from the base64 data
+              dataUri = createDataUri(filePartData, finalMimeType);
+            }
 
             parts.push({
               type: 'file',
@@ -2502,34 +2743,44 @@ export class MessageList {
                   providerMetadata: part.providerOptions,
                 });
               }
+            } else if (typeof part.data === 'string') {
+              // Categorize the file data and extract MIME type if present
+              const categorized = categorizeFileData(part.data, part.mediaType);
+
+              if (categorized.type === 'url' || categorized.type === 'dataUri') {
+                // It's a URL or data URI, use it directly
+                parts.push({
+                  type: 'file',
+                  url: part.data,
+                  mediaType: categorized.mimeType || 'application/octet-stream',
+                  providerMetadata: part.providerOptions,
+                });
+              } else {
+                // Raw data, convert to base64 and create data URI
+                try {
+                  const base64Data = convertDataContentToBase64String(part.data);
+                  const dataUri = createDataUri(base64Data, categorized.mimeType || 'image/png');
+                  parts.push({
+                    type: 'file',
+                    url: dataUri,
+                    mediaType: categorized.mimeType || 'image/png',
+                    providerMetadata: part.providerOptions,
+                  });
+                } catch (error) {
+                  console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
+                }
+              }
             } else {
+              // Binary data, convert to base64
               try {
                 const base64Data = convertDataContentToBase64String(part.data);
-                let extractedMimeType = part.mediaType;
-
-                // Parse data URI if present to extract base64 and MIME type
-                const parsed = parseDataUri(base64Data);
-                if (parsed.isDataUri) {
-                  if (!extractedMimeType && parsed.mimeType) {
-                    extractedMimeType = parsed.mimeType;
-                  }
-
-                  const dataUri = createDataUri(parsed.base64Content, extractedMimeType || 'image/png');
-                  parts.push({
-                    type: 'file',
-                    url: dataUri,
-                    mediaType: extractedMimeType || 'image/png',
-                    providerMetadata: part.providerOptions,
-                  });
-                } else {
-                  const dataUri = createDataUri(base64Data, part.mediaType || 'image/png');
-                  parts.push({
-                    type: 'file',
-                    url: dataUri,
-                    mediaType: part.mediaType || 'image/png',
-                    providerMetadata: part.providerOptions,
-                  });
-                }
+                const dataUri = createDataUri(base64Data, part.mediaType || 'image/png');
+                parts.push({
+                  type: 'file',
+                  url: dataUri,
+                  mediaType: part.mediaType || 'image/png',
+                  providerMetadata: part.providerOptions,
+                });
               } catch (error) {
                 console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
               }

@@ -12,7 +12,6 @@ export const AgentChat = ({
   initialMessages,
   memory,
   refreshThreadList,
-  onInputChange,
   modelVersion,
 }: ChatProps) => {
   const { settings } = useAgentSettings();
@@ -30,7 +29,7 @@ export const AgentChat = ({
       settings={settings}
       runtimeContext={runtimeContext}
     >
-      <Thread agentName={agentName ?? ''} hasMemory={memory} onInputChange={onInputChange} agentId={agentId} />
+      <Thread agentName={agentName ?? ''} hasMemory={memory} agentId={agentId} />
     </MastraRuntimeProvider>
   );
 };

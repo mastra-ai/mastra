@@ -1,0 +1,147 @@
+---
+title: "Azure App Services"
+description: "MastraアプリケーションをAzure App Servicesにデプロイします。"
+---
+
+import { Callout, Steps } from "nextra/components";
+
+
+
+# Azure App Services
+
+Mastra アプリケーションを Azure App Services にデプロイします。
+
+<Callout>
+  このガイドは、Mastra アプリケーションがデフォルトの
+  `npx create-mastra@latest` コマンドで作成されていることを前提としています。
+  新しい Mastra アプリケーションの作成方法については、
+  [はじめに](/docs/getting-started/installation) をご覧ください。
+</Callout>
+
+
+
+## 前提条件
+
+- 有効なサブスクリプション付きの [Azure アカウント](https://azure.microsoft.com/)
+- Mastra アプリケーションを含む [GitHub リポジトリ](https://github.com/)
+- Mastra アプリケーションが `npx create-mastra@latest` を使用して作成されていること
+
+
+
+## デプロイ手順
+
+<Steps>
+
+### 新しい App Service を作成する
+
+- [Azure Portal](https://portal.azure.com) にログイン
+- **[App Services](https://docs.microsoft.com/en-us/azure/app-service/)** に移動するか、上部の検索バーで検索
+- **Create** をクリックして新しい App Service を作成
+- ドロップダウンで **Web App** を選択
+
+### App Service の設定を構成する
+
+- **Subscription**: 使用する Azure サブスクリプションを選択
+- **Resource Group**: 新規作成するか、既存のリソースグループを選択
+- **Instance name**: アプリの一意の名前を入力（URL の一部になります）
+- **Publish**: **Code** を選択
+- **Runtime stack**: **Node 22 LTS** を選択
+- **Operating System**: **Linux** を選択
+- **Region**: ユーザーに近いリージョンを選択
+- **Linux Plan**: 選択したリージョンによってはプランを選べます。ニーズに合ったものを選択してください。
+- **Review + Create** をクリック
+- 検証が完了したら **Create** をクリック
+
+### デプロイを待機する
+
+- デプロイが完了するまで待つ
+- 完了したら、次の手順セクションで **Go to resource** をクリック
+
+### 環境変数を構成する
+
+デプロイ設定を行う前に、環境変数を構成します:
+
+- 左サイドバーで **Settings** > **Environment variables** に移動
+- 次のような必要な環境変数を追加:
+  - モデルプロバイダーの API キー（例: `OPENAI_API_KEY`）
+  - データベース接続文字列
+  - Mastra アプリケーションに必要なその他の設定値
+- **Apply** をクリックして変更を保存
+
+### GitHub デプロイを設定する
+
+- 左サイドバーで **Deployment Center** に移動
+- ソースとして **GitHub** を選択
+- まだ Azure で認証していない場合は GitHub にサインイン
+- この例ではプロバイダーとして [GitHub Actions](https://docs.github.com/en/actions) を使用します
+- 組織、リポジトリ、ブランチを選択
+- Azure が GitHub のワークフローファイルを生成し、進める前にプレビューできます
+- **Save** をクリック（保存ボタンはページ上部にあります）
+
+### GitHub ワークフローを修正する
+
+<Callout type="warning">
+Azure が生成するデフォルトのワークフローは Mastra アプリケーションでは失敗するため、修正が必要です。
+</Callout>
+
+Azure がワークフローを作成すると、GitHub Actions の実行がトリガーされ、ワークフローファイルがブランチにマージされます。必要な修正なしでは失敗するため、**この最初の実行をキャンセル**してください。
+
+最新の変更をローカルリポジトリにプルし、生成されたワークフローファイル（`.github/workflows/main_<your-app-name>.yml`）を修正します:
+
+1. **ビルドステップを更新**: "npm install, build, and test" という名前のステップを見つけ、以下を実施:
+   - ステップ名を "npm install and build" に変更
+   - Mastra アプリケーションで適切なテストを設定していない場合、`npm test` コマンドを run セクションから削除してください。デフォルトのテストスクリプトは失敗し、デプロイを妨げます。動作するテストがある場合は残して構いません。
+
+2. **Zip アーティファクトのステップを更新**: "Zip artifact for deployment" ステップを見つけ、zip コマンドを次のものに置き換えます:
+
+   ```yaml
+   run: (cd .mastra/output && zip ../../release.zip -r .)
+   ```
+
+   これにより、`.mastra/output` のビルド出力のみがデプロイパッケージに含まれるようになります。
+
+### 変更をデプロイする
+
+- ワークフローの修正をコミットしてプッシュ
+- Azure ダッシュボードの **Deployment Center** でビルドが自動的にトリガーされます
+- 成功するまでデプロイの進捗を監視
+
+### アプリケーションにアクセスする
+
+- ビルドが成功したら、アプリケーションが起動するまで少し待ちます
+- Azure ポータルの **Overview** タブにあるデフォルトの URL からデプロイ済みアプリケーションにアクセス
+- アプリケーションは `https://<your-app-name>.azurewebsites.net` で利用できます
+
+</Steps>
+
+
+
+## Mastra サーバーに接続する
+
+`@mastra/client-js` パッケージの `MastraClient` を使用して、クライアントアプリケーションから Mastra サーバーに接続できます。
+
+詳細は、[`MastraClient` のドキュメント](/docs/client-js/overview)をご覧ください。
+
+```typescript copy showLineNumbers
+import { MastraClient } from "@mastra/client-js";
+
+const mastraClient = new MastraClient({
+  baseUrl: "https://<your-app-name>.azurewebsites.net",
+});
+```
+
+<Callout>
+Azure App Services は一部の料金プランでエフェメラル（永続化されない）なファイルシステムを使用します。
+本番環境では、ローカルファイルシステムに依存する Mastra のストレージプロバイダー（例: ファイル URL を使用する `LibSQLStore`）の使用は避け、
+代わりにクラウドベースのストレージソリューションの利用を検討してください。
+</Callout>
+
+
+
+## 次のステップ
+
+- [Mastra Client SDK](/docs/client-js/overview)
+- [カスタムドメインの設定](https://docs.microsoft.com/en-us/azure/app-service/app-service-web-tutorial-custom-domain)
+- [HTTPSの有効化](https://docs.microsoft.com/en-us/azure/app-service/configure-ssl-bindings)
+- [Azure App Serviceドキュメント](https://docs.microsoft.com/en-us/azure/app-service/)
+

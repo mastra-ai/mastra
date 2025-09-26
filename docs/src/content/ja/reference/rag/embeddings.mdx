@@ -3,9 +3,13 @@ title: "リファレンス: embed() | ドキュメント埋め込み | RAG | Mas
 description: MastraでAI SDKを使用した埋め込み機能のドキュメント。
 ---
 
+
+
 # 埋め込み
 
 Mastraは、AI SDKの`embed`および`embedMany`関数を使用してテキスト入力のベクトル埋め込みを生成し、類似性検索やRAGワークフローを実現します。
+
+
 
 ## 単一埋め込み
 
@@ -47,8 +51,7 @@ const result = await embed({
     {
       name: "abortSignal",
       type: "AbortSignal",
-      description:
-        "リクエストをキャンセルするためのオプションのアボートシグナル",
+      description: "リクエストをキャンセルするためのオプションのアボートシグナル",
       isOptional: true,
     },
     {
@@ -72,6 +75,8 @@ const result = await embed({
     },
   ]}
 />
+
+
 
 ## 複数の埋め込み
 
@@ -113,8 +118,7 @@ const result = await embedMany({
     {
       name: "abortSignal",
       type: "AbortSignal",
-      description:
-        "リクエストをキャンセルするためのオプションのアボートシグナル",
+      description: "リクエストをキャンセルするためのオプションのアボートシグナル",
       isOptional: true,
     },
     {
@@ -134,10 +138,13 @@ const result = await embedMany({
     {
       name: "embeddings",
       type: "number[][]",
-      description: "入力値に対応する埋め込みベクトルの配列",
+      description:
+        "入力値に対応する埋め込みベクトルの配列",
     },
   ]}
 />
+
+
 
 ## 使用例
 

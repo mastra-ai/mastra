@@ -5,7 +5,7 @@ description: Dynamically configure your agent's instruction, model, tools, and m
 
 # Dynamic Agents
 
-Dynamic agents use [runtime context](./runtime-variables), like user IDs and other important parameters, to adjust their settings in real-time.
+Dynamic agents use [runtime context](./runtime-context), like user IDs and other important parameters, to adjust their settings in real-time.
 
 This means they can change the model they use, update their instructions, select different tools, and configure memory as needed.
 
@@ -23,15 +23,34 @@ const supportAgent = new Agent({
     const userTier = runtimeContext.get("user-tier");
     const language = runtimeContext.get("language");
 
+    // Can return a string
     return `You are a customer support agent for our SaaS platform.
     The current user is on the ${userTier} tier and prefers ${language} language.
-    
+
     For ${userTier} tier users:
     ${userTier === "free" ? "- Provide basic support and documentation links" : ""}
     ${userTier === "pro" ? "- Offer detailed technical support and best practices" : ""}
     ${userTier === "enterprise" ? "- Provide priority support with custom solutions" : ""}
-    
+
     Always respond in ${language} language.`;
+    
+    // Alternative: Return a system message object with provider options
+    // return {
+    //   role: "system",
+    //   content: `You are a customer support agent for ${userTier} tier...`,
+    //   providerOptions: {
+    //     openai: { 
+    //       reasoning_effort: userTier === "enterprise" ? "high" : "medium"
+    //     }
+    //   }
+    // };
+    
+    // Alternative: Return an array of system messages for modular instructions
+    // return [
+    //   { role: "system", content: "You are a customer support agent." },
+    //   { role: "system", content: `User is on ${userTier} tier.` },
+    //   { role: "system", content: `Respond in ${language} language.` }
+    // ];
   },
 
   model: ({ runtimeContext }) => {
@@ -58,7 +77,7 @@ const supportAgent = new Agent({
 
   memory: ({ runtimeContext }) => {
     const userTier = runtimeContext.get("user-tier");
-    
+
     if (userTier === "enterprise") {
       return new Memory({
         storage: new LibSQLStore({ url: "file:enterprise.db" }),
@@ -76,7 +95,7 @@ const supportAgent = new Agent({
         },
       });
     }
-    
+
     // Basic memory for free tier
     return new Memory({
       storage: new LibSQLStore({ url: "file:free.db" }),

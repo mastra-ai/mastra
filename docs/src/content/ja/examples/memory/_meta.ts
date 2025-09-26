@@ -1,11 +1,10 @@
 const meta = {
-  "memory-with-libsql": "LibSQLを使用したメモリ",
-  "memory-with-pg": "PostgreSQLを使用したメモリ",
-  "memory-with-upstash": "Upstashを使用したメモリ",
-  "memory-with-mem0": "Mem0を使用したメモリ",
-  "streaming-working-memory": "ストリーミング作業メモリ",
-  "streaming-working-memory-advanced": "ストリーミング作業メモリ（高度）",
-  "memory-processors": "メモリプロセッサ",
-  "use-chat": "AI SDK useChat フック", // 追加されたエントリ
+  "working-memory-basic": "基本のワーキングメモリ",
+  "working-memory-template": "テンプレート対応メモリ",
+  "working-memory-schema": "スキーマ対応メモリ",
+  "memory-processors": "メモリプロセッサー",
+  "memory-with-libsql": "LibSQL を用いたメモリ",
+  "memory-with-pg": "PostgreSQL を用いたメモリ",
+  "memory-with-upstash": "Upstash を用いたメモリ",
 };
 export default meta;

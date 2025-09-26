@@ -6,6 +6,7 @@ import type { MessageListInput } from '../../agent/message-list';
 import { MastraBase } from '../../base';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import { RegisteredLogger } from '../../logger';
+import { PRIMITIVE_TYPES } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import type { MastraMessageV2, MastraMemory } from '../../memory';
 import { RuntimeContext } from '../../runtime-context';
@@ -26,8 +27,6 @@ interface NewAgentNetworkConfig {
   memory?: DynamicArgument<MastraMemory>;
   defaultAgent?: DynamicArgument<Agent>;
 }
-
-const RESOURCE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool', 'none']);
 
 export class NewAgentNetwork extends MastraBase {
   id: string;
@@ -56,6 +55,10 @@ export class NewAgentNetwork extends MastraBase {
       component: RegisteredLogger.NETWORK,
       name: name || 'NewAgentNetwork',
     });
+
+    console.warn(
+      `⚠️  DEPRECATION WARNING: AgentNetwork vNext will be deprecated on September 30th, 2025 and will be removed in a future version. Please use agent.network() instead.`,
+    );
 
     this.id = id;
     this.name = name;
@@ -322,7 +325,7 @@ export class NewAgentNetwork extends MastraBase {
       inputSchema: z.object({
         iteration: z.number(),
         task: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         threadId: z.string().optional(),
         threadResourceId: z.string().optional(),
       }),
@@ -334,7 +337,7 @@ export class NewAgentNetwork extends MastraBase {
       .then(finalStep)
       .commit();
 
-    const run = mainWorkflow.createRun();
+    const run = await mainWorkflow.createRunAsync();
 
     const thread = await this.beforeRun({
       runtimeContext: runtimeContext || new RuntimeContext(),
@@ -404,7 +407,7 @@ export class NewAgentNetwork extends MastraBase {
         iteration: z.number(),
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         result: z.string().optional(),
         threadId: z.string().optional(),
         threadResourceId: z.string().optional(),
@@ -414,7 +417,7 @@ export class NewAgentNetwork extends MastraBase {
       outputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
@@ -428,7 +431,7 @@ export class NewAgentNetwork extends MastraBase {
       .then(finalStep)
       .commit();
 
-    const run = mainWorkflow.createRun();
+    const run = await mainWorkflow.createRunAsync();
 
     const thread = await this.beforeRun({
       runtimeContext: runtimeContext || new RuntimeContext(),
@@ -463,7 +466,7 @@ export class NewAgentNetwork extends MastraBase {
       inputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         result: z.string().optional(),
         iteration: z.number(),
         threadId: z.string().optional(),
@@ -474,7 +477,7 @@ export class NewAgentNetwork extends MastraBase {
       outputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
@@ -530,7 +533,7 @@ export class NewAgentNetwork extends MastraBase {
             return {
               task: inputData.task,
               resourceId: '',
-              resourceType: 'none' as z.infer<typeof RESOURCE_TYPES>,
+              resourceType: 'none' as z.infer<typeof PRIMITIVE_TYPES>,
               prompt: '',
               result: completionResult.object.finalResult,
               isComplete: true,
@@ -569,7 +572,7 @@ export class NewAgentNetwork extends MastraBase {
         const options = {
           output: z.object({
             resourceId: z.string(),
-            resourceType: RESOURCE_TYPES,
+            resourceType: PRIMITIVE_TYPES,
             prompt: z.string(),
             selectionReason: z.string(),
           }),
@@ -602,7 +605,7 @@ export class NewAgentNetwork extends MastraBase {
       inputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
@@ -612,7 +615,7 @@ export class NewAgentNetwork extends MastraBase {
       outputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         result: z.string(),
         isComplete: z.boolean().optional(),
         iteration: z.number(),
@@ -757,7 +760,7 @@ export class NewAgentNetwork extends MastraBase {
       inputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
@@ -767,7 +770,7 @@ export class NewAgentNetwork extends MastraBase {
       outputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         result: z.string(),
         isComplete: z.boolean().optional(),
         iteration: z.number(),
@@ -806,7 +809,7 @@ export class NewAgentNetwork extends MastraBase {
           type: 'tool-call-streaming-start',
           ...toolData,
         });
-        const run = wf.createRun();
+        const run = await wf.createRunAsync();
         const { stream, getWorkflowState } = run.stream({
           inputData: input,
           runtimeContext: runtimeContextToUse,
@@ -899,7 +902,7 @@ export class NewAgentNetwork extends MastraBase {
       inputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
@@ -909,7 +912,7 @@ export class NewAgentNetwork extends MastraBase {
       outputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         result: z.string(),
         isComplete: z.boolean().optional(),
         iteration: z.number(),
@@ -943,6 +946,7 @@ export class NewAgentNetwork extends MastraBase {
           context: inputDataToUse,
           // TODO: Pass proper tracing context when network supports tracing
           tracingContext: { currentSpan: undefined },
+          suspend: async () => {}, // TODO
         });
 
         const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
@@ -978,7 +982,7 @@ export class NewAgentNetwork extends MastraBase {
       inputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
@@ -1006,7 +1010,7 @@ export class NewAgentNetwork extends MastraBase {
       inputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         result: z.string().optional(),
         iteration: z.number(),
         threadId: z.string().optional(),
@@ -1017,7 +1021,7 @@ export class NewAgentNetwork extends MastraBase {
       outputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
@@ -1093,7 +1097,7 @@ export class NewAgentNetwork extends MastraBase {
     }: { runtimeContext?: RuntimeContext; threadId?: string; resourceId?: string },
   ) {
     const networkWorkflow = this.createWorkflow({ runtimeContext });
-    const run = networkWorkflow.createRun();
+    const run = await networkWorkflow.createRunAsync();
 
     const thread = await this.beforeRun({
       runtimeContext: runtimeContext || new RuntimeContext(),
@@ -1142,7 +1146,7 @@ export class NewAgentNetwork extends MastraBase {
     }: { runtimeContext?: RuntimeContext; resourceId?: string; threadId?: string },
   ) {
     const networkWorkflow = this.createWorkflow({ runtimeContext });
-    const run = networkWorkflow.createRun();
+    const run = await networkWorkflow.createRunAsync();
 
     const thread = await this.beforeRun({
       runtimeContext: runtimeContext || new RuntimeContext(),

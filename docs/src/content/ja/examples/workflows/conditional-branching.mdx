@@ -1,155 +1,168 @@
 ---
-title: "例：条件分岐（実験的） | Workflows | Mastra Docs"
-description: Mastra を使ってワークフロー内で if/else 文による条件分岐を作成する例。
+title: "例: 条件分岐 | ワークフロー | Mastra ドキュメント"
+description: " `branch` ステートメントを使って、Mastra のワークフローで条件分岐を作成する例です。"
 ---
 
-import { GithubLink } from "@/components/github-link";
 
-# 条件分岐付きワークフロー（実験的）
 
-ワークフローでは、条件に応じて異なる経路をたどる必要があることがよくあります。この例では、`if` と `else` を使ってワークフロー内に条件分岐を作成する方法を示します。
+# 条件分岐
 
-## 基本的なIf/Elseの例
+ワークフローは条件に応じて異なる処理経路を取る必要があることがよくあります。以下の例では、ステップとワークフローの両方を使って、`.branch()` による条件付きフローを作成する方法を示します。
 
-この例は、数値に基づいて異なる経路をたどるシンプルなワークフローを示しています。
 
-```ts showLineNumbers copy
-import { Mastra } from "@mastra/core";
-import { Step, Workflow } from "@mastra/core/workflows";
+
+## ステップによる条件分岐ロジック
+
+この例では、ワークフローは条件に応じて2つのステップのいずれかを実行するために `.branch()` を使用します。入力の `value` が10以下の場合は `lessThanStep` を実行して `0` を返します。値が10より大きい場合は `greaterThanStep` を実行して `20` を返します。最初に一致したブランチのみが実行され、その出力がワークフロー全体の出力になります。
+
+```typescript filename="src/mastra/workflows/example-branch-steps.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
-// Step that provides the initial value
-const startStep = new Step({
-  id: "start",
+const lessThanStep = createStep({
+  id: "less-than-step",
+  description: "if value is <=10, return 0",
+  inputSchema: z.object({
+    value: z.number()
+  }),
   outputSchema: z.object({
-    value: z.number(),
+    value: z.number()
   }),
-  execute: async ({ context }) => {
-    // Get the value from the trigger data
-    const value = context.triggerData.inputValue;
-    return { value };
-  },
-});
-
-// Step that handles high values
-const highValueStep = new Step({
-  id: "highValue",
-  outputSchema: z.object({
-    result: z.string(),
-  }),
-  execute: async ({ context }) => {
-    const value = context.getStepResult<{ value: number }>("start")?.value;
-    return { result: `High value processed: ${value}` };
-  },
-});
-
-// Step that handles low values
-const lowValueStep = new Step({
-  id: "lowValue",
-  outputSchema: z.object({
-    result: z.string(),
-  }),
-  execute: async ({ context }) => {
-    const value = context.getStepResult<{ value: number }>("start")?.value;
-    return { result: `Low value processed: ${value}` };
-  },
-});
-
-// Final step that summarizes the result
-const finalStep = new Step({
-  id: "final",
-  outputSchema: z.object({
-    summary: z.string(),
-  }),
-  execute: async ({ context }) => {
-    // Get the result from whichever branch executed
-    const highResult = context.getStepResult<{ result: string }>(
-      "highValue",
-    )?.result;
-    const lowResult = context.getStepResult<{ result: string }>(
-      "lowValue",
-    )?.result;
-
-    const result = highResult || lowResult;
-    return { summary: `Processing complete: ${result}` };
-  },
-});
-
-// Build the workflow with conditional branching
-const conditionalWorkflow = new Workflow({
-  name: "conditional-workflow",
-  triggerSchema: z.object({
-    inputValue: z.number(),
-  }),
-});
-
-conditionalWorkflow
-  .step(startStep)
-  .if(async ({ context }) => {
-    const value = context.getStepResult<{ value: number }>("start")?.value ?? 0;
-    return value >= 10; // Condition: value is 10 or greater
-  })
-  .then(highValueStep)
-  .then(finalStep)
-  .else()
-  .then(lowValueStep)
-  .then(finalStep) // Both branches converge on the final step
-  .commit();
-
-// Register the workflow
-const mastra = new Mastra({
-  workflows: { conditionalWorkflow },
-});
-
-// Example usage
-async function runWorkflow(inputValue: number) {
-  const workflow = mastra.getWorkflow("conditionalWorkflow");
-  const { start } = workflow.createRun();
-
-  const result = await start({
-    triggerData: { inputValue },
-  });
-
-  console.log("Workflow result:", result.results);
-  return result;
-}
-
-// Run with a high value (follows the "if" branch)
-const result1 = await runWorkflow(15);
-// Run with a low value (follows the "else" branch)
-const result2 = await runWorkflow(5);
-
-console.log("Result 1:", result1);
-console.log("Result 2:", result2);
-```
-
-## 参照ベースの条件の使用
-
-比較演算子を使って参照ベースの条件を利用することもできます。
-
-```ts showLineNumbers copy
-// Using reference-based conditions instead of functions
-conditionalWorkflow
-  .step(startStep)
-  .if({
-    ref: { step: startStep, path: "value" },
-    query: { $gte: 10 }, // Condition: value is 10 or greater
-  })
-  .then(highValueStep)
-  .then(finalStep)
-  .else()
-  .then(lowValueStep)
-  .then(finalStep)
-  .commit();
-```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/conditional-branching"
+  execute: async () => {
+    return {
+      value: 0
+    };
   }
-/>
+});
+const greaterThanStep = createStep({
+  id: "greater-than-step",
+  description: "if value is >10, return 20",
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    value: z.number()
+  }),
+  execute: async () => {
+    return {
+      value: 20
+    };
+  }
+});
+
+export const branchSteps = createWorkflow({
+  id: "branch-workflow",
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    value: z.number()
+  })
+})
+  .branch([
+    [async ({ inputData: { value } }) => value <= 10, lessThanStep],
+    [async ({ inputData: { value } }) => value > 10, greaterThanStep]
+  ])
+  .commit();
+```
+
+> 入力値が10以下の場合と10より大きい場合の両方で、この例を実行してみてください。
+
+
+
+## ワークフローによる条件分岐
+
+この例では、`.branch()` を使って条件に応じて2つのネストされたワークフローのいずれかを実行します。入力 `value` が10以下なら `lessThanWorkflow` が実行され、その中で `lessThanStep` が走ります。値が10より大きい場合は `greaterThanWorkflow` が実行され、その中で `greaterThanStep` が走ります。
+
+```typescript filename="src/mastra/workflows/example-branch-workflows.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const lessThanStep = createStep({
+  id: "less-than-step",
+  description: "if value is <=10, return 0",
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    value: z.number()
+  }),
+  execute: async () => {
+    return {
+      value: 0
+    };
+  }
+});
+const greaterThanStep = createStep({
+  id: "greater-than-step",
+  description: "if value is >10, return 20",
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    value: z.number()
+  }),
+  execute: async () => {
+    return {
+      value: 20
+    };
+  }
+});
+
+export const lessThanWorkflow = createWorkflow({
+  id: "less-than-workflow",
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    value: z.number()
+  })
+})
+  .then(lessThanStep)
+  .commit();
+
+export const greaterThanWorkflow = createWorkflow({
+  id: "greater-than-workflow",
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    value: z.number()
+  })
+})
+  .then(greaterThanStep)
+  .commit();
+
+export const branchWorkflows = createWorkflow({
+  id: "branch-workflow",
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    value: z.number()
+  })
+})
+  .branch([
+    [async ({ inputData: { value } }) => value <= 10, lessThanWorkflow],
+    [async ({ inputData: { value } }) => value > 10, greaterThanWorkflow]
+  ])
+  .commit();
+```
+
+> 入力値が10以下の場合と10より大きい場合の両方で、この例を実行してみてください。
+
+
+
+## 関連項目
+
+- [ワークフローの実行](./running-workflows.mdx)
+
+
+
+## ワークフロー（レガシー）
+
+以下のリンクは、レガシー版ワークフローのサンプルドキュメントです。
+
+- [分岐パス](/examples/workflows_legacy/branching-paths)
+- [条件分岐（実験的）を含むワークフロー（レガシー）](/examples/workflows_legacy/conditional-branching)
+

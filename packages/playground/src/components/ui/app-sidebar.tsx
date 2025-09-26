@@ -1,6 +1,6 @@
 'use client';
 
-import { Network, Globe, ArrowLeftFromLine, Book, Earth, GaugeIcon, Cloudy, PackageIcon } from 'lucide-react';
+import { Network, Globe, ArrowLeftFromLine, Book, Earth, GaugeIcon, Cloudy, EyeIcon, PackageIcon } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
 
 import {
@@ -146,6 +146,11 @@ const links = [
     icon: GaugeIcon,
   },
   {
+    name: 'Observability',
+    url: '/observability',
+    icon: EyeIcon,
+  },
+  {
     name: 'Runtime Context',
     url: '/runtime-context',
     icon: Globe,
@@ -157,10 +162,18 @@ const links = [
   },
 ];
 
+declare global {
+  interface Window {
+    MASTRA_HIDE_CLOUD_CTA: string;
+  }
+}
+
 export function AppSidebar() {
   const { state, toggleSidebar } = useSidebar();
   const location = useLocation();
   const pathname = location.pathname;
+
+  const hideCloudCta = window?.MASTRA_HIDE_CLOUD_CTA === 'true';
 
   return (
     <Sidebar collapsible="icon">
@@ -276,22 +289,24 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
-              <SidebarMenuItem>
-                <SidebarMenuButton tooltip="Deploy to Mastra Cloud" asChild>
-                  <a
-                    className={`group/icon bg-accent1 text-black hover:bg-accent1/80 hover:text-black active:bg-accent1/90 active:text-black`}
-                    href="https://mastra.ai/cloud"
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    <Icon>
-                      <Cloudy />
-                    </Icon>
+              {!hideCloudCta && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton tooltip="Deploy to Mastra Cloud" asChild>
+                    <a
+                      className={`group/icon bg-accent1 text-black hover:bg-accent1/80 hover:text-black active:bg-accent1/90 active:text-black`}
+                      href="https://mastra.ai/cloud"
+                      target="_blank"
+                      rel="noopener"
+                    >
+                      <Icon>
+                        <Cloudy />
+                      </Icon>
 
-                    <span className="text-[0.8rem] font-normal">Deploy to Mastra Cloud</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                      <span className="text-[0.8rem] font-normal">Deploy to Mastra Cloud</span>
+                    </a>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

@@ -42,5 +42,25 @@ export const myMcpServer = new MCPServer({
         return `The weather in ${city} is ${temp} and sunny.`;
       },
     }),
+    testMastraInstance: createTool({
+      id: 'testMastraInstance',
+      description: 'Test tool to verify mastra instance is available in MCP server tool execution.',
+      inputSchema: z.object({
+        testMessage: z.string().describe('A test message to verify the tool is working.'),
+      }),
+      execute: async ({ context, mastra }) => {
+        return {
+          success: true,
+          testMessage: context.testMessage,
+          mastraAvailable: !!mastra,
+          mastraType: typeof mastra,
+          // Verify that the mastra instance has the expected properties
+          mastraHasAgents: mastra ? 'getAgents' in mastra : false,
+          mastraHasMCPServers: mastra ? 'getMCPServers' in mastra : false,
+          mastraHasLogger: mastra ? 'getLogger' in mastra : false,
+          timestamp: new Date().toISOString(),
+        };
+      },
+    }),
   },
 });

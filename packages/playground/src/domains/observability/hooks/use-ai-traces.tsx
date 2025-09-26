@@ -1,63 +1,48 @@
 import { client } from '@/lib/client';
-import { AISpanType } from '@mastra/core/ai-tracing';
+import { AITracesPaginatedArg } from '@mastra/core';
 import { useInView, useInfiniteQuery } from '@mastra/playground-ui';
 import { useEffect } from 'react';
 
 const fetchAITracesFn = async ({
   page,
   perPage,
-  name,
-  spanType,
   dateRange,
-}: {
+  filters,
+}: AITracesFilters & {
   page: number;
   perPage: number;
-  name?: string;
-  spanType?: AISpanType;
-  dateRange?: {
-    start?: Date;
-    end?: Date;
-  };
 }) => {
-  try {
-    const res = await client.getAITraces({
-      pagination: {
-        page,
-        perPage,
-        dateRange,
-      },
-      filters: {
-        name,
-        spanType,
-      },
-    });
+  const res = await client.getAITraces({
+    pagination: {
+      page,
+      perPage,
+      dateRange,
+    },
+    filters,
+  });
 
-    if (!res.spans) {
-      throw new Error('Error fetching AI traces');
-    }
-    return res.spans;
-  } catch (error) {
-    throw error;
-  }
+  return res.spans || [];
 };
 
-export const useAITraces = (filters?: {
-  name?: string;
-  spanType?: AISpanType;
+export interface AITracesFilters {
+  filters?: AITracesPaginatedArg['filters'];
   dateRange?: {
     start?: Date;
     end?: Date;
   };
-}) => {
+}
+
+export const useAITraces = ({ filters, dateRange }: AITracesFilters) => {
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
   const query = useInfiniteQuery({
-    queryKey: ['ai-traces', filters],
+    queryKey: ['ai-traces', filters, dateRange],
     queryFn: ({ pageParam }) =>
       fetchAITracesFn({
         page: pageParam,
-        perPage: 100,
-        ...filters,
+        perPage: 25,
+        dateRange,
+        filters,
       }),
     initialPageParam: 0,
     getNextPageParam: (lastPage, _, lastPageParam) => {
@@ -68,6 +53,10 @@ export const useAITraces = (filters?: {
     },
     staleTime: 0,
     gcTime: 0,
+    select: data => {
+      return data.pages.flatMap(page => page);
+    },
+    retry: false,
   });
 
   useEffect(() => {

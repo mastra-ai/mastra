@@ -227,6 +227,9 @@ export function CustomChatInterface({
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
+                  if (e.nativeEvent.isComposing) {
+                    return;
+                  }
                   if (inputValue.trim() === "" || isLoading) return;
                   // Track the question
 

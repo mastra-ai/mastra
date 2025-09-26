@@ -2,7 +2,6 @@ import { useState } from 'react';
 
 import {
   Badge,
-  LegacyWorkflowTrigger,
   WorkflowIcon,
   WorkflowTrigger,
   PlaygroundTabs,
@@ -10,31 +9,23 @@ import {
   Tab,
   TabContent,
   EntityHeader,
+  useWorkflow,
 } from '@mastra/playground-ui';
 
 import { WorkflowLogs } from './workflow-logs';
-import {
-  useLegacyWorkflow,
-  useWorkflow,
-  useExecuteWorkflow,
-  useResumeWorkflow,
-  useStreamWorkflow,
-  useCancelWorkflowRun,
-} from '@/hooks/use-workflows';
+import { useExecuteWorkflow, useResumeWorkflow, useStreamWorkflow, useCancelWorkflowRun } from '@/hooks/use-workflows';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { CopyIcon } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { WorkflowRuns } from '@mastra/playground-ui';
 import { useNavigate, useParams } from 'react-router';
-import { useWorkflowRuns } from '@/pages/workflows/workflow/hooks/use-workflow-runs';
 
-export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: string; isLegacy?: boolean }) {
+export function WorkflowInformation({ workflowId }: { workflowId: string }) {
   const params = useParams();
   const navigate = useNavigate();
-  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId, !isLegacy);
-  const { isLoading: isRunsLoading, data: runs } = useWorkflowRuns({ workflowId });
-  const { data: legacyWorkflow, isLoading: isLegacyWorkflowLoading } = useLegacyWorkflow(workflowId, !!isLegacy);
+  const { data: workflow, isLoading } = useWorkflow(workflowId);
+
   const { createWorkflowRun } = useExecuteWorkflow();
   const { resumeWorkflow } = useResumeWorkflow();
   const { streamWorkflow, streamResult, isStreaming } = useStreamWorkflow();
@@ -45,12 +36,9 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
 
   const stepsCount = Object.keys(workflow?.steps ?? {}).length;
 
-  const isLoading = isLegacy ? isLegacyWorkflowLoading : isWorkflowLoading;
-  const workflowToUse = isLegacy ? legacyWorkflow : workflow;
-
   return (
     <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto">
-      <EntityHeader icon={<WorkflowIcon />} title={workflowToUse?.name || ''} isLoading={isLoading}>
+      <EntityHeader icon={<WorkflowIcon />} title={workflow?.name || ''} isLoading={isLoading}>
         <div className="flex items-center gap-2 pt-2">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -81,34 +69,26 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
 
           <TabContent value="run">
             {workflowId ? (
-              <>
-                {isLegacy ? (
-                  <LegacyWorkflowTrigger workflowId={workflowId} setRunId={setRunId} />
-                ) : (
-                  <WorkflowTrigger
-                    workflowId={workflowId}
-                    setRunId={setRunId}
-                    workflow={workflow}
-                    isLoading={isWorkflowLoading}
-                    createWorkflowRun={createWorkflowRun.mutateAsync}
-                    streamWorkflow={streamWorkflow.mutateAsync}
-                    resumeWorkflow={resumeWorkflow.mutateAsync}
-                    streamResult={streamResult}
-                    isStreamingWorkflow={isStreaming}
-                    isResumingWorkflow={resumeWorkflow.isPending}
-                    isCancellingWorkflowRun={isCancellingWorkflowRun}
-                    cancelWorkflowRun={cancelWorkflowRun}
-                  />
-                )}
-              </>
+              <WorkflowTrigger
+                workflowId={workflowId}
+                setRunId={setRunId}
+                workflow={workflow ?? undefined}
+                isLoading={isLoading}
+                createWorkflowRun={createWorkflowRun.mutateAsync}
+                streamWorkflow={streamWorkflow.mutateAsync}
+                resumeWorkflow={resumeWorkflow.mutateAsync}
+                streamResult={streamResult}
+                isStreamingWorkflow={isStreaming}
+                isResumingWorkflow={resumeWorkflow.isPending}
+                isCancellingWorkflowRun={isCancellingWorkflowRun}
+                cancelWorkflowRun={cancelWorkflowRun}
+              />
             ) : null}
           </TabContent>
           <TabContent value="runs">
             <WorkflowRuns
               workflowId={workflowId}
               runId={params?.runId}
-              isLoading={isRunsLoading}
-              runs={runs?.runs || []}
               onPressRun={({ workflowId, runId }) => navigate(`/workflows/${workflowId}/graph/${runId}`)}
             />
           </TabContent>

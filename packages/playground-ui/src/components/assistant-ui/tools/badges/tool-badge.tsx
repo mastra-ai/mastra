@@ -1,59 +1,72 @@
-import { ChevronUpIcon } from 'lucide-react';
-import { useState } from 'react';
-
-import { Badge } from '@/ds/components/Badge';
-import { Icon, ToolsIcon } from '@/ds/icons';
-import { cn } from '@/lib/utils';
+import { ToolsIcon } from '@/ds/icons';
 import { SyntaxHighlighter } from '../../../ui/syntax-highlighter';
+import { BadgeWrapper } from './badge-wrapper';
+import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 
 export interface ToolBadgeProps {
   toolName: string;
-  argsText: string;
+  args: Record<string, unknown> | string;
   result: any;
+  networkMetadata?: {
+    input?: string | Record<string, unknown>;
+    selectionReason?: string;
+  };
+  toolOutput: Array<{ toolId: string }>;
 }
 
-export const ToolBadge = ({ toolName, argsText, result }: ToolBadgeProps) => {
-  const [isCollapsed, setIsCollapsed] = useState(true);
-
-  let argSlot;
+export const ToolBadge = ({ toolName, args, result, networkMetadata, toolOutput }: ToolBadgeProps) => {
+  let argSlot = null;
 
   try {
-    const parsedArgs = JSON.parse(argsText);
-    argSlot = <SyntaxHighlighter data={parsedArgs} />;
+    const { __mastraMetadata: _, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
+    argSlot = <SyntaxHighlighter data={formattedArgs} />;
   } catch {
-    argSlot = <pre className="whitespace-pre-wrap">{argsText}</pre>;
+    argSlot = <pre className="whitespace-pre-wrap">{args as string}</pre>;
   }
 
+  let resultSlot =
+    typeof result === 'string' ? (
+      <pre className="whitespace-pre-wrap bg-surface4 p-4 rounded-md">{result}</pre>
+    ) : (
+      <SyntaxHighlighter data={result} />
+    );
+
   return (
-    <div className="mb-2">
-      <button onClick={() => setIsCollapsed(s => !s)} className="flex items-center gap-2">
-        <Icon>
-          <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
-        </Icon>
-        <Badge icon={<ToolsIcon className="text-[#ECB047]" />}>{toolName}</Badge>
-      </button>
-
-      {!isCollapsed && (
-        <div className="pt-2">
-          <div className="border-sm border-border1 rounded-lg bg-surface4">
-            <div className="px-4 border-b-sm border-border1 py-2">
-              <p className="font-medium pb-2">Tool arguments</p>
-              {argSlot}
-            </div>
-
-            {result !== undefined && (
-              <div className="px-4 py-2">
-                <p className="font-medium pb-2">Tool result</p>
-                {typeof result === 'string' ? (
-                  <pre className="whitespace-pre-wrap">{result}</pre>
-                ) : (
-                  <SyntaxHighlighter data={result} />
-                )}
-              </div>
-            )}
-          </div>
+    <BadgeWrapper
+      icon={<ToolsIcon className="text-[#ECB047]" />}
+      title={toolName}
+      extraInfo={
+        networkMetadata && (
+          <NetworkChoiceMetadataDialogTrigger
+            selectionReason={networkMetadata?.selectionReason || ''}
+            input={networkMetadata?.input}
+          />
+        )
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <p className="font-medium pb-2">Tool arguments</p>
+          {argSlot}
         </div>
-      )}
-    </div>
+
+        {resultSlot !== undefined && (
+          <div>
+            <p className="font-medium pb-2">Tool result</p>
+            {resultSlot}
+          </div>
+        )}
+
+        {toolOutput.length > 0 && (
+          <div>
+            <p className="font-medium pb-2">Tool output</p>
+
+            <div className="h-40 overflow-y-auto">
+              <SyntaxHighlighter data={toolOutput} />
+            </div>
+          </div>
+        )}
+      </div>
+    </BadgeWrapper>
   );
 };

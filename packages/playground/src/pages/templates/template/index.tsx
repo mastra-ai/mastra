@@ -46,7 +46,7 @@ export default function Template() {
   });
 
   const { data: templateEnvVars, isLoading: isLoadingEnvVars } = useTemplateRepoEnvVars({
-    repo: `template-${templateSlug}`,
+    repo: template?.githubUrl ? new URL(template.githubUrl).pathname.split('/')[2] : `template-${templateSlug}`,
     owner: 'mastra-ai',
     branch: selectedProvider,
   });
@@ -336,7 +336,7 @@ export default function Template() {
         </Breadcrumb>
       </Header>
       <div className={cn('w-full lg:px-[3rem] h-full overflow-y-scroll')}>
-        <div className="p-[1.5rem] max-w-[80rem] mx-auto grid gap-y-[1rem]">
+        <div className="p-[1.5rem] w-full max-w-[80rem] mx-auto grid gap-y-[1rem]">
           <TemplateInfo
             isLoading={isLoadingTemplate}
             title={template?.title}

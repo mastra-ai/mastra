@@ -1,6 +1,8 @@
 import { TransformStream } from 'stream/web';
-import { asSchema, isDeepEqualData, parsePartialJson } from 'ai-v5';
-import type { Schema } from 'ai-v5';
+import { asSchema, isDeepEqualData, jsonSchema, parsePartialJson } from 'ai-v5';
+import type { JSONSchema7, Schema } from 'ai-v5';
+import type z3 from 'zod/v3';
+import type z4 from 'zod/v4';
 import { safeValidateTypes } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
 import type { ChunkType } from '../types';
@@ -67,8 +69,15 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
   constructor(schema?: OUTPUT, options: { validatePartialChunks?: boolean } = {}) {
     if (!schema) {
       this.schema = undefined;
+    } else if (
+      schema &&
+      typeof schema === 'object' &&
+      !(schema as z3.ZodType<any> | z4.ZodType<any, any>).safeParse &&
+      !(schema as Schema<any>).jsonSchema
+    ) {
+      this.schema = jsonSchema(schema as JSONSchema7);
     } else {
-      this.schema = asSchema(schema);
+      this.schema = asSchema(schema as z3.ZodType<any> | z4.ZodType<any, any> | Schema<any>);
     }
     if (options.validatePartialChunks) {
       if (schema !== undefined && 'partial' in schema && typeof schema.partial === 'function') {
@@ -93,9 +102,32 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
    * @param finalValue - The final parsed value to validate
    * @returns Promise resolving to validation result
    */
-  abstract validateAndTransformFinal(
-    finalValue: InferSchemaOutput<OUTPUT>,
-  ): Promise<ValidateAndTransformFinalResult<OUTPUT>>;
+  abstract validateAndTransformFinal(finalValue: string): Promise<ValidateAndTransformFinalResult<OUTPUT>>;
+
+  /**
+   * Preprocesses accumulated text to handle LLMs that wrap JSON in code blocks.
+   * Extracts content from the first complete valid ```json...``` code block or removes opening ```json prefix if no complete code block is found (streaming chunks).
+   * @param accumulatedText - Raw accumulated text from streaming
+   * @returns Processed text ready for JSON parsing
+   */
+  protected preprocessText(accumulatedText: string): string {
+    let processedText = accumulatedText;
+
+    // Some LLMs wrap the JSON response in code blocks.
+    // In that case, first try to extract content from complete code blocks
+    if (processedText.includes('```json')) {
+      const match = processedText.match(/```json\s*\n?([\s\S]*?)\n?\s*```/);
+      if (match && match[1]) {
+        // Complete code block found - use content between tags
+        processedText = match[1].trim();
+      } else {
+        // No complete code block - just remove the opening ```json
+        processedText = processedText.replace(/^```json\s*\n?/, '');
+      }
+    }
+
+    return processedText;
+  }
 }
 
 /**
@@ -109,7 +141,8 @@ class ObjectFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseF
     accumulatedText,
     previousObject,
   }: ProcessPartialChunkParams): Promise<ProcessPartialChunkResult> {
-    const { value: currentObjectJson, state } = await parsePartialJson(accumulatedText);
+    const processedAccumulatedText = this.preprocessText(accumulatedText);
+    const { value: currentObjectJson, state } = await parsePartialJson(processedAccumulatedText);
 
     // TODO: test partial object chunk validation with schema.partial()
     if (this.validatePartialChunks && this.partialSchema) {
@@ -144,25 +177,25 @@ class ObjectFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseF
     return { shouldEmit: false };
   }
 
-  async validateAndTransformFinal(
-    finalValue: InferSchemaOutput<OUTPUT>,
-  ): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
-    if (!finalValue) {
+  async validateAndTransformFinal(finalRawValue: string): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
+    if (!finalRawValue) {
       return {
         success: false,
         error: new Error('No object generated: could not parse the response.'),
       };
     }
+    const rawValue = this.preprocessText(finalRawValue);
+    const { value } = await parsePartialJson(rawValue);
 
     if (!this.schema) {
       return {
         success: true,
-        value: finalValue,
+        value: value as InferSchemaOutput<OUTPUT>,
       };
     }
 
     try {
-      const result = await safeValidateTypes({ value: finalValue, schema: this.schema });
+      const result = await safeValidateTypes({ value, schema: this.schema });
 
       if (result.success) {
         return {
@@ -200,7 +233,8 @@ class ArrayFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFo
     accumulatedText,
     previousObject,
   }: ProcessPartialChunkParams): Promise<ProcessPartialChunkResult> {
-    const { value: currentObjectJson, state: parseState } = await parsePartialJson(accumulatedText);
+    const processedAccumulatedText = this.preprocessText(accumulatedText);
+    const { value: currentObjectJson, state: parseState } = await parsePartialJson(processedAccumulatedText);
     // TODO: parse/validate partial array elements, emit error chunk if validation fails
     // using this.partialSchema / this.validatePartialChunks
     if (currentObjectJson !== undefined && !isDeepEqualData(previousObject, currentObjectJson)) {
@@ -253,9 +287,7 @@ class ArrayFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFo
     return { shouldEmit: false };
   }
 
-  async validateAndTransformFinal(
-    _finalValue: InferSchemaOutput<OUTPUT>,
-  ): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
+  async validateAndTransformFinal(_finalValue: string): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
     const resultValue = this.textPreviousFilteredArray;
 
     if (!resultValue) {
@@ -335,7 +367,8 @@ class EnumFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFor
     accumulatedText,
     previousObject,
   }: ProcessPartialChunkParams): Promise<ProcessPartialChunkResult> {
-    const { value: currentObjectJson } = await parsePartialJson(accumulatedText);
+    const processedAccumulatedText = this.preprocessText(accumulatedText);
+    const { value: currentObjectJson } = await parsePartialJson(processedAccumulatedText);
     if (
       currentObjectJson !== undefined &&
       currentObjectJson !== null &&
@@ -362,9 +395,17 @@ class EnumFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFor
     return { shouldEmit: false };
   }
 
-  async validateAndTransformFinal(
-    finalValue: InferSchemaOutput<OUTPUT>,
-  ): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
+  async validateAndTransformFinal(rawFinalValue: string): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
+    const processedValue = this.preprocessText(rawFinalValue);
+    const { value } = await parsePartialJson(processedValue);
+    if (!(typeof value === 'object' && value !== null && 'result' in value)) {
+      return {
+        success: false,
+        error: new Error('Invalid enum format: expected object with result property'),
+      };
+    }
+    const finalValue = value as { result: InferSchemaOutput<OUTPUT> };
+
     // For enums, check the wrapped format and unwrap
     if (!finalValue || typeof finalValue !== 'object' || typeof finalValue.result !== 'string') {
       return {
@@ -513,7 +554,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
         return;
       }
 
-      const finalResult = await handler.validateAndTransformFinal(previousObject);
+      const finalResult = await handler.validateAndTransformFinal(accumulatedText);
 
       if (!finalResult.success) {
         controller.enqueue({

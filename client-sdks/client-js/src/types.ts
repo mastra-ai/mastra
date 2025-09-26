@@ -1,7 +1,9 @@
 import type {
   AgentExecutionOptions,
+  MultiPrimitiveExecutionOptions,
   AgentGenerateOptions,
   AgentStreamOptions,
+  StructuredOutputOptions,
   ToolsInput,
   UIMessageWithMetadata,
 } from '@mastra/core/agent';
@@ -9,13 +11,18 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
-import type { AiMessageType, MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type {
+  AiMessageType,
+  MastraMessageV1,
+  MastraMessageV2,
+  MemoryConfig,
+  StorageThreadType,
+} from '@mastra/core/memory';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
 import type {
   AITraceRecord,
   AISpanRecord,
-  LegacyWorkflowRuns,
   StorageGetMessagesArg,
   PaginationInfo,
   WorkflowRun,
@@ -24,11 +31,7 @@ import type {
 import type { OutputSchema } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
 import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
-import type {
-  StepAction,
-  StepGraph,
-  LegacyWorkflowRunResult as CoreLegacyWorkflowRunResult,
-} from '@mastra/core/workflows/legacy';
+
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
@@ -68,16 +71,32 @@ type WithoutMethods<T> = {
         : K]: T[K];
 };
 
+export type NetworkStreamParams = {
+  messages: MessageListInput;
+} & MultiPrimitiveExecutionOptions;
 export interface GetAgentResponse {
   name: string;
   instructions: string;
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;
+  agents: Record<string, { id: string; name: string }>;
   provider: string;
   modelId: string;
   modelVersion: string;
   defaultGenerateOptions: WithoutMethods<AgentGenerateOptions>;
   defaultStreamOptions: WithoutMethods<AgentStreamOptions>;
+  modelList:
+    | Array<{
+        id: string;
+        enabled: boolean;
+        maxRetries: number;
+        model: {
+          modelId: string;
+          provider: string;
+          modelVersion: string;
+        };
+      }>
+    | undefined;
 }
 
 export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -100,16 +119,47 @@ export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefin
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
 >;
 
-export type StreamVNextParams<OUTPUT extends OutputSchema | undefined = undefined> = {
+export type StreamVNextParams<OUTPUT extends OutputSchema = undefined> = {
   messages: MessageListInput;
   output?: OUTPUT;
   runtimeContext?: RuntimeContext | Record<string, any>;
   clientTools?: ToolsInput;
-} & WithoutMethods<Omit<AgentExecutionOptions<OUTPUT>, 'output' | 'runtimeContext' | 'clientTools' | 'options'>>;
+} & OutputOptions<OUTPUT> &
+  WithoutMethods<
+    Omit<
+      AgentExecutionOptions<OUTPUT>,
+      'output' | 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
+    >
+  >;
+
+type OutputOptions<OUTPUT extends OutputSchema = undefined> =
+  | {
+      output?: OUTPUT;
+      structuredOutput?: never;
+    }
+  | {
+      // Can't serialize the model, so we need to omit it, falls back to agent's model
+      structuredOutput?: Omit<StructuredOutputOptions<OUTPUT>, 'model'>;
+      output?: never;
+    };
 
 export type UpdateModelParams = {
   modelId: string;
   provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+};
+
+export type UpdateModelInModelListParams = {
+  modelConfigId: string;
+  model?: {
+    modelId: string;
+    provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+  };
+  maxRetries?: number;
+  enabled?: boolean;
+};
+
+export type ReorderModelListParams = {
+  reorderedModelIds: string[];
 };
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
@@ -126,15 +176,6 @@ export interface GetToolResponse {
   outputSchema: string;
 }
 
-export interface GetLegacyWorkflowResponse {
-  name: string;
-  triggerSchema: string;
-  steps: Record<string, StepAction<any, any, any, any>>;
-  stepGraph: StepGraph;
-  stepSubscriberGraph: Record<string, StepGraph>;
-  workflowId?: string;
-}
-
 export interface GetWorkflowRunsParams {
   fromDate?: Date;
   toDate?: Date;
@@ -143,20 +184,11 @@ export interface GetWorkflowRunsParams {
   resourceId?: string;
 }
 
-export type GetLegacyWorkflowRunsResponse = LegacyWorkflowRuns;
-
 export type GetWorkflowRunsResponse = WorkflowRuns;
 
 export type GetWorkflowRunByIdResponse = WorkflowRun;
 
 export type GetWorkflowRunExecutionResultResponse = WatchEvent['payload']['workflowState'];
-
-export type LegacyWorkflowRunResult = {
-  activePaths: Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>;
-  results: CoreLegacyWorkflowRunResult<any, any, any>['results'];
-  timestamp: number;
-  runId: string;
-};
 
 export interface GetWorkflowResponse {
   name: string;
@@ -189,7 +221,7 @@ export interface GetWorkflowResponse {
 
 export type WorkflowWatchResult = WatchEvent & { runId: string };
 
-export type WorkflowRunResult = WorkflowResult<any, any>;
+export type WorkflowRunResult = WorkflowResult<any, any, any>;
 export interface UpsertVectorParams {
   indexName: string;
   vectors: number[][];
@@ -254,6 +286,12 @@ export interface GetMemoryThreadParams {
   resourceId: string;
   agentId: string;
 }
+
+export interface GetMemoryConfigParams {
+  agentId: string;
+}
+
+export type GetMemoryConfigResponse = MemoryConfig;
 
 export interface GetNetworkMemoryThreadParams {
   resourceId: string;
@@ -371,22 +409,6 @@ export interface GetTelemetryParams {
   toDate?: Date;
 }
 
-export interface GetNetworkResponse {
-  id: string;
-  name: string;
-  instructions: string;
-  agents: Array<{
-    name: string;
-    provider: string;
-    modelId: string;
-  }>;
-  routingModel: {
-    provider: string;
-    modelId: string;
-  };
-  state?: Record<string, any>;
-}
-
 export interface GetVNextNetworkResponse {
   id: string;
   name: string;
@@ -449,7 +471,7 @@ export interface LoopVNextNetworkResponse {
     isComplete?: boolean | undefined;
     completionReason?: string | undefined;
   };
-  steps: WorkflowResult<any, any>['steps'];
+  steps: WorkflowResult<any, any, any>['steps'];
 }
 
 export interface McpServerListResponse {
@@ -473,7 +495,7 @@ export interface McpServerToolListResponse {
 export type ClientScoreRowData = Omit<ScoreRowData, 'createdAt' | 'updatedAt'> & {
   createdAt: string;
   updatedAt: string;
-};
+} & { spanId?: string };
 
 // Scores-related types
 export interface GetScoresByRunIdParams {
@@ -517,7 +539,9 @@ export interface SaveScoreResponse {
 
 export type GetScorerResponse = MastraScorerEntry & {
   agentIds: string[];
+  agentNames: string[];
   workflowIds: string[];
+  isRegistered: boolean;
 };
 
 export interface GetScorersResponse {

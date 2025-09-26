@@ -4,6 +4,7 @@ import type { AITracesPaginatedArg } from '@mastra/core/storage';
 import {
   getAITraceHandler as getOriginalAITraceHandler,
   getAITracesPaginatedHandler as getOriginalAITracesPaginatedHandler,
+  scoreTracesHandler as getOriginalScoreTracesHandler,
 } from '@mastra/server/handlers/observability';
 import type { Context } from 'hono';
 import { handleError } from '../../error';
@@ -31,7 +32,7 @@ export async function getAITraceHandler(c: Context) {
 export async function getAITracesPaginatedHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const { page, perPage, name, spanType, start, end } = c.req.query();
+    const { page, perPage, name, spanType, dateRange, entityId, entityType } = c.req.query();
 
     const pagination: AITracesPaginatedArg['pagination'] = {
       page: parseInt(page || '0'),
@@ -47,26 +48,25 @@ export async function getAITracesPaginatedHandler(c: Context) {
         return c.json({ error: 'Invalid spanType' }, 400);
       }
     }
+    if (entityId && entityType && (entityType === 'agent' || entityType === 'workflow')) {
+      filters.entityId = entityId;
+      filters.entityType = entityType;
+    }
 
-    const dateRange: { start?: Date; end?: Date } = {};
-    if (start) {
+    let start: Date | undefined;
+    let end: Date | undefined;
+    if (dateRange) {
       try {
-        dateRange.start = new Date(start);
+        const parsedDateRange = JSON.parse(dateRange);
+        start = parsedDateRange.start ? new Date(parsedDateRange.start) : undefined;
+        end = parsedDateRange.end ? new Date(parsedDateRange.end) : undefined;
       } catch {
         return c.json({ error: 'Invalid start date' }, 400);
       }
     }
 
-    if (end) {
-      try {
-        dateRange.end = new Date(end);
-      } catch {
-        return c.json({ error: 'Invalid end date' }, 400);
-      }
-    }
-
-    if (Object.keys(dateRange).length > 0) {
-      pagination.dateRange = dateRange;
+    if (start || end) {
+      pagination.dateRange = { start, end };
     }
 
     const result = await getOriginalAITracesPaginatedHandler({
@@ -80,5 +80,21 @@ export async function getAITracesPaginatedHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error getting AI traces paginated');
+  }
+}
+
+export async function processTraceScoringHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const { scorerName, targets } = await c.req.json();
+
+    const result = await getOriginalScoreTracesHandler({
+      mastra,
+      body: { scorerName, targets },
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error processing trace scoring');
   }
 }

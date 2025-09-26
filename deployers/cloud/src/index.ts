@@ -42,7 +42,15 @@ export class CloudDeployer extends Deployer {
 
     const defaultToolsPath = join(mastraDir, MASTRA_DIRECTORY, 'tools');
 
-    await this._bundle(this.getEntry(), mastraEntryFile, outputDirectory, [defaultToolsPath]);
+    await this._bundle(
+      this.getEntry(),
+      mastraEntryFile,
+      {
+        outputDirectory,
+        projectRoot: mastraDir,
+      },
+      [defaultToolsPath],
+    );
     process.chdir(currentCwd);
   }
 
@@ -57,12 +65,11 @@ import { tools } from '#tools';
 import { mastra } from '#mastra';
 import { MultiLogger } from '@mastra/core/logger';
 import { PinoLogger } from '@mastra/loggers';
-import { UpstashTransport } from '@mastra/loggers/upstash';
 import { HttpTransport } from '@mastra/loggers/http';
 import { evaluate } from '@mastra/core/eval';
 import { AvailableHooks, registerHook } from '@mastra/core/hooks';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
-
+import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces';
 const startTime = process.env.RUNNER_START_TIME ? new Date(process.env.RUNNER_START_TIME).getTime() : Date.now();
 const createNodeServerStartTime = Date.now();
 
@@ -153,6 +160,10 @@ if (process.env.MASTRA_STORAGE_URL && process.env.MASTRA_STORAGE_AUTH_TOKEN) {
       });
     }
   });
+}
+
+if (mastra?.getStorage()) {
+  mastra.__registerInternalWorkflow(scoreTracesWorkflow);
 }
 
 ${getAuthEntrypoint()}
