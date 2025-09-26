@@ -147,13 +147,16 @@ export class OpenAIVoice extends MastraVoice {
       throw new Error('Input text is empty');
     }
 
+    const { speaker, responseFormat, speed, ...otherOptions } = options || {};
+
     const audio = await this.traced(async () => {
       const response = await this.speechClient!.audio.speech.create({
         model: this.speechModel?.name ?? 'tts-1',
-        voice: (options?.speaker ?? this.speaker) as OpenAIVoiceId,
-        response_format: options?.responseFormat ?? 'mp3',
+        voice: (speaker ?? this.speaker) as OpenAIVoiceId,
+        response_format: responseFormat ?? 'mp3',
         input,
-        speed: options?.speed || 1.0,
+        speed: speed || 1.0,
+        ...otherOptions,
       });
 
       const passThrough = new PassThrough();
