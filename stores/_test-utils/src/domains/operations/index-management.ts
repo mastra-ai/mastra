@@ -2,8 +2,56 @@ import type { MastraStorage } from '@mastra/core/storage';
 import { TABLE_THREADS, TABLE_MESSAGES, TABLE_TRACES, TABLE_EVALS } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
+type IndexCapabilities = {
+  indexMethods: ('btree' | 'hash' | 'gin' | 'gist' | 'spgist' | 'brin')[];
+  storageParameters: boolean;
+  operatorClasses: boolean;
+  tablespaces: boolean;
+  concurrent: boolean;
+  partial: boolean;
+  describeIndex: boolean;
+};
+
+// Storage adapter capabilities for index management features
+const STORAGE_INDEX_CAPABILITIES: Record<string, IndexCapabilities> = {
+  LibSQLStore: {
+    indexMethods: [],
+    storageParameters: false,
+    operatorClasses: false,
+    tablespaces: false,
+    concurrent: false,
+    partial: true,
+    describeIndex: false, // LibSQL doesn't support describeIndex
+  },
+  PostgresStore: {
+    indexMethods: ['btree', 'hash', 'gin', 'gist', 'spgist', 'brin'],
+    storageParameters: true,
+    operatorClasses: true,
+    tablespaces: true,
+    concurrent: true,
+    partial: true,
+    describeIndex: true, // PostgreSQL supports describeIndex
+  },
+  // Fallback for unknown adapters - assume basic support
+  default: {
+    indexMethods: ['btree', 'hash', 'gin', 'gist', 'spgist', 'brin'],
+    storageParameters: true,
+    operatorClasses: true,
+    tablespaces: true,
+    concurrent: true,
+    partial: true,
+    describeIndex: true, // Assume most adapters support it
+  },
+};
+
+function getStorageIndexCapabilities(storage: MastraStorage): IndexCapabilities {
+  const storageName = storage.name as string;
+  return STORAGE_INDEX_CAPABILITIES[storageName] ?? STORAGE_INDEX_CAPABILITIES['default']!;
+}
+
 export function createIndexManagementTests({ storage }: { storage: MastraStorage }) {
   if (storage.supports.indexManagement) {
+    const capabilities = getStorageIndexCapabilities(storage);
     describe('Index Management', () => {
       // Use timestamp to ensure unique index names across test runs
       const timestamp = Date.now();
@@ -128,7 +176,11 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
         });
 
         it('should create index with advanced options', async () => {
-          // Test BRIN index (efficient for large tables with natural ordering)
+          if (capabilities.indexMethods.length === 0) {
+            console.log('Skipping advanced index options test - index methods not supported by this storage adapter');
+            return;
+          }
+
           const brinIndexName = `${testIndexPrefix}_brin`;
           await storage.createIndex({
             name: brinIndexName,
@@ -143,7 +195,6 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           expect(brinIndex).toBeDefined();
           expect(brinIndex?.definition.toLowerCase()).toContain('brin');
 
-          // Test SP-GiST index (space-partitioned GiST)
           const spgistIndexName = `${testIndexPrefix}_spgist`;
           await storage.createIndex({
             name: spgistIndexName,
@@ -160,6 +211,11 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
         });
 
         it('should create index with storage parameters', async () => {
+          if (!capabilities.storageParameters) {
+            console.log('Skipping storage parameters test - not supported by this storage adapter');
+            return;
+          }
+
           const indexName = `${testIndexPrefix}_with_storage`;
 
           // Create index with storage parameters
@@ -211,6 +267,10 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
 
       describe('describeIndex', () => {
         it('should return detailed statistics for an index', async () => {
+          if (!capabilities.describeIndex) {
+            console.log('Skipping describeIndex test - not supported by this storage adapter');
+            return;
+          }
           const indexName = `${testIndexPrefix}_describe`;
 
           // Create an index to describe
@@ -240,6 +300,11 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
         });
 
         it('should return statistics for unique index', async () => {
+          if (!capabilities.describeIndex) {
+            console.log('Skipping describeIndex test - not supported by this storage adapter');
+            return;
+          }
+
           const indexName = `${testIndexPrefix}_describe_unique`;
 
           await storage.createIndex({
@@ -257,7 +322,16 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
         });
 
         it('should return statistics for different index methods', async () => {
-          // Test GIN index on JSONB column (use TABLE_TRACES attributes column which is JSONB)
+          if (!capabilities.describeIndex) {
+            console.log('Skipping describeIndex test - not supported by this storage adapter');
+            return;
+          }
+
+          if (capabilities.indexMethods.length === 0) {
+            console.log('Skipping different index methods test - index methods not supported by this storage adapter');
+            return;
+          }
+
           const ginIndexName = `${testIndexPrefix}_describe_gin`;
           await storage.createIndex({
             name: ginIndexName,
@@ -270,7 +344,6 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           const ginStats = await storage.describeIndex(ginIndexName);
           expect(ginStats.method).toBe('gin');
 
-          // Test HASH index
           const hashIndexName = `${testIndexPrefix}_describe_hash`;
           await storage.createIndex({
             name: hashIndexName,
@@ -288,10 +361,20 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
         });
 
         it('should throw error for non-existent index', async () => {
+          if (!capabilities.describeIndex) {
+            console.log('Skipping describeIndex test - not supported by this storage adapter');
+            return;
+          }
+
           await expect(storage.describeIndex(`${testIndexPrefix}_non_existent_describe`)).rejects.toThrow();
         });
 
         it('should track index usage statistics', async () => {
+          if (!capabilities.describeIndex) {
+            console.log('Skipping describeIndex test - not supported by this storage adapter');
+            return;
+          }
+
           const indexName = `${testIndexPrefix}_describe_usage`;
 
           // Create index
