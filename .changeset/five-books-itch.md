@@ -36,7 +36,6 @@
 '@mastra/mongodb': patch
 '@mastra/upstash': patch
 '@mastra/voice-deepgram': patch
-'@mastra/core': patch
 '@mastra/chroma': patch
 '@mastra/libsql': patch
 '@mastra/qdrant': patch
