@@ -10,7 +10,7 @@ import {
 import { useState, ReactNode, useEffect, useRef, useContext } from 'react';
 
 import { AssistantMessage, ChatProps, Message } from '@/types';
-import { useMastraClient } from '@/contexts/mastra-client-context';
+import { useMastraClient } from '@mastra/react-hooks';
 import { useVNextNetworkChat } from '@/services/vnext-network-chat-provider';
 import { useMessages } from './vnext-message-provider';
 import { formatJSON } from '@/lib/formatting';
