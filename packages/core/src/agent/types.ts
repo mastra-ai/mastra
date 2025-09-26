@@ -11,6 +11,7 @@ import type {
   DefaultLLMTextOptions,
   OutputType,
   SystemMessage,
+  MastraModelConfig,
 } from '../llm';
 import type {
   StreamTextOnFinishCallback,
@@ -69,6 +70,22 @@ export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;
 }
 
+// Helper type that preserves literal types better
+type DynamicModel = ({
+  runtimeContext,
+  mastra,
+}: {
+  runtimeContext: RuntimeContext;
+  mastra?: Mastra;
+}) => Promise<ModelRouterModelId | MastraModelConfig> | ModelRouterModelId | MastraModelConfig;
+
+// Helper type for model with retries
+type ModelWithRetries = {
+  model: ModelRouterModelId | MastraModelConfig | DynamicModel;
+  maxRetries?: number; //defaults to 0
+  enabled?: boolean; //defaults to true
+};
+
 export interface AgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
@@ -78,14 +95,7 @@ export interface AgentConfig<
   name: TAgentId;
   description?: string;
   instructions: DynamicAgentInstructions;
-  model:
-    | ModelRouterModelId
-    | DynamicArgument<MastraLanguageModel | ModelRouterModelId>
-    | {
-        model: DynamicArgument<MastraLanguageModel | ModelRouterModelId>;
-        maxRetries?: number; //defaults to 0
-        enabled?: boolean; //defaults to true
-      }[];
+  model: ModelRouterModelId | MastraModelConfig | DynamicModel | ModelWithRetries[];
   maxRetries?: number; //defaults to 0
   tools?: DynamicArgument<TTools>;
   workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
