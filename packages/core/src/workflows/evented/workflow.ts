@@ -8,7 +8,13 @@ import type { ToolExecutionContext } from '../../tools/types';
 import { Workflow, Run } from '../../workflows';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
 import type { ExecuteFunction, Step } from '../../workflows/step';
-import type { SerializedStepFlowEntry, WorkflowConfig, WorkflowResult, WatchEvent } from '../../workflows/types';
+import type {
+  SerializedStepFlowEntry,
+  WorkflowConfig,
+  WorkflowResult,
+  WatchEvent,
+  StepWithComponent,
+} from '../../workflows/types';
 import { EMITTER_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
 import { WorkflowEventProcessor } from './workflow-event-processor';
@@ -55,6 +61,7 @@ export function cloneStep<TStepId extends string>(
     inputSchema: step.inputSchema,
     outputSchema: step.outputSchema,
     execute: step.execute,
+    component: step.component,
   };
 }
 
@@ -100,10 +107,12 @@ export function createStep<
 
 export function createStep<
   TSchemaIn extends z.ZodType<any>,
+  TSuspendSchema extends z.ZodType<any>,
+  TResumeSchema extends z.ZodType<any>,
   TSchemaOut extends z.ZodType<any>,
-  TContext extends ToolExecutionContext<TSchemaIn>,
+  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema>,
 >(
-  tool: Tool<TSchemaIn, TSchemaOut, TContext> & {
+  tool: Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
     inputSchema: TSchemaIn;
     outputSchema: TSchemaOut;
     execute: (context: TContext) => Promise<any>;
@@ -143,6 +152,7 @@ export function createStep<
   if (isAgent(params)) {
     return {
       id: params.name,
+      description: params.getDescription(),
       // @ts-ignore
       inputSchema: z.object({
         prompt: z.string(),
@@ -206,6 +216,7 @@ export function createStep<
           text: await streamPromise.promise,
         };
       },
+      component: params.component,
     };
   }
 
@@ -218,17 +229,23 @@ export function createStep<
       // TODO: tool probably should have strong id type
       // @ts-ignore
       id: params.id,
+      description: params.description,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
-      execute: async ({ inputData, mastra, runtimeContext }) => {
+      suspendSchema: params.suspendSchema,
+      resumeSchema: params.resumeSchema,
+      execute: async ({ inputData, mastra, runtimeContext, suspend, resumeData }) => {
         return params.execute({
           context: inputData,
           mastra,
           runtimeContext,
           // TODO: Pass proper tracing context when evented workflows support tracing
           tracingContext: { currentSpan: undefined },
+          suspend,
+          resumeData,
         });
       },
+      component: 'TOOL',
     };
   }
 
@@ -296,6 +313,7 @@ export class EventedWorkflow<
         mastra: this.mastra,
         retryConfig: this.retryConfig,
         cleanup: () => this.runs.delete(runIdToUse),
+        workflowSteps: this.steps,
       });
 
     this.runs.set(runIdToUse, run);
@@ -345,6 +363,8 @@ export class EventedRun<
       delay?: number;
     };
     cleanup?: () => void;
+    workflowSteps: Record<string, StepWithComponent>;
+    validateInputs?: boolean;
   }) {
     super(params);
     this.serializedStepGraph = params.serializedStepGraph;
@@ -386,12 +406,14 @@ export class EventedRun<
       },
     });
 
+    const inputDataToUse = await this._validateInput(inputData);
+
     const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
       graph: this.executionGraph,
       serializedStepGraph: this.serializedStepGraph,
-      input: inputData,
+      input: inputDataToUse,
       emitter: {
         emit: async (event: string, data: any) => {
           this.emitter.emit(event, data);
@@ -471,17 +493,21 @@ export class EventedRun<
       }
     }
 
+    const suspendedStep = this.workflowSteps[steps?.[0] ?? ''];
+
+    const resumeDataToUse = await this._validateResumeData(params.resumeData, suspendedStep);
+
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
         runId: this.runId,
         graph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
-        input: params.resumeData,
+        input: resumeDataToUse,
         resume: {
           steps,
           stepResults: snapshot?.context as any,
-          resumePayload: params.resumeData,
+          resumePayload: resumeDataToUse,
           resumePath,
         },
         emitter: {

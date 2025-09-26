@@ -26,6 +26,8 @@ import type {
   StreamParams,
   UpdateModelParams,
   StreamVNextParams,
+  UpdateModelInModelListParams,
+  ReorderModelListParams,
   NetworkStreamParams,
 } from '../types';
 
@@ -76,6 +78,7 @@ async function executeToolCallAndRespond({
             threadId,
             runtimeContext: runtimeContext as RuntimeContext,
             tracingContext: { currentSpan: undefined },
+            suspend: async () => {},
           },
           {
             messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -83,12 +86,10 @@ async function executeToolCallAndRespond({
           },
         );
 
+        // Build updated messages from the response, adding the tool result
+        // Do NOT re-include the original user message to avoid storage duplicates
         const updatedMessages = [
-          {
-            role: 'user',
-            content: params.messages,
-          },
-          ...(response.response as unknown as { messages: CoreMessage[] }).messages,
+          ...(response.response.messages || []),
           {
             role: 'tool',
             content: [
@@ -220,7 +221,7 @@ export class Agent extends BaseResource {
     StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
   >(params: GenerateParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
     console.warn(
-      "Deprecation NOTICE:\Generate method will switch to use generateVNext implementation September 23rd, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
+      "Deprecation NOTICE:\Generate method will switch to use generateVNext implementation September 30th, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
     );
     // @ts-expect-error - generic type issues
     return this.generateLegacy(params);
@@ -286,6 +287,7 @@ export class Agent extends BaseResource {
               threadId,
               runtimeContext: runtimeContext as RuntimeContext,
               tracingContext: { currentSpan: undefined },
+              suspend: async () => {},
             },
             {
               messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -293,11 +295,9 @@ export class Agent extends BaseResource {
             },
           );
 
+          // Build updated messages from the response, adding the tool result
+          // Do NOT re-include the original user message to avoid storage duplicates
           const updatedMessages = [
-            {
-              role: 'user',
-              content: params.messages,
-            },
             ...(response.response as unknown as { messages: CoreMessage[] }).messages,
             {
               role: 'tool',
@@ -743,7 +743,7 @@ export class Agent extends BaseResource {
     }
   > {
     console.warn(
-      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 23rd, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
+      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 30th, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
     );
     return this.streamLegacy(params);
   }
@@ -1220,6 +1220,7 @@ export class Agent extends BaseResource {
                     runtimeContext: processedParams.runtimeContext as RuntimeContext,
                     // TODO: Pass proper tracing context when client-js supports tracing
                     tracingContext: { currentSpan: undefined },
+                    suspend: async () => {},
                   },
                   {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -1253,13 +1254,10 @@ export class Agent extends BaseResource {
                   toolInvocation.result = result;
                 }
 
-                // Convert messages to the correct format for the recursive call
-                const originalMessages = processedParams.messages;
-                const messageArray = Array.isArray(originalMessages) ? originalMessages : [originalMessages];
+                // Build updated messages for the recursive call
+                // Do NOT re-include the original messages to avoid storage duplicates
                 const updatedMessages =
-                  lastMessage != null
-                    ? [...messageArray, ...messages.filter(m => m.id !== lastMessage.id), lastMessage]
-                    : [...messageArray, ...messages];
+                  lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
 
                 // Recursively call stream with updated messages
                 this.processStreamResponse_vNext(
@@ -1496,6 +1494,7 @@ export class Agent extends BaseResource {
                     runtimeContext: processedParams.runtimeContext as RuntimeContext,
                     // TODO: Pass proper tracing context when client-js supports tracing
                     tracingContext: { currentSpan: undefined },
+                    suspend: async () => {},
                   },
                   {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -1545,15 +1544,11 @@ export class Agent extends BaseResource {
                   writer.releaseLock();
                 }
 
-                // Convert messages to the correct format for the recursive call
-                const originalMessages = processedParams.messages;
-                const messageArray = Array.isArray(originalMessages) ? originalMessages : [originalMessages];
-
                 // Recursively call stream with updated messages
                 this.processStreamResponse(
                   {
                     ...processedParams,
-                    messages: [...messageArray, ...messages.filter(m => m.id !== lastMessage.id), lastMessage],
+                    messages: [...messages.filter(m => m.id !== lastMessage.id), lastMessage],
                   },
                   writable,
                 ).catch(error => {
@@ -1633,6 +1628,30 @@ export class Agent extends BaseResource {
    */
   updateModel(params: UpdateModelParams): Promise<{ message: string }> {
     return this.request(`/api/agents/${this.agentId}/model`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Updates the model for the agent in the model list
+   * @param params - Parameters for updating the model
+   * @returns Promise containing the updated model
+   */
+  updateModelInModelList({ modelConfigId, ...params }: UpdateModelInModelListParams): Promise<{ message: string }> {
+    return this.request(`/api/agents/${this.agentId}/models/${modelConfigId}`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Reorders the models for the agent
+   * @param params - Parameters for reordering the model list
+   * @returns Promise containing the updated model list
+   */
+  reorderModelList(params: ReorderModelListParams): Promise<{ message: string }> {
+    return this.request(`/api/agents/${this.agentId}/models/reorder`, {
       method: 'POST',
       body: params,
     });

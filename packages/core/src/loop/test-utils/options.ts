@@ -75,6 +75,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           toolCallId: 'call-1',
           messages: expect.any(Array),
           writableStream: expect.any(Object),
+          resumeData: undefined,
+          suspend: expect.any(Function),
         },
       );
     });
@@ -4105,9 +4107,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             "type": "tool-input-delta",
           },
           {
-            "filename": undefined,
             "id": "123",
-            "mediaType": undefined,
             "providerMetadata": {
               "provider": {
                 "custom": "value",

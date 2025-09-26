@@ -1,4 +1,4 @@
-import type { GenerateTextOnStepFinishCallback, TelemetrySettings } from 'ai';
+import type { GenerateTextOnStepFinishCallback, TelemetrySettings, ToolSet } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
@@ -38,6 +38,7 @@ import type { SaveQueueManager } from './save-queue';
 
 export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
 export type { Message as AiMessageType } from 'ai';
+export type { LLMStepResult } from '../stream/types';
 
 export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5>;
 
@@ -86,7 +87,7 @@ export interface AgentConfig<
       }[];
   maxRetries?: number; //defaults to 0
   tools?: DynamicArgument<TTools>;
-  workflows?: DynamicArgument<Record<string, Workflow>>;
+  workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
   defaultGenerateOptions?: DynamicArgument<AgentGenerateOptions>;
   defaultStreamOptions?: DynamicArgument<AgentStreamOptions>;
   defaultVNextStreamOptions?: DynamicArgument<AgentExecutionOptions>;
@@ -276,7 +277,7 @@ export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boole
 export type AgentExecuteOnFinishOptions = {
   instructions: SystemMessage;
   runId: string;
-  result: Record<string, any>;
+  result: Parameters<StreamTextOnFinishCallback<ToolSet>>[0] & { object?: unknown };
   thread: StorageThreadType | null | undefined;
   readOnlyMemory?: boolean;
   threadId?: string;

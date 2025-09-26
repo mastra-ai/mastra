@@ -6,11 +6,18 @@ import type {
   LanguageModelV2CallWarning,
   LanguageModelV2ResponseMetadata,
   LanguageModelV2,
+  LanguageModelV2StreamPart,
 } from '@ai-sdk/provider-v5';
-import type { LanguageModelV1StreamPart, LanguageModelRequestMetadata } from 'ai';
-import type { CoreMessage, StepResult } from 'ai-v5';
+import type { Span } from '@opentelemetry/api';
+import type { FinishReason, LanguageModelRequestMetadata, TelemetrySettings } from 'ai';
+import type { ModelMessage, StepResult, ToolSet, UIMessage } from 'ai-v5';
+import type { AIV5ResponseMessage } from '../agent/message-list';
+import type { AIV5Type } from '../agent/message-list/types';
+import type { TracingContext } from '../ai-tracing/types';
+import type { OutputProcessor } from '../processors';
+import type { ProcessorRunnerMode } from '../processors/runner';
 import type { WorkflowStreamEvent } from '../workflows/types';
-import type { OutputSchema, PartialSchemaOutput } from './base/schema';
+import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './base/schema';
 
 export enum ChunkFrom {
   AGENT = 'AGENT',
@@ -26,7 +33,7 @@ interface BaseChunkType {
 
 interface ResponseMetadataPayload {
   signature?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface TextStartPayload {
@@ -43,7 +50,7 @@ export interface TextDeltaPayload {
 interface TextEndPayload {
   id: string;
   providerMetadata?: SharedV2ProviderMetadata;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface ReasoningStartPayload {
@@ -64,7 +71,7 @@ interface ReasoningEndPayload {
   signature?: string;
 }
 
-interface SourcePayload {
+export interface SourcePayload {
   id: string;
   sourceType: 'url' | 'document';
   title: string;
@@ -74,31 +81,71 @@ interface SourcePayload {
   providerMetadata?: SharedV2ProviderMetadata;
 }
 
-interface FilePayload {
+export interface FilePayload {
   data: string | Uint8Array;
   base64?: string;
   mimeType: string;
   providerMetadata?: SharedV2ProviderMetadata;
 }
 
-interface ToolCallPayload {
-  toolCallId: string;
-  toolName: string;
-  args?: Record<string, any>;
-  providerExecuted?: boolean;
-  providerMetadata?: SharedV2ProviderMetadata;
-  output?: any;
+type JSONValue = string | number | boolean | null | JSONObject | JSONArray;
+type JSONObject = { [key: string]: JSONValue | undefined };
+type JSONArray = JSONValue[];
+
+export type ReadonlyJSONValue = null | string | number | boolean | ReadonlyJSONObject | ReadonlyJSONArray;
+
+export type ReadonlyJSONObject = {
+  readonly [key: string]: ReadonlyJSONValue;
+};
+
+export type ReadonlyJSONArray = readonly ReadonlyJSONValue[];
+
+export interface MastraMetadataMessage {
+  type: 'text' | 'tool';
+  content?: string;
+  toolName?: string;
+  toolInput?: ReadonlyJSONValue;
+  toolOutput?: ReadonlyJSONValue;
+  args?: ReadonlyJSONValue;
+  toolCallId?: string;
+  result?: ReadonlyJSONValue;
 }
 
-interface ToolResultPayload {
+export interface MastraMetadata {
+  isStreaming?: boolean;
+  from?: 'AGENT' | 'WORKFLOW' | 'USER' | 'SYSTEM';
+  networkMetadata?: ReadonlyJSONObject;
+  toolOutput?: ReadonlyJSONValue | ReadonlyJSONValue[];
+  messages?: MastraMetadataMessage[];
+  workflowFullState?: ReadonlyJSONObject;
+  selectionReason?: string;
+}
+
+export interface ToolCallPayload<TArgs = unknown, TOutput = unknown> {
   toolCallId: string;
   toolName: string;
-  result: any;
+  args?: TArgs & {
+    __mastraMetadata?: MastraMetadata;
+  };
+  providerExecuted?: boolean;
+  providerMetadata?: SharedV2ProviderMetadata;
+  output?: TOutput;
+  dynamic?: boolean;
+}
+
+export interface ToolResultPayload<TResult = unknown, TArgs = unknown> {
+  toolCallId: string;
+  toolName: string;
+  result: TResult;
   isError?: boolean;
   providerExecuted?: boolean;
   providerMetadata?: SharedV2ProviderMetadata;
-  args?: Record<string, any>;
+  args?: TArgs;
+  dynamic?: boolean;
 }
+
+export type DynamicToolCallPayload = ToolCallPayload<any, any>;
+export type DynamicToolResultPayload = ToolResultPayload<any, any>;
 
 interface ToolCallInputStreamingStartPayload {
   toolCallId: string;
@@ -133,37 +180,37 @@ interface FinishPayload {
   metadata: {
     providerMetadata?: SharedV2ProviderMetadata;
     request?: LanguageModelRequestMetadata;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   messages: {
-    all: CoreMessage[];
-    user: CoreMessage[];
-    nonUser: CoreMessage[];
+    all: ModelMessage[];
+    user: ModelMessage[];
+    nonUser: AIV5ResponseMessage[];
   };
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface ErrorPayload {
   error: unknown;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface RawPayload {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface StartPayload {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface StepStartPayload {
   messageId?: string;
   request: {
     body?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   warnings?: LanguageModelV2CallWarning[];
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface StepFinishPayload {
@@ -184,9 +231,14 @@ export interface StepFinishPayload {
   metadata: {
     request?: LanguageModelRequestMetadata;
     providerMetadata?: SharedV2ProviderMetadata;
-    [key: string]: any;
+    [key: string]: unknown;
   };
-  [key: string]: any;
+  messages?: {
+    all: ModelMessage[];
+    user: ModelMessage[];
+    nonUser: AIV5ResponseMessage[];
+  };
+  [key: string]: unknown;
 }
 
 interface ToolErrorPayload {
@@ -194,13 +246,13 @@ interface ToolErrorPayload {
   providerMetadata?: SharedV2ProviderMetadata;
   toolCallId: string;
   toolName: string;
-  args?: Record<string, any>;
+  args?: Record<string, unknown>;
   error: unknown;
   providerExecuted?: boolean;
 }
 
 interface AbortPayload {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface ReasoningSignaturePayload {
@@ -211,22 +263,38 @@ interface ReasoningSignaturePayload {
 
 interface RedactedReasoningPayload {
   id: string;
-  data: any;
+  data: unknown;
   providerMetadata?: SharedV2ProviderMetadata;
 }
 
-interface ToolOutputPayload {
-  output: any;
-  [key: string]: any;
+interface ToolOutputPayload<TOutput = unknown> {
+  output: TOutput; // Tool outputs can be any shape, including nested workflow chunks
+  toolCallId: string;
+  toolName?: string;
+  [key: string]: unknown;
 }
 
+type DynamicToolOutputPayload = ToolOutputPayload<any>;
+
+// Define a specific type for nested workflow outputs
+type NestedWorkflowOutput = {
+  from: ChunkFrom;
+  type: string;
+  payload?: {
+    output?: ChunkType | NestedWorkflowOutput; // Allow one level of nesting
+    usage?: unknown;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
 interface StepOutputPayload {
-  output: any;
-  [key: string]: any;
+  output: ChunkType | NestedWorkflowOutput;
+  [key: string]: unknown;
 }
 
 interface WatchPayload {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface TripwirePayload {
@@ -307,17 +375,23 @@ interface WorkflowExecutionEndPayload {
 }
 
 interface ToolExecutionStartPayload {
-  args: Record<string, any>;
-  toolName: string;
+  args: Record<string, unknown> & {
+    toolName?: string;
+    toolCallId?: string;
+    args?: Record<string, unknown>; // The actual tool arguments are nested here
+    selectionReason?: string;
+    __mastraMetadata?: MastraMetadata;
+    // Other inputData fields spread here
+    [key: string]: unknown;
+  };
   runId: string;
-  toolCallId: string;
 }
 
 interface ToolExecutionEndPayload {
   task: string;
   resourceId: string;
   resourceType: string;
-  result: any;
+  result: unknown;
   isComplete: boolean;
   iteration: number;
   toolCallId: string;
@@ -345,6 +419,18 @@ interface NetworkFinishPayload {
   isOneOff: boolean;
 }
 
+interface ToolCallApprovalPayload {
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, any>;
+}
+
+interface ToolCallSuspendedPayload {
+  toolCallId: string;
+  toolName: string;
+  suspendPayload: any;
+}
+
 export type NetworkChunkType =
   | (BaseChunkType & { type: 'routing-agent-start'; payload: RoutingAgentStartPayload })
   | (BaseChunkType & { type: 'routing-agent-end'; payload: RoutingAgentEndPayload })
@@ -356,10 +442,11 @@ export type NetworkChunkType =
   | (BaseChunkType & { type: 'tool-execution-end'; payload: ToolExecutionEndPayload })
   | (BaseChunkType & { type: 'network-execution-event-step-finish'; payload: NetworkStepFinishPayload })
   | (BaseChunkType & { type: 'network-execution-event-finish'; payload: NetworkFinishPayload })
-  | (BaseChunkType & { type: `agent-execution-event-${string}`; payload: any })
-  | (BaseChunkType & { type: `workflow-execution-event-${string}`; payload: any });
+  | (BaseChunkType & { type: `agent-execution-event-${string}`; payload: unknown })
+  | (BaseChunkType & { type: `workflow-execution-event-${string}`; payload: object });
 
-export type ChunkType<OUTPUT extends OutputSchema = undefined> =
+// Strongly typed chunk type (currently only OUTPUT is strongly typed, tools use dynamic types)
+export type TypedChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'response-metadata'; payload: ResponseMetadataPayload })
   | (BaseChunkType & { type: 'text-start'; payload: TextStartPayload })
   | (BaseChunkType & { type: 'text-delta'; payload: TextDeltaPayload })
@@ -372,6 +459,8 @@ export type ChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'source'; payload: SourcePayload })
   | (BaseChunkType & { type: 'file'; payload: FilePayload })
   | (BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload })
+  | (BaseChunkType & { type: 'tool-call-approval'; payload: ToolCallApprovalPayload })
+  | (BaseChunkType & { type: 'tool-call-suspended'; payload: ToolCallSuspendedPayload })
   | (BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload })
   | (BaseChunkType & { type: 'tool-call-input-streaming-start'; payload: ToolCallInputStreamingStartPayload })
   | (BaseChunkType & { type: 'tool-call-delta'; payload: ToolCallDeltaPayload })
@@ -388,7 +477,7 @@ export type ChunkType<OUTPUT extends OutputSchema = undefined> =
       type: 'object';
       object: PartialSchemaOutput<OUTPUT>;
     })
-  | (BaseChunkType & { type: 'tool-output'; payload: ToolOutputPayload })
+  | (BaseChunkType & { type: 'tool-output'; payload: DynamicToolOutputPayload })
   | (BaseChunkType & { type: 'step-output'; payload: StepOutputPayload })
   | (BaseChunkType & { type: 'workflow-step-output'; payload: StepOutputPayload })
   | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
@@ -396,50 +485,25 @@ export type ChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & WorkflowStreamEvent)
   | NetworkChunkType;
 
-export type OnResult = (result: {
-  warnings: Record<string, any>;
-  request: Record<string, any>;
-  rawResponse: Record<string, any>;
-}) => void;
+// Default ChunkType for backward compatibility using dynamic (any) tool types
+export type ChunkType<OUTPUT extends OutputSchema = undefined> = TypedChunkType<OUTPUT>;
 
-export type CreateStream = () => Promise<{
-  stream: ReadableStream<LanguageModelV1StreamPart | Record<string, any>>;
-  warnings: Record<string, any>;
-  request: Record<string, any>;
-  rawResponse?: Record<string, any>;
-  response?: Record<string, any>;
-}>;
-
-export interface StepBufferItem {
-  stepType: 'initial' | 'tool-result';
-  text: string;
-  reasoning?: string;
-  sources: any[];
-  files: any[];
-  toolCalls: any[];
-  toolResults: any[];
-  warnings?: LanguageModelV2CallWarning[];
-  reasoningDetails?: any;
-  providerMetadata?: SharedV2ProviderMetadata;
-  experimental_providerMetadata?: SharedV2ProviderMetadata;
-  isContinued?: boolean;
-  logprobs?: LanguageModelV1LogProbs;
-  finishReason?: LanguageModelV2FinishReason;
-  response?: StepResult<any>['response'];
-  request?: LanguageModelRequestMetadata;
-  usage?: LanguageModelV2Usage;
-  content: StepResult<any>['content'];
+export interface LanguageModelV2StreamResult {
+  stream: ReadableStream<LanguageModelV2StreamPart>;
+  request: LLMStepResult['request'];
+  response?: LLMStepResult['response'];
+  rawResponse: LLMStepResult['response'] | Record<string, never>;
+  warnings?: LLMStepResult['warnings'];
 }
 
-export interface BufferedByStep {
-  text: string;
-  reasoning: string;
-  sources: any[];
-  files: any[];
-  toolCalls: any[];
-  toolResults: any[];
-  msgCount: number;
-}
+export type OnResult = (result: Omit<LanguageModelV2StreamResult, 'stream'>) => void;
+export type CreateStream = () => Promise<LanguageModelV2StreamResult>;
+
+export type SourceChunk = BaseChunkType & { type: 'source'; payload: SourcePayload };
+export type FileChunk = BaseChunkType & { type: 'file'; payload: FilePayload };
+export type ToolCallChunk = BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload };
+export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload };
+export type ReasoningChunk = BaseChunkType & { type: 'reasoning'; payload: ReasoningDeltaPayload };
 
 export type ExecuteStreamModelManager<T> = (
   callback: (model: LanguageModelV2, isLastModel: boolean) => Promise<T>,
@@ -449,4 +513,78 @@ export type ModelManagerModelConfig = {
   model: LanguageModelV2;
   maxRetries: number;
   id: string;
+};
+
+export interface LanguageModelUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
+}
+
+export type partialModel = {
+  modelId?: string;
+  provider?: string;
+  version?: string;
+};
+
+export type MastraOnStepFinishCallback = (
+  event: LLMStepResult & { model?: partialModel; runId?: string },
+) => Promise<void> | void;
+
+export type MastraOnFinishCallbackArgs<OUTPUT extends OutputSchema = undefined> = LLMStepResult & {
+  error?: Error | string | { message: string; stack: string };
+  object?: InferSchemaOutput<OUTPUT>;
+  steps: LLMStepResult[];
+  totalUsage: LanguageModelUsage;
+  model?: partialModel;
+  runId?: string;
+};
+
+export type MastraOnFinishCallback = (event: MastraOnFinishCallbackArgs) => Promise<void> | void;
+
+export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
+  runId: string;
+  rootSpan?: Span;
+  telemetry_settings?: TelemetrySettings;
+  toolCallStreaming?: boolean;
+  onFinish?: MastraOnFinishCallback;
+  onStepFinish?: MastraOnStepFinishCallback;
+  includeRawChunks?: boolean;
+  output?: OUTPUT;
+  outputProcessors?: OutputProcessor[];
+  outputProcessorRunnerMode?: ProcessorRunnerMode;
+  returnScorerData?: boolean;
+  tracingContext?: TracingContext;
+};
+
+export type LLMStepResult = {
+  stepType?: 'initial' | 'tool-result';
+  toolCalls: ToolCallChunk[];
+  toolResults: ToolResultChunk[];
+  dynamicToolCalls: ToolCallChunk[];
+  dynamicToolResults: ToolResultChunk[];
+  staticToolCalls: ToolCallChunk[];
+  staticToolResults: ToolResultChunk[];
+  files: FileChunk[];
+  sources: SourceChunk[];
+  text: string;
+  reasoning: ReasoningChunk[];
+  content: AIV5Type.StepResult<ToolSet>['content'];
+  finishReason?: FinishReason | string;
+  usage: LanguageModelUsage;
+  warnings: LanguageModelV2CallWarning[];
+  request: { body?: unknown };
+  response: {
+    headers?: Record<string, string>;
+    messages?: StepResult<ToolSet>['response']['messages'];
+    uiMessages?: UIMessage[];
+    id?: string;
+    timestamp?: Date;
+    modelId?: string;
+    [key: string]: unknown;
+  };
+  reasoningText: string | undefined;
+  providerMetadata: SharedV2ProviderMetadata | undefined;
 };

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.17.2-alpha.1",
+  "version": "0.18.1-alpha.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -151,6 +151,16 @@
         "default": "./dist/processors/index.cjs"
       }
     },
+    "./scores/scoreTraces": {
+      "import": {
+        "types": "./dist/scores/scoreTraces/index.d.ts",
+        "default": "./dist/scores/scoreTraces/index.js"
+      },
+      "require": {
+        "types": "./dist/scores/scoreTraces/index.d.ts",
+        "default": "./dist/scores/scoreTraces/index.cjs"
+      }
+    },
     "./utils/zod-to-json": {
       "import": {
         "types": "./dist/zod-to-json.d.ts",
@@ -167,11 +177,14 @@
   "scripts": {
     "check": "tsc --noEmit",
     "typecheck": "tsc --noEmit -p tsconfig.build.json",
+    "typecheck:zod-compat": "NODE_OPTIONS='--max-old-space-size=4096' tsc --project tsconfig.zod-compat.json",
     "lint": "eslint .",
     "pre-build": "tsup --silent --config tsup.config.ts --no-dts",
     "build": "node ./tools/commonjs-tsc-fixer.js",
     "build:watch": "pnpm build --watch",
-    "test": "vitest run"
+    "test:unit": "vitest run --exclude '**/tool-builder/**'",
+    "test:types:zod": "node test-zod-compat.mjs",
+    "test": "npm run test:types:zod && npm run test:unit"
   },
   "dependencies": {
     "@a2a-js/sdk": "~0.2.4",
