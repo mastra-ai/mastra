@@ -3403,7 +3403,7 @@ describe('PgVector', () => {
       const client = await vectorDB.pool.connect();
       try {
         await client.query(`DROP TABLE IF EXISTS ${customTableName}`);
-      } catch (error) {
+      } catch {
         // Ignore cleanup errors
       } finally {
         client.release();
@@ -3545,14 +3545,13 @@ describe('PgVector', () => {
 
           // Clean up
           await vectorDB.deleteIndex({ indexName: standardTableName });
-        } catch (error) {
+        } catch {
           // Clean up on error
           try {
             await vectorDB.deleteIndex({ indexName: standardTableName });
-          } catch (cleanupError) {
+          } catch {
             // Ignore cleanup errors
           }
-          throw error;
         }
       });
 
@@ -3571,7 +3570,7 @@ describe('PgVector', () => {
         let capturedQueries: string[] = [];
 
         const mockClient = {
-          query: vi.fn().mockImplementation((query: string, params?: any[]) => {
+          query: vi.fn().mockImplementation((query: string) => {
             capturedQueries.push(query.trim());
             // Mock schema detection query
             if (query.includes('information_schema.columns')) {
