@@ -3,6 +3,8 @@ import { mapWorkflowStreamChunkToWatchResult } from '@/domains/workflows/utils';
 import { StreamChunk } from '@/types';
 import { ThreadMessageLike } from '@assistant-ui/react';
 import { ChunkType } from '@mastra/core';
+import { ReadonlyJSONObject } from '@mastra/core/stream';
+import { flushSync } from 'react-dom';
 
 export interface HandleStreamChunkOptions {
   conversation: ThreadMessageLike[];
@@ -168,7 +170,10 @@ export const handleStreamChunk = ({ chunk, conversation }: HandleStreamChunkOpti
             toolName: chunk.payload.toolName,
             args: {
               ...chunk.payload.args,
-              __mastraMetadata: { ...chunk.payload.args?.__mastraMetadata, isStreaming: true },
+              __mastraMetadata: {
+                ...(chunk.payload.args?.__mastraMetadata as ReadonlyJSONObject),
+                isStreaming: true,
+              },
             },
           },
         ],
@@ -216,7 +221,7 @@ export const handleStreamChunk = ({ chunk, conversation }: HandleStreamChunkOpti
     }
 
     case 'finish': {
-      handleFinishReason(chunk.payload.finishReason);
+      handleFinishReason(chunk.payload.stepResult.reason);
       return [...conversation];
     }
 
@@ -277,7 +282,7 @@ const handleFinishReason = (finishReason: string) => {
 interface HandleWorkflowChunkOptions {
   workflowChunk: object;
   conversation: ThreadMessageLike[];
-  entityName: string;
+  entityName?: string;
 }
 
 export const handleWorkflowChunk = ({

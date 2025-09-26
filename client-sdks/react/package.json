@@ -1,6 +1,6 @@
 {
   "name": "@mastra/react-hooks",
-  "version": "0.0.1-alpha.0",
+  "version": "0.0.1-alpha.1",
   "private": true,
   "type": "module",
   "main": "dist/index.cjs.js",
