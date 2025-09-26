@@ -189,7 +189,7 @@ describe('Memory Streaming Tests', () => {
       let error: Error | null = null;
       const { result } = renderHook(() => {
         const chat = useChat({
-          api: `http://localhost:${port}/api/agents/test/streamLegacy`,
+          api: `http://localhost:${port}/api/agents/test/stream-legacy`,
           experimental_prepareRequestBody({ messages }: { messages: Message[]; id: string }) {
             return {
               messages: [messages.at(-1)],
