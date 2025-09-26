@@ -24,7 +24,7 @@ import {
   handleStreamChunk,
   handleWorkflowChunk,
 } from './stream-chunk-message';
-import { ModelSettings, useMastraChat } from '@mastra/react-hooks';
+import { ModelSettings, useMastraChat } from '@mastra/react';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -373,8 +373,7 @@ export function MastraRuntimeProvider({
             runtimeContext: runtimeContextInstance,
             threadId,
             modelSettings: modelSettingsArgs,
-            signal: controller.signal,
-            onNetworkChunk: (chunk, conversation) => {
+            onNetworkChunk: ({ chunk, conversation }) => {
               if (chunk.type.startsWith('agent-execution-event-')) {
                 const agentChunk = chunk.payload;
 
@@ -502,7 +501,7 @@ export function MastraRuntimeProvider({
               runtimeContext: runtimeContextInstance,
               threadId,
               modelSettings: modelSettingsArgs,
-              onChunk: (chunk, conversation) => {
+              onChunk: ({ chunk, conversation }) => {
                 const next = handleStreamChunk({ chunk, conversation });
 
                 if (
@@ -517,7 +516,6 @@ export function MastraRuntimeProvider({
 
                 return next;
               },
-              signal: controller.signal,
             });
 
             return;
