@@ -11,9 +11,16 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     this.operations = operations;
   }
 
-  async createAISpan(span: AISpanRecord): Promise<void> {
+  async createAISpan(span: Omit<AISpanRecord, 'createdAt' | 'updatedAt'>): Promise<void> {
     try {
-      return this.operations.insert({ tableName: TABLE_AI_SPANS, record: span });
+      // Explicitly set createdAt/updatedAt timestamps
+      const now = new Date().toISOString();
+      const record = {
+        ...span,
+        createdAt: now,
+        updatedAt: now,
+      };
+      return this.operations.insert({ tableName: TABLE_AI_SPANS, record });
     } catch (error) {
       throw new MastraError(
         {
@@ -70,7 +77,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
   }: {
     spanId: string;
     traceId: string;
-    updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+    updates: Partial<Omit<AISpanRecord, 'createdAt' | 'updatedAt' | 'spanId' | 'traceId'>>;
   }): Promise<void> {
     try {
       await this.operations.update({
@@ -205,14 +212,16 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     }
   }
 
-  async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
+  async batchCreateAISpans(args: { records: Omit<AISpanRecord, 'createdAt' | 'updatedAt'>[] }): Promise<void> {
     try {
+      // Use single timestamp for all records in the batch
+      const now = new Date().toISOString();
       return this.operations.batchInsert({
         tableName: TABLE_AI_SPANS,
         records: args.records.map(record => ({
           ...record,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          createdAt: now,
+          updatedAt: now,
         })),
       });
     } catch (error) {
@@ -231,7 +240,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     records: {
       traceId: string;
       spanId: string;
-      updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+      updates: Partial<Omit<AISpanRecord, 'createdAt' | 'updatedAt' | 'spanId' | 'traceId'>>;
     }[];
   }): Promise<void> {
     try {
