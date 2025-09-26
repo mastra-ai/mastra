@@ -5,12 +5,10 @@ import { Crumb, Header, HeaderGroup, Button, Breadcrumb, HeaderAction, Icon, Api
 export function WorkflowHeader({
   workflowName,
   workflowId,
-  isLegacy,
   runId,
 }: {
   workflowName: string;
   workflowId: string;
-  isLegacy?: boolean;
   runId?: string;
 }) {
   return (
@@ -20,7 +18,7 @@ export function WorkflowHeader({
           <Crumb as={Link} to={`/workflows`}>
             Workflows
           </Crumb>
-          <Crumb as={Link} to={`/workflows${isLegacy ? '/legacy' : ''}/${workflowId}`} isCurrent={!runId}>
+          <Crumb as={Link} to={`/workflows/${workflowId}`} isCurrent={!runId}>
             {workflowName}
           </Crumb>
 
@@ -32,10 +30,10 @@ export function WorkflowHeader({
         </Breadcrumb>
 
         <HeaderGroup>
-          <Button as={Link} to={`/workflows${isLegacy ? '/legacy' : ''}/${workflowId}/graph`}>
+          <Button as={Link} to={`/workflows/${workflowId}/graph`}>
             Graph
           </Button>
-          <Button as={Link} to={`/workflows${isLegacy ? '/legacy' : ''}/${workflowId}/traces`}>
+          <Button as={Link} to={`/workflows/${workflowId}/traces`}>
             Traces
           </Button>
         </HeaderGroup>
