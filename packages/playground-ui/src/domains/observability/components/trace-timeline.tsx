@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import { TraceTimelineSpan } from './trace-timeline-span';
-import { SideDialogHeading } from '@/components/ui/elements';
+// import { SideDialogHeading } from '@/components/ui/elements';
 import { ListTreeIcon } from 'lucide-react';
 import { TraceTimelineLegend } from './trace-timeline-legend';
 import Spinner from '@/components/ui/spinner';
@@ -31,9 +31,9 @@ export function TraceTimeline({
   return (
     <div className={cn('grid gap-[1rem]', className)}>
       <div className="flex w-full justify-between pr-[2.5rem]">
-        <SideDialogHeading as="h2">
-          <ListTreeIcon /> Timeline
-        </SideDialogHeading>
+        {/* <SideDialogHeading as="h2"> */}
+        <ListTreeIcon /> Timeline
+        {/* </SideDialogHeading> */}
         <TraceTimelineLegend spans={spans} />
       </div>
 
