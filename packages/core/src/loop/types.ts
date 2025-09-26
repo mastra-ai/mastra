@@ -106,8 +106,8 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema
 
 export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = {
   messageId: string;
-  controller: ReadableStreamDefaultController<ChunkType>;
-  writer: WritableStream<ChunkType>;
+  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
+  writer: WritableStream<ChunkType<OUTPUT>>;
   requireToolApproval?: boolean;
 } & LoopRun<Tools, OUTPUT>;
 

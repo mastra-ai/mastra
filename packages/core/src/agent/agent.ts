@@ -34,7 +34,6 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
-import { StructuredOutputProcessor } from '../processors/processors/structured-output';
 import { ProcessorRunner } from '../processors/runner';
 import { RuntimeContext } from '../runtime-context';
 import type {
@@ -3586,6 +3585,14 @@ export class Agent<
     messages: MessageListInput,
     generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
+    if ('structuredOutput' in generateOptions && generateOptions.structuredOutput) {
+      throw new MastraError({
+        id: 'AGENT_GENERATE_LEGACY_STRUCTURED_OUTPUT_NOT_SUPPORTED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'This method does not support structured output. Please use generateVNext instead.',
+      });
+    }
     const defaultGenerateOptions = await this.getDefaultGenerateOptions({
       runtimeContext: generateOptions.runtimeContext,
     });
@@ -3661,13 +3668,6 @@ export class Agent<
 
     // Handle structuredOutput option by creating an StructuredOutputProcessor
     let finalOutputProcessors = mergedGenerateOptions.outputProcessors;
-    if (mergedGenerateOptions.structuredOutput) {
-      const agentModel = await this.getModel({ runtimeContext: mergedGenerateOptions.runtimeContext });
-      const structuredProcessor = new StructuredOutputProcessor(mergedGenerateOptions.structuredOutput, agentModel);
-      finalOutputProcessors = finalOutputProcessors
-        ? [...finalOutputProcessors, structuredProcessor]
-        : [structuredProcessor];
-    }
 
     if (!output || experimental_output) {
       const result = await llmToUse.__text<any, EXPERIMENTAL_OUTPUT>({

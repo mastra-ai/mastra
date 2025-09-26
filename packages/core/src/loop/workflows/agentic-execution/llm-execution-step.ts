@@ -31,7 +31,7 @@ type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   outputStream: MastraModelOutput<OUTPUT>;
   runState: AgenticRunState;
   options?: LoopConfig;
-  controller: ReadableStreamDefaultController<ChunkType>;
+  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
   responseFromModel: {
     warnings: any;
     request: any;
@@ -50,13 +50,13 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
   responseFromModel,
   includeRawChunks,
 }: ProcessOutputStreamOptions<OUTPUT>) {
-  for await (const chunk of outputStream.fullStream) {
+  for await (const chunk of outputStream._getBaseStream()) {
     if (!chunk) {
       continue;
     }
 
-    if (chunk.type == 'object') {
-      // controller.enqueue(chunk);
+    if (chunk.type == 'object' || chunk.type == 'object-result') {
+      controller.enqueue(chunk);
       continue;
     }
 
@@ -360,7 +360,8 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       ].includes(chunk.type)
     ) {
       const transformedChunk = convertMastraChunkToAISDKv5({
-        chunk,
+        // @ts-ignore
+        chunk, // TODO: fix types here (is not assignable to type 'ChunkType'.)
       });
 
       if (chunk.type === 'raw' && !includeRawChunks) {
@@ -379,7 +380,8 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
 function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): ExecuteStreamModelManager<T> {
   return async callback => {
     let index = 0;
-    let finalResult: any;
+    let finalResult: T | undefined;
+
     let done = false;
     for (const modelConfig of models) {
       index++;
@@ -409,7 +411,10 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
         }
       }
     }
-
+    if (typeof finalResult === 'undefined') {
+      console.error('Exhausted all fallback models and reached the maximum number of retries.');
+      throw new Error('Exhausted all fallback models and reached the maximum number of retries.');
+    }
     return finalResult;
   };
 }
@@ -580,7 +585,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
             includeRawChunks,
             output,
             outputProcessors,
-            outputProcessorRunnerMode: 'stream',
+            isLLMExecutionStep: true,
             tracingContext,
           },
         });
@@ -718,7 +723,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
       const usage = outputStream._getImmediateUsage();
       const responseMetadata = runState.state.responseMetadata;
       const text = outputStream._getImmediateText();
-
+      const object = outputStream._getImmediateObject();
       // Check if tripwire was triggered
       const tripwireTriggered = outputStream.tripwire;
 
@@ -769,6 +774,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
           toolCalls,
           usage: usage ?? inputData.output?.usage,
           steps,
+          ...(object ? { object } : {}),
         },
         messages,
       };

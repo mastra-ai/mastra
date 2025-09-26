@@ -318,7 +318,7 @@ export function convertMastraChunkToAISDKv5({
   chunk,
   mode = 'stream',
 }: {
-  chunk: ChunkType;
+  chunk: ChunkType<undefined>;
   mode?: 'generate' | 'stream';
 }): OutputChunkType {
   switch (chunk.type) {
@@ -522,7 +522,7 @@ export function convertMastraChunkToAISDKv5({
       };
 
     default:
-      if (chunk.type && chunk.payload) {
+      if (chunk.type && 'payload' in chunk && chunk.payload) {
         return {
           type: chunk.type as string,
           ...(chunk.payload || {}),

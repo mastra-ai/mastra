@@ -12,8 +12,8 @@ import { isControllerOpen } from '../stream';
 
 interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>
   extends LoopRun<Tools, OUTPUT> {
-  controller: ReadableStreamDefaultController<ChunkType>;
-  writer: WritableStream<ChunkType>;
+  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
+  writer: WritableStream<ChunkType<OUTPUT>>;
 }
 
 export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>(

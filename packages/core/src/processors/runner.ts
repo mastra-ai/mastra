@@ -26,8 +26,6 @@ export class ProcessorState<OUTPUT extends OutputSchema = undefined> {
   }
 }
 
-export type ProcessorRunnerMode = 'stream' | 'result' | false;
-
 export class ProcessorRunner {
   public readonly inputProcessors: Processor[];
   public readonly outputProcessors: Processor[];
