@@ -1,6 +1,6 @@
 import type { GenerateTextOnStepFinishCallback, TelemetrySettings, ToolSet } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema } from 'zod';
+import type { ZodSchema } from 'zod';
 import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
 import type { Metric } from '../eval';
 import type {
