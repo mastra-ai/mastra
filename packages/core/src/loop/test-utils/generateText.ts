@@ -760,6 +760,22 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
             "modelProvider": "mock-provider",
             "modelVersion": "v2",
             "timestamp": 1970-01-01T00:00:10.000Z,
+            "uiMessages": [
+              {
+                "id": "1234",
+                "metadata": {
+                  "__originalContent": "Hello, world!",
+                  "createdAt": 2024-01-01T00:00:00.000Z,
+                },
+                "parts": [
+                  {
+                    "text": "Hello, world!",
+                    "type": "text",
+                  },
+                ],
+                "role": "assistant",
+              },
+            ],
           }
         `);
         expect(await result.response).toMatchInlineSnapshot(`
