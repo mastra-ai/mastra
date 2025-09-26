@@ -3522,7 +3522,7 @@ export class Agent<
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
     if (!generateDeprecationWarningShown) {
       this.logger.warn(
-        "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 23rd, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
+        "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 30th, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
       );
       generateDeprecationWarningShown = true;
     }
@@ -3892,7 +3892,7 @@ export class Agent<
   > {
     if (!streamDeprecationWarningShown) {
       this.logger.warn(
-        "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 23rd, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
+        "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 30th, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
       );
       streamDeprecationWarningShown = true;
     }
