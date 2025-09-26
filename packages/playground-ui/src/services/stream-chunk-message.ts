@@ -4,7 +4,6 @@ import { StreamChunk } from '@/types';
 import { ThreadMessageLike } from '@assistant-ui/react';
 import { ChunkType } from '@mastra/core';
 import { ReadonlyJSONObject } from '@mastra/core/stream';
-import { flushSync } from 'react-dom';
 
 export interface HandleStreamChunkOptions {
   conversation: ThreadMessageLike[];
@@ -26,17 +25,20 @@ export const handleStreamChunk = ({ chunk, conversation }: HandleStreamChunkOpti
     case 'text-delta': {
       // Always add a new last text chunk if one doesn't exist yet to maintain content ordering
       const lastMessage = conversation[conversation.length - 1];
+      if (!lastMessage) return conversation;
+
       if (
-        lastMessage &&
         lastMessage.role === 'assistant' &&
         typeof lastMessage.content !== `string` &&
-        (lastMessage.content.length === 0 || lastMessage.content[lastMessage.content.length - 1]?.type !== `text`)
+        (!lastMessage.content ||
+          lastMessage.content.length === 0 ||
+          lastMessage.content[lastMessage.content.length - 1]?.type !== `text`)
       ) {
         return [
           ...conversation.slice(0, -1),
           {
             ...lastMessage,
-            content: [...lastMessage.content, { type: 'text', text: '' }],
+            content: [...(lastMessage.content || []), { type: 'text', text: '' }],
           },
         ];
       }
@@ -55,9 +57,8 @@ export const handleStreamChunk = ({ chunk, conversation }: HandleStreamChunkOpti
         ];
       }
 
-      const lastPart = lastMessage.content[lastMessage.content.length - 1];
-
-      if (lastPart.type !== `text`) return conversation; // for TS! this is actually garunteed because we set the last part to be type text if it's not
+      const lastPart = lastMessage.content?.[lastMessage.content.length - 1];
+      if (!lastPart || lastPart.type !== `text`) return conversation;
 
       return [
         ...conversation.slice(0, -1),
