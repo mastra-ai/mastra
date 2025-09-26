@@ -1,4 +1,4 @@
-import { GetToolResponse } from '@mastra/client-js';
+import { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
 
 export type AgentTableData = {
   branch?: string;
@@ -10,4 +10,5 @@ export type AgentTableData = {
   instructions: string;
   tools?: Record<string, GetToolResponse>;
   link: string;
+  modelList: GetAgentResponse['modelList'];
 };

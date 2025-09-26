@@ -48,6 +48,7 @@ export type PostgresConfig = {
     }
   | {
       connectionString: string;
+      ssl?: boolean | ISSLConfig;
     }
   // Support Cloud SQL Connector & pg ClientConfig
   | ClientConfig
@@ -64,7 +65,9 @@ export class PostgresStore extends MastraStorage {
 
   constructor(config: PostgresConfig) {
     // Type guards for better type safety
-    const isConnectionStringConfig = (cfg: PostgresConfig): cfg is PostgresConfig & { connectionString: string } => {
+    const isConnectionStringConfig = (
+      cfg: PostgresConfig,
+    ): cfg is PostgresConfig & { connectionString: string; ssl?: boolean | ISSLConfig } => {
       return 'connectionString' in cfg;
     };
 
@@ -120,14 +123,15 @@ export class PostgresStore extends MastraStorage {
           connectionString: config.connectionString,
           max: config.max,
           idleTimeoutMillis: config.idleTimeoutMillis,
-        } as any;
+          ssl: config.ssl,
+        };
       } else if (isCloudSqlConfig(config)) {
         // Cloud SQL connector config
         this.#config = {
           ...config,
           max: config.max,
           idleTimeoutMillis: config.idleTimeoutMillis,
-        } as any;
+        };
       } else if (isHostConfig(config)) {
         this.#config = {
           host: config.host,
@@ -138,14 +142,12 @@ export class PostgresStore extends MastraStorage {
           ssl: config.ssl,
           max: config.max,
           idleTimeoutMillis: config.idleTimeoutMillis,
-        } as any;
+        };
       } else {
         // This should never happen due to validation above, but included for completeness
-        this.#config = {
-          ...(config as ClientConfig),
-          max: (config as any).max,
-          idleTimeoutMillis: (config as any).idleTimeoutMillis,
-        } as any;
+        throw new Error(
+          'PostgresStore: invalid config. Provide either {connectionString}, {host,port,database,user,password}, or a pg ClientConfig (e.g., Cloud SQL connector with `stream`).',
+        );
       }
       this.stores = {} as StorageDomains;
     } catch (e) {
