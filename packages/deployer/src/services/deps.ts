@@ -82,7 +82,7 @@ export class Deps extends MastraBase {
     }
 
     return cpLogger({
-      cmd: `${this.packageManager} pack ${destinationFlag}`,
+      cmd: `${this.packageManager} ${packCmd} ${destinationFlag}`,
       args: [],
       env: {
         PATH: process.env.PATH!,
