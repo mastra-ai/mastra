@@ -1,12 +1,12 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`Wrap Mastra instance > should wrap Mastra instance in ./__fixtures__/basic.js 1`] = `
-"import { Mastra } from '@mastra/core/mastra';
-import { createLogger } from '@mastra/core/logger';
-import { weatherAgent } from '@/agents';
-import { TestDeployer } from '@mastra/deployer/test';
+"import { createLogger } from '@mastra/core/logger';
+import { Mastra } from '@mastra/core/mastra';
 import { createApiRoute } from '@mastra/core/server';
+import { TestDeployer } from '@mastra/deployer/test';
 import { PostgresStore } from '@mastra/pg';
+import { weatherAgent } from '@/agents';
 
 const mastra = () => new Mastra({
   agents: {
