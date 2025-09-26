@@ -1490,6 +1490,11 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
                 "headers": undefined,
                 "id": "id-0",
                 "modelId": "mock-model-id",
+                "modelMetadata": {
+                  "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
+                },
                 "timestamp": 1970-01-01T00:00:00.000Z,
               },
               "type": "finish-step",

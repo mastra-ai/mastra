@@ -87,6 +87,7 @@ function Agent() {
                   initialMessages={messages?.uiMessages || []}
                   memory={memory?.result}
                   refreshThreadList={refreshThreads}
+                  modelList={agent?.modelList}
                 />
               )}
             </div>
