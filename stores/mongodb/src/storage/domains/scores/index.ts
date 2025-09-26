@@ -74,6 +74,15 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     }
   }
 
+  let metadataValue: any = null;
+  if (row.metadata) {
+    try {
+      metadataValue = typeof row.metadata === 'string' ? safelyParseJSON(row.metadata) : row.metadata;
+    } catch (e) {
+      console.warn('Failed to parse metadata:', e);
+    }
+  }
+
   return {
     id: row.id as string,
     entityId: row.entityId as string,
@@ -84,12 +93,13 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     runId: row.runId as string,
     scorer: scorerValue,
     preprocessStepResult: preprocessStepResultValue,
+    preprocessPrompt: row.preprocessPrompt as string,
     analyzeStepResult: analyzeStepResultValue,
+    generateScorePrompt: row.generateScorePrompt as string,
     score: row.score as number,
-    reason: row.reason as string,
-    extractPrompt: row.extractPrompt as string,
     analyzePrompt: row.analyzePrompt as string,
     reasonPrompt: row.reasonPrompt as string,
+    metadata: metadataValue,
     input: inputValue,
     output: outputValue,
     additionalContext: row.additionalContext,
