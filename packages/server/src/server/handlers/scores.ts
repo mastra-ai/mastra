@@ -1,9 +1,9 @@
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
 import type { StoragePagination } from '@mastra/core/storage';
+import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 import { handleError } from './error';
-import { HTTPException } from '../http-exception';
 
 async function getScorersFromSystem({
   mastra,
@@ -198,6 +198,10 @@ export async function getScoresBySpan({
   const storage = mastra.getStorage();
   if (!storage) {
     throw new HTTPException(500, { message: 'Storage is not available' });
+  }
+
+  if (!traceId || !spanId) {
+    throw new HTTPException(400, { message: 'Trace ID and span ID are required' });
   }
 
   try {

@@ -347,6 +347,45 @@ describe('Scores Handlers', () => {
         }),
       ).rejects.toThrow(HTTPException);
     });
+
+    it('should throw error when traceId is missing', async () => {
+      const pagination = createPagination({ page: 0, perPage: 10 });
+
+      await expect(
+        getScoresBySpan({
+          mastra,
+          traceId: '',
+          spanId: 'test-span-1',
+          pagination,
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
+
+    it('should throw error when spanId is missing', async () => {
+      const pagination = createPagination({ page: 0, perPage: 10 });
+
+      await expect(
+        getScoresBySpan({
+          mastra,
+          traceId: 'test-trace-1',
+          spanId: '',
+          pagination,
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
+
+    it('should throw error when both traceId and spanId are missing', async () => {
+      const pagination = createPagination({ page: 0, perPage: 10 });
+
+      await expect(
+        getScoresBySpan({
+          mastra,
+          traceId: '',
+          spanId: '',
+          pagination,
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
   });
 
   describe('saveScoreHandler', () => {
