@@ -82,7 +82,7 @@ export class QuestionsAnsweredExtractor extends BaseExtractor {
       const result = await miniAgent.generate([{ role: 'user', content: prompt }], { format: 'mastra' });
       questionsText = result.text;
     } else {
-      const result = await miniAgent.generate([{ role: 'user', content: prompt }]);
+      const result = await miniAgent.generateLegacy([{ role: 'user', content: prompt }]);
       questionsText = result.text;
     }
 

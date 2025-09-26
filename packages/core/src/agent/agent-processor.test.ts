@@ -1274,7 +1274,7 @@ describe('Input and Output Processors', () => {
           let result;
 
           if (model.specificationVersion === 'v1') {
-            result = await agent.generate(
+            result = await agent.generateLegacy(
               'Tell me about a vibrant sunset orange color. What are its properties and how does it make people feel?.',
               {
                 structuredOutput: {
@@ -1359,7 +1359,7 @@ describe('Input and Output Processors', () => {
           let result;
 
           if (model.specificationVersion === 'v1') {
-            result = await agent.generate(`Analyze this article and extract key information:\n\n${articleText}`, {
+            result = await agent.generateLegacy(`Analyze this article and extract key information:\n\n${articleText}`, {
               structuredOutput: {
                 schema: articleSchema,
                 model,
@@ -1436,7 +1436,7 @@ describe('Input and Output Processors', () => {
           let result;
 
           if (model.specificationVersion === 'v1') {
-            result = await agent.generate('Tell me about the weather today in a casual way.', {
+            result = await agent.generateLegacy('Tell me about the weather today in a casual way.', {
               structuredOutput: {
                 schema: strictSchema,
                 model,
@@ -1488,7 +1488,7 @@ describe('Input and Output Processors', () => {
           let result;
 
           if (model.specificationVersion === 'v1') {
-            result = await agent.generate(
+            result = await agent.generateLegacy(
               'Come up with an innovative solution for reducing food waste in restaurants.',
               {
                 structuredOutput: {
@@ -1656,7 +1656,7 @@ describe('v1 model - output processors', () => {
         outputProcessors: [new TestOutputProcessor()],
       });
 
-      const result = await agent.generate('Hello');
+      const result = await agent.generateLegacy('Hello');
 
       // The output processors should modify the returned result
       expect(result.text).toBe('This is a TEST response with TEST words');
@@ -1722,7 +1722,7 @@ describe('v1 model - output processors', () => {
         outputProcessors: [new ReplaceProcessor(), new AddPrefixProcessor()],
       });
 
-      const result = await agent.generate('Test');
+      const result = await agent.generateLegacy('Test');
 
       // The output processors should modify the returned result
       expect(result.text).toBe('[PROCESSED] HELLO world');
@@ -1764,7 +1764,7 @@ describe('v1 model - output processors', () => {
       });
 
       // Should return tripwire result when processor aborts
-      const result = await agent.generate('Generate inappropriate content');
+      const result = await agent.generateLegacy('Generate inappropriate content');
 
       expect(result.tripwire).toBe(true);
       expect(result.tripwireReason).toBe('Content flagged as inappropriate');
@@ -1814,7 +1814,7 @@ describe('v1 model - output processors', () => {
         outputProcessors: [new CompleteProcessor()],
       });
 
-      const result = await agent.generate('Test');
+      const result = await agent.generateLegacy('Test');
 
       // The output processors should modify the returned result
       expect(result.text).toBe('Original response [COMPLETE]');
@@ -1877,7 +1877,7 @@ describe('v1 model - output processors', () => {
         outputProcessors: [new TestStructuredOutputProcessor()],
       });
 
-      const result = await agent.generate('Who won the 2012 US presidential election?', {
+      const result = await agent.generateLegacy('Who won the 2012 US presidential election?', {
         output: z.object({
           winner: z.string(),
           year: z.string(),
@@ -1970,7 +1970,7 @@ describe('v1 model - output processors', () => {
         outputProcessors: [new FirstProcessor(), new SecondProcessor()],
       });
 
-      const result = await agent.generate('Say hello', {
+      const result = await agent.generateLegacy('Say hello', {
         output: z.object({
           message: z.string(),
         }),
@@ -2019,7 +2019,7 @@ describe('v1 model - output processors', () => {
           outputProcessors: [abortProcessor],
         });
 
-        const result = await agent.generate('Hello');
+        const result = await agent.generateLegacy('Hello');
 
         expect(result.tripwire).toBe(true);
         expect(result.tripwireReason).toBe('Tripwire triggered by abort-output-processor');
@@ -2050,7 +2050,7 @@ describe('v1 model - output processors', () => {
           outputProcessors: [customAbortProcessor],
         });
 
-        const result = await agent.generate('Custom abort test');
+        const result = await agent.generateLegacy('Custom abort test');
 
         expect(result.tripwire).toBe(true);
         expect(result.tripwireReason).toBe('Custom output abort reason');
@@ -2098,7 +2098,7 @@ describe('v1 model - output processors', () => {
           outputProcessors: [abortProcessor, shouldNotRunProcessor],
         });
 
-        const result = await agent.generate('Abort sequence test');
+        const result = await agent.generateLegacy('Abort sequence test');
 
         expect(result.tripwire).toBe(true);
         expect(result.tripwireReason).toBe('Stop here');

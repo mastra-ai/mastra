@@ -19,6 +19,7 @@ import {
   updateAgentModelHandler,
   reorderAgentModelListHandler,
   updateAgentModelInModelListHandler,
+  streamGenerateLegacyHandler,
 } from './agents';
 
 const mockEvals = [
@@ -353,7 +354,7 @@ describe('Agent Handlers', () => {
       };
       (mockAgent.stream as any).mockResolvedValue(mockStreamResult);
 
-      const result = await streamGenerateHandler({
+      const result = await streamGenerateLegacyHandler({
         mastra: mockMastra,
         agentId: 'test-agent',
         body: {
@@ -376,7 +377,7 @@ describe('Agent Handlers', () => {
 
     it('should throw 404 when agent not found', async () => {
       await expect(
-        streamGenerateHandler({
+        streamGenerateLegacyHandler({
           mastra: mockMastra,
           agentId: 'non-existing',
           body: {
@@ -420,7 +421,7 @@ describe('Agent Handlers', () => {
       expect(modelId).toEqual('gpt-4o-mini');
       //confirm that stream works fine after the model update
 
-      const result = await streamGenerateHandler({
+      const result = await streamGenerateLegacyHandler({
         mastra: mockMastra,
         agentId: 'test-agent',
         body: {

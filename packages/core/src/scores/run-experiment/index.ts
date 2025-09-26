@@ -233,7 +233,7 @@ async function executeAgent(agent: Agent, item: RunExperimentDataItem<any>) {
       runtimeContext: item.runtimeContext,
     });
   } else {
-    return await agent.generate(item.input as any, {
+    return await agent.generateLegacy(item.input as any, {
       scorers: {},
       returnScorerData: true,
       runtimeContext: item.runtimeContext,

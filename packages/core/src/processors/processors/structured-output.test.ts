@@ -221,7 +221,7 @@ describe('StructuredOutputProcessor', () => {
       };
 
       // Mock the structuring agent's generate method to return the expected structured data
-      vi.spyOn(complexProcessor['structuringAgent'], 'generate').mockResolvedValueOnce({
+      vi.spyOn(complexProcessor['structuringAgent'], 'generateLegacy').mockResolvedValueOnce({
         text: JSON.stringify(expectedObject),
         object: expectedObject,
         finishReason: 'stop',

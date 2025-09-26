@@ -3539,7 +3539,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       let response;
       let toolCall;
       if (version === 'v1') {
-        response = await testAgent.generate('Use the runtimeContext-test-tool with query "test"', {
+        response = await testAgent.generateLegacy('Use the runtimeContext-test-tool with query "test"', {
           toolChoice: 'required',
           runtimeContext: testRuntimeContext,
         });
@@ -3595,7 +3595,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       let stream;
       let toolCall;
       if (version === 'v1') {
-        stream = await testAgent.stream('Use the runtimeContext-test-tool with query "test"', {
+        stream = await testAgent.streamLegacy('Use the runtimeContext-test-tool with query "test"', {
           toolChoice: 'required',
           runtimeContext: testRuntimeContext,
         });
@@ -7853,7 +7853,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
         if (version === 'v1') {
-          result = await agentWithProcessor.generate('Hello world');
+          result = await agentWithProcessor.generateLegacy('Hello world');
         } else {
           result = await agentWithProcessor.generate('Hello world');
         }
@@ -7889,7 +7889,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
         if (version === 'v1') {
-          result = await agentWithProcessors.generate('Hello');
+          result = await agentWithProcessors.generateLegacy('Hello');
         } else {
           result = await agentWithProcessors.generate('Hello');
         }
@@ -7925,7 +7925,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
         if (version === 'v1') {
-          result = await agentWithAsyncProcessors.generate('Test async');
+          result = await agentWithAsyncProcessors.generateLegacy('Test async');
         } else {
           result = await agentWithAsyncProcessors.generate('Test async');
         }
@@ -7955,7 +7955,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
         if (version === 'v1') {
-          result = await agentWithAbortProcessor.generate('This should be aborted');
+          result = await agentWithAbortProcessor.generateLegacy('This should be aborted');
         } else {
           result = await agentWithAbortProcessor.generate('This should be aborted');
         }
@@ -7984,7 +7984,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
         if (version === 'v1') {
-          result = await agentWithCustomAbort.generate('Custom abort test');
+          result = await agentWithCustomAbort.generateLegacy('Custom abort test');
         } else {
           result = await agentWithCustomAbort.generate('Custom abort test');
         }
@@ -8023,7 +8023,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
         if (version === 'v1') {
-          result = await agentWithAbortSequence.generate('Abort sequence test');
+          result = await agentWithAbortSequence.generateLegacy('Abort sequence test');
         } else {
           result = await agentWithAbortSequence.generate('Abort sequence test');
         }
@@ -8052,7 +8052,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let stream;
         if (version === 'v1') {
-          stream = await agentWithStreamProcessor.stream('Stream test');
+          stream = await agentWithStreamProcessor.streamLegacy('Stream test');
         } else {
           stream = await agentWithStreamProcessor.stream('Stream test');
         }
@@ -8083,7 +8083,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let stream;
         if (version === 'v1') {
-          stream = await agentWithStreamAbort.stream('Stream abort test');
+          stream = await agentWithStreamAbort.streamLegacy('Stream abort test');
           expect(stream.tripwire).toBe(true);
           expect(stream.tripwireReason).toBe('Stream aborted');
         } else {
@@ -8124,7 +8124,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let stream;
         if (version === 'v1') {
-          stream = await agentWithDeployerAbort.stream('Deployer abort test');
+          stream = await agentWithDeployerAbort.streamLegacy('Deployer abort test');
         } else {
           stream = await agentWithDeployerAbort.stream('Deployer abort test');
         }
@@ -8182,7 +8182,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
         if (version === 'v1') {
-          result = await agentWithDynamicProcessors.generate('Test dynamic', {
+          result = await agentWithDynamicProcessors.generateLegacy('Test dynamic', {
             runtimeContext,
           });
         } else {
@@ -8204,7 +8204,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
         if (version === 'v1') {
-          result = await agentWithEmptyProcessors.generate('No processors test');
+          result = await agentWithEmptyProcessors.generateLegacy('No processors test');
         } else {
           result = await agentWithEmptyProcessors.generate('No processors test');
         }
@@ -8239,7 +8239,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
         if (version === 'v1') {
-          result = await agentWithModifier.generate('Original user message');
+          result = await agentWithModifier.generateLegacy('Original user message');
         } else {
           result = await agentWithModifier.generate('Original user message');
         }
@@ -8598,7 +8598,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     if (version === 'v1') {
-      const result = await userAgent.stream('Make it green', {
+      const result = await userAgent.streamLegacy('Make it green', {
         clientTools: {
           changeColor: {
             id: 'changeColor',
@@ -8652,7 +8652,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       if (version === 'v1') {
-        const result = await userAgent.generate('Make it green', {
+        const result = await userAgent.generateLegacy('Make it green', {
           clientTools: {
             changeColor: {
               id: 'changeColor',
@@ -9782,7 +9782,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       // Call stream without passing any options - should use defaultStreamOptions
-      const result = version === 'v1' ? await agent.stream('How are you?') : await agent.stream('How are you?');
+      const result = version === 'v1' ? await agent.streamLegacy('How are you?') : await agent.stream('How are you?');
 
       // Consume the stream to trigger onFinish
       if (version === 'v1') {
@@ -9828,7 +9828,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       // Call stream with empty options - should still use defaultStreamOptions
-      const result = version === 'v1' ? await agent.stream('How are you?', {}) : await agent.stream('How are you?', {});
+      const result =
+        version === 'v1' ? await agent.streamLegacy('How are you?', {}) : await agent.stream('How are you?', {});
 
       // Consume the stream to trigger onFinish
       if (version === 'v1') {
@@ -9875,7 +9876,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Call stream with explicit onFinish - should override defaultStreamOptions
       const result =
         version === 'v1'
-          ? await agent.stream('How are you?', {
+          ? await agent.streamLegacy('How are you?', {
               onFinish: data => {
                 passedOnFinishCalled = true;
                 finishData = data;
@@ -10493,7 +10494,7 @@ describe('Stream ID Consistency', () => {
     const threadId = randomUUID();
     const resourceId = 'test-resource';
 
-    const streamResult = await agent.stream('Hello!', {
+    const streamResult = await agent.streamLegacy('Hello!', {
       threadId,
       resourceId,
     });
@@ -10567,7 +10568,7 @@ describe('Stream ID Consistency', () => {
     const threadId = randomUUID();
     const resourceId = 'test-resource';
 
-    const stream = await agent.stream('Hello!', { threadId, resourceId });
+    const stream = await agent.streamLegacy('Hello!', { threadId, resourceId });
 
     await stream.consumeStream();
     const res = await stream.response;
@@ -11327,7 +11328,7 @@ describe('Agent usage tracking', () => {
           instructions: 'You are a helpful assistant',
         });
 
-        const result = await agent.generate('Hello');
+        const result = await agent.generateLegacy('Hello');
 
         // Check that usage exists
         expect(result.usage).toBeDefined();
@@ -11352,7 +11353,7 @@ describe('Agent usage tracking', () => {
           instructions: 'You are a helpful assistant',
         });
 
-        const result = await agent.stream('Hello');
+        const result = await agent.streamLegacy('Hello');
 
         // Consume stream to get usage
         for await (const _ of result.textStream) {
@@ -11385,7 +11386,7 @@ describe('Agent usage tracking', () => {
           instructions: 'You are a helpful assistant',
         });
 
-        const result = await agent.generate('Hello');
+        const result = await agent.generateLegacy('Hello');
 
         // Currently using legacy implementation, should have legacy format
         expect(result.usage).toBeDefined();
@@ -11404,7 +11405,7 @@ describe('Agent usage tracking', () => {
           instructions: 'You are a helpful assistant',
         });
 
-        const result = await agent.stream('Hello');
+        const result = await agent.streamLegacy('Hello');
 
         // Consume stream
         for await (const _ of result.textStream) {

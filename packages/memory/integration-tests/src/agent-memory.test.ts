@@ -180,7 +180,7 @@ describe('Agent Memory Tests', () => {
 
     // First, create a thread and add some messages to establish history
     const thread1Id = randomUUID();
-    await agent.generate('Tell me about cats', {
+    await agent.generateLegacy('Tell me about cats', {
       memory: {
         thread: thread1Id,
         resource: resourceId,

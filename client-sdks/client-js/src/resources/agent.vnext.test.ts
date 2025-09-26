@@ -60,7 +60,7 @@ describe('Agent vNext', () => {
 
     // Verify request
     expect(global.fetch).toHaveBeenCalledWith(
-      'http://localhost:4111/api/agents/agent-1/stream/vnext',
+      'http://localhost:4111/api/agents/agent-1/stream',
       expect.objectContaining({ method: 'POST' }),
     );
   });
@@ -107,8 +107,11 @@ describe('Agent vNext', () => {
 
     // Client tool executed
     expect(executeSpy).toHaveBeenCalledTimes(1);
+    console.log((global.fetch as any).mock.calls);
     // Recursive request made
-    expect((global.fetch as any).mock.calls.filter((c: any[]) => (c?.[0] as string).includes('/vnext')).length).toBe(2);
+    expect((global.fetch as any).mock.calls.filter((c: any[]) => (c?.[0] as string).includes('/stream')).length).toBe(
+      2,
+    );
   });
 
   it('generate: returns JSON using mocked fetch', async () => {
@@ -120,7 +123,7 @@ describe('Agent vNext', () => {
     const result = await agent.generate('hello');
     expect(result).toEqual(mockJson);
     expect(global.fetch).toHaveBeenCalledWith(
-      'http://localhost:4111/api/agents/agent-1/generate/vnext',
+      'http://localhost:4111/api/agents/agent-1/generate',
       expect.objectContaining({
         body: '{"messages":"hello"}',
         credentials: undefined,
@@ -170,7 +173,7 @@ describe('Agent vNext', () => {
 
     // Verify request contains structuredOutput in the body
     expect(global.fetch).toHaveBeenCalledWith(
-      'http://localhost:4111/api/agents/agent-1/stream/vnext',
+      'http://localhost:4111/api/agents/agent-1/stream',
       expect.objectContaining({
         method: 'POST',
         body: expect.stringMatching(/structuredOutput/),
@@ -224,7 +227,7 @@ describe('Agent vNext', () => {
 
     // Verify request contains structuredOutput in the body
     expect(global.fetch).toHaveBeenCalledWith(
-      'http://localhost:4111/api/agents/agent-1/generate/vnext',
+      'http://localhost:4111/api/agents/agent-1/generate',
       expect.objectContaining({
         method: 'POST',
         body: expect.stringMatching(/structuredOutput/),

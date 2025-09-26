@@ -1352,7 +1352,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const streamResult = run.stream({ inputData: {} });
+      const streamResult = run.streamVNext({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -1535,7 +1535,7 @@ describe('Workflow', () => {
 
       const run = await promptEvalWorkflow.createRunAsync();
 
-      let streamResult = run.stream({ inputData: { input: 'test' } });
+      let streamResult = run.streamVNext({ inputData: { input: 'test' } });
 
       for await (const data of streamResult) {
         if (data.type === 'workflow-step-suspended') {
@@ -1679,7 +1679,7 @@ describe('Workflow', () => {
 
       const run = await promptEvalWorkflow.createRunAsync();
 
-      let streamResult = run.stream({ inputData: { input: 'test' }, closeOnSuspend: false });
+      let streamResult = run.streamVNext({ inputData: { input: 'test' }, closeOnSuspend: false });
 
       for await (const data of streamResult) {
         if (data.type === 'workflow-step-suspended') {
@@ -1849,7 +1849,7 @@ describe('Workflow', () => {
       const run = await workflow.createRunAsync({
         runId: 'test-run-id',
       });
-      const streamResult = run.stream({
+      const streamResult = run.streamVNext({
         inputData: {
           prompt1: 'Capital of France, just the name',
           prompt2: 'Capital of UK, just the name',
@@ -2379,7 +2379,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const streamResult = run.stream({ inputData: {} });
+      const streamResult = run.streamVNext({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -2549,7 +2549,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const streamResult = run.stream({ inputData: {} });
+      const streamResult = run.streamVNext({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -2715,7 +2715,7 @@ describe('Workflow', () => {
       const run = await workflow.createRunAsync({ runId: 'test-run-id' });
       const originalInput = { originalInput: 'original-data' };
 
-      let streamResult = run.stream({ inputData: originalInput });
+      let streamResult = run.streamVNext({ inputData: originalInput });
 
       for await (const _data of streamResult) {
       }
@@ -2778,7 +2778,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const streamResult = run.stream({ inputData: {} });
+      const streamResult = run.streamVNext({ inputData: {} });
 
       setTimeout(() => {
         run.sendEvent('user-event-test', {
@@ -9415,7 +9415,7 @@ describe('Workflow', () => {
             outputSchema: z.object({ text: z.string() }),
             execute: async ({ inputData, mastra }) => {
               const agent = mastra.getAgent('test-agent-1');
-              const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
+              const result = await agent.generateLegacy([{ role: 'user', content: inputData.prompt }]);
               return { text: result.text };
             },
           }),
@@ -9433,7 +9433,7 @@ describe('Workflow', () => {
             outputSchema: z.object({ text: z.string() }),
             execute: async ({ inputData, mastra }) => {
               const agent = mastra.getAgent('test-agent-2');
-              const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
+              const result = await agent.generateLegacy([{ role: 'user', content: inputData.prompt }]);
               return { text: result.text };
             },
           }),
@@ -9514,7 +9514,7 @@ describe('Workflow', () => {
         outputSchema: z.object({ text: z.string() }),
         execute: async ({ inputData, mastra }) => {
           const agent = mastra.getAgent(inputData.agentName);
-          const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
+          const result = await agent.generateLegacy([{ role: 'user', content: inputData.prompt }]);
           return { text: result.text };
         },
       });

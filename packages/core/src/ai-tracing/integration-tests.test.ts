@@ -1512,7 +1512,7 @@ describe('AI Tracing Integration Tests', () => {
     });
 
     const agent = mastra.getAgent('structuredAgent');
-    const result = await agent.generate('Generate a person object', {
+    const result = await agent.generateLegacy('Generate a person object', {
       output: schema,
     });
 

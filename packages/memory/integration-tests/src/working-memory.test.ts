@@ -116,7 +116,7 @@ describe('Working Memory Tests', () => {
         memory,
       });
 
-      await agent.generate('Hi, my name is Tyler and I live in San Francisco', {
+      await agent.generateLegacy('Hi, my name is Tyler and I live in San Francisco', {
         threadId: thread.id,
         resourceId,
       });

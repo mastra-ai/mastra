@@ -288,7 +288,7 @@ describe('Memory with Processors', () => {
 
     const userMessage = 'Tell me something interesting about space';
 
-    const res = await agent.generate(
+    const res = await agent.generateLegacy(
       [
         {
           role: 'user',

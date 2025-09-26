@@ -87,7 +87,7 @@ export class KeywordExtractor extends BaseExtractor {
         );
         keywords = result.text;
       } else {
-        const result = await miniAgent.generate([
+        const result = await miniAgent.generateLegacy([
           {
             role: 'user',
             content: this.promptTemplate.format({ context: node.getContent(), maxKeywords: this.keywords.toString() }),

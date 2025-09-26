@@ -90,10 +90,6 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) 
   return cb(value);
 }
 
-// Flags to track if deprecation warnings have been shown
-let streamDeprecationWarningShown = false;
-let generateDeprecationWarningShown = false;
-
 // Helper to resolve threadId from args (supports both new and old API)
 function resolveThreadIdFromArgs(args: {
   memory?: AgentMemoryOption;

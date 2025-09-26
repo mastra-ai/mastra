@@ -54,7 +54,7 @@ describe('Memory Streaming Tests', () => {
     const resourceId = 'test-resource';
 
     // First weather check
-    const stream1 = await agent.stream('what is the weather in LA?', {
+    const stream1 = await agent.streamLegacy('what is the weather in LA?', {
       threadId,
       resourceId,
     });
