@@ -128,7 +128,7 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
   private url: string;
   private headers: Record<string, string>;
 
-  constructor(config: ModelRouterModelId | OpenAICompatibleConfig | string) {
+  constructor(config: ModelRouterModelId | OpenAICompatibleConfig) {
     // Parse configuration
     let parsedConfig: OpenAICompatibleConfig;
 

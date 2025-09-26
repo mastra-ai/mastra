@@ -18,7 +18,6 @@ import type {
   StreamTextOnStepFinishCallback,
   StreamObjectOnFinishCallback,
 } from '../llm/model/base.types';
-import type { ModelRouterModelId } from '../llm/model/provider-registry.generated';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MastraLanguageModel, MemoryConfig, StorageThreadType } from '../memory/types';
@@ -77,11 +76,11 @@ type DynamicModel = ({
 }: {
   runtimeContext: RuntimeContext;
   mastra?: Mastra;
-}) => Promise<ModelRouterModelId | MastraModelConfig> | ModelRouterModelId | MastraModelConfig;
+}) => Promise<MastraModelConfig> | MastraModelConfig;
 
 // Helper type for model with retries
 type ModelWithRetries = {
-  model: ModelRouterModelId | MastraModelConfig | DynamicModel;
+  model: MastraModelConfig | DynamicModel;
   maxRetries?: number; //defaults to 0
   enabled?: boolean; //defaults to true
 };
@@ -95,7 +94,7 @@ export interface AgentConfig<
   name: TAgentId;
   description?: string;
   instructions: DynamicAgentInstructions;
-  model: ModelRouterModelId | MastraModelConfig | DynamicModel | ModelWithRetries[];
+  model: MastraModelConfig | DynamicModel | ModelWithRetries[];
   maxRetries?: number; //defaults to 0
   tools?: DynamicArgument<TTools>;
   workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
