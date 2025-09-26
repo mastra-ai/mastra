@@ -377,6 +377,7 @@ export function MastraRuntimeProvider({
             onNetworkChunk: (chunk, conversation) => {
               if (chunk.type.startsWith('agent-execution-event-')) {
                 const agentChunk = chunk.payload;
+
                 if (!currentEntityId) return conversation;
 
                 return handleAgentChunk({ agentChunk, conversation, entityName: currentEntityId });
@@ -432,7 +433,7 @@ export function MastraRuntimeProvider({
 
                 return handleWorkflowChunk({ workflowChunk, conversation, entityName: currentEntityId });
               } else if (chunk.type === 'workflow-execution-start' || chunk.type === 'agent-execution-start') {
-                currentEntityId = chunk.payload?.args?.resourceId;
+                currentEntityId = (chunk.payload?.args as any)?.primitiveId; // TODO: fix networkchunk type cc @DanielSLew
 
                 const runId = chunk.payload.runId;
 
