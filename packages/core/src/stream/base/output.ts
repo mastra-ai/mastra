@@ -939,14 +939,12 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * Returns complete output including text, usage, tool calls, and all metadata.
    */
   async getFullOutput() {
-    if (!this.#consumptionStarted) {
-      await this.consumeStream({
-        onError: (error: unknown) => {
-          console.error(error);
-          throw error;
-        },
-      });
-    }
+    await this.consumeStream({
+      onError: (error: unknown) => {
+        console.error(error);
+        throw error;
+      },
+    });
 
     let scoringData:
       | {
@@ -1113,7 +1111,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * ```
    */
   get object() {
-    if (!this.processorRunner && !this.#options.output) {
+    if (!this.processorRunner && !this.#options.output && this.#delayedPromises.object.status.type === 'pending') {
       this.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
     }
 
