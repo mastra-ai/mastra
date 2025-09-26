@@ -1,5 +1,5 @@
 import type { AITraceRecord, AITracesPaginatedArg } from '@mastra/core/storage';
-import type { ClientOptions, GetAITracesResponse } from '../types';
+import type { ClientOptions, GetAITracesResponse, GetScoresBySpanParams, GetScoresResponse } from '../types';
 import { BaseResource } from './base';
 
 export class Observability extends BaseResource {
@@ -54,6 +54,28 @@ export class Observability extends BaseResource {
 
     const queryString = searchParams.toString();
     return this.request(`/api/observability/traces${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Retrieves scores by trace ID and span ID
+   * @param params - Parameters containing trace ID, span ID, and pagination options
+   * @returns Promise containing scores and pagination info
+   */
+  public getScoresBySpan(params: GetScoresBySpanParams): Promise<GetScoresResponse> {
+    const { traceId, spanId, page, perPage } = params;
+    const searchParams = new URLSearchParams();
+
+    if (page !== undefined) {
+      searchParams.set('page', String(page));
+    }
+    if (perPage !== undefined) {
+      searchParams.set('perPage', String(perPage));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(
+      `/api/observability/traces/${encodeURIComponent(traceId)}/${encodeURIComponent(spanId)}/scores${queryString ? `?${queryString}` : ''}`,
+    );
   }
 
   score(params: {

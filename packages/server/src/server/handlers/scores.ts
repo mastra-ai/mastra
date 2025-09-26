@@ -188,6 +188,7 @@ export async function getScoresByEntityIdHandler({
   }
 }
 
+// Legacy function to get trace and span details
 function getTraceDetails(traceIdWithSpanId?: string) {
   if (!traceIdWithSpanId) {
     return {};

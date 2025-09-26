@@ -1,9 +1,10 @@
-import type { Mastra } from '@mastra/core/mastra';
+import { createSampleScore } from '@internal/storage-test-utils';
+import { Mastra } from '@mastra/core/mastra';
 import type { MastraStorage, AITraceRecord } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import * as errorHandler from './error';
-import { getAITraceHandler, getAITracesPaginatedHandler, scoreTracesHandler } from './observability';
+import { getAITraceHandler, getAITracesPaginatedHandler, getScoresBySpan, scoreTracesHandler } from './observability';
 
 // Mock scoreTraces
 vi.mock('@mastra/core/scores/scoreTraces', () => ({
@@ -610,6 +611,141 @@ describe('Observability Handlers', () => {
         traceCount: 1,
         status: 'success',
       });
+    });
+  });
+
+  describe('getScoresBySpan', () => {
+    it('should get scores by span successfully', async () => {
+      const mockScores = [
+        createSampleScore({ traceId: 'test-trace-1', spanId: 'test-span-1', scorerId: 'test-scorer' }),
+      ];
+      const pagination = { page: 0, perPage: 10 };
+
+      // Mock the storage method to return our test data
+      mockStorage.getScoresBySpan = vi.fn().mockResolvedValue({
+        scores: mockScores,
+        pagination: {
+          total: 1,
+          page: 0,
+          perPage: 10,
+          hasMore: false,
+        },
+      });
+
+      const result = await getScoresBySpan({
+        mastra: mockMastra,
+        traceId: 'test-trace-1',
+        spanId: 'test-span-1',
+        pagination,
+      });
+
+      expect(mockStorage.getScoresBySpan).toHaveBeenCalledWith({
+        traceId: 'test-trace-1',
+        spanId: 'test-span-1',
+        pagination,
+      });
+
+      expect(result.scores).toHaveLength(1);
+
+      expect(result.pagination).toEqual({
+        total: 1,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      });
+    });
+
+    it('should throw an error when storage method is not available', async () => {
+      const pagination = { page: 0, perPage: 10 };
+      const mastraWithoutStorage = new Mastra({
+        logger: false,
+      });
+
+      await expect(
+        getScoresBySpan({
+          mastra: mastraWithoutStorage,
+          traceId: 'test-trace-1',
+          spanId: 'test-span-1',
+          pagination,
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
+
+    it('should throw an error when storage method is not available', async () => {
+      const pagination = { page: 0, perPage: 10 };
+      const mastraWithoutStorage = new Mastra({
+        logger: false,
+      });
+
+      await expect(
+        getScoresBySpan({
+          mastra: mastraWithoutStorage,
+          traceId: 'test-trace-1',
+          spanId: 'test-span-1',
+          pagination,
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
+
+    it('should handle API errors with status codes', async () => {
+      const pagination = { page: 0, perPage: 10 };
+      const apiError = {
+        message: 'Span not found',
+        status: 404,
+      };
+
+      mockStorage.getScoresBySpan = vi.fn().mockRejectedValue(apiError);
+
+      try {
+        await getScoresBySpan({
+          mastra: mockMastra,
+          traceId: 'test-trace-1',
+          spanId: 'test-span-1',
+          pagination,
+        });
+      } catch (error) {
+        expect(error.status).toBe(404);
+        expect(error.message).toBe('Span not found');
+      }
+    });
+
+    it('should throw error when traceId is missing', async () => {
+      const pagination = { page: 0, perPage: 10 };
+
+      await expect(
+        getScoresBySpan({
+          mastra: mockMastra,
+          traceId: '',
+          spanId: 'test-span-1',
+          pagination,
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
+
+    it('should throw error when spanId is missing', async () => {
+      const pagination = { page: 0, perPage: 10 };
+
+      await expect(
+        getScoresBySpan({
+          mastra: mockMastra,
+          traceId: 'test-trace-1',
+          spanId: '',
+          pagination,
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
+
+    it('should throw error when both traceId and spanId are missing', async () => {
+      const pagination = { page: 0, perPage: 10 };
+
+      await expect(
+        getScoresBySpan({
+          mastra: mockMastra,
+          traceId: '',
+          spanId: '',
+          pagination,
+        }),
+      ).rejects.toThrow(HTTPException);
     });
   });
 });

@@ -71,18 +71,14 @@ describe('Scores Handlers', () => {
         pagination,
       });
 
-      if ('scores' in result) {
-        expect(result.scores).toHaveLength(1);
-      }
+      expect(result.scores).toHaveLength(1);
 
-      if ('pagination' in result) {
-        expect(result.pagination).toEqual({
-          total: 1,
-          page: 0,
-          perPage: 10,
-          hasMore: false,
-        });
-      }
+      expect(result.pagination).toEqual({
+        total: 1,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      });
     });
 
     it('should return empty array when storage method is not available', async () => {
@@ -158,18 +154,14 @@ describe('Scores Handlers', () => {
         pagination,
       });
 
-      if ('scores' in result) {
-        expect(result.scores).toHaveLength(1);
-      }
+      expect(result.scores).toHaveLength(1);
 
-      if ('pagination' in result) {
-        expect(result.pagination).toEqual({
-          total: 1,
-          page: 0,
-          perPage: 10,
-          hasMore: false,
-        });
-      }
+      expect(result.pagination).toEqual({
+        total: 1,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      });
     });
 
     it('should return empty array when storage method is not available', async () => {
@@ -248,18 +240,13 @@ describe('Scores Handlers', () => {
         pagination,
       });
 
-      if ('scores' in result) {
-        expect(result.scores).toHaveLength(1);
-      }
-
-      if ('pagination' in result) {
-        expect(result.pagination).toEqual({
-          total: 1,
-          page: 0,
-          perPage: 10,
-          hasMore: false,
-        });
-      }
+      expect(result.scores).toHaveLength(1);
+      expect(result.pagination).toEqual({
+        total: 1,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      });
     });
   });
 
