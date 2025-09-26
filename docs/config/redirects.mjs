@@ -784,6 +784,11 @@ export const redirectList = [
     permanent: true,
   },
   {
+    source: "/:locale/reference/streaming/agents",
+    destination: "/:locale/reference/streaming/agents/stream",
+    permanent: true,
+  },
+  {
     source: "/:locale/reference/agents/streamVNext",
     destination: "/:locale/reference/streaming/agents/streamVNext",
     permanent: true,
@@ -822,6 +827,11 @@ export const redirectList = [
   {
     source: "/:locale/docs/observability/ai-tracing",
     destination: "/:locale/docs/observability/ai-tracing/overview",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/observability/ai-tracing",
+    destination: "/:locale/reference/observability/ai-tracing/ai-tracing",
     permanent: true,
   },
   // Observability reference reorganization

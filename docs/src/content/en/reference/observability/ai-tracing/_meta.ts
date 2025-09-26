@@ -1,6 +1,8 @@
 const meta = {
-  "ai-tracing": "MastraAITracing",
+  "ai-tracing": "AITracing Classes",
   configuration: "Configuration",
+  interfaces: "Interfaces",
+  span: "Span",
   exporters: "Exporters",
   processors: "Processors",
 };
