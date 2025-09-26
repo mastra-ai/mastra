@@ -1,7 +1,5 @@
 import type { TransformStreamDefaultController } from 'stream/web';
-import type { ZodTypeAny } from 'zod';
 import { Agent } from '../../agent';
-import type { MastraMessageV2 } from '../../agent/message-list';
 import type { StructuredOutputOptions } from '../../agent/types';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import { ChunkFrom } from '../../stream';
