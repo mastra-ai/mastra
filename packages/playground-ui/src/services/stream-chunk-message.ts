@@ -4,7 +4,6 @@ import { StreamChunk } from '@/types';
 import { ThreadMessageLike } from '@assistant-ui/react';
 import { ChunkType } from '@mastra/core';
 import { ReadonlyJSONObject } from '@mastra/core/stream';
-import { flushSync } from 'react-dom';
 
 export interface HandleStreamChunkOptions {
   conversation: ThreadMessageLike[];
