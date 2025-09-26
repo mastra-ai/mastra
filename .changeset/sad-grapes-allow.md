@@ -4,4 +4,4 @@
 'create-mastra': patch
 ---
 
-Fixed an issue where text-start/end parts were ignored in useMastraChat and tool ordering vs text wasn't retained
+Fixed an issue in playground where text-start/end parts were ignored in handleStreamChunk and tool ordering vs text wasn't retained
