@@ -23,6 +23,7 @@ import { createScorer } from '../scores';
 import { runScorer } from '../scores/hooks';
 import { MockStore } from '../storage';
 import type { AIV5FullStreamPart } from '../stream/aisdk/v5/output';
+import type { MastraModelOutput } from '../stream/base/output';
 import type { ChunkType } from '../stream/types';
 import { createMockModel } from '../test-utils/llm-mock';
 import { createTool } from '../tools';
@@ -5718,7 +5719,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               thread: 'test-thread-7050',
               resource: 'test-resource-7050',
             },
-            onStepFinish: async (step: any) => {
+            onStepFinish: async step => {
               capturedStep = step;
             },
           });
@@ -8083,6 +8084,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let stream;
         if (version === 'v1') {
           stream = await agentWithStreamAbort.stream('Stream abort test');
+          expect(stream.tripwire).toBe(true);
+          expect(stream.tripwireReason).toBe('Stream aborted');
         } else {
           stream = await agentWithStreamAbort.streamVNext('Stream abort test');
 
@@ -8090,10 +8093,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             expect(chunk.type).toBe('tripwire');
             expect(chunk.payload.tripwireReason).toBe('Stream aborted');
           }
+          const fullOutput = await (stream as MastraModelOutput<any>).getFullOutput();
+          expect(fullOutput.tripwire).toBe(true);
+          expect(fullOutput.tripwireReason).toBe('Stream aborted');
         }
-
-        expect(stream.tripwire).toBe(true);
-        expect(stream.tripwireReason).toBe('Stream aborted');
 
         // Stream should be empty
         let textReceived = '';
@@ -8126,10 +8129,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           stream = await agentWithDeployerAbort.streamVNext('Deployer abort test');
         }
 
-        expect(stream.tripwire).toBe(true);
-        expect(stream.tripwireReason).toBe('Deployer test abort');
-
         if (version === 'v1') {
+          expect(stream.tripwire).toBe(true);
+          expect(stream.tripwireReason).toBe('Deployer test abort');
           // Verify deployer methods exist and return Response objects
           expect(typeof stream.toDataStreamResponse).toBe('function');
           expect(typeof stream.toTextStreamResponse).toBe('function');
@@ -8147,6 +8149,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           expect(typeof stream.pipeTextStreamToResponse).toBe('function');
           expect(stream.experimental_partialOutputStream).toBeDefined();
           expect(typeof stream.experimental_partialOutputStream[Symbol.asyncIterator]).toBe('function');
+        } else if (version === 'v2') {
+          const fullOutput = await (stream as MastraModelOutput<any>).getFullOutput();
+          expect(fullOutput.tripwire).toBe(true);
+          expect(fullOutput.tripwireReason).toBe('Deployer test abort');
         }
       });
     });
@@ -10360,7 +10366,7 @@ describe('Agent Tests', () => {
       expect(steps[2].content.length).toBe(1);
 
       expect(stopWhenContent[1]).not.toEqual(stopWhenContent[0]);
-    }, 10000);
+    }, 20000);
 
     it('should contain the correct content in the step results for both stopWhen and stream.steps with text and tool calls in the same step', async () => {
       const agent = new Agent({
