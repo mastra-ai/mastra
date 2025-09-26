@@ -11,19 +11,14 @@ import { RuntimeContext } from '@mastra/core/di';
 import { ChatProps, Message } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@/lib/file/toBase64';
-import { useMastraClient } from '@mastra/react';
+import { toAssistantUIMessage, useMastraClient } from '@mastra/react';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
 import { MastraModelOutput, ReadonlyJSONObject } from '@mastra/core/stream';
 
 import { handleNetworkMessageFromMemory } from './agent-network-message';
-import {
-  createRootToolAssistantMessage,
-  handleAgentChunk,
-  handleStreamChunk,
-  handleWorkflowChunk,
-} from './stream-chunk-message';
+import { createRootToolAssistantMessage, handleAgentChunk, handleWorkflowChunk } from './stream-chunk-message';
 import { ModelSettings, useMastraChat } from '@mastra/react';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
@@ -387,7 +382,7 @@ export function MastraRuntimeProvider({
                 const mastraMetadata = argsData.__mastraMetadata || {};
                 const selectionReason = argsData.selectionReason || '';
 
-                return handleStreamChunk({
+                return toAssistantUIMessage({
                   chunk: {
                     ...chunk,
                     type: 'tool-call',
@@ -410,7 +405,7 @@ export function MastraRuntimeProvider({
                   conversation,
                 });
               } else if (chunk.type === 'tool-execution-end') {
-                const next = handleStreamChunk({
+                const next = toAssistantUIMessage({
                   chunk: { ...chunk, type: 'tool-result' },
                   conversation,
                 });
@@ -455,7 +450,7 @@ export function MastraRuntimeProvider({
                   { role: 'assistant', content: [{ type: 'text', text: chunk?.payload?.result || '' }] },
                 ];
               } else {
-                return handleStreamChunk({ chunk, conversation });
+                return toAssistantUIMessage({ chunk, conversation });
               }
             },
           });
@@ -502,7 +497,7 @@ export function MastraRuntimeProvider({
               threadId,
               modelSettings: modelSettingsArgs,
               onChunk: ({ chunk, conversation }) => {
-                const next = handleStreamChunk({ chunk, conversation });
+                const next = toAssistantUIMessage({ chunk, conversation });
 
                 if (
                   chunk.type === 'tool-result' &&
