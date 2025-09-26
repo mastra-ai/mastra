@@ -303,12 +303,21 @@ export class ObservabilityPG extends ObservabilityStorage {
       return this.operations.batchUpdate({
         tableName: TABLE_AI_SPANS,
         updates: args.records.map(record => {
-          const data = { ...record.updates };
+          const data: Partial<Omit<AISpanRecord, 'createdAt' | 'updatedAt' | 'spanId' | 'traceId'>> & {
+            endedAtZ?: string;
+            startedAtZ?: string;
+          } = {
+            ...record.updates,
+          };
           if (data.endedAt instanceof Date) {
-            data.endedAt = data.endedAt.toISOString() as any;
+            const endedAt = data.endedAt.toISOString();
+            data.endedAt = endedAt as any;
+            data.endedAtZ = endedAt;
           }
           if (data.startedAt instanceof Date) {
-            data.startedAt = data.startedAt.toISOString() as any;
+            const startedAt = data.startedAt.toISOString();
+            data.startedAt = startedAt as any;
+            data.startedAtZ = startedAt;
           }
           // Note: updatedAt will be set by database trigger automatically
 
