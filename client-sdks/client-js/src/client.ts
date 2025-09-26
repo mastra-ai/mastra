@@ -649,28 +649,6 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Retrieves scores by trace ID and span ID
-   * @param params - Parameters containing trace ID, span ID, and pagination options
-   * @returns Promise containing scores and pagination info
-   */
-  public getScoresBySpan(params: GetScoresBySpanParams): Promise<GetScoresResponse> {
-    const { traceId, spanId, page, perPage } = params;
-    const searchParams = new URLSearchParams();
-
-    if (page !== undefined) {
-      searchParams.set('page', String(page));
-    }
-    if (perPage !== undefined) {
-      searchParams.set('perPage', String(perPage));
-    }
-
-    const queryString = searchParams.toString();
-    return this.request(
-      `/api/scores/span/${encodeURIComponent(traceId)}/${encodeURIComponent(spanId)}${queryString ? `?${queryString}` : ''}`,
-    );
-  }
-
-  /**
    * Saves a score
    * @param params - Parameters containing the score data to save
    * @returns Promise containing the saved score
@@ -696,6 +674,10 @@ export class MastraClient extends BaseResource {
 
   getAITraces(params: AITracesPaginatedArg): Promise<GetAITracesResponse> {
     return this.observability.getTraces(params);
+  }
+
+  getScoresBySpan(params: GetScoresBySpanParams): Promise<GetScoresResponse> {
+    return this.observability.getScoresBySpan(params);
   }
 
   score(params: {

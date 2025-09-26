@@ -8,7 +8,6 @@ import {
   getScoresByRunIdHandler,
   getScoresByScorerIdHandler,
   getScoresByEntityIdHandler,
-  getScoresBySpan,
   saveScoreHandler,
 } from './handlers';
 
@@ -158,50 +157,6 @@ export function scoresRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     getScoresByEntityIdHandler,
-  );
-
-  router.get(
-    '/span/:traceId/:spanId',
-    describeRoute({
-      description: 'Get scores by trace ID and span ID',
-      tags: ['scores'],
-      parameters: [
-        {
-          name: 'traceId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-          description: 'Trace ID',
-        },
-        {
-          name: 'spanId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-          description: 'Span ID',
-        },
-        {
-          name: 'page',
-          in: 'query',
-          required: false,
-          schema: { type: 'number' },
-          description: 'Page number for pagination (default: 0)',
-        },
-        {
-          name: 'perPage',
-          in: 'query',
-          required: false,
-          schema: { type: 'number' },
-          description: 'Number of items per page (default: 10)',
-        },
-      ],
-      responses: {
-        200: {
-          description: 'Paginated list of scores for span',
-        },
-      },
-    }),
-    getScoresBySpan,
   );
 
   router.post(

@@ -1,7 +1,6 @@
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
 import type { StoragePagination } from '@mastra/core/storage';
-import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 import { handleError } from './error';
 
@@ -186,28 +185,6 @@ export async function getScoresByEntityIdHandler({
     };
   } catch (error) {
     return handleError(error, 'Error getting scores by entity id');
-  }
-}
-
-export async function getScoresBySpan({
-  mastra,
-  traceId,
-  spanId,
-  pagination,
-}: Context & { traceId: string; spanId: string; pagination: StoragePagination }) {
-  const storage = mastra.getStorage();
-  if (!storage) {
-    throw new HTTPException(500, { message: 'Storage is not available' });
-  }
-
-  if (!traceId || !spanId) {
-    throw new HTTPException(400, { message: 'Trace ID and span ID are required' });
-  }
-
-  try {
-    return await storage.getScoresBySpan({ traceId, spanId, pagination });
-  } catch (error) {
-    return handleError(error, 'Error getting scores by span');
   }
 }
 
