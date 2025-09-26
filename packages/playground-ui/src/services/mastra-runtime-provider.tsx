@@ -11,11 +11,11 @@ import { RuntimeContext } from '@mastra/core/di';
 import { ChatProps, Message } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@/lib/file/toBase64';
-import { useMastraClient } from '@/contexts/mastra-client-context';
+import { useMastraClient } from '@mastra/react-hooks';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
-import { MastraModelOutput } from '@mastra/core/stream';
+import { MastraModelOutput, ReadonlyJSONObject } from '@mastra/core/stream';
 
 import { handleNetworkMessageFromMemory } from './agent-network-message';
 import {
@@ -86,6 +86,7 @@ const convertToAIAttachments = async (attachments: AppendMessage['attachments'])
 };
 
 const initializeMessageState = (initialMessages: Message[]) => {
+  // @ts-expect-error - TODO: fix the ThreadMessageLike type, it's missing some properties like "data" from the role.
   const convertedMessages: ThreadMessageLike[] = initialMessages
     ?.map((message: Message) => {
       let content;
@@ -151,7 +152,7 @@ const initializeMessageState = (initialMessages: Message[]) => {
       return {
         ...message,
         content: [...formattedParts, ...attachmentsAsContentParts],
-      } as ThreadMessageLike;
+      };
     })
     .filter(Boolean);
 
@@ -220,7 +221,7 @@ export function MastraRuntimeProvider({
     topP,
     maxTokens,
     instructions,
-    providerOptions: providerOptions as any,
+    providerOptions,
   };
 
   const baseClient = useMastraClient();
@@ -247,9 +248,13 @@ export function MastraRuntimeProvider({
 
     try {
       function handleGenerateResponse(generatedResponse: Awaited<ReturnType<MastraModelOutput['getFullOutput']>>) {
-        if (generatedResponse.response && 'messages' in generatedResponse.response) {
+        if (
+          generatedResponse.response &&
+          'messages' in generatedResponse.response &&
+          generatedResponse.response.messages
+        ) {
           const latestMessage = generatedResponse.response.messages.reduce(
-            (acc: ThreadMessageLike, message: any) => {
+            (acc: ThreadMessageLike, message) => {
               const _content = Array.isArray(acc.content) ? acc.content : [];
 
               if (typeof message.content === 'string') {
@@ -263,20 +268,20 @@ export function MastraRuntimeProvider({
                       text: message.content,
                     },
                   ],
-                } as ThreadMessageLike;
+                };
               }
 
               if (message.role === 'assistant') {
                 const toolCallContent = Array.isArray(message.content)
-                  ? message.content.find((content: any) => content.type === 'tool-call')
+                  ? message.content.find(content => content.type === 'tool-call')
                   : undefined;
 
                 const reasoningContent = Array.isArray(message.content)
-                  ? message.content.find((content: any) => content.type === 'reasoning')
+                  ? message.content.find(content => content.type === 'reasoning')
                   : undefined;
 
                 if (toolCallContent) {
-                  const newContent = message.content.map((c: any) => {
+                  const newContent = message.content.map(c => {
                     if (c.type === 'tool-call' && c.toolCallId === toolCallContent?.toolCallId) {
                       return {
                         ...c,
@@ -288,31 +293,31 @@ export function MastraRuntimeProvider({
                     return c;
                   });
 
-                  const containsToolCall = newContent.some((c: any) => c.type === 'tool-call');
+                  const containsToolCall = newContent.some(c => c.type === 'tool-call');
 
                   return {
                     ...acc,
                     content: containsToolCall
                       ? [...(reasoningContent ? [reasoningContent] : []), ...newContent]
                       : [..._content, ...(reasoningContent ? [reasoningContent] : []), toolCallContent],
-                  } as ThreadMessageLike;
+                  };
                 }
 
                 const textContent = Array.isArray(message.content)
-                  ? message.content.find((content: any) => content.type === 'text' && content.text)
+                  ? message.content.find(content => content.type === 'text' && content.text)
                   : undefined;
 
                 if (textContent) {
                   return {
                     ...acc,
                     content: [..._content, ...(reasoningContent ? [reasoningContent] : []), textContent],
-                  } as ThreadMessageLike;
+                  };
                 }
               }
 
               if (message.role === 'tool') {
                 const toolResult = Array.isArray(message.content)
-                  ? message.content.find((content: any) => content.type === 'tool-result')
+                  ? message.content.find(content => content.type === 'tool-result')
                   : undefined;
 
                 if (toolResult) {
@@ -332,17 +337,17 @@ export function MastraRuntimeProvider({
                           ..._content,
                           { type: 'tool-result', toolCallId: toolResult.toolCallId, result: toolResult.output?.value },
                         ],
-                  } as ThreadMessageLike;
+                  };
                 }
 
                 return {
                   ...acc,
                   content: [..._content, toolResult],
-                } as ThreadMessageLike;
+                };
               }
               return acc;
             },
-            { role: 'assistant', content: [] } as ThreadMessageLike,
+            { role: 'assistant', content: [] },
           );
 
           setMessages(currentConversation => [...currentConversation, latestMessage]);
@@ -372,25 +377,32 @@ export function MastraRuntimeProvider({
             onNetworkChunk: (chunk, conversation) => {
               if (chunk.type.startsWith('agent-execution-event-')) {
                 const agentChunk = chunk.payload;
+
                 if (!currentEntityId) return conversation;
 
                 return handleAgentChunk({ agentChunk, conversation, entityName: currentEntityId });
               } else if (chunk.type === 'tool-execution-start') {
+                const { args: argsData } = chunk.payload;
+
+                const nestedArgs = argsData.args || {};
+                const mastraMetadata = argsData.__mastraMetadata || {};
+                const selectionReason = argsData.selectionReason || '';
+
                 return handleStreamChunk({
                   chunk: {
                     ...chunk,
                     type: 'tool-call',
                     payload: {
-                      ...chunk?.payload,
-                      toolCallId: chunk?.payload?.args?.toolCallId,
-                      toolName: chunk?.payload?.args?.toolName,
+                      ...chunk.payload,
+                      toolCallId: argsData.toolCallId || 'unknown',
+                      toolName: argsData.toolName || 'unknown',
                       args: {
-                        ...chunk?.payload?.args?.args,
+                        ...nestedArgs,
                         __mastraMetadata: {
-                          ...chunk?.payload?.args?.__mastraMetadata,
+                          ...mastraMetadata,
                           networkMetadata: {
-                            selectionReason: chunk?.payload?.args?.selectionReason || '',
-                            input: chunk?.payload?.args?.args,
+                            selectionReason,
+                            input: nestedArgs as ReadonlyJSONObject,
                           },
                         },
                       },
@@ -404,18 +416,24 @@ export function MastraRuntimeProvider({
                   conversation,
                 });
 
-                if (chunk.payload?.toolName === 'updateWorkingMemory' && chunk.payload.result?.success) {
+                if (
+                  chunk.payload?.toolName === 'updateWorkingMemory' &&
+                  typeof chunk.payload.result === 'object' &&
+                  'success' in chunk.payload.result! &&
+                  chunk.payload.result?.success
+                ) {
                   refreshWorkingMemory?.();
                 }
 
                 return next;
               } else if (chunk.type.startsWith('workflow-execution-event-')) {
-                const workflowChunk = chunk.payload;
+                const workflowChunk = chunk.payload as object;
+
                 if (!currentEntityId) return conversation;
 
                 return handleWorkflowChunk({ workflowChunk, conversation, entityName: currentEntityId });
               } else if (chunk.type === 'workflow-execution-start' || chunk.type === 'agent-execution-start') {
-                currentEntityId = chunk.payload?.args?.resourceId;
+                currentEntityId = chunk.payload?.args?.primitiveId;
 
                 const runId = chunk.payload.runId;
 
@@ -463,7 +481,7 @@ export function MastraRuntimeProvider({
                 topP,
                 maxOutputTokens: maxTokens,
               },
-              providerOptions: providerOptions as any,
+              providerOptions,
               instructions,
               runtimeContext: runtimeContextInstance,
               ...(memory ? { threadId, resourceId: agentId } : {}),
@@ -490,6 +508,8 @@ export function MastraRuntimeProvider({
                 if (
                   chunk.type === 'tool-result' &&
                   chunk.payload?.toolName === 'updateWorkingMemory' &&
+                  typeof chunk.payload.result === 'object' &&
+                  'success' in chunk.payload.result! &&
                   chunk.payload.result?.success
                 ) {
                   refreshWorkingMemory?.();
@@ -526,11 +546,11 @@ export function MastraRuntimeProvider({
             instructions,
             runtimeContext: runtimeContextInstance,
             ...(memory ? { threadId, resourceId: agentId } : {}),
-            providerOptions: providerOptions as any,
+            providerOptions,
           });
           if (generateResponse.response && 'messages' in generateResponse.response) {
             const latestMessage = generateResponse.response.messages.reduce(
-              (acc, message) => {
+              (acc: ThreadMessageLike, message) => {
                 const _content = Array.isArray(acc.content) ? acc.content : [];
                 if (typeof message.content === 'string') {
                   return {
@@ -543,7 +563,7 @@ export function MastraRuntimeProvider({
                         text: message.content,
                       },
                     ],
-                  } as ThreadMessageLike;
+                  };
                 }
                 if (message.role === 'assistant') {
                   const toolCallContent = Array.isArray(message.content)
@@ -567,7 +587,7 @@ export function MastraRuntimeProvider({
                       content: containsToolCall
                         ? [...(reasoningContent ? [reasoningContent] : []), ...newContent]
                         : [..._content, ...(reasoningContent ? [reasoningContent] : []), toolCallContent],
-                    } as ThreadMessageLike;
+                    };
                   }
 
                   const textContent = Array.isArray(message.content)
@@ -578,7 +598,7 @@ export function MastraRuntimeProvider({
                     return {
                       ...acc,
                       content: [..._content, ...(reasoningContent ? [reasoningContent] : []), textContent],
-                    } as ThreadMessageLike;
+                    };
                   }
                 }
 
@@ -604,19 +624,19 @@ export function MastraRuntimeProvider({
                             ..._content,
                             { type: 'tool-result', toolCallId: toolResult.toolCallId, result: toolResult.result },
                           ],
-                    } as ThreadMessageLike;
+                    };
                   }
 
                   return {
                     ...acc,
                     content: [..._content, toolResult],
-                  } as ThreadMessageLike;
+                  };
                 }
                 return acc;
               },
-              { role: 'assistant', content: [] } as ThreadMessageLike,
+              { role: 'assistant', content: [] },
             );
-            setMessages(currentConversation => [...currentConversation, latestMessage]);
+            setMessages(currentConversation => [...currentConversation, latestMessage as ThreadMessageLike]);
             handleFinishReason(generateResponse.finishReason);
           }
         } else {
@@ -641,7 +661,7 @@ export function MastraRuntimeProvider({
             instructions,
             runtimeContext: runtimeContextInstance,
             ...(memory ? { threadId, resourceId: agentId } : {}),
-            providerOptions: providerOptions as any,
+            providerOptions,
           });
 
           if (!response.body) {
@@ -748,7 +768,7 @@ export function MastraRuntimeProvider({
               });
               toolCallIdToName.current[value.toolCallId] = value.toolName;
             },
-            async onToolResultPart(value: any) {
+            async onToolResultPart(value) {
               // Update the messages state
               setMessages(currentConversation => {
                 // Get the last message (should be the assistant's message)
@@ -854,7 +874,7 @@ export function MastraRuntimeProvider({
 
       setMessages(currentConversation => [
         ...currentConversation,
-        { role: 'assistant', content: [{ type: 'text', text: `${error}` as string }] },
+        { role: 'assistant', content: [{ type: 'text', text: `${error}` }] },
       ]);
     } finally {
       // Clean up the abort controller reference

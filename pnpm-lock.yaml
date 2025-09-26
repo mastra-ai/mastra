@@ -416,6 +416,9 @@ importers:
       rollup:
         specifier: ~4.50.2
         version: 4.50.2
+      rollup-plugin-esbuild:
+        specifier: ^6.2.1
+        version: 6.2.1(esbuild@0.25.10)(rollup@4.50.2)
     devDependencies:
       '@babel/types':
         specifier: ^7.28.4
