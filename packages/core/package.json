@@ -230,6 +230,7 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
+    "@ai-sdk/google": "^1.0.0",
     "@ai-sdk/openai": "^1.3.24",
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.23",
     "@babel/core": "^7.28.4",
