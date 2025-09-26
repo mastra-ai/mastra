@@ -5,6 +5,7 @@ import type {
   SharedV2ProviderMetadata,
   LanguageModelV2CallWarning,
   LanguageModelV2ResponseMetadata,
+  LanguageModelV2,
 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1StreamPart, LanguageModelRequestMetadata } from 'ai';
 import type { CoreMessage, StepResult } from 'ai-v5';
@@ -165,7 +166,7 @@ interface StepStartPayload {
   [key: string]: any;
 }
 
-interface StepFinishPayload {
+export interface StepFinishPayload {
   id?: string;
   providerMetadata?: SharedV2ProviderMetadata;
   totalUsage?: LanguageModelV2Usage;
@@ -320,6 +321,7 @@ interface ToolExecutionEndPayload {
   isComplete: boolean;
   iteration: number;
   toolCallId: string;
+  toolName: string;
 }
 
 interface NetworkStepFinishPayload {
@@ -341,6 +343,18 @@ interface NetworkFinishPayload {
   threadId?: string;
   threadResourceId?: string;
   isOneOff: boolean;
+}
+
+interface ToolCallApprovalPayload {
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, any>;
+}
+
+interface ToolCallSuspendedPayload {
+  toolCallId: string;
+  toolName: string;
+  suspendPayload: any;
 }
 
 export type NetworkChunkType =
@@ -370,6 +384,8 @@ export type ChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'source'; payload: SourcePayload })
   | (BaseChunkType & { type: 'file'; payload: FilePayload })
   | (BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload })
+  | (BaseChunkType & { type: 'tool-call-approval'; payload: ToolCallApprovalPayload })
+  | (BaseChunkType & { type: 'tool-call-suspended'; payload: ToolCallSuspendedPayload })
   | (BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload })
   | (BaseChunkType & { type: 'tool-call-input-streaming-start'; payload: ToolCallInputStreamingStartPayload })
   | (BaseChunkType & { type: 'tool-call-delta'; payload: ToolCallDeltaPayload })
@@ -438,3 +454,13 @@ export interface BufferedByStep {
   toolResults: any[];
   msgCount: number;
 }
+
+export type ExecuteStreamModelManager<T> = (
+  callback: (model: LanguageModelV2, isLastModel: boolean) => Promise<T>,
+) => Promise<T>;
+
+export type ModelManagerModelConfig = {
+  model: LanguageModelV2;
+  maxRetries: number;
+  id: string;
+};

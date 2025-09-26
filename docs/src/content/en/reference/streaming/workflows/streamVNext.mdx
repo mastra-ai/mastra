@@ -1,15 +1,15 @@
 ---
-title: "Reference: Run.streamVNext() | Workflows | Mastra Docs"
-description: Documentation for the `Run.streamVNext()` method in workflows, which enables real-time streaming of responses.
+title: "Reference: Run.resumeStreamVNext() | Workflows | Mastra Docs"
+description: Documentation for the `Run.resumeStreamVNext()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
 ---
 
 import { StreamVNextCallout } from "@/components/streamVNext-callout.tsx"
 
-# Run.streamVNext() (Experimental)
+# Run.resumeStreamVNext() (Experimental)
 
 <StreamVNextCallout />
 
-The `.streamVNext()` method enables real-time streaming of responses from a workflow. This enhanced streaming capability will eventually replace the current `stream()` method.
+The `.resumeStreamVNext()` method resumes a suspended workflow run with new data, allowing you to continue execution from a specific step and to observe the stream of events.
 
 ## Usage example
 
@@ -21,6 +21,14 @@ const stream = run.streamVNext({
     value: "initial data",
   },
 });
+
+
+const result = await stream.result;
+if (result.status === "suspended") {
+  const resumedStream = await run.resumeStreamVNext({
+    resumeData: { value: "resume data" }
+  });
+}
 ```
 
 ## Parameters
@@ -28,7 +36,7 @@ const stream = run.streamVNext({
 <PropertiesTable
   content={[
     {
-      name: "inputData",
+      name: "resumeData",
       type: "z.infer<TInput>",
       description: "Input data that matches the workflow's input schema",
       isOptional: true,
@@ -38,38 +46,6 @@ const stream = run.streamVNext({
       type: "RuntimeContext",
       description: "Runtime context data to use during workflow execution",
       isOptional: true,
-    },
-    {
-      name: "tracingContext",
-      type: "TracingContext",
-      isOptional: true,
-      description: "AI tracing context for creating child spans and adding metadata.",
-      properties: [
-        {
-          parameters: [{
-            name: "currentSpan",
-            type: "AISpan",
-            isOptional: true,
-            description: "Current AI span for creating child spans and adding metadata."
-          }]
-        }
-      ]
-    },
-    {
-      name: "tracingOptions",
-      type: "TracingOptions",
-      isOptional: true,
-      description: "Options for AI tracing configuration.",
-      properties: [
-        {
-          parameters: [{
-            name: "metadata",
-            type: "Record<string, any>",
-            isOptional: true,
-            description: "Metadata to add to the root trace span."
-          }]
-        }
-      ]
     },
     {
       name: "closeOnSuspend",
@@ -104,28 +80,8 @@ const stream = run.streamVNext({
       type: "Promise<{ inputTokens: number; outputTokens: number; totalTokens: number, reasoningTokens?: number, cacheInputTokens?: number }>",
       description: "A promise that resolves to token usage statistics",
     },
-    {
-      name: "stream.traceId",
-      type: "string",
-      isOptional: true,
-      description: "The trace ID associated with this execution when AI tracing is enabled.",
-    },
   ]}
 />
-
-## Extended usage example
-
-```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
-
-const stream = run.streamVNext({
-  inputData: {
-    value: "initial data",
-  },
-});
-
-const result = await stream.result;
-```
 
 ## Stream Events
 

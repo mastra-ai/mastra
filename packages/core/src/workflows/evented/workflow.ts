@@ -1,5 +1,4 @@
 import { randomUUID } from 'crypto';
-import type { ReadableStream } from 'stream/web';
 import z from 'zod';
 import type { Agent } from '../../agent';
 import { RuntimeContext } from '../../di';
@@ -9,13 +8,7 @@ import type { ToolExecutionContext } from '../../tools/types';
 import { Workflow, Run } from '../../workflows';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
 import type { ExecuteFunction, Step } from '../../workflows/step';
-import type {
-  SerializedStepFlowEntry,
-  WorkflowConfig,
-  WorkflowResult,
-  StreamEvent,
-  WatchEvent,
-} from '../../workflows/types';
+import type { SerializedStepFlowEntry, WorkflowConfig, WorkflowResult, WatchEvent } from '../../workflows/types';
 import { EMITTER_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
 import { WorkflowEventProcessor } from './workflow-event-processor';
@@ -107,10 +100,12 @@ export function createStep<
 
 export function createStep<
   TSchemaIn extends z.ZodType<any>,
+  TSuspendSchema extends z.ZodType<any>,
+  TResumeSchema extends z.ZodType<any>,
   TSchemaOut extends z.ZodType<any>,
-  TContext extends ToolExecutionContext<TSchemaIn>,
+  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema>,
 >(
-  tool: Tool<TSchemaIn, TSchemaOut, TContext> & {
+  tool: Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
     inputSchema: TSchemaIn;
     outputSchema: TSchemaOut;
     execute: (context: TContext) => Promise<any>;
@@ -161,6 +156,7 @@ export function createStep<
         text: z.string(),
       }),
       execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext, abortSignal, abort }) => {
+        // TODO: support streamVNext
         let streamPromise = {} as {
           promise: Promise<string>;
           resolve: (value: string) => void;
@@ -170,14 +166,6 @@ export function createStep<
         streamPromise.promise = new Promise((resolve, reject) => {
           streamPromise.resolve = resolve;
           streamPromise.reject = reject;
-        });
-        const toolData = {
-          name: params.name,
-          args: inputData,
-        };
-        await emitter.emit('watch-v2', {
-          type: 'workflow-agent-call-start',
-          payload: toolData,
         });
         const { fullStream } = await params.stream(inputData.prompt, {
           // resourceId: inputData.resourceId,
@@ -193,13 +181,27 @@ export function createStep<
           return abort();
         }
 
-        for await (const chunk of fullStream) {
-          await emitter.emit('watch-v2', chunk);
-        }
+        const toolData = {
+          name: params.name,
+          args: inputData,
+        };
 
         await emitter.emit('watch-v2', {
-          type: 'workflow-agent-call-finish',
-          payload: toolData,
+          type: 'tool-call-streaming-start',
+          ...(toolData ?? {}),
+        });
+        for await (const chunk of fullStream) {
+          if (chunk.type === 'text-delta') {
+            await emitter.emit('watch-v2', {
+              type: 'tool-call-delta',
+              ...(toolData ?? {}),
+              argsTextDelta: chunk.textDelta,
+            });
+          }
+        }
+        await emitter.emit('watch-v2', {
+          type: 'tool-call-streaming-finish',
+          ...(toolData ?? {}),
         });
 
         return {
@@ -220,13 +222,17 @@ export function createStep<
       id: params.id,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
-      execute: async ({ inputData, mastra, runtimeContext }) => {
+      suspendSchema: params.suspendSchema,
+      resumeSchema: params.resumeSchema,
+      execute: async ({ inputData, mastra, runtimeContext, suspend, resumeData }) => {
         return params.execute({
           context: inputData,
           mastra,
           runtimeContext,
           // TODO: Pass proper tracing context when evented workflows support tracing
           tracingContext: { currentSpan: undefined },
+          suspend,
+          resumeData,
         });
       },
     };
@@ -356,7 +362,17 @@ export class EventedRun<
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
-  }): Promise<WorkflowResult<TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
+    // Add validation checks
+    if (this.serializedStepGraph.length === 0) {
+      throw new Error(
+        'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
+      );
+    }
+    if (!this.executionGraph.steps) {
+      throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
+    }
+
     runtimeContext = runtimeContext ?? new RuntimeContext();
 
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
@@ -376,7 +392,7 @@ export class EventedRun<
       },
     });
 
-    const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
+    const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
       graph: this.executionGraph,
@@ -410,159 +426,7 @@ export class EventedRun<
     return result;
   }
 
-  /**
-   * Starts the workflow execution with the provided input as a stream
-   * @param input The input data for the workflow
-   * @returns A promise that resolves to the workflow output
-   */
-  stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
-    stream: ReadableStream<StreamEvent>;
-    getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
-  } {
-    const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
-
-    let currentToolData: { name: string; args: any } | undefined = undefined;
-
-    const writer = writable.getWriter();
-    const unwatch = this.watch(async event => {
-      console.log('raw_event', event);
-      if ((event as any).type === 'workflow-agent-call-start') {
-        currentToolData = {
-          name: (event as any).payload.name,
-          args: (event as any).payload.args,
-        };
-        await writer.write({
-          ...event.payload,
-          type: 'tool-call-streaming-start',
-        } as any);
-
-        return;
-      }
-
-      try {
-        if ((event as any).type === 'workflow-agent-call-finish') {
-          return;
-        } else if (!(event as any).type.startsWith('workflow-')) {
-          if ((event as any).type === 'text-delta') {
-            await writer.write({
-              type: 'tool-call-delta',
-              ...(currentToolData ?? {}),
-              argsTextDelta: (event as any).textDelta,
-            } as any);
-          }
-          return;
-        }
-
-        const e: any = {
-          ...event,
-          type: event.type.replace('workflow-', ''),
-        };
-        // watch-v2 events are data stream events, so we need to cast them to the correct type
-
-        await writer.write(e as any);
-      } catch {}
-    }, 'watch-v2');
-
-    this.closeStreamAction = async () => {
-      unwatch();
-
-      try {
-        await writer.close();
-      } catch (err) {
-        console.error('Error closing stream:', err);
-      } finally {
-        writer.releaseLock();
-      }
-    };
-
-    this.executionResults = this.start({ inputData, runtimeContext }).then(result => {
-      if (result.status !== 'suspended') {
-        this.closeStreamAction?.().catch(() => {});
-      }
-
-      return result;
-    });
-
-    return {
-      stream: readable as ReadableStream<StreamEvent>,
-      getWorkflowState: () => this.executionResults!,
-    };
-  }
-
-  async streamAsync({
-    inputData,
-    runtimeContext,
-  }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): Promise<{
-    stream: ReadableStream<StreamEvent>;
-    getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
-  }> {
-    const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
-
-    let currentToolData: { name: string; args: any } | undefined = undefined;
-
-    const writer = writable.getWriter();
-    const unwatch = await this.watchAsync(async event => {
-      if ((event as any).type === 'workflow-agent-call-start') {
-        currentToolData = {
-          name: (event as any).payload.name,
-          args: (event as any).payload.args,
-        };
-        await writer.write({
-          ...event.payload,
-          type: 'tool-call-streaming-start',
-        } as any);
-
-        return;
-      }
-
-      try {
-        if ((event as any).type === 'workflow-agent-call-finish') {
-          return;
-        } else if (!(event as any).type.startsWith('workflow-')) {
-          if ((event as any).type === 'text-delta') {
-            await writer.write({
-              type: 'tool-call-delta',
-              ...(currentToolData ?? {}),
-              argsTextDelta: (event as any).textDelta,
-            } as any);
-          }
-          return;
-        }
-
-        const e: any = {
-          ...event,
-          type: event.type.replace('workflow-', ''),
-        };
-        // watch-v2 events are data stream events, so we need to cast them to the correct type
-        await writer.write(e as any);
-      } catch {}
-    }, 'watch-v2');
-
-    this.closeStreamAction = async () => {
-      await unwatch();
-
-      try {
-        await writer.close();
-      } catch (err) {
-        console.error('Error closing stream:', err);
-      } finally {
-        writer.releaseLock();
-      }
-    };
-
-    this.executionResults = this.start({ inputData, runtimeContext }).then(result => {
-      if (result.status !== 'suspended') {
-        this.closeStreamAction?.().catch(() => {});
-      }
-
-      return result;
-    });
-
-    return {
-      stream: readable as ReadableStream<StreamEvent>,
-      getWorkflowState: () => this.executionResults!,
-    };
-  }
+  // TODO: streamVNext
 
   async resume<TResumeSchema extends z.ZodType<any>>(params: {
     resumeData?: z.infer<TResumeSchema>;
@@ -572,7 +436,7 @@ export class EventedRun<
       | string
       | string[];
     runtimeContext?: RuntimeContext;
-  }): Promise<WorkflowResult<TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
     );
@@ -597,14 +461,24 @@ export class EventedRun<
       { resume: { runtimeContextObj: snapshot?.runtimeContext, runtimeContext: params.runtimeContext } },
       { depth: null },
     );
+    // Start with the snapshot's runtime context (old values)
     const runtimeContextObj = snapshot?.runtimeContext ?? {};
-    const runtimeContext = params.runtimeContext ?? new RuntimeContext();
+    const runtimeContext = new RuntimeContext();
+
+    // First, set values from the snapshot
     for (const [key, value] of Object.entries(runtimeContextObj)) {
       runtimeContext.set(key, value);
     }
 
+    // Then, override with any values from the passed runtime context (new values take precedence)
+    if (params.runtimeContext) {
+      for (const [key, value] of params.runtimeContext.entries()) {
+        runtimeContext.set(key, value);
+      }
+    }
+
     const executionResultPromise = this.executionEngine
-      .execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
+      .execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
         runId: this.runId,
         graph: this.executionGraph,

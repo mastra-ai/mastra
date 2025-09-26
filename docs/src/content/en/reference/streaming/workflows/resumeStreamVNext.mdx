@@ -48,9 +48,15 @@ if (result.status === "suspended") {
       isOptional: true,
     },
     {
+<<<<<<<< HEAD:docs/src/content/en/reference/streaming/workflows/resumeStreamVNext.mdx
       name: "step",
       type: "Step<string, any, any, any, any, TEngineType>",
       description: "The step to resume execution from",
+========
+      name: "closeOnSuspend",
+      type: "boolean",
+      description: "Whether to close the stream when the workflow is suspended, or to keep the stream open until the workflow is finished (by success or error). Default value is true.",
+>>>>>>>> 41743cd05b61:docs/src/content/en/reference/streaming/workflows/streamVNext.mdx
       isOptional: true,
     },
   ]}
@@ -97,4 +103,8 @@ The stream emits various event types during workflow execution. Each event has a
 
 - [Workflows overview](../../../docs/workflows/overview.mdx#run-workflow)
 - [Workflow.createRunAsync()](../create-run.mdx)
+<<<<<<<< HEAD:docs/src/content/en/reference/streaming/workflows/resumeStreamVNext.mdx
 - [Run.streamVNext()](./streamVNext.mdx)
+========
+- [Run.resumeStreamVNext()](./resumeStreamVNext.mdx)
+>>>>>>>> 41743cd05b61:docs/src/content/en/reference/streaming/workflows/streamVNext.mdx

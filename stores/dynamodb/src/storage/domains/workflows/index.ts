@@ -75,16 +75,17 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
     this.logger.debug('Persisting workflow snapshot', { workflowName, runId });
 
     try {
-      const resourceId = 'resourceId' in snapshot ? snapshot.resourceId : undefined;
       const now = new Date().toISOString();
       // Prepare data including the 'entity' type
       const data = {
@@ -252,9 +253,6 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     const { runId, workflowName } = args;
     this.logger.debug('Getting workflow run by ID', { runId, workflowName });
 
-    console.log('workflowName', workflowName);
-    console.log('runId', runId);
-
     try {
       // If we have a workflowName, we can do a direct get using the primary key
       if (workflowName) {
@@ -266,8 +264,6 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
             run_id: runId,
           })
           .go();
-
-        console.log('result', result);
 
         if (!result.data) {
           return null;

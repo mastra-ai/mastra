@@ -1,7 +1,7 @@
 import { analytics } from '../..';
 import type { CLI_ORIGIN } from '../../analytics';
 import { init } from '../init/init';
-import { checkAndInstallCoreDeps, checkPkgJson, interactivePrompt } from '../init/utils';
+import { checkAndInstallCoreDeps, checkForPkgJson, interactivePrompt } from '../init/utils';
 
 const origin = process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN;
 
@@ -10,7 +10,7 @@ export const initProject = async (args: any) => {
     command: 'init',
     args,
     execution: async () => {
-      await checkPkgJson();
+      await checkForPkgJson();
       await checkAndInstallCoreDeps(args?.example || args?.default);
 
       if (!Object.keys(args).length) {
