@@ -42,6 +42,7 @@ import type {
   GetScoresResponse,
   GetScoresByRunIdParams,
   GetScoresByEntityIdParams,
+  GetScoresBySpanParams,
   SaveScoreParams,
   SaveScoreResponse,
   GetAITracesResponse,
@@ -581,7 +582,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing the scorer
    */
   public getScorer(scorerId: string): Promise<GetScorerResponse> {
-    return this.request(`/api/scores/scorers/${scorerId}`);
+    return this.request(`/api/scores/scorers/${encodeURIComponent(scorerId)}`);
   }
 
   public getScoresByScorerId(params: GetScoresByScorerIdParams): Promise<GetScoresResponse> {
@@ -602,7 +603,7 @@ export class MastraClient extends BaseResource {
       searchParams.set('perPage', String(perPage));
     }
     const queryString = searchParams.toString();
-    return this.request(`/api/scores/scorer/${scorerId}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/scores/scorer/${encodeURIComponent(scorerId)}${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -622,7 +623,7 @@ export class MastraClient extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/scores/run/${runId}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/scores/run/${encodeURIComponent(runId)}${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -642,7 +643,31 @@ export class MastraClient extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/scores/entity/${entityType}/${entityId}${queryString ? `?${queryString}` : ''}`);
+    return this.request(
+      `/api/scores/entity/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}${queryString ? `?${queryString}` : ''}`,
+    );
+  }
+
+  /**
+   * Retrieves scores by trace ID and span ID
+   * @param params - Parameters containing trace ID, span ID, and pagination options
+   * @returns Promise containing scores and pagination info
+   */
+  public getScoresBySpan(params: GetScoresBySpanParams): Promise<GetScoresResponse> {
+    const { traceId, spanId, page, perPage } = params;
+    const searchParams = new URLSearchParams();
+
+    if (page !== undefined) {
+      searchParams.set('page', String(page));
+    }
+    if (perPage !== undefined) {
+      searchParams.set('perPage', String(perPage));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(
+      `/api/scores/span/${encodeURIComponent(traceId)}/${encodeURIComponent(spanId)}${queryString ? `?${queryString}` : ''}`,
+    );
   }
 
   /**
