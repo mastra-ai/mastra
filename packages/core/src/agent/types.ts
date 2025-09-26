@@ -141,11 +141,6 @@ export type AgentGenerateOptions<
   output?: OutputType | OUTPUT;
   /** Schema for structured output generation alongside tool calls. */
   experimental_output?: EXPERIMENTAL_OUTPUT;
-  /**
-   * Structured output configuration using StructuredOutputProcessor.
-   * This provides better DX than manually creating the processor.
-   */
-  structuredOutput?: EXPERIMENTAL_OUTPUT extends z.ZodTypeAny ? StructuredOutputOptions<EXPERIMENTAL_OUTPUT> : never;
   /** Controls how tools are selected during generation */
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** Telemetry settings */

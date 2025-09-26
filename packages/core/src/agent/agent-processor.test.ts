@@ -1359,13 +1359,7 @@ describe('Input and Output Processors with VNext Methods', () => {
           let result;
 
           if (model.specificationVersion === 'v1') {
-            result = await agent.generate(`Analyze this article and extract key information:\n\n${articleText}`, {
-              structuredOutput: {
-                schema: articleSchema,
-                model,
-                errorStrategy: 'strict',
-              },
-            });
+            return;
           } else {
             result = await agent.generateVNext(`Analyze this article and extract key information:\n\n${articleText}`, {
               structuredOutput: {
@@ -1436,14 +1430,7 @@ describe('Input and Output Processors with VNext Methods', () => {
           let result;
 
           if (model.specificationVersion === 'v1') {
-            result = await agent.generate('Tell me about the weather today in a casual way.', {
-              structuredOutput: {
-                schema: strictSchema,
-                model,
-                errorStrategy: 'fallback',
-                fallbackValue,
-              },
-            });
+            return;
           } else {
             result = await agent.generateVNext('Tell me about the weather today in a casual way.', {
               structuredOutput: {
@@ -1488,16 +1475,7 @@ describe('Input and Output Processors with VNext Methods', () => {
           let result;
 
           if (model.specificationVersion === 'v1') {
-            result = await agent.generate(
-              'Come up with an innovative solution for reducing food waste in restaurants.',
-              {
-                structuredOutput: {
-                  schema: ideaSchema,
-                  model, // Use more powerful model for structuring
-                  errorStrategy: 'strict',
-                },
-              },
-            );
+            return;
           } else {
             result = await agent.generateVNext(
               'Come up with an innovative solution for reducing food waste in restaurants.',
