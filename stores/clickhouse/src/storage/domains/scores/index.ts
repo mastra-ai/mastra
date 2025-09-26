@@ -95,7 +95,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
 
     try {
       const record = {
-        ...score,
+        ...parsedScore,
       };
       await this.client.insert({
         table: TABLE_SCORERS,

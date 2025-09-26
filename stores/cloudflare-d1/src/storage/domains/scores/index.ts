@@ -1,10 +1,6 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
-import {
-  saveScorePayloadSchema,
-  type ScoreRowData,
-  type ScoringSource,
-  type ValidatedSaveScorePayload,
-} from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
 import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
 import type Cloudflare from 'cloudflare';
