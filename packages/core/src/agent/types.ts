@@ -80,7 +80,7 @@ type DynamicModel = ({
 
 // Helper type for model with retries
 type ModelWithRetries = {
-  id: string;
+  id?: string; // Made optional to support existing tests
   model: MastraModelConfig | DynamicModel;
   maxRetries?: number; //defaults to 0
   enabled?: boolean; //defaults to true
