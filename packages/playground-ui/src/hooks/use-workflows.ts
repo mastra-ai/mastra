@@ -1,6 +1,6 @@
 import { WorkflowWatchResult } from '@mastra/client-js';
 
-import { useMastraClient } from '@mastra/react-hooks';
+import { useMastraClient } from '@mastra/react';
 import { usePlaygroundStore } from '@/store/playground-store';
 import { useQuery } from '@tanstack/react-query';
 
