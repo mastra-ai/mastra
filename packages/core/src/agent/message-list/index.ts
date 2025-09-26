@@ -296,13 +296,13 @@ export class MessageList {
         }
 
         // Ensure we have at least one user message
-        const needsDefaultUserMessage = !messages.length || messages[0]?.role === 'assistant';
+        const needsDefaultUserMessage = !messages.length || messages[messages.length - 1]?.role !== 'user';
         if (needsDefaultUserMessage) {
           const defaultMessage: AIV5Type.ModelMessage = {
             role: 'user',
             content: '.',
           };
-          messages.unshift(defaultMessage);
+          messages.push(defaultMessage);
         }
 
         return messages.map(MessageList.aiV5ModelMessageToV2PromptMessage);
