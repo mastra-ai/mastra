@@ -995,7 +995,7 @@ importers:
         version: link:../mcp
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
-        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -1195,7 +1195,7 @@ importers:
         version: 1.9.0
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
-        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -2415,8 +2415,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@storybook/addon-docs':
-        specifier: ^9.1.7
-        version: 9.1.7(@types/react@19.1.13)(storybook@9.1.7(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))
+        specifier: ^9.1.8
+        version: 9.1.8(@types/react@19.1.13)(storybook@9.1.7(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))
       '@storybook/react-vite':
         specifier: ^9.1.6
         version: 9.1.6(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(rollup@4.50.2)(storybook@9.1.7(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))(typescript@5.8.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1))
@@ -9498,10 +9498,10 @@ packages:
   '@standard-schema/spec@1.0.0':
     resolution: {integrity: sha512-m2bOd0f2RT9k8QJx1JN85cZYyH1RqFBdlwtkSlf4tBDYLCiiZnv1fIIwacK6cqwXavOydf0NPToMQgpKq+dVlA==}
 
-  '@storybook/addon-docs@9.1.7':
-    resolution: {integrity: sha512-ZwD25QBWOeZS2T/JSHl6iqMx7w2yCxREnZIQaLpyOoGl2mRUk2NHcsGfdXQ4sL0zd7YT7CTfzH5tbwQfLIiEog==}
+  '@storybook/addon-docs@9.1.8':
+    resolution: {integrity: sha512-GVrNVEdNRRo6r1hawfgyy6x+HJqPx1oOHm0U0wz0SGAxgS/Xh6SQVZL+RDoh7NpXkNi1GbezVlT931UsHQTyvQ==}
     peerDependencies:
-      storybook: ^9.1.7
+      storybook: ^9.1.8
 
   '@storybook/builder-vite@9.1.6':
     resolution: {integrity: sha512-AUoSjXr4MvtkFQkfFfZSXrqVM0z80DX0sebm80nODu/qFhsJIU5trNP+XDYY8ClODERXd5QSZJyOyH9nOz60SA==}
@@ -9514,10 +9514,10 @@ packages:
     peerDependencies:
       storybook: ^9.1.6
 
-  '@storybook/csf-plugin@9.1.7':
-    resolution: {integrity: sha512-xrPKWt16hBXvyHliuIEzPLvHdRbEe5Oubk/NIPibFVG4cxhEmNxMeHo3uFua3wgtEXyp4UErRWteviNjYSzjUA==}
+  '@storybook/csf-plugin@9.1.8':
+    resolution: {integrity: sha512-KnrXPz87bn+8ZGkzFEBc7TT5HkWpR1Xz7ojxPclSvkKxTfzazuaw0JlOQMzJoI1+wHXDAIw/4MIsO8HEiaWyfQ==}
     peerDependencies:
-      storybook: ^9.1.7
+      storybook: ^9.1.8
 
   '@storybook/global@5.0.0':
     resolution: {integrity: sha512-FcOqPAXACP0I3oJ/ws6/rrPT9WGhu915Cg8D02a9YxLo0DE9zI+a9A5gRGvmQ09fiWPukqI8ZAEoQEdWUKMQdQ==}
@@ -9536,12 +9536,12 @@ packages:
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0-beta
       storybook: ^9.1.6
 
-  '@storybook/react-dom-shim@9.1.7':
-    resolution: {integrity: sha512-ktjCuZ42g3TAF6nMiSdLbJu/EcvC039hYrmVltKpfF7krf+0xHkK3dCuYqSBp5nv3fS+IemrqmzJwREu5BJLuQ==}
+  '@storybook/react-dom-shim@9.1.8':
+    resolution: {integrity: sha512-OepccjVZh/KQugTH8/RL2CIyf1g5Lwc5ESC8x8BH3iuYc82WMQBwMJzRI5EofQdirau63NGrqkWCgQASoVreEA==}
     peerDependencies:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0-beta
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0-beta
-      storybook: ^9.1.7
+      storybook: ^9.1.8
 
   '@storybook/react-vite@9.1.6':
     resolution: {integrity: sha512-YNKQZcz5Vtv8OdHUJ65Wx4PbfZMrPPbtL+OYAR0We+EEoTDofi3VogXyOUw99Jppp1HIq5IiDF5qyZPEpC5k0A==}
@@ -20873,7 +20873,7 @@ snapshots:
       '@isaacs/ttlcache': 1.4.1
       '@mastra/schema-compat': 0.11.4(ai@4.3.19(react@19.1.1)(zod@4.1.9))(zod@4.1.9)
       '@opentelemetry/api': 1.9.0
-      '@opentelemetry/auto-instrumentations-node': 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+      '@opentelemetry/auto-instrumentations-node': 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-grpc': 0.203.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-http': 0.203.0(@opentelemetry/api@1.9.0)
@@ -21312,7 +21312,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))':
+  '@opentelemetry/auto-instrumentations-node@0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -21361,7 +21361,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.3.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.10.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.3(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
       '@opentelemetry/resources': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.203.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -22442,7 +22442,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -23892,12 +23892,12 @@ snapshots:
 
   '@standard-schema/spec@1.0.0': {}
 
-  '@storybook/addon-docs@9.1.7(@types/react@19.1.13)(storybook@9.1.7(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))':
+  '@storybook/addon-docs@9.1.8(@types/react@19.1.13)(storybook@9.1.7(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))':
     dependencies:
       '@mdx-js/react': 3.1.0(@types/react@19.1.13)(react@19.1.1)
-      '@storybook/csf-plugin': 9.1.7(storybook@9.1.7(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))
+      '@storybook/csf-plugin': 9.1.8(storybook@9.1.7(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))
       '@storybook/icons': 1.4.0(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
-      '@storybook/react-dom-shim': 9.1.7(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(storybook@9.1.7(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))
+      '@storybook/react-dom-shim': 9.1.8(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(storybook@9.1.7(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))
       react: 19.1.1
       react-dom: 19.1.1(react@19.1.1)
       storybook: 9.1.7(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1))
@@ -23917,7 +23917,7 @@ snapshots:
       storybook: 9.1.7(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1))
       unplugin: 1.16.1
 
-  '@storybook/csf-plugin@9.1.7(storybook@9.1.7(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))':
+  '@storybook/csf-plugin@9.1.8(storybook@9.1.7(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))':
     dependencies:
       storybook: 9.1.7(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1))
       unplugin: 1.16.1
@@ -23935,7 +23935,7 @@ snapshots:
       react-dom: 19.1.1(react@19.1.1)
       storybook: 9.1.7(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1))
 
-  '@storybook/react-dom-shim@9.1.7(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(storybook@9.1.7(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))':
+  '@storybook/react-dom-shim@9.1.8(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(storybook@9.1.7(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))':
     dependencies:
       react: 19.1.1
       react-dom: 19.1.1(react@19.1.1)
