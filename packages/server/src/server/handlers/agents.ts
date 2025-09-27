@@ -1,14 +1,3 @@
-// TODO: Install these AI SDK dependencies
-// import { anthropic } from '@ai-sdk/anthropic';
-// import { anthropic as anthropicV5 } from '@ai-sdk/anthropic-v5';
-// import { google } from '@ai-sdk/google';
-// import { google as googleV5 } from '@ai-sdk/google-v5';
-// import { groq } from '@ai-sdk/groq';
-// import { groq as groqV5 } from '@ai-sdk/groq-v5';
-// import { openai } from '@ai-sdk/openai';
-// import { openai as openaiV5 } from '@ai-sdk/openai-v5';
-// import { xai } from '@ai-sdk/xai';
-// import { xai as xaiV5 } from '@ai-sdk/xai-v5';
 import type { Agent, MastraLanguageModel } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
@@ -708,36 +697,23 @@ export async function updateAgentModelHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const agentModel = await agent.getModel();
-    const modelVersion = agentModel.specificationVersion;
+    const newModel = `${body.provider}/${body.modelId}`;
 
-    const { modelId, provider } = body;
+    const llm = await agent.getLLM();
+    // Normalize the existing provider by removing AI SDK suffixes
+    let existingProvider = llm?.getProvider();
+    if (existingProvider?.endsWith('.chat') || existingProvider?.endsWith('.completion')) {
+      existingProvider = existingProvider.substring(0, existingProvider.lastIndexOf('.'));
+    }
+    const existingModelId = llm?.getModelId();
 
-    // TODO: Uncomment when @ai-sdk packages are installed
-    // const providerMap = {
-    //   v1: {
-    //     openai: openai(modelId),
-    //     anthropic: anthropic(modelId),
-    //     groq: groq(modelId),
-    //     xai: xai(modelId),
-    //     google: google(modelId),
-    //   },
-    //   v2: {
-    //     openai: openaiV5(modelId),
-    //     anthropic: anthropicV5(modelId),
-    //     groq: groqV5(modelId),
-    //     xai: xaiV5(modelId),
-    //     google: googleV5(modelId),
-    //   },
-    // };
+    if (existingProvider && existingModelId && `${existingProvider}/${existingModelId}` === newModel) {
+      return { message: 'Agent model does not need updating, it already uses the requested model' };
+    }
 
-    // TODO: need to fix this! one of the last remaining things to fix
-    // const modelVersionKey = modelVersion === 'v2' ? 'v2' : 'v1';
-    // const model = providerMap[modelVersionKey][provider];
-    // agent.__updateModel({ model });
-
-    // Temporary fallback until @ai-sdk packages are installed
-    // throw new Error('Model router functionality requires @ai-sdk packages to be installed');
+    // Use the universal mastra router format: "provider/model"
+    // This will be handled by OpenAICompatibleModel in the agent
+    agent.__updateModel({ model: newModel });
 
     return { message: 'Agent model updated' };
   } catch (error) {
