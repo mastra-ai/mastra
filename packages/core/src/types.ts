@@ -7,4 +7,17 @@ export type DynamicArgument<T> =
 
 export type NonEmpty<T extends string> = T extends '' ? never : T;
 
-export type MastraIdGenerator = () => NonEmpty<string>;
+export interface IdGeneratorContext {
+  type: 'agent' | 'workflow' | 'memory' | 'network' | 'internal' | 'unknown';
+  agentId?: string;
+  agentName?: string;
+  workflowId?: string;
+  workflowName?: string;
+  threadId?: string;
+  resourceId?: string;
+  stepId?: string;
+  runId?: string;
+  [key: string]: any;
+}
+
+export type MastraIdGenerator = (context?: IdGeneratorContext) => NonEmpty<string>;
