@@ -11,9 +11,9 @@
     "@ai-sdk/openai": "latest",
     "@assistant-ui/react": "0.10.45",
     "@assistant-ui/react-markdown": "^0.10.9",
-    "@assistant-ui/react-ui": "^0.1.8",
+    "@assistant-ui/react-ui": "^0.2.0",
     "@mastra/client-js": "latest",
-    "next": "^15.3.1",
+    "next": "^15.5.4",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "tailwindcss-animate": "^1.0.7",
@@ -30,10 +30,10 @@
     "@types/react-dom": "^19.1.7",
     "eslint": "^9.35.0",
     "eslint-config-next": "15.5.3",
-    "postcss": "^8.5.3",
+    "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3"
   },
   "version": "0.0.0",
-  "packageManager": "pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39"
+  "packageManager": "pnpm@10.17.1+sha512.17c560fca4867ae9473a3899ad84a88334914f379be46d455cbf92e5cf4b39d34985d452d2583baf19967fa76cb5c17bc9e245529d0b98745721aa7200ecaf7a"
 }
