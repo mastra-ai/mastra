@@ -143,13 +143,19 @@ export const AgentMetadataModelSwitcher = ({
 
   const [infoMsg, setInfoMsg] = useState('');
 
-// Auto-save when model changes
+  // Auto-save when model changes
   const handleModelSelect = async (modelId: string) => {
     setSelectedModel(modelId);
     setShowModelSuggestions(false);
 
-    // Find which provider this model belongs to
-    const modelInfo = allModels.find(m => m.model === modelId);
+    // First try to find the model within the current provider's models
+    let modelInfo = allModels.find(m => m.model === modelId && m.provider === currentModelProvider);
+
+    // If not found in current provider, search all models (fallback)
+    if (!modelInfo) {
+      modelInfo = allModels.find(m => m.model === modelId);
+    }
+
     const providerToUse = modelInfo?.provider || currentModelProvider || selectedProvider;
 
     console.log('DEBUG: handleModelSelect called with:', { modelId, providerToUse, modelInfo });
