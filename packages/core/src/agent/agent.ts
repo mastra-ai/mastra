@@ -766,7 +766,14 @@ export class Agent<
     return resolveMaybePromise(modelToUse, resolvedModel => {
       let llm: MastraLLM | Promise<MastraLLM>;
       if (resolvedModel.specificationVersion === 'v2') {
-        llm = this.prepareModels(runtimeContext, resolvedModel).then(models => {
+        // If we have an array of models, use prepareModels without passing the resolved model
+        // so it processes the entire array
+        const modelsPromise =
+          Array.isArray(this.model) && !model
+            ? this.prepareModels(runtimeContext)
+            : this.prepareModels(runtimeContext, resolvedModel);
+
+        llm = modelsPromise.then(models => {
           const enabledModels = models.filter(model => model.enabled);
           return new MastraLLMVNext({
             models: enabledModels,
@@ -2903,10 +2910,10 @@ export class Agent<
         }
 
         return {
-          id: modelConfig.id,
+          id: modelConfig.id || model.modelId || 'unknown',
           model: model as MastraLanguageModelV2,
-          maxRetries: modelConfig.maxRetries,
-          enabled: modelConfig.enabled,
+          maxRetries: modelConfig.maxRetries ?? 0,
+          enabled: modelConfig.enabled ?? true,
         };
       }),
     );
