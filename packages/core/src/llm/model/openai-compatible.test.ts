@@ -49,14 +49,19 @@ describe('OpenAICompatibleModel', () => {
       }).toThrow('Unknown provider: unknown-provider. Use a custom URL instead.');
     });
 
-    it('should throw error for missing API key', () => {
+    it('should throw error for missing API key when calling doStream', async () => {
       // Remove API key from environment
       const originalEnv = process.env;
       process.env = {};
 
-      expect(() => {
-        new OpenAICompatibleModel('openai/gpt-4o');
-      }).toThrow('API key not found for provider "openai". Please set the OPENAI_API_KEY environment variable.');
+      const model = new OpenAICompatibleModel('openai/gpt-4o');
+
+      await expect(
+        model.doStream({
+          prompt: [],
+          providerOptions: {},
+        }),
+      ).rejects.toThrow('API key not found for provider "openai". Please set the OPENAI_API_KEY environment variable.');
 
       // Restore environment
       process.env = originalEnv;
