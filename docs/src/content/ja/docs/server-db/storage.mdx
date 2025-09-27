@@ -1,0 +1,529 @@
+---
+title: Mastra のストレージ | Mastra ドキュメント
+description: Mastra のストレージシステムとデータ永続化機能の概要
+---
+
+import { Tabs } from "nextra/components";
+
+import { PropertiesTable } from "@/components/properties-table";
+import { SchemaTable } from "@/components/schema-table";
+import { StorageOverviewImage } from "@/components/storage-overview-image";
+
+
+
+# MastraStorage
+
+`MastraStorage` は、次の管理に共通のインターフェースを提供します:
+
+- **Suspended Workflows**: 一時停止中のワークフローのシリアライズ済み状態（後で再開できるように）
+- **Memory**: アプリケーション内の `resourceId` ごとのスレッドとメッセージ
+- **Traces**: Mastra のすべてのコンポーネントからの OpenTelemetry トレース
+- **Eval Datasets**: 評価実行におけるスコアとその理由
+
+<br />
+
+<br />
+
+<StorageOverviewImage />
+
+Mastra には複数のストレージプロバイダがあり、相互に置き換えて利用できます。たとえば、開発では libsql、本番では postgres を使っても、どちらの場合でもコードは同じように動作します。
+
+
+
+## 設定
+
+Mastra はデフォルトのストレージオプションで構成できます:
+
+```typescript copy
+import { Mastra } from "@mastra/core/mastra";
+import { LibSQLStore } from "@mastra/libsql";
+
+const mastra = new Mastra({
+  storage: new LibSQLStore({
+    url: "file:./mastra.db",
+  }),
+});
+```
+
+`storage` を指定しない場合、Mastra はアプリケーションの再起動やデプロイをまたいでデータを保持しません。ローカルでのテストを超えるあらゆるデプロイでは、`Mastra` で、または `new Memory()` 内で直接、独自のストレージ設定を用意してください。
+
+
+
+## データスキーマ
+
+{/*
+LLM CONTEXT: この Tabs コンポーネントは、Mastra が保存する各種データ型のデータベーススキーマを表示します。
+各タブでは、特定のデータエンティティ（Messages、Threads、Workflows など）のテーブル構造とカラム定義を示します。
+タブにより、ユーザーはデータモデルや各ストレージエンティティ間の関係を理解しやすくなります。
+各タブには、型、制約、例示的なデータ構造を含む詳細なカラム情報が含まれます。
+データ型には Messages、Threads、Workflows、Eval Datasets、Traces が含まれます。
+*/}
+
+
+
+<Tabs items={['Messages', 'Threads', 'Resources', 'Workflows', 'Eval Datasets', 'Traces']}>
+  <Tabs.Tab>
+    会話メッセージとそのメタデータを格納します。各メッセージはスレッドに属し、送信者のロールやメッセージ種別に関するメタデータとともに実際の内容を含みます。
+
+    <br />
+
+    <SchemaTable
+      columns={[
+  {
+    name: "id",
+    type: "uuidv4",
+    description: "メッセージの一意の識別子（形式: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`）",
+    constraints: [
+      { type: "primaryKey" },
+      { type: "nullable", value: false }
+    ]
+  },
+  {
+    name: "thread_id",
+    type: "uuidv4",
+    description: "親スレッドへの参照",
+    constraints: [
+      { type: "foreignKey", value: "threads.id" },
+      { type: "nullable", value: false }
+    ]
+  },
+  {
+    name: "resourceId",
+    type: "uuidv4",
+    description: "このメッセージの所有元リソースのID",
+    constraints: [
+      { type: "nullable", value: true }
+    ]
+  },
+  {
+    name: "content",
+    type: "text",
+    description: "V2形式のメッセージ内容のJSON。例: `{ format: 2, parts: [...] }`",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "role",
+    type: "text",
+    description: "`user | assistant` の列挙型",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "createdAt",
+    type: "timestamp",
+    description: "スレッド内のメッセージの並び替えに使用",
+    constraints: [{ type: "nullable", value: false }]
+  }
+]}
+    />
+
+    メッセージの `content` 列には、`MastraMessageContentV2` 型に準拠したJSONオブジェクトが格納されます。これは AI SDK の `UIMessage` のメッセージ構造に近づけて設計されています。
+
+    <SchemaTable
+      columns={[
+  {
+    name: "format",
+    type: "integer",
+    description: "メッセージフォーマットのバージョン（現在は 2）",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "parts",
+    type: "array (JSON)",
+    description: "メッセージパーツの配列（text、tool-invocation、file、reasoning など）。この配列内の各項目の構造は `type` によって異なります。",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "experimental_attachments",
+    type: "array (JSON)",
+    description: "任意のファイル添付の配列",
+    constraints: [{ type: "nullable", value: true }]
+  },
+  {
+    name: "content",
+    type: "text",
+    description: "メッセージのメインのテキスト内容（任意）",
+    constraints: [{ type: "nullable", value: true }]
+  },
+  {
+    name: "toolInvocations",
+    type: "array (JSON)",
+    description: "ツール呼び出しと結果の要約（任意）の配列",
+    constraints: [{ type: "nullable", value: true }]
+  },
+  {
+    name: "reasoning",
+    type: "object (JSON)",
+    description: "アシスタントの応答の背後にある推論プロセスに関する情報（任意）",
+    constraints: [{ type: "nullable", value: true }]
+  },
+  {
+    name: "annotations",
+    type: "object (JSON)",
+    description: "追加のメタデータまたは注釈（任意）",
+    constraints: [{ type: "nullable", value: true }]
+  }
+]}
+    />
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    関連するメッセージをまとめ、特定のリソースに紐づけます。会話に関するメタデータを含みます。
+
+    <br />
+
+    <SchemaTable
+      columns={[
+  {
+    name: "id",
+    type: "uuidv4",
+    description: "スレッドの一意の識別子（形式: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`）",
+    constraints: [
+      { type: "primaryKey" },
+      { type: "nullable", value: false }
+    ]
+  },
+  {
+    name: "resourceId",
+    type: "text",
+    description: "このスレッドが関連付けられている外部リソースの主識別子。関連スレッドのグルーピングや取得に使用します。",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "title",
+    type: "text",
+    description: "会話スレッドのタイトル",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "metadata",
+    type: "text",
+    description: "JSON 文字列としてのカスタムスレッドメタデータ。例:",
+    example: {
+      category: "support",
+      priority: 1
+    }
+  },
+  {
+    name: "createdAt",
+    type: "timestamp",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "updatedAt",
+    type: "timestamp",
+    description: "スレッドの並び替え履歴に使用",
+    constraints: [{ type: "nullable", value: false }]
+  }
+]}
+    />
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    リソース単位のワーキングメモリ向けに、ユーザー固有のデータを保存します。各リソースはユーザーまたはエンティティを表し、そのユーザーの全スレッド間でワーキングメモリが永続化されます。
+
+    <br />
+
+    <SchemaTable
+      columns={[
+  {
+    name: "id",
+    type: "text",
+    description: "リソース識別子（ユーザーまたはエンティティ ID）。スレッドやエージェント呼び出しで使用される resourceId と同一",
+    constraints: [
+      { type: "primaryKey" },
+      { type: "nullable", value: false }
+    ]
+  },
+  {
+    name: "workingMemory",
+    type: "text",
+    description: "Markdown テキストとして保持する永続的なワーキングメモリデータ。ユーザープロフィール、嗜好、スレッド間で共有されるコンテキスト情報を含みます。",
+    constraints: [{ type: "nullable", value: true }]
+  },
+  {
+    name: "metadata",
+    type: "jsonb",
+    description: "JSON 形式の追加リソースメタデータ。例:",
+    example: {
+      preferences: { language: "en", timezone: "UTC" },
+      tags: ["premium", "beta-user"]
+    },
+    constraints: [{ type: "nullable", value: true }]
+  },
+  {
+    name: "createdAt",
+    type: "timestamp",
+    description: "このリソースレコードが最初に作成された時刻",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "updatedAt",
+    type: "timestamp",
+    description: "ワーキングメモリが最後に更新された時刻",
+    constraints: [{ type: "nullable", value: false }]
+  }
+]}
+    />
+
+    **注**: このテーブルは、リソース単位のワーキングメモリをサポートするストレージアダプター（LibSQL、PostgreSQL、Upstash）のみで作成・使用されます。その他のストレージアダプターでは、リソース単位メモリを使用しようとした場合、有用なエラーメッセージが返されます。
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    `suspend` がワークフローで呼び出されると、その状態は次の形式で保存されます。`resume` が呼び出されると、その状態は復元されます。
+
+    <br />
+
+    <SchemaTable
+      columns={[
+  {
+    name: "workflow_name",
+    type: "text",
+    description: "ワークフロー名",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "run_id",
+    type: "uuidv4",
+    description: "ワークフロー実行の一意の識別子。suspend/resume サイクルをまたいだ状態の追跡に使用します（形式: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`）",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "snapshot",
+    type: "text",
+    description: "JSON でシリアライズされたワークフロー状態。例:",
+    example: {
+      value: { currentState: 'running' },
+      context: {
+        stepResults: {},
+        attempts: {},
+        triggerData: {}
+      },
+      activePaths: [],
+      runId: '550e8400-e29b-41d4-a716-446655440000',
+      timestamp: 1648176000000
+    },
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "createdAt",
+    type: "timestamp",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "updatedAt",
+    type: "timestamp",
+    description: "最終更新時刻。ワークフロー実行中の状態変化の追跡に使用します",
+    constraints: [{ type: "nullable", value: false }]
+  }
+]}
+    />
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    エージェント出力に対してメトリクスを実行した評価結果を保存します。
+
+    <br />
+
+    <SchemaTable
+      columns={[
+  {
+    name: "input",
+    type: "text",
+    description: "エージェントに与えた入力",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "output",
+    type: "text",
+    description: "エージェントが生成した出力",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "result",
+    type: "jsonb",
+    description: "スコアと詳細を含む評価結果データ。例:",
+    example: {
+      score: 0.95,
+      details: {
+        reason: "応答は元の資料を正確に反映しています",
+        citations: ["page 1", "page 3"]
+      }
+    },
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "agent_name",
+    type: "text",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "metric_name",
+    type: "text",
+    description: "例: Faithfulness、Hallucination など",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "instructions",
+    type: "text",
+    description: "エージェントのシステムプロンプトまたは指示",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "test_info",
+    type: "jsonb",
+    description: "追加のテストメタデータおよび設定",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "global_run_id",
+    type: "uuidv4",
+    description: "関連する評価実行をまとめるための ID（例: CI 実行内のすべてのユニットテスト）",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "run_id",
+    type: "uuidv4",
+    description: "評価対象の実行の一意の識別子（形式: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`）",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "created_at",
+    type: "timestamp",
+    constraints: [{ type: "nullable", value: false }]
+  }
+]}
+    />
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    監視とデバッグのために OpenTelemetry のトレースを収集します。
+
+    <br />
+
+    <SchemaTable
+      columns={[
+  {
+    name: "id",
+    type: "text",
+    description: "一意のトレース識別子",
+    constraints: [
+      { type: "nullable", value: false },
+      { type: "primaryKey" }
+    ]
+  },
+  {
+    name: "parentSpanId",
+    type: "text",
+    description: "親スパンのID。トップレベルのスパンの場合はnull",
+  },
+  {
+    name: "name",
+    type: "text",
+    description: "階層的な操作名（例: `workflow.myWorkflow.execute`、`http.request`、`database.query`）",
+    constraints: [{ type: "nullable", value: false }],
+  },
+  {
+    name: "traceId",
+    type: "text",
+    description: "関連するスパンをまとめるルートトレース識別子",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "scope",
+    type: "text",
+    description: "スパンを作成したライブラリ／パッケージ／サービス（例: `@mastra/core`、`express`、`pg`）",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "kind",
+    type: "integer",
+    description: "`INTERNAL`（0・プロセス内）、`CLIENT`（1・送信呼び出し）、`SERVER`（2・受信呼び出し）、`PRODUCER`（3・非同期ジョブの作成）、`CONSUMER`（4・非同期ジョブの処理）",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "attributes",
+    type: "jsonb",
+    description: "スパンのメタデータを含むユーザー定義のキーと値のペア",
+  },
+  {
+    name: "status",
+    type: "jsonb",
+    description: "`code`（UNSET=0、ERROR=1、OK=2）と任意の `message` を含むJSONオブジェクト。例:",
+    example: {
+      code: 1,
+      message: "HTTPリクエストがステータス500で失敗しました"
+    }
+  },
+  {
+    name: "events",
+    type: "jsonb",
+    description: "スパン中に発生したタイムスタンプ付きイベント",
+  },
+  {
+    name: "links",
+    type: "jsonb",
+    description: "他の関連スパンへのリンク",
+    },
+  {
+    name: "other",
+    type: "text",
+    description: "追加の OpenTelemetry スパンフィールドをJSON文字列として格納。例:",
+    example: {
+      droppedAttributesCount: 2,
+      droppedEventsCount: 1,
+      instrumentationLibrary: "@opentelemetry/instrumentation-http"
+    }
+  },
+  {
+    name: "startTime",
+    type: "bigint",
+    description: "スパン開始時点のUnixエポックからの経過ナノ秒",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "endTime",
+    type: "bigint",
+    description: "スパン終了時点のUnixエポックからの経過ナノ秒",
+    constraints: [{ type: "nullable", value: false }]
+  },
+  {
+    name: "createdAt",
+    type: "timestamp",
+    constraints: [{ type: "nullable", value: false }]
+  }
+]}
+    />
+  </Tabs.Tab>
+</Tabs>
+
+
+
+### メッセージの照会
+
+メッセージは内部的に V2 形式で保存されており、概ね AI SDK の `UIMessage` 形式に相当します。`getMessages` でメッセージを取得する際は、出力形式を指定でき、後方互換性のためデフォルトは `v1` です。
+
+```typescript copy
+// デフォルトの V1 形式でメッセージを取得（概ね AI SDK の CoreMessage 形式に相当）
+const messagesV1 = await mastra.getStorage().getMessages({ threadId: 'your-thread-id' });
+
+// V2 形式でメッセージを取得（概ね AI SDK の UIMessage 形式に相当）
+const messagesV2 = await mastra.getStorage().getMessages({ threadId: 'your-thread-id', format: 'v2' });
+```
+
+メッセージ ID の配列を使ってメッセージを取得することも可能です。`getMessages` と異なり、こちらはデフォルトで V2 形式になります。
+
+```typescript copy
+const messagesV1 = await mastra.getStorage().getMessagesById({ messageIds: messageIdArr, format: 'v1' });
+
+const messagesV2 = await mastra.getStorage().getMessagesById({ messageIds: messageIdArr });
+```
+
+
+
+## ストレージプロバイダー
+
+Mastra は次のプロバイダーをサポートしています：
+
+- ローカル開発には [LibSQL Storage](../../reference/storage/libsql.mdx) をご覧ください
+- 本番環境には [PostgreSQL Storage](../../reference/storage/postgresql.mdx) をご覧ください
+- サーバーレス環境には [Upstash Storage](../../reference/storage/upstash.mdx) をご覧ください

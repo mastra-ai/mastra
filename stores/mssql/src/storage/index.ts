@@ -149,6 +149,7 @@ export class MSSQLStore extends MastraStorage {
     hasColumn: boolean;
     createTable: boolean;
     deleteMessages: boolean;
+    getScoresBySpan: boolean;
   } {
     return {
       selectByIncludeResourceScope: true,
@@ -156,6 +157,7 @@ export class MSSQLStore extends MastraStorage {
       hasColumn: true,
       createTable: true,
       deleteMessages: true,
+      getScoresBySpan: true,
     };
   }
 
@@ -394,13 +396,15 @@ export class MSSQLStore extends MastraStorage {
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
-    return this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+    return this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, resourceId, snapshot });
   }
 
   async loadWorkflowSnapshot({
@@ -490,5 +494,17 @@ export class MSSQLStore extends MastraStorage {
       entityType: _entityType,
       pagination: _pagination,
     });
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination: _pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    return this.stores.scores.getScoresBySpan({ traceId, spanId, pagination: _pagination });
   }
 }

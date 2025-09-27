@@ -9,7 +9,7 @@ import type {
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
 import { parseModelString, getProviderConfig } from './provider-registry.generated';
-import type { OpenAICompatibleModelId } from './provider-registry.generated';
+import type { ModelRouterModelId } from './provider-registry.generated';
 import type { OpenAICompatibleConfig } from './shared.types';
 
 // Helper function to resolve API key from environment
@@ -128,7 +128,7 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
   private url: string;
   private headers: Record<string, string>;
 
-  constructor(config: OpenAICompatibleModelId | OpenAICompatibleConfig | string) {
+  constructor(config: ModelRouterModelId | OpenAICompatibleConfig) {
     // Parse configuration
     let parsedConfig: OpenAICompatibleConfig;
 
@@ -551,8 +551,10 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
     const decoder = new TextDecoder();
     let buffer = '';
     let sentStart = false;
-    const toolCallBuffers = new Map<number, { id: string; name: string; args: string }>();
+    const toolCallBuffers = new Map<number, { id: string; name: string; args: string; sent?: boolean }>();
     const mapFinishReason = this.mapFinishReason.bind(this);
+
+    let isActiveText = false;
 
     const stream = new ReadableStream<LanguageModelV2StreamPart>({
       async start(controller) {
@@ -567,14 +569,16 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
             const { done, value } = await reader.read();
 
             if (done) {
-              // Parse and send any buffered tool calls
+              // Parse and send any buffered tool calls that haven't been sent yet
               for (const [_, toolCall] of toolCallBuffers) {
-                controller.enqueue({
-                  type: 'tool-call',
-                  toolCallId: toolCall.id,
-                  toolName: toolCall.name,
-                  input: toolCall.args || '{}',
-                });
+                if (!toolCall.sent && toolCall.id && toolCall.name && toolCall.args) {
+                  controller.enqueue({
+                    type: 'tool-call',
+                    toolCallId: toolCall.id,
+                    toolName: toolCall.name,
+                    input: toolCall.args || '{}',
+                  });
+                }
               }
 
               controller.close();
@@ -610,11 +614,19 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
 
                   // Handle text delta
                   if (choice.delta?.content) {
+                    if (!isActiveText) {
+                      controller.enqueue({ type: 'text-start', id: 'text-1' });
+                      isActiveText = true;
+                    }
+
                     controller.enqueue({
                       type: 'text-delta',
                       id: 'text-1',
                       delta: choice.delta.content,
                     });
+                  } else if (isActiveText) {
+                    controller.enqueue({ type: 'text-end', id: 'text-1' });
+                    isActiveText = false;
                   }
 
                   // Handle tool call deltas
@@ -623,9 +635,18 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
                       const index = toolCall.index;
 
                       if (!toolCallBuffers.has(index)) {
+                        // Send tool-input-start when we first see a tool call
+                        if (toolCall.id && toolCall.function?.name) {
+                          controller.enqueue({
+                            type: 'tool-input-start',
+                            id: toolCall.id,
+                            toolName: toolCall.function.name,
+                          });
+                        }
+
                         toolCallBuffers.set(index, {
-                          id: '',
-                          name: '',
+                          id: toolCall.id || '',
+                          name: toolCall.function?.name || '',
                           args: '',
                         });
                       }
@@ -647,23 +668,40 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
                           id: buffer.id,
                           delta: toolCall.function.arguments,
                         });
+
+                        // Check if tool call is complete (parsable JSON)
+                        try {
+                          JSON.parse(buffer.args);
+                          if (buffer.id && buffer.name) {
+                            controller.enqueue({
+                              type: 'tool-input-end',
+                              id: buffer.id,
+                            });
+
+                            controller.enqueue({
+                              type: 'tool-call',
+                              toolCallId: buffer.id,
+                              toolName: buffer.name,
+                              input: buffer.args,
+                            });
+
+                            toolCallBuffers.set(index, {
+                              id: buffer.id,
+                              name: buffer.name,
+                              args: buffer.args,
+                              sent: true,
+                            });
+                          }
+                        } catch {
+                          // Not complete JSON yet, continue buffering
+                        }
                       }
                     }
                   }
 
                   // Handle finish
                   if (choice.finish_reason) {
-                    // Parse and send complete tool calls before finishing
-                    for (const [_, toolCall] of toolCallBuffers) {
-                      if (toolCall.id && toolCall.name && toolCall.args) {
-                        controller.enqueue({
-                          type: 'tool-call',
-                          toolCallId: toolCall.id,
-                          toolName: toolCall.name,
-                          input: toolCall.args || '{}',
-                        });
-                      }
-                    }
+                    // Don't send tool calls again - they've already been sent when complete
                     toolCallBuffers.clear();
 
                     controller.enqueue({

@@ -1,9 +1,24 @@
-import type { Agent } from '@mastra/core/agent';
+// TODO: Install these AI SDK dependencies
+// import { anthropic } from '@ai-sdk/anthropic';
+// import { anthropic as anthropicV5 } from '@ai-sdk/anthropic-v5';
+// import { google } from '@ai-sdk/google';
+// import { google as googleV5 } from '@ai-sdk/google-v5';
+// import { groq } from '@ai-sdk/groq';
+// import { groq as groqV5 } from '@ai-sdk/groq-v5';
+// import { openai } from '@ai-sdk/openai';
+// import { openai as openaiV5 } from '@ai-sdk/openai-v5';
+// import { xai } from '@ai-sdk/xai';
+// import { xai as xaiV5 } from '@ai-sdk/xai-v5';
+import type { Agent, MastraLanguageModel } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 
+import type {
+  StreamTextOnFinishCallback,
+  StreamTextOnStepFinishCallback,
+} from '../../../../core/dist/llm/model/base.types';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 
@@ -113,6 +128,15 @@ async function formatAgentList({
   const serializedAgentAgents = await getSerializedAgentDefinition({ agent, runtimeContext });
 
   const model = llm?.getModel();
+  const models = await agent.getModelList(runtimeContext);
+  const modelList = models?.map(md => ({
+    ...md,
+    model: {
+      modelId: md.model.modelId,
+      provider: md.model.provider,
+      modelVersion: md.model.specificationVersion,
+    },
+  }));
 
   // Normalize provider names by removing AI SDK suffixes like ".chat" and ".completion" so that the unified model router display in the UI works for openai() as well (showing the initially selected model as openai/x, and then using the model router if the user selects another model)
   let provider = llm?.getProvider();
@@ -132,6 +156,7 @@ async function formatAgentList({
     modelVersion: model?.specificationVersion,
     defaultGenerateOptions: defaultGenerateOptions as any,
     defaultStreamOptions: defaultStreamOptions as any,
+    modelList,
   };
 }
 
@@ -223,6 +248,15 @@ async function formatAgent({
     const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext: proxyRuntimeContext });
 
     const model = llm?.getModel();
+    const models = await agent.getModelList(runtimeContext);
+    const modelList = models?.map(md => ({
+      ...md,
+      model: {
+        modelId: md.model.modelId,
+        provider: md.model.provider,
+        modelVersion: md.model.specificationVersion,
+      },
+    }));
 
     const serializedAgentAgents = await getSerializedAgentDefinition({ agent, runtimeContext: proxyRuntimeContext });
 
@@ -241,6 +275,7 @@ async function formatAgent({
       provider,
       modelId: llm?.getModelId(),
       modelVersion: model?.specificationVersion,
+      modelList,
       defaultGenerateOptions: defaultGenerateOptions as any,
       defaultStreamOptions: defaultStreamOptions as any,
     };
@@ -320,7 +355,7 @@ export function generateHandler({
 }) {
   const logger = mastra.getLogger();
   logger?.warn(
-    "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 16th, 2025. Please use generateLegacyHandler if you don't want to upgrade just yet.",
+    "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 30th, 2025. Please use generateLegacyHandler if you don't want to upgrade just yet.",
   );
   return generateLegacyHandler({ mastra, ...args });
 }
@@ -440,7 +475,7 @@ export async function streamGenerateHandler({
 }) {
   const logger = mastra.getLogger();
   logger?.warn(
-    "Deprecation NOTICE:\n Stream method will switch to use streamVNext implementation September 16th, 2025. Please use streamGenerateLegacyHandler if you don't want to upgrade just yet.",
+    "Deprecation NOTICE:\n Stream method will switch to use streamVNext implementation September 30th, 2025. Please use streamGenerateLegacyHandler if you don't want to upgrade just yet.",
   );
 
   return streamGenerateLegacyHandler({ mastra, ...args });
@@ -615,8 +650,11 @@ export async function streamVNextUIMessageHandler({
 }: Context & {
   runtimeContext: RuntimeContext;
   agentId: string;
-  body: GetBody<'streamVNext'> & {
+  body: Omit<GetBody<'streamVNext'>, 'onStepFinish' | 'onFinish' | 'output'> & {
     runtimeContext?: string;
+    onStepFinish?: StreamTextOnStepFinishCallback<any>;
+    onFinish?: StreamTextOnFinishCallback<any>;
+    output?: undefined;
   };
   abortSignal?: AbortSignal;
 }): Promise<Response | undefined> {
@@ -670,23 +708,36 @@ export async function updateAgentModelHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const newModel = `${body.provider}/${body.modelId}`;
+    const agentModel = await agent.getModel();
+    const modelVersion = agentModel.specificationVersion;
 
-    const llm = await agent.getLLM();
-    // Normalize the existing provider by removing AI SDK suffixes
-    let existingProvider = llm?.getProvider();
-    if (existingProvider?.endsWith('.chat') || existingProvider?.endsWith('.completion')) {
-      existingProvider = existingProvider.substring(0, existingProvider.lastIndexOf('.'));
-    }
-    const existingModelId = llm?.getModelId();
+    const { modelId, provider } = body;
 
-    if (existingProvider && existingModelId && `${existingProvider}/${existingModelId}` === newModel) {
-      return { message: 'Agent model does not need updating, it already uses the requested model' };
-    }
+    // TODO: Uncomment when @ai-sdk packages are installed
+    // const providerMap = {
+    //   v1: {
+    //     openai: openai(modelId),
+    //     anthropic: anthropic(modelId),
+    //     groq: groq(modelId),
+    //     xai: xai(modelId),
+    //     google: google(modelId),
+    //   },
+    //   v2: {
+    //     openai: openaiV5(modelId),
+    //     anthropic: anthropicV5(modelId),
+    //     groq: groqV5(modelId),
+    //     xai: xaiV5(modelId),
+    //     google: googleV5(modelId),
+    //   },
+    // };
 
-    // Use the universal mastra router format: "provider/model"
-    // This will be handled by OpenAICompatibleModel in the agent
-    agent.__updateModel({ model: newModel });
+    // TODO: need to fix this! one of the last remaining things to fix
+    // const modelVersionKey = modelVersion === 'v2' ? 'v2' : 'v1';
+    // const model = providerMap[modelVersionKey][provider];
+    // agent.__updateModel({ model });
+
+    // Temporary fallback until @ai-sdk packages are installed
+    // throw new Error('Model router functionality requires @ai-sdk packages to be installed');
 
     return { message: 'Agent model updated' };
   } catch (error) {
@@ -723,5 +774,98 @@ export async function getProvidersHandler(): Promise<{
     return { providers };
   } catch (error) {
     return handleError(error, 'Error getting providers');
+  }
+}
+
+export async function reorderAgentModelListHandler({
+  mastra,
+  agentId,
+  body,
+}: Context & {
+  agentId: string;
+  body: {
+    reorderedModelIds: Array<string>;
+  };
+}): Promise<{ message: string }> {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    const modelList = await agent.getModelList();
+    if (!modelList || modelList.length === 0) {
+      throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
+    }
+
+    agent.reorderModels(body.reorderedModelIds);
+
+    return { message: 'Model list reordered' };
+  } catch (error) {
+    return handleError(error, 'error reordering model list');
+  }
+}
+
+export async function updateAgentModelInModelListHandler({
+  mastra,
+  agentId,
+  modelConfigId,
+  body,
+}: Context & {
+  agentId: string;
+  modelConfigId: string;
+  body: {
+    model?: {
+      modelId: string;
+      provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+    };
+    maxRetries?: number;
+    enabled?: boolean;
+  };
+}): Promise<{ message: string }> {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+    const { model: bodyModel, maxRetries, enabled } = body;
+
+    if (!modelConfigId) {
+      throw new HTTPException(400, { message: 'Model id is required' });
+    }
+
+    const modelList = await agent.getModelList();
+    if (!modelList || modelList.length === 0) {
+      throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
+    }
+
+    const modelToUpdate = modelList.find(m => m.id === modelConfigId);
+    if (!modelToUpdate) {
+      throw new HTTPException(400, { message: 'Model to update is not found in agent model list' });
+    }
+
+    let model: MastraLanguageModel | undefined;
+    if (bodyModel) {
+      const { modelId, provider } = bodyModel;
+      // TODO: Uncomment when AI SDK dependencies are installed
+      // const providerMap = {
+      //   openai: openaiV5(modelId),
+      //   anthropic: anthropicV5(modelId),
+      //   groq: groqV5(modelId),
+      //   xai: xaiV5(modelId),
+      //   google: googleV5(modelId),
+      // };
+
+      // model = providerMap[provider];
+      throw new Error('AI SDK dependencies not installed. Please install @ai-sdk/openai, @ai-sdk/anthropic, etc.');
+    }
+
+    agent.updateModelInModelList({ id: modelConfigId, model, maxRetries, enabled });
+
+    return { message: 'Model list updated' };
+  } catch (error) {
+    return handleError(error, 'error updating model list');
   }
 }

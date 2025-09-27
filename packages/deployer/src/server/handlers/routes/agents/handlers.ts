@@ -15,6 +15,8 @@ import {
   streamVNextUIMessageHandler as getOriginalStreamVNextUIMessageHandler,
   generateLegacyHandler as getOriginalGenerateLegacyHandler,
   streamGenerateLegacyHandler as getOriginalStreamGenerateLegacyHandler,
+  reorderAgentModelListHandler as getOriginalReorderAgentModelListHandler,
+  updateAgentModelInModelListHandler as getOriginalUpdateAgentModelInModelListHandler,
   streamNetworkHandler as getOriginalStreamNetworkHandler,
   getProvidersHandler as getOriginalProvidersHandler,
 } from '@mastra/server/handlers/agents';
@@ -471,4 +473,42 @@ export async function getModelProvidersHandler(c: Context) {
   });
 
   return c.json(providerInfo);
+}
+
+export async function updateAgentModelInModelListHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+    const modelConfigId = c.req.param('modelConfigId');
+    const body = await c.req.json();
+
+    const result = await getOriginalUpdateAgentModelInModelListHandler({
+      mastra,
+      agentId,
+      body,
+      modelConfigId,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error updating agent model in model list');
+  }
+}
+
+export async function reorderAgentModelListHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+    const body = await c.req.json();
+
+    const result = await getOriginalReorderAgentModelListHandler({
+      mastra,
+      agentId,
+      body,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error reordering agent model list');
+  }
 }

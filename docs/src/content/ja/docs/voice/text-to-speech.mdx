@@ -3,12 +3,16 @@ title: Mastra におけるテキスト読み上げ（TTS） | Mastra ドキュ�
 description: Mastra のテキスト読み上げ機能の概要、設定方法、使用方法、音声プロバイダーとの連携について説明します。
 ---
 
+
+
 # Text-to-Speech (TTS)
 
 MastraのText-to-Speech (TTS)は、さまざまなプロバイダーを利用してテキストから音声を合成するための統一APIを提供します。
 TTSをアプリケーションに組み込むことで、自然な音声によるインタラクションでユーザー体験を向上させたり、視覚障害のあるユーザーのアクセシビリティを改善したり、より魅力的なマルチモーダルインターフェースを作成したりできます。
 
 TTSは、あらゆる音声アプリケーションの中核となるコンポーネントです。STT（Speech-to-Text）と組み合わせることで、音声インタラクションシステムの基盤を形成します。新しいモデルではSTS（[Speech-to-Speech](./speech-to-speech)）もサポートされており、リアルタイムのインタラクションに利用できますが、コストが高い（$）という特徴があります。
+
+
 
 ## 設定
 
@@ -35,6 +39,8 @@ const voice = new OpenAIVoice({
 const voice = new OpenAIVoice();
 ```
 
+
+
 ## 利用可能なプロバイダー
 
 Mastra は幅広い Text-to-Speech プロバイダーに対応しており、それぞれ独自の機能や音声オプションを提供しています。アプリケーションのニーズに最適なプロバイダーを選択できます。
@@ -55,6 +61,8 @@ Mastra は幅広い Text-to-Speech プロバイダーに対応しており、そ
 ```bash
 pnpm add @mastra/voice-openai  # Example for OpenAI
 ```
+
+
 
 ## speak メソッドの使用
 

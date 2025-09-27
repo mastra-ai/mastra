@@ -193,7 +193,7 @@ await agent.generate("message for agent");
       type: "TelemetrySettings",
       isOptional: true,
       description:
-        "Settings for telemetry collection during generation.",
+        "Settings for OTLP telemetry collection during generation (not AI tracing).",
       properties: [
         {
           parameters: [{
@@ -340,6 +340,38 @@ await agent.generate("message for agent");
       description: "Runtime context for dependency injection and contextual information.",
     },
     {
+      name: "tracingContext",
+      type: "TracingContext",
+      isOptional: true,
+      description: "AI tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+      properties: [
+        {
+          parameters: [{
+            name: "currentSpan",
+            type: "AISpan",
+            isOptional: true,
+            description: "Current AI span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution."
+          }]
+        }
+      ]
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "Options for AI tracing configuration.",
+      properties: [
+        {
+          parameters: [{
+            name: "metadata",
+            type: "Record<string, any>",
+            isOptional: true,
+            description: "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags."
+          }]
+        }
+      ]
+    },
+    {
       name: "maxTokens",
       type: "number",
       isOptional: true,
@@ -429,6 +461,12 @@ await agent.generate("message for agent");
           }]
         }
       ]
+    },
+    {
+      name: "traceId",
+      type: "string",
+      isOptional: true,
+      description: "The trace ID associated with this execution when AI tracing is enabled. Use this to correlate logs and debug execution flow.",
     },
   ]}
 />

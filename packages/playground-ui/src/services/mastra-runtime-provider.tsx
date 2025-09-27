@@ -11,7 +11,7 @@ import { RuntimeContext } from '@mastra/core/di';
 import { ChatProps, Message } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@/lib/file/toBase64';
-import { useMastraClient } from '@/contexts/mastra-client-context';
+import { useMastraClient } from '@mastra/react-hooks';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
@@ -227,7 +227,7 @@ export function MastraRuntimeProvider({
 
     try {
       function handleGenerateResponse(generatedResponse: Awaited<ReturnType<MastraModelOutput['getFullOutput']>>) {
-        if (generatedResponse.response && 'messages' in generatedResponse.response) {
+        if (generatedResponse.response && 'messages' in generatedResponse.response && generatedResponse.response.messages) {
           const latestMessage = generatedResponse.response.messages.reduce(
             (acc: ThreadMessageLike, message: any) => {
               const _content = Array.isArray(acc.content) ? acc.content : [];
@@ -541,7 +541,7 @@ export function MastraRuntimeProvider({
                           toolName: chunk.payload.toolName,
                           args: {
                             ...chunk.payload.args,
-                            __mastraMetadata: { ...chunk.payload.args?.__mastraMetadata, isStreaming: true },
+__mastraMetadata: { ...chunk.payload.args?.__mastraMetadata, isStreaming: true } as any,
                           },
                         },
                       ],
@@ -589,7 +589,7 @@ export function MastraRuntimeProvider({
                   });
                   try {
                     const toolName = toolCallIdToName.current[chunk.payload.toolCallId];
-                    if (toolName === 'updateWorkingMemory' && chunk.payload.result?.success) {
+                    if (toolName === 'updateWorkingMemory' && (chunk.payload.result as any)?.success) {
                       await refreshWorkingMemory?.();
                     }
                   } finally {
@@ -644,7 +644,7 @@ export function MastraRuntimeProvider({
                 }
 
                 case 'finish': {
-                  handleFinishReason(chunk.payload.finishReason);
+                  handleFinishReason(chunk.payload.finishReason as string);
                   break;
                 }
 

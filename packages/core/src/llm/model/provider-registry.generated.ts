@@ -7,16 +7,63 @@
  * Provider configurations for OpenAI-compatible APIs
  */
 export const PROVIDER_REGISTRY = {
-  "deepseek": {
-    "url": "https://api.deepseek.com/chat/completions",
-    "apiKeyEnvVar": "DEEPSEEK_API_KEY",
+  "moonshotai-cn": {
+    "url": "https://api.moonshot.cn/v1/chat/completions",
+    "apiKeyEnvVar": "MOONSHOT_API_KEY",
     "apiKeyHeader": "Authorization",
-    "name": "DeepSeek",
+    "name": "Moonshot AI (China)",
     "models": [
-      "deepseek-chat",
-      "deepseek-reasoner"
+      "kimi-k2-0711-preview",
+      "kimi-k2-0905-preview",
+      "kimi-k2-turbo-preview"
     ],
-    "docUrl": "https://platform.deepseek.com/api-docs/pricing"
+    "docUrl": "https://platform.moonshot.cn/docs/api/chat"
+  },
+  "lucidquery": {
+    "url": "https://lucidquery.com/api/v1/chat/completions",
+    "apiKeyEnvVar": "LUCIDQUERY_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "LucidQuery AI",
+    "models": [
+      "lucidnova-rf1-100b",
+      "lucidquery-nexus-coder"
+    ],
+    "docUrl": "https://lucidquery.com/api/docs"
+  },
+  "moonshotai": {
+    "url": "https://api.moonshot.ai/v1/chat/completions",
+    "apiKeyEnvVar": "MOONSHOT_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "Moonshot AI",
+    "models": [
+      "kimi-k2-0711-preview",
+      "kimi-k2-0905-preview",
+      "kimi-k2-turbo-preview"
+    ],
+    "docUrl": "https://platform.moonshot.ai/docs/api/chat"
+  },
+  "zai-coding-plan": {
+    "url": "https://api.z.ai/api/coding/paas/v4/chat/completions",
+    "apiKeyEnvVar": "ZHIPU_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "Z.AI Coding Plan",
+    "models": [
+      "glm-4.5",
+      "glm-4.5-air",
+      "glm-4.5-flash",
+      "glm-4.5v"
+    ],
+    "docUrl": "https://docs.z.ai/devpack/overview"
+  },
+  "alibaba": {
+    "url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
+    "apiKeyEnvVar": "DASHSCOPE_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "Alibaba",
+    "models": [
+      "qwen3-coder-plus"
+    ],
+    "docUrl": "https://www.alibabacloud.com/help/en/model-studio/models"
   },
   "xai": {
     "url": "https://api.x.ai/v1/chat/completions",
@@ -39,168 +86,71 @@ export const PROVIDER_REGISTRY = {
       "grok-3-mini-fast-latest",
       "grok-3-mini-latest",
       "grok-4",
+      "grok-4-fast",
+      "grok-4-fast-non-reasoning",
       "grok-beta",
       "grok-vision-beta"
     ],
     "docUrl": "https://docs.x.ai/docs/models"
   },
-  "fireworks-ai": {
-    "url": "https://api.fireworks.ai/inference/v1/chat/completions",
-    "apiKeyEnvVar": "FIREWORKS_API_KEY",
+  "nvidia": {
+    "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+    "apiKeyEnvVar": "NVIDIA_API_KEY",
     "apiKeyHeader": "Authorization",
-    "name": "Fireworks AI",
+    "name": "Nvidia",
     "models": [
-      "accounts/fireworks/gpt-oss-120b",
-      "accounts/fireworks/gpt-oss-20b",
-      "accounts/fireworks/models/deepseek-r1-0528",
-      "accounts/fireworks/models/deepseek-v3-0324",
-      "accounts/fireworks/models/deepseek-v3p1",
-      "accounts/fireworks/models/glm-4p5",
-      "accounts/fireworks/models/glm-4p5-air",
-      "accounts/fireworks/models/kimi-k2-instruct",
-      "accounts/fireworks/models/qwen3-235b-a22b",
-      "accounts/fireworks/models/qwen3-coder-480b-a35b-instruct"
-    ],
-    "docUrl": "https://fireworks.ai/docs/"
-  },
-  "openrouter": {
-    "url": "https://openrouter.ai/api/v1/chat/completions",
-    "apiKeyEnvVar": "OPENROUTER_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "OpenRouter",
-    "models": [
-      "anthropic/claude-3.5-haiku",
-      "anthropic/claude-3.7-sonnet",
-      "anthropic/claude-opus-4",
-      "anthropic/claude-opus-4.1",
-      "anthropic/claude-sonnet-4",
-      "cognitivecomputations/dolphin3.0-mistral-24b",
-      "cognitivecomputations/dolphin3.0-r1-mistral-24b",
-      "deepseek/deepseek-chat-v3-0324",
-      "deepseek/deepseek-chat-v3.1",
-      "deepseek/deepseek-r1-0528-qwen3-8b:free",
-      "deepseek/deepseek-r1-0528:free",
-      "deepseek/deepseek-r1-distill-llama-70b",
-      "deepseek/deepseek-r1-distill-qwen-14b",
-      "deepseek/deepseek-r1:free",
-      "deepseek/deepseek-v3-base:free",
-      "featherless/qwerky-72b",
-      "google/gemini-2.0-flash-001",
-      "google/gemini-2.0-flash-exp:free",
-      "google/gemini-2.5-flash",
-      "google/gemini-2.5-pro",
-      "google/gemini-2.5-pro-preview-05-06",
-      "google/gemini-2.5-pro-preview-06-05",
-      "google/gemma-2-9b-it:free",
-      "google/gemma-3-12b-it",
+      "black-forest-labs/flux.1-dev",
+      "deepseek-ai/deepseek-v3.1",
       "google/gemma-3-27b-it",
-      "google/gemma-3n-e4b-it",
-      "google/gemma-3n-e4b-it:free",
-      "meta-llama/llama-3.2-11b-vision-instruct",
-      "meta-llama/llama-3.3-70b-instruct:free",
-      "meta-llama/llama-4-scout:free",
-      "microsoft/mai-ds-r1:free",
-      "mistralai/codestral-2508",
-      "mistralai/devstral-medium-2507",
-      "mistralai/devstral-small-2505",
-      "mistralai/devstral-small-2505:free",
-      "mistralai/devstral-small-2507",
-      "mistralai/mistral-7b-instruct:free",
-      "mistralai/mistral-medium-3",
-      "mistralai/mistral-medium-3.1",
-      "mistralai/mistral-nemo:free",
-      "mistralai/mistral-small-3.1-24b-instruct",
-      "mistralai/mistral-small-3.2-24b-instruct",
-      "mistralai/mistral-small-3.2-24b-instruct:free",
-      "moonshotai/kimi-dev-72b:free",
-      "moonshotai/kimi-k2",
-      "moonshotai/kimi-k2-0905",
-      "moonshotai/kimi-k2:free",
-      "nousresearch/deephermes-3-llama-3-8b-preview",
-      "nousresearch/hermes-4-405b",
-      "nousresearch/hermes-4-70b",
-      "openai/gpt-4.1",
-      "openai/gpt-4.1-mini",
-      "openai/gpt-4o-mini",
-      "openai/gpt-5",
-      "openai/gpt-5-chat",
-      "openai/gpt-5-mini",
-      "openai/gpt-5-nano",
+      "microsoft/phi-4-mini-instruct",
+      "moonshotai/kimi-k2-instruct",
+      "nvidia/cosmos-nemotron-34b",
+      "nvidia/llama-3.1-nemotron-ultra-253b-v1",
+      "nvidia/nemoretriever-ocr-v1",
+      "nvidia/parakeet-tdt-0.6b-v2",
+      "openai/gpt-oss-120b",
+      "openai/whisper-large-v3",
+      "qwen/qwen3-235b-a22b",
+      "qwen/qwen3-coder-480b-a35b-instruct"
+    ],
+    "docUrl": "https://docs.api.nvidia.com/nim/"
+  },
+  "upstage": {
+    "url": "https://api.upstage.ai/chat/completions",
+    "apiKeyEnvVar": "UPSTAGE_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "Upstage",
+    "models": [
+      "solar-mini",
+      "solar-pro2"
+    ],
+    "docUrl": "https://developers.upstage.ai/docs/apis/chat"
+  },
+  "groq": {
+    "url": "https://api.groq.com/openai/v1/chat/completions",
+    "apiKeyEnvVar": "GROQ_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "Groq",
+    "models": [
+      "deepseek-r1-distill-llama-70b",
+      "gemma2-9b-it",
+      "llama-3.1-8b-instant",
+      "llama-3.3-70b-versatile",
+      "llama-guard-3-8b",
+      "llama3-70b-8192",
+      "llama3-8b-8192",
+      "meta-llama/llama-4-maverick-17b-128e-instruct",
+      "meta-llama/llama-4-scout-17b-16e-instruct",
+      "meta-llama/llama-guard-4-12b",
+      "mistral-saba-24b",
+      "moonshotai/kimi-k2-instruct",
+      "moonshotai/kimi-k2-instruct-0905",
       "openai/gpt-oss-120b",
       "openai/gpt-oss-20b",
-      "openai/o4-mini",
-      "openrouter/cypher-alpha:free",
-      "openrouter/horizon-alpha",
-      "openrouter/horizon-beta",
-      "openrouter/sonoma-dusk-alpha",
-      "openrouter/sonoma-sky-alpha",
-      "qwen/qwen-2.5-coder-32b-instruct",
-      "qwen/qwen2.5-vl-32b-instruct:free",
-      "qwen/qwen2.5-vl-72b-instruct",
-      "qwen/qwen2.5-vl-72b-instruct:free",
-      "qwen/qwen3-14b:free",
-      "qwen/qwen3-235b-a22b-07-25",
-      "qwen/qwen3-235b-a22b-07-25:free",
-      "qwen/qwen3-235b-a22b-thinking-2507",
-      "qwen/qwen3-235b-a22b:free",
-      "qwen/qwen3-30b-a3b-instruct-2507",
-      "qwen/qwen3-30b-a3b:free",
-      "qwen/qwen3-32b:free",
-      "qwen/qwen3-8b:free",
-      "qwen/qwen3-coder",
-      "qwen/qwen3-coder:free",
-      "qwen/qwen3-max",
-      "qwen/qwq-32b:free",
-      "rekaai/reka-flash-3",
-      "sarvamai/sarvam-m:free",
-      "thudm/glm-z1-32b:free",
-      "tngtech/deepseek-r1t2-chimera:free",
-      "x-ai/grok-3",
-      "x-ai/grok-3-beta",
-      "x-ai/grok-3-mini",
-      "x-ai/grok-3-mini-beta",
-      "x-ai/grok-4",
-      "x-ai/grok-code-fast-1",
-      "z-ai/glm-4.5",
-      "z-ai/glm-4.5-air",
-      "z-ai/glm-4.5-air:free",
-      "z-ai/glm-4.5v"
+      "qwen-qwq-32b",
+      "qwen/qwen3-32b"
     ],
-    "docUrl": "https://openrouter.ai/models"
-  },
-  "cerebras": {
-    "url": "https://api.cerebras.ai/v1/chat/completions",
-    "apiKeyEnvVar": "CEREBRAS_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "Cerebras",
-    "models": [
-      "gpt-oss-120b",
-      "qwen-3-235b-a22b-instruct-2507",
-      "qwen-3-coder-480b"
-    ],
-    "docUrl": "https://inference-docs.cerebras.ai/models/overview"
-  },
-  "venice": {
-    "url": "https://api.venice.ai/api/v1/chat/completions",
-    "apiKeyEnvVar": "VENICE_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "Venice AI",
-    "models": [
-      "deepseek-coder-v2-lite",
-      "deepseek-r1-671b",
-      "dolphin-2.9.2-qwen2-72b",
-      "llama-3.1-405b",
-      "llama-3.2-3b",
-      "llama-3.3-70b",
-      "mistral-31-24b",
-      "qwen-2.5-coder-32b",
-      "qwen-2.5-qwq-32b",
-      "qwen-2.5-vl",
-      "qwen3-235b",
-      "qwen3-4b",
-      "venice-uncensored"
-    ],
-    "docUrl": "https://docs.venice.ai"
+    "docUrl": "https://console.groq.com/docs/models"
   },
   "github-copilot": {
     "url": "https://api.githubcopilot.com/chat/completions",
@@ -219,6 +169,7 @@ export const PROVIDER_REGISTRY = {
       "gpt-4.1",
       "gpt-4o",
       "gpt-5",
+      "gpt-5-codex",
       "gpt-5-mini",
       "grok-code-fast-1",
       "o3",
@@ -226,85 +177,6 @@ export const PROVIDER_REGISTRY = {
       "o4-mini"
     ],
     "docUrl": "https://docs.github.com/en/copilot"
-  },
-  "submodel": {
-    "url": "https://llm.submodel.ai/v1/chat/completions",
-    "apiKeyEnvVar": "SUBMODEL_INSTAGEN_ACCESS_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "submodel",
-    "models": [
-      "Qwen/Qwen3-235B-A22B-Instruct-2507",
-      "Qwen/Qwen3-235B-A22B-Thinking-2507",
-      "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
-      "deepseek-ai/DeepSeek-R1-0528",
-      "deepseek-ai/DeepSeek-V3-0324",
-      "deepseek-ai/DeepSeek-V3.1",
-      "openai/gpt-oss-120b",
-      "zai-org/GLM-4.5-Air",
-      "zai-org/GLM-4.5-FP8"
-    ],
-    "docUrl": "https://submodel.gitbook.io"
-  },
-  "anthropic": {
-    "url": "https://api.anthropic.com/v1/chat/completions",
-    "apiKeyEnvVar": "ANTHROPIC_API_KEY",
-    "apiKeyHeader": "x-api-key",
-    "name": "Anthropic",
-    "models": [
-      "claude-3-5-haiku-20241022",
-      "claude-3-5-sonnet-20240620",
-      "claude-3-5-sonnet-20241022",
-      "claude-3-7-sonnet-20250219",
-      "claude-3-haiku-20240307",
-      "claude-3-opus-20240229",
-      "claude-3-sonnet-20240229",
-      "claude-opus-4-1-20250805",
-      "claude-opus-4-20250514",
-      "claude-sonnet-4-20250514"
-    ],
-    "docUrl": "https://docs.anthropic.com/en/docs/about-claude/models"
-  },
-  "alibaba": {
-    "url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
-    "apiKeyEnvVar": "DASHSCOPE_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "Alibaba",
-    "models": [
-      "qwen3-coder-plus"
-    ],
-    "docUrl": "https://www.alibabacloud.com/help/en/model-studio/models"
-  },
-  "openai": {
-    "url": "https://api.openai.com/v1/chat/completions",
-    "apiKeyEnvVar": "OPENAI_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "OpenAI",
-    "models": [
-      "codex-mini-latest",
-      "gpt-3.5-turbo",
-      "gpt-4",
-      "gpt-4-turbo",
-      "gpt-4.1",
-      "gpt-4.1-mini",
-      "gpt-4.1-nano",
-      "gpt-4o",
-      "gpt-4o-mini",
-      "gpt-5",
-      "gpt-5-chat-latest",
-      "gpt-5-mini",
-      "gpt-5-nano",
-      "o1",
-      "o1-mini",
-      "o1-preview",
-      "o1-pro",
-      "o3",
-      "o3-deep-research",
-      "o3-mini",
-      "o3-pro",
-      "o4-mini",
-      "o4-mini-deep-research"
-    ],
-    "docUrl": "https://platform.openai.com/docs/models"
   },
   "mistral": {
     "url": "https://api.mistral.ai/v1/chat/completions",
@@ -333,127 +205,6 @@ export const PROVIDER_REGISTRY = {
       "pixtral-large-latest"
     ],
     "docUrl": "https://docs.mistral.ai/getting-started/models/"
-  },
-  "upstage": {
-    "url": "https://api.upstage.ai/chat/completions",
-    "apiKeyEnvVar": "UPSTAGE_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "Upstage",
-    "models": [
-      "solar-mini",
-      "solar-pro2"
-    ],
-    "docUrl": "https://developers.upstage.ai/docs/apis/chat"
-  },
-  "llama": {
-    "url": "https://api.llama.com/compat/v1/chat/completions",
-    "apiKeyEnvVar": "LLAMA_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "Llama",
-    "models": [
-      "cerebras-llama-4-maverick-17b-128e-instruct",
-      "cerebras-llama-4-scout-17b-16e-instruct",
-      "groq-llama-4-maverick-17b-128e-instruct",
-      "llama-3.3-70b-instruct",
-      "llama-3.3-8b-instruct",
-      "llama-4-maverick-17b-128e-instruct-fp8",
-      "llama-4-scout-17b-16e-instruct-fp8"
-    ],
-    "docUrl": "https://llama.developer.meta.com/docs/models"
-  },
-  "moonshotai-cn": {
-    "url": "https://api.moonshot.cn/v1/chat/completions",
-    "apiKeyEnvVar": "MOONSHOT_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "Moonshot AI (China)",
-    "models": [
-      "kimi-k2-0711-preview",
-      "kimi-k2-0905-preview",
-      "kimi-k2-turbo-preview"
-    ],
-    "docUrl": "https://platform.moonshot.cn/docs/api/chat"
-  },
-  "deepinfra": {
-    "url": "https://api.deepinfra.com/v1/openai/chat/completions",
-    "apiKeyEnvVar": "DEEPINFRA_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "Deep Infra",
-    "models": [
-      "Qwen/Qwen3-Coder-480B-A35B-Instruct",
-      "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
-      "moonshotai/Kimi-K2-Instruct",
-      "zai-org/GLM-4.5"
-    ],
-    "docUrl": "https://deepinfra.com/models"
-  },
-  "zhipuai": {
-    "url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
-    "apiKeyEnvVar": "ZHIPU_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "Zhipu AI",
-    "models": [
-      "glm-4.5",
-      "glm-4.5-air",
-      "glm-4.5-flash",
-      "glm-4.5v"
-    ],
-    "docUrl": "https://docs.z.ai/guides/overview/pricing"
-  },
-  "synthetic": {
-    "url": "https://api.synthetic.new/v1/chat/completions",
-    "apiKeyEnvVar": "SYNTHETIC_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "Synthetic",
-    "models": [
-      "hf:Qwen/Qwen2.5-Coder-32B-Instruct",
-      "hf:Qwen/Qwen3-235B-A22B-Instruct-2507",
-      "hf:Qwen/Qwen3-235B-A22B-Thinking-2507",
-      "hf:Qwen/Qwen3-Coder-480B-A35B-Instruct",
-      "hf:deepseek-ai/DeepSeek-R1",
-      "hf:deepseek-ai/DeepSeek-R1-0528",
-      "hf:deepseek-ai/DeepSeek-V3",
-      "hf:deepseek-ai/DeepSeek-V3-0324",
-      "hf:deepseek-ai/DeepSeek-V3.1",
-      "hf:meta-llama/Llama-3.1-405B-Instruct",
-      "hf:meta-llama/Llama-3.1-70B-Instruct",
-      "hf:meta-llama/Llama-3.1-8B-Instruct",
-      "hf:meta-llama/Llama-3.3-70B-Instruct",
-      "hf:meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
-      "hf:meta-llama/Llama-4-Scout-17B-16E-Instruct",
-      "hf:moonshotai/Kimi-K2-Instruct",
-      "hf:moonshotai/Kimi-K2-Instruct-0905",
-      "hf:openai/gpt-oss-120b",
-      "hf:zai-org/GLM-4.5"
-    ],
-    "docUrl": "https://synthetic.new/pricing"
-  },
-  "modelscope": {
-    "url": "https://api-inference.modelscope.cn/v1/chat/completions",
-    "apiKeyEnvVar": "MODELSCOPE_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "ModelScope",
-    "models": [
-      "Qwen/Qwen3-235B-A22B-Instruct-2507",
-      "Qwen/Qwen3-235B-A22B-Thinking-2507",
-      "Qwen/Qwen3-30B-A3B-Instruct-2507",
-      "Qwen/Qwen3-30B-A3B-Thinking-2507",
-      "Qwen/Qwen3-Coder-30B-A3B-Instruct",
-      "Qwen/Qwen3-Coder-480B-A35B-Instruct",
-      "ZhipuAI/GLM-4.5",
-      "moonshotai/Kimi-K2-Instruct"
-    ],
-    "docUrl": "https://modelscope.cn/docs/model-service/API-Inference/intro"
-  },
-  "baseten": {
-    "url": "https://inference.baseten.co/v1/chat/completions",
-    "apiKeyEnvVar": "BASETEN_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "Baseten",
-    "models": [
-      "Moonshotai-Kimi-K2-Instruct-0905",
-      "Qwen-Qwen3-Coder-480B-A35B-Instruct"
-    ],
-    "docUrl": "https://docs.baseten.co/development/model-apis/overview"
   },
   "vercel": {
     "url": "https://ai-gateway.vercel.sh/v1/chat/completions",
@@ -502,6 +253,7 @@ export const PROVIDER_REGISTRY = {
       "openai/gpt-4o",
       "openai/gpt-4o-mini",
       "openai/gpt-5",
+      "openai/gpt-5-codex",
       "openai/gpt-5-mini",
       "openai/gpt-5-nano",
       "openai/gpt-oss-120b",
@@ -522,78 +274,105 @@ export const PROVIDER_REGISTRY = {
     ],
     "docUrl": "https://github.com/vercel/ai/tree/5eb85cc45a259553501f535b8ac79a77d0e79223/packages/gateway"
   },
-  "google": {
-    "url": "https://generativelanguage.googleapis.com/v1beta/chat/completions",
-    "apiKeyEnvVar": "GOOGLE_GENERATIVE_AI_API_KEY",
+  "deepseek": {
+    "url": "https://api.deepseek.com/chat/completions",
+    "apiKeyEnvVar": "DEEPSEEK_API_KEY",
     "apiKeyHeader": "Authorization",
-    "name": "Google",
+    "name": "DeepSeek",
     "models": [
-      "gemini-1.5-flash",
-      "gemini-1.5-flash-8b",
-      "gemini-1.5-pro",
-      "gemini-2.0-flash",
-      "gemini-2.0-flash-lite",
-      "gemini-2.5-flash",
-      "gemini-2.5-flash-lite-preview-06-17",
-      "gemini-2.5-flash-preview-04-17",
-      "gemini-2.5-flash-preview-05-20",
-      "gemini-2.5-pro",
-      "gemini-2.5-pro-preview-05-06",
-      "gemini-2.5-pro-preview-06-05"
+      "deepseek-chat",
+      "deepseek-reasoner"
     ],
-    "docUrl": "https://ai.google.dev/gemini-api/docs/pricing"
+    "docUrl": "https://platform.deepseek.com/api-docs/pricing"
   },
-  "togetherai": {
-    "url": "https://api.together.xyz/v1/chat/completions",
-    "apiKeyEnvVar": "TOGETHER_API_KEY",
+  "alibaba-cn": {
+    "url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+    "apiKeyEnvVar": "DASHSCOPE_API_KEY",
     "apiKeyHeader": "Authorization",
-    "name": "Together AI",
+    "name": "Alibaba (China)",
     "models": [
-      "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
-      "deepseek-ai/DeepSeek-R1",
-      "deepseek-ai/DeepSeek-V3",
-      "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-      "moonshotai/Kimi-K2-Instruct",
-      "openai/gpt-oss-120b"
+      "qwen3-coder-plus"
     ],
-    "docUrl": "https://docs.together.ai/docs/serverless-models"
+    "docUrl": "https://www.alibabacloud.com/help/en/model-studio/models"
   },
-  "wandb": {
-    "url": "https://api.inference.wandb.ai/v1/chat/completions",
-    "apiKeyEnvVar": "WANDB_API_KEY",
+  "venice": {
+    "url": "https://api.venice.ai/api/v1/chat/completions",
+    "apiKeyEnvVar": "VENICE_API_KEY",
     "apiKeyHeader": "Authorization",
-    "name": "Weights & Biases",
+    "name": "Venice AI",
+    "models": [
+      "deepseek-coder-v2-lite",
+      "deepseek-r1-671b",
+      "dolphin-2.9.2-qwen2-72b",
+      "llama-3.1-405b",
+      "llama-3.2-3b",
+      "llama-3.3-70b",
+      "mistral-31-24b",
+      "qwen-2.5-coder-32b",
+      "qwen-2.5-qwq-32b",
+      "qwen-2.5-vl",
+      "qwen3-235b",
+      "qwen3-4b",
+      "venice-uncensored"
+    ],
+    "docUrl": "https://docs.venice.ai"
+  },
+  "chutes": {
+    "url": "https://llm.chutes.ai/v1/chat/completions",
+    "apiKeyEnvVar": "CHUTES_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "Chutes",
     "models": [
       "Qwen/Qwen3-235B-A22B-Instruct-2507",
       "Qwen/Qwen3-235B-A22B-Thinking-2507",
-      "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+      "Qwen/Qwen3-30B-A3B",
+      "Qwen/Qwen3-30B-A3B-Instruct-2507",
+      "Qwen/Qwen3-30B-A3B-Thinking-2507",
+      "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+      "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+      "Qwen/Qwen3-Next-80B-A3B-Instruct",
+      "Qwen/Qwen3-Next-80B-A3B-Thinking",
+      "chutesai/Devstral-Small-2505",
+      "chutesai/Mistral-Small-3.2-24B-Instruct-2506",
       "deepseek-ai/DeepSeek-R1-0528",
+      "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
+      "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
       "deepseek-ai/DeepSeek-V3-0324",
-      "meta-llama/Llama-3.1-8B-Instruct",
-      "meta-llama/Llama-3.3-70B-Instruct",
-      "meta-llama/Llama-4-Scout-17B-16E-Instruct",
-      "microsoft/Phi-4-mini-instruct",
-      "moonshotai/Kimi-K2-Instruct"
+      "deepseek-ai/DeepSeek-V3.1",
+      "deepseek-ai/DeepSeek-V3.1-Turbo",
+      "deepseek-ai/DeepSeek-V3.1:THINKING",
+      "meituan-longcat/LongCat-Flash-Chat-FP8",
+      "moonshotai/Kimi-Dev-72B",
+      "moonshotai/Kimi-K2-Instruct-0905",
+      "moonshotai/Kimi-K2-Instruct-75k",
+      "moonshotai/Kimi-VL-A3B-Thinking",
+      "openai/gpt-oss-120b",
+      "tngtech/DeepSeek-R1T-Chimera",
+      "tngtech/DeepSeek-TNG-R1T2-Chimera",
+      "zai-org/GLM-4.5-Air",
+      "zai-org/GLM-4.5-FP8",
+      "zai-org/GLM-4.5-Turbo"
     ],
-    "docUrl": "https://weave-docs.wandb.ai/guides/integrations/inference/"
+    "docUrl": "https://llm.chutes.ai/v1/models"
   },
-  "inference": {
-    "url": "https://inference.net/v1/chat/completions",
-    "apiKeyEnvVar": "INFERENCE_API_KEY",
+  "cortecs": {
+    "url": "https://api.cortecs.ai/v1/chat/completions",
+    "apiKeyEnvVar": "CORTECS_API_KEY",
     "apiKeyHeader": "Authorization",
-    "name": "Inference",
+    "name": "Cortecs",
     "models": [
-      "google/gemma-3",
-      "meta/llama-3.1-8b-instruct",
-      "meta/llama-3.2-11b-vision-instruct",
-      "meta/llama-3.2-1b-instruct",
-      "meta/llama-3.2-3b-instruct",
-      "mistral/mistral-nemo-12b-instruct",
-      "osmosis/osmosis-structure-0.6b",
-      "qwen/qwen-2.5-7b-vision-instruct",
-      "qwen/qwen3-embedding-4b"
+      "claude-sonnet-4",
+      "deepseek-v3-0324",
+      "gemini-2.5-pro",
+      "gpt-4.1",
+      "gpt-oss-120b",
+      "kimi-k2-instruct",
+      "llama-3.1-405b-instruct",
+      "nova-pro-v1",
+      "qwen3-32b",
+      "qwen3-coder-480b-a35b-instruct"
     ],
-    "docUrl": "https://inference.net/models"
+    "docUrl": "https://api.cortecs.ai/v1/models"
   },
   "github-models": {
     "url": "https://models.github.ai/inference/chat/completions",
@@ -659,44 +438,31 @@ export const PROVIDER_REGISTRY = {
     ],
     "docUrl": "https://docs.github.com/en/github-models"
   },
-  "opencode": {
-    "url": "https://opencode.ai/zen/v1/chat/completions",
-    "apiKeyEnvVar": "OPENCODE_API_KEY",
+  "togetherai": {
+    "url": "https://api.together.xyz/v1/chat/completions",
+    "apiKeyEnvVar": "TOGETHER_API_KEY",
     "apiKeyHeader": "Authorization",
-    "name": "opencode",
+    "name": "Together AI",
     "models": [
-      "claude-3-5-haiku",
-      "claude-opus-4-1",
-      "claude-sonnet-4",
-      "gpt-5",
-      "grok-code",
-      "kimi-k2",
-      "qwen3-coder"
+      "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+      "deepseek-ai/DeepSeek-R1",
+      "deepseek-ai/DeepSeek-V3",
+      "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+      "moonshotai/Kimi-K2-Instruct",
+      "openai/gpt-oss-120b"
     ],
-    "docUrl": "https://opencode.ai/docs"
+    "docUrl": "https://docs.together.ai/docs/serverless-models"
   },
-  "nvidia": {
-    "url": "https://integrate.api.nvidia.com/v1/chat/completions",
-    "apiKeyEnvVar": "NVIDIA_API_KEY",
+  "baseten": {
+    "url": "https://inference.baseten.co/v1/chat/completions",
+    "apiKeyEnvVar": "BASETEN_API_KEY",
     "apiKeyHeader": "Authorization",
-    "name": "Nvidia",
+    "name": "Baseten",
     "models": [
-      "cosmos-nemotron-34b",
-      "deepseek-r1",
-      "deepseek-v3.1",
-      "flux_1-dev",
-      "gemma-3-27b-it",
-      "llama-3.1-nemotron-ultra-253b-v1",
-      "llama-3.3-nemotron-super-49b-v1.5",
-      "mistral-small-3.1-24b-instruct-2503",
-      "nemoretriever-ocr-v1",
-      "parakeet-tdt-0.6b-v2",
-      "phi-4-multimodal-instruct",
-      "qwen3-235b-a22b",
-      "qwen3-coder-480b-a35b-instruct",
-      "whisper-large-v3"
+      "Qwen3/Qwen3-Coder-480B-A35B-Instruct",
+      "moonshotai/Kimi-K2-Instruct-0905"
     ],
-    "docUrl": "https://docs.api.nvidia.com/nim/"
+    "docUrl": "https://docs.baseten.co/development/model-apis/overview"
   },
   "huggingface": {
     "url": "https://router.huggingface.co/v1/chat/completions",
@@ -706,107 +472,35 @@ export const PROVIDER_REGISTRY = {
     "models": [
       "Qwen/Qwen3-235B-A22B-Thinking-2507",
       "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+      "Qwen/Qwen3-Next-80B-A3B-Instruct",
+      "Qwen/Qwen3-Next-80B-A3B-Thinking",
       "deepseek-ai/DeepSeek-R1-0528",
       "deepseek-ai/Deepseek-V3-0324",
       "moonshotai/Kimi-K2-Instruct",
+      "moonshotai/Kimi-K2-Instruct-0905",
       "zai-org/GLM-4.5",
       "zai-org/GLM-4.5-Air"
     ],
     "docUrl": "https://huggingface.co/docs/inference-providers"
   },
-  "inception": {
-    "url": "https://api.inceptionlabs.ai/v1/chat/completions",
-    "apiKeyEnvVar": "INCEPTION_API_KEY",
+  "opencode": {
+    "url": "https://opencode.ai/zen/v1/chat/completions",
+    "apiKeyEnvVar": "OPENCODE_API_KEY",
     "apiKeyHeader": "Authorization",
-    "name": "Inception",
+    "name": "opencode zen",
     "models": [
-      "mercury",
-      "mercury-coder"
+      "claude-3-5-haiku",
+      "claude-opus-4-1",
+      "claude-sonnet-4",
+      "code-supernova",
+      "gpt-5",
+      "gpt-5-codex",
+      "grok-code",
+      "kimi-k2",
+      "qwen3-coder",
+      "qwen3-max"
     ],
-    "docUrl": "https://platform.inceptionlabs.ai/docs"
-  },
-  "groq": {
-    "url": "https://api.groq.com/openai/v1/chat/completions",
-    "apiKeyEnvVar": "GROQ_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "Groq",
-    "models": [
-      "deepseek-r1-distill-llama-70b",
-      "gemma2-9b-it",
-      "llama-3.1-8b-instant",
-      "llama-3.3-70b-versatile",
-      "llama-guard-3-8b",
-      "llama3-70b-8192",
-      "llama3-8b-8192",
-      "meta-llama/llama-4-maverick-17b-128e-instruct",
-      "meta-llama/llama-4-scout-17b-16e-instruct",
-      "meta-llama/llama-guard-4-12b",
-      "mistral-saba-24b",
-      "moonshotai/kimi-k2-instruct",
-      "moonshotai/kimi-k2-instruct-0905",
-      "openai/gpt-oss-120b",
-      "openai/gpt-oss-20b",
-      "qwen-qwq-32b",
-      "qwen/qwen3-32b"
-    ],
-    "docUrl": "https://console.groq.com/docs/models"
-  },
-  "chutes": {
-    "url": "https://llm.chutes.ai/v1/chat/completions",
-    "apiKeyEnvVar": "CHUTES_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "Chutes",
-    "models": [
-      "Qwen/Qwen3-235B-A22B-Instruct-2507",
-      "Qwen/Qwen3-235B-A22B-Thinking-2507",
-      "Qwen/Qwen3-30B-A3B",
-      "Qwen/Qwen3-30B-A3B-Instruct-2507",
-      "Qwen/Qwen3-Coder-30B-A3B-Instruct",
-      "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
-      "chutesai/Devstral-Small-2505",
-      "chutesai/Mistral-Small-3.2-24B-Instruct-2506",
-      "deepseek-ai/DeepSeek-R1-0528",
-      "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
-      "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
-      "deepseek-ai/DeepSeek-V3-0324",
-      "deepseek-ai/DeepSeek-V3.1",
-      "deepseek-ai/DeepSeek-V3.1:THINKING",
-      "moonshotai/Kimi-Dev-72B",
-      "moonshotai/Kimi-K2-Instruct-0905",
-      "moonshotai/Kimi-K2-Instruct-75k",
-      "moonshotai/Kimi-VL-A3B-Thinking",
-      "openai/gpt-oss-120b",
-      "tngtech/DeepSeek-R1T-Chimera",
-      "tngtech/DeepSeek-TNG-R1T2-Chimera",
-      "zai-org/GLM-4.5-Air",
-      "zai-org/GLM-4.5-FP8"
-    ],
-    "docUrl": "https://llm.chutes.ai/v1/models"
-  },
-  "lmstudio": {
-    "url": "http://127.0.0.1:1234/v1/chat/completions",
-    "apiKeyEnvVar": "LMSTUDIO_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "LMStudio",
-    "models": [
-      "openai/gpt-oss-20b",
-      "qwen/qwen3-30b-a3b-2507",
-      "qwen/qwen3-coder-30b"
-    ],
-    "docUrl": "https://lmstudio.ai/models"
-  },
-  "zai": {
-    "url": "https://api.z.ai/api/paas/v4/chat/completions",
-    "apiKeyEnvVar": "ZHIPU_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "Z.AI",
-    "models": [
-      "glm-4.5",
-      "glm-4.5-air",
-      "glm-4.5-flash",
-      "glm-4.5v"
-    ],
-    "docUrl": "https://docs.z.ai/guides/overview/pricing"
+    "docUrl": "https://opencode.ai/docs"
   },
   "fastrouter": {
     "url": "https://go.fastrouter.ai/api/v1/chat/completions",
@@ -831,6 +525,357 @@ export const PROVIDER_REGISTRY = {
     ],
     "docUrl": "https://fastrouter.ai/models"
   },
+  "google": {
+    "url": "https://generativelanguage.googleapis.com/v1beta/chat/completions",
+    "apiKeyEnvVar": "GOOGLE_GENERATIVE_AI_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "Google",
+    "models": [
+      "gemini-1.5-flash",
+      "gemini-1.5-flash-8b",
+      "gemini-1.5-pro",
+      "gemini-2.0-flash",
+      "gemini-2.0-flash-lite",
+      "gemini-2.5-flash",
+      "gemini-2.5-flash-lite",
+      "gemini-2.5-flash-lite-preview-06-17",
+      "gemini-2.5-flash-lite-preview-09-2025",
+      "gemini-2.5-flash-preview-04-17",
+      "gemini-2.5-flash-preview-05-20",
+      "gemini-2.5-flash-preview-09-2025",
+      "gemini-2.5-pro",
+      "gemini-2.5-pro-preview-05-06",
+      "gemini-2.5-pro-preview-06-05"
+    ],
+    "docUrl": "https://ai.google.dev/gemini-api/docs/pricing"
+  },
+  "inception": {
+    "url": "https://api.inceptionlabs.ai/v1/chat/completions",
+    "apiKeyEnvVar": "INCEPTION_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "Inception",
+    "models": [
+      "mercury",
+      "mercury-coder"
+    ],
+    "docUrl": "https://platform.inceptionlabs.ai/docs"
+  },
+  "wandb": {
+    "url": "https://api.inference.wandb.ai/v1/chat/completions",
+    "apiKeyEnvVar": "WANDB_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "Weights & Biases",
+    "models": [
+      "Qwen/Qwen3-235B-A22B-Instruct-2507",
+      "Qwen/Qwen3-235B-A22B-Thinking-2507",
+      "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+      "deepseek-ai/DeepSeek-R1-0528",
+      "deepseek-ai/DeepSeek-V3-0324",
+      "meta-llama/Llama-3.1-8B-Instruct",
+      "meta-llama/Llama-3.3-70B-Instruct",
+      "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+      "microsoft/Phi-4-mini-instruct",
+      "moonshotai/Kimi-K2-Instruct"
+    ],
+    "docUrl": "https://weave-docs.wandb.ai/guides/integrations/inference/"
+  },
+  "openai": {
+    "url": "https://api.openai.com/v1/chat/completions",
+    "apiKeyEnvVar": "OPENAI_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "OpenAI",
+    "models": [
+      "codex-mini-latest",
+      "gpt-3.5-turbo",
+      "gpt-4",
+      "gpt-4-turbo",
+      "gpt-4.1",
+      "gpt-4.1-mini",
+      "gpt-4.1-nano",
+      "gpt-4o",
+      "gpt-4o-2024-05-13",
+      "gpt-4o-2024-08-06",
+      "gpt-4o-2024-11-20",
+      "gpt-4o-mini",
+      "gpt-5",
+      "gpt-5-chat-latest",
+      "gpt-5-codex",
+      "gpt-5-mini",
+      "gpt-5-nano",
+      "o1",
+      "o1-mini",
+      "o1-preview",
+      "o1-pro",
+      "o3",
+      "o3-deep-research",
+      "o3-mini",
+      "o3-pro",
+      "o4-mini",
+      "o4-mini-deep-research"
+    ],
+    "docUrl": "https://platform.openai.com/docs/models"
+  },
+  "zhipuai-coding-plan": {
+    "url": "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions",
+    "apiKeyEnvVar": "ZHIPU_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "Zhipu AI Coding Plan",
+    "models": [
+      "glm-4.5",
+      "glm-4.5-air",
+      "glm-4.5-flash",
+      "glm-4.5v"
+    ],
+    "docUrl": "https://docs.bigmodel.cn/cn/coding-plan/overview"
+  },
+  "perplexity": {
+    "url": "https://api.perplexity.ai/chat/completions",
+    "apiKeyEnvVar": "PERPLEXITY_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "Perplexity",
+    "models": [
+      "sonar",
+      "sonar-pro",
+      "sonar-reasoning",
+      "sonar-reasoning-pro"
+    ],
+    "docUrl": "https://docs.perplexity.ai"
+  },
+  "openrouter": {
+    "url": "https://openrouter.ai/api/v1/chat/completions",
+    "apiKeyEnvVar": "OPENROUTER_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "OpenRouter",
+    "models": [
+      "anthropic/claude-3.5-haiku",
+      "anthropic/claude-3.7-sonnet",
+      "anthropic/claude-opus-4",
+      "anthropic/claude-opus-4.1",
+      "anthropic/claude-sonnet-4",
+      "cognitivecomputations/dolphin3.0-mistral-24b",
+      "cognitivecomputations/dolphin3.0-r1-mistral-24b",
+      "deepseek/deepseek-chat-v3-0324",
+      "deepseek/deepseek-chat-v3.1",
+      "deepseek/deepseek-r1-0528-qwen3-8b:free",
+      "deepseek/deepseek-r1-0528:free",
+      "deepseek/deepseek-r1-distill-llama-70b",
+      "deepseek/deepseek-r1-distill-qwen-14b",
+      "deepseek/deepseek-r1:free",
+      "deepseek/deepseek-v3-base:free",
+      "deepseek/deepseek-v3.1-terminus",
+      "featherless/qwerky-72b",
+      "google/gemini-2.0-flash-001",
+      "google/gemini-2.0-flash-exp:free",
+      "google/gemini-2.5-flash",
+      "google/gemini-2.5-pro",
+      "google/gemini-2.5-pro-preview-05-06",
+      "google/gemini-2.5-pro-preview-06-05",
+      "google/gemma-2-9b-it:free",
+      "google/gemma-3-12b-it",
+      "google/gemma-3-27b-it",
+      "google/gemma-3n-e4b-it",
+      "google/gemma-3n-e4b-it:free",
+      "meta-llama/llama-3.2-11b-vision-instruct",
+      "meta-llama/llama-3.3-70b-instruct:free",
+      "meta-llama/llama-4-scout:free",
+      "microsoft/mai-ds-r1:free",
+      "mistralai/codestral-2508",
+      "mistralai/devstral-medium-2507",
+      "mistralai/devstral-small-2505",
+      "mistralai/devstral-small-2505:free",
+      "mistralai/devstral-small-2507",
+      "mistralai/mistral-7b-instruct:free",
+      "mistralai/mistral-medium-3",
+      "mistralai/mistral-medium-3.1",
+      "mistralai/mistral-nemo:free",
+      "mistralai/mistral-small-3.1-24b-instruct",
+      "mistralai/mistral-small-3.2-24b-instruct",
+      "mistralai/mistral-small-3.2-24b-instruct:free",
+      "moonshotai/kimi-dev-72b:free",
+      "moonshotai/kimi-k2",
+      "moonshotai/kimi-k2-0905",
+      "moonshotai/kimi-k2:free",
+      "nousresearch/deephermes-3-llama-3-8b-preview",
+      "nousresearch/hermes-4-405b",
+      "nousresearch/hermes-4-70b",
+      "openai/gpt-4.1",
+      "openai/gpt-4.1-mini",
+      "openai/gpt-4o-mini",
+      "openai/gpt-5",
+      "openai/gpt-5-chat",
+      "openai/gpt-5-codex",
+      "openai/gpt-5-mini",
+      "openai/gpt-5-nano",
+      "openai/gpt-oss-120b",
+      "openai/gpt-oss-20b",
+      "openai/o4-mini",
+      "openrouter/cypher-alpha:free",
+      "openrouter/horizon-alpha",
+      "openrouter/horizon-beta",
+      "openrouter/sonoma-dusk-alpha",
+      "openrouter/sonoma-sky-alpha",
+      "qwen/qwen-2.5-coder-32b-instruct",
+      "qwen/qwen2.5-vl-32b-instruct:free",
+      "qwen/qwen2.5-vl-72b-instruct",
+      "qwen/qwen2.5-vl-72b-instruct:free",
+      "qwen/qwen3-14b:free",
+      "qwen/qwen3-235b-a22b-07-25",
+      "qwen/qwen3-235b-a22b-07-25:free",
+      "qwen/qwen3-235b-a22b-thinking-2507",
+      "qwen/qwen3-235b-a22b:free",
+      "qwen/qwen3-30b-a3b-instruct-2507",
+      "qwen/qwen3-30b-a3b:free",
+      "qwen/qwen3-32b:free",
+      "qwen/qwen3-8b:free",
+      "qwen/qwen3-coder",
+      "qwen/qwen3-coder:free",
+      "qwen/qwen3-max",
+      "qwen/qwen3-next-80b-a3b-instruct",
+      "qwen/qwq-32b:free",
+      "rekaai/reka-flash-3",
+      "sarvamai/sarvam-m:free",
+      "thudm/glm-z1-32b:free",
+      "tngtech/deepseek-r1t2-chimera:free",
+      "x-ai/grok-3",
+      "x-ai/grok-3-beta",
+      "x-ai/grok-3-mini",
+      "x-ai/grok-3-mini-beta",
+      "x-ai/grok-4",
+      "x-ai/grok-4-fast:free",
+      "x-ai/grok-code-fast-1",
+      "z-ai/glm-4.5",
+      "z-ai/glm-4.5-air",
+      "z-ai/glm-4.5-air:free",
+      "z-ai/glm-4.5v"
+    ],
+    "docUrl": "https://openrouter.ai/models"
+  },
+  "synthetic": {
+    "url": "https://api.synthetic.new/v1/chat/completions",
+    "apiKeyEnvVar": "SYNTHETIC_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "Synthetic",
+    "models": [
+      "hf:Qwen/Qwen2.5-Coder-32B-Instruct",
+      "hf:Qwen/Qwen3-235B-A22B-Instruct-2507",
+      "hf:Qwen/Qwen3-235B-A22B-Thinking-2507",
+      "hf:Qwen/Qwen3-Coder-480B-A35B-Instruct",
+      "hf:deepseek-ai/DeepSeek-R1",
+      "hf:deepseek-ai/DeepSeek-R1-0528",
+      "hf:deepseek-ai/DeepSeek-V3",
+      "hf:deepseek-ai/DeepSeek-V3-0324",
+      "hf:deepseek-ai/DeepSeek-V3.1",
+      "hf:deepseek-ai/DeepSeek-V3.1-Terminus",
+      "hf:meta-llama/Llama-3.1-405B-Instruct",
+      "hf:meta-llama/Llama-3.1-70B-Instruct",
+      "hf:meta-llama/Llama-3.1-8B-Instruct",
+      "hf:meta-llama/Llama-3.3-70B-Instruct",
+      "hf:meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
+      "hf:meta-llama/Llama-4-Scout-17B-16E-Instruct",
+      "hf:moonshotai/Kimi-K2-Instruct",
+      "hf:moonshotai/Kimi-K2-Instruct-0905",
+      "hf:openai/gpt-oss-120b",
+      "hf:zai-org/GLM-4.5"
+    ],
+    "docUrl": "https://synthetic.new/pricing"
+  },
+  "deepinfra": {
+    "url": "https://api.deepinfra.com/v1/openai/chat/completions",
+    "apiKeyEnvVar": "DEEPINFRA_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "Deep Infra",
+    "models": [
+      "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+      "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+      "moonshotai/Kimi-K2-Instruct",
+      "zai-org/GLM-4.5"
+    ],
+    "docUrl": "https://deepinfra.com/models"
+  },
+  "zhipuai": {
+    "url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+    "apiKeyEnvVar": "ZHIPU_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "Zhipu AI",
+    "models": [
+      "glm-4.5",
+      "glm-4.5-air",
+      "glm-4.5-flash",
+      "glm-4.5v"
+    ],
+    "docUrl": "https://docs.z.ai/guides/overview/pricing"
+  },
+  "submodel": {
+    "url": "https://llm.submodel.ai/v1/chat/completions",
+    "apiKeyEnvVar": "SUBMODEL_INSTAGEN_ACCESS_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "submodel",
+    "models": [
+      "Qwen/Qwen3-235B-A22B-Instruct-2507",
+      "Qwen/Qwen3-235B-A22B-Thinking-2507",
+      "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+      "deepseek-ai/DeepSeek-R1-0528",
+      "deepseek-ai/DeepSeek-V3-0324",
+      "deepseek-ai/DeepSeek-V3.1",
+      "openai/gpt-oss-120b",
+      "zai-org/GLM-4.5-Air",
+      "zai-org/GLM-4.5-FP8"
+    ],
+    "docUrl": "https://submodel.gitbook.io"
+  },
+  "zai": {
+    "url": "https://api.z.ai/api/paas/v4/chat/completions",
+    "apiKeyEnvVar": "ZHIPU_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "Z.AI",
+    "models": [
+      "glm-4.5",
+      "glm-4.5-air",
+      "glm-4.5-flash",
+      "glm-4.5v"
+    ],
+    "docUrl": "https://docs.z.ai/guides/overview/pricing"
+  },
+  "inference": {
+    "url": "https://inference.net/v1/chat/completions",
+    "apiKeyEnvVar": "INFERENCE_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "Inference",
+    "models": [
+      "google/gemma-3",
+      "meta/llama-3.1-8b-instruct",
+      "meta/llama-3.2-11b-vision-instruct",
+      "meta/llama-3.2-1b-instruct",
+      "meta/llama-3.2-3b-instruct",
+      "mistral/mistral-nemo-12b-instruct",
+      "osmosis/osmosis-structure-0.6b",
+      "qwen/qwen-2.5-7b-vision-instruct",
+      "qwen/qwen3-embedding-4b"
+    ],
+    "docUrl": "https://inference.net/models"
+  },
+  "requesty": {
+    "url": "https://router.requesty.ai/v1/chat/completions",
+    "apiKeyEnvVar": "REQUESTY_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "Requesty",
+    "models": [
+      "anthropic/claude-3-7-sonnet",
+      "anthropic/claude-4-sonnet-20250522",
+      "anthropic/claude-opus-4",
+      "anthropic/claude-opus-4-1-20250805",
+      "google/gemini-2.5-flash",
+      "google/gemini-2.5-pro",
+      "openai/gpt-4.1",
+      "openai/gpt-4.1-mini",
+      "openai/gpt-4o-mini",
+      "openai/gpt-5",
+      "openai/gpt-5-mini",
+      "openai/gpt-5-nano",
+      "openai/o4-mini"
+    ],
+    "docUrl": "https://requesty.ai/solution/llm-routing/models"
+  },
   "morph": {
     "url": "https://api.morphllm.com/v1/chat/completions",
     "apiKeyEnvVar": "MORPH_API_KEY",
@@ -843,51 +888,99 @@ export const PROVIDER_REGISTRY = {
     ],
     "docUrl": "https://docs.morphllm.com/api-reference/introduction"
   },
-  "moonshotai": {
-    "url": "https://api.moonshot.ai/v1/chat/completions",
-    "apiKeyEnvVar": "MOONSHOT_API_KEY",
+  "lmstudio": {
+    "url": "http://127.0.0.1:1234/v1/chat/completions",
+    "apiKeyEnvVar": "LMSTUDIO_API_KEY",
     "apiKeyHeader": "Authorization",
-    "name": "Moonshot AI",
+    "name": "LMStudio",
     "models": [
-      "kimi-k2-0711-preview",
-      "kimi-k2-0905-preview",
-      "kimi-k2-turbo-preview"
+      "openai/gpt-oss-20b",
+      "qwen/qwen3-30b-a3b-2507",
+      "qwen/qwen3-coder-30b"
     ],
-    "docUrl": "https://platform.moonshot.ai/docs/api/chat"
+    "docUrl": "https://lmstudio.ai/models"
   },
-  "netlify": {
-    "url": "https://api.netlify.com/api/v1/ai-gateway",
-    "apiKeyEnvVar": "NETLIFY_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "Netlify AI Gateway",
+  "anthropic": {
+    "url": "https://api.anthropic.com/v1/chat/completions",
+    "apiKeyEnvVar": "ANTHROPIC_API_KEY",
+    "apiKeyHeader": "x-api-key",
+    "name": "Anthropic",
     "models": [
-      "anthropic/claude-3-5-haiku-20241022",
-      "anthropic/claude-3-7-sonnet-20250219",
-      "anthropic/claude-3-haiku-20240307",
-      "anthropic/claude-opus-4-20250514",
-      "anthropic/claude-sonnet-4-20250514",
-      "gemini/gemini-1.5-flash",
-      "gemini/gemini-1.5-flash-8b",
-      "gemini/gemini-1.5-pro",
-      "gemini/gemini-2.0-flash",
-      "gemini/gemini-2.0-flash-lite",
-      "gemini/gemini-2.5-flash",
-      "gemini/gemini-2.5-flash-lite",
-      "gemini/gemini-2.5-pro",
-      "gemini/imagen-4.0-generate-001",
-      "gemini/veo-3.0-generate-preview",
-      "openai/codex-mini-latest",
-      "openai/dall-e-2",
-      "openai/dall-e-3",
-      "openai/gpt-3.5-turbo",
-      "openai/gpt-4-turbo",
-      "openai/gpt-4o",
-      "openai/gpt-4o-mini",
-      "openai/gpt-image-1",
-      "openai/o1",
-      "openai/o1-mini",
-      "openai/o3-mini"
-    ]
+      "claude-3-5-haiku-20241022",
+      "claude-3-5-sonnet-20240620",
+      "claude-3-5-sonnet-20241022",
+      "claude-3-7-sonnet-20250219",
+      "claude-3-haiku-20240307",
+      "claude-3-opus-20240229",
+      "claude-3-sonnet-20240229",
+      "claude-opus-4-1-20250805",
+      "claude-opus-4-20250514",
+      "claude-sonnet-4-20250514"
+    ],
+    "docUrl": "https://docs.anthropic.com/en/docs/about-claude/models"
+  },
+  "fireworks-ai": {
+    "url": "https://api.fireworks.ai/inference/v1/chat/completions",
+    "apiKeyEnvVar": "FIREWORKS_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "Fireworks AI",
+    "models": [
+      "accounts/fireworks/models/deepseek-r1-0528",
+      "accounts/fireworks/models/deepseek-v3-0324",
+      "accounts/fireworks/models/deepseek-v3p1",
+      "accounts/fireworks/models/glm-4p5",
+      "accounts/fireworks/models/glm-4p5-air",
+      "accounts/fireworks/models/gpt-oss-120b",
+      "accounts/fireworks/models/gpt-oss-20b",
+      "accounts/fireworks/models/kimi-k2-instruct",
+      "accounts/fireworks/models/qwen3-235b-a22b",
+      "accounts/fireworks/models/qwen3-coder-480b-a35b-instruct"
+    ],
+    "docUrl": "https://fireworks.ai/docs/"
+  },
+  "modelscope": {
+    "url": "https://api-inference.modelscope.cn/v1/chat/completions",
+    "apiKeyEnvVar": "MODELSCOPE_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "ModelScope",
+    "models": [
+      "Qwen/Qwen3-235B-A22B-Instruct-2507",
+      "Qwen/Qwen3-235B-A22B-Thinking-2507",
+      "Qwen/Qwen3-30B-A3B-Instruct-2507",
+      "Qwen/Qwen3-30B-A3B-Thinking-2507",
+      "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+      "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+      "ZhipuAI/GLM-4.5"
+    ],
+    "docUrl": "https://modelscope.cn/docs/model-service/API-Inference/intro"
+  },
+  "llama": {
+    "url": "https://api.llama.com/compat/v1/chat/completions",
+    "apiKeyEnvVar": "LLAMA_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "Llama",
+    "models": [
+      "cerebras-llama-4-maverick-17b-128e-instruct",
+      "cerebras-llama-4-scout-17b-16e-instruct",
+      "groq-llama-4-maverick-17b-128e-instruct",
+      "llama-3.3-70b-instruct",
+      "llama-3.3-8b-instruct",
+      "llama-4-maverick-17b-128e-instruct-fp8",
+      "llama-4-scout-17b-16e-instruct-fp8"
+    ],
+    "docUrl": "https://llama.developer.meta.com/docs/models"
+  },
+  "cerebras": {
+    "url": "https://api.cerebras.ai/v1/chat/completions",
+    "apiKeyEnvVar": "CEREBRAS_API_KEY",
+    "apiKeyHeader": "Authorization",
+    "name": "Cerebras",
+    "models": [
+      "gpt-oss-120b",
+      "qwen-3-235b-a22b-instruct-2507",
+      "qwen-3-coder-480b"
+    ],
+    "docUrl": "https://inference-docs.cerebras.ai/models/overview"
   }
 } as const;
 
@@ -895,9 +988,28 @@ export const PROVIDER_REGISTRY = {
  * Available models per provider
  */
 export const PROVIDER_MODELS = {
-  "deepseek": [
-    "deepseek-chat",
-    "deepseek-reasoner"
+  "moonshotai-cn": [
+    "kimi-k2-0711-preview",
+    "kimi-k2-0905-preview",
+    "kimi-k2-turbo-preview"
+  ],
+  "lucidquery": [
+    "lucidnova-rf1-100b",
+    "lucidquery-nexus-coder"
+  ],
+  "moonshotai": [
+    "kimi-k2-0711-preview",
+    "kimi-k2-0905-preview",
+    "kimi-k2-turbo-preview"
+  ],
+  "zai-coding-plan": [
+    "glm-4.5",
+    "glm-4.5-air",
+    "glm-4.5-flash",
+    "glm-4.5v"
+  ],
+  "alibaba": [
+    "qwen3-coder-plus"
   ],
   "xai": [
     "grok-2",
@@ -915,138 +1027,48 @@ export const PROVIDER_MODELS = {
     "grok-3-mini-fast-latest",
     "grok-3-mini-latest",
     "grok-4",
+    "grok-4-fast",
+    "grok-4-fast-non-reasoning",
     "grok-beta",
     "grok-vision-beta"
   ],
-  "fireworks-ai": [
-    "accounts/fireworks/gpt-oss-120b",
-    "accounts/fireworks/gpt-oss-20b",
-    "accounts/fireworks/models/deepseek-r1-0528",
-    "accounts/fireworks/models/deepseek-v3-0324",
-    "accounts/fireworks/models/deepseek-v3p1",
-    "accounts/fireworks/models/glm-4p5",
-    "accounts/fireworks/models/glm-4p5-air",
-    "accounts/fireworks/models/kimi-k2-instruct",
-    "accounts/fireworks/models/qwen3-235b-a22b",
-    "accounts/fireworks/models/qwen3-coder-480b-a35b-instruct"
-  ],
-  "openrouter": [
-    "anthropic/claude-3.5-haiku",
-    "anthropic/claude-3.7-sonnet",
-    "anthropic/claude-opus-4",
-    "anthropic/claude-opus-4.1",
-    "anthropic/claude-sonnet-4",
-    "cognitivecomputations/dolphin3.0-mistral-24b",
-    "cognitivecomputations/dolphin3.0-r1-mistral-24b",
-    "deepseek/deepseek-chat-v3-0324",
-    "deepseek/deepseek-chat-v3.1",
-    "deepseek/deepseek-r1-0528-qwen3-8b:free",
-    "deepseek/deepseek-r1-0528:free",
-    "deepseek/deepseek-r1-distill-llama-70b",
-    "deepseek/deepseek-r1-distill-qwen-14b",
-    "deepseek/deepseek-r1:free",
-    "deepseek/deepseek-v3-base:free",
-    "featherless/qwerky-72b",
-    "google/gemini-2.0-flash-001",
-    "google/gemini-2.0-flash-exp:free",
-    "google/gemini-2.5-flash",
-    "google/gemini-2.5-pro",
-    "google/gemini-2.5-pro-preview-05-06",
-    "google/gemini-2.5-pro-preview-06-05",
-    "google/gemma-2-9b-it:free",
-    "google/gemma-3-12b-it",
+  "nvidia": [
+    "black-forest-labs/flux.1-dev",
+    "deepseek-ai/deepseek-v3.1",
     "google/gemma-3-27b-it",
-    "google/gemma-3n-e4b-it",
-    "google/gemma-3n-e4b-it:free",
-    "meta-llama/llama-3.2-11b-vision-instruct",
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "meta-llama/llama-4-scout:free",
-    "microsoft/mai-ds-r1:free",
-    "mistralai/codestral-2508",
-    "mistralai/devstral-medium-2507",
-    "mistralai/devstral-small-2505",
-    "mistralai/devstral-small-2505:free",
-    "mistralai/devstral-small-2507",
-    "mistralai/mistral-7b-instruct:free",
-    "mistralai/mistral-medium-3",
-    "mistralai/mistral-medium-3.1",
-    "mistralai/mistral-nemo:free",
-    "mistralai/mistral-small-3.1-24b-instruct",
-    "mistralai/mistral-small-3.2-24b-instruct",
-    "mistralai/mistral-small-3.2-24b-instruct:free",
-    "moonshotai/kimi-dev-72b:free",
-    "moonshotai/kimi-k2",
-    "moonshotai/kimi-k2-0905",
-    "moonshotai/kimi-k2:free",
-    "nousresearch/deephermes-3-llama-3-8b-preview",
-    "nousresearch/hermes-4-405b",
-    "nousresearch/hermes-4-70b",
-    "openai/gpt-4.1",
-    "openai/gpt-4.1-mini",
-    "openai/gpt-4o-mini",
-    "openai/gpt-5",
-    "openai/gpt-5-chat",
-    "openai/gpt-5-mini",
-    "openai/gpt-5-nano",
+    "microsoft/phi-4-mini-instruct",
+    "moonshotai/kimi-k2-instruct",
+    "nvidia/cosmos-nemotron-34b",
+    "nvidia/llama-3.1-nemotron-ultra-253b-v1",
+    "nvidia/nemoretriever-ocr-v1",
+    "nvidia/parakeet-tdt-0.6b-v2",
+    "openai/gpt-oss-120b",
+    "openai/whisper-large-v3",
+    "qwen/qwen3-235b-a22b",
+    "qwen/qwen3-coder-480b-a35b-instruct"
+  ],
+  "upstage": [
+    "solar-mini",
+    "solar-pro2"
+  ],
+  "groq": [
+    "deepseek-r1-distill-llama-70b",
+    "gemma2-9b-it",
+    "llama-3.1-8b-instant",
+    "llama-3.3-70b-versatile",
+    "llama-guard-3-8b",
+    "llama3-70b-8192",
+    "llama3-8b-8192",
+    "meta-llama/llama-4-maverick-17b-128e-instruct",
+    "meta-llama/llama-4-scout-17b-16e-instruct",
+    "meta-llama/llama-guard-4-12b",
+    "mistral-saba-24b",
+    "moonshotai/kimi-k2-instruct",
+    "moonshotai/kimi-k2-instruct-0905",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
-    "openai/o4-mini",
-    "openrouter/cypher-alpha:free",
-    "openrouter/horizon-alpha",
-    "openrouter/horizon-beta",
-    "openrouter/sonoma-dusk-alpha",
-    "openrouter/sonoma-sky-alpha",
-    "qwen/qwen-2.5-coder-32b-instruct",
-    "qwen/qwen2.5-vl-32b-instruct:free",
-    "qwen/qwen2.5-vl-72b-instruct",
-    "qwen/qwen2.5-vl-72b-instruct:free",
-    "qwen/qwen3-14b:free",
-    "qwen/qwen3-235b-a22b-07-25",
-    "qwen/qwen3-235b-a22b-07-25:free",
-    "qwen/qwen3-235b-a22b-thinking-2507",
-    "qwen/qwen3-235b-a22b:free",
-    "qwen/qwen3-30b-a3b-instruct-2507",
-    "qwen/qwen3-30b-a3b:free",
-    "qwen/qwen3-32b:free",
-    "qwen/qwen3-8b:free",
-    "qwen/qwen3-coder",
-    "qwen/qwen3-coder:free",
-    "qwen/qwen3-max",
-    "qwen/qwq-32b:free",
-    "rekaai/reka-flash-3",
-    "sarvamai/sarvam-m:free",
-    "thudm/glm-z1-32b:free",
-    "tngtech/deepseek-r1t2-chimera:free",
-    "x-ai/grok-3",
-    "x-ai/grok-3-beta",
-    "x-ai/grok-3-mini",
-    "x-ai/grok-3-mini-beta",
-    "x-ai/grok-4",
-    "x-ai/grok-code-fast-1",
-    "z-ai/glm-4.5",
-    "z-ai/glm-4.5-air",
-    "z-ai/glm-4.5-air:free",
-    "z-ai/glm-4.5v"
-  ],
-  "cerebras": [
-    "gpt-oss-120b",
-    "qwen-3-235b-a22b-instruct-2507",
-    "qwen-3-coder-480b"
-  ],
-  "venice": [
-    "deepseek-coder-v2-lite",
-    "deepseek-r1-671b",
-    "dolphin-2.9.2-qwen2-72b",
-    "llama-3.1-405b",
-    "llama-3.2-3b",
-    "llama-3.3-70b",
-    "mistral-31-24b",
-    "qwen-2.5-coder-32b",
-    "qwen-2.5-qwq-32b",
-    "qwen-2.5-vl",
-    "qwen3-235b",
-    "qwen3-4b",
-    "venice-uncensored"
+    "qwen-qwq-32b",
+    "qwen/qwen3-32b"
   ],
   "github-copilot": [
     "claude-3.5-sonnet",
@@ -1060,62 +1082,12 @@ export const PROVIDER_MODELS = {
     "gpt-4.1",
     "gpt-4o",
     "gpt-5",
+    "gpt-5-codex",
     "gpt-5-mini",
     "grok-code-fast-1",
     "o3",
     "o3-mini",
     "o4-mini"
-  ],
-  "submodel": [
-    "Qwen/Qwen3-235B-A22B-Instruct-2507",
-    "Qwen/Qwen3-235B-A22B-Thinking-2507",
-    "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
-    "deepseek-ai/DeepSeek-R1-0528",
-    "deepseek-ai/DeepSeek-V3-0324",
-    "deepseek-ai/DeepSeek-V3.1",
-    "openai/gpt-oss-120b",
-    "zai-org/GLM-4.5-Air",
-    "zai-org/GLM-4.5-FP8"
-  ],
-  "anthropic": [
-    "claude-3-5-haiku-20241022",
-    "claude-3-5-sonnet-20240620",
-    "claude-3-5-sonnet-20241022",
-    "claude-3-7-sonnet-20250219",
-    "claude-3-haiku-20240307",
-    "claude-3-opus-20240229",
-    "claude-3-sonnet-20240229",
-    "claude-opus-4-1-20250805",
-    "claude-opus-4-20250514",
-    "claude-sonnet-4-20250514"
-  ],
-  "alibaba": [
-    "qwen3-coder-plus"
-  ],
-  "openai": [
-    "codex-mini-latest",
-    "gpt-3.5-turbo",
-    "gpt-4",
-    "gpt-4-turbo",
-    "gpt-4.1",
-    "gpt-4.1-mini",
-    "gpt-4.1-nano",
-    "gpt-4o",
-    "gpt-4o-mini",
-    "gpt-5",
-    "gpt-5-chat-latest",
-    "gpt-5-mini",
-    "gpt-5-nano",
-    "o1",
-    "o1-mini",
-    "o1-preview",
-    "o1-pro",
-    "o3",
-    "o3-deep-research",
-    "o3-mini",
-    "o3-pro",
-    "o4-mini",
-    "o4-mini-deep-research"
   ],
   "mistral": [
     "codestral-latest",
@@ -1137,71 +1109,6 @@ export const PROVIDER_MODELS = {
     "open-mixtral-8x7b",
     "pixtral-12b",
     "pixtral-large-latest"
-  ],
-  "upstage": [
-    "solar-mini",
-    "solar-pro2"
-  ],
-  "llama": [
-    "cerebras-llama-4-maverick-17b-128e-instruct",
-    "cerebras-llama-4-scout-17b-16e-instruct",
-    "groq-llama-4-maverick-17b-128e-instruct",
-    "llama-3.3-70b-instruct",
-    "llama-3.3-8b-instruct",
-    "llama-4-maverick-17b-128e-instruct-fp8",
-    "llama-4-scout-17b-16e-instruct-fp8"
-  ],
-  "moonshotai-cn": [
-    "kimi-k2-0711-preview",
-    "kimi-k2-0905-preview",
-    "kimi-k2-turbo-preview"
-  ],
-  "deepinfra": [
-    "Qwen/Qwen3-Coder-480B-A35B-Instruct",
-    "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
-    "moonshotai/Kimi-K2-Instruct",
-    "zai-org/GLM-4.5"
-  ],
-  "zhipuai": [
-    "glm-4.5",
-    "glm-4.5-air",
-    "glm-4.5-flash",
-    "glm-4.5v"
-  ],
-  "synthetic": [
-    "hf:Qwen/Qwen2.5-Coder-32B-Instruct",
-    "hf:Qwen/Qwen3-235B-A22B-Instruct-2507",
-    "hf:Qwen/Qwen3-235B-A22B-Thinking-2507",
-    "hf:Qwen/Qwen3-Coder-480B-A35B-Instruct",
-    "hf:deepseek-ai/DeepSeek-R1",
-    "hf:deepseek-ai/DeepSeek-R1-0528",
-    "hf:deepseek-ai/DeepSeek-V3",
-    "hf:deepseek-ai/DeepSeek-V3-0324",
-    "hf:deepseek-ai/DeepSeek-V3.1",
-    "hf:meta-llama/Llama-3.1-405B-Instruct",
-    "hf:meta-llama/Llama-3.1-70B-Instruct",
-    "hf:meta-llama/Llama-3.1-8B-Instruct",
-    "hf:meta-llama/Llama-3.3-70B-Instruct",
-    "hf:meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
-    "hf:meta-llama/Llama-4-Scout-17B-16E-Instruct",
-    "hf:moonshotai/Kimi-K2-Instruct",
-    "hf:moonshotai/Kimi-K2-Instruct-0905",
-    "hf:openai/gpt-oss-120b",
-    "hf:zai-org/GLM-4.5"
-  ],
-  "modelscope": [
-    "Qwen/Qwen3-235B-A22B-Instruct-2507",
-    "Qwen/Qwen3-235B-A22B-Thinking-2507",
-    "Qwen/Qwen3-30B-A3B-Instruct-2507",
-    "Qwen/Qwen3-30B-A3B-Thinking-2507",
-    "Qwen/Qwen3-Coder-30B-A3B-Instruct",
-    "Qwen/Qwen3-Coder-480B-A35B-Instruct",
-    "ZhipuAI/GLM-4.5",
-    "moonshotai/Kimi-K2-Instruct"
-  ],
-  "baseten": [
-    "Moonshotai-Kimi-K2-Instruct-0905",
-    "Qwen-Qwen3-Coder-480B-A35B-Instruct"
   ],
   "vercel": [
     "amazon/nova-lite",
@@ -1245,6 +1152,7 @@ export const PROVIDER_MODELS = {
     "openai/gpt-4o",
     "openai/gpt-4o-mini",
     "openai/gpt-5",
+    "openai/gpt-5-codex",
     "openai/gpt-5-mini",
     "openai/gpt-5-nano",
     "openai/gpt-oss-120b",
@@ -1263,50 +1171,70 @@ export const PROVIDER_MODELS = {
     "xai/grok-3-mini-fast",
     "xai/grok-4"
   ],
-  "google": [
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-8b",
-    "gemini-1.5-pro",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite-preview-06-17",
-    "gemini-2.5-flash-preview-04-17",
-    "gemini-2.5-flash-preview-05-20",
-    "gemini-2.5-pro",
-    "gemini-2.5-pro-preview-05-06",
-    "gemini-2.5-pro-preview-06-05"
+  "deepseek": [
+    "deepseek-chat",
+    "deepseek-reasoner"
   ],
-  "togetherai": [
-    "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
-    "deepseek-ai/DeepSeek-R1",
-    "deepseek-ai/DeepSeek-V3",
-    "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-    "moonshotai/Kimi-K2-Instruct",
-    "openai/gpt-oss-120b"
+  "alibaba-cn": [
+    "qwen3-coder-plus"
   ],
-  "wandb": [
+  "venice": [
+    "deepseek-coder-v2-lite",
+    "deepseek-r1-671b",
+    "dolphin-2.9.2-qwen2-72b",
+    "llama-3.1-405b",
+    "llama-3.2-3b",
+    "llama-3.3-70b",
+    "mistral-31-24b",
+    "qwen-2.5-coder-32b",
+    "qwen-2.5-qwq-32b",
+    "qwen-2.5-vl",
+    "qwen3-235b",
+    "qwen3-4b",
+    "venice-uncensored"
+  ],
+  "chutes": [
     "Qwen/Qwen3-235B-A22B-Instruct-2507",
     "Qwen/Qwen3-235B-A22B-Thinking-2507",
-    "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    "Qwen/Qwen3-30B-A3B",
+    "Qwen/Qwen3-30B-A3B-Instruct-2507",
+    "Qwen/Qwen3-30B-A3B-Thinking-2507",
+    "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+    "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+    "Qwen/Qwen3-Next-80B-A3B-Instruct",
+    "Qwen/Qwen3-Next-80B-A3B-Thinking",
+    "chutesai/Devstral-Small-2505",
+    "chutesai/Mistral-Small-3.2-24B-Instruct-2506",
     "deepseek-ai/DeepSeek-R1-0528",
+    "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
+    "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
     "deepseek-ai/DeepSeek-V3-0324",
-    "meta-llama/Llama-3.1-8B-Instruct",
-    "meta-llama/Llama-3.3-70B-Instruct",
-    "meta-llama/Llama-4-Scout-17B-16E-Instruct",
-    "microsoft/Phi-4-mini-instruct",
-    "moonshotai/Kimi-K2-Instruct"
+    "deepseek-ai/DeepSeek-V3.1",
+    "deepseek-ai/DeepSeek-V3.1-Turbo",
+    "deepseek-ai/DeepSeek-V3.1:THINKING",
+    "meituan-longcat/LongCat-Flash-Chat-FP8",
+    "moonshotai/Kimi-Dev-72B",
+    "moonshotai/Kimi-K2-Instruct-0905",
+    "moonshotai/Kimi-K2-Instruct-75k",
+    "moonshotai/Kimi-VL-A3B-Thinking",
+    "openai/gpt-oss-120b",
+    "tngtech/DeepSeek-R1T-Chimera",
+    "tngtech/DeepSeek-TNG-R1T2-Chimera",
+    "zai-org/GLM-4.5-Air",
+    "zai-org/GLM-4.5-FP8",
+    "zai-org/GLM-4.5-Turbo"
   ],
-  "inference": [
-    "google/gemma-3",
-    "meta/llama-3.1-8b-instruct",
-    "meta/llama-3.2-11b-vision-instruct",
-    "meta/llama-3.2-1b-instruct",
-    "meta/llama-3.2-3b-instruct",
-    "mistral/mistral-nemo-12b-instruct",
-    "osmosis/osmosis-structure-0.6b",
-    "qwen/qwen-2.5-7b-vision-instruct",
-    "qwen/qwen3-embedding-4b"
+  "cortecs": [
+    "claude-sonnet-4",
+    "deepseek-v3-0324",
+    "gemini-2.5-pro",
+    "gpt-4.1",
+    "gpt-oss-120b",
+    "kimi-k2-instruct",
+    "llama-3.1-405b-instruct",
+    "nova-pro-v1",
+    "qwen3-32b",
+    "qwen3-coder-480b-a35b-instruct"
   ],
   "github-models": [
     "ai21-labs/ai21-jamba-1.5-large",
@@ -1365,98 +1293,41 @@ export const PROVIDER_MODELS = {
     "xai/grok-3",
     "xai/grok-3-mini"
   ],
-  "opencode": [
-    "claude-3-5-haiku",
-    "claude-opus-4-1",
-    "claude-sonnet-4",
-    "gpt-5",
-    "grok-code",
-    "kimi-k2",
-    "qwen3-coder"
+  "togetherai": [
+    "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+    "deepseek-ai/DeepSeek-R1",
+    "deepseek-ai/DeepSeek-V3",
+    "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    "moonshotai/Kimi-K2-Instruct",
+    "openai/gpt-oss-120b"
   ],
-  "nvidia": [
-    "cosmos-nemotron-34b",
-    "deepseek-r1",
-    "deepseek-v3.1",
-    "flux_1-dev",
-    "gemma-3-27b-it",
-    "llama-3.1-nemotron-ultra-253b-v1",
-    "llama-3.3-nemotron-super-49b-v1.5",
-    "mistral-small-3.1-24b-instruct-2503",
-    "nemoretriever-ocr-v1",
-    "parakeet-tdt-0.6b-v2",
-    "phi-4-multimodal-instruct",
-    "qwen3-235b-a22b",
-    "qwen3-coder-480b-a35b-instruct",
-    "whisper-large-v3"
+  "baseten": [
+    "Qwen3/Qwen3-Coder-480B-A35B-Instruct",
+    "moonshotai/Kimi-K2-Instruct-0905"
   ],
   "huggingface": [
     "Qwen/Qwen3-235B-A22B-Thinking-2507",
     "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    "Qwen/Qwen3-Next-80B-A3B-Instruct",
+    "Qwen/Qwen3-Next-80B-A3B-Thinking",
     "deepseek-ai/DeepSeek-R1-0528",
     "deepseek-ai/Deepseek-V3-0324",
     "moonshotai/Kimi-K2-Instruct",
+    "moonshotai/Kimi-K2-Instruct-0905",
     "zai-org/GLM-4.5",
     "zai-org/GLM-4.5-Air"
   ],
-  "inception": [
-    "mercury",
-    "mercury-coder"
-  ],
-  "groq": [
-    "deepseek-r1-distill-llama-70b",
-    "gemma2-9b-it",
-    "llama-3.1-8b-instant",
-    "llama-3.3-70b-versatile",
-    "llama-guard-3-8b",
-    "llama3-70b-8192",
-    "llama3-8b-8192",
-    "meta-llama/llama-4-maverick-17b-128e-instruct",
-    "meta-llama/llama-4-scout-17b-16e-instruct",
-    "meta-llama/llama-guard-4-12b",
-    "mistral-saba-24b",
-    "moonshotai/kimi-k2-instruct",
-    "moonshotai/kimi-k2-instruct-0905",
-    "openai/gpt-oss-120b",
-    "openai/gpt-oss-20b",
-    "qwen-qwq-32b",
-    "qwen/qwen3-32b"
-  ],
-  "chutes": [
-    "Qwen/Qwen3-235B-A22B-Instruct-2507",
-    "Qwen/Qwen3-235B-A22B-Thinking-2507",
-    "Qwen/Qwen3-30B-A3B",
-    "Qwen/Qwen3-30B-A3B-Instruct-2507",
-    "Qwen/Qwen3-Coder-30B-A3B-Instruct",
-    "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
-    "chutesai/Devstral-Small-2505",
-    "chutesai/Mistral-Small-3.2-24B-Instruct-2506",
-    "deepseek-ai/DeepSeek-R1-0528",
-    "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
-    "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
-    "deepseek-ai/DeepSeek-V3-0324",
-    "deepseek-ai/DeepSeek-V3.1",
-    "deepseek-ai/DeepSeek-V3.1:THINKING",
-    "moonshotai/Kimi-Dev-72B",
-    "moonshotai/Kimi-K2-Instruct-0905",
-    "moonshotai/Kimi-K2-Instruct-75k",
-    "moonshotai/Kimi-VL-A3B-Thinking",
-    "openai/gpt-oss-120b",
-    "tngtech/DeepSeek-R1T-Chimera",
-    "tngtech/DeepSeek-TNG-R1T2-Chimera",
-    "zai-org/GLM-4.5-Air",
-    "zai-org/GLM-4.5-FP8"
-  ],
-  "lmstudio": [
-    "openai/gpt-oss-20b",
-    "qwen/qwen3-30b-a3b-2507",
-    "qwen/qwen3-coder-30b"
-  ],
-  "zai": [
-    "glm-4.5",
-    "glm-4.5-air",
-    "glm-4.5-flash",
-    "glm-4.5v"
+  "opencode": [
+    "claude-3-5-haiku",
+    "claude-opus-4-1",
+    "claude-sonnet-4",
+    "code-supernova",
+    "gpt-5",
+    "gpt-5-codex",
+    "grok-code",
+    "kimi-k2",
+    "qwen3-coder",
+    "qwen3-max"
   ],
   "fastrouter": [
     "anthropic/claude-opus-4.1",
@@ -1474,43 +1345,315 @@ export const PROVIDER_MODELS = {
     "qwen/qwen3-coder",
     "x-ai/grok-4"
   ],
+  "google": [
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-8b",
+    "gemini-1.5-pro",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash-lite-preview-06-17",
+    "gemini-2.5-flash-lite-preview-09-2025",
+    "gemini-2.5-flash-preview-04-17",
+    "gemini-2.5-flash-preview-05-20",
+    "gemini-2.5-flash-preview-09-2025",
+    "gemini-2.5-pro",
+    "gemini-2.5-pro-preview-05-06",
+    "gemini-2.5-pro-preview-06-05"
+  ],
+  "inception": [
+    "mercury",
+    "mercury-coder"
+  ],
+  "wandb": [
+    "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    "deepseek-ai/DeepSeek-R1-0528",
+    "deepseek-ai/DeepSeek-V3-0324",
+    "meta-llama/Llama-3.1-8B-Instruct",
+    "meta-llama/Llama-3.3-70B-Instruct",
+    "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+    "microsoft/Phi-4-mini-instruct",
+    "moonshotai/Kimi-K2-Instruct"
+  ],
+  "openai": [
+    "codex-mini-latest",
+    "gpt-3.5-turbo",
+    "gpt-4",
+    "gpt-4-turbo",
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-4.1-nano",
+    "gpt-4o",
+    "gpt-4o-2024-05-13",
+    "gpt-4o-2024-08-06",
+    "gpt-4o-2024-11-20",
+    "gpt-4o-mini",
+    "gpt-5",
+    "gpt-5-chat-latest",
+    "gpt-5-codex",
+    "gpt-5-mini",
+    "gpt-5-nano",
+    "o1",
+    "o1-mini",
+    "o1-preview",
+    "o1-pro",
+    "o3",
+    "o3-deep-research",
+    "o3-mini",
+    "o3-pro",
+    "o4-mini",
+    "o4-mini-deep-research"
+  ],
+  "zhipuai-coding-plan": [
+    "glm-4.5",
+    "glm-4.5-air",
+    "glm-4.5-flash",
+    "glm-4.5v"
+  ],
+  "perplexity": [
+    "sonar",
+    "sonar-pro",
+    "sonar-reasoning",
+    "sonar-reasoning-pro"
+  ],
+  "openrouter": [
+    "anthropic/claude-3.5-haiku",
+    "anthropic/claude-3.7-sonnet",
+    "anthropic/claude-opus-4",
+    "anthropic/claude-opus-4.1",
+    "anthropic/claude-sonnet-4",
+    "cognitivecomputations/dolphin3.0-mistral-24b",
+    "cognitivecomputations/dolphin3.0-r1-mistral-24b",
+    "deepseek/deepseek-chat-v3-0324",
+    "deepseek/deepseek-chat-v3.1",
+    "deepseek/deepseek-r1-0528-qwen3-8b:free",
+    "deepseek/deepseek-r1-0528:free",
+    "deepseek/deepseek-r1-distill-llama-70b",
+    "deepseek/deepseek-r1-distill-qwen-14b",
+    "deepseek/deepseek-r1:free",
+    "deepseek/deepseek-v3-base:free",
+    "deepseek/deepseek-v3.1-terminus",
+    "featherless/qwerky-72b",
+    "google/gemini-2.0-flash-001",
+    "google/gemini-2.0-flash-exp:free",
+    "google/gemini-2.5-flash",
+    "google/gemini-2.5-pro",
+    "google/gemini-2.5-pro-preview-05-06",
+    "google/gemini-2.5-pro-preview-06-05",
+    "google/gemma-2-9b-it:free",
+    "google/gemma-3-12b-it",
+    "google/gemma-3-27b-it",
+    "google/gemma-3n-e4b-it",
+    "google/gemma-3n-e4b-it:free",
+    "meta-llama/llama-3.2-11b-vision-instruct",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "meta-llama/llama-4-scout:free",
+    "microsoft/mai-ds-r1:free",
+    "mistralai/codestral-2508",
+    "mistralai/devstral-medium-2507",
+    "mistralai/devstral-small-2505",
+    "mistralai/devstral-small-2505:free",
+    "mistralai/devstral-small-2507",
+    "mistralai/mistral-7b-instruct:free",
+    "mistralai/mistral-medium-3",
+    "mistralai/mistral-medium-3.1",
+    "mistralai/mistral-nemo:free",
+    "mistralai/mistral-small-3.1-24b-instruct",
+    "mistralai/mistral-small-3.2-24b-instruct",
+    "mistralai/mistral-small-3.2-24b-instruct:free",
+    "moonshotai/kimi-dev-72b:free",
+    "moonshotai/kimi-k2",
+    "moonshotai/kimi-k2-0905",
+    "moonshotai/kimi-k2:free",
+    "nousresearch/deephermes-3-llama-3-8b-preview",
+    "nousresearch/hermes-4-405b",
+    "nousresearch/hermes-4-70b",
+    "openai/gpt-4.1",
+    "openai/gpt-4.1-mini",
+    "openai/gpt-4o-mini",
+    "openai/gpt-5",
+    "openai/gpt-5-chat",
+    "openai/gpt-5-codex",
+    "openai/gpt-5-mini",
+    "openai/gpt-5-nano",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "openai/o4-mini",
+    "openrouter/cypher-alpha:free",
+    "openrouter/horizon-alpha",
+    "openrouter/horizon-beta",
+    "openrouter/sonoma-dusk-alpha",
+    "openrouter/sonoma-sky-alpha",
+    "qwen/qwen-2.5-coder-32b-instruct",
+    "qwen/qwen2.5-vl-32b-instruct:free",
+    "qwen/qwen2.5-vl-72b-instruct",
+    "qwen/qwen2.5-vl-72b-instruct:free",
+    "qwen/qwen3-14b:free",
+    "qwen/qwen3-235b-a22b-07-25",
+    "qwen/qwen3-235b-a22b-07-25:free",
+    "qwen/qwen3-235b-a22b-thinking-2507",
+    "qwen/qwen3-235b-a22b:free",
+    "qwen/qwen3-30b-a3b-instruct-2507",
+    "qwen/qwen3-30b-a3b:free",
+    "qwen/qwen3-32b:free",
+    "qwen/qwen3-8b:free",
+    "qwen/qwen3-coder",
+    "qwen/qwen3-coder:free",
+    "qwen/qwen3-max",
+    "qwen/qwen3-next-80b-a3b-instruct",
+    "qwen/qwq-32b:free",
+    "rekaai/reka-flash-3",
+    "sarvamai/sarvam-m:free",
+    "thudm/glm-z1-32b:free",
+    "tngtech/deepseek-r1t2-chimera:free",
+    "x-ai/grok-3",
+    "x-ai/grok-3-beta",
+    "x-ai/grok-3-mini",
+    "x-ai/grok-3-mini-beta",
+    "x-ai/grok-4",
+    "x-ai/grok-4-fast:free",
+    "x-ai/grok-code-fast-1",
+    "z-ai/glm-4.5",
+    "z-ai/glm-4.5-air",
+    "z-ai/glm-4.5-air:free",
+    "z-ai/glm-4.5v"
+  ],
+  "synthetic": [
+    "hf:Qwen/Qwen2.5-Coder-32B-Instruct",
+    "hf:Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "hf:Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "hf:Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    "hf:deepseek-ai/DeepSeek-R1",
+    "hf:deepseek-ai/DeepSeek-R1-0528",
+    "hf:deepseek-ai/DeepSeek-V3",
+    "hf:deepseek-ai/DeepSeek-V3-0324",
+    "hf:deepseek-ai/DeepSeek-V3.1",
+    "hf:deepseek-ai/DeepSeek-V3.1-Terminus",
+    "hf:meta-llama/Llama-3.1-405B-Instruct",
+    "hf:meta-llama/Llama-3.1-70B-Instruct",
+    "hf:meta-llama/Llama-3.1-8B-Instruct",
+    "hf:meta-llama/Llama-3.3-70B-Instruct",
+    "hf:meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
+    "hf:meta-llama/Llama-4-Scout-17B-16E-Instruct",
+    "hf:moonshotai/Kimi-K2-Instruct",
+    "hf:moonshotai/Kimi-K2-Instruct-0905",
+    "hf:openai/gpt-oss-120b",
+    "hf:zai-org/GLM-4.5"
+  ],
+  "deepinfra": [
+    "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+    "moonshotai/Kimi-K2-Instruct",
+    "zai-org/GLM-4.5"
+  ],
+  "zhipuai": [
+    "glm-4.5",
+    "glm-4.5-air",
+    "glm-4.5-flash",
+    "glm-4.5v"
+  ],
+  "submodel": [
+    "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+    "deepseek-ai/DeepSeek-R1-0528",
+    "deepseek-ai/DeepSeek-V3-0324",
+    "deepseek-ai/DeepSeek-V3.1",
+    "openai/gpt-oss-120b",
+    "zai-org/GLM-4.5-Air",
+    "zai-org/GLM-4.5-FP8"
+  ],
+  "zai": [
+    "glm-4.5",
+    "glm-4.5-air",
+    "glm-4.5-flash",
+    "glm-4.5v"
+  ],
+  "inference": [
+    "google/gemma-3",
+    "meta/llama-3.1-8b-instruct",
+    "meta/llama-3.2-11b-vision-instruct",
+    "meta/llama-3.2-1b-instruct",
+    "meta/llama-3.2-3b-instruct",
+    "mistral/mistral-nemo-12b-instruct",
+    "osmosis/osmosis-structure-0.6b",
+    "qwen/qwen-2.5-7b-vision-instruct",
+    "qwen/qwen3-embedding-4b"
+  ],
+  "requesty": [
+    "anthropic/claude-3-7-sonnet",
+    "anthropic/claude-4-sonnet-20250522",
+    "anthropic/claude-opus-4",
+    "anthropic/claude-opus-4-1-20250805",
+    "google/gemini-2.5-flash",
+    "google/gemini-2.5-pro",
+    "openai/gpt-4.1",
+    "openai/gpt-4.1-mini",
+    "openai/gpt-4o-mini",
+    "openai/gpt-5",
+    "openai/gpt-5-mini",
+    "openai/gpt-5-nano",
+    "openai/o4-mini"
+  ],
   "morph": [
     "auto",
     "morph-v3-fast",
     "morph-v3-large"
   ],
-  "moonshotai": [
-    "kimi-k2-0711-preview",
-    "kimi-k2-0905-preview",
-    "kimi-k2-turbo-preview"
+  "lmstudio": [
+    "openai/gpt-oss-20b",
+    "qwen/qwen3-30b-a3b-2507",
+    "qwen/qwen3-coder-30b"
   ],
-  "netlify": [
-    "anthropic/claude-3-5-haiku-20241022",
-    "anthropic/claude-3-7-sonnet-20250219",
-    "anthropic/claude-3-haiku-20240307",
-    "anthropic/claude-opus-4-20250514",
-    "anthropic/claude-sonnet-4-20250514",
-    "gemini/gemini-1.5-flash",
-    "gemini/gemini-1.5-flash-8b",
-    "gemini/gemini-1.5-pro",
-    "gemini/gemini-2.0-flash",
-    "gemini/gemini-2.0-flash-lite",
-    "gemini/gemini-2.5-flash",
-    "gemini/gemini-2.5-flash-lite",
-    "gemini/gemini-2.5-pro",
-    "gemini/imagen-4.0-generate-001",
-    "gemini/veo-3.0-generate-preview",
-    "openai/codex-mini-latest",
-    "openai/dall-e-2",
-    "openai/dall-e-3",
-    "openai/gpt-3.5-turbo",
-    "openai/gpt-4-turbo",
-    "openai/gpt-4o",
-    "openai/gpt-4o-mini",
-    "openai/gpt-image-1",
-    "openai/o1",
-    "openai/o1-mini",
-    "openai/o3-mini"
+  "anthropic": [
+    "claude-3-5-haiku-20241022",
+    "claude-3-5-sonnet-20240620",
+    "claude-3-5-sonnet-20241022",
+    "claude-3-7-sonnet-20250219",
+    "claude-3-haiku-20240307",
+    "claude-3-opus-20240229",
+    "claude-3-sonnet-20240229",
+    "claude-opus-4-1-20250805",
+    "claude-opus-4-20250514",
+    "claude-sonnet-4-20250514"
+  ],
+  "fireworks-ai": [
+    "accounts/fireworks/models/deepseek-r1-0528",
+    "accounts/fireworks/models/deepseek-v3-0324",
+    "accounts/fireworks/models/deepseek-v3p1",
+    "accounts/fireworks/models/glm-4p5",
+    "accounts/fireworks/models/glm-4p5-air",
+    "accounts/fireworks/models/gpt-oss-120b",
+    "accounts/fireworks/models/gpt-oss-20b",
+    "accounts/fireworks/models/kimi-k2-instruct",
+    "accounts/fireworks/models/qwen3-235b-a22b",
+    "accounts/fireworks/models/qwen3-coder-480b-a35b-instruct"
+  ],
+  "modelscope": [
+    "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "Qwen/Qwen3-30B-A3B-Instruct-2507",
+    "Qwen/Qwen3-30B-A3B-Thinking-2507",
+    "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+    "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    "ZhipuAI/GLM-4.5"
+  ],
+  "llama": [
+    "cerebras-llama-4-maverick-17b-128e-instruct",
+    "cerebras-llama-4-scout-17b-16e-instruct",
+    "groq-llama-4-maverick-17b-128e-instruct",
+    "llama-3.3-70b-instruct",
+    "llama-3.3-8b-instruct",
+    "llama-4-maverick-17b-128e-instruct-fp8",
+    "llama-4-scout-17b-16e-instruct-fp8"
+  ],
+  "cerebras": [
+    "gpt-oss-120b",
+    "qwen-3-235b-a22b-instruct-2507",
+    "qwen-3-coder-480b"
   ]
 } as const;
 
@@ -1525,7 +1668,7 @@ export type ModelForProvider<P extends Provider> = ProviderModels[P][number];
  * OpenAI-compatible model ID type
  * Full provider/model paths (e.g., "openai/gpt-4o", "anthropic/claude-3-5-sonnet-20241022")
  */
-export type OpenAICompatibleModelId = {[P in Provider]: `${P}/${ModelForProvider<P>}`}[Provider];
+export type ModelRouterModelId = {[P in Provider]: `${P}/${ModelForProvider<P>}`}[Provider] | (string & {});
 
 
 /**
@@ -1565,7 +1708,6 @@ export interface ProviderConfig {
  * Parse a model string to extract provider and model ID
  * Examples:
  *   "openai/gpt-4o" -> { provider: "openai", modelId: "gpt-4o" }
- *   "netlify/openai/gpt-4o" -> { provider: "netlify/openai", modelId: "gpt-4o" }
  *   "gpt-4o" -> { provider: null, modelId: "gpt-4o" }
  */
 export function parseModelString(modelString: string): { provider: string | null; modelId: string } {
@@ -1595,7 +1737,7 @@ export function parseModelString(modelString: string): { provider: string | null
 /**
  * Type guard to check if a string is a valid OpenAI-compatible model ID
  */
-export function isValidModelId(modelId: string): modelId is OpenAICompatibleModelId {
+export function isValidModelId(modelId: string): modelId is ModelRouterModelId {
   const { provider } = parseModelString(modelId);
   return provider !== null && isProviderRegistered(provider);
 }

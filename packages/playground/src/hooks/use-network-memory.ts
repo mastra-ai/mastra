@@ -1,52 +1,37 @@
-import type { AiMessageType, MastraMessageV1, StorageThreadType as ThreadType } from '@mastra/core/memory';
-import { useEffect } from 'react';
-import { toast } from 'sonner';
-import useSWR, { useSWRConfig } from 'swr';
-
-import { fetcher } from '@/lib/utils';
+import { useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '@mastra/react-hooks';
 
 export const useNetworkMemory = (networkId?: string) => {
-  const {
-    data: memory,
-    isLoading,
-    mutate,
-  } = useSWR<{ result: boolean }>(`/api/memory/network/status?networkId=${networkId}`, fetcher, {
-    fallbackData: { result: false },
-    isPaused: () => !networkId,
+  const client = useMastraClient();
+
+  return useQuery({
+    queryKey: ['network', 'memory', networkId],
+    queryFn: () => (networkId ? client.getNetworkMemoryStatus(networkId) : null),
+    enabled: Boolean(networkId),
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
   });
-  return { memory, isLoading, mutate };
 };
 
 export const useNetworkThreads = ({
-  resourceid,
+  resourceId,
   networkId,
   isMemoryEnabled,
 }: {
-  resourceid: string;
+  resourceId: string;
   networkId: string;
   isMemoryEnabled: boolean;
 }) => {
-  const {
-    data: threads,
-    isLoading,
-    mutate,
-  } = useSWR<Array<ThreadType>>(
-    `/api/memory/network/threads?resourceid=${resourceid}&networkId=${networkId}`,
-    fetcher,
-    {
-      fallbackData: [],
-      isPaused: () => !resourceid || !networkId || !isMemoryEnabled,
-      revalidateOnFocus: false,
-    },
-  );
-
-  useEffect(() => {
-    if (resourceid && networkId && isMemoryEnabled) {
-      mutate();
-    }
-  }, [resourceid, networkId, isMemoryEnabled]);
-
-  return { threads, isLoading, mutate };
+  const client = useMastraClient();
+  return useQuery({
+    queryKey: ['network', 'threads', resourceId, networkId],
+    queryFn: () => (isMemoryEnabled ? client.getNetworkMemoryThreads({ resourceId, networkId }) : null),
+    enabled: Boolean(isMemoryEnabled),
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  });
 };
 
 export const useNetworkMessages = ({
@@ -58,55 +43,13 @@ export const useNetworkMessages = ({
   memory: boolean;
   networkId: string;
 }) => {
-  const { data, isLoading, mutate } = useSWR<{ uiMessages: Array<AiMessageType>; messages: Array<MastraMessageV1> }>(
-    `/api/memory/network/threads/${threadId}/messages?networkId=${networkId}`,
-    url => fetcher(url, true),
-    {
-      fallbackData: { uiMessages: [], messages: [] },
-      revalidateOnFocus: false,
-      isPaused: () => !threadId || !networkId,
-      shouldRetryOnError: false,
-    },
-  );
-
-  useEffect(() => {
-    if (threadId && memory) {
-      mutate();
-    }
-  }, [threadId, memory]);
-
-  return { messages: data?.uiMessages, isLoading, mutate };
-};
-
-export const useDeleteNetworkThread = () => {
-  const { mutate } = useSWRConfig();
-
-  const deleteThread = async ({
-    threadId,
-    resourceid,
-    networkId,
-  }: {
-    threadId: string;
-    networkId: string;
-    resourceid: string;
-  }) => {
-    const deletePromise = fetch(`/api/memory/network/threads/${threadId}?networkId=${networkId}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-mastra-dev-playground': 'true',
-      },
-    });
-
-    toast.promise(deletePromise, {
-      loading: 'Deleting chat...',
-      success: () => {
-        mutate(`/api/memory/network/threads?resourceid=${resourceid}&networkId=${networkId}`);
-        return 'Chat deleted successfully';
-      },
-      error: 'Failed to delete chat',
-    });
-  };
-
-  return { deleteThread };
+  const client = useMastraClient();
+  return useQuery({
+    queryKey: ['network', 'messages', threadId, networkId],
+    queryFn: () => (memory ? client.getThreadMessages(threadId, { networkId }) : null),
+    enabled: Boolean(memory),
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  });
 };

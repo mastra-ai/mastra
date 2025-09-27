@@ -3,7 +3,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { MastraModelGateway, type ProviderConfig } from '../src/llm/model/gateways/index.js';
 import { ModelsDevGateway } from '../src/llm/model/gateways/models-dev.js';
-import { NetlifyGateway } from '../src/llm/model/gateways/netlify.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,10 +17,11 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
       const providers = await gateway.fetchProviders();
 
       for (const [providerId, config] of Object.entries(providers)) {
-        // The gateway's fetchProviders() method already includes the prefix in the provider IDs
-        // so we just use them as-is
-        allProviders[providerId] = config;
-        allModels[providerId] = config.models;
+        // Apply prefix if gateway has one
+        const finalProviderId = gateway.prefix ? `${gateway.prefix}/${providerId}` : providerId;
+
+        allProviders[finalProviderId] = config;
+        allModels[finalProviderId] = config.models;
       }
     } catch (error) {
       console.error(`Failed to fetch from gateway ${gateway.name}:`, error);
@@ -56,7 +56,7 @@ export type ModelForProvider<P extends Provider> = ProviderModels[P][number];
  * OpenAI-compatible model ID type
  * Full provider/model paths (e.g., "openai/gpt-4o", "anthropic/claude-3-5-sonnet-20241022")
  */
-export type OpenAICompatibleModelId = {[P in Provider]: \`\${P}/\${ModelForProvider<P>}\`}[Provider];
+export type ModelRouterModelId = {[P in Provider]: \`\${P}/\${ModelForProvider<P>}\`}[Provider] | (string & {});
 
 
 /**
@@ -96,7 +96,6 @@ export interface ProviderConfig {
  * Parse a model string to extract provider and model ID
  * Examples:
  *   "openai/gpt-4o" -> { provider: "openai", modelId: "gpt-4o" }
- *   "netlify/openai/gpt-4o" -> { provider: "netlify/openai", modelId: "gpt-4o" }
  *   "gpt-4o" -> { provider: null, modelId: "gpt-4o" }
  */
 export function parseModelString(modelString: string): { provider: string | null; modelId: string } {
@@ -126,7 +125,7 @@ export function parseModelString(modelString: string): { provider: string | null
 /**
  * Type guard to check if a string is a valid OpenAI-compatible model ID
  */
-export function isValidModelId(modelId: string): modelId is OpenAICompatibleModelId {
+export function isValidModelId(modelId: string): modelId is ModelRouterModelId {
   const { provider } = parseModelString(modelId);
   return provider !== null && isProviderRegistered(provider);
 }
@@ -147,7 +146,7 @@ export function isValidModelId(modelId: string): modelId is OpenAICompatibleMode
 // Main execution
 async function main() {
   // Configure which gateways to use
-  const gateways: MastraModelGateway[] = [new ModelsDevGateway(), new NetlifyGateway()];
+  const gateways: MastraModelGateway[] = [new ModelsDevGateway()];
 
   await generateProviderRegistry(gateways);
 }

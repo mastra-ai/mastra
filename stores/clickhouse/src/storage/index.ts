@@ -106,6 +106,7 @@ export class ClickhouseStore extends MastraStorage {
     hasColumn: boolean;
     createTable: boolean;
     deleteMessages: boolean;
+    getScoresBySpan: boolean;
   } {
     return {
       selectByIncludeResourceScope: true,
@@ -113,6 +114,7 @@ export class ClickhouseStore extends MastraStorage {
       hasColumn: true,
       createTable: true,
       deleteMessages: false,
+      getScoresBySpan: true,
     };
   }
 
@@ -242,13 +244,15 @@ export class ClickhouseStore extends MastraStorage {
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
-    return this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+    return this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, resourceId, snapshot });
   }
 
   async loadWorkflowSnapshot({
@@ -448,6 +452,18 @@ export class ClickhouseStore extends MastraStorage {
     source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     return this.stores.scores.getScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    return this.stores.scores.getScoresBySpan({ traceId, spanId, pagination });
   }
 
   async close(): Promise<void> {

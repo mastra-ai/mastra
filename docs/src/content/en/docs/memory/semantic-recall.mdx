@@ -1,3 +1,8 @@
+---
+title: "Semantic Recall | Memory | Mastra Docs"
+description: "Learn how to use semantic recall in Mastra to retrieve relevant messages from past conversations using vector search and embeddings."
+---
+
 # Semantic Recall
 
 If you ask your friend what they did last weekend, they will search in their memory for events associated with "last weekend" and then tell you what they did. That's sort of like how semantic recall works in Mastra.
@@ -130,6 +135,42 @@ const agent = new Agent({
   }),
 });
 ```
+
+### PostgreSQL Index Optimization
+
+When using PostgreSQL as your vector store, you can optimize semantic recall performance by configuring the vector index. This is particularly important for large-scale deployments with thousands of messages.
+
+PostgreSQL supports both IVFFlat and HNSW indexes. By default, Mastra creates an IVFFlat index, but HNSW indexes typically provide better performance, especially with OpenAI embeddings which use inner product distance.
+
+```typescript {9-18}
+import { Memory } from "@mastra/memory";
+import { PgStore, PgVector } from "@mastra/pg";
+
+const agent = new Agent({
+  memory: new Memory({
+    storage: new PgStore({
+      connectionString: process.env.DATABASE_URL,
+    }),
+    vector: new PgVector({
+      connectionString: process.env.DATABASE_URL,
+    }),
+    options: {
+      semanticRecall: {
+        topK: 5,
+        messageRange: 2,
+        indexConfig: {
+          type: 'hnsw',           // Use HNSW for better performance
+          metric: 'dotproduct',   // Best for OpenAI embeddings  
+          m: 16,                  // Number of bi-directional links (default: 16)
+          efConstruction: 64,    // Size of candidate list during construction (default: 64)
+        },
+      },
+    },
+  }),
+});
+```
+
+For detailed information about index configuration options and performance tuning, see the [PgVector configuration guide](/reference/rag/pg#index-configuration-guide).
 
 ### Disabling
 

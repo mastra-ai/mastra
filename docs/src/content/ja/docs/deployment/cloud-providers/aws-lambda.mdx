@@ -1,0 +1,292 @@
+---
+title: "AWS Lambda"
+description: "DockerコンテナとAWS Lambda Web Adapterを使用してMastraアプリケーションをAWS Lambdaにデプロイします。"
+---
+
+import { Callout, Steps } from "nextra/components";
+
+
+
+# AWS Lambda
+
+Docker コンテナと AWS Lambda Web Adapter を使用して、Mastra アプリケーションを AWS Lambda にデプロイします。
+この方法により、Mastra サーバーを自動スケーリング対応のコンテナ化された Lambda 関数として実行できます。
+
+<Callout>
+  このガイドは、Mastra アプリケーションがデフォルトの
+  `npx create-mastra@latest` コマンドで作成されていることを前提としています。
+  新しい Mastra アプリケーションの作成方法の詳細は、
+  [はじめにガイド](/docs/getting-started/installation) を参照してください。
+</Callout>
+
+
+
+## 前提条件
+
+AWS Lambda へデプロイする前に、以下を確認してください:
+
+- [AWS CLI](https://aws.amazon.com/cli/) がインストールされ、設定済みであること
+- [Docker](https://www.docker.com/) がインストールされ、起動していること
+- Lambda、ECR、IAM に対する適切な権限を持つ AWS アカウント
+- 適切なメモリストレージを設定した Mastra アプリケーション
+
+
+
+## メモリ構成
+
+<Callout>
+  AWS Lambda は一時的なファイルシステムを使用しているため、
+  ファイルシステムに書き込まれたファイルは短期間で失われる可能性があります。
+  ファイルシステムを用いる Mastra のストレージプロバイダー（例：ファイル URL を指定した `LibSQLStore`）の使用は避けてください。
+</Callout>
+
+Lambda 関数にはファイルシステムによるストレージに制約があります。Mastra アプリケーションは、インメモリまたは外部ストレージプロバイダーのいずれかを使用するように構成してください。
+
+### オプション 1: インメモリ（最も簡単）
+
+```typescript filename="src/mastra/index.ts" copy showLineNumbers
+import { LibSQLStore } from "@mastra/libsql";
+
+const storage = new LibSQLStore({
+  url: ":memory:", // in-memory storage
+});
+```
+
+### オプション 2: 外部ストレージプロバイダー
+
+Lambda の呼び出し間でメモリを永続化するには、Turso と組み合わせた `LibSQLStore` などの外部ストレージ、または `PostgreStore` のような他のプロバイダーを使用してください。
+
+```typescript filename="src/mastra/index.ts" copy showLineNumbers
+import { LibSQLStore } from "@mastra/libsql";
+
+const storage = new LibSQLStore({
+  url: "libsql://your-database.turso.io", // External Turso database
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
+```
+
+メモリ構成の詳細については、[Memory のドキュメント](/docs/memory/overview)を参照してください。
+
+
+
+## Dockerfile の作成
+
+Mastra プロジェクトのルートディレクトリに `Dockerfile` を作成します。
+
+```dockerfile filename="Dockerfile" copy showLineNumbers
+FROM node:22-alpine
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY src ./src
+RUN npx mastra build
+RUN apk add --no-cache gcompat
+
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.0 /lambda-adapter /opt/extensions/lambda-adapter
+RUN addgroup -g 1001 -S nodejs && \
+  adduser -S mastra -u 1001 && \
+  chown -R mastra:nodejs /app
+
+USER mastra
+
+ENV PORT=8080
+ENV NODE_ENV=production
+ENV READINESS_CHECK_PATH="/api"
+
+EXPOSE 8080
+
+CMD ["node", "--import=./.mastra/output/instrumentation.mjs", ".mastra/output/index.mjs"]
+```
+
+
+
+## 構築とデプロイ
+
+<Steps>
+
+### 環境変数を設定する
+
+デプロイ作業のために環境変数を設定します:
+
+```bash copy
+export PROJECT_NAME="your-mastra-app"
+export AWS_REGION="us-east-1"
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+```
+
+### Docker イメージをビルドする
+
+ローカルで Docker イメージをビルドします:
+
+```bash copy
+docker build -t "$PROJECT_NAME" .
+```
+
+### ECR リポジトリを作成する
+
+Docker イメージを保存するための Amazon ECR リポジトリを作成します:
+
+```bash copy
+aws ecr create-repository --repository-name "$PROJECT_NAME" --region "$AWS_REGION"
+```
+
+### Docker を ECR に認証する
+
+Amazon ECR にログインします:
+
+```bash copy
+aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+```
+
+### イメージにタグ付けしてプッシュする
+
+ECR リポジトリの URI でイメージにタグ付けし、プッシュします:
+
+```bash copy
+docker tag "$PROJECT_NAME":latest "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT_NAME":latest
+docker push "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT_NAME":latest
+```
+
+### Lambda 関数を作成する
+
+AWS コンソールで Lambda 関数を作成します:
+
+1. [AWS Lambda Console](https://console.aws.amazon.com/lambda/) に移動
+2. **Create function** をクリック
+3. **Container image** を選択
+4. 関数を設定:
+   - **Function name**: 関数名（例: `mastra-app`）
+   - **Container image URI**: **Browse images** をクリックし、ECR リポジトリを選択して `latest` タグを選ぶ
+   - **Architecture**: Docker のビルドに合わせたアーキテクチャを選択（通常は `x86_64`）
+
+### Function URL を設定する
+
+外部アクセス用に Function URL を有効化します:
+
+1. Lambda 関数の設定で **Configuration** > **Function URL** に移動
+2. **Create function URL** をクリック
+3. **Auth type** を **NONE** に設定（パブリックアクセス）
+4. **CORS** を設定:
+   - **Allow-Origin**: `*`（本番では自ドメインに制限）
+   - **Allow-Headers**: `content-type`
+   - **Allow-Methods**: `*`（本番では精査のうえ制限）
+5. **Save** をクリック
+
+### 環境変数を設定する
+
+Lambda 関数の設定で環境変数を追加します:
+
+1. **Configuration** > **Environment variables** に移動
+2. Mastra アプリケーションに必要な変数を追加:
+   - `OPENAI_API_KEY`:（OpenAI を使用する場合）OpenAI の API キー
+   - `ANTHROPIC_API_KEY`:（Anthropic を使用する場合）Anthropic の API キー
+   - `TURSO_AUTH_TOKEN`:（Turso を用いた LibSQL を使用する場合）Turso の認証トークン
+   - その他、プロバイダー固有の必要な API キー
+
+### 関数設定を調整する
+
+関数のメモリとタイムアウトを設定します:
+
+1. **Configuration** > **General configuration** に移動
+2. 次の推奨値を設定:
+   - **Memory**: 512 MB（アプリケーションに応じて調整）
+   - **Timeout**: 30 秒（アプリケーションに応じて調整）
+   - **Ephemeral storage**: 512 MB（任意、一時ファイル用）
+
+</Steps>
+
+
+
+## デプロイのテスト
+
+デプロイが完了したら、Lambda 関数をテストします。
+
+1. Lambda コンソールで **Function URL** をコピーする
+2. ブラウザでその URL にアクセスし、Mastra のサーバーのホーム画面を表示する
+3. 生成された API エンドポイントを使ってエージェントとワークフローをテストする
+
+利用可能な API エンドポイントの詳細は、[サーバーのドキュメント](/docs/deployment/server)を参照してください。
+
+
+
+## クライアントの接続
+
+クライアントアプリケーションを更新して、Lambda の Function URL を使用します：
+
+```typescript filename="src/client.ts" copy showLineNumbers
+import { MastraClient } from "@mastra/client-js";
+
+const mastraClient = new MastraClient({
+  baseUrl: "https://your-function-url.lambda-url.us-east-1.on.aws",
+});
+```
+
+
+
+## トラブルシューティング
+
+### 関数のタイムアウトエラー
+
+Lambda 関数がタイムアウトする場合:
+
+- **Configuration** > **General configuration** でタイムアウト値を増やす
+- コールドスタートを短縮するよう Mastra アプリケーションを最適化する
+- パフォーマンスを安定させるためにプロビジョンド同時実行の利用を検討する
+
+### メモリに関する問題
+
+メモリ関連のエラーが発生する場合:
+
+- **Configuration** > **General configuration** でメモリ割り当てを増やす
+- CloudWatch Logs でメモリ使用量を監視する
+- アプリケーションのメモリ使用量を最適化する
+
+### CORS に関する問題
+
+ホームページでは問題ないがエンドポイントへのアクセスで CORS エラーが発生する場合:
+
+- Mastra サーバー設定で CORS ヘッダーが正しく設定されていることを確認する
+- Lambda Function URL の CORS 設定を確認する
+- クライアントが正しい URL にリクエストしていることを確認する
+
+### コンテナイメージに関する問題
+
+Lambda 関数の起動に失敗する場合:
+
+- Docker イメージがローカルで正常にビルドされることを確認する
+- Dockerfile の `CMD` 命令が正しいことを確認する
+- コンテナ起動時のエラーについて CloudWatch Logs を確認する
+- Lambda Web Adapter がコンテナに正しくインストールされていることを確認する
+
+
+
+## 本番環境での考慮事項
+
+本番環境へのデプロイでは、次の点を考慮してください:
+
+### セキュリティ
+
+- CORS の許可元は信頼できるドメインに限定する
+- 他の AWS サービスへの安全なアクセスには AWS IAM ロールを使用する
+- 機密性の高い環境変数は AWS Secrets Manager または Parameter Store に保存する
+
+### 監視
+
+- Lambda 関数の CloudWatch 監視を有効にする
+- エラーやパフォーマンスメトリクスに対して CloudWatch アラームを設定する
+- 分散トレーシングには AWS X-Ray を使用する
+
+### スケーリング
+
+- 予測可能なパフォーマンスのためにプロビジョンドコンカレンシーを設定する
+- 同時実行数を監視し、必要に応じて上限を調整する
+- より複雑なルーティングが必要な場合は Application Load Balancer の利用を検討する
+
+
+
+## 次のステップ
+
+- [Mastra Client SDK](/docs/client-js/overview)
+- [AWS Lambda documentation](https://docs.aws.amazon.com/lambda/)
+- [AWS Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter)

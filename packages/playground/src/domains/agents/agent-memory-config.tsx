@@ -3,6 +3,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useMemoryConfig } from '@/hooks/use-memory';
+import { SemanticRecall } from '@mastra/core/memory';
 
 interface MemoryConfigSection {
   title: string;
@@ -18,7 +19,7 @@ interface AgentMemoryConfigProps {
 }
 
 export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
-  const { config, isLoading } = useMemoryConfig(agentId);
+  const { data: config, isLoading } = useMemoryConfig(agentId);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['General', 'Semantic Recall']));
 
   const configSections: MemoryConfigSection[] = useMemo(() => {
@@ -43,9 +44,9 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
     ];
 
     // Semantic Recall section
-    if (config.semanticRecall !== undefined) {
-      const semanticRecall = typeof config.semanticRecall === 'object' ? config.semanticRecall : {};
-      const enabled = config.semanticRecall !== false;
+    if (config.semanticRecall) {
+      const enabled = !Boolean(config.semanticRecall);
+      const semanticRecall = typeof config.semanticRecall === 'object' ? config.semanticRecall : ({} as SemanticRecall);
 
       sections.push({
         title: 'Semantic Recall',
@@ -170,7 +171,7 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
                 {section.items.map((item, index) => (
                   <div key={`${section.title}-${item.label}`} className="flex items-center justify-between py-1">
                     <span className="text-xs text-icon3">{item.label}</span>
-                    {renderValue(item.value, item.badge)}
+                    {renderValue(item.value || '', item.badge)}
                   </div>
                 ))}
               </div>

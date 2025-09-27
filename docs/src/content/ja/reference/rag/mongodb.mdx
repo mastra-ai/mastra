@@ -3,15 +3,21 @@ title: "リファレンス: MongoDB ベクターストア | ベクターデー�
 description: Mastra の MongoDBVector クラスのドキュメント。MongoDB Atlas および Atlas Vector Search を使用したベクター検索を提供します。
 ---
 
+
+
 # MongoDB Vector Store
 
 `MongoDBVector` クラスは、[MongoDB Atlas Vector Search](https://www.mongodb.com/docs/atlas/atlas-vector-search/) を使用したベクター検索を提供します。これにより、MongoDB コレクション内で効率的な類似性検索とメタデータフィルタリングが可能になります。
+
+
 
 ## インストール
 
 ```bash copy
 npm install @mastra/mongodb
 ```
+
+
 
 ## 使用例
 
@@ -23,6 +29,8 @@ const store = new MongoDBVector({
   database: process.env.MONGODB_DATABASE,
 });
 ```
+
+
 
 ## コンストラクターオプション
 
@@ -47,37 +55,39 @@ const store = new MongoDBVector({
   ]}
 />
 
+
+
 ## メソッド
 
 ### createIndex()
 
-MongoDBに新しいベクトルインデックス（コレクション）を作成します。
+MongoDBに新しいベクターインデックス（コレクション）を作成します。
 
 <PropertiesTable
   content={[
     {
       name: "indexName",
       type: "string",
-      description: "作成するコレクションの名前（以下の命名規則を参照）",
+      description: "作成するコレクションの名前",
     },
     {
       name: "dimension",
       type: "number",
-      description: "ベクトルの次元数（埋め込みモデルと一致する必要があります）",
+      description: "ベクターの次元数（埋め込みモデルと一致する必要があります）",
     },
     {
       name: "metric",
       type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
       defaultValue: "cosine",
-      description: "類似性検索の距離メトリック",
+      description: "類似性検索のための距離メトリック",
     },
   ]}
 />
 
 ### upsert()
 
-コレクションにベクトルとそのメタデータを追加または更新します。
+コレクションにベクターとそのメタデータを追加または更新します。
 
 <PropertiesTable
   content={[
@@ -89,26 +99,26 @@ MongoDBに新しいベクトルインデックス（コレクション）を作�
     {
       name: "vectors",
       type: "number[][]",
-      description: "埋め込みベクトルの配列",
+      description: "埋め込みベクターの配列",
     },
     {
       name: "metadata",
       type: "Record<string, any>[]",
       isOptional: true,
-      description: "各ベクトルのメタデータ",
+      description: "各ベクターのメタデータ",
     },
     {
       name: "ids",
       type: "string[]",
       isOptional: true,
-      description: "オプションのベクトルID（提供されない場合は自動生成）",
+      description: "オプションのベクターID（提供されない場合は自動生成）",
     },
   ]}
 />
 
 ### query()
 
-オプションのメタデータフィルタリングを使用して類似ベクトルを検索します。
+オプションのメタデータフィルタリングを使用して類似ベクターを検索します。
 
 <PropertiesTable
   content={[
@@ -120,7 +130,7 @@ MongoDBに新しいベクトルインデックス（コレクション）を作�
     {
       name: "queryVector",
       type: "number[]",
-      description: "類似ベクトルを検索するためのクエリベクトル",
+      description: "類似ベクターを見つけるためのクエリベクター",
     },
     {
       name: "topK",
@@ -139,22 +149,21 @@ MongoDBに新しいベクトルインデックス（コレクション）を作�
       name: "documentFilter",
       type: "Record<string, any>",
       isOptional: true,
-      description:
-        "元のドキュメントフィールドに対するフィルター（メタデータだけでなく）",
+      description: "元のドキュメントフィールドのフィルター（メタデータだけでなく）",
     },
     {
       name: "includeVector",
       type: "boolean",
       isOptional: true,
       defaultValue: "false",
-      description: "結果にベクトルデータを含めるかどうか",
+      description: "結果にベクターデータを含めるかどうか",
     },
     {
       name: "minScore",
       type: "number",
       isOptional: true,
       defaultValue: "0",
-      description: "最小類似性スコアのしきい値",
+      description: "最小類似性スコアの閾値",
     },
   ]}
 />
@@ -199,36 +208,36 @@ interface IndexStats {
 
 ### listIndexes()
 
-MongoDBデータベース内のすべてのベクトルコレクションを一覧表示します。
+MongoDBデータベース内のすべてのベクターコレクションをリストします。
 
 戻り値：`Promise<string[]>`
 
 ### updateVector()
 
-IDで特定のベクトルエントリを新しいベクトルデータやメタデータで更新します。
+IDによって特定のベクターエントリを新しいベクターデータやメタデータで更新します。
 
 <PropertiesTable
   content={[
     {
       name: "indexName",
       type: "string",
-      description: "ベクトルを含むコレクションの名前",
+      description: "ベクターを含むコレクションの名前",
     },
     {
       name: "id",
       type: "string",
-      description: "更新するベクトルエントリのID",
+      description: "更新するベクターエントリのID",
     },
     {
       name: "update",
       type: "object",
-      description: "ベクトルやメタデータを含む更新データ",
+      description: "ベクターやメタデータを含む更新データ",
     },
     {
       name: "update.vector",
       type: "number[]",
       isOptional: true,
-      description: "更新する新しいベクトルデータ",
+      description: "更新する新しいベクターデータ",
     },
     {
       name: "update.metadata",
@@ -241,26 +250,30 @@ IDで特定のベクトルエントリを新しいベクトルデータやメタ
 
 ### deleteVector()
 
-IDによってインデックスから特定のベクトルエントリを削除します。
+IDによってインデックスから特定のベクターエントリを削除します。
 
 <PropertiesTable
   content={[
     {
       name: "indexName",
       type: "string",
-      description: "ベクトルを含むコレクションの名前",
+      description: "ベクターを含むコレクションの名前",
     },
     {
       name: "id",
       type: "string",
-      description: "削除するベクトルエントリのID",
+      description: "削除するベクターエントリのID",
     },
   ]}
 />
 
+
+
 ### disconnect()
 
 MongoDBクライアントの接続を閉じます。ストアの使用が終わったら呼び出す必要があります。
+
+
 
 ## レスポンスタイプ
 
@@ -274,6 +287,8 @@ interface QueryResult {
   vector?: number[]; // Only included if includeVector is true
 }
 ```
+
+
 
 ## エラー処理
 
@@ -299,11 +314,15 @@ try {
 }
 ```
 
+
+
 ## ベストプラクティス
 
 - クエリのパフォーマンスを最適化するために、フィルターで使用するメタデータフィールドにインデックスを作成してください。
 - 予期しないクエリ結果を避けるために、メタデータ内のフィールド名を一貫して使用してください。
 - 効率的な検索を維持するために、インデックスやコレクションの統計情報を定期的に監視してください。
+
+
 
 ## 関連
 

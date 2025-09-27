@@ -1,4 +1,5 @@
 import { openai } from '@ai-sdk/openai';
+import { anthropic } from '@ai-sdk/anthropic';
 import { Agent } from '@mastra/core/agent';
 // import { Memory } from '@mastra/memory';
 import { LibSQLStore } from '@mastra/libsql';
@@ -27,7 +28,12 @@ Your primary function is to help users get weather details for specific location
 - Keep responses concise but informative
 
 Use the weatherTool to fetch current weather data.`,
-  model: openai('gpt-4o'),
+  model: [
+    { model: anthropic('claude-3-5-sonnet-20241022') },
+    { model: openai('gpt-4o') },
+    { model: openai('gpt-4o-mini') },
+  ],
+  maxRetries: 3,
   tools: { weatherTool },
   // memory,
   // voice,

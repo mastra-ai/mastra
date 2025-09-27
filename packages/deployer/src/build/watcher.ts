@@ -1,75 +1,61 @@
 import type { InputOptions, OutputOptions, Plugin } from 'rollup';
 import { watch } from 'rollup';
-import { findWorkspacesRoot } from 'find-workspaces';
+import { join } from 'node:path';
+import * as pkg from 'empathic/package';
 import { getInputOptions as getBundlerInputOptions } from './bundler';
 import { aliasHono } from './plugins/hono-alias';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
-import { bundleExternals } from './analyze';
 import { noopLogger } from '@mastra/core/logger';
-import { createWorkspacePackageMap } from '../bundler/workspaceDependencies';
-import type { DependencyMetadata } from './types';
-import { getPackageName, getPackageRootPath } from './utils';
+import { getWorkspaceInformation } from '../bundler/workspaceDependencies';
+import { analyzeBundle } from './analyze';
+import path, { dirname } from 'path';
+import { getPackageName } from './utils';
 
 export async function getInputOptions(
   entryFile: string,
   platform: 'node' | 'browser',
   env?: Record<string, string>,
-  { sourcemap = false, transpilePackages = [] }: { sourcemap?: boolean; transpilePackages?: string[] } = {},
+  { sourcemap = false }: { sourcemap?: boolean } = {},
 ) {
-  const dependencies = new Map<string, string>();
-  const workspaceMap = await createWorkspacePackageMap();
-  const workspaceRoot = findWorkspacesRoot()?.location;
-  const depsToOptimize = new Map<string, DependencyMetadata>();
+  const closestPkgJson = pkg.up({ cwd: dirname(entryFile) });
+  const projectRoot = closestPkgJson ? dirname(closestPkgJson) : process.cwd();
+  const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: entryFile });
 
-  if (transpilePackages.length) {
-    for (const pkg of transpilePackages) {
-      const isWorkspace = workspaceMap.has(pkg);
-      const exports = ['*'];
+  const analyzeEntryResult = await analyzeBundle(
+    [entryFile],
+    entryFile,
+    {
+      outputDir: path.join(process.cwd(), '.mastra/.build'),
+      projectRoot: workspaceRoot || process.cwd(),
+      platform: 'node',
+      isDev: true,
+    },
+    noopLogger,
+  );
 
-      const pkgName = getPackageName(pkg);
-      let rootPath: string | null = null;
-
-      if (pkgName && pkgName !== '#tools') {
-        rootPath = await getPackageRootPath(pkgName);
-      }
-
-      depsToOptimize.set(pkg, { exports, isWorkspace, rootPath });
-    }
-
-    const { output, reverseVirtualReferenceMap } = await bundleExternals(
-      depsToOptimize,
-      '.mastra/.build',
-      noopLogger,
-      {
-        transpilePackages,
-        isDev: true,
-      },
-      { workspaceRoot, workspaceMap },
-    );
-
-    for (const file of output) {
-      if (file.type === 'asset') {
-        continue;
-      }
-
-      if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
-        dependencies.set(reverseVirtualReferenceMap.get(file.name)!, file.fileName);
-      }
+  const deps = /* @__PURE__ */ new Map();
+  for (const [dep, metadata] of analyzeEntryResult.dependencies.entries()) {
+    const pkgName = getPackageName(dep);
+    if (pkgName && workspaceMap.has(pkgName)) {
+      deps.set(dep, metadata);
     }
   }
+
+  // In `analyzeBundle` we output this file and we want to use that instead of the original entry file
+  // const analyzedEntryFile = join(path.join(projectRoot, '.mastra/.build'), 'entry-0.mjs');
 
   const inputOptions = await getBundlerInputOptions(
     entryFile,
     {
-      dependencies,
+      dependencies: deps,
       externalDependencies: new Set(),
       invalidChunks: new Set(),
       workspaceMap,
     },
     platform,
     env,
-    { sourcemap, isDev: true, workspaceRoot },
+    { sourcemap, isDev: true, workspaceRoot, projectRoot },
   );
 
   if (Array.isArray(inputOptions.plugins)) {

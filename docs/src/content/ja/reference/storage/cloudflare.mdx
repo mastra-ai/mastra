@@ -3,15 +3,21 @@ title: "Cloudflare Storage | ストレージシステム | Mastra Core"
 description: MastraにおけるCloudflare KVストレージ実装のドキュメント。
 ---
 
+
+
 # Cloudflare Storage
 
 Cloudflare KV ストレージの実装は、Cloudflare Workers KV を使用したグローバル分散型のサーバーレスなキー・バリュー・ストアソリューションを提供します。
+
+
 
 ## インストール
 
 ```bash copy
 npm install @mastra/cloudflare@latest
 ```
+
+
 
 ## 使い方
 
@@ -36,6 +42,8 @@ const storageRest = new CloudflareStore({
 });
 ```
 
+
+
 ## パラメーター
 
 <PropertiesTable
@@ -43,8 +51,7 @@ const storageRest = new CloudflareStore({
     {
       name: "bindings",
       type: "Record<string, KVNamespace>",
-      description:
-        "Cloudflare Workers KV バインディング（Workers ランタイム用）",
+      description: "Cloudflare Workers KV バインディング（Workers ランタイム用）",
       isOptional: true,
     },
     {

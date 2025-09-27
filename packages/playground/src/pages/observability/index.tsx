@@ -10,6 +10,7 @@ import {
   EntryListStatusCell,
   TracesTools,
   TraceDialog,
+  parseError,
 } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
@@ -18,12 +19,12 @@ import { useAITraces } from '@/domains/observability/hooks/use-ai-traces';
 import { useAITrace } from '@/domains/observability/hooks/use-ai-trace';
 import { format, isToday } from 'date-fns';
 import { useWorkflows } from '@/hooks/use-workflows';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 
 const listColumns = [
   { name: 'shortId', label: 'ID', size: '6rem' },
   { name: 'date', label: 'Date', size: '4.5rem' },
-  { name: 'time', label: 'Time', size: '5rem' },
+  { name: 'time', label: 'Time', size: '6.5rem' },
   { name: 'name', label: 'Name', size: '1fr' },
   { name: 'entityId', label: 'Entity', size: '10rem' },
   { name: 'status', label: 'Status', size: '3rem' },
@@ -38,6 +39,7 @@ type TraceItem = {
 };
 
 export default function Observability() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedTraceId, setSelectedTraceId] = useState<string | undefined>();
   const [selectedEntityOption, setSelectedEntityOption] = useState<EntityOptions | undefined>({
@@ -52,6 +54,9 @@ export default function Observability() {
   const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
 
   const { data: aiTrace, isLoading: isLoadingAiTrace } = useAITrace(selectedTraceId, { enabled: !!selectedTraceId });
+
+  const traceId = searchParams.get('traceId');
+  const spanId = searchParams.get('spanId');
 
   const {
     data: aiTraces = [],
@@ -78,15 +83,20 @@ export default function Observability() {
         : undefined,
   });
 
+  useEffect(() => {
+    if (traceId) {
+      setSelectedTraceId(traceId);
+      setDialogIsOpen(true);
+    }
+  }, [traceId]);
+
   const agentOptions: EntityOptions[] = (Object.entries(agents) || []).map(([, value]) => ({
     value: value.name,
     label: value.name,
     type: 'agent' as const,
   }));
 
-  const legacy = workflows?.[0] || {};
-  const current = workflows?.[1] || {};
-  const workflowOptions: EntityOptions[] = (Object.entries({ ...legacy, ...current }) || []).map(([, value]) => ({
+  const workflowOptions: EntityOptions[] = (Object.entries(workflows || {}) || []).map(([, value]) => ({
     value: value.name,
     label: value.name,
     type: 'workflow' as const,
@@ -110,7 +120,7 @@ export default function Observability() {
 
   const handleReset = () => {
     setSelectedTraceId(undefined);
-    setSearchParams({ entity: 'all' });
+    setSearchParams({ entity: 'all', traceId: '' });
     setDialogIsOpen(false);
     setSelectedDateFrom(undefined);
     setSelectedDateTo(undefined);
@@ -136,7 +146,7 @@ export default function Observability() {
       id: trace.traceId,
       shortId: getShortId(trace?.traceId) || 'n/a',
       date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
-      time: format(createdAtDate, 'HH:mm:ss'),
+      time: format(createdAtDate, 'h:mm:ss aaa'),
       name: trace?.name,
       entityId: trace?.attributes?.agentId || trace?.attributes?.workflowId,
       status: <EntryListStatusCell status={trace?.attributes?.status} key={`${trace?.traceId}-status`} />,
@@ -180,6 +190,8 @@ export default function Observability() {
     return currentIndex > 0;
   };
 
+  const error = isAiTracesError ? parseError(aiTracesError) : undefined;
+
   return (
     <>
       <MainContentLayout>
@@ -213,7 +225,7 @@ export default function Observability() {
               isLoadingNextPage={isFetchingNextPage}
               hasMore={!!hasNextPage}
               setEndOfListElement={setEndOfListElement}
-              errorMsg={isAiTracesError ? aiTracesError.message : undefined}
+              errorMsg={error?.error}
             />
           </div>
         </div>
@@ -221,12 +233,17 @@ export default function Observability() {
       <TraceDialog
         traceSpans={aiTrace?.spans}
         traceId={selectedTraceId}
+        initialSpanId={spanId || undefined}
         traceDetails={aiTraces.find(t => t.traceId === selectedTraceId)}
         isOpen={dialogIsOpen}
         onClose={() => setDialogIsOpen(false)}
         onNext={thereIsNextItem() ? toNextItem : undefined}
         onPrevious={thereIsPreviousItem() ? toPreviousItem : undefined}
         isLoadingSpans={isLoadingAiTrace}
+        onScorerTriggered={scorerName => {
+          setDialogIsOpen(false);
+          navigate(`/scorers/${scorerName}`);
+        }}
       />
     </>
   );

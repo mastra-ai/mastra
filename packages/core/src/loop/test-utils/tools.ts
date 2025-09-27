@@ -5,13 +5,14 @@ import {
   convertReadableStreamToArray,
   MockLanguageModelV2,
   mockValues,
+  mockId,
 } from 'ai-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { loop } from '../loop';
-import { createTestModel, defaultSettings, testUsage } from './utils';
+import { createTestModels, defaultSettings, testUsage } from './utils';
 
 export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe.skip('provider-executed tools', () => {
@@ -22,7 +23,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
         result = await loopFn({
           runId,
           messageList: new MessageList(),
-          model: createTestModel({
+          models: createTestModels({
             stream: convertArrayToReadableStream([
               {
                 type: 'tool-input-start',
@@ -314,7 +315,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
         result = await loopFn({
           runId,
           messageList: new MessageList(),
-          model: createTestModel({
+          models: createTestModels({
             stream: convertArrayToReadableStream([
               {
                 type: 'tool-input-start',
@@ -542,7 +543,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
 
       const result = await loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -826,56 +827,62 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       );
       const result = await loopFn({
         runId,
-        model: new MockLanguageModelV2({
-          doStream: async ({ prompt, tools, toolChoice }) => {
-            expect(tools).toStrictEqual([
-              {
-                type: 'function',
-                name: 'tool1',
-                description: undefined,
-                inputSchema: {
-                  additionalProperties: false,
-                  properties: { value: { type: 'string' } },
-                  required: ['value'],
-                  type: 'object',
-                },
-                providerOptions: undefined,
+        models: [
+          {
+            maxRetries: 0,
+            id: 'test-model',
+            model: new MockLanguageModelV2({
+              doStream: async ({ prompt, tools, toolChoice }) => {
+                expect(tools).toStrictEqual([
+                  {
+                    type: 'function',
+                    name: 'tool1',
+                    description: undefined,
+                    inputSchema: {
+                      additionalProperties: false,
+                      properties: { value: { type: 'string' } },
+                      required: ['value'],
+                      type: 'object',
+                    },
+                    providerOptions: undefined,
+                  },
+                ]);
+
+                expect(toolChoice).toStrictEqual({ type: 'required' });
+
+                expect(prompt).toStrictEqual([
+                  {
+                    role: 'user',
+                    content: [{ type: 'text', text: 'test-input' }],
+                    // providerOptions: undefined,
+                  },
+                ]);
+
+                return {
+                  stream: convertArrayToReadableStream([
+                    {
+                      type: 'response-metadata',
+                      id: 'id-0',
+                      modelId: 'mock-model-id',
+                      timestamp: new Date(0),
+                    },
+                    {
+                      type: 'tool-call',
+                      toolCallId: 'call-1',
+                      toolName: 'tool1',
+                      input: `{ "value": "value" }`,
+                    },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: testUsage,
+                    },
+                  ]),
+                };
               },
-            ]);
-
-            expect(toolChoice).toStrictEqual({ type: 'required' });
-
-            expect(prompt).toStrictEqual([
-              {
-                role: 'user',
-                content: [{ type: 'text', text: 'test-input' }],
-                // providerOptions: undefined,
-              },
-            ]);
-
-            return {
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                {
-                  type: 'tool-call',
-                  toolCallId: 'call-1',
-                  toolName: 'tool1',
-                  input: `{ "value": "value" }`,
-                },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: testUsage,
-                },
-              ]),
-            };
+            }),
           },
-        }),
+        ],
         tools: {
           tool1: {
             inputSchema: jsonSchema<{ value: string }>({
@@ -890,6 +897,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
         messageList,
         _internal: {
           now: mockValues(0, 100, 500),
+          generateId: mockId({ prefix: 'id' }),
         },
       });
 
@@ -904,7 +912,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       result = await loopFn({
         runId,
         messageList: new MessageList(),
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -943,66 +951,62 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       console.log(fullStream);
 
       expect(fullStream).toMatchInlineSnapshot(`
-              [
-                {
-                  "type": "start",
-                },
-                {
-                  "request": {},
-                  "type": "start-step",
-                  "warnings": [],
-                },
-                {
-                  "input": {
-                    "value": "value",
-                  },
-                  "providerExecuted": undefined,
-                  "providerMetadata": undefined,
-                  "toolCallId": "call-1",
-                  "toolName": "tool1",
-                  "type": "tool-call",
-                },
-                {
-                  "error": [Error: test error],
-                  "input": {
-                    "value": "value",
-                  },
-                  "providerExecuted": undefined,
-                  "toolCallId": "call-1",
-                  "toolName": "tool1",
-                  "type": "tool-error",
-                },
-                {
-                  "finishReason": "stop",
-                  "providerMetadata": undefined,
-                  "response": {
-                    "headers": undefined,
-                    "id": "id-0",
-                    "modelId": "mock-model-id",
-                    "timestamp": 1970-01-01T00:00:00.000Z,
-                  },
-                  "type": "finish-step",
-                  "usage": {
-                    "cachedInputTokens": undefined,
-                    "inputTokens": 3,
-                    "outputTokens": 10,
-                    "reasoningTokens": undefined,
-                    "totalTokens": 13,
-                  },
-                },
-                {
-                  "finishReason": "stop",
-                  "totalUsage": {
-                    "cachedInputTokens": undefined,
-                    "inputTokens": 3,
-                    "outputTokens": 10,
-                    "reasoningTokens": undefined,
-                    "totalTokens": 13,
-                  },
-                  "type": "finish",
-                },
-              ]
-            `);
+        [
+          {
+            "type": "start",
+          },
+          {
+            "request": {},
+            "type": "start-step",
+            "warnings": [],
+          },
+          {
+            "input": {
+              "value": "value",
+            },
+            "providerExecuted": undefined,
+            "providerMetadata": undefined,
+            "toolCallId": "call-1",
+            "toolName": "tool1",
+            "type": "tool-call",
+          },
+          {
+            "error": [Error: test error],
+            "input": {
+              "value": "value",
+            },
+            "providerExecuted": undefined,
+            "toolCallId": "call-1",
+            "toolName": "tool1",
+            "type": "tool-error",
+          },
+          {
+            "finishReason": "stop",
+            "providerMetadata": undefined,
+            "response": {
+              "headers": undefined,
+              "id": "id-0",
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "type": "finish-step",
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+          },
+          {
+            "finishReason": "stop",
+            "totalUsage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "type": "finish",
+          },
+        ]
+      `);
     });
 
     it.skip('should include the error part in the step stream', async () => {
@@ -1131,34 +1135,35 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       const uiMessageStream = await convertReadableStreamToArray(result.aisdk.v5.toUIMessageStream());
 
       expect(uiMessageStream).toMatchInlineSnapshot(`
-              [
-                {
-                  "type": "start",
-                },
-                {
-                  "type": "start-step",
-                },
-                {
-                  "input": {
-                    "value": "value",
-                  },
-                  "toolCallId": "call-1",
-                  "toolName": "tool1",
-                  "type": "tool-input-available",
-                },
-                {
-                  "errorText": "test error",
-                  "toolCallId": "call-1",
-                  "type": "tool-output-error",
-                },
-                {
-                  "type": "finish-step",
-                },
-                {
-                  "type": "finish",
-                },
-              ]
-            `);
+        [
+          {
+            "messageId": "msg-0",
+            "type": "start",
+          },
+          {
+            "type": "start-step",
+          },
+          {
+            "input": {
+              "value": "value",
+            },
+            "toolCallId": "call-1",
+            "toolName": "tool1",
+            "type": "tool-input-available",
+          },
+          {
+            "errorText": "test error",
+            "toolCallId": "call-1",
+            "type": "tool-output-error",
+          },
+          {
+            "type": "finish-step",
+          },
+          {
+            "type": "finish",
+          },
+        ]
+      `);
     });
   });
 
@@ -1168,7 +1173,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       const result = loopFn({
         runId,
         messageList: new MessageList(),
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',

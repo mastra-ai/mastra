@@ -4,7 +4,7 @@ export {
   PROVIDER_REGISTRY,
   parseModelString,
   getProviderConfig,
-  type OpenAICompatibleModelId,
+  type ModelRouterModelId,
   type Provider,
   type ModelForProvider,
 } from './provider-registry.generated';

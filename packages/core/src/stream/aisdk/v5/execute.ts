@@ -5,11 +5,12 @@ import type { Span } from '@opentelemetry/api';
 import type { CallSettings, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
 import { getResponseFormat } from '../../base/schema';
 import type { OutputSchema } from '../../base/schema';
+import type { LanguageModelV2StreamResult, OnResult } from '../../types';
 import { prepareToolsAndToolChoice } from './compat';
 import { AISDKV5InputStream } from './input';
 import { getModelSupport } from './model-supports';
 
-type ExecutionProps<OUTPUT extends OutputSchema | undefined = undefined> = {
+type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   runId: string;
   model: LanguageModelV2;
   providerOptions?: SharedV2ProviderOptions;
@@ -24,16 +25,17 @@ type ExecutionProps<OUTPUT extends OutputSchema | undefined = undefined> = {
   telemetry_settings?: TelemetrySettings;
   includeRawChunks?: boolean;
   modelSettings?: CallSettings;
-  onResult: (result: { warnings: any; request: any; rawResponse: any }) => void;
+  onResult: OnResult;
   output?: OUTPUT;
   /**
   Additional HTTP headers to be sent with the request.
   Only applicable for HTTP-based providers.
   */
   headers?: Record<string, string | undefined>;
+  shouldThrowError?: boolean;
 };
 
-export function execute<OUTPUT extends OutputSchema | undefined = undefined>({
+export function execute<OUTPUT extends OutputSchema = undefined>({
   runId,
   model,
   providerOptions,
@@ -48,6 +50,7 @@ export function execute<OUTPUT extends OutputSchema | undefined = undefined>({
   modelSettings,
   output,
   headers,
+  shouldThrowError,
 }: ExecutionProps<OUTPUT>) {
   const v5 = new AISDKV5InputStream({
     component: 'LLM',
@@ -83,7 +86,7 @@ export function execute<OUTPUT extends OutputSchema | undefined = undefined>({
     onResult,
     createStream: async () => {
       try {
-        const stream = await model.doStream({
+        const streamResult = await model.doStream({
           ...toolsAndToolChoice,
           prompt,
           providerOptions,
@@ -93,11 +96,16 @@ export function execute<OUTPUT extends OutputSchema | undefined = undefined>({
           ...(modelSettings ?? {}),
           headers,
         });
-        return stream as any;
+        // We have to cast this because doStream is missing the warnings property in its return type even though it exists
+        return streamResult as unknown as LanguageModelV2StreamResult;
       } catch (error) {
         console.error('Error creating stream', error);
         if (isAbortError(error) && options?.abortSignal?.aborted) {
-          console.log('Abort error', error);
+          console.error('Abort error', error);
+        }
+
+        if (shouldThrowError) {
+          throw error;
         }
 
         return {
