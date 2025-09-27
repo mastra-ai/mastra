@@ -1,4 +1,6 @@
 import type { InferUIMessageChunk, TextStreamPart, ToolSet, UIMessage, IdGenerator } from 'ai-v5';
+import type { WorkflowStreamEvent } from '../../../../workflows/types';
+import { isWorkflowStreamEventType } from '../../../../workflows/types';
 
 export function getResponseUIMessageId({
   originalMessages,
@@ -173,6 +175,19 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     // tool-output is a custom mastra chunk type used in ToolStream
     // TODO: Should this be a data part instead of a tool output type
     case 'tool-output': {
+      const { type, ...rest } = part.output;
+      if (isWorkflowStreamEventType(type)) {
+        const newType: `data-${WorkflowStreamEvent['type']}` = `data-${type}`;
+        const chunk = {
+          type: newType,
+          data: {
+            id: part.toolCallId ?? undefined,
+            ...rest,
+          },
+        };
+        return chunk as InferUIMessageChunk<UI_MESSAGE>;
+      }
+
       return {
         toolCallId: part.toolCallId,
         ...part.output,

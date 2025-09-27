@@ -207,6 +207,19 @@ export type WorkflowStreamEvent =
       };
     };
 
+export function isWorkflowStreamEventType(type: string): type is WorkflowStreamEvent['type'] {
+  return [
+    'workflow-start',
+    'workflow-finish',
+    'workflow-canceled',
+    'workflow-step-start',
+    'workflow-step-finish',
+    'workflow-step-suspended',
+    'workflow-step-waiting',
+    'workflow-step-result',
+  ].includes(type);
+}
+
 export type WorkflowRunStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'pending' | 'canceled';
 
 export type WatchEvent = {
