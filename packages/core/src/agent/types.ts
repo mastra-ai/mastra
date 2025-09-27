@@ -11,16 +11,16 @@ import type {
   DefaultLLMTextOptions,
   OutputType,
   SystemMessage,
+  MastraModelConfig,
 } from '../llm';
 import type {
   StreamTextOnFinishCallback,
   StreamTextOnStepFinishCallback,
   StreamObjectOnFinishCallback,
 } from '../llm/model/base.types';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { MemoryConfig, StorageThreadType } from '../memory/types';
+import type { MastraLanguageModel, MemoryConfig, StorageThreadType } from '../memory/types';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import type { RuntimeContext } from '../runtime-context';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
@@ -69,6 +69,23 @@ export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;
 }
 
+// Helper type that preserves literal types better
+type DynamicModel = ({
+  runtimeContext,
+  mastra,
+}: {
+  runtimeContext: RuntimeContext;
+  mastra?: Mastra;
+}) => Promise<MastraModelConfig> | MastraModelConfig;
+
+// Helper type for model with retries
+type ModelWithRetries = {
+  id?: string; // Made optional to support existing tests
+  model: MastraModelConfig | DynamicModel;
+  maxRetries?: number; //defaults to 0
+  enabled?: boolean; //defaults to true
+};
+
 export interface AgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
@@ -78,13 +95,7 @@ export interface AgentConfig<
   name: TAgentId;
   description?: string;
   instructions: DynamicAgentInstructions;
-  model:
-    | DynamicArgument<MastraLanguageModel>
-    | {
-        model: DynamicArgument<MastraLanguageModel>;
-        maxRetries?: number; //defaults to 0
-        enabled?: boolean; //defaults to true
-      }[];
+  model: MastraModelConfig | DynamicModel | ModelWithRetries[];
   maxRetries?: number; //defaults to 0
   tools?: DynamicArgument<TTools>;
   workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
