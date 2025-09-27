@@ -1,5 +1,13 @@
 # create-mastra
 
+## 0.13.3-alpha.0
+
+### Patch Changes
+
+- Add types in the streamVNext codepath, fixes for various issues across multiple packages surfaced from type issues, align return types. ([#8010](https://github.com/mastra-ai/mastra/pull/8010))
+
+- Add model fallbacks to playground ([#7427](https://github.com/mastra-ai/mastra/pull/7427))
+
 ## 0.13.2
 
 ### Patch Changes

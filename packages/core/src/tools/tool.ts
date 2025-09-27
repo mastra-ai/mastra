@@ -1,16 +1,13 @@
-import type { ToolExecutionOptions } from 'ai';
-import type { ToolCallOptions } from 'ai-v5';
-import type { z } from 'zod';
-
 import type { Mastra } from '../mastra';
+import type { ZodLikeSchema } from '../types/zod-compat';
 import type { ToolAction, ToolExecutionContext, ToolInvocationOptions } from './types';
 import { validateToolInput } from './validation';
 
 export class Tool<
-  TSchemaIn extends z.ZodSchema | undefined = undefined,
-  TSchemaOut extends z.ZodSchema | undefined = undefined,
-  TSuspendSchema extends z.ZodSchema = any,
-  TResumeSchema extends z.ZodSchema = any,
+  TSchemaIn extends ZodLikeSchema | undefined = undefined,
+  TSchemaOut extends ZodLikeSchema | undefined = undefined,
+  TSuspendSchema extends ZodLikeSchema = any,
+  TResumeSchema extends ZodLikeSchema = any,
   TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema> = ToolExecutionContext<
     TSchemaIn,
     TSuspendSchema,
@@ -59,10 +56,10 @@ export class Tool<
 }
 
 export function createTool<
-  TSchemaIn extends z.ZodSchema | undefined = undefined,
-  TSchemaOut extends z.ZodSchema | undefined = undefined,
-  TSuspendSchema extends z.ZodSchema = any,
-  TResumeSchema extends z.ZodSchema = any,
+  TSchemaIn extends ZodLikeSchema | undefined = undefined,
+  TSchemaOut extends ZodLikeSchema | undefined = undefined,
+  TSuspendSchema extends ZodLikeSchema = any,
+  TResumeSchema extends ZodLikeSchema = any,
   TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema> = ToolExecutionContext<
     TSchemaIn,
     TSuspendSchema,
@@ -79,11 +76,11 @@ export function createTool<
   opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
     execute?: TExecute;
   },
-): [TSchemaIn, TSchemaOut, TExecute] extends [z.ZodSchema, z.ZodSchema, Function]
+): [TSchemaIn, TSchemaOut, TExecute] extends [ZodLikeSchema, ZodLikeSchema, Function]
   ? Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
       inputSchema: TSchemaIn;
       outputSchema: TSchemaOut;
-      execute: (context: TContext, options: ToolExecutionOptions | ToolCallOptions) => Promise<any>;
+      execute: (context: TContext, options: ToolInvocationOptions) => Promise<any>;
     }
   : Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> {
   return new Tool(opts) as any;
