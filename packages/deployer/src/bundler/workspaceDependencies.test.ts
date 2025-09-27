@@ -279,4 +279,29 @@ describe('workspaceDependencies', () => {
       expect(result.isWorkspacePackage).toBe(true);
     });
   });
+
+  it('should handle Windows file paths correctly', async () => {
+    // Incoming Windows-style path
+    vi.mocked(pkg.up).mockReturnValue('\\workspace\\minimal\\package.json');
+    // find-workspaces normalizes paths to POSIX style
+    vi.mocked(findWorkspaces).mockResolvedValue([
+      {
+        location: '/workspace/minimal',
+        package: { name: 'minimal-pkg', dependencies: undefined, version: undefined },
+      },
+    ]);
+    vi.mocked(findWorkspacesRoot).mockReturnValue({
+      location: '/workspace',
+      globs: ['packages/*'],
+    } as WorkspacesRoot);
+
+    const result = await getWorkspaceInformation({ mastraEntryFile: '\\workspace\\minimal\\index.ts' });
+
+    expect(result.workspaceMap.get('minimal-pkg')).toEqual({
+      location: '/workspace/minimal',
+      dependencies: undefined,
+      version: undefined,
+    });
+    expect(result.isWorkspacePackage).toBe(true);
+  });
 });
