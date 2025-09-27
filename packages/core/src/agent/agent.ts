@@ -800,8 +800,9 @@ export class Agent<
     modelConfig: DynamicArgument<MastraModelConfig>,
   ): modelConfig is OpenAICompatibleConfig {
     if (typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) return false;
-    // TODO: this is probably an incomplete check!
-    if (typeof modelConfig === 'object' && 'id' in modelConfig) return true;
+    // Check for OpenAICompatibleConfig specifically - it should have 'id' but NOT 'model'
+    // ModelWithRetries has both 'id' and 'model', so we exclude it
+    if (typeof modelConfig === 'object' && 'id' in modelConfig && !('model' in modelConfig)) return true;
     return false;
   }
 
@@ -2883,7 +2884,8 @@ export class Agent<
 
     const models = await Promise.all(
       this.model.map(async modelConfig => {
-        const model = await this.resolveModelConfig(modelConfig, runtimeContext);
+        // modelConfig is of type ModelWithRetries, so we need to resolve modelConfig.model
+        const model = await this.resolveModelConfig(modelConfig.model, runtimeContext);
 
         if (model.specificationVersion !== 'v2') {
           const mastraError = new MastraError({
