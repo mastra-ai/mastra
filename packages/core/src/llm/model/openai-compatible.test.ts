@@ -553,20 +553,9 @@ describe('OpenAICompatibleModel', () => {
 
   describe('Provider overrides', () => {
     it('should handle Vercel AI Gateway', () => {
-      // Mock the environment variable to avoid API key requirement in tests
-      const originalEnv = process.env.AI_GATEWAY_API_KEY;
-      process.env.AI_GATEWAY_API_KEY = 'test-api-key';
-
       const model = new OpenAICompatibleModel('vercel/deepseek/deepseek-r1');
       expect(model.modelId).toBe('deepseek/deepseek-r1');
       expect(model.provider).toBe('vercel');
-
-      // Restore original environment variable
-      if (originalEnv) {
-        process.env.AI_GATEWAY_API_KEY = originalEnv;
-      } else {
-        delete process.env.AI_GATEWAY_API_KEY;
-      }
     });
 
     it('should handle Netlify provider', () => {
