@@ -53,11 +53,11 @@ describe('OpenAICompatibleModel', () => {
       // Remove API key from environment
       const originalEnv = process.env;
       process.env = {};
-      
+
       expect(() => {
         new OpenAICompatibleModel('openai/gpt-4o');
       }).toThrow('API key not found for provider "openai". Please set the OPENAI_API_KEY environment variable.');
-      
+
       // Restore environment
       process.env = originalEnv;
     });
@@ -65,10 +65,10 @@ describe('OpenAICompatibleModel', () => {
     it('should resolve API key from environment', () => {
       const originalEnv = process.env;
       process.env = { OPENAI_API_KEY: 'sk-env-test' };
-      
+
       const model = new OpenAICompatibleModel('openai/gpt-4o');
       expect(model.modelId).toBe('gpt-4o');
-      
+
       // Restore environment
       process.env = originalEnv;
     });
@@ -82,7 +82,7 @@ describe('OpenAICompatibleModel', () => {
       expect(model.modelId).toBe('gpt-4o');
     });
 
-it('should handle multi-slash provider IDs', () => {
+    it('should handle multi-slash provider IDs', () => {
       const model = new OpenAICompatibleModel({
         id: 'chutes/Qwen/Qwen3-235B-A22B-Instruct-2507',
         url: 'https://api.chutes.ai/v1/chat/completions',
@@ -101,7 +101,7 @@ it('should handle multi-slash provider IDs', () => {
         apiKey: 'sk-test',
       });
 
-mockFetch.mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         headers: new Headers(),
         json: async () => ({
@@ -109,14 +109,16 @@ mockFetch.mockResolvedValueOnce({
           object: 'chat.completion',
           created: 1234567890,
           model: 'gpt-4o',
-          choices: [{
-            index: 0,
-            message: {
-              role: 'assistant',
-              content: 'Hello, world!',
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: 'Hello, world!',
+              },
+              finish_reason: 'stop',
             },
-            finish_reason: 'stop',
-          }],
+          ],
           usage: {
             prompt_tokens: 10,
             completion_tokens: 5,
@@ -145,7 +147,7 @@ mockFetch.mockResolvedValueOnce({
         apiKey: 'sk-test',
       });
 
-mockFetch.mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         headers: new Headers(),
         json: async () => ({
@@ -153,22 +155,26 @@ mockFetch.mockResolvedValueOnce({
           object: 'chat.completion',
           created: 1234567890,
           model: 'gpt-4o',
-          choices: [{
-            index: 0,
-            message: {
-              role: 'assistant',
-              content: null,
-              tool_calls: [{
-                id: 'tool-1',
-                type: 'function',
-                function: {
-                  name: 'testFunction',
-                  arguments: '{"param": "value"}',
-                },
-              }],
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'tool-1',
+                    type: 'function',
+                    function: {
+                      name: 'testFunction',
+                      arguments: '{"param": "value"}',
+                    },
+                  },
+                ],
+              },
+              finish_reason: 'tool_calls',
             },
-            finish_reason: 'tool_calls',
-          }],
+          ],
           usage: {
             prompt_tokens: 10,
             completion_tokens: 5,
@@ -181,12 +187,14 @@ mockFetch.mockResolvedValueOnce({
         prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
       });
 
-      expect(result.content).toEqual([{
-        type: 'tool-call',
-        toolCallId: 'tool-1',
-        toolName: 'testFunction',
-        input: '{"param": "value"}',
-      }]);
+      expect(result.content).toEqual([
+        {
+          type: 'tool-call',
+          toolCallId: 'tool-1',
+          toolName: 'testFunction',
+          input: '{"param": "value"}',
+        },
+      ]);
       expect(result.finishReason).toBe('tool-calls');
     });
 
@@ -197,7 +205,7 @@ mockFetch.mockResolvedValueOnce({
         apiKey: 'sk-test',
       });
 
-mockFetch.mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         headers: new Headers(),
         json: async () => ({
@@ -205,14 +213,16 @@ mockFetch.mockResolvedValueOnce({
           object: 'chat.completion',
           created: 1234567890,
           model: 'gpt-4o',
-          choices: [{
-            index: 0,
-            message: {
-              role: 'assistant',
-              content: '{"result": "success"}',
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: '{"result": "success"}',
+              },
+              finish_reason: 'stop',
             },
-            finish_reason: 'stop',
-          }],
+          ],
           usage: {
             prompt_tokens: 10,
             completion_tokens: 5,
@@ -244,16 +254,18 @@ mockFetch.mockResolvedValueOnce({
         apiKey: 'sk-test',
       });
 
-mockFetch.mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 401,
         headers: new Headers(),
         text: async () => 'Unauthorized',
       });
 
-await expect(model.doGenerate({
-        prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
-      })).rejects.toThrow('OpenAI-compatible API error: 401 - Unauthorized');
+      await expect(
+        model.doGenerate({
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+        }),
+      ).rejects.toThrow('OpenAI-compatible API error: 401 - Unauthorized');
     });
 
     it('should handle general API errors', async () => {
@@ -263,16 +275,18 @@ await expect(model.doGenerate({
         apiKey: 'sk-test',
       });
 
-mockFetch.mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 500,
         headers: new Headers(),
         text: async () => 'Internal Server Error',
       });
 
-      await expect(model.doGenerate({
-        prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
-      })).rejects.toThrow('OpenAI-compatible API error: 500 - Internal Server Error');
+      await expect(
+        model.doGenerate({
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+        }),
+      ).rejects.toThrow('OpenAI-compatible API error: 500 - Internal Server Error');
     });
 
     it('should handle tools and tool choice', async () => {
@@ -282,7 +296,7 @@ mockFetch.mockResolvedValueOnce({
         apiKey: 'sk-test',
       });
 
-mockFetch.mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         headers: new Headers(),
         json: async () => ({
@@ -290,14 +304,16 @@ mockFetch.mockResolvedValueOnce({
           object: 'chat.completion',
           created: 1234567890,
           model: 'gpt-4o',
-          choices: [{
-            index: 0,
-            message: {
-              role: 'assistant',
-              content: 'I will use the tool.',
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: 'I will use the tool.',
+              },
+              finish_reason: 'stop',
             },
-            finish_reason: 'stop',
-          }],
+          ],
           usage: {
             prompt_tokens: 10,
             completion_tokens: 5,
@@ -306,19 +322,21 @@ mockFetch.mockResolvedValueOnce({
         }),
       });
 
-const result = await model.doGenerate({
+      const result = await model.doGenerate({
         prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
-        tools: [{
-          name: 'testTool',
-          description: 'A test tool',
-          type: 'function',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              param: { type: 'string' },
+        tools: [
+          {
+            name: 'testTool',
+            description: 'A test tool',
+            type: 'function',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                param: { type: 'string' },
+              },
             },
           },
-        }],
+        ],
         toolChoice: { type: 'auto' },
       });
 
@@ -334,12 +352,24 @@ const result = await model.doGenerate({
         apiKey: 'sk-test',
       });
 
-const mockStream = new ReadableStream({
+      const mockStream = new ReadableStream({
         async start(controller) {
           const encoder = new TextEncoder();
-          controller.enqueue(encoder.encode('data: {"id": "test-id", "object": "chat.completion.chunk", "created": 1234567890, "model": "gpt-4o", "choices": [{"index": 0, "delta": {"content": "Hello"}, "finish_reason": null}]}\n'));
-          controller.enqueue(encoder.encode('data: {"id": "test-id", "object": "chat.completion.chunk", "created": 1234567890, "model": "gpt-4o", "choices": [{"index": 0, "delta": {"content": " world!"}, "finish_reason": null}]}\n'));
-          controller.enqueue(encoder.encode('data: {"id": "test-id", "object": "chat.completion.chunk", "created": 1234567890, "model": "gpt-4o", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}\n'));
+          controller.enqueue(
+            encoder.encode(
+              'data: {"id": "test-id", "object": "chat.completion.chunk", "created": 1234567890, "model": "gpt-4o", "choices": [{"index": 0, "delta": {"content": "Hello"}, "finish_reason": null}]}\n',
+            ),
+          );
+          controller.enqueue(
+            encoder.encode(
+              'data: {"id": "test-id", "object": "chat.completion.chunk", "created": 1234567890, "model": "gpt-4o", "choices": [{"index": 0, "delta": {"content": " world!"}, "finish_reason": null}]}\n',
+            ),
+          );
+          controller.enqueue(
+            encoder.encode(
+              'data: {"id": "test-id", "object": "chat.completion.chunk", "created": 1234567890, "model": "gpt-4o", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}\n',
+            ),
+          );
           controller.close();
         },
       });
@@ -358,9 +388,9 @@ const mockStream = new ReadableStream({
         prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
       });
 
-const chunks = [];
+      const chunks = [];
       const reader = result.stream.getReader();
-      
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -378,13 +408,29 @@ const chunks = [];
         apiKey: 'sk-test',
       });
 
-const mockStream = new ReadableStream({
+      const mockStream = new ReadableStream({
         async start(controller) {
           const encoder = new TextEncoder();
-          controller.enqueue(encoder.encode('data: {"id": "test-id", "object": "chat.completion.chunk", "created": 1234567890, "model": "gpt-4o", "choices": [{"index": 0, "delta": {"tool_calls": [{"index": 0, "id": "call_123", "function": {"name": "testTool", "arguments": ""}}]}, "finish_reason": null}]}\n'));
-          controller.enqueue(encoder.encode('data: {"id": "test-id", "object": "chat.completion.chunk", "created": 1234567890, "model": "gpt-4o", "choices": [{"index": 0, "delta": {"tool_calls": [{"index": 0, "function": {"arguments": "{\\"param\\": \\""}}]}, "finish_reason": null}]}\n'));
-          controller.enqueue(encoder.encode('data: {"id": "test-id", "object": "chat.completion.chunk", "created": 1234567890, "model": "gpt-4o", "choices": [{"index": 0, "delta": {"tool_calls": [{"index": 0, "function": {"arguments": "value\\"}"}}]}, "finish_reason": null}]}\n'));
-          controller.enqueue(encoder.encode('data: {"id": "test-id", "object": "chat.completion.chunk", "created": 1234567890, "model": "gpt-4o", "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]}\n'));
+          controller.enqueue(
+            encoder.encode(
+              'data: {"id": "test-id", "object": "chat.completion.chunk", "created": 1234567890, "model": "gpt-4o", "choices": [{"index": 0, "delta": {"tool_calls": [{"index": 0, "id": "call_123", "function": {"name": "testTool", "arguments": ""}}]}, "finish_reason": null}]}\n',
+            ),
+          );
+          controller.enqueue(
+            encoder.encode(
+              'data: {"id": "test-id", "object": "chat.completion.chunk", "created": 1234567890, "model": "gpt-4o", "choices": [{"index": 0, "delta": {"tool_calls": [{"index": 0, "function": {"arguments": "{\\"param\\": \\""}}]}, "finish_reason": null}]}\n',
+            ),
+          );
+          controller.enqueue(
+            encoder.encode(
+              'data: {"id": "test-id", "object": "chat.completion.chunk", "created": 1234567890, "model": "gpt-4o", "choices": [{"index": 0, "delta": {"tool_calls": [{"index": 0, "function": {"arguments": "value\\"}"}}]}, "finish_reason": null}]}\n',
+            ),
+          );
+          controller.enqueue(
+            encoder.encode(
+              'data: {"id": "test-id", "object": "chat.completion.chunk", "created": 1234567890, "model": "gpt-4o", "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]}\n',
+            ),
+          );
           controller.close();
         },
       });
@@ -403,9 +449,9 @@ const mockStream = new ReadableStream({
         prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
       });
 
-const chunks = [];
+      const chunks = [];
       const reader = result.stream.getReader();
-      
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -423,16 +469,18 @@ const chunks = [];
         apiKey: 'sk-test',
       });
 
-mockFetch.mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 500,
         headers: new Headers(),
         text: async () => 'Internal Server Error',
       });
 
-      await expect(model.doStream({
-        prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
-      })).rejects.toThrow('OpenAI-compatible API error: 500 - Internal Server Error');
+      await expect(
+        model.doStream({
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+        }),
+      ).rejects.toThrow('OpenAI-compatible API error: 500 - Internal Server Error');
     });
   });
 
@@ -440,13 +488,13 @@ mockFetch.mockResolvedValueOnce({
     it('should use x-api-key header for Anthropic', () => {
       const originalEnv = process.env;
       process.env = { ANTHROPIC_API_KEY: 'ant-test' };
-      
+
       const model = new OpenAICompatibleModel('anthropic/claude-3-opus');
-      
+
       // Check that the model was created successfully
       expect(model.modelId).toBe('claude-3-opus');
       expect(model.provider).toBe('anthropic');
-      
+
       // Restore environment
       process.env = originalEnv;
     });
@@ -454,10 +502,10 @@ mockFetch.mockResolvedValueOnce({
     it('should handle Anthropic structured output', async () => {
       const originalEnv = process.env;
       process.env = { ANTHROPIC_API_KEY: 'ant-test' };
-      
+
       const model = new OpenAICompatibleModel('anthropic/claude-3-opus');
 
-mockFetch.mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         headers: new Headers(),
         json: async () => ({
@@ -465,14 +513,16 @@ mockFetch.mockResolvedValueOnce({
           object: 'chat.completion',
           created: 1234567890,
           model: 'claude-3-opus',
-          choices: [{
-            index: 0,
-            message: {
-              role: 'assistant',
-              content: '{"result": "success"}',
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: '{"result": "success"}',
+              },
+              finish_reason: 'stop',
             },
-            finish_reason: 'stop',
-          }],
+          ],
           usage: {
             prompt_tokens: 10,
             completion_tokens: 5,
@@ -495,7 +545,7 @@ mockFetch.mockResolvedValueOnce({
       });
 
       expect(result.content).toEqual([{ type: 'text', text: '{"result": "success"}' }]);
-      
+
       // Restore environment
       process.env = originalEnv;
     });
@@ -508,7 +558,7 @@ mockFetch.mockResolvedValueOnce({
       expect(model.provider).toBe('vercel');
     });
 
-it('should handle Netlify provider', () => {
+    it('should handle Netlify provider', () => {
       const model = new OpenAICompatibleModel({
         id: 'netlify/openai/gpt-4o',
         url: 'https://api.netlify.com/v1/chat/completions',
@@ -533,9 +583,9 @@ it('should handle Netlify provider', () => {
       ];
 
       const converted = (model as any).convertMessagesToOpenAI(messages);
-      
+
       expect(converted).toHaveLength(2);
-expect(converted[0]).toEqual({
+      expect(converted[0]).toEqual({
         role: 'system',
         content: [{ type: 'text', text: 'You are a helpful assistant' }],
       });
@@ -563,7 +613,7 @@ expect(converted[0]).toEqual({
       ];
 
       const converted = (model as any).convertMessagesToOpenAI(messages);
-      
+
       expect(converted).toHaveLength(1);
       expect(converted[0]).toEqual({
         role: 'user',
@@ -597,19 +647,21 @@ expect(converted[0]).toEqual({
       ];
 
       const converted = (model as any).convertMessagesToOpenAI(messages);
-      
+
       expect(converted).toHaveLength(1);
       expect(converted[0]).toEqual({
         role: 'assistant',
         content: 'I will help you',
-        tool_calls: [{
-          id: 'tool-1',
-          type: 'function',
-          function: {
-            name: 'testFunction',
-            arguments: '{"param":"value"}',
+        tool_calls: [
+          {
+            id: 'tool-1',
+            type: 'function',
+            function: {
+              name: 'testFunction',
+              arguments: '{"param":"value"}',
+            },
           },
-        }],
+        ],
       });
     });
 
@@ -634,7 +686,7 @@ expect(converted[0]).toEqual({
       ];
 
       const converted = (model as any).convertMessagesToOpenAI(messages);
-      
+
       expect(converted).toHaveLength(1);
       expect(converted[0]).toEqual({
         role: 'tool',
@@ -652,7 +704,7 @@ expect(converted[0]).toEqual({
         apiKey: 'sk-test',
       });
 
-const tools = {
+      const tools = {
         testTool: {
           name: 'testTool',
           description: 'A test tool',
@@ -667,7 +719,7 @@ const tools = {
       };
 
       const converted = (model as any).convertToolsToOpenAI(tools);
-      
+
       expect(converted).toHaveLength(1);
       expect(converted[0]).toEqual({
         type: 'function',
@@ -684,7 +736,7 @@ const tools = {
       });
     });
 
-it('should handle empty tools', () => {
+    it('should handle empty tools', () => {
       const model = new OpenAICompatibleModel({
         id: 'gpt-4o',
         url: 'https://api.openai.com/v1/chat/completions',
@@ -716,7 +768,7 @@ it('should handle empty tools', () => {
       });
 
       const mapFinishReason = (model as any).mapFinishReason.bind(model);
-      
+
       expect(mapFinishReason('stop')).toBe('stop');
       expect(mapFinishReason('length')).toBe('length');
       expect(mapFinishReason('max_tokens')).toBe('length');
