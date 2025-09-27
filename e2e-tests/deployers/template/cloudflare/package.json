@@ -17,7 +17,7 @@
     "node": ">=20.9.0"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^2.0.23",
+    "@ai-sdk/openai": "^2.0.34",
     "@mastra/core": "deployers-e2e-test",
     "@mastra/deployer-cloudflare": "deployers-e2e-test",
     "@mastra/pg": "deployers-e2e-test",
