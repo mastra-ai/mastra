@@ -2,6 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
+import { weatherWorkflowScorers } from '../scorers';
 
 const llm = openai('gpt-4o');
 
@@ -142,6 +143,7 @@ const planActivities = createStep({
   outputSchema: z.object({
     activities: z.string(),
   }),
+  scorers: weatherWorkflowScorers,
   execute: async ({ inputData }) => {
     const forecast = inputData;
 
