@@ -4,7 +4,6 @@ import { Routes, Route, BrowserRouter, Outlet, useNavigate } from 'react-router'
 import { Layout } from '@/components/layout';
 
 import { AgentLayout } from '@/domains/agents/agent-layout';
-import { LegacyWorkflowLayout } from '@/domains/workflows/legacy-workflow-layout';
 import Tools from '@/pages/tools';
 
 import Agents from './pages/agents';
@@ -15,9 +14,7 @@ import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
 import Workflows from './pages/workflows';
 import { Workflow } from './pages/workflows/workflow';
-import LegacyWorkflow from './pages/workflows/workflow/legacy';
 import WorkflowTracesPage from './pages/workflows/workflow/traces';
-import LegacyWorkflowTracesPage from './pages/workflows/workflow/legacy/traces';
 import Networks from './pages/networks';
 import { NetworkLayout } from './domains/networks/network-layout';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
@@ -28,12 +25,7 @@ import MCPServerToolExecutor from './pages/mcps/tool';
 
 import { McpServerPage } from './pages/mcps/[serverId]';
 
-import {
-  LinkComponentProvider,
-  LinkComponentProviderProps,
-  MastraClientProvider,
-  PlaygroundQueryClient,
-} from '@mastra/playground-ui';
+import { LinkComponentProvider, LinkComponentProviderProps, PlaygroundQueryClient } from '@mastra/playground-ui';
 import VNextNetwork from './pages/networks/network/v-next';
 import { NavigateTo } from './lib/react-router';
 import { Link } from './lib/framework';
@@ -42,6 +34,7 @@ import Scorer from './pages/scorers/scorer';
 import Observability from './pages/observability';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
+import { MastraReactProvider } from '@mastra/react-hooks';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
@@ -73,9 +66,9 @@ const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
 
 function App() {
   return (
-    <PlaygroundQueryClient>
-      <PostHogProvider>
-        <MastraClientProvider>
+    <MastraReactProvider>
+      <PlaygroundQueryClient>
+        <PostHogProvider>
           <BrowserRouter>
             <LinkComponentWrapper>
               <Routes>
@@ -184,31 +177,15 @@ function App() {
                     <Route path="/workflows/:workflowId/graph/:runId" element={<Workflow />} />
                   </Route>
 
-                  <Route
-                    path="/workflows/legacy/:workflowId"
-                    element={<NavigateTo to="/workflows/legacy/:workflowId/graph" />}
-                  />
-
-                  <Route
-                    path="/workflows/legacy/:workflowId"
-                    element={
-                      <LegacyWorkflowLayout>
-                        <Outlet />
-                      </LegacyWorkflowLayout>
-                    }
-                  >
-                    <Route path="graph" element={<LegacyWorkflow />} />
-                    <Route path="traces" element={<LegacyWorkflowTracesPage />} />
-                  </Route>
                   <Route path="/" element={<NavigateTo to="/agents" />} />
                   <Route path="/runtime-context" element={<RuntimeContext />} />
                 </Route>
               </Routes>
             </LinkComponentWrapper>
           </BrowserRouter>
-        </MastraClientProvider>
-      </PostHogProvider>
-    </PlaygroundQueryClient>
+        </PostHogProvider>
+      </PlaygroundQueryClient>
+    </MastraReactProvider>
   );
 }
 

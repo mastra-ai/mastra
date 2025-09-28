@@ -100,6 +100,7 @@ export class InMemoryStore extends MastraStorage {
       deleteMessages: true,
       aiTracing: true,
       indexManagement: false,
+      getScoresBySpan: true,
     };
   }
 
@@ -389,6 +390,18 @@ export class InMemoryStore extends MastraStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     return this.stores.scores.getScoresByEntityId({ entityId, entityType, pagination });
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    return this.stores.scores.getScoresBySpan({ traceId, spanId, pagination });
   }
 
   async getEvals(
