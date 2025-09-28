@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 // Core Mastra imports
-import { Agent } from '../agent';
+import { Agent, type StructuredOutputOptions } from '../agent';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import type { ToolExecutionContext } from '../tools';
@@ -15,6 +15,7 @@ import { createWorkflow, createStep } from '../workflows';
 import { clearAITracingRegistry, shutdownAITracingRegistry } from './registry';
 import { AISpanType, AITracingEventType } from './types';
 import type { AITracingExporter, AITracingEvent, ExportedAISpan, AnyExportedAISpan } from './types';
+import type { OutputSchema } from '../stream';
 
 /**
  * Test exporter for AI tracing events with real-time span lifecycle validation.
@@ -554,6 +555,7 @@ const mockModelV1 = new MockLanguageModelV1({
  * Supports both generateVNext() and streamVNext() operations.
  * Intelligently calls tools based on prompt content or returns structured text responses.
  * Limits tool calls to one per test to avoid infinite loops.
+ * Supports structured output mode.
  */
 const mockModelV2 = new MockLanguageModelV2({
   doGenerate: async options => {
@@ -573,6 +575,19 @@ const mockModelV2 = new MockLanguageModelV2({
             args: toolCall.args,
           },
         ],
+      };
+    }
+
+    // Check if this is the internal structuring agent call
+    const isStructuringCall = prompt.includes('Extract and structure the key information');
+
+    // Return structured JSON for both the initial call and the structuring agent call
+    if (isStructuringCall || (options as any).schemaName || (options as any).schemaDescription) {
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ items: 'test structured output' }) }],
+        finishReason: 'stop',
+        usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 },
+        warnings: [],
       };
     }
 
@@ -599,6 +614,20 @@ const mockModelV2 = new MockLanguageModelV2({
             input: JSON.stringify(toolCall.args),
           },
           { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 } },
+        ]),
+      };
+    }
+
+    // Check if this is the internal structuring agent call
+    const isStructuringCall = prompt.includes('Extract and structure the key information');
+
+    // Return structured JSON for both the initial call and the structuring agent call
+    if (isStructuringCall || (options as any).schemaName || (options as any).schemaDescription) {
+      const structuredOutput = JSON.stringify({ items: 'test structured output' });
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'text-delta', id: '1', delta: structuredOutput },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 } },
         ]),
       };
     }
@@ -684,7 +713,8 @@ const agentMethods = [
       for await (const chunk of result.textStream) {
         fullText += chunk;
       }
-      return { text: fullText, object: result.object, traceId: result.traceId };
+      const object = await result.object;
+      return { text: fullText, object, traceId: result.traceId };
     },
     model: mockModelV2,
     expectedText: 'Mock V2 streaming response',
@@ -1258,6 +1288,79 @@ describe('AI Tracing Integration Tests', () => {
         }
         expect(llmGenerationSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
 
+        testExporter.finalExpectations();
+      });
+    },
+  );
+
+// Only test VNext methods for structuredOutput
+describe.each(agentMethods.filter(m => m.name.includes('VNext')))(
+    'should trace agent using structuredOutput format using $name',
+    ({ method, model }) => {
+      it(`should trace spans correctly`, async () => {
+        const testAgent = new Agent({
+          name: 'Test Agent',
+          instructions: 'Return a simple response',
+          model,
+        });
+
+        const outputSchema = z.object({
+          "items" : z.string(),
+        })
+
+        const structuredOutput : StructuredOutputOptions<OutputSchema> = {
+          schema: outputSchema,
+        }
+
+        const mastra = new Mastra({
+          ...getBaseMastraConfig(testExporter),
+          agents: { testAgent },
+        });
+
+        const agent = mastra.getAgent('testAgent');
+        const result = await method(agent, 'Return a simple response', { structuredOutput });
+        expect(result.object).toBeDefined();
+        expect(result.traceId).toBeDefined();
+
+        const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
+        const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
+        const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
+        const workflowSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
+        const workflowSteps = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
+
+        expect(agentRunSpans.length).toBe(1); // one agent run
+        expect(llmGenerationSpans.length).toBe(1); // one llm run
+        expect(toolCallSpans.length).toBe(0); // no tools
+        expect(workflowSpans.length).toBe(0); // no workflows
+        expect(workflowSteps.length).toBe(0); // no workflows
+
+        const agentRunSpan = agentRunSpans[0];
+        const llmGenerationSpan = llmGenerationSpans[0];
+
+        expect(agentRunSpan?.traceId).toBe(result.traceId);
+
+        // verify span nesting
+        expect(llmGenerationSpan?.parentSpanId).toEqual(agentRunSpan?.id);
+
+        // Verify LLM generation spans
+        expect(llmGenerationSpans[0]?.name).toBe("llm: 'mock-model-id'");
+        expect(llmGenerationSpan?.input.messages).toHaveLength(2);
+
+        expect(llmGenerationSpan?.output.text).toBe('Mock V2 streaming response');
+        expect(agentRunSpan?.output.text).toBe('Mock V2 streaming response');
+
+        console.log("llmGenerationSpan?.output")
+        console.log(llmGenerationSpan?.output)
+
+        console.log("agentRunSpan?.output")
+        console.log(agentRunSpan?.output)
+
+        // Verify structured output
+        expect(result.object).toBeDefined();
+        expect(result.object).toHaveProperty('items');
+        expect((result.object as any).items).toBe('test structured output');
+
+        expect(llmGenerationSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
         testExporter.finalExpectations();
       });
     },

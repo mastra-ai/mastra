@@ -2,7 +2,7 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
-import type { TracingContext } from '../../ai-tracing';
+import { InternalSpans, type TracingContext } from '../../ai-tracing';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { Processor } from '../index';
 
@@ -105,6 +105,7 @@ export class PromptInjectionDetector implements Processor {
       name: 'prompt-injection-detector',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
+      options: { tracingPolicy: { internal: InternalSpans.ALL }},
     });
   }
 
