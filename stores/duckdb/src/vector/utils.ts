@@ -311,7 +311,7 @@ export async function executeBatched<T, R>(
         let completedItems = 0;
         for (let i = 0; i < batches.length; i++) {
           if (completedBatches.has(i)) {
-            completedItems += batches[i].length;
+            completedItems += batches[i]?.length || 0;
           }
         }
 

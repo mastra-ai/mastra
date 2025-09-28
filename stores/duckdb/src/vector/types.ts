@@ -108,6 +108,12 @@ export interface DuckDBIndexOptions {
  */
 export interface DuckDBQueryOptions {
   /**
+   * Number of nearest neighbors to return
+   * @default 10
+   */
+  topK?: number;
+
+  /**
    * Enable hybrid search combining vector and FTS
    * @default false
    */
