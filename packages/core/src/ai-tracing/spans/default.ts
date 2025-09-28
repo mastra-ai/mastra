@@ -1,4 +1,5 @@
 import { MastraError } from '../../error';
+import { getAITracing } from '../registry';
 import type {
   AISpanType,
   AITracing,
@@ -6,8 +7,10 @@ import type {
   ErrorSpanOptions,
   UpdateSpanOptions,
   CreateSpanOptions,
+  ExportedAISpan,
+  AISpan,
 } from '../types';
-import { BaseAISpan, deepClean } from './base';
+import { BaseAISpan, BaseExportedAISpan, deepClean } from './base';
 
 export class DefaultAISpan<TType extends AISpanType> extends BaseAISpan<TType> {
   public id: string;
@@ -113,6 +116,20 @@ export class DefaultAISpan<TType extends AISpanType> extends BaseAISpan<TType> {
       attributes: this.attributes,
       metadata: this.metadata,
     });
+  }
+
+  public exportSpan(includeInternalSpans?: boolean): ExportedAISpan<TType> | undefined {
+    return new DefaultExportedAISpan(this, includeInternalSpans);
+  }
+}
+
+export class DefaultExportedAISpan<TType extends AISpanType = any> extends BaseExportedAISpan<TType> {
+  public resumeSpan(): AISpan<TType> | undefined {
+    const aiTracing = getAITracing(this.configName);
+    //TODO: log a warning about the config not existing
+    //ISSUE: this will create a child span off the parent... which doesn't exist
+    // also we won't be able to recreate the parent span, so this will be treated like a root span?
+    return aiTracing ? new DefaultAISpan(this, aiTracing) : undefined;
   }
 }
 

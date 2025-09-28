@@ -354,6 +354,10 @@ export interface ExportedAISpan<TType extends AISpanType> extends BaseSpan<TType
   parentSpanId?: string;
   /** `TRUE` if the span is the root span of a trace */
   isRootSpan: boolean;
+  /** the name of the observability config used */
+  configName: string;
+  /** Returns a reconstructed AISpan for resuming operation */
+  resumeSpan(): AISpan<TType> | undefined;
 }
 
 /**
@@ -540,6 +544,9 @@ export interface TracingPolicy {
 export interface TracingOptions {
   /** Metadata to add to the root trace span */
   metadata?: Record<string, any>;
+
+  /** Trace ID to use on the execution (if the execution is traced). */
+  traceId?: string;
 }
 
 /**

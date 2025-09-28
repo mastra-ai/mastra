@@ -1170,7 +1170,6 @@ export class Workflow<
           resumeData,
           step: resume.steps as any,
           runtimeContext,
-          tracingContext,
           outputOptions: { includeState: true },
         })
       : await run.start({
@@ -2021,8 +2020,6 @@ export class Run<
     step,
     resumeData,
     runtimeContext,
-    tracingContext,
-    tracingOptions,
     format,
     onChunk,
   }: {
@@ -2033,8 +2030,6 @@ export class Run<
       | string
       | string[];
     runtimeContext?: RuntimeContext;
-    tracingContext?: TracingContext;
-    tracingOptions?: TracingOptions;
     format?: 'aisdk' | 'mastra' | undefined;
     onChunk?: (chunk: ChunkType) => Promise<unknown>;
   } = {}) {
@@ -2109,8 +2104,6 @@ export class Run<
           resumeData,
           step,
           runtimeContext,
-          tracingContext,
-          tracingOptions,
           writableStream: writable,
           format,
           isVNext: true,
@@ -2209,8 +2202,6 @@ export class Run<
       | string[];
     runtimeContext?: RuntimeContext;
     runCount?: number;
-    tracingContext?: TracingContext;
-    tracingOptions?: TracingOptions;
     writableStream?: WritableStream<ChunkType>;
     outputOptions?: {
       includeState?: boolean;
@@ -2231,8 +2222,6 @@ export class Run<
       | string[];
     runtimeContext?: RuntimeContext;
     runCount?: number;
-    tracingContext?: TracingContext;
-    tracingOptions?: TracingOptions;
     writableStream?: WritableStream<ChunkType>;
     format?: 'aisdk' | 'mastra' | undefined;
     isVNext?: boolean;
@@ -2319,7 +2308,7 @@ export class Run<
       params.runtimeContext.delete('__mastraWorflowInputData');
     }
 
-    const stepResults = { ...(snapshot?.context ?? {}), input: runtimeContextInput ?? snapshot?.context?.input } as any;
+    const stepResults = { ...(snapshot.context ?? {}), input: runtimeContextInput ?? snapshot.context?.input } as any;
 
     let runtimeContextToUse = params.runtimeContext ?? new RuntimeContext();
 
@@ -2329,21 +2318,9 @@ export class Run<
       }
     });
 
-    // note: this span is ended inside this.executionEngine.execute()
-    const workflowAISpan = getOrCreateSpan({
-      type: AISpanType.WORKFLOW_RUN,
-      name: `workflow run: '${this.workflowId}'`,
-      input: resumeDataToUse,
-      attributes: {
-        workflowId: this.workflowId,
-      },
-      tracingPolicy: this.tracingPolicy,
-      tracingOptions: params.tracingOptions,
-      tracingContext: params.tracingContext,
-      runtimeContext: runtimeContextToUse,
-    });
+    const workflowSpan = snapshot.workflowSpan
 
-    const traceId = getValidTraceId(workflowAISpan);
+    const traceId = getValidTraceId(workflowSpan);
 
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TState, TInput, TOutput, TSteps>>({
@@ -2379,7 +2356,7 @@ export class Run<
         },
         runtimeContext: runtimeContextToUse,
         abortController: this.abortController,
-        workflowAISpan,
+        workflowSpan,
         outputOptions: params.outputOptions,
       })
       .then(result => {

@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
-import type { AISpan, TracingContext } from '../ai-tracing';
+import type { AISpan, ExportedAISpan, TracingContext } from '../ai-tracing';
 import { AISpanType, wrapMastra, selectFields } from '../ai-tracing';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -324,6 +324,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             result: result.result,
             error: result.error,
             runtimeContext: params.runtimeContext,
+            workflowSpan: workflowAISpan?.exportSpan(),
           });
 
           if (result.error) {
@@ -1920,6 +1921,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     result,
     error,
     runtimeContext,
+    workflowSpan,
   }: {
     workflowId: string;
     runId: string;
@@ -1931,6 +1933,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     result?: Record<string, any>;
     error?: string | Error;
     runtimeContext: RuntimeContext;
+    workflowSpan?: ExportedAISpan<AISpanType.WORKFLOW_RUN>;
   }) {
     const shouldPersistSnapshot = this.options?.shouldPersistSnapshot?.({ stepResults, workflowStatus });
 
@@ -1961,6 +1964,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runtimeContext: runtimeContextObj,
         // @ts-ignore
         timestamp: Date.now(),
+        workflowSpan,
       },
     });
   }

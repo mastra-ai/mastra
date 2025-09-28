@@ -1,6 +1,6 @@
 import type { TextStreamPart } from 'ai';
 import type { z } from 'zod';
-import type { TracingPolicy, TracingProperties } from '../ai-tracing';
+import type { AISpanType, ExportedAISpan, TracingPolicy, TracingProperties } from '../ai-tracing';
 import type { Mastra } from '../mastra';
 import type { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } from './step';
@@ -289,6 +289,9 @@ export interface WorkflowRunState {
   suspendedPaths: Record<string, number[]>;
   waitingPaths: Record<string, number[]>;
   timestamp: number;
+
+  /** The workflow span. (if the workflow was traced.) */
+  workflowSpan?: ExportedAISpan<AISpanType.WORKFLOW_RUN>
 }
 
 export interface WorkflowOptions {

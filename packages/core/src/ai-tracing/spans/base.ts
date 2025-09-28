@@ -134,25 +134,7 @@ export abstract class BaseAISpan<TType extends AISpanType = any> implements AISp
     return this.parent.id;
   }
 
-  /** Returns a lightweight span ready for export */
-  public exportSpan(includeInternalSpans?: boolean): ExportedAISpan<TType> {
-    return {
-      id: this.id,
-      traceId: this.traceId,
-      name: this.name,
-      type: this.type,
-      attributes: this.attributes,
-      metadata: this.metadata,
-      startTime: this.startTime,
-      endTime: this.endTime,
-      input: this.input,
-      output: this.output,
-      errorInfo: this.errorInfo,
-      isEvent: this.isEvent,
-      isRootSpan: this.isRootSpan,
-      parentSpanId: this.getParentSpanId(includeInternalSpans),
-    };
-  }
+  public abstract exportSpan(includeInternalSpans?: boolean): ExportedAISpan<TType> | undefined;
 }
 
 const DEFAULT_KEYS_TO_STRIP = new Set([
@@ -224,4 +206,63 @@ export function deepClean(
   }
 
   return cleaned;
+}
+
+export abstract class BaseExportedAISpan<TType extends AISpanType = any> implements ExportedAISpan<TType> {
+    /** Unique span identifier */
+  public id: string;
+  /** OpenTelemetry-compatible trace ID (32 hex chars) - present on all spans */
+  public traceId: string;
+  /** Name of the span */
+  public name: string;
+  /** Type of the span */
+  public type: TType;
+  /** When span started */
+  public startTime: Date;
+  /** When span ended */
+  public endTime?: Date;
+  /** Is an internal span? (spans internal to the operation of mastra) */
+  public attributes?: AISpanTypeMap[TType];
+  /** User-defined metadata */
+  public metadata?: Record<string, any>;
+  /** Input passed at the start of the span */
+  public input?: any;
+  /** Output generated at the end of the span */
+  public output?: any;
+  /** Error information if span failed */
+  public errorInfo?: {
+    message: string;
+    id?: string;
+    domain?: string;
+    category?: string;
+    details?: Record<string, any>;
+  };
+  /** Is an event span? (event occurs at startTime, has no endTime) */
+  public isEvent: boolean;
+  /** Parent span id reference (undefined for root spans) */
+  public parentSpanId?: string;
+  /** `TRUE` if the span is the root span of a trace */
+  public isRootSpan: boolean;
+  /** the name of the observability config used */
+  public configName: string;
+
+  constructor(aiSpan: AISpan<TType>, includeInternalSpans?: boolean ) {
+    this.id= aiSpan.id;
+    this.traceId= aiSpan.traceId;
+    this.name= aiSpan.name;
+    this.type= aiSpan.type;
+    this.attributes= aiSpan.attributes;
+    this.metadata= aiSpan.metadata;
+    this.startTime= aiSpan.startTime;
+    this.endTime= aiSpan.endTime;
+    this.input= aiSpan.input;
+    this.output= aiSpan.output;
+    this.errorInfo= aiSpan.errorInfo;
+    this.isEvent= aiSpan.isEvent;
+    this.isRootSpan= aiSpan.isRootSpan;
+    this.parentSpanId= aiSpan.getParentSpanId(includeInternalSpans);
+    this.configName= aiSpan.aiTracing.getConfig().name;
+  }
+
+  public abstract resumeSpan(): AISpan<TType> | undefined;
 }
