@@ -1,6 +1,7 @@
 import { mastra } from "@/src/mastra";
 import { convertMessages } from "@mastra/core/agent";
 import { NextResponse } from "next/server";
+import { convertMessages } from "@mastra/core/agent";
 
 const myAgent = mastra.getAgent("weatherAgent");
 export async function GET() {
@@ -9,7 +10,6 @@ export async function GET() {
     threadId: "2",
   });
 
-  return NextResponse.json(
-    convertMessages(result?.uiMessages || []).to("AIV5.UI"),
-  );
+  const messages = convertMessages(result?.uiMessages || []).to("AIV5.UI");
+  return NextResponse.json(messages);
 }
