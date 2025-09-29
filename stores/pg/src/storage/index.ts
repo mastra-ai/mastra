@@ -235,6 +235,7 @@ export class PostgresStore extends MastraStorage {
       deleteMessages: true,
       aiTracing: false,
       indexManagement: true,
+      getScoresBySpan: true,
     };
   }
 
@@ -529,8 +530,8 @@ export class PostgresStore extends MastraStorage {
   /**
    * Scorers
    */
-  async getScoreById({ id: _id }: { id: string }): Promise<ScoreRowData | null> {
-    return this.stores.scores.getScoreById({ id: _id });
+  async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
+    return this.stores.scores.getScoreById({ id });
   }
 
   async getScoresByScorerId({
@@ -549,33 +550,45 @@ export class PostgresStore extends MastraStorage {
     return this.stores.scores.getScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
   }
 
-  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    return this.stores.scores.saveScore(_score);
+  async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+    return this.stores.scores.saveScore(score);
   }
 
   async getScoresByRunId({
-    runId: _runId,
-    pagination: _pagination,
+    runId,
+    pagination,
   }: {
     runId: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByRunId({ runId: _runId, pagination: _pagination });
+    return this.stores.scores.getScoresByRunId({ runId, pagination });
   }
 
   async getScoresByEntityId({
-    entityId: _entityId,
-    entityType: _entityType,
-    pagination: _pagination,
+    entityId,
+    entityType,
+    pagination,
   }: {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     return this.stores.scores.getScoresByEntityId({
-      entityId: _entityId,
-      entityType: _entityType,
-      pagination: _pagination,
+      entityId,
+      entityType,
+      pagination,
     });
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    return this.stores.scores.getScoresBySpan({ traceId, spanId, pagination });
   }
 }

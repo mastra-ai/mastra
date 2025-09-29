@@ -11,7 +11,7 @@ import { RuntimeContext } from '@mastra/core/di';
 import { ChatProps, Message } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@/lib/file/toBase64';
-import { useMastraClient } from '@/contexts/mastra-client-context';
+import { useMastraClient } from '@mastra/react-hooks';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
@@ -387,6 +387,7 @@ export function MastraRuntimeProvider({
             onNetworkChunk: (chunk, conversation) => {
               if (chunk.type.startsWith('agent-execution-event-')) {
                 const agentChunk = chunk.payload;
+
                 if (!currentEntityId) return conversation;
 
                 return handleAgentChunk({ agentChunk, conversation, entityName: currentEntityId });
@@ -442,7 +443,7 @@ export function MastraRuntimeProvider({
 
                 return handleWorkflowChunk({ workflowChunk, conversation, entityName: currentEntityId });
               } else if (chunk.type === 'workflow-execution-start' || chunk.type === 'agent-execution-start') {
-                currentEntityId = chunk.payload?.args?.resourceId;
+                currentEntityId = chunk.payload?.args?.primitiveId;
 
                 const runId = chunk.payload.runId;
 

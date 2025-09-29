@@ -21,114 +21,40 @@ export type TABLE_NAMES =
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
-  scorerId: {
-    type: 'text',
-  },
-  traceId: {
-    type: 'text',
-    nullable: true,
-  },
-  runId: {
-    type: 'text',
-  },
-  scorer: {
-    type: 'jsonb',
-  },
-  preprocessStepResult: {
-    type: 'jsonb',
-    nullable: true,
-  },
-  extractStepResult: {
-    type: 'jsonb',
-    nullable: true,
-  },
-  analyzeStepResult: {
-    type: 'jsonb',
-    nullable: true,
-  },
-  score: {
-    type: 'float',
-  },
-  reason: {
-    type: 'text',
-    nullable: true,
-  },
-  metadata: {
-    type: 'jsonb',
-    nullable: true,
-  },
-  preprocessPrompt: {
-    type: 'text',
-    nullable: true,
-  },
-  extractPrompt: {
-    type: 'text',
-    nullable: true,
-  },
-  generateScorePrompt: {
-    type: 'text',
-    nullable: true,
-  },
-  generateReasonPrompt: {
-    type: 'text',
-    nullable: true,
-  },
-  analyzePrompt: {
-    type: 'text',
-    nullable: true,
-  },
+  scorerId: { type: 'text' },
+  traceId: { type: 'text', nullable: true },
+  spanId: { type: 'text', nullable: true },
+  runId: { type: 'text' },
+  scorer: { type: 'jsonb' },
+  preprocessStepResult: { type: 'jsonb', nullable: true },
+  extractStepResult: { type: 'jsonb', nullable: true },
+  analyzeStepResult: { type: 'jsonb', nullable: true },
+  score: { type: 'float' },
+  reason: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  preprocessPrompt: { type: 'text', nullable: true },
+  extractPrompt: { type: 'text', nullable: true },
+  generateScorePrompt: { type: 'text', nullable: true },
+  generateReasonPrompt: { type: 'text', nullable: true },
+  analyzePrompt: { type: 'text', nullable: true },
 
   // Deprecated
-  reasonPrompt: {
-    type: 'text',
-    nullable: true,
-  },
-  input: {
-    type: 'jsonb', // MESSAGE INPUT
-  },
-  output: {
-    type: 'jsonb', // MESSAGE OUTPUT
-  },
-  additionalContext: {
-    type: 'jsonb', // DATA FROM THE CONTEXT PARAM ON AN AGENT
-    nullable: true,
-  },
-  runtimeContext: {
-    type: 'jsonb', // THE EVALUATE RUNTIME CONTEXT FOR THE RUN
-    nullable: true,
-  },
+  reasonPrompt: { type: 'text', nullable: true },
+  input: { type: 'jsonb' },
+  output: { type: 'jsonb' }, // MESSAGE OUTPUT
+  additionalContext: { type: 'jsonb', nullable: true }, // DATA FROM THE CONTEXT PARAM ON AN AGENT
+  runtimeContext: { type: 'jsonb', nullable: true }, // THE EVALUATE RUNTIME CONTEXT FOR THE RUN
   /**
    * Things you can evaluate
    */
-  entityType: {
-    type: 'text', // WORKFLOW, AGENT, TOOL, STEP, NETWORK
-    nullable: true,
-  },
-  entity: {
-    type: 'jsonb', // MINIMAL JSON DATA ABOUT WORKFLOW, AGENT, TOOL, STEP, NETWORK
-    nullable: true,
-  },
-  entityId: {
-    type: 'text',
-    nullable: true,
-  },
-  source: {
-    type: 'text',
-  },
-  resourceId: {
-    type: 'text',
-    nullable: true,
-  },
-  threadId: {
-    type: 'text',
-    nullable: true,
-  },
-  createdAt: {
-    type: 'timestamp',
-  },
-  updatedAt: {
-    type: 'timestamp',
-  },
+  entityType: { type: 'text', nullable: true }, // WORKFLOW, AGENT, TOOL, STEP, NETWORK
+  entity: { type: 'jsonb', nullable: true }, // MINIMAL JSON DATA ABOUT WORKFLOW, AGENT, TOOL, STEP, NETWORK
+  entityId: { type: 'text', nullable: true },
+  source: { type: 'text' },
+  resourceId: { type: 'text', nullable: true },
+  threadId: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp' },
+  updatedAt: { type: 'timestamp' },
 };
 
 export const AI_SPAN_SCHEMA: Record<string, StorageColumn> = {
