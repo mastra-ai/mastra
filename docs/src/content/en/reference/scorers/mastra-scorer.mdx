@@ -67,6 +67,12 @@ const result = await scorer.run({
       required: false,
       description: "Optional runtime context from the agent or workflow step being evaluated.",
     },
+    {
+      name: "groundTruth",
+      type: "any",
+      required: false,
+      description: "Optional expected or reference output for comparison during scoring. Automatically passed when using runExperiment.",
+    },
   ]}
 />
 
