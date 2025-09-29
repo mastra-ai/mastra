@@ -148,17 +148,14 @@ export const AgentMetadataModelSwitcher = ({
     setSelectedModel(modelId);
     setShowModelSuggestions(false);
 
-    // First try to find the model within the current provider's models
-    let modelInfo = allModels.find(m => m.model === modelId && m.provider === currentModelProvider);
+    // Only search within the current provider's models
+    // This ensures custom model IDs stay with the selected provider
+    const modelInfo = allModels.find(m => m.model === modelId && m.provider === currentModelProvider);
 
-    // If not found in current provider, search all models (fallback)
-    if (!modelInfo) {
-      modelInfo = allModels.find(m => m.model === modelId);
-    }
+    // Always use the current provider, even for custom model IDs
+    const providerToUse = currentModelProvider || selectedProvider;
 
-    const providerToUse = modelInfo?.provider || currentModelProvider || selectedProvider;
-
-    console.log('DEBUG: handleModelSelect called with:', { modelId, providerToUse, modelInfo });
+    console.log('DEBUG: handleModelSelect called with:', { modelId, providerToUse, modelInfo, currentModelProvider });
 
     if (modelId && providerToUse) {
       setLoading(true);
@@ -536,6 +533,7 @@ export const AgentMetadataModelSwitcher = ({
                   case 'Tab':
                     e.preventDefault();
                     if (highlightedModelIndex >= 0 && highlightedModelIndex < filteredModels.length) {
+                      // User selected a model from the list
                       const model = filteredModels[highlightedModelIndex];
                       setModelSearch('');
                       setIsSearching(false);
@@ -552,9 +550,13 @@ export const AgentMetadataModelSwitcher = ({
                           chatInput?.focus();
                         }
                       }, 100);
-                    } else {
-                      // If no model is highlighted, just close dropdown and proceed to chat input
+                    } else if (selectedModel && selectedModel.trim()) {
+                      // User entered a custom model ID - use it as-is with the current provider
+                      setModelSearch('');
+                      setIsSearching(false);
                       setShowModelSuggestions(false);
+                      handleModelSelect(selectedModel.trim());
+                      // After selecting a model, focus the chat input
                       setTimeout(() => {
                         const chatInput = document.querySelector('textarea[data-chat-input]') as HTMLElement;
                         if (!chatInput) {
@@ -565,6 +567,9 @@ export const AgentMetadataModelSwitcher = ({
                           chatInput?.focus();
                         }
                       }, 100);
+                    } else {
+                      // No model selected and no custom input, just close dropdown
+                      setShowModelSuggestions(false);
                     }
                     break;
                   case 'Escape':
