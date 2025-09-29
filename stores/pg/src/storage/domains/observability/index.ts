@@ -1,3 +1,4 @@
+import type { TracingStrategy } from '@mastra/core/ai-tracing';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { AI_SPAN_SCHEMA, ObservabilityStorage, TABLE_AI_SPANS } from '@mastra/core/storage';
 import type {
@@ -30,6 +31,16 @@ export class ObservabilityPG extends ObservabilityStorage {
     this.client = client;
     this.operations = operations;
     this.schema = schema;
+  }
+
+  public override get aiTracingStrategy(): {
+    preferred: TracingStrategy;
+    supported: TracingStrategy[];
+  } {
+    return {
+      preferred: 'batch-with-updates',
+      supported: ['batch-with-updates', 'insert-only'],
+    };
   }
 
   async createAISpan(span: CreateAISpanRecord): Promise<void> {
