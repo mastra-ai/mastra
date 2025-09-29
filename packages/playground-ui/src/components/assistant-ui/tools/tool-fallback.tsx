@@ -20,6 +20,7 @@ const ToolFallbackInner: ToolCallMessagePartComponent = ({ toolName, result, arg
   // The response from the fetch request resolving the workflow might theoretically
   // be resolved after we receive the first stream event
 
+  console.log('ARGUZU', args);
   useWorkflowStream(args.__mastraMetadata?.workflowFullState);
   const { data: workflow, isLoading } = useWorkflow(toolName);
 

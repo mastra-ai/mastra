@@ -73,9 +73,6 @@ export const networkAgent = new Agent({
     'A chef agent that can help you cook great meals with whatever ingredients you have available based on your location and current weather.',
   instructions: `You are a the manager of several agent, tools, and workflows. Use the best primitives based on what the user wants to accomplish your task.`,
   model: openai_v5('gpt-4o-mini'),
-  workflows: {
-    myWorkflow,
-  },
   agents: {
     weatherAgent,
   },

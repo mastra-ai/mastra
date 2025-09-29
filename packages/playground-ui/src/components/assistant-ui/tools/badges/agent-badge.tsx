@@ -61,7 +61,7 @@ export const AgentBadge = ({ agentId, messages = [], networkMetadata }: AgentBad
               toolName={message.toolName}
               argsText={typeof message.args === 'string' ? message.args : JSON.stringify(message.args)}
               result={result}
-              args={message.args}
+              args={message.toolInput}
               status={{ type: 'complete' }}
               type="tool-call"
               toolCallId={message.toolCallId}
