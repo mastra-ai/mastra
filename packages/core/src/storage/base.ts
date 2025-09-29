@@ -47,6 +47,8 @@ import type {
   CreateIndexOptions,
   IndexInfo,
   StorageIndexStats,
+  UpdateAISpanRecord,
+  CreateAISpanRecord,
 } from './types';
 
 export type StorageDomains = {
@@ -582,7 +584,7 @@ export abstract class MastraStorage extends MastraBase {
   /**
    * Creates a single AI span record in the storage provider.
    */
-  async createAISpan(span: AISpanRecord): Promise<void> {
+  async createAISpan(span: CreateAISpanRecord): Promise<void> {
     if (this.stores?.observability) {
       return this.stores.observability.createAISpan(span);
     }
@@ -597,11 +599,7 @@ export abstract class MastraStorage extends MastraBase {
   /**
    * Updates a single AI span with partial data. Primarily used for realtime trace creation.
    */
-  async updateAISpan(params: {
-    spanId: string;
-    traceId: string;
-    updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
-  }): Promise<void> {
+  async updateAISpan(params: { spanId: string; traceId: string; updates: Partial<UpdateAISpanRecord> }): Promise<void> {
     if (this.stores?.observability) {
       return this.stores.observability.updateAISpan(params);
     }
@@ -648,7 +646,7 @@ export abstract class MastraStorage extends MastraBase {
   /**
    * Creates multiple AI spans in a single batch.
    */
-  async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
+  async batchCreateAISpans(args: { records: CreateAISpanRecord[] }): Promise<void> {
     if (this.stores?.observability) {
       return this.stores.observability.batchCreateAISpans(args);
     }
@@ -667,7 +665,7 @@ export abstract class MastraStorage extends MastraBase {
     records: {
       traceId: string;
       spanId: string;
-      updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+      updates: Partial<UpdateAISpanRecord>;
     }[];
   }): Promise<void> {
     if (this.stores?.observability) {
