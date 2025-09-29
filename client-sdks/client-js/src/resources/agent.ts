@@ -484,7 +484,7 @@ export class Agent extends BaseResource {
     }
 
     await processDataStream({
-      stream: stream as unknown as globalThis.ReadableStream<Uint8Array>,
+        stream: stream as ReadableStream<Uint8Array>,
       onTextPart(value) {
         if (currentTextPart == null) {
           currentTextPart = {
