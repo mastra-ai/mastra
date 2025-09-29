@@ -270,13 +270,12 @@ export class ObservabilityPG extends ObservabilityStorage {
     try {
       const records = args.records.map(record => {
         const startedAt = record.startedAt instanceof Date ? record.startedAt.toISOString() : record.startedAt;
-        const endedAt = record.endedAt instanceof Date ? record.endedAt?.toISOString() : record.endedAt;
+        const endedAt = record.endedAt instanceof Date ? record.endedAt.toISOString() : record.endedAt;
 
         return {
           ...record,
           startedAt,
           endedAt,
-          // Also set the TIMESTAMPTZ columns for startedAt/endedAt
           startedAtZ: startedAt,
           endedAtZ: endedAt,
           // Note: createdAt/updatedAt will be set by database triggers

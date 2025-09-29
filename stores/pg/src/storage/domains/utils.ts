@@ -89,8 +89,11 @@ export function transformFromSqlRow<T>({
       }
     }
     // Handle Date columns
-    else if (columnSchema?.type === 'timestamp' && value) {
-      result[key] = value instanceof Date ? value : new Date(value);
+    // Handle Date columns - convert to Date objects for timestamp columns
+    else if (columnSchema?.type === 'timestamp' && value && typeof value === 'string') {
+      result[key] = new Date(value);
+    } else if (columnSchema?.type === 'timestamp' && value instanceof Date) {
+      result[key] = value;
     }
     // Handle boolean columns
     else if (columnSchema?.type === 'boolean') {
