@@ -8,7 +8,7 @@ import { createStep, createWorkflow } from '../../workflows/evented';
 import type { MastraScorer, ScorerRun } from '../base';
 import type { ScoreRowData } from '../types';
 import { saveScorePayloadSchema } from '../types';
-import { transformTraceToScorerInput, transformTraceToScorerOutput } from './utils';
+import { transformTraceToScorerInputAndOutput } from './utils';
 
 const getTraceStep = createStep({
   id: '__process-trace-scoring',
@@ -172,10 +172,12 @@ function buildScorerRun({
   targetSpan: AISpanRecord;
 }) {
   let runPayload: ScorerRun;
+  const { input, output } = transformTraceToScorerInputAndOutput(trace);
+
   if (scorerType === 'agent') {
     runPayload = {
-      input: transformTraceToScorerInput(trace as any),
-      output: transformTraceToScorerOutput(trace as any),
+      input,
+      output,
     };
   } else {
     runPayload = { input: targetSpan.input, output: targetSpan.output };
