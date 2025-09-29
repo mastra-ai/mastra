@@ -1,3 +1,4 @@
+import type { ReadableStream } from 'stream/web';
 import { parsePartialJson, processDataStream } from '@ai-sdk/ui-utils';
 import type {
   JSONValue,
@@ -16,7 +17,6 @@ import type { OutputSchema, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodType } from 'zod';
-
 import type {
   GenerateParams,
   GetAgentResponse,
@@ -484,7 +484,7 @@ export class Agent extends BaseResource {
     }
 
     await processDataStream({
-      stream,
+      stream: stream as unknown as globalThis.ReadableStream<Uint8Array>,
       onTextPart(value) {
         if (currentTextPart == null) {
           currentTextPart = {
@@ -786,7 +786,7 @@ export class Agent extends BaseResource {
     // Add the processDataStream method to the response
     streamResponse.processDataStream = async (options = {}) => {
       await processDataStream({
-        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        stream: streamResponse.body as unknown as globalThis.ReadableStream<Uint8Array>,
         ...options,
       });
     };
@@ -1188,7 +1188,7 @@ export class Agent extends BaseResource {
 
       // Process the other branch for chat response handling
       this.processChatResponse_vNext({
-        stream: streamForProcessing,
+        stream: streamForProcessing as unknown as ReadableStream<Uint8Array>,
         update: ({ message }) => {
           const existingIndex = messages.findIndex(m => m.id === message.id);
 
@@ -1464,7 +1464,7 @@ export class Agent extends BaseResource {
 
       // Process the other branch for chat response handling
       this.processChatResponse({
-        stream: streamForProcessing,
+        stream: streamForProcessing as unknown as ReadableStream<Uint8Array>,
         update: ({ message }) => {
           const existingIndex = messages.findIndex(m => m.id === message.id);
 

@@ -1,6 +1,6 @@
 import type { ChildProcess } from 'child_process';
 import process from 'node:process';
-import { join } from 'path';
+import { join, posix } from 'path';
 import devcert from '@expo/devcert';
 import { FileService } from '@mastra/deployer';
 import { getServerOptions } from '@mastra/deployer/build';
@@ -306,10 +306,11 @@ export async function dev({
   const dotMastraPath = join(rootDir, '.mastra');
 
   // You cannot express an "include all js/ts except these" in one single string glob pattern so by default an array is passed to negate test files.
-  const defaultToolsPath = join(mastraDir, 'tools/**/*.{js,ts}');
+  const normalizedMastraDir = mastraDir.replaceAll('\\', '/');
+  const defaultToolsPath = posix.join(normalizedMastraDir, 'tools/**/*.{js,ts}');
   const defaultToolsIgnorePaths = [
-    `!${join(mastraDir, 'tools/**/*.{test,spec}.{js,ts}')}`,
-    `!${join(mastraDir, 'tools/**/__tests__/**')}`,
+    `!${posix.join(normalizedMastraDir, 'tools/**/*.{test,spec}.{js,ts}')}`,
+    `!${posix.join(normalizedMastraDir, 'tools/**/__tests__/**')}`,
   ];
   // We pass an array to tinyglobby to allow for the aforementioned negations
   const defaultTools = [defaultToolsPath, ...defaultToolsIgnorePaths];
