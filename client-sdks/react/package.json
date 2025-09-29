@@ -1,7 +1,7 @@
 {
   "name": "@mastra/react",
   "version": "0.0.1-alpha.0",
-  "private": false,
+  "private": true,
   "type": "module",
   "main": "dist/index.cjs.js",
   "module": "dist/index.es.js",

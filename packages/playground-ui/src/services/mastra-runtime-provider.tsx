@@ -184,6 +184,7 @@ export function MastraRuntimeProvider({
     isRunning: isRunningStreamVNext,
   } = useChat<ThreadMessageLike>({
     agentId,
+    initializeMessages: () => initializeMessageState(initialMessages ?? []),
   });
 
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
@@ -359,8 +360,6 @@ export function MastraRuntimeProvider({
 
       if (modelVersion === 'v2') {
         if (chatWithNetwork) {
-          let currentEntityId: string | undefined;
-
           await network({
             coreUserMessages: [
               {

@@ -12,11 +12,6 @@ export interface MastraChatProps<TMessage> {
   initializeMessages?: () => TMessage[];
 }
 
-export interface MastraChatProps<TMessage> {
-  agentId: string;
-  initializeMessages?: () => TMessage[];
-}
-
 export interface StreamVNextArgs<TMessage> {
   coreUserMessages: CoreUserMessage[];
   runtimeContext?: RuntimeContext;
