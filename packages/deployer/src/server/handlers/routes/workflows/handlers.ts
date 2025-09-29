@@ -1,5 +1,4 @@
 import type { Mastra } from '@mastra/core';
-import type { TracingOptions } from '@mastra/core/ai-tracing';
 import {
   getWorkflowsHandler as getOriginalWorkflowsHandler,
   getWorkflowByIdHandler as getOriginalWorkflowByIdHandler,
