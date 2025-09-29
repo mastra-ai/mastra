@@ -103,12 +103,70 @@ describe('Agent vNext', () => {
 
     const resp = await agent.streamVNext({ messages: 'weather?', clientTools: { weatherTool } });
 
-    await resp.processDataStream({ onChunk: async _chunk => {} });
+    let lastChunk = null;
+    await resp.processDataStream({
+      onChunk: async chunk => {
+        lastChunk = chunk;
+      },
+    });
 
+    expect(lastChunk?.type).toBe('finish');
+    expect(lastChunk?.payload?.stepResult?.reason).toBe('stop');
     // Client tool executed
     expect(executeSpy).toHaveBeenCalledTimes(1);
     // Recursive request made
     expect((global.fetch as any).mock.calls.filter((c: any[]) => (c?.[0] as string).includes('/vnext')).length).toBe(2);
+  });
+
+  it('streamVNext: step execution when client tool is present without an execute function', async () => {
+    const toolCallId = 'call_1';
+
+    // First cycle: emit tool-call and finish with tool-calls
+    const firstCycle = [
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      {
+        type: 'tool-call',
+        payload: { toolCallId, toolName: 'weatherTool', args: { location: 'NYC' } },
+      },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
+    ];
+
+    // Second cycle: emit normal completion after tool result handling
+    const secondCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'Tool handled' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 3 } } },
+    ];
+
+    // Mock two sequential fetch calls (initial and recursive)
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    const executeSpy = vi.fn(async () => ({ ok: true }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ ok: z.boolean() }),
+    });
+
+    const resp = await agent.streamVNext({ messages: 'weather?', clientTools: { weatherTool } });
+
+    let lastChunk = null;
+    await resp.processDataStream({
+      onChunk: async chunk => {
+        lastChunk = chunk;
+      },
+    });
+
+    expect(lastChunk?.type).toBe('finish');
+    expect(lastChunk?.payload?.stepResult?.reason).toBe('tool-calls');
+
+    // Recursive request made
+    expect((global.fetch as any).mock.calls.filter((c: any[]) => (c?.[0] as string).includes('/vnext')).length).toBe(1);
   });
 
   it('generate: returns JSON using mocked fetch', async () => {

@@ -1144,7 +1144,7 @@ export class Agent extends BaseResource {
       body: processedParams,
       stream: true,
     });
-
+    console.log(processedParams);
     if (!response.body) {
       throw new Error('No response body');
     }
@@ -1207,10 +1207,12 @@ export class Agent extends BaseResource {
               toolCalls.push(toolCall);
             }
 
+            let shouldExecuteClientTool = false;
             // Handle tool calls if needed
             for (const toolCall of toolCalls) {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
+                shouldExecuteClientTool = true;
                 const result = await clientTool.execute(
                   {
                     context: toolCall?.args,
@@ -1270,6 +1272,12 @@ export class Agent extends BaseResource {
                   console.error('Error processing stream response:', error);
                 });
               }
+            }
+
+            if (!shouldExecuteClientTool) {
+              setTimeout(() => {
+                writable.close();
+              }, 0);
             }
           } else {
             setTimeout(() => {
@@ -1423,6 +1431,7 @@ export class Agent extends BaseResource {
         stream: streamResponse.body as ReadableStream<Uint8Array>,
         onChunk,
       });
+      console.log('processDataStream done');
     };
 
     return streamResponse;
