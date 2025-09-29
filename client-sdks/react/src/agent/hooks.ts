@@ -5,6 +5,7 @@ import { CoreUserMessage } from '@mastra/core/llm';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useState } from 'react';
+import { flushSync } from 'react-dom';
 
 export interface MastraChatProps<TMessage> {
   agentId: string;
@@ -90,7 +91,10 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
 
     await response.processDataStream({
       onChunk: (chunk: ChunkType) => {
-        setMessages(prev => onChunk(chunk, prev));
+        flushSync(() => {
+          setMessages(prev => onChunk(chunk, prev));
+        });
+
         return Promise.resolve();
       },
     });
