@@ -700,6 +700,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       options: {
         toolCallStreaming: options?.toolCallStreaming,
         output: options?.output,
+        tracingContext: options?.tracingContext,
       },
     });
 
