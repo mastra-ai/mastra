@@ -1431,7 +1431,7 @@ export class Agent extends BaseResource {
         stream: streamResponse.body as ReadableStream<Uint8Array>,
         onChunk,
       });
-      console.log('processDataStream done');
+      });
     };
 
     return streamResponse;
