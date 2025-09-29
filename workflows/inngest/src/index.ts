@@ -295,7 +295,7 @@ export class InngestRun<
           steps,
           stepResults: snapshot?.context as any,
           resumePayload: resumeDataToUse,
-          resumePath: snapshot?.suspendedPaths?.[steps?.[0] ?? ''] as any,
+          resumePath: steps?.[0]  ? snapshot?.suspendedPaths?.[steps?.[0]] as any : undefined,
         },
       },
     });
@@ -1348,7 +1348,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               steps: resume.steps.slice(1),
               stepResults: snapshot?.context as any,
               resumePayload: resume.resumePayload,
-              resumePath: snapshot?.suspendedPaths?.[resume.steps?.[1] ?? ''] as any,
+              resumePath: resume.steps?.[1] ? snapshot?.suspendedPaths?.[resume.steps?.[1]] as any : undefined,
             },
           },
         })) as any;
