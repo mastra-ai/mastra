@@ -1,4 +1,5 @@
 import { ReadableStream, TransformStream } from 'node:stream/web';
+import type { TracingOptions } from '@mastra/core/ai-tracing';
 import type { RuntimeContext } from '@mastra/core/di';
 import type { WorkflowRuns } from '@mastra/core/storage';
 import type { Workflow, WatchEvent, WorkflowInfo, StreamEvent } from '@mastra/core/workflows';
@@ -6,7 +7,6 @@ import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
 import { handleError } from './error';
-import type { TracingOptions } from '@mastra/core/ai-tracing';
 
 export interface WorkflowContext extends Context {
   workflowId?: string;

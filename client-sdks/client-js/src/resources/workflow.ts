@@ -1,3 +1,4 @@
+import type { TracingOptions } from '@mastra/core/ai-tracing';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type {
   ClientOptions,
@@ -12,7 +13,6 @@ import type {
 
 import { parseClientRuntimeContext, base64RuntimeContext, runtimeContextQueryString } from '../utils';
 import { BaseResource } from './base';
-import type { TracingOptions } from '@mastra/core/ai-tracing';
 
 const RECORD_SEPARATOR = '\x1E';
 
