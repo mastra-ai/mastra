@@ -11,6 +11,8 @@ import {
 import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
 import type z from 'zod';
 import type { MessageList } from '../../../agent/message-list';
+import { getValidTraceId } from '../../../ai-tracing';
+import type { TracingContext } from '../../../ai-tracing';
 import type { MastraModelOutput } from '../../base/output';
 import { getResponseFormat } from '../../base/schema';
 import type { OutputSchema } from '../../base/schema';
@@ -19,7 +21,6 @@ import type { ConsumeStreamOptions } from './compat';
 import { getResponseUIMessageId, convertFullStreamChunkToUIMessageStream } from './compat';
 import { convertMastraChunkToAISDKv5 } from './transform';
 import type { OutputChunkType } from './transform';
-import { getValidTraceId, type TracingContext } from '../../../ai-tracing';
 
 type AISDKV5OutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   toolCallStreaming?: boolean;

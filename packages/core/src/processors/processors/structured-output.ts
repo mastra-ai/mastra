@@ -2,11 +2,11 @@ import type { ZodTypeAny } from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import type { StructuredOutputOptions } from '../../agent/types';
+import { InternalSpans } from '../../ai-tracing';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { OutputSchema } from '../../stream';
 import type { InferSchemaOutput } from '../../stream/base/schema';
 import type { Processor } from '../index';
-import { InternalSpans } from '../../ai-tracing';
 
 export type { StructuredOutputOptions } from '../../agent/types';
 
@@ -46,7 +46,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
       name: 'structured-output-structurer',
       instructions: options.instructions || this.generateInstructions(),
       model: modelToUse,
-      options: { tracingPolicy: { internal: InternalSpans.ALL }},
+      options: { tracingPolicy: { internal: InternalSpans.ALL } },
     });
   }
 

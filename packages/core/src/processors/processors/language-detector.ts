@@ -2,9 +2,9 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import { InternalSpans } from '../../ai-tracing';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { Processor } from '../index';
-import { InternalSpans } from '../../ai-tracing';
 
 /**
  * Language detection result for a single text
@@ -173,7 +173,7 @@ export class LanguageDetector implements Processor {
       name: 'language-detector',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
-      options: { tracingPolicy: { internal: InternalSpans.ALL }},
+      options: { tracingPolicy: { internal: InternalSpans.ALL } },
     });
   }
 

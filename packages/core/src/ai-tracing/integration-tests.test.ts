@@ -4,9 +4,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 // Core Mastra imports
-import { Agent, type StructuredOutputOptions } from '../agent';
+import { Agent } from '../agent';
+import type { StructuredOutputOptions } from '../agent';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
+import type { OutputSchema } from '../stream';
 import type { ToolExecutionContext } from '../tools';
 import { createTool } from '../tools';
 import { createWorkflow, createStep } from '../workflows';
@@ -15,7 +17,6 @@ import { createWorkflow, createStep } from '../workflows';
 import { clearAITracingRegistry, shutdownAITracingRegistry } from './registry';
 import { AISpanType, AITracingEventType } from './types';
 import type { AITracingExporter, AITracingEvent, ExportedAISpan, AnyExportedAISpan } from './types';
-import type { OutputSchema } from '../stream';
 
 /**
  * Test exporter for AI tracing events with real-time span lifecycle validation.
@@ -1293,8 +1294,8 @@ describe('AI Tracing Integration Tests', () => {
     },
   );
 
-// Only test VNext methods for structuredOutput
-describe.each(agentMethods.filter(m => m.name.includes('VNext')))(
+  // Only test VNext methods for structuredOutput
+  describe.each(agentMethods.filter(m => m.name.includes('VNext')))(
     'should trace agent using structuredOutput format using $name',
     ({ method, model }) => {
       it(`should trace spans correctly`, async () => {
@@ -1305,12 +1306,12 @@ describe.each(agentMethods.filter(m => m.name.includes('VNext')))(
         });
 
         const outputSchema = z.object({
-          "items" : z.string(),
-        })
+          items: z.string(),
+        });
 
-        const structuredOutput : StructuredOutputOptions<OutputSchema> = {
+        const structuredOutput: StructuredOutputOptions<OutputSchema> = {
           schema: outputSchema,
-        }
+        };
 
         const mastra = new Mastra({
           ...getBaseMastraConfig(testExporter),
@@ -1349,11 +1350,11 @@ describe.each(agentMethods.filter(m => m.name.includes('VNext')))(
         expect(llmGenerationSpan?.output.text).toBe('Mock V2 streaming response');
         expect(agentRunSpan?.output.text).toBe('Mock V2 streaming response');
 
-        console.log("llmGenerationSpan?.output")
-        console.log(llmGenerationSpan?.output)
+        console.log('llmGenerationSpan?.output');
+        console.log(llmGenerationSpan?.output);
 
-        console.log("agentRunSpan?.output")
-        console.log(agentRunSpan?.output)
+        console.log('agentRunSpan?.output');
+        console.log(agentRunSpan?.output);
 
         // Verify structured output
         expect(result.object).toBeDefined();
