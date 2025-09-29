@@ -1,5 +1,5 @@
 /**
- * OpenTelemetry Exporter Types
+ * OtelExporter Types
  */
 
 import type { AnyExportedAISpan } from '@mastra/core/ai-tracing';
@@ -39,13 +39,6 @@ export interface LaminarConfig {
   endpoint?: string;
 }
 
-export interface LangSmithConfig {
-  apiKey?: string; // Required at runtime
-  projectName?: string;
-  region?: 'us' | 'eu';
-  endpoint?: string; // For self-hosted
-}
-
 export interface CustomConfig {
   endpoint?: string; // Required at runtime
   headers?: Record<string, string>;
@@ -59,10 +52,9 @@ export type ProviderConfig =
   | { newrelic: NewRelicConfig }
   | { traceloop: TraceloopConfig }
   | { laminar: LaminarConfig }
-  | { langsmith: LangSmithConfig }
   | { custom: CustomConfig };
 
-export interface OpenTelemetryExporterConfig {
+export interface OtelExporterConfig {
   // Provider configuration
   provider?: ProviderConfig;
 

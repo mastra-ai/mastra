@@ -1,5 +1,5 @@
 /**
- * Provider-specific configurations for OpenTelemetry exporters
+ * Provider-specific configurations for OtelExporters
  */
 
 import type {
@@ -10,7 +10,6 @@ import type {
   NewRelicConfig,
   TraceloopConfig,
   LaminarConfig,
-  LangSmithConfig,
   CustomConfig,
 } from './types.js';
 
@@ -31,8 +30,6 @@ export function resolveProviderConfig(config: ProviderConfig): ResolvedProviderC
     return resolveTraceloopConfig(config.traceloop);
   } else if ('laminar' in config) {
     return resolveLaminarConfig(config.laminar);
-  } else if ('langsmith' in config) {
-    return resolveLangSmithConfig(config.langsmith);
   } else if ('custom' in config) {
     return resolveCustomConfig(config.custom);
   } else {
@@ -44,12 +41,12 @@ export function resolveProviderConfig(config: ProviderConfig): ResolvedProviderC
 
 function resolveDash0Config(config: Dash0Config): ResolvedProviderConfig | null {
   if (!config.apiKey) {
-    console.error('[OpenTelemetry Exporter] Dash0 configuration requires apiKey. Tracing will be disabled.');
+    console.error('[OtelExporter] Dash0 configuration requires apiKey. Tracing will be disabled.');
     return null;
   }
 
   if (!config.endpoint) {
-    console.error('[OpenTelemetry Exporter] Dash0 configuration requires endpoint. Tracing will be disabled.');
+    console.error('[OtelExporter] Dash0 configuration requires endpoint. Tracing will be disabled.');
     return null;
   }
 
@@ -79,7 +76,7 @@ function resolveDash0Config(config: Dash0Config): ResolvedProviderConfig | null 
 
 function resolveSignozConfig(config: SignozConfig): ResolvedProviderConfig | null {
   if (!config.apiKey) {
-    console.error('[OpenTelemetry Exporter] SigNoz configuration requires apiKey. Tracing will be disabled.');
+    console.error('[OtelExporter] SigNoz configuration requires apiKey. Tracing will be disabled.');
     return null;
   }
 
@@ -97,9 +94,7 @@ function resolveSignozConfig(config: SignozConfig): ResolvedProviderConfig | nul
 
 function resolveNewRelicConfig(config: NewRelicConfig): ResolvedProviderConfig | null {
   if (!config.apiKey) {
-    console.error(
-      '[OpenTelemetry Exporter] New Relic configuration requires apiKey (license key). Tracing will be disabled.',
-    );
+    console.error('[OtelExporter] New Relic configuration requires apiKey (license key). Tracing will be disabled.');
     return null;
   }
 
@@ -118,7 +113,7 @@ function resolveNewRelicConfig(config: NewRelicConfig): ResolvedProviderConfig |
 
 function resolveTraceloopConfig(config: TraceloopConfig): ResolvedProviderConfig | null {
   if (!config.apiKey) {
-    console.error('[OpenTelemetry Exporter] Traceloop configuration requires apiKey. Tracing will be disabled.');
+    console.error('[OtelExporter] Traceloop configuration requires apiKey. Tracing will be disabled.');
     return null;
   }
 
@@ -142,7 +137,7 @@ function resolveTraceloopConfig(config: TraceloopConfig): ResolvedProviderConfig
 
 function resolveLaminarConfig(config: LaminarConfig): ResolvedProviderConfig | null {
   if (!config.apiKey) {
-    console.error('[OpenTelemetry Exporter] Laminar configuration requires apiKey. Tracing will be disabled.');
+    console.error('[OtelExporter] Laminar configuration requires apiKey. Tracing will be disabled.');
     return null;
   }
 
@@ -166,42 +161,9 @@ function resolveLaminarConfig(config: LaminarConfig): ResolvedProviderConfig | n
   };
 }
 
-function resolveLangSmithConfig(config: LangSmithConfig): ResolvedProviderConfig | null {
-  if (!config.apiKey) {
-    console.error('[OpenTelemetry Exporter] LangSmith configuration requires apiKey. Tracing will be disabled.');
-    return null;
-  }
-
-  // Support EU region and self-hosted instances
-  let endpoint: string;
-  if (config.endpoint) {
-    // Custom endpoint (e.g., self-hosted)
-    endpoint = config.endpoint;
-  } else if (config.region === 'eu') {
-    endpoint = 'https://eu.api.smith.langchain.com/otel';
-  } else {
-    endpoint = 'https://api.smith.langchain.com/otel';
-  }
-
-  const headers: Record<string, string> = {
-    'x-api-key': config.apiKey,
-  };
-
-  // Add project name if specified
-  if (config.projectName) {
-    headers['Langsmith-Project'] = config.projectName;
-  }
-
-  return {
-    endpoint,
-    headers,
-    protocol: 'http/protobuf', // LangSmith supports both JSON and protobuf
-  };
-}
-
 function resolveCustomConfig(config: CustomConfig): ResolvedProviderConfig | null {
   if (!config.endpoint) {
-    console.error('[OpenTelemetry Exporter] Custom configuration requires endpoint. Tracing will be disabled.');
+    console.error('[OtelExporter] Custom configuration requires endpoint. Tracing will be disabled.');
     return null;
   }
 

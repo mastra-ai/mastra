@@ -1,7 +1,7 @@
 import { AISpanType, AITracingEventType } from '@mastra/core/ai-tracing';
 import type { AnyExportedAISpan } from '@mastra/core/ai-tracing';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { OpenTelemetryExporter } from './ai-tracing';
+import { OtelExporter } from './ai-tracing';
 
 // Mock the OpenTelemetry modules
 vi.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
@@ -40,8 +40,8 @@ vi.mock('./loadExporter', () => ({
   ),
 }));
 
-describe('OpenTelemetryExporter', () => {
-  let exporter: OpenTelemetryExporter;
+describe('OtelExporter', () => {
+  let exporter: OtelExporter;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -57,11 +57,10 @@ describe('OpenTelemetryExporter', () => {
 
   describe('Provider Configuration', () => {
     it('should configure Dash0 provider correctly', async () => {
-      exporter = new OpenTelemetryExporter({
+      exporter = new OtelExporter({
         provider: {
           dash0: {
             apiKey: 'test-api-key',
-            region: 'us',
             dataset: 'test-dataset',
           },
         },
@@ -89,7 +88,7 @@ describe('OpenTelemetryExporter', () => {
     });
 
     it('should configure SigNoz provider correctly', async () => {
-      exporter = new OpenTelemetryExporter({
+      exporter = new OtelExporter({
         provider: {
           signoz: {
             apiKey: 'test-api-key',
@@ -119,7 +118,7 @@ describe('OpenTelemetryExporter', () => {
     });
 
     it('should configure New Relic provider correctly', async () => {
-      exporter = new OpenTelemetryExporter({
+      exporter = new OtelExporter({
         provider: {
           newrelic: {
             apiKey: 'test-license-key',
@@ -150,7 +149,7 @@ describe('OpenTelemetryExporter', () => {
 
   describe('Span Buffering', () => {
     it('should buffer spans until root completes', async () => {
-      exporter = new OpenTelemetryExporter({
+      exporter = new OtelExporter({
         provider: {
           custom: {
             endpoint: 'http://localhost:4318',
@@ -204,7 +203,7 @@ describe('OpenTelemetryExporter', () => {
     });
 
     it('should handle multiple traces independently', async () => {
-      exporter = new OpenTelemetryExporter({
+      exporter = new OtelExporter({
         provider: {
           custom: {
             endpoint: 'http://localhost:4318',
@@ -250,7 +249,7 @@ describe('OpenTelemetryExporter', () => {
 
   describe('Span Type Mapping', () => {
     it('should map LLM spans correctly', async () => {
-      exporter = new OpenTelemetryExporter({
+      exporter = new OtelExporter({
         provider: {
           custom: {
             endpoint: 'http://localhost:4318',
@@ -287,7 +286,7 @@ describe('OpenTelemetryExporter', () => {
     });
 
     it('should map tool spans correctly', async () => {
-      exporter = new OpenTelemetryExporter({
+      exporter = new OtelExporter({
         provider: {
           custom: {
             endpoint: 'http://localhost:4318',
@@ -319,7 +318,7 @@ describe('OpenTelemetryExporter', () => {
 
   describe('Error Handling', () => {
     it('should handle spans with errors', async () => {
-      exporter = new OpenTelemetryExporter({
+      exporter = new OtelExporter({
         provider: {
           custom: {
             endpoint: 'http://localhost:4318',
@@ -355,7 +354,7 @@ describe('OpenTelemetryExporter', () => {
 
   describe('Cleanup', () => {
     it('should export remaining traces on close', async () => {
-      exporter = new OpenTelemetryExporter({
+      exporter = new OtelExporter({
         provider: {
           custom: {
             endpoint: 'http://localhost:4318',

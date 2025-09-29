@@ -1,4 +1,4 @@
-# OpenTelemetry AI Tracing Exporter
+# OtelExporter - OpenTelemetry AI Tracing Exporter
 
 Export Mastra AI traces to any OpenTelemetry-compatible observability platform.
 
@@ -12,13 +12,13 @@ Export Mastra AI traces to any OpenTelemetry-compatible observability platform.
 
 ```bash
 # Dash0 uses gRPC protocol, requires both packages
-npm install @mastra/opentelemetry @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
+npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
 ```
 
 #### Configuration
 
 ```typescript
-import { OpenTelemetryExporter } from '@mastra/opentelemetry';
+import { OtelExporter } from '@mastra/otel-exporter';
 import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
@@ -28,7 +28,7 @@ const mastra = new Mastra({
       otel: {
         serviceName: 'mastra-service',
         exporters: [
-          new OpenTelemetryExporter({
+          new OtelExporter({
             provider: {
               dash0: {
                 apiKey: process.env.DASH0_API_KEY, // Required at runtime
@@ -51,13 +51,13 @@ const mastra = new Mastra({
 #### Installation
 
 ```bash
-npm install @mastra/opentelemetry @opentelemetry/exporter-trace-otlp-proto
+npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-proto
 ```
 
 #### Configuration
 
 ```typescript
-import { OpenTelemetryExporter } from '@mastra/opentelemetry';
+import { OtelExporter } from '@mastra/otel-exporter';
 import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
@@ -67,7 +67,7 @@ const mastra = new Mastra({
       otel: {
         serviceName: 'mastra-service',
         exporters: [
-          new OpenTelemetryExporter({
+          new OtelExporter({
             provider: {
               signoz: {
                 apiKey: process.env.SIGNOZ_API_KEY, // Required at runtime
@@ -88,13 +88,13 @@ const mastra = new Mastra({
 #### Installation
 
 ```bash
-npm install @mastra/opentelemetry @opentelemetry/exporter-trace-otlp-proto
+npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-proto
 ```
 
 #### Configuration
 
 ```typescript
-import { OpenTelemetryExporter } from '@mastra/opentelemetry';
+import { OtelExporter } from '@mastra/otel-exporter';
 import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
@@ -104,7 +104,7 @@ const mastra = new Mastra({
       otel: {
         serviceName: 'mastra-service',
         exporters: [
-          new OpenTelemetryExporter({
+          new OtelExporter({
             provider: {
               newrelic: {
                 apiKey: process.env.NEW_RELIC_LICENSE_KEY, // Required at runtime
@@ -124,13 +124,13 @@ const mastra = new Mastra({
 #### Installation
 
 ```bash
-npm install @mastra/opentelemetry @opentelemetry/exporter-trace-otlp-http
+npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-http
 ```
 
 #### Configuration
 
 ```typescript
-import { OpenTelemetryExporter } from '@mastra/opentelemetry';
+import { OtelExporter } from '@mastra/otel-exporter';
 import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
@@ -140,7 +140,7 @@ const mastra = new Mastra({
       otel: {
         serviceName: 'mastra-service',
         exporters: [
-          new OpenTelemetryExporter({
+          new OtelExporter({
             provider: {
               traceloop: {
                 apiKey: process.env.TRACELOOP_API_KEY, // Required at runtime
@@ -161,13 +161,13 @@ const mastra = new Mastra({
 #### Installation
 
 ```bash
-npm install @mastra/opentelemetry @opentelemetry/exporter-trace-otlp-proto
+npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-proto
 ```
 
 #### Configuration
 
 ```typescript
-import { OpenTelemetryExporter } from '@mastra/opentelemetry';
+import { OtelExporter } from '@mastra/otel-exporter';
 import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
@@ -177,7 +177,7 @@ const mastra = new Mastra({
       otel: {
         serviceName: 'mastra-service',
         exporters: [
-          new OpenTelemetryExporter({
+          new OtelExporter({
             provider: {
               laminar: {
                 apiKey: process.env.LMNR_PROJECT_API_KEY, // Required at runtime
@@ -195,56 +195,18 @@ const mastra = new Mastra({
 
 **Note:** Laminar now only requires the `LMNR_PROJECT_API_KEY`. The `teamId` is optional.
 
-### LangSmith
-
-#### Installation
-
-```bash
-npm install @mastra/opentelemetry @opentelemetry/exporter-trace-otlp-proto
-```
-
-#### Configuration
-
-```typescript
-import { OpenTelemetryExporter } from '@mastra/opentelemetry';
-import { Mastra } from '@mastra/core';
-
-const mastra = new Mastra({
-  ...,
-  observability: {
-    configs: {
-      otel: {
-        serviceName: 'mastra-service',
-        exporters: [
-          new OpenTelemetryExporter({
-            provider: {
-              langsmith: {
-                apiKey: process.env.LANGSMITH_API_KEY, // Required at runtime
-                projectName: 'my-project', // Optional, defaults to 'default'
-                region: 'us', // Optional: 'us' | 'eu', defaults to 'us'
-                // endpoint: 'https://self-hosted.com', // Optional: for self-hosted
-              }
-            },
-          })
-        ],
-      },
-    },
-  },
-});
-```
-
 ### Zipkin
 
 #### Installation
 
 ```bash
-npm install @mastra/opentelemetry @opentelemetry/exporter-zipkin
+npm install @mastra/otel-exporter @opentelemetry/exporter-zipkin
 ```
 
 #### Configuration
 
 ```typescript
-import { OpenTelemetryExporter } from '@mastra/opentelemetry';
+import { OtelExporter } from '@mastra/otel-exporter';
 import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
@@ -254,7 +216,7 @@ const mastra = new Mastra({
       otel: {
         serviceName: 'mastra-service',
         exporters: [
-          new OpenTelemetryExporter({
+          new OtelExporter({
             provider: {
               custom: {
                 endpoint: 'http://localhost:9411/api/v2/spans',
@@ -277,16 +239,16 @@ Choose the appropriate exporter based on your collector's protocol:
 
 ```bash
 # For HTTP/JSON: Human-readable, larger payload, good for debugging
-npm install @mastra/opentelemetry @opentelemetry/exporter-trace-otlp-http
+npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-http
 
 # For HTTP/Protobuf: Binary format, smaller payload, recommended for production
-npm install @mastra/opentelemetry @opentelemetry/exporter-trace-otlp-proto
+npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-proto
 
 # For gRPC: Bidirectional streaming, lowest latency, requires gRPC support
-npm install @mastra/opentelemetry @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
+npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
 
 # For Zipkin: Zipkin-specific format
-npm install @mastra/opentelemetry @opentelemetry/exporter-zipkin
+npm install @mastra/otel-exporter @opentelemetry/exporter-zipkin
 ```
 
 Most providers recommend HTTP/Protobuf for production use.
@@ -294,7 +256,7 @@ Most providers recommend HTTP/Protobuf for production use.
 #### Configuration
 
 ```typescript
-import { OpenTelemetryExporter } from '@mastra/opentelemetry';
+import { OtelExporter } from '@mastra/otel-exporter';
 import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
@@ -304,7 +266,7 @@ const mastra = new Mastra({
       otel: {
         serviceName: 'mastra-service',
         exporters: [
-          new OpenTelemetryExporter({
+          new OtelExporter({
             provider: {
               custom: {
                 endpoint: 'https://your-collector.example.com/v1/traces', // Required at runtime
@@ -351,13 +313,12 @@ If you forget to install the required exporter, you'll get a helpful error messa
 | New Relic | HTTP/Protobuf | `https://otlp.nr-data.net:443/v1/traces`             | US region          |
 | Traceloop | HTTP/JSON     | `https://api.traceloop.com/v1/traces`                | Default endpoint   |
 | Laminar   | HTTP/Protobuf | `https://api.lmnr.ai/v1/traces`                      | Default endpoint   |
-| LangSmith | HTTP/Protobuf | `https://api.smith.langchain.com/otel`               | US region          |
 
 ## Additional configuration
 
 ```typescript
 // Main configuration interface
-interface OpenTelemetryExporterConfig {
+interface OtelExporterConfig {
   // Provider configuration (discriminated union)
   provider?: ProviderConfig;
 

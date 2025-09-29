@@ -13,10 +13,10 @@ import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { loadExporter } from './loadExporter.js';
 import { resolveProviderConfig } from './provider-configs.js';
 import { SpanConverter } from './span-converter.js';
-import type { OpenTelemetryExporterConfig, TraceData } from './types.js';
+import type { OtelExporterConfig, TraceData } from './types.js';
 
-export class OpenTelemetryExporter implements AITracingExporter {
-  private config: OpenTelemetryExporterConfig;
+export class OtelExporter implements AITracingExporter {
+  private config: OtelExporterConfig;
   private traceMap: Map<string, TraceData> = new Map();
   private spanConverter: SpanConverter;
   private tracerProvider?: NodeTracerProvider;
@@ -28,7 +28,7 @@ export class OpenTelemetryExporter implements AITracingExporter {
 
   name = 'opentelemetry';
 
-  constructor(config: OpenTelemetryExporterConfig) {
+  constructor(config: OtelExporterConfig) {
     this.config = config;
     this.spanConverter = new SpanConverter();
 
@@ -44,7 +44,7 @@ export class OpenTelemetryExporter implements AITracingExporter {
     // Provider configuration is required
     if (!this.config.provider) {
       console.error(
-        '[OpenTelemetry Exporter] Provider configuration is required. Use the "custom" provider for generic endpoints.',
+        '[OtelExporter] Provider configuration is required. Use the "custom" provider for generic endpoints.',
       );
       this.isDisabled = true;
       this.isSetup = true;
@@ -94,7 +94,7 @@ export class OpenTelemetryExporter implements AITracingExporter {
           });
         } catch (grpcError) {
           console.error(
-            `[OpenTelemetry Exporter] Failed to load gRPC metadata. Install required packages:\n` +
+            `[OtelExporter] Failed to load gRPC metadata. Install required packages:\n` +
               `  npm install @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js\n`,
             grpcError,
           );
@@ -117,7 +117,7 @@ export class OpenTelemetryExporter implements AITracingExporter {
         });
       }
     } catch (error) {
-      console.error(`[OpenTelemetry Exporter] Failed to create exporter:`, error);
+      console.error(`[OtelExporter] Failed to create exporter:`, error);
       this.isDisabled = true;
       this.isSetup = true;
       return;

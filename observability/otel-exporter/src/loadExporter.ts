@@ -1,5 +1,5 @@
 /**
- * Dynamic loader for optional OpenTelemetry exporters
+ * Dynamic loader for optional OtelExporters
  */
 
 import type { ExportProtocol } from './types.js';
@@ -19,7 +19,7 @@ export async function loadExporter(protocol: ExportProtocol, provider?: string):
           ZipkinExporter = module.ZipkinExporter;
         } catch {
           console.error(
-            `[OpenTelemetry Exporter] Zipkin exporter is not installed.\n` +
+            `[OtelExporter] Zipkin exporter is not installed.\n` +
               `To use Zipkin export, install the required package:\n` +
               `  npm install @opentelemetry/exporter-zipkin`,
           );
@@ -36,7 +36,7 @@ export async function loadExporter(protocol: ExportProtocol, provider?: string):
         } catch {
           const providerInfo = provider ? ` (required for ${provider})` : '';
           console.error(
-            `[OpenTelemetry Exporter] gRPC exporter is not installed${providerInfo}.\n` +
+            `[OtelExporter] gRPC exporter is not installed${providerInfo}.\n` +
               `To use gRPC export, install the required packages:\n` +
               `  npm install @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js`,
           );
@@ -53,7 +53,7 @@ export async function loadExporter(protocol: ExportProtocol, provider?: string):
         } catch {
           const providerInfo = provider ? ` (required for ${provider})` : '';
           console.error(
-            `[OpenTelemetry Exporter] HTTP/Protobuf exporter is not installed${providerInfo}.\n` +
+            `[OtelExporter] HTTP/Protobuf exporter is not installed${providerInfo}.\n` +
               `To use HTTP/Protobuf export, install the required package:\n` +
               `  npm install @opentelemetry/exporter-trace-otlp-proto`,
           );
@@ -71,7 +71,7 @@ export async function loadExporter(protocol: ExportProtocol, provider?: string):
         } catch {
           const providerInfo = provider ? ` (required for ${provider})` : '';
           console.error(
-            `[OpenTelemetry Exporter] HTTP/JSON exporter is not installed${providerInfo}.\n` +
+            `[OtelExporter] HTTP/JSON exporter is not installed${providerInfo}.\n` +
               `To use HTTP/JSON export, install the required package:\n` +
               `  npm install @opentelemetry/exporter-trace-otlp-http`,
           );

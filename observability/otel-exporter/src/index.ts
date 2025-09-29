@@ -1,13 +1,12 @@
-export { OpenTelemetryExporter } from './ai-tracing.js';
+export { OtelExporter } from './ai-tracing.js';
 export type {
-  OpenTelemetryExporterConfig,
+  OtelExporterConfig,
   ProviderConfig,
   Dash0Config,
   SignozConfig,
   NewRelicConfig,
   TraceloopConfig,
   LaminarConfig,
-  LangSmithConfig,
   CustomConfig,
   ExportProtocol,
 } from './types.js';
