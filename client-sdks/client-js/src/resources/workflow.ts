@@ -577,6 +577,7 @@ export class Workflow extends BaseResource {
     inputData: Record<string, any>;
     runtimeContext?: RuntimeContext;
     closeOnSuspend?: boolean;
+    tracingOptions?: TracingOptions;
   }) {
     const searchParams = new URLSearchParams();
 
@@ -589,7 +590,12 @@ export class Workflow extends BaseResource {
       `/api/workflows/${this.workflowId}/streamVNext?${searchParams.toString()}`,
       {
         method: 'POST',
-        body: { inputData: params.inputData, runtimeContext, closeOnSuspend: params.closeOnSuspend },
+        body: {
+          inputData: params.inputData,
+          runtimeContext,
+          closeOnSuspend: params.closeOnSuspend,
+          tracingOptions: params.tracingOptions,
+        },
         stream: true,
       },
     );
