@@ -74,17 +74,40 @@ export class MastraBaseError<D, C> extends Error {
     let error;
     if (originalError instanceof Error) {
       error = originalError;
+    } else if (originalError && typeof originalError === 'object') {
+      // For object errors, stringify them for better visibility
+      try {
+        error = new Error(JSON.stringify(originalError));
+      } catch {
+        error = new Error(String(originalError));
+      }
     } else if (originalError) {
       error = new Error(String(originalError));
     }
 
-    const message = errorDefinition.text ?? error?.message ?? 'Unknown error';
+    // Enhanced error message extraction to preserve more detail
+    let message = errorDefinition.text;
+    if (!message) {
+      if (error?.message) {
+        message = error.message;
+      } else if (originalError && typeof originalError === 'object') {
+        // Stringify object errors to preserve all details
+        try {
+          const jsonStr = JSON.stringify(originalError);
+          message = `Unknown error (details: ${jsonStr})`;
+        } catch {
+          message = 'Unknown error';
+        }
+      } else {
+        message = originalError ? String(originalError) : 'Unknown error';
+      }
+    }
     super(message, { cause: error });
     this.id = errorDefinition.id;
     this.domain = errorDefinition.domain;
     this.category = errorDefinition.category;
     this.details = errorDefinition.details ?? {};
-    this.message = message;
+    this.message = message!;
 
     Object.setPrototypeOf(this, new.target.prototype);
   }
