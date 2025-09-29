@@ -2,8 +2,6 @@
  * Tests for span hierarchy and parent-child relationships
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
-import { SpanConverter } from './span-converter.js';
 import { AISpanType } from '@mastra/core/ai-tracing';
 import type {
   ExportedAISpan,
@@ -13,6 +11,8 @@ import type {
   WorkflowRunAttributes,
   WorkflowStepAttributes,
 } from '@mastra/core/ai-tracing';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { SpanConverter } from './span-converter.js';
 
 describe('Span Hierarchy and Parent-Child Relationships', () => {
   let converter: SpanConverter;

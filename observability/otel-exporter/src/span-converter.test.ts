@@ -2,8 +2,6 @@
  * Tests for OTEL-compliant span conversion
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
-import { SpanConverter } from './span-converter.js';
 import { AISpanType } from '@mastra/core/ai-tracing';
 import type {
   ExportedAISpan,
@@ -14,6 +12,8 @@ import type {
   WorkflowRunAttributes,
 } from '@mastra/core/ai-tracing';
 import { SpanKind } from '@opentelemetry/api';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { SpanConverter } from './span-converter.js';
 
 describe('SpanConverter', () => {
   let converter: SpanConverter;
