@@ -923,6 +923,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "object": {
                 "content": "Hello, world!",
               },
+              "providerMetadata": {
+                "testProvider": {
+                  "testKey": "testValue",
+                },
+              },
               "reasoning": [],
               "reasoningText": undefined,
               "request": {},
@@ -963,19 +968,24 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "staticToolCalls": [],
               "staticToolResults": [],
               "steps": [
-                DefaultStepResult {
+                {
                   "content": [
                     {
                       "text": "{ "content": "Hello, world!" }",
                       "type": "text",
                     },
                   ],
+                  "dynamicToolCalls": [],
+                  "dynamicToolResults": [],
+                  "files": [],
                   "finishReason": "stop",
                   "providerMetadata": {
                     "testProvider": {
                       "testKey": "testValue",
                     },
                   },
+                  "reasoning": [],
+                  "reasoningText": "",
                   "request": {},
                   "response": {
                     "headers": undefined,
@@ -993,7 +1003,30 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     ],
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:00.000Z,
+                    "uiMessages": [
+                      {
+                        "id": "1234",
+                        "metadata": {
+                          "__originalContent": "{ "content": "Hello, world!" }",
+                          "createdAt": 2024-01-01T00:00:00.000Z,
+                        },
+                        "parts": [
+                          {
+                            "text": "{ "content": "Hello, world!" }",
+                            "type": "text",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                    ],
                   },
+                  "sources": [],
+                  "staticToolCalls": [],
+                  "staticToolResults": [],
+                  "stepType": "initial",
+                  "text": "{ "content": "Hello, world!" }",
+                  "toolCalls": [],
+                  "toolResults": [],
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
@@ -1092,6 +1125,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "object": {
                 "invalid": "Hello, world!",
               },
+              "providerMetadata": undefined,
               "reasoning": [],
               "reasoningText": undefined,
               "request": {},
@@ -1132,15 +1166,20 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "staticToolCalls": [],
               "staticToolResults": [],
               "steps": [
-                DefaultStepResult {
+                {
                   "content": [
                     {
                       "text": "{ "invalid": "Hello, world!" }",
                       "type": "text",
                     },
                   ],
+                  "dynamicToolCalls": [],
+                  "dynamicToolResults": [],
+                  "files": [],
                   "finishReason": "error",
                   "providerMetadata": undefined,
+                  "reasoning": [],
+                  "reasoningText": "",
                   "request": {},
                   "response": {
                     "headers": undefined,
@@ -1158,7 +1197,30 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     ],
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:00.000Z,
+                    "uiMessages": [
+                      {
+                        "id": "1234",
+                        "metadata": {
+                          "__originalContent": "{ "invalid": "Hello, world!" }",
+                          "createdAt": 2024-01-01T00:00:00.000Z,
+                        },
+                        "parts": [
+                          {
+                            "text": "{ "invalid": "Hello, world!" }",
+                            "type": "text",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                    ],
                   },
+                  "sources": [],
+                  "staticToolCalls": [],
+                  "staticToolResults": [],
+                  "stepType": "initial",
+                  "text": "{ "invalid": "Hello, world!" }",
+                  "toolCalls": [],
+                  "toolResults": [],
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,

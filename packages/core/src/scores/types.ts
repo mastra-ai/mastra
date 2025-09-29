@@ -1,13 +1,14 @@
 import type { CoreMessage, CoreSystemMessage } from 'ai';
 import { z } from 'zod';
 import type { UIMessageWithMetadata } from '../agent';
+import { AISpanType } from '../ai-tracing';
 import type { TracingContext } from '../ai-tracing';
 
 export type ScoringSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
 
 export type ScoringSource = 'LIVE' | 'TEST';
 
-export type ScoringEntityType = 'AGENT' | 'WORKFLOW';
+export type ScoringEntityType = 'AGENT' | 'WORKFLOW' | AISpanType;
 
 export type ScoringPrompts = {
   description: string;
@@ -16,8 +17,8 @@ export type ScoringPrompts = {
 
 export type ScoringInput = {
   runId?: string;
-  input?: Record<string, any>[];
-  output: Record<string, any>;
+  input?: any;
+  output: any;
   additionalContext?: Record<string, any>;
   runtimeContext?: Record<string, any>;
   tracingContext?: TracingContext;
@@ -26,8 +27,8 @@ export type ScoringInput = {
 export type ScoringHookInput = {
   runId?: string;
   scorer: Record<string, any>;
-  input: Record<string, any>[];
-  output: Record<string, any>;
+  input: any;
+  output: any;
   metadata?: Record<string, any>;
   additionalContext?: Record<string, any>;
   source: ScoringSource;
@@ -37,6 +38,7 @@ export type ScoringHookInput = {
   tracingContext?: TracingContext;
   structuredOutput?: boolean;
   traceId?: string;
+  spanId?: string;
   resourceId?: string;
   threadId?: string;
 };
@@ -124,10 +126,11 @@ export const saveScorePayloadSchema = z.object({
   input: z.any().optional(),
   output: z.any(),
   source: z.enum(['LIVE', 'TEST']),
-  entityType: z.enum(['AGENT', 'WORKFLOW']).optional(),
+  entityType: z.enum(['AGENT', 'WORKFLOW', ...Object.values(AISpanType)]).optional(),
+  scorer: z.record(z.string(), z.any()),
 
   traceId: z.string().optional(),
-  scorer: z.record(z.string(), z.any()).optional(),
+  spanId: z.string().optional(),
   preprocessStepResult: z.record(z.string(), z.any()).optional(),
   extractStepResult: z.record(z.string(), z.any()).optional(),
   analyzeStepResult: z.record(z.string(), z.any()).optional(),

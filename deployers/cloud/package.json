@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloud",
-  "version": "0.18.0-alpha.2",
+  "version": "0.18.1-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -50,7 +50,7 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.15.3-0 <0.19.0-0"
+    "@mastra/core": ">=0.18.1-0 <0.20.0-0"
   },
   "repository": {
     "type": "git",
