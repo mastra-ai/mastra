@@ -2251,9 +2251,12 @@ importers:
       '@mastra/client-js':
         specifier: workspace:^
         version: link:../../client-sdks/client-js
+<<<<<<< HEAD
       '@mastra/react':
         specifier: workspace:*
         version: link:../../client-sdks/react
+=======
+>>>>>>> 83aa2220e5 (changeset)
       '@radix-ui/react-alert-dialog':
         specifier: ^1.1.14
         version: 1.1.14(@types/react-dom@19.1.9(@types/react@19.1.13))(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
@@ -2414,6 +2417,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/react':
+        specifier: workspace:*
+        version: link:../../client-sdks/react
       '@storybook/addon-docs':
         specifier: ^9.1.7
         version: 9.1.7(@types/react@19.1.13)(storybook@9.1.7(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))
