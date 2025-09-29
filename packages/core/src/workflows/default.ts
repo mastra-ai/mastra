@@ -140,17 +140,18 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         eventTimestamp: Date.now(),
       });
 
-      base.error =
-        error instanceof Error
-          ? (error?.stack ?? error)
-          : (lastOutput.error ??
-            (typeof error === 'string'
-              ? error
-              : typeof error === 'object' && error !== null
-                ? (new Error('Unknown error: ' + JSON.stringify(error))?.stack ??
-                  new Error('Unknown error: ' + JSON.stringify(error)))
-                : (new Error('Unknown error: ' + String(error))?.stack ??
-                  new Error('Unknown error: ' + String(error)))));
+      if (error instanceof Error) {
+        base.error = error?.stack ?? error;
+      } else if (lastOutput.error) {
+        base.error = lastOutput.error;
+      } else if (typeof error === 'string') {
+        base.error = error;
+      } else {
+        // For non-string, non-Error values, create a descriptive error
+        const errorMessage = typeof error === 'object' && error !== null ? JSON.stringify(error) : String(error);
+        const errorObj = new Error('Unknown error: ' + errorMessage);
+        base.error = errorObj?.stack ?? errorObj;
+      }
     } else if (lastOutput.status === 'suspended') {
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {
