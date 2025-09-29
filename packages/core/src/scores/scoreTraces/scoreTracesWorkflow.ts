@@ -172,9 +172,8 @@ function buildScorerRun({
   targetSpan: AISpanRecord;
 }) {
   let runPayload: ScorerRun;
-  const { input, output } = transformTraceToScorerInputAndOutput(trace);
-
   if (scorerType === 'agent') {
+    const { input, output } = transformTraceToScorerInputAndOutput(trace);
     runPayload = {
       input,
       output,
