@@ -4,13 +4,18 @@
 
 import { AITracingEventType } from '@mastra/core/ai-tracing';
 import type { AITracingExporter, AITracingEvent, AnyExportedAISpan, TracingConfig } from '@mastra/core/ai-tracing';
+import { ConsoleLogger } from '@mastra/core/logger';
 import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
 import { resourceFromAttributes } from '@opentelemetry/resources';
-import type { Resource } from '@opentelemetry/resources';
-import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import type { SpanExporter } from '@opentelemetry/sdk-trace-base';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import {
+  ATTR_SERVICE_NAME,
+  ATTR_SERVICE_VERSION,
+  ATTR_TELEMETRY_SDK_LANGUAGE,
+  ATTR_TELEMETRY_SDK_NAME,
+  ATTR_TELEMETRY_SDK_VERSION,
+} from '@opentelemetry/semantic-conventions';
 
 import { loadExporter } from './loadExporter.js';
 import { resolveProviderConfig } from './provider-configs.js';
@@ -25,12 +30,14 @@ export class OtelExporter implements AITracingExporter {
   private exporter?: SpanExporter;
   private isSetup: boolean = false;
   private isDisabled: boolean = false;
+  private logger: ConsoleLogger;
 
   name = 'opentelemetry';
 
   constructor(config: OtelExporterConfig) {
     this.config = config;
     this.spanConverter = new SpanConverter();
+    this.logger = new ConsoleLogger({ level: config.logLevel ?? 'warn' });
 
     // Set up OpenTelemetry diagnostics if debug mode
     if (config.logLevel === 'debug') {
@@ -50,7 +57,7 @@ export class OtelExporter implements AITracingExporter {
 
     // Provider configuration is required
     if (!this.config.provider) {
-      console.error(
+      this.logger.error(
         '[OtelExporter] Provider configuration is required. Use the "custom" provider for generic endpoints.',
       );
       this.isDisabled = true;
@@ -100,7 +107,7 @@ export class OtelExporter implements AITracingExporter {
             metadata.set(key, value);
           });
         } catch (grpcError) {
-          console.error(
+          this.logger.error(
             `[OtelExporter] Failed to load gRPC metadata. Install required packages:\n` +
               `  npm install @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js\n`,
             grpcError,
@@ -124,7 +131,7 @@ export class OtelExporter implements AITracingExporter {
         });
       }
     } catch (error) {
-      console.error(`[OtelExporter] Failed to create exporter:`, error);
+      this.logger.error(`[OtelExporter] Failed to create exporter:`, error);
       this.isDisabled = true;
       this.isSetup = true;
       return;
@@ -132,12 +139,12 @@ export class OtelExporter implements AITracingExporter {
 
     // Create resource with service name from TracingConfig
     const resource = resourceFromAttributes({
-      [SemanticResourceAttributes.SERVICE_NAME]: this.tracingConfig?.serviceName || 'mastra-service',
-      [SemanticResourceAttributes.SERVICE_VERSION]: '1.0.0',
+      [ATTR_SERVICE_NAME]: this.tracingConfig?.serviceName || 'mastra-service',
+      [ATTR_SERVICE_VERSION]: '1.0.0',
       // Add telemetry SDK information
-      [SemanticResourceAttributes.TELEMETRY_SDK_NAME]: '@mastra/otel-exporter',
-      [SemanticResourceAttributes.TELEMETRY_SDK_VERSION]: '1.0.0',
-      [SemanticResourceAttributes.TELEMETRY_SDK_LANGUAGE]: 'nodejs',
+      [ATTR_TELEMETRY_SDK_NAME]: '@mastra/otel-exporter',
+      [ATTR_TELEMETRY_SDK_VERSION]: '1.0.0',
+      [ATTR_TELEMETRY_SDK_LANGUAGE]: 'nodejs',
     });
 
     // Store the resource for the span converter
@@ -152,10 +159,9 @@ export class OtelExporter implements AITracingExporter {
       exportTimeoutMillis: this.config.timeout || 30000, // Export timeout
     });
 
-    if (this.config.logLevel === 'debug') {
-      console.log(`[OtelExporter] Using BatchSpanProcessor (batch size: ${this.config.batchSize || 512}, delay: 5s)`);
-    }
-
+    this.logger.debug(
+      `[OtelExporter] Using BatchSpanProcessor (batch size: ${this.config.batchSize || 512}, delay: 5s)`,
+    );
     this.isSetup = true;
   }
 
@@ -197,13 +203,11 @@ export class OtelExporter implements AITracingExporter {
         resolve();
       });
 
-      if (this.config.logLevel === 'debug') {
-        console.log(
-          `[OtelExporter] Exported span ${span.id} (trace: ${span.traceId}, parent: ${span.parentSpanId || 'none'}, type: ${span.type})`,
-        );
-      }
+      this.logger.debug(
+        `[OtelExporter] Exported span ${span.id} (trace: ${span.traceId}, parent: ${span.parentSpanId || 'none'}, type: ${span.type})`,
+      );
     } catch (error) {
-      console.error(`[OtelExporter] Failed to export span ${span.id}:`, error);
+      this.logger.error(`[OtelExporter] Failed to export span ${span.id}:`, error);
     }
   }
 
