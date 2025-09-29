@@ -1,6 +1,13 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { AI_SPAN_SCHEMA, ObservabilityStorage, TABLE_AI_SPANS } from '@mastra/core/storage';
-import type { AISpanRecord, AITraceRecord, AITracesPaginatedArg, PaginationInfo } from '@mastra/core/storage';
+import type {
+  AISpanRecord,
+  AITraceRecord,
+  AITracesPaginatedArg,
+  CreateAISpanRecord,
+  PaginationInfo,
+  UpdateAISpanRecord,
+} from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
 import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
@@ -25,7 +32,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     this.schema = schema;
   }
 
-  async createAISpan(span: Omit<AISpanRecord, 'createdAt' | 'updatedAt'>): Promise<void> {
+  async createAISpan(span: CreateAISpanRecord): Promise<void> {
     try {
       const startedAt = span.startedAt instanceof Date ? span.startedAt.toISOString() : span.startedAt;
       const endedAt = span.endedAt instanceof Date ? span.endedAt.toISOString() : span.endedAt;
@@ -112,7 +119,7 @@ export class ObservabilityPG extends ObservabilityStorage {
   }: {
     spanId: string;
     traceId: string;
-    updates: Partial<Omit<AISpanRecord, 'createdAt' | 'updatedAt' | 'spanId' | 'traceId'>>;
+    updates: Partial<UpdateAISpanRecord>;
   }): Promise<void> {
     try {
       const data = { ...updates };
@@ -259,7 +266,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     }
   }
 
-  async batchCreateAISpans(args: { records: Omit<AISpanRecord, 'createdAt' | 'updatedAt'>[] }): Promise<void> {
+  async batchCreateAISpans(args: { records: CreateAISpanRecord[] }): Promise<void> {
     try {
       const records = args.records.map(record => {
         const startedAt = record.startedAt instanceof Date ? record.startedAt.toISOString() : record.startedAt;
@@ -296,14 +303,14 @@ export class ObservabilityPG extends ObservabilityStorage {
     records: {
       traceId: string;
       spanId: string;
-      updates: Partial<Omit<AISpanRecord, 'createdAt' | 'updatedAt' | 'spanId' | 'traceId'>>;
+      updates: Partial<UpdateAISpanRecord>;
     }[];
   }): Promise<void> {
     try {
       return this.operations.batchUpdate({
         tableName: TABLE_AI_SPANS,
         updates: args.records.map(record => {
-          const data: Partial<Omit<AISpanRecord, 'createdAt' | 'updatedAt' | 'spanId' | 'traceId'>> & {
+          const data: Partial<UpdateAISpanRecord> & {
             endedAtZ?: string;
             startedAtZ?: string;
           } = {

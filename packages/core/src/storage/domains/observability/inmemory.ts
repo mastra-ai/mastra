@@ -1,6 +1,13 @@
 import type { TracingStrategy } from '../../../ai-tracing';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import type { AISpanRecord, AITraceRecord, AITracesPaginatedArg, PaginationInfo } from '../../types';
+import type {
+  AISpanRecord,
+  AITraceRecord,
+  AITracesPaginatedArg,
+  CreateAISpanRecord,
+  PaginationInfo,
+  UpdateAISpanRecord,
+} from '../../types';
 import type { StoreOperations } from '../operations';
 import { ObservabilityStorage } from './base';
 
@@ -25,7 +32,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     };
   }
 
-  async createAISpan(span: Omit<AISpanRecord, 'createdAt' | 'updatedAt'>): Promise<void> {
+  async createAISpan(span: CreateAISpanRecord): Promise<void> {
     this.validateCreateAISpan(span);
     const id = this.generateId(span);
     const record = span as AISpanRecord;
@@ -34,13 +41,13 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     this.collection.set(id, record);
   }
 
-  async batchCreateAISpans(args: { records: Omit<AISpanRecord, 'createdAt' | 'updatedAt'>[] }): Promise<void> {
+  async batchCreateAISpans(args: { records: CreateAISpanRecord[] }): Promise<void> {
     for (const record of args.records) {
       await this.createAISpan(record);
     }
   }
 
-  private validateCreateAISpan(record: Omit<AISpanRecord, 'createdAt' | 'updatedAt'>): void {
+  private validateCreateAISpan(record: CreateAISpanRecord): void {
     if (!record.spanId) {
       throw new MastraError({
         id: 'OBSERVABILITY_SPAN_ID_REQUIRED',
@@ -142,11 +149,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return spans.slice(start, end);
   }
 
-  async updateAISpan(params: {
-    spanId: string;
-    traceId: string;
-    updates: Partial<Omit<AISpanRecord, 'createdAt' | 'updatedAt' | 'spanId' | 'traceId'>>;
-  }): Promise<void> {
+  async updateAISpan(params: { spanId: string; traceId: string; updates: Partial<UpdateAISpanRecord> }): Promise<void> {
     const id = this.generateId(params);
     const span = this.collection.get(id);
 
@@ -166,7 +169,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     records: {
       traceId: string;
       spanId: string;
-      updates: Partial<Omit<AISpanRecord, 'createdAt' | 'updatedAt' | 'spanId' | 'traceId'>>;
+      updates: Partial<UpdateAISpanRecord>;
     }[];
   }): Promise<void> {
     for (const record of args.records) {

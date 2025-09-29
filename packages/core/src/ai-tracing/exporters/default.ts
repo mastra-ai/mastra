@@ -2,12 +2,9 @@ import { ConsoleLogger, LogLevel } from '../../logger';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { MastraStorage } from '../../storage/base';
-import type { AISpanRecord } from '../../storage/types';
+import type { CreateAISpanRecord, UpdateAISpanRecord } from '../../storage/types';
 import { AITracingEventType } from '../types';
 import type { AITracingEvent, AITracingExporter, AnyExportedAISpan, TracingStrategy } from '../types';
-
-type CreateAISpanRecord = Omit<AISpanRecord, 'createdAt' | 'updatedAt'>;
-type UpdateAISpanRecord = Omit<CreateAISpanRecord, 'spanId' | 'traceId'>;
 
 interface BatchingConfig {
   maxBatchSize?: number; // Default: 1000 spans
