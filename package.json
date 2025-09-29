@@ -3,7 +3,6 @@
   "version": "0.1.11",
   "type": "module",
   "devDependencies": {
-    "@changesets/changelog-github": "^0.5.1",
     "@changesets/cli": "^2.29.7",
     "@types/node": "^20.19.0",
     "changesets-changelog-github-local": "^1.0.0",
