@@ -63,8 +63,8 @@ export const mastra = new Mastra({
           new OtelExporter({
             provider: {
               dash0: {
-                apiKey: process.env.DASH0_API_KEY!,
-                endpoint: process.env.DASH0_ENDPOINT!, // e.g., 'ingress.us-west-2.aws.dash0.com:4317'
+                apiKey: process.env.DASH0_API_KEY,
+                endpoint: process.env.DASH0_ENDPOINT, // e.g., 'ingress.us-west-2.aws.dash0.com:4317'
                 dataset: 'production', // Optional dataset name
               }
             },
@@ -88,7 +88,7 @@ Get your Dash0 endpoint from your dashboard. It should be in the format `ingress
 new OtelExporter({
   provider: {
     signoz: {
-      apiKey: process.env.SIGNOZ_API_KEY!,
+      apiKey: process.env.SIGNOZ_API_KEY,
       region: 'us', // 'us' | 'eu' | 'in'
       // endpoint: 'https://my-signoz.example.com', // For self-hosted
     }
@@ -104,7 +104,7 @@ new OtelExporter({
 new OtelExporter({
   provider: {
     newrelic: {
-      apiKey: process.env.NEW_RELIC_LICENSE_KEY!,
+      apiKey: process.env.NEW_RELIC_LICENSE_KEY,
       // endpoint: 'https://otlp.eu01.nr-data.net', // For EU region
     }
   },
@@ -119,7 +119,7 @@ new OtelExporter({
 new OtelExporter({
   provider: {
     traceloop: {
-      apiKey: process.env.TRACELOOP_API_KEY!,
+      apiKey: process.env.TRACELOOP_API_KEY,
       destinationId: 'my-destination', // Optional
     }
   },
@@ -134,7 +134,7 @@ new OtelExporter({
 new OtelExporter({
   provider: {
     laminar: {
-      apiKey: process.env.LMNR_PROJECT_API_KEY!,
+      apiKey: process.env.LMNR_PROJECT_API_KEY,
       // teamId: process.env.LAMINAR_TEAM_ID, // Optional, for backwards compatibility
     }
   },
@@ -152,7 +152,7 @@ new OtelExporter({
       endpoint: 'https://your-collector.example.com/v1/traces',
       protocol: 'http/protobuf', // 'http/json' | 'http/protobuf' | 'grpc'
       headers: {
-        'x-api-key': process.env.API_KEY!,
+        'x-api-key': process.env.API_KEY,
       },
     }
   },
@@ -205,32 +205,6 @@ The exporter buffers spans until a trace is complete:
 2. Waits 5 seconds after root span completes
 3. Exports complete trace with preserved parent-child relationships
 4. Ensures no orphaned spans
-
-## Environment Variables
-
-Common environment variables by provider:
-
-```bash filename=".env"
-# Dash0
-DASH0_API_KEY=your-api-key
-DASH0_ENDPOINT=ingress.us-west-2.aws.dash0.com:4317
-
-# SigNoz
-SIGNOZ_API_KEY=your-api-key
-
-# New Relic
-NEW_RELIC_LICENSE_KEY=your-license-key
-
-# Traceloop
-TRACELOOP_API_KEY=your-api-key
-
-# Laminar
-LMNR_PROJECT_API_KEY=your-project-key
-
-# Custom
-OTEL_ENDPOINT=https://your-collector.example.com/v1/traces
-OTEL_API_KEY=your-api-key
-```
 
 ## Protocol Selection Guide
 

@@ -1,5 +1,5 @@
 ---
-'@mastra/opentelemetry': patch
+'@mastra/otel-exporter': patch
 ---
 
-Initial release of otel exporter for ai observability
+Initial release of the otel-exporter for ai observability

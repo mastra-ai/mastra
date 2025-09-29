@@ -281,7 +281,7 @@ import { OtelExporter } from '@mastra/otel-exporter';
 const exporter = new OtelExporter({
   provider: {
     signoz: {
-      apiKey: process.env.SIGNOZ_API_KEY!,
+      apiKey: process.env.SIGNOZ_API_KEY,
       region: 'us',
     }
   },
@@ -297,7 +297,7 @@ const exporter = new OtelExporter({
       endpoint: 'https://my-collector.example.com/v1/traces',
       protocol: 'http/protobuf',
       headers: {
-        'x-api-key': process.env.API_KEY!,
+        'x-api-key': process.env.API_KEY,
       },
     }
   },

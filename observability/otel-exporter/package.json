@@ -58,7 +58,7 @@
   },
   "peerDependencies": {
     "@grpc/grpc-js": "^1.13.4",
-    "@mastra/core": ">=0.16.4-0 <0.17.0-0",
+    "@mastra/core": ">=0.18.0-0 <0.20.0-0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.205.0",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.205.0",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.205.0",
@@ -85,7 +85,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "observability/opentelemetry"
+    "directory": "observability/otel-exporter"
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"

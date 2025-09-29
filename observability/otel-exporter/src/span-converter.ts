@@ -247,9 +247,6 @@ export class SpanConverter {
       if (toolAttrs.toolId) {
         attributes['gen_ai.tool.name'] = toolAttrs.toolId;
       }
-      if (toolAttrs.toolDescription) {
-        attributes['gen_ai.tool.description'] = toolAttrs.toolDescription;
-      }
 
       // MCP-specific attributes
       if (aiSpan.type === AISpanType.MCP_TOOL_CALL) {
@@ -259,6 +256,10 @@ export class SpanConverter {
         }
         if (mcpAttrs.serverVersion) {
           attributes['mcp.server.version'] = mcpAttrs.serverVersion;
+        }
+      } else {
+        if ((toolAttrs as ToolCallAttributes).toolDescription) {
+          attributes['gen_ai.tool.description'] = (toolAttrs as ToolCallAttributes).toolDescription;
         }
       }
 
