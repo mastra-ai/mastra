@@ -146,8 +146,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           : (lastOutput.error ??
             (typeof error === 'string'
               ? error
-              : (new Error('Unknown error: ' + JSON.stringify(error))?.stack ??
-                new Error('Unknown error: ' + JSON.stringify(error)))));
+              : typeof error === 'object' && error !== null
+                ? (new Error('Unknown error: ' + JSON.stringify(error))?.stack ??
+                  new Error('Unknown error: ' + JSON.stringify(error)))
+                : (new Error('Unknown error: ' + String(error))?.stack ??
+                  new Error('Unknown error: ' + String(error)))));
     } else if (lastOutput.status === 'suspended') {
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {
