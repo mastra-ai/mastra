@@ -681,7 +681,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#status = 'failed';
 
               // Reject all delayed promises on error
-              const errorMessage = (self.#error as any)?.message ||
+              const errorMessage =
+                (self.#error as any)?.message ||
                 (typeof self.#error === 'object' && self.#error !== null
                   ? JSON.stringify(self.#error)
                   : String(self.#error));
