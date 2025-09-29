@@ -3,6 +3,7 @@ const meta = {
   cloud: "Cloud",
   braintrust: "Braintrust",
   langfuse: "Langfuse",
+  langsmith: "LangSmith",
 };
 
 export default meta;
