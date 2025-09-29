@@ -140,33 +140,44 @@ export class SpanConverter {
     // Add gen_ai.operation.name based on span type
     attributes['gen_ai.operation.name'] = this.getOperationName(aiSpan);
 
+    // Add span kind semantic attribute
+    attributes['span.kind'] = this.getSpanKindString(aiSpan);
+
+    // Add span type for better visibility
+    attributes['mastra.span.type'] = aiSpan.type;
+
+    // Add trace and span IDs for debugging
+    attributes['mastra.trace_id'] = aiSpan.traceId;
+    attributes['mastra.span_id'] = aiSpan.id;
+    if (aiSpan.parentSpanId) {
+      attributes['mastra.parent_span_id'] = aiSpan.parentSpanId;
+    }
+
     // Handle input/output based on span type
-    if (aiSpan.type === AISpanType.LLM_GENERATION) {
-      // For LLM spans, use gen_ai semantic conventions
-      if (aiSpan.input !== undefined) {
-        attributes['gen_ai.prompt'] = typeof aiSpan.input === 'string' ? aiSpan.input : JSON.stringify(aiSpan.input);
+    // Always add input/output for Laminar compatibility
+    if (aiSpan.input !== undefined) {
+      const inputStr = typeof aiSpan.input === 'string' ? aiSpan.input : JSON.stringify(aiSpan.input);
+      // Add generic input for all providers
+      attributes['input'] = inputStr;
+
+      // Add specific attributes based on span type
+      if (aiSpan.type === AISpanType.LLM_GENERATION) {
+        attributes['gen_ai.prompt'] = inputStr;
+      } else if (aiSpan.type === AISpanType.TOOL_CALL || aiSpan.type === AISpanType.MCP_TOOL_CALL) {
+        attributes['gen_ai.tool.input'] = inputStr;
       }
-      if (aiSpan.output !== undefined) {
-        attributes['gen_ai.completion'] =
-          typeof aiSpan.output === 'string' ? aiSpan.output : JSON.stringify(aiSpan.output);
-      }
-    } else if (aiSpan.type === AISpanType.TOOL_CALL || aiSpan.type === AISpanType.MCP_TOOL_CALL) {
-      // For tool spans, use tool-specific attributes
-      if (aiSpan.input !== undefined) {
-        attributes['gen_ai.tool.input'] =
-          typeof aiSpan.input === 'string' ? aiSpan.input : JSON.stringify(aiSpan.input);
-      }
-      if (aiSpan.output !== undefined) {
-        attributes['gen_ai.tool.output'] =
-          typeof aiSpan.output === 'string' ? aiSpan.output : JSON.stringify(aiSpan.output);
-      }
-    } else {
-      // For other spans, keep as generic input/output
-      if (aiSpan.input !== undefined) {
-        attributes['input'] = typeof aiSpan.input === 'string' ? aiSpan.input : JSON.stringify(aiSpan.input);
-      }
-      if (aiSpan.output !== undefined) {
-        attributes['output'] = typeof aiSpan.output === 'string' ? aiSpan.output : JSON.stringify(aiSpan.output);
+    }
+
+    if (aiSpan.output !== undefined) {
+      const outputStr = typeof aiSpan.output === 'string' ? aiSpan.output : JSON.stringify(aiSpan.output);
+      // Add generic output for all providers
+      attributes['output'] = outputStr;
+
+      // Add specific attributes based on span type
+      if (aiSpan.type === AISpanType.LLM_GENERATION) {
+        attributes['gen_ai.completion'] = outputStr;
+      } else if (aiSpan.type === AISpanType.TOOL_CALL || aiSpan.type === AISpanType.MCP_TOOL_CALL) {
+        attributes['gen_ai.tool.output'] = outputStr;
       }
     }
 
@@ -307,14 +318,32 @@ export class SpanConverter {
       }
     }
 
-    // Add metadata as custom attributes (but not nested under mastra)
+    // Add metadata as custom attributes with proper typing
     if (aiSpan.metadata) {
       Object.entries(aiSpan.metadata).forEach(([key, value]) => {
         // Skip if attribute already exists
         if (!attributes[key]) {
-          attributes[key] = value;
+          // Ensure value is a valid OTEL attribute type
+          if (value === null || value === undefined) {
+            return;
+          }
+          if (typeof value === 'object') {
+            attributes[key] = JSON.stringify(value);
+          } else {
+            attributes[key] = value;
+          }
         }
       });
+    }
+
+    // Add timing information
+    if (aiSpan.startTime) {
+      attributes['mastra.start_time'] = aiSpan.startTime.toISOString();
+    }
+    if (aiSpan.endTime) {
+      attributes['mastra.end_time'] = aiSpan.endTime.toISOString();
+      const duration = aiSpan.endTime.getTime() - aiSpan.startTime.getTime();
+      attributes['mastra.duration_ms'] = duration;
     }
 
     return attributes;
@@ -338,6 +367,27 @@ export class SpanConverter {
         return 'workflow.run';
       default:
         return aiSpan.type.replace(/_/g, '.');
+    }
+  }
+
+  /**
+   * Get span kind as string for attribute
+   */
+  private getSpanKindString(aiSpan: AnyExportedAISpan): string {
+    const kind = this.getSpanKind(aiSpan);
+    switch (kind) {
+      case SpanKind.SERVER:
+        return 'server';
+      case SpanKind.CLIENT:
+        return 'client';
+      case SpanKind.INTERNAL:
+        return 'internal';
+      case SpanKind.PRODUCER:
+        return 'producer';
+      case SpanKind.CONSUMER:
+        return 'consumer';
+      default:
+        return 'internal';
     }
   }
 }

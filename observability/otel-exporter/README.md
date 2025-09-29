@@ -324,23 +324,30 @@ interface OtelExporterConfig {
   provider?: ProviderConfig;
 
   // Export configuration
-  timeout?: number; // milliseconds
-  batchSize?: number;
+  timeout?: number; // Export timeout in milliseconds (default: 30000)
+  batchSize?: number; // Max spans per batch (default: 512)
 
   // Debug
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
 }
 ```
 
-## Buffering Strategy
+## Batching Strategy
 
-The exporter buffers spans until a trace is complete before sending them. This ensures:
+The OtelExporter uses OpenTelemetry's `BatchSpanProcessor` for efficient span export:
 
-1. Complete traces are sent together
-2. Parent-child relationships are preserved
-3. No orphaned spans
+- **Automatic batching**: Spans are queued and exported in batches
+- **Default batch size**: 512 spans (configurable via `batchSize`)
+- **Export interval**: Every 5 seconds or when batch is full
+- **Queue size**: Up to 2048 spans queued in memory
+- **Production-ready**: Optimized for high-throughput applications
 
-Traces are exported 5 seconds after the root span completes, allowing time for any remaining child spans to finish.
+This approach ensures:
+
+- Efficient network usage (fewer HTTP/gRPC calls)
+- Better performance under load
+- Automatic retry with backoff
+- Proper trace context propagation across all spans in a trace
 
 ## OpenTelemetry Semantic Conventions
 

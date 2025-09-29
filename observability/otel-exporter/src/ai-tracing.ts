@@ -3,28 +3,28 @@
  */
 
 import { AITracingEventType } from '@mastra/core/ai-tracing';
-import type { AITracingExporter, AITracingEvent, AnyExportedAISpan } from '@mastra/core/ai-tracing';
+import type { AITracingExporter, AITracingEvent, AnyExportedAISpan, TracingConfig } from '@mastra/core/ai-tracing';
 import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
-import { defaultResource } from '@opentelemetry/resources';
-import { SimpleSpanProcessor, BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { resourceFromAttributes } from '@opentelemetry/resources';
+import type { Resource } from '@opentelemetry/resources';
+import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import type { SpanExporter } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 
 import { loadExporter } from './loadExporter.js';
 import { resolveProviderConfig } from './provider-configs.js';
 import { SpanConverter } from './span-converter.js';
-import type { OtelExporterConfig, TraceData } from './types.js';
+import type { OtelExporterConfig } from './types.js';
 
 export class OtelExporter implements AITracingExporter {
   private config: OtelExporterConfig;
-  private traceMap: Map<string, TraceData> = new Map();
+  private tracingConfig?: TracingConfig;
   private spanConverter: SpanConverter;
-  private tracerProvider?: NodeTracerProvider;
+  private processor?: BatchSpanProcessor;
   private exporter?: SpanExporter;
   private isSetup: boolean = false;
   private isDisabled: boolean = false;
-  private exportTimeout?: NodeJS.Timeout;
-  private readonly EXPORT_DELAY_MS = 5000; // Wait 5 seconds after root span completes
 
   name = 'opentelemetry';
 
@@ -36,6 +36,13 @@ export class OtelExporter implements AITracingExporter {
     if (config.logLevel === 'debug') {
       diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
     }
+  }
+
+  /**
+   * Initialize with tracing configuration
+   */
+  init(config: TracingConfig): void {
+    this.tracingConfig = config;
   }
 
   private async setupExporter() {
@@ -123,26 +130,31 @@ export class OtelExporter implements AITracingExporter {
       return;
     }
 
-    // Create default resource
-    const resource = defaultResource();
+    // Create resource with service name from TracingConfig
+    const resource = resourceFromAttributes({
+      [SemanticResourceAttributes.SERVICE_NAME]: this.tracingConfig?.serviceName || 'mastra-service',
+      [SemanticResourceAttributes.SERVICE_VERSION]: '1.0.0',
+      // Add telemetry SDK information
+      [SemanticResourceAttributes.TELEMETRY_SDK_NAME]: '@mastra/otel-exporter',
+      [SemanticResourceAttributes.TELEMETRY_SDK_VERSION]: '1.0.0',
+      [SemanticResourceAttributes.TELEMETRY_SDK_LANGUAGE]: 'nodejs',
+    });
 
     // Store the resource for the span converter
     this.spanConverter = new SpanConverter(resource);
 
-    // Use BatchSpanProcessor for better performance
-    const processor = this.config.batchSize
-      ? new BatchSpanProcessor(this.exporter!, {
-          maxExportBatchSize: this.config.batchSize,
-        })
-      : new SimpleSpanProcessor(this.exporter!);
+    // Always use BatchSpanProcessor for production
+    // It queues spans and exports them in batches for better performance
+    this.processor = new BatchSpanProcessor(this.exporter!, {
+      maxExportBatchSize: this.config.batchSize || 512, // Default batch size
+      maxQueueSize: 2048, // Maximum spans to queue
+      scheduledDelayMillis: 5000, // Export every 5 seconds
+      exportTimeoutMillis: this.config.timeout || 30000, // Export timeout
+    });
 
-    this.tracerProvider = new NodeTracerProvider({
-      resource,
-      spanProcessors: [processor],
-    } as any);
-
-    // Register the provider
-    this.tracerProvider.register();
+    if (this.config.logLevel === 'debug') {
+      console.log(`[OtelExporter] Using BatchSpanProcessor (batch size: ${this.config.batchSize || 512}, delay: 5s)`);
+    }
 
     this.isSetup = true;
   }
@@ -153,123 +165,52 @@ export class OtelExporter implements AITracingExporter {
       return;
     }
 
-    if (
-      event.type !== AITracingEventType.SPAN_ENDED &&
-      event.type !== AITracingEventType.SPAN_UPDATED &&
-      event.type !== AITracingEventType.SPAN_STARTED
-    ) {
+    // Only process SPAN_ENDED events for OTEL
+    // OTEL expects complete spans with start and end times
+    if (event.type !== AITracingEventType.SPAN_ENDED) {
       return;
     }
 
     const span = event.exportedSpan;
-    await this.processSpan(span);
+    await this.exportSpan(span);
   }
 
-  private async processSpan(span: AnyExportedAISpan): Promise<void> {
+  private async exportSpan(span: AnyExportedAISpan): Promise<void> {
     // Ensure exporter is set up
     if (!this.isSetup) {
       await this.setupExporter();
     }
 
     // Skip if disabled
-    if (this.isDisabled) {
-      return;
-    }
-
-    // Get or create trace data
-    let traceData = this.traceMap.get(span.traceId);
-
-    if (!traceData) {
-      // First span in trace - must be root
-      traceData = {
-        spans: new Map(),
-        rootSpanId: span.id,
-        isRootComplete: false,
-      };
-      this.traceMap.set(span.traceId, traceData);
-    }
-
-    // Store span data
-    const isComplete = !!span.endTime;
-    traceData.spans.set(span.id, { span, isComplete });
-
-    // Check if this is the root span completing
-    if (span.id === traceData.rootSpanId && isComplete) {
-      traceData.isRootComplete = true;
-
-      // Schedule export after delay to allow child spans to complete
-      await this.scheduleExport(span.traceId);
-    }
-  }
-
-  private async scheduleExport(traceId: string) {
-    // Clear any existing timeout for this trace
-    if (this.exportTimeout) {
-      clearTimeout(this.exportTimeout);
-    }
-
-    // Schedule export after delay
-    this.exportTimeout = setTimeout(async () => {
-      await this.exportTrace(traceId);
-    }, this.EXPORT_DELAY_MS);
-  }
-
-  private async exportTrace(traceId: string) {
-    const traceData = this.traceMap.get(traceId);
-    if (!traceData || !traceData.isRootComplete) {
+    if (this.isDisabled || !this.processor) {
       return;
     }
 
     try {
-      // Build parent-child relationships
-      const rootSpan = traceData.spans.get(traceData.rootSpanId);
+      // Convert the span to OTEL format
+      const readableSpan = this.spanConverter.convertSpan(span);
 
-      if (!rootSpan) {
-        console.warn(`Root span ${traceData.rootSpanId} not found for trace ${traceId}`);
-        return;
+      // Export the span immediately through the processor
+      // The processor will handle batching if configured
+      await new Promise<void>(resolve => {
+        this.processor!.onEnd(readableSpan);
+        resolve();
+      });
+
+      if (this.config.logLevel === 'debug') {
+        console.log(
+          `[OtelExporter] Exported span ${span.id} (trace: ${span.traceId}, parent: ${span.parentSpanId || 'none'}, type: ${span.type})`,
+        );
       }
-
-      // Convert all spans to ReadableSpans
-      const readableSpans: any[] = [];
-
-      // Convert all spans - Mastra already provides correct parentSpanId
-      for (const [, spanData] of traceData.spans) {
-        const readableSpan = this.spanConverter.convertSpan(spanData.span);
-        readableSpans.push(readableSpan);
-      }
-
-      // Export the readable spans directly through the exporter
-      if (this.exporter && 'export' in this.exporter) {
-        await (this.exporter as any).export(readableSpans, (result: any) => {
-          if (result.code !== 0) {
-            console.error(`Failed to export trace ${traceId}:`, result.error);
-          }
-        });
-      }
-
-      // Clean up trace data
-      this.traceMap.delete(traceId);
     } catch (error) {
-      console.error(`Failed to export trace ${traceId}:`, error);
+      console.error(`[OtelExporter] Failed to export span ${span.id}:`, error);
     }
   }
 
   async shutdown(): Promise<void> {
-    // Clear any pending exports
-    if (this.exportTimeout) {
-      clearTimeout(this.exportTimeout);
-    }
-
-    // Export any remaining traces
-    for (const [traceId, traceData] of this.traceMap) {
-      if (traceData.isRootComplete) {
-        await this.exportTrace(traceId);
-      }
-    }
-
-    // Shutdown tracer provider
-    if (this.tracerProvider) {
-      await this.tracerProvider.shutdown();
+    // Shutdown the processor to flush any remaining spans
+    if (this.processor) {
+      await this.processor.shutdown();
     }
   }
 }
