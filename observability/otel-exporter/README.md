@@ -124,6 +124,7 @@ const mastra = new Mastra({
 #### Installation
 
 ```bash
+# Traceloop uses HTTP/JSON protocol
 npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-http
 ```
 
@@ -341,34 +342,63 @@ The exporter buffers spans until a trace is complete before sending them. This e
 
 Traces are exported 5 seconds after the root span completes, allowing time for any remaining child spans to finish.
 
-## Attributes
+## OpenTelemetry Semantic Conventions
 
-The exporter adds the following attributes to spans:
+This exporter follows the [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/) to ensure compatibility with observability platforms.
 
-### Standard Attributes
+### Span Naming
 
-- `mastra.span.type` - Mastra span type
-- `mastra.input` - Span input (serialized if object)
-- `mastra.output` - Span output (serialized if object)
+Spans are named following OTEL conventions:
 
-### LLM-Specific Attributes
+- **LLM Operations**: `chat {model}` or `tool_selection {model}`
+- **Tool Execution**: `tool.execute {tool_name}`
+- **Agent Runs**: `agent.{agent_id}`
+- **Workflow Runs**: `workflow.{workflow_id}`
 
-- `llm.model` / `gen_ai.request.model` - Model name
-- `llm.provider` / `gen_ai.system` - Provider name
-- `llm.usage.prompt_tokens` / `gen_ai.usage.prompt_tokens` - Input tokens
-- `llm.usage.completion_tokens` / `gen_ai.usage.completion_tokens` - Output tokens
-- `llm.usage.total_tokens` - Total token count
-- `llm.parameters.*` - Model parameters
+### Attributes
 
-### Tool Attributes
+The exporter maps Mastra's AI tracing data to OTEL-compliant attributes:
 
-- `tool.name` - Tool name
-- `tool.description` - Tool description
+#### Core Attributes
 
-### Custom Attributes
+- `gen_ai.operation.name` - Operation type (chat, tool.execute, agent.run, workflow.run)
+- `gen_ai.system` - AI provider (openai, anthropic, etc.)
+- `gen_ai.request.model` - Model identifier
 
-- `mastra.attributes.*` - Any custom attributes from the span
-- `mastra.metadata.*` - Any metadata from the span
+#### LLM-Specific Attributes
+
+- `gen_ai.usage.input_tokens` - Number of input tokens
+- `gen_ai.usage.output_tokens` - Number of output tokens
+- `gen_ai.usage.total_tokens` - Total token count
+- `gen_ai.request.temperature` - Sampling temperature
+- `gen_ai.request.max_tokens` - Maximum tokens to generate
+- `gen_ai.request.top_p` - Top-p sampling parameter
+- `gen_ai.request.top_k` - Top-k sampling parameter
+- `gen_ai.response.finish_reasons` - Reason for completion
+- `gen_ai.prompt` - Input prompt (for LLM spans)
+- `gen_ai.completion` - Model output (for LLM spans)
+
+#### Tool Attributes
+
+- `gen_ai.tool.name` - Tool identifier
+- `gen_ai.tool.description` - Tool description
+- `gen_ai.tool.success` - Whether tool execution succeeded
+- `gen_ai.tool.input` - Tool input parameters
+- `gen_ai.tool.output` - Tool execution result
+
+#### Agent & Workflow Attributes
+
+- `agent.id` - Agent identifier
+- `agent.max_steps` - Maximum agent steps
+- `workflow.id` - Workflow identifier
+- `workflow.status` - Workflow execution status
+
+#### Error Attributes
+
+- `error` - Boolean indicating error occurred
+- `error.type` - Error identifier
+- `error.message` - Error description
+- `error.domain` - Error domain/category
 
 ## Troubleshooting
 

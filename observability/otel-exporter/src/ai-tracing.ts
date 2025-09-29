@@ -232,17 +232,9 @@ export class OtelExporter implements AITracingExporter {
       // Convert all spans to ReadableSpans
       const readableSpans: any[] = [];
 
-      // Convert root span first
-      const rootReadableSpan = this.spanConverter.convertSpan(rootSpan.span);
-      readableSpans.push(rootReadableSpan);
-
-      // Convert child spans with parent IDs
-      for (const [spanId, spanData] of traceData.spans) {
-        if (spanId === traceData.rootSpanId) continue;
-
-        const parentId = spanData.span.parentSpanId || traceData.rootSpanId;
-        const readableSpan = this.spanConverter.convertSpan(spanData.span, parentId);
-
+      // Convert all spans - Mastra already provides correct parentSpanId
+      for (const [, spanData] of traceData.spans) {
+        const readableSpan = this.spanConverter.convertSpan(spanData.span);
         readableSpans.push(readableSpan);
       }
 
