@@ -7,7 +7,7 @@ $ pnpm add @mastra/react
 ```
 
 ```tsx
-import { toStreamAssistantUIMessage , useAgent, MastraReactProvider } from '@mastra/react'
+import { toStreamAssistantUIMessage, useAgent, MastraReactProvider } from '@mastra/react';
 
 // App.tsx
 export default function App() {
@@ -36,6 +36,6 @@ export default function YourComponent() {
     });
   };
 
-  return <div>...</div>
+  return <div>...</div>;
 }
 ```
