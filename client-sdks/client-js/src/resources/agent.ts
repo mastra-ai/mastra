@@ -1144,7 +1144,7 @@ export class Agent extends BaseResource {
       body: processedParams,
       stream: true,
     });
-    });
+
     if (!response.body) {
       throw new Error('No response body');
     }
@@ -1430,7 +1430,6 @@ export class Agent extends BaseResource {
       await processMastraStream({
         stream: streamResponse.body as ReadableStream<Uint8Array>,
         onChunk,
-      });
       });
     };
 

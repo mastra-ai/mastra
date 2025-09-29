@@ -145,7 +145,6 @@ describe('Agent vNext', () => {
       .mockResolvedValueOnce(sseResponse(firstCycle))
       .mockResolvedValueOnce(sseResponse(secondCycle));
 
-    const executeSpy = vi.fn(async () => ({ ok: true }));
     const weatherTool = createTool({
       id: 'weatherTool',
       description: 'Weather',
