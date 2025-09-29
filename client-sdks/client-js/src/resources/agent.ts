@@ -1144,7 +1144,7 @@ export class Agent extends BaseResource {
       body: processedParams,
       stream: true,
     });
-    console.log(processedParams);
+    });
     if (!response.body) {
       throw new Error('No response body');
     }
