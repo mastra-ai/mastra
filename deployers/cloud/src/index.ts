@@ -22,7 +22,7 @@ export class CloudDeployer extends Deployer {
     await copy(join(__dirname, '../templates', 'instrumentation-template.js'), instrumentationFile);
   }
   writePackageJson(outputDirectory: string, dependencies: Map<string, string>) {
-    dependencies.set('@mastra/loggers', '0.10.6');
+    dependencies.set('@mastra/loggers', '0.10.13');
     dependencies.set('@mastra/libsql', '0.14.3');
     dependencies.set('@mastra/cloud', '0.1.15');
     return super.writePackageJson(outputDirectory, dependencies);
