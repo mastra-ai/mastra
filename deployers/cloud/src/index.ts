@@ -23,7 +23,7 @@ export class CloudDeployer extends Deployer {
   }
   writePackageJson(outputDirectory: string, dependencies: Map<string, string>) {
     dependencies.set('@mastra/loggers', '0.10.6');
-    dependencies.set('@mastra/libsql', '0.13.1');
+    dependencies.set('@mastra/libsql', '0.14.3');
     dependencies.set('@mastra/cloud', '0.1.15');
     return super.writePackageJson(outputDirectory, dependencies);
   }
