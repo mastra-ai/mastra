@@ -1,4 +1,4 @@
-import { useMastraClient } from '@mastra/react-hooks';
+import { useMastraClient } from '@mastra/react';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
