@@ -89,6 +89,7 @@ export const PROVIDER_REGISTRY = {
       "grok-4-fast",
       "grok-4-fast-non-reasoning",
       "grok-beta",
+      "grok-code-fast-1",
       "grok-vision-beta"
     ],
     "docUrl": "https://docs.x.ai/docs/models"
@@ -270,7 +271,10 @@ export const PROVIDER_REGISTRY = {
       "xai/grok-3-fast",
       "xai/grok-3-mini",
       "xai/grok-3-mini-fast",
-      "xai/grok-4"
+      "xai/grok-4",
+      "xai/grok-4-fast",
+      "xai/grok-4-fast-non-reasoning",
+      "xai/grok-code-fast-1"
     ],
     "docUrl": "https://github.com/vercel/ai/tree/5eb85cc45a259553501f535b8ac79a77d0e79223/packages/gateway"
   },
@@ -339,7 +343,8 @@ export const PROVIDER_REGISTRY = {
       "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
       "deepseek-ai/DeepSeek-V3-0324",
       "deepseek-ai/DeepSeek-V3.1",
-      "deepseek-ai/DeepSeek-V3.1-Turbo",
+      "deepseek-ai/DeepSeek-V3.1-Terminus",
+      "deepseek-ai/DeepSeek-V3.1-turbo",
       "deepseek-ai/DeepSeek-V3.1:THINKING",
       "meituan-longcat/LongCat-Flash-Chat-FP8",
       "moonshotai/Kimi-Dev-72B",
@@ -351,7 +356,7 @@ export const PROVIDER_REGISTRY = {
       "tngtech/DeepSeek-TNG-R1T2-Chimera",
       "zai-org/GLM-4.5-Air",
       "zai-org/GLM-4.5-FP8",
-      "zai-org/GLM-4.5-Turbo"
+      "zai-org/GLM-4.5-turbo"
     ],
     "docUrl": "https://llm.chutes.ai/v1/models"
   },
@@ -492,6 +497,7 @@ export const PROVIDER_REGISTRY = {
       "claude-3-5-haiku",
       "claude-opus-4-1",
       "claude-sonnet-4",
+      "claude-sonnet-4-5",
       "code-supernova",
       "gpt-5",
       "gpt-5-codex",
@@ -545,7 +551,10 @@ export const PROVIDER_REGISTRY = {
       "gemini-2.5-flash-preview-09-2025",
       "gemini-2.5-pro",
       "gemini-2.5-pro-preview-05-06",
-      "gemini-2.5-pro-preview-06-05"
+      "gemini-2.5-pro-preview-06-05",
+      "gemini-flash-latest",
+      "gemini-flash-lite-latest",
+      "gemini-live-2.5-flash-preview-native-audio"
     ],
     "docUrl": "https://ai.google.dev/gemini-api/docs/pricing"
   },
@@ -741,6 +750,7 @@ export const PROVIDER_REGISTRY = {
       "x-ai/grok-3-mini",
       "x-ai/grok-3-mini-beta",
       "x-ai/grok-4",
+      "x-ai/grok-4-fast",
       "x-ai/grok-4-fast:free",
       "x-ai/grok-code-fast-1",
       "z-ai/glm-4.5",
@@ -1030,6 +1040,7 @@ export const PROVIDER_MODELS = {
     "grok-4-fast",
     "grok-4-fast-non-reasoning",
     "grok-beta",
+    "grok-code-fast-1",
     "grok-vision-beta"
   ],
   "nvidia": [
@@ -1169,7 +1180,10 @@ export const PROVIDER_MODELS = {
     "xai/grok-3-fast",
     "xai/grok-3-mini",
     "xai/grok-3-mini-fast",
-    "xai/grok-4"
+    "xai/grok-4",
+    "xai/grok-4-fast",
+    "xai/grok-4-fast-non-reasoning",
+    "xai/grok-code-fast-1"
   ],
   "deepseek": [
     "deepseek-chat",
@@ -1210,7 +1224,8 @@ export const PROVIDER_MODELS = {
     "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
     "deepseek-ai/DeepSeek-V3-0324",
     "deepseek-ai/DeepSeek-V3.1",
-    "deepseek-ai/DeepSeek-V3.1-Turbo",
+    "deepseek-ai/DeepSeek-V3.1-Terminus",
+    "deepseek-ai/DeepSeek-V3.1-turbo",
     "deepseek-ai/DeepSeek-V3.1:THINKING",
     "meituan-longcat/LongCat-Flash-Chat-FP8",
     "moonshotai/Kimi-Dev-72B",
@@ -1222,7 +1237,7 @@ export const PROVIDER_MODELS = {
     "tngtech/DeepSeek-TNG-R1T2-Chimera",
     "zai-org/GLM-4.5-Air",
     "zai-org/GLM-4.5-FP8",
-    "zai-org/GLM-4.5-Turbo"
+    "zai-org/GLM-4.5-turbo"
   ],
   "cortecs": [
     "claude-sonnet-4",
@@ -1321,6 +1336,7 @@ export const PROVIDER_MODELS = {
     "claude-3-5-haiku",
     "claude-opus-4-1",
     "claude-sonnet-4",
+    "claude-sonnet-4-5",
     "code-supernova",
     "gpt-5",
     "gpt-5-codex",
@@ -1360,7 +1376,10 @@ export const PROVIDER_MODELS = {
     "gemini-2.5-flash-preview-09-2025",
     "gemini-2.5-pro",
     "gemini-2.5-pro-preview-05-06",
-    "gemini-2.5-pro-preview-06-05"
+    "gemini-2.5-pro-preview-06-05",
+    "gemini-flash-latest",
+    "gemini-flash-lite-latest",
+    "gemini-live-2.5-flash-preview-native-audio"
   ],
   "inception": [
     "mercury",
@@ -1514,6 +1533,7 @@ export const PROVIDER_MODELS = {
     "x-ai/grok-3-mini",
     "x-ai/grok-3-mini-beta",
     "x-ai/grok-4",
+    "x-ai/grok-4-fast",
     "x-ai/grok-4-fast:free",
     "x-ai/grok-code-fast-1",
     "z-ai/glm-4.5",
