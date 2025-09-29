@@ -2028,7 +2028,7 @@ importers:
       '@mastra/playground-ui':
         specifier: workspace:^
         version: link:../playground-ui
-      '@mastra/react-hooks':
+      '@mastra/react':
         specifier: workspace:*
         version: link:../../client-sdks/react
       '@radix-ui/react-checkbox':
@@ -2251,7 +2251,7 @@ importers:
       '@mastra/client-js':
         specifier: workspace:^
         version: link:../../client-sdks/client-js
-      '@mastra/react-hooks':
+      '@mastra/react':
         specifier: workspace:*
         version: link:../../client-sdks/react
       '@radix-ui/react-alert-dialog':
