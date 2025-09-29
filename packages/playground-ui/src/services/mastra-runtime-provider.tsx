@@ -11,7 +11,6 @@ import { RuntimeContext } from '@mastra/core/di';
 import { ChatProps, Message } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@/lib/file/toBase64';
-import { toStreamAssistantUIMessage, toNetworkAssistantUIMessage, useMastraClient } from '@mastra/react';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
@@ -19,7 +18,13 @@ import { MastraModelOutput } from '@mastra/core/stream';
 
 import { handleNetworkMessageFromMemory } from './agent-network-message';
 
-import { ModelSettings, useAgent } from '@mastra/react';
+import {
+  ModelSettings,
+  useChat,
+  toStreamAssistantUIMessage,
+  toNetworkAssistantUIMessage,
+  useMastraClient,
+} from '@mastra/react';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -169,14 +174,15 @@ export function MastraRuntimeProvider({
 }> &
   ChatProps) {
   const [isRunning, setIsRunning] = useState(false);
-  const [messages, setMessages] = useState<ThreadMessageLike[]>(() => initializeMessageState(initialMessages ?? []));
 
   const {
+    messages,
+    setMessages,
     streamVNext,
     network,
     cancelRun,
     isRunning: isRunningStreamVNext,
-  } = useAgent({
+  } = useChat<ThreadMessageLike>({
     agentId,
   });
 
@@ -366,10 +372,9 @@ export function MastraRuntimeProvider({
             runtimeContext: runtimeContextInstance,
             threadId,
             modelSettings: modelSettingsArgs,
-            onNetworkChunk: ({ chunk }) => {
-              setMessages(currentConversation =>
-                toNetworkAssistantUIMessage({ chunk, conversation: currentConversation }),
-              );
+            onNetworkChunk: ({ chunk, conversation }) => {
+              const next = toNetworkAssistantUIMessage({ chunk, conversation });
+
               if (
                 chunk.type === 'tool-execution-end' &&
                 chunk.payload?.toolName === 'updateWorkingMemory' &&
@@ -379,6 +384,8 @@ export function MastraRuntimeProvider({
               ) {
                 refreshWorkingMemory?.();
               }
+
+              return next;
             },
           });
         } else {
@@ -423,10 +430,8 @@ export function MastraRuntimeProvider({
               runtimeContext: runtimeContextInstance,
               threadId,
               modelSettings: modelSettingsArgs,
-              onChunk: ({ chunk }) => {
-                setMessages(currentConversation =>
-                  toStreamAssistantUIMessage({ chunk, conversation: currentConversation }),
-                );
+              onChunk: ({ chunk, conversation }) => {
+                const next = toStreamAssistantUIMessage({ chunk, conversation });
 
                 if (
                   chunk.type === 'tool-result' &&
@@ -437,6 +442,8 @@ export function MastraRuntimeProvider({
                 ) {
                   refreshWorkingMemory?.();
                 }
+
+                return next;
               },
             });
 

@@ -7,27 +7,36 @@ import { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 
 import { useRef, useState } from 'react';
 
-export interface MastraChatProps {
+export interface MastraChatProps<TMessage> {
   agentId: string;
+  initializeMessages?: () => TMessage[];
 }
 
-export interface StreamVNextArgs {
+export interface MastraChatProps<TMessage> {
+  agentId: string;
+  initializeMessages?: () => TMessage[];
+}
+
+export interface StreamVNextArgs<TMessage> {
   coreUserMessages: CoreUserMessage[];
   runtimeContext?: RuntimeContext;
   threadId?: string;
-  onChunk?: ({ chunk }: { chunk: ChunkType }) => void;
+  onChunk: ({ chunk, conversation }: { chunk: ChunkType; conversation: TMessage[] }) => TMessage[];
   modelSettings?: ModelSettings;
+  signal?: AbortSignal;
 }
 
-export interface NetworkArgs {
+export interface NetworkArgs<TMessage> {
   coreUserMessages: CoreUserMessage[];
   runtimeContext?: RuntimeContext;
   threadId?: string;
-  onNetworkChunk?: ({ chunk }: { chunk: NetworkChunkType }) => void;
+  onNetworkChunk: ({ chunk, conversation }: { chunk: NetworkChunkType; conversation: TMessage[] }) => TMessage[];
   modelSettings?: ModelSettings;
+  signal?: AbortSignal;
 }
 
-export const useAgent = ({ agentId }: MastraChatProps) => {
+export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatProps<TMessage>) => {
+  const [messages, setMessages] = useState<TMessage[]>(initializeMessages ?? []);
   const abortControllerRef = useRef<AbortController | null>(null);
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
@@ -38,7 +47,7 @@ export const useAgent = ({ agentId }: MastraChatProps) => {
     threadId,
     onChunk,
     modelSettings,
-  }: StreamVNextArgs) => {
+  }: StreamVNextArgs<TMessage>) => {
     const {
       frequencyPenalty,
       presencePenalty,
@@ -88,7 +97,7 @@ export const useAgent = ({ agentId }: MastraChatProps) => {
 
     await response.processDataStream({
       onChunk: (chunk: ChunkType) => {
-        onChunk?.({ chunk });
+        setMessages(prev => onChunk({ chunk, conversation: prev }));
         return Promise.resolve();
       },
     });
@@ -102,7 +111,7 @@ export const useAgent = ({ agentId }: MastraChatProps) => {
     threadId,
     onNetworkChunk,
     modelSettings,
-  }: NetworkArgs) => {
+  }: NetworkArgs<TMessage>) => {
     const { frequencyPenalty, presencePenalty, maxRetries, maxTokens, temperature, topK, topP, maxSteps } =
       modelSettings || {};
 
@@ -134,10 +143,9 @@ export const useAgent = ({ agentId }: MastraChatProps) => {
       runtimeContext,
       ...(threadId ? { thread: threadId, resourceId: agentId } : {}),
     });
-
     await response.processDataStream({
       onChunk: (chunk: NetworkChunkType) => {
-        onNetworkChunk?.({ chunk });
+        setMessages(prev => onNetworkChunk({ chunk, conversation: prev }));
         return Promise.resolve();
       },
     });
@@ -146,6 +154,8 @@ export const useAgent = ({ agentId }: MastraChatProps) => {
   };
 
   return {
+    messages,
+    setMessages,
     network,
     streamVNext,
     isRunning,
