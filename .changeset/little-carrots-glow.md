@@ -3,4 +3,4 @@
 '@mastra/pg': minor
 ---
 
-Added Postgres ai-traces exporter and updated libsql storage adapter for ai-traces
+Added Postgres and updated libsql storage adapters for ai-traces
