@@ -1,6 +1,6 @@
 'use client';
 
-import { MastraReactProvider, MastraUIMessage, toNetworkUIMessage, toUIMessage, useChat } from '@mastra/react';
+import { MastraReactProvider, MastraUIMessage, toNetworkUIMessage, useChat } from '@mastra/react';
 import {
   Conversation,
   ConversationContent,
