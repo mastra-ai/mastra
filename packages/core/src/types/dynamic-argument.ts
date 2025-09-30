@@ -1,5 +1,5 @@
-import type { Mastra } from './mastra';
-import type { RuntimeContext } from './runtime-context';
+import type { Mastra } from '../mastra';
+import type { RuntimeContext } from '../runtime-context';
 
 export type DynamicArgument<T> =
   | T
