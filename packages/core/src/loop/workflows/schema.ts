@@ -21,6 +21,7 @@ import type {
   GeneratedFile,
 } from 'ai-v5';
 import z from 'zod';
+import type { InferSchemaOutput, OutputSchema } from '../../stream/base/schema';
 
 // Type definitions for the workflow data
 export interface LLMIterationStepResult {
@@ -34,7 +35,7 @@ export interface LLMIterationStepResult {
   request?: LanguageModelRequestMetadata;
 }
 
-export interface LLMIterationOutput<Tools extends ToolSet = ToolSet> {
+export interface LLMIterationOutput<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
   text?: string;
   reasoning?: ReasoningPart[];
   reasoningText?: string;
@@ -48,7 +49,7 @@ export interface LLMIterationOutput<Tools extends ToolSet = ToolSet> {
   dynamicToolResults?: DynamicToolResult[];
   usage: LanguageModelUsage;
   steps: StepResult<Tools>[];
-  // object?: InferSchemaOutput<OUTPUT>;
+  object?: InferSchemaOutput<OUTPUT>;
 }
 
 export interface LLMIterationMetadata {
@@ -61,14 +62,14 @@ export interface LLMIterationMetadata {
   request?: LanguageModelRequestMetadata;
 }
 
-export interface LLMIterationData<Tools extends ToolSet = ToolSet> {
+export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
   messageId: string;
   messages: {
     all: ModelMessage[];
     user: ModelMessage[];
     nonUser: ModelMessage[];
   };
-  output: LLMIterationOutput<Tools>;
+  output: LLMIterationOutput<Tools, OUTPUT>;
   metadata: LLMIterationMetadata;
   stepResult: LLMIterationStepResult;
 }
