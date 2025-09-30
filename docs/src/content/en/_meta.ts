@@ -3,7 +3,6 @@ const meta = {
   examples: { title: "Examples", type: "page" },
   guides: { title: "Guides", type: "page" },
   reference: { title: "Reference", type: "page" },
-  models: { title: "Models", type: "page" },
   showcase: {
     title: "Showcase",
     type: "page",
