@@ -768,7 +768,7 @@ export class Agent<
       if (resolvedModel.specificationVersion === 'v2') {
         const modelsPromise =
           Array.isArray(this.model) && !model
-            ? this.prepareModels(runtimeContext, this.model)
+            ? this.prepareModels(runtimeContext)
             : this.prepareModels(runtimeContext, resolvedModel);
 
         llm = modelsPromise.then(models => {
