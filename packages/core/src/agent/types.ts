@@ -69,7 +69,8 @@ export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;
 }
 
-// Helper type that preserves literal types better
+// This is used in place of DynamicArgument so that model router IDE autocomplete works.
+// Without this TS doesn't understand the function/string union type from DynamicArgument
 type DynamicModel = ({
   runtimeContext,
   mastra,
@@ -78,9 +79,8 @@ type DynamicModel = ({
   mastra?: Mastra;
 }) => Promise<MastraModelConfig> | MastraModelConfig;
 
-// Helper type for model with retries
 type ModelWithRetries = {
-  id?: string; // Made optional to support existing tests
+  id?: string;
   model: MastraModelConfig | DynamicModel;
   maxRetries?: number; //defaults to 0
   enabled?: boolean; //defaults to true

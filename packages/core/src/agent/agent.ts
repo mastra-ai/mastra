@@ -89,6 +89,13 @@ import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 
+type ModelFallbacks = {
+  id: string;
+  model: DynamicArgument<MastraModelConfig>;
+  maxRetries: number;
+  enabled: boolean;
+}[];
+
 function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
   if (value instanceof Promise) {
     return value.then(cb);
@@ -152,14 +159,7 @@ export class Agent<
   public name: TAgentId;
   #instructions: DynamicAgentInstructions;
   readonly #description?: string;
-  model:
-    | DynamicArgument<MastraModelConfig>
-    | {
-        id: string;
-        model: DynamicArgument<MastraModelConfig>;
-        maxRetries: number;
-        enabled: boolean;
-      }[];
+  model: DynamicArgument<MastraModelConfig> | ModelFallbacks;
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
@@ -766,11 +766,9 @@ export class Agent<
     return resolveMaybePromise(modelToUse, resolvedModel => {
       let llm: MastraLLM | Promise<MastraLLM>;
       if (resolvedModel.specificationVersion === 'v2') {
-        // If we have an array of models, use prepareModels without passing the resolved model
-        // so it processes the entire array
         const modelsPromise =
           Array.isArray(this.model) && !model
-            ? this.prepareModels(runtimeContext)
+            ? this.prepareModels(runtimeContext, this.model)
             : this.prepareModels(runtimeContext, resolvedModel);
 
         llm = modelsPromise.then(models => {
@@ -809,6 +807,8 @@ export class Agent<
     if (typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) return false;
     // Check for OpenAICompatibleConfig specifically - it should have 'id' but NOT 'model'
     // ModelWithRetries has both 'id' and 'model', so we exclude it
+    // TODO: should probably do some additional checking using providers list to see if the ID starts with a known provider
+    // we can also do some duck typing around optional properties like url/apiKey/etc
     if (typeof modelConfig === 'object' && 'id' in modelConfig && !('model' in modelConfig)) return true;
     return false;
   }
@@ -2858,7 +2858,7 @@ export class Agent<
 
   private async prepareModels(
     runtimeContext: RuntimeContext,
-    model?: DynamicArgument<MastraLanguageModel>,
+    model?: DynamicArgument<MastraLanguageModel> | ModelFallbacks,
   ): Promise<Array<AgentModelManagerConfig>> {
     if (model || !Array.isArray(this.model)) {
       const modelToUse = model ?? this.model;
@@ -2891,7 +2891,6 @@ export class Agent<
 
     const models = await Promise.all(
       this.model.map(async modelConfig => {
-        // modelConfig is of type ModelWithRetries, so we need to resolve modelConfig.model
         const model = await this.resolveModelConfig(modelConfig.model, runtimeContext);
 
         if (model.specificationVersion !== 'v2') {
