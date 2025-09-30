@@ -12,10 +12,12 @@ npm install @mastra/voice-google
 
 ## Configuration
 
-The module requires the following environment variable:
+You can authenticate in one of the following ways:
 
 ```bash
 GOOGLE_API_KEY=your_api_key
+# or provide a service account key picked up by ADC
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
 ```
 
 ## Usage
@@ -26,10 +28,11 @@ import { GoogleVoice } from '@mastra/voice-google';
 // Initialize with configuration
 const voice = new GoogleVoice({
   speechModel: {
-    apiKey: 'your-api-key', // Optional, can use GOOGLE_API_KEY env var
+    apiKey: 'your-api-key', // Optional, can rely on GOOGLE_API_KEY or ADC
+    keyFilename: '/path/to/service-account.json', // Optional, can rely on GOOGLE_APPLICATION_CREDENTIALS
   },
   listeningModel: {
-    apiKey: 'your-api-key', // Optional, can use GOOGLE_API_KEY env var
+    keyFilename: '/path/to/service-account.json', // Optional, can rely on ADC
   },
   speaker: 'en-US-Standard-F', // Default voice
 });
