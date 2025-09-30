@@ -1,21 +1,19 @@
 import { Badge } from '@/ds/components/Badge';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
-import { providerMapToIcon } from '../provider-map-icon';
 import { useLinkComponent } from '@/lib/framework';
 import { GetAgentResponse, GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
 import { AgentMetadataSection } from './agent-metadata-section';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
 import { AgentMetadataWrapper } from './agent-metadata-wrapper';
-import { ReactNode, useState } from 'react';
+import { ReactNode } from 'react';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { useScorers } from '@/domains/scores';
-import { AgentIcon, Icon } from '@/ds/icons';
-import { EditIcon, GaugeIcon } from 'lucide-react';
+import { AgentIcon } from '@/ds/icons';
+import { GaugeIcon } from 'lucide-react';
 import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './agent-metadata-model-switcher';
 import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
 import { LoadingBadge } from '@/components/assistant-ui/tools/badges/loading-badge';
-import { cleanProviderId } from './utils';
 
 export interface AgentMetadataProps {
   agentId: string;
@@ -64,9 +62,6 @@ export const AgentMetadata = ({
   updateModelInModelList,
   reorderModelList,
 }: AgentMetadataProps) => {
-  const cleanedProvider = cleanProviderId(agent.provider || 'openai');
-  const providerIcon = providerMapToIcon[(cleanedProvider + '.chat') as keyof typeof providerMapToIcon] || providerMapToIcon['openai.chat'];
-
   const networkAgentsMap = agent.agents ?? {};
   const networkAgents = Object.values(networkAgentsMap);
 
@@ -78,7 +73,7 @@ export const AgentMetadata = ({
 
   return (
     <AgentMetadataWrapper>
-{agent.modelList ? (
+      {agent.modelList ? (
         <AgentMetadataSection title="Models">
           <AgentMetadataModelList
             modelList={agent.modelList}
