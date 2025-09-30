@@ -5,7 +5,6 @@ import type { ToolSet } from 'ai-v5';
 import { MessageList } from '../../../agent/message-list';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
-import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
 import { MastraModelOutput } from '../../../stream/base/output';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type {

@@ -1,6 +1,5 @@
 import type { ToolSet } from 'ai-v5';
 import z from 'zod';
-import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
