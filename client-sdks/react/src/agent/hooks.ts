@@ -5,6 +5,7 @@ import { CoreUserMessage } from '@mastra/core/llm';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useState } from 'react';
+import { flushSync } from 'react-dom';
 
 export interface MastraChatProps<TMessage> {
   agentId: string;
@@ -29,7 +30,7 @@ export interface NetworkArgs<TMessage> {
   signal?: AbortSignal;
 }
 
-export const useMastraChat = <TMessage>({ agentId, initializeMessages }: MastraChatProps<TMessage>) => {
+export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatProps<TMessage>) => {
   const [messages, setMessages] = useState<TMessage[]>(initializeMessages || []);
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
@@ -90,7 +91,11 @@ export const useMastraChat = <TMessage>({ agentId, initializeMessages }: MastraC
 
     await response.processDataStream({
       onChunk: (chunk: ChunkType) => {
-        setMessages(prev => onChunk(chunk, prev));
+        // Without this, React might batch intermediate chunks which would break the message reconstruction over time
+        flushSync(() => {
+          setMessages(prev => onChunk(chunk, prev));
+        });
+
         return Promise.resolve();
       },
     });

@@ -6,17 +6,23 @@ export function createSampleScore({
   entityId,
   entityType,
   source,
+  traceId,
+  spanId,
 }: {
   scorerId: string;
   entityId?: string;
   entityType?: ScoringEntityType;
   source?: ScoringSource;
+  traceId?: string;
+  spanId?: string;
 }): ScoreRowData {
   return {
     id: randomUUID(),
     entityId: entityId ?? 'eval-agent',
     entityType: entityType ?? 'AGENT',
     scorerId,
+    traceId,
+    spanId,
     createdAt: new Date(),
     updatedAt: new Date(),
     runId: randomUUID(),

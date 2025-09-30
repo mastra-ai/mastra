@@ -1113,8 +1113,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               ],
               "dynamicToolCalls": [],
               "dynamicToolResults": [],
-              "error": [Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
-            Error message: Validation failed],
+              "error": [Error: {"name":"AI_TypeValidationError","cause":"Validation failed","value":{"invalid":"Hello, world!"}}],
               "files": [],
               "finishReason": "error",
               "model": {
