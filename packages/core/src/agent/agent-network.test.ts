@@ -109,7 +109,7 @@ describe('Agent - network', () => {
     name: 'Test Network',
     instructions:
       'You can research cities. You can also synthesize research material. You can also write a full report based on the researched material.',
-    model: openai('gpt-4o'),
+    model: openai('gpt-4o-mini'),
     agents: {
       agent1,
       agent2,
@@ -167,7 +167,20 @@ describe('Agent - network', () => {
     for await (const chunk of anStream) {
       console.log(chunk);
     }
+  });
 
-    console.log('SUH', anStream);
+  it.only('Should not infinite loop', async () => {
+    const prompt = `Hi!`; // <- this triggers an infinite loop
+
+    const networkResult = await network.network([{ role: 'user', content: prompt }]);
+
+    const resultObject = await networkResult.result;
+
+    if (resultObject?.status === 'success') {
+      console.log('RESULT OBJECT', resultObject.result);
+      console.log('Done');
+    } else {
+      console.log('RESULT OBJECT', resultObject);
+    }
   });
 }, 120e3);

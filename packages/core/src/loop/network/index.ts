@@ -572,19 +572,13 @@ export async function createNetworkLoop({
         payload: toolData,
       });
 
-      // await emitter.emit('watch-v2', {
-      //     type: 'tool-call-streaming-start',
-      //     ...toolData,
-      // });
-
       const stream = run.streamVNext({
         inputData: input,
         runtimeContext: runtimeContext,
       });
 
-      // let result: any;
-      // let stepResults: Record<string, any> = {};
       let chunks: ChunkType[] = [];
+
       for await (const chunk of stream) {
         chunks.push(chunk);
         await writer?.write({
@@ -824,9 +818,15 @@ export async function createNetworkLoop({
       iteration: z.number(),
     }),
     execute: async ({ inputData, writer }) => {
+      let endResult = inputData.result;
+
+      if (inputData.primitiveId === 'none' && inputData.primitiveType === 'none' && !inputData.result) {
+        endResult = inputData.selectionReason;
+      }
+
       const endPayload = {
         task: inputData.task,
-        result: inputData.result,
+        result: endResult,
         isComplete: !!inputData.isComplete,
         iteration: inputData.iteration,
       };
