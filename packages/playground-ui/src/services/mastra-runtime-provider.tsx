@@ -15,16 +15,12 @@ import { useMastraClient } from '@mastra/react';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
-import { MastraModelOutput, ReadonlyJSONObject } from '@mastra/core/stream';
+import { MastraModelOutput, NetworkChunkType } from '@mastra/core/stream';
 
 import { handleNetworkMessageFromMemory } from './agent-network-message';
-import {
-  createRootToolAssistantMessage,
-  handleAgentChunk,
-  handleStreamChunk,
-  handleWorkflowChunk,
-} from './stream-chunk-message';
+import { handleStreamChunk } from './stream-chunk-message';
 import { ModelSettings, useChat } from '@mastra/react';
+import { toNetworkAssistantUIMessage } from './to-network-chunk';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -179,7 +175,6 @@ export function MastraRuntimeProvider({
     messages,
     setMessages,
     streamVNext,
-    network,
     cancelRun,
     isRunning: isRunningStreamVNext,
   } = useChat<ThreadMessageLike>({
@@ -360,106 +355,37 @@ export function MastraRuntimeProvider({
 
       if (modelVersion === 'v2') {
         if (chatWithNetwork) {
-          let currentEntityId: string | undefined;
-
-          await network({
-            coreUserMessages: [
+          const response = await agent.network({
+            messages: [
               {
                 role: 'user',
                 content: input,
               },
               ...attachments,
             ],
+            maxSteps,
+            modelSettings: {
+              frequencyPenalty,
+              presencePenalty,
+              maxRetries,
+              maxOutputTokens: maxTokens,
+              temperature,
+              topK,
+              topP,
+            },
+            runId: agentId,
             runtimeContext: runtimeContextInstance,
-            threadId,
-            modelSettings: modelSettingsArgs,
-            signal: controller.signal,
-            onNetworkChunk: (chunk, conversation) => {
-              if (chunk.type.startsWith('agent-execution-event-')) {
-                const agentChunk = chunk.payload;
+            ...(threadId ? { thread: threadId, resourceId: agentId } : {}),
+          });
 
-                if (!currentEntityId) return conversation;
-
-                return handleAgentChunk({ agentChunk, conversation, entityName: currentEntityId });
-              } else if (chunk.type === 'tool-execution-start') {
-                const { args: argsData } = chunk.payload;
-
-                const nestedArgs = argsData.args || {};
-                const mastraMetadata = argsData.__mastraMetadata || {};
-                const selectionReason = argsData.selectionReason || '';
-
-                return handleStreamChunk({
-                  chunk: {
-                    ...chunk,
-                    type: 'tool-call',
-                    payload: {
-                      ...chunk.payload,
-                      toolCallId: argsData.toolCallId || 'unknown',
-                      toolName: argsData.toolName || 'unknown',
-                      args: {
-                        ...nestedArgs,
-                        __mastraMetadata: {
-                          ...mastraMetadata,
-                          networkMetadata: {
-                            selectionReason,
-                            input: nestedArgs as ReadonlyJSONObject,
-                          },
-                        },
-                      },
-                    },
-                  },
-                  conversation,
-                });
-              } else if (chunk.type === 'tool-execution-end') {
-                const next = handleStreamChunk({
-                  chunk: { ...chunk, type: 'tool-result' },
-                  conversation,
-                });
-
-                if (
-                  chunk.payload?.toolName === 'updateWorkingMemory' &&
-                  typeof chunk.payload.result === 'object' &&
-                  'success' in chunk.payload.result! &&
-                  chunk.payload.result?.success
-                ) {
-                  refreshWorkingMemory?.();
-                }
-
-                return next;
-              } else if (chunk.type.startsWith('workflow-execution-event-')) {
-                const workflowChunk = chunk.payload as object;
-
-                if (!currentEntityId) return conversation;
-
-                return handleWorkflowChunk({ workflowChunk, conversation, entityName: currentEntityId });
-              } else if (chunk.type === 'workflow-execution-start' || chunk.type === 'agent-execution-start') {
-                currentEntityId = chunk.payload?.args?.primitiveId;
-
-                const runId = chunk.payload.runId;
-
-                if (!currentEntityId || !runId) return conversation;
-
-                return createRootToolAssistantMessage({
-                  entityName: currentEntityId,
-                  conversation,
-                  runId,
-                  chunk,
-                  from: chunk.type === 'agent-execution-start' ? 'AGENT' : 'WORKFLOW',
-                  networkMetadata: {
-                    selectionReason: chunk?.payload?.args?.selectionReason || '',
-                    input: chunk?.payload?.args?.prompt,
-                  },
-                });
-              } else if (chunk.type === 'network-execution-event-step-finish') {
-                return [
-                  ...conversation,
-                  { role: 'assistant', content: [{ type: 'text', text: chunk?.payload?.result || '' }] },
-                ];
-              } else {
-                return handleStreamChunk({ chunk, conversation });
-              }
+          await response.processDataStream({
+            onChunk: (chunk: NetworkChunkType) => {
+              setMessages(prev => toNetworkAssistantUIMessage({ chunk, conversation: prev }));
+              return Promise.resolve();
             },
           });
+
+          setIsRunning(false);
         } else {
           if (chatWithGenerateVNext) {
             setIsRunning(true);
