@@ -4,6 +4,7 @@ import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
 import { getValidTraceId } from '../../ai-tracing';
 import { MastraBase } from '../../base';
+import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
 import type { WorkflowRunStatus } from '../../workflows';
@@ -20,7 +21,6 @@ import type {
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
-import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
 
 export class JsonToSseTransformStream extends TransformStream<unknown, string> {
   constructor() {
