@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { MastraModelGateway, ProviderConfig } from '../src/llm/model/gateways/index.js';
 import { ModelsDevGateway } from '../src/llm/model/gateways/models-dev.js';
+import { NetlifyGateway } from '../src/llm/model/gateways/netlify.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,6 +35,18 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
  * THIS FILE IS AUTO-GENERATED - DO NOT EDIT
  * Generated from model gateway providers
  */
+
+import type { MastraModelGateway } from './gateways/base.js';
+import { ModelsDevGateway } from './gateways/models-dev.js';
+import { NetlifyGateway } from './gateways/netlify.js';
+
+/**
+ * Gateway instances for runtime resolution
+ */
+export const GATEWAYS: MastraModelGateway[] = [
+  new NetlifyGateway(),
+  new ModelsDevGateway(),
+];
 
 /**
  * Provider configurations for OpenAI-compatible APIs
@@ -146,7 +159,7 @@ export function isValidModelId(modelId: string): modelId is ModelRouterModelId {
 // Main execution
 async function main() {
   // Configure which gateways to use
-  const gateways: MastraModelGateway[] = [new ModelsDevGateway()];
+  const gateways: MastraModelGateway[] = [new ModelsDevGateway(), new NetlifyGateway()];
 
   await generateProviderRegistry(gateways);
 }

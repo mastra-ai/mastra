@@ -5,8 +5,9 @@ import type {
   LanguageModelV2StreamPart,
   LanguageModelV2CallWarning,
 } from '@ai-sdk/provider-v5';
-import { parseModelString, getProviderConfig } from './provider-registry.generated';
-import type { ModelRouterModelId } from './provider-registry.generated';
+import { resolveModelConfig } from './gateway-resolver.js';
+import { parseModelString, getProviderConfig } from './provider-registry.generated.js';
+import type { ModelRouterModelId } from './provider-registry.generated.js';
 import type { OpenAICompatibleConfig } from './shared.types';
 
 // Helper function to resolve API key from environment
@@ -21,36 +22,6 @@ function resolveApiKey({ provider, apiKey }: { provider?: string; apiKey?: strin
   }
 
   return undefined;
-}
-
-// Helper function to build headers for the request
-function buildHeaders(
-  apiKey?: string,
-  apiKeyHeader?: string,
-  customHeaders?: Record<string, string>,
-  provider?: string,
-): Record<string, string> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...customHeaders,
-  };
-
-  if (apiKey) {
-    // Use custom API key header if specified (e.g., 'x-api-key' for Anthropic)
-    if (apiKeyHeader === 'x-api-key') {
-      headers['x-api-key'] = apiKey;
-    } else {
-      // Default to Authorization Bearer format
-      headers['Authorization'] = `Bearer ${apiKey}`;
-    }
-  }
-
-  // Add provider-specific headers
-  if (provider === 'anthropic') {
-    headers['anthropic-version'] = '2023-06-01';
-  }
-
-  return headers;
 }
 
 // TODO: get these types from openai
@@ -93,9 +64,8 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
   readonly modelId: string;
   readonly provider: string;
 
-  private url: string;
-  private headers: Record<string, string>;
-  private apiKey: string | undefined;
+  private config: OpenAICompatibleConfig;
+  private fullModelId: string; // Store the full model ID for gateway resolution
 
   constructor(config: ModelRouterModelId | OpenAICompatibleConfig) {
     // Parse configuration
@@ -112,32 +82,27 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
       }
 
       if (isUrl) {
-        // If it's a direct URL
+        // If it's a direct URL - use as-is
         parsedConfig = {
           id: 'unknown',
           url: config,
         };
         this.provider = 'openai-compatible';
+        this.fullModelId = 'unknown';
+        this.config = { id: 'unknown', url: config };
       } else {
-        // Handle magic strings like "openai/gpt-4o" or "chutes/Qwen/Qwen3-235B-A22B-Instruct-2507"
-        // For multi-slash strings, extract just the provider (first part)
+        // Handle magic strings like "openai/gpt-4o" or "netlify/openai/gpt-4o"
+        this.fullModelId = config;
         const firstSlashIndex = config.indexOf('/');
 
         if (firstSlashIndex !== -1) {
           const provider = config.substring(0, firstSlashIndex);
           const modelId = config.substring(firstSlashIndex + 1);
 
-          const providerConfig = getProviderConfig(provider);
-          if (!providerConfig) {
-            throw new Error(`Unknown provider: ${provider}. Use a custom URL instead.`);
-          }
-
           parsedConfig = {
             id: modelId,
-            url: providerConfig.url,
             apiKey: resolveApiKey({ provider }),
           };
-
           this.provider = provider;
         } else {
           // No slash at all, treat as direct model ID
@@ -147,21 +112,14 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
     } else {
       // Handle config object
       parsedConfig = config;
+      this.fullModelId = config.id;
 
       // Extract provider from id if present
       const parsed = parseModelString(config.id);
+      this.provider = parsed.provider || 'openai-compatible';
 
-      if (!config.url && parsed.provider) {
-        // Use provider preset
-        const providerConfig = getProviderConfig(parsed.provider);
-        if (!providerConfig) {
-          throw new Error(`Unknown provider: ${parsed.provider}. Please provide a URL.`);
-        }
-        parsedConfig.url = providerConfig.url;
+      if (parsed.provider && parsed.modelId !== config.id) {
         parsedConfig.id = parsed.modelId;
-        this.provider = parsed.provider;
-      } else {
-        this.provider = parsed.provider || 'openai-compatible';
       }
 
       // Resolve API key if not provided
@@ -170,19 +128,9 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
       }
     }
 
-    // Validate we have a URL
-    if (!parsedConfig.url) {
-      throw new Error('URL is required for OpenAI-compatible model');
-    }
-
-    // Get provider config for headers
-    const providerConfig = this.provider !== 'openai-compatible' ? getProviderConfig(this.provider) : undefined;
-
-    // Set final properties
+    // Store the configuration
     this.modelId = parsedConfig.id;
-    this.url = parsedConfig.url;
-    this.apiKey = parsedConfig.apiKey; // Store API key for later validation
-    this.headers = buildHeaders(parsedConfig.apiKey, providerConfig?.apiKeyHeader, parsedConfig.headers, this.provider);
+    this.config = parsedConfig;
   }
 
   private convertMessagesToOpenAI(messages: LanguageModelV2CallOptions['prompt']): any[] {
@@ -307,9 +255,67 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
     }
   }
 
+  /**
+   * Resolve URL and headers for the request
+   * This is called fresh for each request to ensure we get the latest values
+   * (e.g., Netlify tokens can expire and need to be refreshed)
+   */
+  private async resolveRequestConfig(): Promise<{ url: string; headers: Record<string, string>; modelId: string }> {
+    // If they provide a url as a string or in the config object, we shouldn't use our gateway classes
+    const shouldUseGateway = !this.config.url;
+
+    if (shouldUseGateway) {
+      // Use gateway resolution - always get fresh values
+      const { url, headers, resolvedModelId } = await resolveModelConfig(this.fullModelId);
+
+      if (url === false) {
+        throw new Error(`No gateway can handle model: ${this.fullModelId}`);
+      }
+
+      // Merge headers with custom headers
+      const finalHeaders = {
+        'Content-Type': 'application/json',
+        ...headers,
+        ...this.config.headers,
+      };
+
+      return { url, headers: finalHeaders, modelId: resolvedModelId };
+    } else {
+      // Use static configuration
+      if (!this.config.url) {
+        throw new Error('URL is required for OpenAI-compatible model');
+      }
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...this.config.headers,
+      };
+
+      // Add auth header if API key is available
+      if (this.config.apiKey) {
+        // Check if we need a special header format
+        const providerConfig = this.provider !== 'openai-compatible' ? getProviderConfig(this.provider) : undefined;
+        if (providerConfig?.apiKeyHeader === 'x-api-key') {
+          headers['x-api-key'] = this.config.apiKey;
+        } else {
+          headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+        }
+      }
+
+      return { url: this.config.url, headers, modelId: this.modelId };
+    }
+  }
+
   private validateApiKey(): void {
+    // Skip validation for models that will use gateway resolution
+    // Gateway handles auth through its own mechanism (e.g., Netlify uses site ID + token)
+    const willUseGateway = !this.config.url;
+    if (willUseGateway) {
+      return;
+    }
+
     // Check if API key is required and missing
-    if (!this.apiKey && this.provider !== 'openai-compatible') {
+    if (!this.config.apiKey && this.provider !== 'openai-compatible') {
       // Get the provider config to find the env var name
       const providerConfig = getProviderConfig(this.provider);
       if (providerConfig?.apiKeyEnvVar) {
@@ -338,12 +344,16 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
     warnings: LanguageModelV2CallWarning[];
   }> {
     this.validateApiKey(); // Validate API key before making the request
+
+    // Resolve URL and headers
+    const { url, headers, modelId: resolvedModelId } = await this.resolveRequestConfig();
+
     const { prompt, tools, toolChoice, providerOptions } = options;
 
     // TODO: real body type, not any
     const body: any = {
       messages: this.convertMessagesToOpenAI(prompt),
-      model: this.modelId,
+      model: resolvedModelId,
       stream: true,
       ...providerOptions,
     };
@@ -379,11 +389,11 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
 
     const fetchArgs = {
       method: 'POST',
-      headers: this.headers,
+      headers,
       body: JSON.stringify(body),
       signal: options.abortSignal,
     };
-    const response = await fetch(this.url, fetchArgs);
+    const response = await fetch(url, fetchArgs);
 
     if (!response.ok) {
       const error = await response.text();

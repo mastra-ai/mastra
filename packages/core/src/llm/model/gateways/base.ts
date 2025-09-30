@@ -37,11 +37,21 @@ export abstract class MastraModelGateway {
    * @param envVars Environment variables available
    * @returns URL string if this gateway can handle the model, false otherwise
    */
-  abstract buildUrl(modelId: string, envVars: Record<string, string>): string | false;
+  abstract buildUrl(modelId: string, envVars: Record<string, string>): string | false | Promise<string | false>;
 
   /**
    * Build headers for the request
    * Optional - only needed if the gateway requires special headers
    */
-  buildHeaders?(modelId: string, envVars: Record<string, string>): Record<string, string>;
+  buildHeaders?(
+    modelId: string,
+    envVars: Record<string, string>,
+  ): Record<string, string> | Promise<Record<string, string>>;
+
+  /**
+   * Resolve the model ID to the format expected by the provider
+   * For example, "netlify/openai/gpt-4o" might become just "gpt-4o"
+   * Default implementation returns the model ID as-is
+   */
+  resolveModelId?(modelId: string): string;
 }

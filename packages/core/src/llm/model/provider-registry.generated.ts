@@ -3,6 +3,15 @@
  * Generated from model gateway providers
  */
 
+import type { MastraModelGateway } from './gateways/base.js';
+import { ModelsDevGateway } from './gateways/models-dev.js';
+import { NetlifyGateway } from './gateways/netlify.js';
+
+/**
+ * Gateway instances for runtime resolution
+ */
+export const GATEWAYS: MastraModelGateway[] = [new NetlifyGateway(), new ModelsDevGateway()];
+
 /**
  * Provider configurations for OpenAI-compatible APIs
  */
@@ -932,6 +941,63 @@ export const PROVIDER_REGISTRY = {
     models: ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'qwen-3-coder-480b'],
     docUrl: 'https://inference-docs.cerebras.ai/models/overview',
   },
+  'netlify/anthropic': {
+    url: 'NETLIFY_SITE_URL_PLACEHOLDER/anthropic',
+    apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+    apiKeyHeader: 'Authorization',
+    name: 'Anthropic (via Netlify)',
+    models: [
+      'claude-3-5-haiku-20241022',
+      'claude-3-5-haiku-latest',
+      'claude-3-7-sonnet-20250219',
+      'claude-3-7-sonnet-latest',
+      'claude-3-haiku-20240307',
+      'claude-opus-4-1-20250805',
+      'claude-opus-4-20250514',
+      'claude-sonnet-4-20250514',
+      'claude-sonnet-4-5',
+      'claude-sonnet-4-5-20250929',
+    ],
+  },
+  'netlify/gemini': {
+    url: 'NETLIFY_SITE_URL_PLACEHOLDER/gemini',
+    apiKeyEnvVar: 'GEMINI_API_KEY',
+    apiKeyHeader: 'Authorization',
+    name: 'Gemini (via Netlify)',
+    models: [
+      'gemini-2.0-flash',
+      'gemini-2.0-flash-lite',
+      'gemini-2.5-flash',
+      'gemini-2.5-flash-image-preview',
+      'gemini-2.5-flash-lite',
+      'gemini-2.5-flash-lite-preview-09-2025',
+      'gemini-2.5-flash-preview-09-2025',
+      'gemini-2.5-pro',
+      'gemini-flash',
+      'gemini-flash-lite-latest',
+    ],
+  },
+  'netlify/openai': {
+    url: 'NETLIFY_SITE_URL_PLACEHOLDER/openai',
+    apiKeyEnvVar: 'OPENAI_API_KEY',
+    apiKeyHeader: 'Authorization',
+    name: 'Openai (via Netlify)',
+    models: [
+      'codex-mini-latest',
+      'gpt-4.1',
+      'gpt-4.1-mini',
+      'gpt-4.1-nano',
+      'gpt-4o',
+      'gpt-4o-mini',
+      'gpt-5',
+      'gpt-5-codex',
+      'gpt-5-mini',
+      'gpt-5-nano',
+      'o3',
+      'o3-mini',
+      'o4-mini',
+    ],
+  },
 } as const;
 
 /**
@@ -1555,6 +1621,45 @@ export const PROVIDER_MODELS = {
     'llama-4-scout-17b-16e-instruct-fp8',
   ],
   cerebras: ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'qwen-3-coder-480b'],
+  'netlify/anthropic': [
+    'claude-3-5-haiku-20241022',
+    'claude-3-5-haiku-latest',
+    'claude-3-7-sonnet-20250219',
+    'claude-3-7-sonnet-latest',
+    'claude-3-haiku-20240307',
+    'claude-opus-4-1-20250805',
+    'claude-opus-4-20250514',
+    'claude-sonnet-4-20250514',
+    'claude-sonnet-4-5',
+    'claude-sonnet-4-5-20250929',
+  ],
+  'netlify/gemini': [
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-image-preview',
+    'gemini-2.5-flash-lite',
+    'gemini-2.5-flash-lite-preview-09-2025',
+    'gemini-2.5-flash-preview-09-2025',
+    'gemini-2.5-pro',
+    'gemini-flash',
+    'gemini-flash-lite-latest',
+  ],
+  'netlify/openai': [
+    'codex-mini-latest',
+    'gpt-4.1',
+    'gpt-4.1-mini',
+    'gpt-4.1-nano',
+    'gpt-4o',
+    'gpt-4o-mini',
+    'gpt-5',
+    'gpt-5-codex',
+    'gpt-5-mini',
+    'gpt-5-nano',
+    'o3',
+    'o3-mini',
+    'o4-mini',
+  ],
 } as const;
 
 /**
