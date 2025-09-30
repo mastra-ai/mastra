@@ -955,6 +955,18 @@ export async function networkLoop<
   resourceId?: string;
   messages: MessageListInput;
 }) {
+  // Validate that memory is available before starting the network
+  const memoryToUse = await routingAgent.getMemory({ runtimeContext });
+
+  if (!memoryToUse) {
+    throw new MastraError({
+      id: 'AGENT_NETWORK_MEMORY_REQUIRED',
+      domain: ErrorDomain.AGENT_NETWORK,
+      category: ErrorCategory.USER,
+      text: 'Memory is required for the agent network to function properly. Please configure memory for the agent.',
+    });
+  }
+
   const { networkWorkflow } = await createNetworkLoop({
     networkName,
     runtimeContext,
