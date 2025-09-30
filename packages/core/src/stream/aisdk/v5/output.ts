@@ -327,7 +327,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
           }
         },
       }),
-    ) as any as AIV5FullStreamType<OUTPUT>;
+    ) as AIV5FullStreamType<OUTPUT>;
   }
 
   async getFullOutput() {
