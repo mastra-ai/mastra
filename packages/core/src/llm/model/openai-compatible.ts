@@ -337,7 +337,24 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
     response?: { headers: Record<string, string> };
     warnings: LanguageModelV2CallWarning[];
   }> {
-    this.validateApiKey(); // Validate API key before making the request
+    // Validate API key and return error stream if validation fails
+    try {
+      this.validateApiKey();
+    } catch (error) {
+      // Return an error stream instead of throwing
+      return {
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({
+              type: 'error',
+              error: error instanceof Error ? error.message : String(error),
+            } as LanguageModelV2StreamPart);
+          },
+        }),
+        warnings: [],
+      };
+    }
+
     const { prompt, tools, toolChoice, providerOptions } = options;
 
     // TODO: real body type, not any
