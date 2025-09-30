@@ -1,6 +1,4 @@
 ---
-'mastra': patch
-'@mastra/core': patch
 '@mastra/playground-ui': patch
 ---
 
