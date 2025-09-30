@@ -1,4 +1,5 @@
 import { ReadableStream, TransformStream } from 'node:stream/web';
+import type { TracingOptions } from '@mastra/core/ai-tracing';
 import type { RuntimeContext } from '@mastra/core/di';
 import type { WorkflowRuns } from '@mastra/core/storage';
 import type { Workflow, WatchEvent, WorkflowInfo, StreamEvent } from '@mastra/core/workflows';
@@ -185,9 +186,11 @@ export async function startAsyncWorkflowHandler({
   workflowId,
   runId,
   inputData,
+  tracingOptions,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
   runtimeContext?: RuntimeContext;
+  tracingOptions?: TracingOptions;
 }) {
   try {
     if (!workflowId) {
@@ -204,6 +207,7 @@ export async function startAsyncWorkflowHandler({
     const result = await _run.start({
       inputData,
       runtimeContext,
+      tracingOptions,
     });
     return result;
   } catch (error) {
@@ -217,9 +221,11 @@ export async function startWorkflowRunHandler({
   workflowId,
   runId,
   inputData,
+  tracingOptions,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
   runtimeContext?: RuntimeContext;
+  tracingOptions?: TracingOptions;
 }) {
   try {
     if (!workflowId) {
@@ -246,6 +252,7 @@ export async function startWorkflowRunHandler({
     void _run.start({
       inputData,
       runtimeContext,
+      tracingOptions,
     });
 
     return { message: 'Workflow run started' };
@@ -424,9 +431,11 @@ export async function streamVNextWorkflowHandler({
   workflowId,
   runId,
   inputData,
+  closeOnSuspend,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
   runtimeContext?: RuntimeContext;
+  closeOnSuspend?: boolean;
 }) {
   try {
     if (!workflowId) {
@@ -447,6 +456,7 @@ export async function streamVNextWorkflowHandler({
     const result = run.streamVNext({
       inputData,
       runtimeContext,
+      closeOnSuspend,
     });
     return result;
   } catch (error) {
@@ -460,9 +470,11 @@ export async function resumeAsyncWorkflowHandler({
   runId,
   body,
   runtimeContext,
+  tracingOptions,
 }: WorkflowContext & {
   body: { step: string | string[]; resumeData?: unknown };
   runtimeContext?: RuntimeContext;
+  tracingOptions?: TracingOptions;
 }) {
   try {
     if (!workflowId) {
@@ -494,6 +506,7 @@ export async function resumeAsyncWorkflowHandler({
       step: body.step,
       resumeData: body.resumeData,
       runtimeContext,
+      tracingOptions,
     });
 
     return result;
@@ -508,9 +521,11 @@ export async function resumeWorkflowHandler({
   runId,
   body,
   runtimeContext,
+  tracingOptions,
 }: WorkflowContext & {
   body: { step: string | string[]; resumeData?: unknown };
   runtimeContext?: RuntimeContext;
+  tracingOptions?: TracingOptions;
 }) {
   try {
     if (!workflowId) {
@@ -543,9 +558,59 @@ export async function resumeWorkflowHandler({
       step: body.step,
       resumeData: body.resumeData,
       runtimeContext,
+      tracingOptions,
     });
 
     return { message: 'Workflow run resumed' };
+  } catch (error) {
+    return handleError(error, 'Error resuming workflow');
+  }
+}
+
+export async function resumeStreamWorkflowHandler({
+  mastra,
+  workflowId,
+  runId,
+  body,
+  runtimeContext,
+}: WorkflowContext & {
+  body: { step: string | string[]; resumeData?: unknown };
+  runtimeContext?: RuntimeContext;
+}) {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to resume workflow' });
+    }
+
+    if (!body.step) {
+      throw new HTTPException(400, { message: 'step required to resume workflow' });
+    }
+
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
+
+    if (!workflow) {
+      throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    const run = await workflow.getWorkflowRunById(runId);
+
+    if (!run) {
+      throw new HTTPException(404, { message: 'Workflow run not found' });
+    }
+
+    const _run = await workflow.createRunAsync({ runId });
+
+    const stream = await _run.resumeStreamVNext({
+      step: body.step,
+      resumeData: body.resumeData,
+      runtimeContext,
+    });
+
+    return stream;
   } catch (error) {
     return handleError(error, 'Error resuming workflow');
   }

@@ -75,6 +75,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           toolCallId: 'call-1',
           messages: expect.any(Array),
           writableStream: expect.any(Object),
+          resumeData: undefined,
+          suspend: expect.any(Function),
         },
       );
     });
@@ -555,10 +557,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               },
               "type": "finish-step",
               "usage": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
             },
@@ -1669,10 +1669,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     "timestamp": 1970-01-01T00:00:00.000Z,
                   },
                   "usage": {
-                    "cachedInputTokens": undefined,
                     "inputTokens": 3,
                     "outputTokens": 10,
-                    "reasoningTokens": undefined,
                     "totalTokens": 13,
                   },
                   "warnings": [],
@@ -1797,10 +1795,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     "timestamp": 1970-01-01T00:00:00.000Z,
                   },
                   "usage": {
-                    "cachedInputTokens": undefined,
                     "inputTokens": 3,
                     "outputTokens": 10,
-                    "reasoningTokens": undefined,
                     "totalTokens": 13,
                   },
                   "warnings": [],
@@ -4111,9 +4107,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             "type": "tool-input-delta",
           },
           {
-            "filename": undefined,
             "id": "123",
-            "mediaType": undefined,
             "providerMetadata": {
               "provider": {
                 "custom": "value",
@@ -6447,20 +6441,16 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               },
               "type": "finish-step",
               "usage": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
             },
             {
               "finishReason": "stop",
               "totalUsage": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "type": "finish",
@@ -6967,10 +6957,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               },
               "type": "finish-step",
               "usage": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
             },

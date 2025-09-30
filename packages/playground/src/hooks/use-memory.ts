@@ -1,140 +1,91 @@
-import type { AiMessageType, MastraMessageV1, StorageThreadType as ThreadType } from '@mastra/core/memory';
-import { useEffect } from 'react';
 import { toast } from 'sonner';
-import useSWR, { useSWRConfig } from 'swr';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { fetcher } from '@/lib/utils';
-import type { MemoryConfigResponse, MemorySearchResponse, MemorySearchParams } from '@/types/memory';
+import type { MemorySearchResponse, MemorySearchParams } from '@/types/memory';
+import { useMastraClient } from '@mastra/react';
 
 export const useMemory = (agentId?: string) => {
-  const {
-    data: memory,
-    isLoading,
-    mutate,
-  } = useSWR<{ result: boolean }>(`/api/memory/status?agentId=${agentId}`, fetcher, {
-    fallbackData: { result: false },
-    isPaused: () => !agentId,
+  const client = useMastraClient();
+
+  return useQuery({
+    queryKey: ['memory', agentId],
+    queryFn: () => (agentId ? client.getMemoryStatus(agentId) : null),
+    enabled: Boolean(agentId),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
+    retry: false,
   });
-  return { memory, isLoading, mutate };
 };
 
 export const useMemoryConfig = (agentId?: string) => {
-  const {
-    data: config,
-    isLoading,
-    refetch: mutate,
-  } = useQuery<MemoryConfigResponse>({
+  const client = useMastraClient();
+
+  return useQuery({
     queryKey: ['memory', 'config', agentId],
-    queryFn: () => fetcher(`/api/memory/config?agentId=${agentId}`),
-    enabled: !!agentId,
+    queryFn: () => (agentId ? client.getMemoryConfig({ agentId }) : null),
+    enabled: Boolean(agentId),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
+    retry: false,
   });
-  return { config: config?.config, isLoading, mutate };
 };
 
 export const useThreads = ({
-  resourceid,
+  resourceId,
   agentId,
   isMemoryEnabled,
 }: {
-  resourceid: string;
+  resourceId: string;
   agentId: string;
   isMemoryEnabled: boolean;
 }) => {
-  const {
-    data: threads,
-    isLoading,
-    mutate,
-  } = useSWR<Array<ThreadType>>(`/api/memory/threads?resourceid=${resourceid}&agentId=${agentId}`, fetcher, {
-    fallbackData: [],
-    isPaused: () => !resourceid || !agentId || !isMemoryEnabled,
-    revalidateOnFocus: false,
+  const client = useMastraClient();
+
+  return useQuery({
+    queryKey: ['memory', 'threads', resourceId, agentId],
+    queryFn: () => (isMemoryEnabled ? client.getMemoryThreads({ resourceId, agentId }) : null),
+    enabled: Boolean(isMemoryEnabled),
+    staleTime: 0,
+    gcTime: 0,
+    refetchInterval: 5000,
+    retry: false,
   });
-
-  useEffect(() => {
-    if (resourceid && agentId && isMemoryEnabled) {
-      mutate();
-    }
-  }, [resourceid, agentId, isMemoryEnabled]);
-
-  useEffect(() => {
-    const refetchThreads = async (count = 0) => {
-      const newThreads = await mutate();
-      if (newThreads?.length) {
-        const lastThread = newThreads[newThreads.length - 1];
-        count = count + 1;
-        if (lastThread?.title?.toLowerCase()?.includes('new thread') && count < 3) {
-          setTimeout(() => {
-            refetchThreads(count);
-          }, 500);
-        }
-      }
-    };
-    if (threads?.length) {
-      const lastThread = threads[threads.length - 1];
-      if (lastThread?.title?.toLowerCase()?.includes('new thread')) {
-        setTimeout(() => {
-          refetchThreads();
-        }, 500);
-      }
-    }
-  }, [threads]);
-
-  return { threads, isLoading, mutate };
 };
 
 export const useMessages = ({ threadId, memory, agentId }: { threadId: string; memory: boolean; agentId: string }) => {
-  const { data, isLoading, mutate } = useSWR<{ uiMessages: Array<AiMessageType>; messages: Array<MastraMessageV1> }>(
-    `/api/memory/threads/${threadId}/messages?agentId=${agentId}`,
-    url => fetcher(url, true),
-    {
-      fallbackData: { uiMessages: [], messages: [] },
-      revalidateOnFocus: false,
-      isPaused: () => !threadId || !agentId,
-      shouldRetryOnError: false,
-    },
-  );
+  const client = useMastraClient();
 
-  useEffect(() => {
-    if (threadId && memory) {
-      mutate();
-    }
-  }, [threadId, memory]);
-
-  return { messages: data?.uiMessages, isLoading, mutate };
+  return useQuery({
+    queryKey: ['memory', 'messages', threadId, agentId],
+    queryFn: () => (memory ? client.getThreadMessages(threadId, { agentId }) : null),
+    enabled: Boolean(memory),
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  });
 };
 
 export const useDeleteThread = () => {
-  const { mutate } = useSWRConfig();
+  const client = useMastraClient();
+  const queryClient = useQueryClient();
 
-  const deleteThread = async ({
-    threadId,
-    resourceid,
-    agentId,
-  }: {
-    threadId: string;
-    agentId: string;
-    resourceid: string;
-  }) => {
-    const deletePromise = fetch(`/api/memory/threads/${threadId}?agentId=${agentId}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-mastra-dev-playground': 'true',
-      },
-    });
-
-    toast.promise(deletePromise, {
-      loading: 'Deleting chat...',
-      success: () => {
-        mutate(`/api/memory/threads?resourceid=${resourceid}&agentId=${agentId}`);
-        return 'Chat deleted successfully';
-      },
-      error: 'Failed to delete chat',
-    });
-  };
-
-  return { deleteThread };
+  return useMutation({
+    mutationFn: ({ threadId, agentId, networkId }: { threadId: string; agentId?: string; networkId?: string }) =>
+      client.deleteThread(threadId, { agentId, networkId }),
+    onSuccess: (_, variables) => {
+      const { agentId, networkId } = variables;
+      if (agentId) {
+        queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
+      }
+      if (networkId) {
+        queryClient.invalidateQueries({ queryKey: ['network', 'threads', networkId, networkId] });
+      }
+      toast.success('Chat deleted successfully');
+    },
+    onError: () => {
+      toast.error('Failed to delete chat');
+    },
+  });
 };
 
 export const useMemorySearch = ({

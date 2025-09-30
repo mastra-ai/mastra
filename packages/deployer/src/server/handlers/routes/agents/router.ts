@@ -20,6 +20,8 @@ import {
   streamVNextUIMessageHandler,
   streamGenerateLegacyHandler,
   generateLegacyHandler,
+  reorderAgentModelListHandler,
+  updateAgentModelInModelListHandler,
   streamNetworkHandler,
   sharedBodyOptions,
 } from './handlers';
@@ -145,6 +147,17 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 runId: { type: 'string' },
                 output: { type: 'object' },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the agent execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
               required: ['messages'],
             },
@@ -197,6 +210,17 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 runId: { type: 'string' },
                 output: { type: 'object' },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the agent execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
               required: ['messages'],
             },
@@ -355,6 +379,17 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 runId: { type: 'string' },
                 output: { type: 'object' },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the agent execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
               required: ['messages'],
             },
@@ -407,6 +442,17 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 runId: { type: 'string' },
                 output: { type: 'object' },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the agent execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
               required: ['messages'],
             },
@@ -473,6 +519,17 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                     { type: 'string', enum: ['auto', 'none', 'required'] },
                     { type: 'object', properties: { type: { type: 'string' }, toolName: { type: 'string' } } },
                   ],
+                },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the agent execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
                 },
               },
               required: ['messages'],
@@ -586,6 +643,118 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     updateAgentModelHandler,
+  );
+
+  router.post(
+    '/:agentId/models/reorder',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Reorder the models for an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                reorderedModelIds: {
+                  type: 'array',
+                  items: {
+                    type: 'string',
+                  },
+                },
+              },
+              required: ['reorderedModelIds'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Model list reordered successfully',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    reorderAgentModelListHandler,
+  );
+
+  router.post(
+    '/:agentId/models/:modelConfigId',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Update the model for an agent in the model list',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'modelConfigId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                model: {
+                  type: 'object',
+                  properties: {
+                    modelId: {
+                      type: 'string',
+                      description: 'The modelId to update the agent to',
+                    },
+                    provider: {
+                      type: 'string',
+                      enum: ['openai', 'anthropic', 'groq', 'xai', 'google'],
+                      description: 'The provider of the model to update the agent to',
+                    },
+                  },
+                  required: ['modelId', 'provider'],
+                },
+                maxRetries: {
+                  type: 'number',
+                  description: 'The maximum number of retries for the model',
+                },
+                enabled: {
+                  type: 'boolean',
+                  description: 'Whether the model is enabled',
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Model updated successfully',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    updateAgentModelInModelListHandler,
   );
 
   router.get(

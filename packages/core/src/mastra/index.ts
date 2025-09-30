@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
 import { getAllAITracing, setupAITracing, shutdownAITracingRegistry } from '../ai-tracing';
 import type { ObservabilityRegistryConfig } from '../ai-tracing';
@@ -32,7 +33,10 @@ import { createOnScorerHook } from './hooks';
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
-  TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
+  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any>> = Record<
+    string,
+    Workflow<any, any, any, any, any, any>
+  >,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
@@ -86,7 +90,10 @@ export interface Config<
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
-  TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
+  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any>> = Record<
+    string,
+    Workflow<any, any, any, any, any, any>
+  >,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
@@ -118,6 +125,7 @@ export class Mastra<
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
+  #internalMastraWorkflows: Record<string, Workflow> = {};
   // This is only used internally for server handlers that require temporary persistence
   #serverCache: MastraServerCache;
 
@@ -169,7 +177,7 @@ export class Mastra<
       }
       return id;
     }
-    return crypto.randomUUID();
+    return randomUUID();
   }
 
   public setIdGenerator(idGenerator: MastraIdGenerator) {
@@ -523,12 +531,13 @@ do:
     const allTracingInstances = getAllAITracing();
 
     allTracingInstances.forEach(tracing => {
+      const config = tracing.getConfig();
       const exporters = tracing.getExporters();
       exporters.forEach(exporter => {
         // Initialize exporter if it has an init method
         if ('init' in exporter && typeof exporter.init === 'function') {
           try {
-            exporter.init();
+            exporter.init(config);
           } catch (error) {
             this.#logger?.warn('Failed to initialize AI tracing exporter', {
               exporterName: exporter.name,
@@ -673,6 +682,37 @@ do:
 
     if (serialized) {
       return { name: workflow.name } as TWorkflows[TWorkflowId];
+    }
+
+    return workflow;
+  }
+
+  __registerInternalWorkflow(workflow: Workflow) {
+    workflow.__registerMastra(this);
+    workflow.__registerPrimitives({
+      logger: this.getLogger(),
+      storage: this.storage,
+    });
+    this.#internalMastraWorkflows[workflow.id] = workflow;
+  }
+
+  __hasInternalWorkflow(id: string): boolean {
+    return Object.values(this.#internalMastraWorkflows).some(workflow => workflow.id === id);
+  }
+
+  __getInternalWorkflow(id: string): Workflow {
+    const workflow = Object.values(this.#internalMastraWorkflows).find(a => a.id === id);
+    if (!workflow) {
+      throw new MastraError({
+        id: 'MASTRA_GET_INTERNAL_WORKFLOW_BY_ID_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.SYSTEM,
+        text: `Workflow with id ${String(id)} not found`,
+        details: {
+          status: 404,
+          workflowId: String(id),
+        },
+      });
     }
 
     return workflow;

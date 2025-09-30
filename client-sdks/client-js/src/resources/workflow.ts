@@ -1,3 +1,4 @@
+import type { TracingOptions } from '@mastra/core/ai-tracing';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type {
   ClientOptions,
@@ -240,12 +241,14 @@ export class Workflow extends BaseResource {
     start: (params: {
       inputData: Record<string, any>;
       runtimeContext?: RuntimeContext | Record<string, any>;
+      tracingOptions?: TracingOptions;
     }) => Promise<{ message: string }>;
     watch: (onRecord: (record: WorkflowWatchResult) => void) => Promise<void>;
     resume: (params: {
       step: string | string[];
       resumeData?: Record<string, any>;
       runtimeContext?: RuntimeContext | Record<string, any>;
+      tracingOptions?: TracingOptions;
     }) => Promise<{ message: string }>;
     stream: (params: {
       inputData: Record<string, any>;
@@ -254,12 +257,19 @@ export class Workflow extends BaseResource {
     startAsync: (params: {
       inputData: Record<string, any>;
       runtimeContext?: RuntimeContext | Record<string, any>;
+      tracingOptions?: TracingOptions;
     }) => Promise<WorkflowRunResult>;
     resumeAsync: (params: {
       step: string | string[];
       resumeData?: Record<string, any>;
       runtimeContext?: RuntimeContext | Record<string, any>;
+      tracingOptions?: TracingOptions;
     }) => Promise<WorkflowRunResult>;
+    resumeStreamVNext: (params: {
+      step: string | string[];
+      resumeData?: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+    }) => Promise<ReadableStream>;
   }> {
     const searchParams = new URLSearchParams();
 
@@ -278,14 +288,29 @@ export class Workflow extends BaseResource {
 
     return {
       runId,
-      start: async (p: { inputData: Record<string, any>; runtimeContext?: RuntimeContext | Record<string, any> }) => {
-        return this.start({ runId, inputData: p.inputData, runtimeContext: p.runtimeContext });
+      start: async (p: {
+        inputData: Record<string, any>;
+        runtimeContext?: RuntimeContext | Record<string, any>;
+        tracingOptions?: TracingOptions;
+      }) => {
+        return this.start({
+          runId,
+          inputData: p.inputData,
+          runtimeContext: p.runtimeContext,
+          tracingOptions: p.tracingOptions,
+        });
       },
       startAsync: async (p: {
         inputData: Record<string, any>;
         runtimeContext?: RuntimeContext | Record<string, any>;
+        tracingOptions?: TracingOptions;
       }) => {
-        return this.startAsync({ runId, inputData: p.inputData, runtimeContext: p.runtimeContext });
+        return this.startAsync({
+          runId,
+          inputData: p.inputData,
+          runtimeContext: p.runtimeContext,
+          tracingOptions: p.tracingOptions,
+        });
       },
       watch: async (onRecord: (record: WorkflowWatchResult) => void) => {
         return this.watch({ runId }, onRecord);
@@ -297,15 +322,41 @@ export class Workflow extends BaseResource {
         step: string | string[];
         resumeData?: Record<string, any>;
         runtimeContext?: RuntimeContext | Record<string, any>;
+        tracingOptions?: TracingOptions;
       }) => {
-        return this.resume({ runId, step: p.step, resumeData: p.resumeData, runtimeContext: p.runtimeContext });
+        return this.resume({
+          runId,
+          step: p.step,
+          resumeData: p.resumeData,
+          runtimeContext: p.runtimeContext,
+          tracingOptions: p.tracingOptions,
+        });
       },
       resumeAsync: async (p: {
         step: string | string[];
         resumeData?: Record<string, any>;
         runtimeContext?: RuntimeContext | Record<string, any>;
+        tracingOptions?: TracingOptions;
       }) => {
-        return this.resumeAsync({ runId, step: p.step, resumeData: p.resumeData, runtimeContext: p.runtimeContext });
+        return this.resumeAsync({
+          runId,
+          step: p.step,
+          resumeData: p.resumeData,
+          runtimeContext: p.runtimeContext,
+          tracingOptions: p.tracingOptions,
+        });
+      },
+      resumeStreamVNext: async (p: {
+        step: string | string[];
+        resumeData?: Record<string, any>;
+        runtimeContext?: RuntimeContext | Record<string, any>;
+      }) => {
+        return this.resumeStreamVNext({
+          runId,
+          step: p.step,
+          resumeData: p.resumeData,
+          runtimeContext: p.runtimeContext,
+        });
       },
     };
   }
@@ -319,11 +370,12 @@ export class Workflow extends BaseResource {
     runId: string;
     inputData: Record<string, any>;
     runtimeContext?: RuntimeContext | Record<string, any>;
+    tracingOptions?: TracingOptions;
   }): Promise<{ message: string }> {
     const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
     return this.request(`/api/workflows/${this.workflowId}/start?runId=${params.runId}`, {
       method: 'POST',
-      body: { inputData: params?.inputData, runtimeContext },
+      body: { inputData: params?.inputData, runtimeContext, tracingOptions: params.tracingOptions },
     });
   }
 
@@ -336,12 +388,14 @@ export class Workflow extends BaseResource {
     step,
     runId,
     resumeData,
+    tracingOptions,
     ...rest
   }: {
     step: string | string[];
     runId: string;
     resumeData?: Record<string, any>;
     runtimeContext?: RuntimeContext | Record<string, any>;
+    tracingOptions?: TracingOptions;
   }): Promise<{ message: string }> {
     const runtimeContext = parseClientRuntimeContext(rest.runtimeContext);
     return this.request(`/api/workflows/${this.workflowId}/resume?runId=${runId}`, {
@@ -350,6 +404,7 @@ export class Workflow extends BaseResource {
         step,
         resumeData,
         runtimeContext,
+        tracingOptions,
       },
     });
   }
@@ -363,6 +418,7 @@ export class Workflow extends BaseResource {
     runId?: string;
     inputData: Record<string, any>;
     runtimeContext?: RuntimeContext | Record<string, any>;
+    tracingOptions?: TracingOptions;
   }): Promise<WorkflowRunResult> {
     const searchParams = new URLSearchParams();
 
@@ -374,7 +430,7 @@ export class Workflow extends BaseResource {
 
     return this.request(`/api/workflows/${this.workflowId}/start-async?${searchParams.toString()}`, {
       method: 'POST',
-      body: { inputData: params.inputData, runtimeContext },
+      body: { inputData: params.inputData, runtimeContext, tracingOptions: params.tracingOptions },
     });
   }
 
@@ -515,7 +571,12 @@ export class Workflow extends BaseResource {
    * @param params - Object containing the optional runId, inputData and runtimeContext
    * @returns Promise containing the workflow execution results
    */
-  async streamVNext(params: { runId?: string; inputData: Record<string, any>; runtimeContext?: RuntimeContext }) {
+  async streamVNext(params: {
+    runId?: string;
+    inputData: Record<string, any>;
+    runtimeContext?: RuntimeContext;
+    closeOnSuspend?: boolean;
+  }) {
     const searchParams = new URLSearchParams();
 
     if (!!params?.runId) {
@@ -527,7 +588,7 @@ export class Workflow extends BaseResource {
       `/api/workflows/${this.workflowId}/streamVNext?${searchParams.toString()}`,
       {
         method: 'POST',
-        body: { inputData: params.inputData, runtimeContext },
+        body: { inputData: params.inputData, runtimeContext, closeOnSuspend: params.closeOnSuspend },
         stream: true,
       },
     );
@@ -590,6 +651,7 @@ export class Workflow extends BaseResource {
     step: string | string[];
     resumeData?: Record<string, any>;
     runtimeContext?: RuntimeContext | Record<string, any>;
+    tracingOptions?: TracingOptions;
   }): Promise<WorkflowRunResult> {
     const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
     return this.request(`/api/workflows/${this.workflowId}/resume-async?runId=${params.runId}`, {
@@ -598,10 +660,34 @@ export class Workflow extends BaseResource {
         step: params.step,
         resumeData: params.resumeData,
         runtimeContext,
+        tracingOptions: params.tracingOptions,
       },
     });
   }
 
+  /**
+   * Resumes a suspended workflow step that uses streamVNext asynchronously and returns a promise that resolves when the workflow is complete
+   * @param params - Object containing the runId, step, resumeData and runtimeContext
+   * @returns Promise containing the workflow resume results
+   */
+  resumeStreamVNext(params: {
+    runId: string;
+    step: string | string[];
+    resumeData?: Record<string, any>;
+    runtimeContext?: RuntimeContext | Record<string, any>;
+    tracingOptions?: TracingOptions;
+  }): Promise<ReadableStream> {
+    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    return this.request(`/api/workflows/${this.workflowId}/resume-stream?runId=${params.runId}`, {
+      method: 'POST',
+      body: {
+        step: params.step,
+        resumeData: params.resumeData,
+        runtimeContext,
+        tracingOptions: params.tracingOptions,
+      },
+    });
+  }
   /**
    * Watches workflow transitions in real-time
    * @param runId - Optional run ID to filter the watch stream

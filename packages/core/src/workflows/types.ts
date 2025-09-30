@@ -276,6 +276,7 @@ export interface WorkflowRunState {
 
 export interface WorkflowOptions {
   tracingPolicy?: TracingPolicy;
+  validateInputs?: boolean;
 }
 
 export type WorkflowInfo = {
@@ -381,10 +382,15 @@ export type StepWithComponent = Step<string, any, any, any, any, any> & {
   steps?: Record<string, StepWithComponent>;
 };
 
-export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<string, any, any>[]> =
+export type WorkflowResult<
+  TInput extends z.ZodType<any>,
+  TOutput extends z.ZodType<any>,
+  TSteps extends Step<string, any, any>[],
+> =
   | ({
       status: 'success';
       result: z.infer<TOutput>;
+      input: z.infer<TInput>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
@@ -398,6 +404,7 @@ export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<s
     } & TracingProperties)
   | ({
       status: 'failed';
+      input: z.infer<TInput>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
@@ -412,6 +419,7 @@ export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<s
     } & TracingProperties)
   | ({
       status: 'suspended';
+      input: z.infer<TInput>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
@@ -422,6 +430,7 @@ export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<s
               z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
             >;
       };
+      suspendPayload: any;
       suspended: [string[], ...string[][]];
     } & TracingProperties);
 

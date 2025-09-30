@@ -19,6 +19,7 @@ import {
   observeStreamWorkflowHandler,
   streamVNextWorkflowHandler,
   watchWorkflowHandler,
+  resumeStreamWorkflowHandler,
 } from './handlers';
 import {
   createLegacyWorkflowRunHandler,
@@ -129,6 +130,17 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
               properties: {
                 stepId: { type: 'string' },
                 context: { type: 'object' },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the workflow execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
             },
           },
@@ -167,6 +179,17 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
               properties: {
                 stepId: { type: 'string' },
                 context: { type: 'object' },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the workflow execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
             },
           },
@@ -495,6 +518,50 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
   );
 
   router.post(
+    '/:workflowId/resume-stream',
+    describeRoute({
+      description: 'Resume a suspended workflow that uses streamVNext',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                step: {
+                  oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+                },
+                resumeData: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
+              },
+              required: ['step'],
+            },
+          },
+        },
+      },
+    }),
+    resumeStreamWorkflowHandler,
+  );
+
+  router.post(
     '/:workflowId/resume-async',
     bodyLimit(bodyLimitOptions),
     describeRoute({
@@ -648,6 +715,10 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
                   type: 'object',
                   description: 'Runtime context for the workflow execution',
                 },
+                closeOnSuspend: {
+                  type: 'boolean',
+                  description: 'Close the stream on suspend',
+                },
               },
             },
           },
@@ -727,6 +798,17 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
                   type: 'object',
                   description: 'Runtime context for the workflow execution',
                 },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the workflow execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
             },
           },
@@ -747,7 +829,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
   router.post(
     '/:workflowId/start',
     describeRoute({
-      description: 'Create and start a new workflow run',
+      description: 'Start an existing workflow run',
       tags: ['workflows'],
       parameters: [
         {
@@ -774,6 +856,17 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
                 runtimeContext: {
                   type: 'object',
                   description: 'Runtime context for the workflow execution',
+                },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the workflow execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
                 },
               },
             },

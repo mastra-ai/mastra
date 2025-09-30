@@ -123,6 +123,7 @@ export class DynamoDBStore extends MastraStorage {
       hasColumn: false,
       createTable: false,
       deleteMessages: false,
+      getScoresBySpan: true,
     };
   }
 
@@ -536,5 +537,17 @@ export class DynamoDBStore extends MastraStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     return this.stores.scores.getScoresByScorerId({ scorerId, source, entityId, entityType, pagination });
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    return this.stores.scores.getScoresBySpan({ traceId, spanId, pagination });
   }
 }

@@ -14,9 +14,15 @@ import z from 'zod';
 import type { MessageList } from '../agent/message-list';
 import type { AISpan, AISpanType } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
+import type { Mastra } from '../mastra';
 import type { OutputProcessor } from '../processors';
 import type { OutputSchema } from '../stream/base/schema';
-import type { ChunkType, ModelManagerModelConfig } from '../stream/types';
+import type {
+  ChunkType,
+  MastraOnFinishCallback,
+  MastraOnStepFinishCallback,
+  ModelManagerModelConfig,
+} from '../stream/types';
 import type { MastraIdGenerator } from '../types';
 
 export type StreamInternal = {
@@ -43,8 +49,8 @@ export type PrepareStepFunction<TOOLS extends ToolSet = ToolSet> = (options: {
 export type LoopConfig = {
   onChunk?: (chunk: ChunkType) => Promise<void> | void;
   onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
-  onFinish?: (event: any) => Promise<void> | void;
-  onStepFinish?: (event: any) => Promise<void> | void;
+  onFinish?: MastraOnFinishCallback;
+  onStepFinish?: MastraOnStepFinishCallback;
   onAbort?: (event: any) => Promise<void> | void;
   activeTools?: Array<keyof ToolSet> | undefined;
   abortSignal?: AbortSignal;
@@ -53,6 +59,8 @@ export type LoopConfig = {
 };
 
 export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
+  mastra?: Mastra;
+  resumeContext?: any;
   models: ModelManagerModelConfig[];
   logger?: IMastraLogger;
   mode?: 'generate' | 'stream';
@@ -78,9 +86,10 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   downloadRetries?: number;
   downloadConcurrency?: number;
   llmAISpan?: AISpan<AISpanType.LLM_GENERATION>;
+  requireToolApproval?: boolean;
 };
 
-export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = LoopOptions<
+export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = LoopOptions<
   Tools,
   OUTPUT
 > & {
@@ -89,12 +98,17 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema
   startTimestamp: number;
   modelStreamSpan: Span;
   _internal: StreamInternal;
+  streamState: {
+    serialize: () => any;
+    deserialize: (state: any) => void;
+  };
 };
 
-export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
+export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = {
   messageId: string;
   controller: ReadableStreamDefaultController<ChunkType>;
   writer: WritableStream<ChunkType>;
+  requireToolApproval?: boolean;
 } & LoopRun<Tools, OUTPUT>;
 
-export const RESOURCE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool']);
+export const PRIMITIVE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool']);

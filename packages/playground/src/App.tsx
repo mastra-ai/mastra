@@ -1,9 +1,9 @@
+import { v4 as uuid } from '@lukeed/uuid';
 import { Routes, Route, BrowserRouter, Outlet, useNavigate } from 'react-router';
 
 import { Layout } from '@/components/layout';
 
 import { AgentLayout } from '@/domains/agents/agent-layout';
-import { LegacyWorkflowLayout } from '@/domains/workflows/legacy-workflow-layout';
 import Tools from '@/pages/tools';
 
 import Agents from './pages/agents';
@@ -14,9 +14,7 @@ import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
 import Workflows from './pages/workflows';
 import { Workflow } from './pages/workflows/workflow';
-import LegacyWorkflow from './pages/workflows/workflow/legacy';
 import WorkflowTracesPage from './pages/workflows/workflow/traces';
-import LegacyWorkflowTracesPage from './pages/workflows/workflow/legacy/traces';
 import Networks from './pages/networks';
 import { NetworkLayout } from './domains/networks/network-layout';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
@@ -27,7 +25,7 @@ import MCPServerToolExecutor from './pages/mcps/tool';
 
 import { McpServerPage } from './pages/mcps/[serverId]';
 
-import { LinkComponentProvider, MastraClientProvider, PlaygroundQueryClient } from '@mastra/playground-ui';
+import { LinkComponentProvider, LinkComponentProviderProps, PlaygroundQueryClient } from '@mastra/playground-ui';
 import VNextNetwork from './pages/networks/network/v-next';
 import { NavigateTo } from './lib/react-router';
 import { Link } from './lib/framework';
@@ -36,6 +34,22 @@ import Scorer from './pages/scorers/scorer';
 import Observability from './pages/observability';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
+import { MastraReactProvider } from '@mastra/react';
+
+const paths: LinkComponentProviderProps['paths'] = {
+  agentLink: (agentId: string) => `/agents/${agentId}`,
+  agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
+  agentsLink: () => `/agents`,
+  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/${uuid()}`,
+  agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/chat/${threadId}`,
+  workflowsLink: () => `/workflows`,
+  workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
+  networkLink: (networkId: string) => `/networks/v-next/${networkId}/chat`,
+  networkNewThreadLink: (networkId: string) => `/networks/v-next/${networkId}/chat/${uuid()}`,
+  networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
+  scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
+  toolLink: (toolId: string) => `/tools/all/${toolId}`,
+};
 
 const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
@@ -44,7 +58,7 @@ const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <LinkComponentProvider Link={Link} navigate={frameworkNavigate}>
+    <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
       {children}
     </LinkComponentProvider>
   );
@@ -52,9 +66,9 @@ const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
 
 function App() {
   return (
-    <PlaygroundQueryClient>
-      <PostHogProvider>
-        <MastraClientProvider>
+    <MastraReactProvider>
+      <PlaygroundQueryClient>
+        <PostHogProvider>
           <BrowserRouter>
             <LinkComponentWrapper>
               <Routes>
@@ -76,7 +90,10 @@ function App() {
                   }
                 >
                   <Route path="/scorers" element={<Scorers />} />
-                  <Route path="/scorers/:scorerId" element={<Scorer />} />
+                  <Route
+                    path="/scorers/:scorerId"
+                    element={<Scorer computeTraceLink={traceId => `/observability?traceId=${traceId}`} />}
+                  />
                 </Route>
                 <Route
                   element={
@@ -122,6 +139,7 @@ function App() {
                 >
                   <Route path="/agents" element={<Agents />} />
                   <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
+                  <Route path="/agents/:agentId/tools/:toolId" element={<AgentTool />} />
                   <Route
                     path="/agents/:agentId"
                     element={
@@ -136,7 +154,7 @@ function App() {
                     <Route path="traces" element={<AgentTracesPage />} />
                   </Route>
                   <Route path="/tools" element={<Tools />} />
-                  <Route path="/tools/:agentId/:toolId" element={<AgentTool />} />
+
                   <Route path="/tools/all/:toolId" element={<Tool />} />
                   <Route path="/mcps" element={<MCPs />} />
 
@@ -159,31 +177,15 @@ function App() {
                     <Route path="/workflows/:workflowId/graph/:runId" element={<Workflow />} />
                   </Route>
 
-                  <Route
-                    path="/workflows/legacy/:workflowId"
-                    element={<NavigateTo to="/workflows/legacy/:workflowId/graph" />}
-                  />
-
-                  <Route
-                    path="/workflows/legacy/:workflowId"
-                    element={
-                      <LegacyWorkflowLayout>
-                        <Outlet />
-                      </LegacyWorkflowLayout>
-                    }
-                  >
-                    <Route path="graph" element={<LegacyWorkflow />} />
-                    <Route path="traces" element={<LegacyWorkflowTracesPage />} />
-                  </Route>
                   <Route path="/" element={<NavigateTo to="/agents" />} />
                   <Route path="/runtime-context" element={<RuntimeContext />} />
                 </Route>
               </Routes>
             </LinkComponentWrapper>
           </BrowserRouter>
-        </MastraClientProvider>
-      </PostHogProvider>
-    </PlaygroundQueryClient>
+        </PostHogProvider>
+      </PlaygroundQueryClient>
+    </MastraReactProvider>
   );
 }
 

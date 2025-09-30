@@ -80,11 +80,18 @@ export interface LLMGenerationAttributes extends AIBaseAttributes {
   provider?: string;
   /** Type of result/output this LLM call produced */
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
-  /** Token usage statistics */
+  /** Token usage statistics - supports both v5 and legacy formats */
   usage?: {
+    // VNext paths
+    inputTokens?: number;
+    outputTokens?: number;
+    // Legacy format (for backward compatibility)
     promptTokens?: number;
     completionTokens?: number;
+    // Common fields
     totalTokens?: number;
+    reasoningTokens?: number;
+    cachedInputTokens?: number;
     promptCacheHitTokens?: number;
     promptCacheMissTokens?: number;
   };
@@ -646,8 +653,8 @@ export interface AITracingExporter {
   /** Exporter name */
   name: string;
 
-  /** Initialize exporter (called after all dependencies are ready) */
-  init?(): void;
+  /** Initialize exporter with tracing configuration */
+  init?(config: TracingConfig): void;
 
   /** Export tracing events */
   exportEvent(event: AITracingEvent): Promise<void>;

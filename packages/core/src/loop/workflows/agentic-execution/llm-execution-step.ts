@@ -20,8 +20,9 @@ import { createStep } from '../../../workflows';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
+import { isControllerOpen } from '../stream';
 
-type ProcessOutputStreamOptions<OUTPUT extends OutputSchema | undefined = undefined> = {
+type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   model: LanguageModelV2;
   tools?: ToolSet;
   messageId: string;
@@ -38,7 +39,7 @@ type ProcessOutputStreamOptions<OUTPUT extends OutputSchema | undefined = undefi
   };
 };
 
-async function processOutputStream<OUTPUT extends OutputSchema | undefined = undefined>({
+async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
   tools,
   messageId,
   messageList,
@@ -155,7 +156,9 @@ async function processOutputStream<OUTPUT extends OutputSchema | undefined = und
           textDeltas: textDeltasFromState,
           isStreaming: true,
         });
-        controller.enqueue(chunk);
+        if (isControllerOpen(controller)) {
+          controller.enqueue(chunk);
+        }
         break;
       }
 
@@ -176,7 +179,9 @@ async function processOutputStream<OUTPUT extends OutputSchema | undefined = und
           }
         }
 
-        controller.enqueue(chunk);
+        if (isControllerOpen(controller)) {
+          controller.enqueue(chunk);
+        }
 
         break;
       }
@@ -198,7 +203,9 @@ async function processOutputStream<OUTPUT extends OutputSchema | undefined = und
             console.error('Error calling onInputDelta', error);
           }
         }
-        controller.enqueue(chunk);
+        if (isControllerOpen(controller)) {
+          controller.enqueue(chunk);
+        }
         break;
       }
 
@@ -222,10 +229,14 @@ async function processOutputStream<OUTPUT extends OutputSchema | undefined = und
             },
             'response',
           );
-          controller.enqueue(chunk);
+          if (isControllerOpen(controller)) {
+            controller.enqueue(chunk);
+          }
           break;
         }
-        controller.enqueue(chunk);
+        if (isControllerOpen(controller)) {
+          controller.enqueue(chunk);
+        }
         break;
       }
 
@@ -237,7 +248,9 @@ async function processOutputStream<OUTPUT extends OutputSchema | undefined = und
           reasoningDeltas: reasoningDeltasFromState,
           providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
         });
-        controller.enqueue(chunk);
+        if (isControllerOpen(controller)) {
+          controller.enqueue(chunk);
+        }
         break;
       }
 
@@ -297,7 +310,7 @@ async function processOutputStream<OUTPUT extends OutputSchema | undefined = und
             totalUsage: chunk.payload.totalUsage,
             headers: responseFromModel.rawResponse?.headers,
             messageId,
-            isContinued: !['stop', 'error'].includes(chunk.payload.reason),
+            isContinued: !['stop', 'error'].includes(chunk.payload.stepResult.reason),
             request: responseFromModel.request,
           },
         });
@@ -321,7 +334,7 @@ async function processOutputStream<OUTPUT extends OutputSchema | undefined = und
 
         let e = chunk.payload.error as any;
         if (typeof e === 'object') {
-          e = new Error(e?.message || 'Unknown error');
+          e = new Error(JSON.stringify(e));
           Object.assign(e, chunk.payload.error);
         }
 
@@ -330,7 +343,9 @@ async function processOutputStream<OUTPUT extends OutputSchema | undefined = und
 
         break;
       default:
-        controller.enqueue(chunk);
+        if (isControllerOpen(controller)) {
+          controller.enqueue(chunk);
+        }
     }
 
     if (
@@ -399,10 +414,7 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
   };
 }
 
-export function createLLMExecutionStep<
-  Tools extends ToolSet = ToolSet,
-  OUTPUT extends OutputSchema | undefined = undefined,
->({
+export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>({
   models,
   _internal,
   messageId,
@@ -524,13 +536,19 @@ export function createLLMExecutionStep<
                 request = requestFromStream || {};
                 rawResponse = rawResponseFromStream;
 
+                if (!isControllerOpen(controller)) {
+                  // Controller is closed or errored, skip enqueueing
+                  // This can happen when downstream errors (like in onStepFinish) close the controller
+                  return;
+                }
+
                 controller.enqueue({
                   runId,
                   from: ChunkFrom.AGENT,
                   type: 'step-start',
                   payload: {
                     request: request || {},
-                    warnings: [],
+                    warnings: warnings || [],
                     messageId: messageId,
                   },
                 });
@@ -591,18 +609,22 @@ export function createLLMExecutionStep<
               steps: inputData?.output?.steps ?? [],
             });
 
-            controller.enqueue({ type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+            if (isControllerOpen(controller)) {
+              controller.enqueue({ type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+            }
 
             return { callBail: true, outputStream, runState };
           }
 
           if (isLastModel) {
-            controller.enqueue({
-              type: 'error',
-              runId,
-              from: ChunkFrom.AGENT,
-              payload: { error },
-            });
+            if (isControllerOpen(controller)) {
+              controller.enqueue({
+                type: 'error',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: { error },
+              });
+            }
 
             runState.setState({
               hasErrored: true,
@@ -632,7 +654,7 @@ export function createLLMExecutionStep<
             isContinued: false,
           },
           metadata: {
-            providerMetadata: providerOptions,
+            providerMetadata: runState.state.providerOptions,
             ...responseMetadata,
             headers: rawResponse?.headers,
             request,
@@ -651,17 +673,7 @@ export function createLLMExecutionStep<
         });
       }
 
-      // Check if the inner stream encountered a tripwire and propagate it
       if (outputStream.tripwire) {
-        controller.enqueue({
-          type: 'tripwire',
-          runId,
-          from: ChunkFrom.AGENT,
-          payload: {
-            tripwireReason: outputStream.tripwireReason || 'Content blocked by output processor',
-          },
-        });
-
         // Set the step result to indicate abort
         runState.setState({
           stepResult: {
@@ -723,7 +735,7 @@ export function createLLMExecutionStep<
       steps.push(
         new DefaultStepResult({
           warnings: outputStream._getImmediateWarnings(),
-          providerMetadata: providerOptions,
+          providerMetadata: runState.state.providerOptions,
           finishReason: runState.state.stepResult?.reason,
           content: currentIterationContent,
           response: { ...responseMetadata, ...rawResponse, messages: messageList.get.response.aiV5.model() },

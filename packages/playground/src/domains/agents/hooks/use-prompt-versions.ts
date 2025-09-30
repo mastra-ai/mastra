@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 
 import type { EvalResult, PromptVersion } from '../types';
-import { useMastraClient, usePlaygroundStore } from '@mastra/playground-ui';
+import { usePlaygroundStore } from '@mastra/playground-ui';
+import { useMastraClient } from '@mastra/react';
 
 export function usePromptVersions(agentId: string, instructions?: string) {
   const [versions, setVersions] = useState<PromptVersion[]>([]);

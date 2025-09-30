@@ -516,21 +516,17 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             messageList: new MessageList(),
           });
 
-          const expectedOutput = `
-          {
-            "cachedInputTokens": undefined,
-            "inputTokens": 3,
-            "outputTokens": 10,
-            "reasoningTokens": undefined,
-            "totalTokens": 13,
-          }
-        `;
-
           // consume stream (runs in parallel)
           // void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
           // expect(await result.usage).toMatchInlineSnapshot(expectedOutput);
           await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-          expect(await result.usage).toMatchInlineSnapshot(expectedOutput);
+          expect(await result.usage).toMatchInlineSnapshot(`
+            {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            }
+          `);
         });
       });
 
@@ -927,6 +923,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "object": {
                 "content": "Hello, world!",
               },
+              "providerMetadata": {
+                "testProvider": {
+                  "testKey": "testValue",
+                },
+              },
               "reasoning": [],
               "reasoningText": undefined,
               "request": {},
@@ -967,19 +968,24 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "staticToolCalls": [],
               "staticToolResults": [],
               "steps": [
-                DefaultStepResult {
+                {
                   "content": [
                     {
                       "text": "{ "content": "Hello, world!" }",
                       "type": "text",
                     },
                   ],
+                  "dynamicToolCalls": [],
+                  "dynamicToolResults": [],
+                  "files": [],
                   "finishReason": "stop",
                   "providerMetadata": {
                     "testProvider": {
                       "testKey": "testValue",
                     },
                   },
+                  "reasoning": [],
+                  "reasoningText": "",
                   "request": {},
                   "response": {
                     "headers": undefined,
@@ -997,12 +1003,33 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     ],
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:00.000Z,
+                    "uiMessages": [
+                      {
+                        "id": "1234",
+                        "metadata": {
+                          "__originalContent": "{ "content": "Hello, world!" }",
+                          "createdAt": 2024-01-01T00:00:00.000Z,
+                        },
+                        "parts": [
+                          {
+                            "text": "{ "content": "Hello, world!" }",
+                            "type": "text",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                    ],
                   },
+                  "sources": [],
+                  "staticToolCalls": [],
+                  "staticToolResults": [],
+                  "stepType": "initial",
+                  "text": "{ "content": "Hello, world!" }",
+                  "toolCalls": [],
+                  "toolResults": [],
                   "usage": {
-                    "cachedInputTokens": undefined,
                     "inputTokens": 3,
                     "outputTokens": 10,
-                    "reasoningTokens": undefined,
                     "totalTokens": 13,
                   },
                   "warnings": [],
@@ -1019,10 +1046,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "totalTokens": 13,
               },
               "usage": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "warnings": [],
@@ -1088,8 +1113,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               ],
               "dynamicToolCalls": [],
               "dynamicToolResults": [],
-              "error": [Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
-            Error message: Validation failed],
+              "error": [Error: {"name":"AI_TypeValidationError","cause":"Validation failed","value":{"invalid":"Hello, world!"}}],
               "files": [],
               "finishReason": "error",
               "model": {
@@ -1100,6 +1124,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "object": {
                 "invalid": "Hello, world!",
               },
+              "providerMetadata": undefined,
               "reasoning": [],
               "reasoningText": undefined,
               "request": {},
@@ -1140,15 +1165,20 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "staticToolCalls": [],
               "staticToolResults": [],
               "steps": [
-                DefaultStepResult {
+                {
                   "content": [
                     {
                       "text": "{ "invalid": "Hello, world!" }",
                       "type": "text",
                     },
                   ],
+                  "dynamicToolCalls": [],
+                  "dynamicToolResults": [],
+                  "files": [],
                   "finishReason": "error",
                   "providerMetadata": undefined,
+                  "reasoning": [],
+                  "reasoningText": "",
                   "request": {},
                   "response": {
                     "headers": undefined,
@@ -1166,12 +1196,33 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     ],
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:00.000Z,
+                    "uiMessages": [
+                      {
+                        "id": "1234",
+                        "metadata": {
+                          "__originalContent": "{ "invalid": "Hello, world!" }",
+                          "createdAt": 2024-01-01T00:00:00.000Z,
+                        },
+                        "parts": [
+                          {
+                            "text": "{ "invalid": "Hello, world!" }",
+                            "type": "text",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                    ],
                   },
+                  "sources": [],
+                  "staticToolCalls": [],
+                  "staticToolResults": [],
+                  "stepType": "initial",
+                  "text": "{ "invalid": "Hello, world!" }",
+                  "toolCalls": [],
+                  "toolResults": [],
                   "usage": {
-                    "cachedInputTokens": undefined,
                     "inputTokens": 3,
                     "outputTokens": 10,
-                    "reasoningTokens": undefined,
                     "totalTokens": 13,
                   },
                   "warnings": [],
@@ -1188,10 +1239,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "totalTokens": 13,
               },
               "usage": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "warnings": [],
