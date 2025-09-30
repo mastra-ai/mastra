@@ -968,7 +968,7 @@ importers:
         version: link:../memory
       ai:
         specifier: ^5.0.25
-        version: 5.0.44(zod@3.25.76)
+        version: 5.0.57(zod@3.25.76)
       ignore:
         specifier: ^7.0.5
         version: 7.0.5
@@ -1069,7 +1069,7 @@ importers:
         version: link:../mcp
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
-        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))
+        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.1.0(@opentelemetry/api@1.9.0)
@@ -1269,7 +1269,7 @@ importers:
         version: 1.9.0
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
-        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))
+        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.1.0(@opentelemetry/api@1.9.0)
@@ -1319,11 +1319,11 @@ importers:
         specifier: ^16.6.1
         version: 16.6.1
       hono:
-        specifier: ^4.9.7
-        version: 4.9.7
+        specifier: ^4.9.9
+        version: 4.9.9
       hono-openapi:
         specifier: ^0.4.8
-        version: 0.4.8(hono@4.9.7)(openapi-types@12.1.3)(zod@3.25.76)
+        version: 0.4.8(hono@4.9.9)(openapi-types@12.1.3)(zod@3.25.76)
       js-tiktoken:
         specifier: ^1.0.20
         version: 1.0.21
@@ -1555,8 +1555,8 @@ importers:
         specifier: ^11.3.2
         version: 11.3.2
       hono:
-        specifier: ^4.9.7
-        version: 4.9.7
+        specifier: ^4.9.9
+        version: 4.9.9
       local-pkg:
         specifier: ^1.1.2
         version: 1.1.2
@@ -1581,10 +1581,10 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.19.5
-        version: 1.19.5(hono@4.9.7)
+        version: 1.19.5(hono@4.9.9)
       '@hono/swagger-ui':
         specifier: ^0.5.2
-        version: 0.5.2(hono@4.9.7)
+        version: 0.5.2(hono@4.9.9)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1620,7 +1620,7 @@ importers:
         version: 2.1.0
       hono-openapi:
         specifier: ^0.4.8
-        version: 0.4.8(hono@4.9.7)(openapi-types@12.1.3)(zod@3.25.76)
+        version: 0.4.8(hono@4.9.9)(openapi-types@12.1.3)(zod@3.25.76)
       rollup-plugin-visualizer:
         specifier: ^5.14.0
         version: 5.14.0(rollup@4.50.2)
@@ -1813,7 +1813,7 @@ importers:
         version: 1.3.24(zod@3.25.76)
       '@hono/node-server':
         specifier: ^1.19.5
-        version: 1.19.5(hono@4.9.7)
+        version: 1.19.5(hono@4.9.9)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1839,11 +1839,11 @@ importers:
         specifier: ^9.35.0
         version: 9.36.0(jiti@2.6.0)
       hono:
-        specifier: ^4.9.7
-        version: 4.9.7
+        specifier: ^4.9.9
+        version: 4.9.9
       hono-mcp-server-sse-transport:
         specifier: 0.0.7
-        version: 0.0.7(@modelcontextprotocol/sdk@1.17.5)(hono@4.9.7)
+        version: 0.0.7(@modelcontextprotocol/sdk@1.17.5)(hono@4.9.9)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.14))(jiti@2.6.0)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.8.3)(yaml@2.8.1)
@@ -1898,7 +1898,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.19.5
-        version: 1.19.5(hono@4.9.7)
+        version: 1.19.5(hono@4.9.9)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1921,8 +1921,8 @@ importers:
         specifier: ^9.35.0
         version: 9.36.0(jiti@2.6.0)
       hono:
-        specifier: ^4.9.7
-        version: 4.9.7
+        specifier: ^4.9.9
+        version: 4.9.9
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.14))(jiti@2.6.0)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.8.3)(yaml@2.8.1)
@@ -1953,7 +1953,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.19.5
-        version: 1.19.5(hono@4.9.7)
+        version: 1.19.5(hono@4.9.9)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1979,8 +1979,8 @@ importers:
         specifier: ^9.35.0
         version: 9.36.0(jiti@2.6.0)
       hono:
-        specifier: ^4.9.7
-        version: 4.9.7
+        specifier: ^4.9.9
+        version: 4.9.9
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.14))(jiti@2.6.0)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.8.3)(yaml@2.8.1)
@@ -2735,13 +2735,13 @@ importers:
         version: 5.1.0
       '@inngest/realtime':
         specifier: ^0.3.1
-        version: 0.3.1(encoding@0.1.13)(express@5.1.0)(hono@4.9.7)(next@15.5.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)(typescript@5.8.3)
+        version: 0.3.1(encoding@0.1.13)(express@5.1.0)(hono@4.9.9)(next@15.5.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)(typescript@5.8.3)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
       inngest:
         specifier: ^3.40.3
-        version: 3.40.3(encoding@0.1.13)(express@5.1.0)(hono@4.9.7)(next@15.5.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(typescript@5.8.3)
+        version: 3.40.3(encoding@0.1.13)(express@5.1.0)(hono@4.9.9)(next@15.5.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(typescript@5.8.3)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -4063,13 +4063,13 @@ importers:
     dependencies:
       '@inngest/realtime':
         specifier: ^0.3.1
-        version: 0.3.1(encoding@0.1.13)(express@5.1.0)(hono@4.9.7)(next@15.5.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)(typescript@5.8.3)
+        version: 0.3.1(encoding@0.1.13)(express@5.1.0)(hono@4.9.9)(next@15.5.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)(typescript@5.8.3)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
       inngest:
         specifier: ^3.40.3
-        version: 3.40.3(encoding@0.1.13)(express@5.1.0)(hono@4.9.7)(next@15.5.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(typescript@5.8.3)
+        version: 3.40.3(encoding@0.1.13)(express@5.1.0)(hono@4.9.9)(next@15.5.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(typescript@5.8.3)
       zod:
         specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76
@@ -4079,7 +4079,7 @@ importers:
         version: 1.3.24(zod@3.25.76)
       '@hono/node-server':
         specifier: ^1.19.5
-        version: 1.19.5(hono@4.9.7)
+        version: 1.19.5(hono@4.9.9)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -4114,8 +4114,8 @@ importers:
         specifier: 7.1.0
         version: 7.1.0
       hono:
-        specifier: ^4.9.7
-        version: 4.9.7
+        specifier: ^4.9.9
+        version: 4.9.9
       inngest-cli:
         specifier: 1.8.2
         version: 1.8.2(encoding@0.1.13)
@@ -12746,8 +12746,8 @@ packages:
       zod-openapi:
         optional: true
 
-  hono@4.9.7:
-    resolution: {integrity: sha512-t4Te6ERzIaC48W3x4hJmBwgNlLhmiEdEE5ViYb02ffw4ignHNHa5IBtPjmbKstmtKa8X6C35iWwK4HaqvrzG9w==}
+  hono@4.9.9:
+    resolution: {integrity: sha512-Hxw4wT6zjJGZJdkJzAx9PyBdf7ZpxaTSA0NfxqjLghwMrLBX8p33hJBzoETRakF3UJu6OdNQBZAlNSkGqKFukw==}
     engines: {node: '>=16.9.0'}
 
   hpagent@1.2.0:
@@ -17162,6 +17162,12 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.9(zod@4.1.9)
       zod: 4.1.9
 
+  '@ai-sdk/gateway@1.0.30(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.10(zod@3.25.76)
+      zod: 3.25.76
+
   '@ai-sdk/gateway@1.0.30(zod@4.1.9)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
@@ -17250,6 +17256,13 @@ snapshots:
       nanoid: 3.3.11
       secure-json-parse: 2.7.0
       zod: 4.1.9
+
+  '@ai-sdk/provider-utils@3.0.10(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@standard-schema/spec': 1.0.0
+      eventsource-parser: 3.0.6
+      zod: 3.25.76
 
   '@ai-sdk/provider-utils@3.0.10(zod@4.1.9)':
     dependencies:
@@ -20573,13 +20586,13 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react'
 
-  '@hono/node-server@1.19.5(hono@4.9.7)':
+  '@hono/node-server@1.19.5(hono@4.9.9)':
     dependencies:
-      hono: 4.9.7
+      hono: 4.9.9
 
-  '@hono/swagger-ui@0.5.2(hono@4.9.7)':
+  '@hono/swagger-ui@0.5.2(hono@4.9.9)':
     dependencies:
-      hono: 4.9.7
+      hono: 4.9.9
 
   '@hookform/resolvers@3.10.0(react-hook-form@7.59.0(react@19.1.1))':
     dependencies:
@@ -20770,11 +20783,11 @@ snapshots:
       '@types/node': 20.19.14
       typescript: 5.8.3
 
-  '@inngest/realtime@0.3.1(encoding@0.1.13)(express@5.1.0)(hono@4.9.7)(next@15.5.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)(typescript@5.8.3)':
+  '@inngest/realtime@0.3.1(encoding@0.1.13)(express@5.1.0)(hono@4.9.9)(next@15.5.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)(typescript@5.8.3)':
     dependencies:
       '@standard-schema/spec': 1.0.0
       debug: 4.4.1
-      inngest: 3.40.3(encoding@0.1.13)(express@5.1.0)(hono@4.9.7)(next@15.5.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(typescript@5.8.3)
+      inngest: 3.40.3(encoding@0.1.13)(express@5.1.0)(hono@4.9.9)(next@15.5.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(typescript@5.8.3)
       react: 19.1.1
       zod: 3.25.76
     transitivePeerDependencies:
@@ -21155,7 +21168,7 @@ snapshots:
       '@isaacs/ttlcache': 1.4.1
       '@mastra/schema-compat': 0.11.4(ai@4.3.19(react@19.1.1)(zod@4.1.9))(zod@4.1.9)
       '@opentelemetry/api': 1.9.0
-      '@opentelemetry/auto-instrumentations-node': 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))
+      '@opentelemetry/auto-instrumentations-node': 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core': 2.1.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-grpc': 0.203.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-http': 0.203.0(@opentelemetry/api@1.9.0)
@@ -21172,8 +21185,8 @@ snapshots:
       ai-v5: ai@5.0.44(zod@4.1.9)
       date-fns: 3.6.0
       dotenv: 16.6.1
-      hono: 4.9.7
-      hono-openapi: 0.4.8(hono@4.9.7)(openapi-types@12.1.3)(zod@4.1.9)
+      hono: 4.9.9
+      hono-openapi: 0.4.8(hono@4.9.9)(openapi-types@12.1.3)(zod@4.1.9)
       js-tiktoken: 1.0.21
       json-schema: 0.4.0
       json-schema-to-zod: 2.6.1
@@ -21599,7 +21612,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))':
+  '@opentelemetry/auto-instrumentations-node@0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.1.0(@opentelemetry/api@1.9.0)
@@ -21648,7 +21661,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.3.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.10.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.3(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
       '@opentelemetry/resources': 2.1.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.203.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -22807,7 +22820,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.1.0(@opentelemetry/api@1.9.0)
@@ -25541,6 +25554,14 @@ snapshots:
       '@opentelemetry/api': 1.9.0
       zod: 4.1.9
 
+  ai@5.0.57(zod@3.25.76):
+    dependencies:
+      '@ai-sdk/gateway': 1.0.30(zod@3.25.76)
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.10(zod@3.25.76)
+      '@opentelemetry/api': 1.9.0
+      zod: 3.25.76
+
   ai@5.0.57(zod@4.1.9):
     dependencies:
       '@ai-sdk/gateway': 1.0.30(zod@4.1.9)
@@ -28088,28 +28109,28 @@ snapshots:
 
   highlightjs-vue@1.0.0: {}
 
-  hono-mcp-server-sse-transport@0.0.7(@modelcontextprotocol/sdk@1.17.5)(hono@4.9.7):
+  hono-mcp-server-sse-transport@0.0.7(@modelcontextprotocol/sdk@1.17.5)(hono@4.9.9):
     dependencies:
       '@modelcontextprotocol/sdk': 1.17.5
-      hono: 4.9.7
+      hono: 4.9.9
 
-  hono-openapi@0.4.8(hono@4.9.7)(openapi-types@12.1.3)(zod@3.25.76):
+  hono-openapi@0.4.8(hono@4.9.9)(openapi-types@12.1.3)(zod@3.25.76):
     dependencies:
       json-schema-walker: 2.0.0
       openapi-types: 12.1.3
     optionalDependencies:
-      hono: 4.9.7
+      hono: 4.9.9
       zod: 3.25.76
 
-  hono-openapi@0.4.8(hono@4.9.7)(openapi-types@12.1.3)(zod@4.1.9):
+  hono-openapi@0.4.8(hono@4.9.9)(openapi-types@12.1.3)(zod@4.1.9):
     dependencies:
       json-schema-walker: 2.0.0
       openapi-types: 12.1.3
     optionalDependencies:
-      hono: 4.9.7
+      hono: 4.9.9
       zod: 4.1.9
 
-  hono@4.9.7: {}
+  hono@4.9.9: {}
 
   hpagent@1.2.0: {}
 
@@ -28270,7 +28291,7 @@ snapshots:
       - encoding
       - supports-color
 
-  inngest@3.40.3(encoding@0.1.13)(express@5.1.0)(hono@4.9.7)(next@15.5.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(typescript@5.8.3):
+  inngest@3.40.3(encoding@0.1.13)(express@5.1.0)(hono@4.9.9)(next@15.5.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(typescript@5.8.3):
     dependencies:
       '@bufbuild/protobuf': 2.5.2
       '@inngest/ai': 0.1.4
@@ -28296,7 +28317,7 @@ snapshots:
       zod: 3.22.5
     optionalDependencies:
       express: 5.1.0
-      hono: 4.9.7
+      hono: 4.9.9
       next: 15.5.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       typescript: 5.8.3
     transitivePeerDependencies:
