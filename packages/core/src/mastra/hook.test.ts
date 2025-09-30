@@ -120,7 +120,7 @@ describe('createOnScorerHook', () => {
 
     await hookWithoutStorage({
       runId: 'test-run',
-      scorer: { id: 'test-scorer' },
+      scorer: { name: 'test-scorer' },
       input: [],
       output: {},
       source: 'LIVE',
@@ -135,15 +135,19 @@ describe('createOnScorerHook', () => {
   it('should save score', async () => {
     const hookData = {
       runId: 'test-run',
-      scorer: { id: 'test-scorer' },
+      scorer: { name: 'test-scorer' },
       input: [{ message: 'test' }],
       output: { result: 'test' },
       source: 'LIVE' as const,
       entity: { id: 'test-entity' },
       entityType: 'AGENT' as const,
+      entityId: 'test-entity',
+      scorerId: 'test-scorer',
+      score: 0.8,
     };
 
     const mockScorer = {
+      name: 'test-scorer',
       run: vi.fn().mockResolvedValue({ score: 0.8 }),
     };
 
@@ -191,7 +195,7 @@ describe('createOnScorerHook', () => {
   it('should handle scorer run failure without throwing', async () => {
     const hookData = {
       runId: 'test-run',
-      scorer: { id: 'test-scorer' },
+      scorer: { name: 'test-scorer' },
       input: [],
       output: {},
       source: 'LIVE' as const,
@@ -217,7 +221,7 @@ describe('createOnScorerHook', () => {
   it('should handle validation errors without throwing', async () => {
     const hookData = {
       runId: 'test-run',
-      scorer: { id: 'test-scorer' },
+      scorer: { name: 'test-scorer' },
       input: [],
       output: {},
       source: 'LIVE' as const,

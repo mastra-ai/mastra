@@ -13,6 +13,8 @@ import {
   streamVNextUIMessageHandler as getOriginalStreamVNextUIMessageHandler,
   generateLegacyHandler as getOriginalGenerateLegacyHandler,
   streamGenerateLegacyHandler as getOriginalStreamGenerateLegacyHandler,
+  reorderAgentModelListHandler as getOriginalReorderAgentModelListHandler,
+  updateAgentModelInModelListHandler as getOriginalUpdateAgentModelInModelListHandler,
   streamNetworkHandler as getOriginalStreamNetworkHandler,
 } from '@mastra/server/handlers/agents';
 import type { Context } from 'hono';
@@ -74,6 +76,17 @@ export const vNextBodyOptions: any = {
     description: 'Controls how tools are selected during generation',
   },
   format: { type: 'string', enum: ['mastra', 'aisdk'], description: 'Response format' },
+  tracingOptions: {
+    type: 'object',
+    description: 'Tracing options for the agent execution',
+    properties: {
+      metadata: {
+        type: 'object',
+        description: 'Custom metadata to attach to the trace',
+        additionalProperties: true,
+      },
+    },
+  },
   ...sharedBodyOptions,
 };
 
@@ -430,4 +443,42 @@ export async function getModelProvidersHandler(c: Context) {
   const availableProviders = providers.filter(([_, value]) => envKeys.includes(value) && !!envVars[value]);
   const availableProvidersNames = availableProviders.map(([key]) => key);
   return c.json(availableProvidersNames);
+}
+
+export async function updateAgentModelInModelListHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+    const modelConfigId = c.req.param('modelConfigId');
+    const body = await c.req.json();
+
+    const result = await getOriginalUpdateAgentModelInModelListHandler({
+      mastra,
+      agentId,
+      body,
+      modelConfigId,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error updating agent model in model list');
+  }
+}
+
+export async function reorderAgentModelListHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+    const body = await c.req.json();
+
+    const result = await getOriginalReorderAgentModelListHandler({
+      mastra,
+      agentId,
+      body,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error reordering agent model list');
+  }
 }
