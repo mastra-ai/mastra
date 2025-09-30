@@ -681,8 +681,12 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#status = 'failed';
 
               // Reject all delayed promises on error
-              const error =
-                typeof self.#error === 'object' ? new Error(self.#error.message) : new Error(String(self.#error));
+              const errorMessage =
+                (self.#error as any)?.message ||
+                (typeof self.#error === 'object' && self.#error !== null
+                  ? JSON.stringify(self.#error)
+                  : String(self.#error));
+              const error = new Error(errorMessage);
 
               Object.values(self.#delayedPromises).forEach(promise => promise.reject(error));
 
@@ -700,6 +704,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       options: {
         toolCallStreaming: options?.toolCallStreaming,
         output: options?.output,
+        tracingContext: options?.tracingContext,
       },
     });
 
