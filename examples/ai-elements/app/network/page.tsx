@@ -102,7 +102,7 @@ function HomeInner() {
             className="pr-12"
           />
           <PromptInputSubmit
-            status={status === 'streaming' ? 'streaming' : 'ready'}
+            status={isRunning ? 'streaming' : 'ready'}
             disabled={!input.trim()}
             className="absolute bottom-1 right-1"
           />
