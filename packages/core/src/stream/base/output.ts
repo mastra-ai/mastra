@@ -719,9 +719,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
           controller.enqueue(chunk);
         },
         flush: () => {
-          // TODO: might need to also check if we are in the main stream with a structuring agent so we
-          // TODO: can also reject if structuredOutput.errorStrategy is not 'ignore'
-          // TODO: main agent will not have #options.output but can still have a structuring agent and object promise
           if (!self.#options.output && self.#delayedPromises.object.status.type !== 'resolved') {
             // always resolve object promise as undefined if still hanging in flush and no output schema provided
             self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
