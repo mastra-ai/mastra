@@ -22,6 +22,7 @@ export const AgentMetadataModelList = ({
   reorderModelList,
 }: AgentMetadataModelListProps) => {
   const [modelConfigs, setModelConfigs] = useState(() => modelList);
+  const hasMultipleModels = modelConfigs.length > 1;
 
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) {
@@ -74,6 +75,7 @@ export const AgentMetadataModelList = ({
                       modelConfig={modelConfig}
                       modelProviders={modelProviders}
                       updateModelInModelList={updateModel}
+                      showDragHandle={hasMultipleModels}
                     />
                   </div>
                 )}
@@ -91,22 +93,26 @@ interface AgentMetadataModelListItemProps {
   modelConfig: AgentMetadataModelListType[number];
   modelProviders: string[];
   updateModelInModelList: (params: UpdateModelInModelListParams) => Promise<{ message: string }>;
+  showDragHandle: boolean;
 }
 
 const AgentMetadataModelListItem = ({
   modelConfig,
   modelProviders,
   updateModelInModelList,
+  showDragHandle,
 }: AgentMetadataModelListItemProps) => {
   const [enabled, setEnabled] = useState(() => modelConfig.enabled);
 
   return (
     <div className="flex items-center gap-2 p-2 rounded-lg bg-background hover:bg-muted/50 transition-colors">
-      <div className="text-icon3 cursor-grab active:cursor-grabbing flex-shrink-0">
-        <Icon>
-          <GripVertical />
-        </Icon>
-      </div>
+      {showDragHandle && (
+        <div className="text-icon3 cursor-grab active:cursor-grabbing flex-shrink-0">
+          <Icon>
+            <GripVertical />
+          </Icon>
+        </div>
+      )}
       <div className="flex-1 min-w-0">
         <AgentMetadataModelSwitcher
           defaultProvider={modelConfig.model.provider}
