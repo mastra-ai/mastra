@@ -20,4 +20,3 @@ Run the appropriate CLI command in your terminal (may vary by example). For exam
 ```bash
 npm run dev
 ```
-
