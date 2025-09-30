@@ -2,7 +2,6 @@ import type { Agent, MastraLanguageModel } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
-import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 
 import type {
   StreamTextOnFinishCallback,
@@ -127,12 +126,6 @@ async function formatAgentList({
     },
   }));
 
-  // Normalize provider names by removing AI SDK suffixes like ".chat" and ".completion" so that the unified model router display in the UI works for openai() as well (showing the initially selected model as openai/x, and then using the model router if the user selects another model)
-  let provider = llm?.getProvider();
-  if (provider?.endsWith('.chat') || provider?.endsWith('.completion')) {
-    provider = provider.substring(0, provider.lastIndexOf('.'));
-  }
-
   return {
     id,
     name: agent.name,
@@ -140,7 +133,7 @@ async function formatAgentList({
     agents: serializedAgentAgents,
     tools: serializedAgentTools,
     workflows: serializedAgentWorkflows,
-    provider,
+    provider: llm?.getProvider(),
     modelId: llm?.getModelId(),
     modelVersion: model?.specificationVersion,
     defaultGenerateOptions: defaultGenerateOptions as any,
@@ -249,19 +242,13 @@ async function formatAgent({
 
     const serializedAgentAgents = await getSerializedAgentDefinition({ agent, runtimeContext: proxyRuntimeContext });
 
-    // Normalize provider names by removing AI SDK suffixes like ".chat" and ".completion"
-    let provider = llm?.getProvider();
-    if (provider?.endsWith('.chat') || provider?.endsWith('.completion')) {
-      provider = provider.substring(0, provider.lastIndexOf('.'));
-    }
-
     return {
       name: agent.name,
       instructions,
       tools: serializedAgentTools,
       agents: serializedAgentAgents,
       workflows: serializedAgentWorkflows,
-      provider,
+      provider: llm?.getProvider(),
       modelId: llm?.getModelId(),
       modelVersion: model?.specificationVersion,
       modelList,
@@ -697,59 +684,16 @@ export async function updateAgentModelHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const newModel = `${body.provider}/${body.modelId}`;
+    const { modelId, provider } = body;
 
-    const llm = await agent.getLLM();
-    // Normalize the existing provider by removing AI SDK suffixes
-    let existingProvider = llm?.getProvider();
-    if (existingProvider?.endsWith('.chat') || existingProvider?.endsWith('.completion')) {
-      existingProvider = existingProvider.substring(0, existingProvider.lastIndexOf('.'));
-    }
-    const existingModelId = llm?.getModelId();
+    // Use the universal Mastra router format: provider/model
+    const newModel = `${provider}/${modelId}`;
 
-    if (existingProvider && existingModelId && `${existingProvider}/${existingModelId}` === newModel) {
-      return { message: 'Agent model does not need updating, it already uses the requested model' };
-    }
-
-    // Use the universal mastra router format: "provider/model"
-    // This will be handled by OpenAICompatibleModel in the agent
     agent.__updateModel({ model: newModel });
 
     return { message: 'Agent model updated' };
   } catch (error) {
     return handleError(error, 'error updating agent model');
-  }
-}
-
-export async function getProvidersHandler(): Promise<{
-  providers: Array<{
-    id: string;
-    name: string;
-    envVar: string;
-    connected: boolean;
-    models: string[];
-  }>;
-}> {
-  try {
-    const providers = [];
-
-    // Check each provider in the registry
-    for (const [providerId, config] of Object.entries(PROVIDER_REGISTRY)) {
-      const envVar = config.apiKeyEnvVar;
-      const apiKey = process.env[envVar];
-
-      providers.push({
-        id: providerId,
-        name: config.name,
-        envVar: envVar,
-        connected: !!apiKey,
-        models: [...config.models], // Convert readonly array to mutable
-      });
-    }
-
-    return { providers };
-  } catch (error) {
-    return handleError(error, 'Error getting providers');
   }
 }
 
@@ -794,7 +738,7 @@ export async function updateAgentModelInModelListHandler({
   body: {
     model?: {
       modelId: string;
-      provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+      provider: string;
     };
     maxRetries?: number;
     enabled?: boolean;
@@ -822,20 +766,11 @@ export async function updateAgentModelInModelListHandler({
       throw new HTTPException(400, { message: 'Model to update is not found in agent model list' });
     }
 
-    let model: MastraLanguageModel | undefined;
+    let model: string | undefined;
     if (bodyModel) {
       const { modelId, provider } = bodyModel;
-      // TODO: Uncomment when AI SDK dependencies are installed
-      // const providerMap = {
-      //   openai: openaiV5(modelId),
-      //   anthropic: anthropicV5(modelId),
-      //   groq: groqV5(modelId),
-      //   xai: xaiV5(modelId),
-      //   google: googleV5(modelId),
-      // };
-
-      // model = providerMap[provider];
-      throw new Error('AI SDK dependencies not installed. Please install @ai-sdk/openai, @ai-sdk/anthropic, etc.');
+      // Use the universal Mastra router format: provider/model
+      model = `${provider}/${modelId}`;
     }
 
     agent.updateModelInModelList({ id: modelConfigId, model, maxRetries, enabled });

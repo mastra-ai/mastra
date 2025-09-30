@@ -66,7 +66,7 @@ export class ModelsDevGateway extends MastraModelGateway {
   private providerConfigs: Record<string, ProviderConfig> = {};
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
-    console.log('Fetching providers from models.dev API...');
+    console.info('Fetching providers from models.dev API...');
 
     const response = await fetch('https://models.dev/api.json');
     if (!response.ok) {
@@ -107,7 +107,7 @@ export class ModelsDevGateway extends MastraModelGateway {
 
         // Skip if we don't have a URL
         if (!url) {
-          console.log(`Skipping ${normalizedId}: No API URL available`);
+          console.info(`Skipping ${normalizedId}: No API URL available`);
           continue;
         }
 
@@ -134,8 +134,8 @@ export class ModelsDevGateway extends MastraModelGateway {
     // Store for later use in buildUrl and buildHeaders
     this.providerConfigs = providerConfigs;
 
-    console.log(`Found ${Object.keys(providerConfigs).length} OpenAI-compatible providers`);
-    console.log('Providers:', Object.keys(providerConfigs).sort());
+    console.info(`Found ${Object.keys(providerConfigs).length} OpenAI-compatible providers`);
+    console.info('Providers:', Object.keys(providerConfigs).sort());
     return providerConfigs;
   }
 

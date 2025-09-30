@@ -18,7 +18,6 @@ import {
   reorderAgentModelListHandler as getOriginalReorderAgentModelListHandler,
   updateAgentModelInModelListHandler as getOriginalUpdateAgentModelInModelListHandler,
   streamNetworkHandler as getOriginalStreamNetworkHandler,
-  getProvidersHandler as getOriginalProvidersHandler,
 } from '@mastra/server/handlers/agents';
 import type { Context } from 'hono';
 
@@ -79,6 +78,17 @@ export const vNextBodyOptions: any = {
     description: 'Controls how tools are selected during generation',
   },
   format: { type: 'string', enum: ['mastra', 'aisdk'], description: 'Response format' },
+  tracingOptions: {
+    type: 'object',
+    description: 'Tracing options for the agent execution',
+    properties: {
+      metadata: {
+        type: 'object',
+        description: 'Custom metadata to attach to the trace',
+        additionalProperties: true,
+      },
+    },
+  },
   ...sharedBodyOptions,
 };
 

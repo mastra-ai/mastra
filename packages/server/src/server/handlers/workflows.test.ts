@@ -96,6 +96,7 @@ describe('vNext Workflow Handlers', () => {
   let mockMastra: Mastra;
   let mockWorkflow: Workflow;
   let reusableWorkflow: Workflow;
+  const tracingOptions = { metadata: { test: true } };
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -166,6 +167,7 @@ describe('vNext Workflow Handlers', () => {
         mastra: mockMastra,
         workflowId: 'test-workflow',
         inputData: {},
+        tracingOptions,
       });
 
       expect(result.steps['test-step'].status).toEqual('success');
@@ -177,6 +179,7 @@ describe('vNext Workflow Handlers', () => {
         workflowId: 'test-workflow',
         runId: 'test-run',
         inputData: {},
+        tracingOptions,
       });
 
       expect(result.steps['test-step'].status).toEqual('success');
@@ -369,6 +372,7 @@ describe('vNext Workflow Handlers', () => {
         workflowId: 'test-workflow',
         runId: 'test-run',
         inputData: { test: 'data' },
+        tracingOptions,
       });
 
       expect(result).toEqual({ message: 'Workflow run started' });
@@ -465,6 +469,7 @@ describe('vNext Workflow Handlers', () => {
         workflowId: reusableWorkflow.name,
         runId: 'test-run',
         body: { step: 'test-step', resumeData: { test: 'data' } },
+        tracingOptions,
       });
 
       expect(result).toEqual({ message: 'Workflow run resumed' });

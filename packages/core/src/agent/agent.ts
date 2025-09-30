@@ -89,6 +89,13 @@ import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 
+type ModelFallbacks = {
+  id: string;
+  model: DynamicArgument<MastraModelConfig>;
+  maxRetries: number;
+  enabled: boolean;
+}[];
+
 function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
   if (value instanceof Promise) {
     return value.then(cb);
@@ -152,14 +159,7 @@ export class Agent<
   public name: TAgentId;
   #instructions: DynamicAgentInstructions;
   readonly #description?: string;
-  model:
-    | DynamicArgument<MastraModelConfig>
-    | {
-        id: string;
-        model: DynamicArgument<MastraModelConfig>;
-        maxRetries: number;
-        enabled: boolean;
-      }[];
+  model: DynamicArgument<MastraModelConfig> | ModelFallbacks;
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
@@ -766,7 +766,12 @@ export class Agent<
     return resolveMaybePromise(modelToUse, resolvedModel => {
       let llm: MastraLLM | Promise<MastraLLM>;
       if (resolvedModel.specificationVersion === 'v2') {
-        llm = this.prepareModels(runtimeContext, resolvedModel).then(models => {
+        const modelsPromise =
+          Array.isArray(this.model) && !model
+            ? this.prepareModels(runtimeContext, this.model)
+            : this.prepareModels(runtimeContext, resolvedModel);
+
+        llm = modelsPromise.then(models => {
           const enabledModels = models.filter(model => model.enabled);
           return new MastraLLMVNext({
             models: enabledModels,
@@ -800,8 +805,11 @@ export class Agent<
     modelConfig: DynamicArgument<MastraModelConfig>,
   ): modelConfig is OpenAICompatibleConfig {
     if (typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) return false;
-    // TODO: this is probably an incomplete check!
-    if (typeof modelConfig === 'object' && 'id' in modelConfig) return true;
+    // Check for OpenAICompatibleConfig specifically - it should have 'id' but NOT 'model'
+    // ModelWithRetries has both 'id' and 'model', so we exclude it
+    // TODO: should probably do some additional checking using providers list to see if the ID starts with a known provider
+    // we can also do some duck typing around optional properties like url/apiKey/etc
+    if (typeof modelConfig === 'object' && 'id' in modelConfig && !('model' in modelConfig)) return true;
     return false;
   }
 
@@ -890,7 +898,7 @@ export class Agent<
     this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
   }
 
-  __updateModel({ model }: { model: DynamicArgument<MastraModelConfig> }) {
+  __updateModel({ model }: { model: DynamicArgument<MastraLanguageModel> }) {
     this.model = model;
     this.logger.debug(`[Agents:${this.name}] Model updated.`, { model: this.model, name: this.name });
   }
@@ -2850,7 +2858,7 @@ export class Agent<
 
   private async prepareModels(
     runtimeContext: RuntimeContext,
-    model?: DynamicArgument<MastraLanguageModel>,
+    model?: DynamicArgument<MastraLanguageModel> | ModelFallbacks,
   ): Promise<Array<AgentModelManagerConfig>> {
     if (model || !Array.isArray(this.model)) {
       const modelToUse = model ?? this.model;
@@ -2883,7 +2891,7 @@ export class Agent<
 
     const models = await Promise.all(
       this.model.map(async modelConfig => {
-        const model = await this.resolveModelConfig(modelConfig, runtimeContext);
+        const model = await this.resolveModelConfig(modelConfig.model, runtimeContext);
 
         if (model.specificationVersion !== 'v2') {
           const mastraError = new MastraError({
@@ -2901,10 +2909,10 @@ export class Agent<
         }
 
         return {
-          id: modelConfig.id,
+          id: modelConfig.id || model.modelId || 'unknown',
           model: model as MastraLanguageModelV2,
-          maxRetries: modelConfig.maxRetries,
-          enabled: modelConfig.enabled,
+          maxRetries: modelConfig.maxRetries ?? 0,
+          enabled: modelConfig.enabled ?? true,
         };
       }),
     );

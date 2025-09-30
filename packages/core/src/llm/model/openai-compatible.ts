@@ -1,12 +1,9 @@
 import type {
   LanguageModelV2,
   LanguageModelV2CallOptions,
-  LanguageModelV2Content,
   LanguageModelV2FinishReason,
-  LanguageModelV2Usage,
   LanguageModelV2StreamPart,
   LanguageModelV2CallWarning,
-  SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
 import { parseModelString, getProviderConfig } from './provider-registry.generated';
 import type { ModelRouterModelId } from './provider-registry.generated';
@@ -86,35 +83,6 @@ interface OpenAIStreamChunk {
   };
 }
 
-// TODO: get these types from openai
-interface OpenAICompletionResponse {
-  id: string;
-  object: string;
-  created: number;
-  model: string;
-  choices: Array<{
-    index: number;
-    message: {
-      role: string;
-      content: string | null;
-      tool_calls?: Array<{
-        id: string;
-        type: string;
-        function: {
-          name: string;
-          arguments: string;
-        };
-      }>;
-    };
-    finish_reason: string | null;
-  }>;
-  usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
-}
-
 export class OpenAICompatibleModel implements LanguageModelV2 {
   readonly specificationVersion = 'v2' as const;
   readonly defaultObjectGenerationMode = 'json' as const;
@@ -127,6 +95,7 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
 
   private url: string;
   private headers: Record<string, string>;
+  private apiKey: string | undefined;
 
   constructor(config: ModelRouterModelId | OpenAICompatibleConfig) {
     // Parse configuration
@@ -206,16 +175,13 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
       throw new Error('URL is required for OpenAI-compatible model');
     }
 
-    // Store the API key (might be undefined, we'll check later when making requests)
-    // This allows the model to be instantiated even without an API key,
-    // and we'll throw a proper error through the stream when the request is made
-
     // Get provider config for headers
     const providerConfig = this.provider !== 'openai-compatible' ? getProviderConfig(this.provider) : undefined;
 
     // Set final properties
     this.modelId = parsedConfig.id;
     this.url = parsedConfig.url;
+    this.apiKey = parsedConfig.apiKey; // Store API key for later validation
     this.headers = buildHeaders(parsedConfig.apiKey, providerConfig?.apiKeyHeader, parsedConfig.headers, this.provider);
   }
 
@@ -341,125 +307,28 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
     }
   }
 
-  async doGenerate(options: LanguageModelV2CallOptions): Promise<{
-    content: LanguageModelV2Content[];
-    finishReason: LanguageModelV2FinishReason;
-    usage: LanguageModelV2Usage;
-    providerMetadata?: SharedV2ProviderMetadata;
-    request?: { body: string };
-    response?: { headers: Record<string, string> };
-    warnings: LanguageModelV2CallWarning[];
-  }> {
+  private validateApiKey(): void {
     // Check if API key is required and missing
-    if (!this.headers['Authorization'] && !this.headers['x-api-key'] && this.provider !== 'openai-compatible') {
+    if (!this.apiKey && this.provider !== 'openai-compatible') {
+      // Get the provider config to find the env var name
       const providerConfig = getProviderConfig(this.provider);
-      const errorMessage = providerConfig?.apiKeyEnvVar
-        ? `API key not found for provider "${this.provider}". Please set the ${providerConfig.apiKeyEnvVar} environment variable.`
-        : `API key not found for provider "${this.provider}". Please provide an API key in the configuration.`;
-
-      throw new Error(errorMessage);
-    }
-
-    const { prompt, tools, toolChoice, providerOptions } = options;
-
-    // TODO: lets get a real body type here, not any
-    const body: any = {
-      messages: this.convertMessagesToOpenAI(prompt),
-      model: this.modelId,
-      ...providerOptions,
-    };
-
-    const openAITools = this.convertToolsToOpenAI(tools);
-    if (openAITools) {
-      body.tools = openAITools;
-      if (toolChoice) {
-        body.tool_choice =
-          toolChoice.type === 'none'
-            ? 'none'
-            : toolChoice.type === 'required'
-              ? 'required'
-              : toolChoice.type === 'auto'
-                ? 'auto'
-                : toolChoice.type === 'tool'
-                  ? { type: 'function', function: { name: toolChoice.toolName } }
-                  : 'auto';
+      if (providerConfig?.apiKeyEnvVar) {
+        throw new Error(
+          `API key not found for provider "${this.provider}". Please set the ${providerConfig.apiKeyEnvVar} environment variable.`,
+        );
+      } else {
+        throw new Error(
+          `API key not found for provider "${this.provider}". Please provide an API key in the configuration.`,
+        );
       }
     }
+  }
 
-    // Handle structured output
-    if (options.responseFormat?.type === 'json') {
-      body.response_format = {
-        type: 'json_schema',
-        json_schema: {
-          name: 'response',
-          strict: true,
-          schema: options.responseFormat.schema,
-        },
-      };
-    }
-
-    const response = await fetch(this.url, {
-      method: 'POST',
-      headers: this.headers,
-      body: JSON.stringify(body),
-      signal: options.abortSignal,
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-
-      // Check for authentication errors
-      if (response.status === 401 || response.status === 403) {
-        const providerConfig = getProviderConfig(this.provider);
-        if (providerConfig?.apiKeyEnvVar) {
-          throw new Error(
-            `Authentication failed for provider "${this.provider}". Please ensure the ${providerConfig.apiKeyEnvVar} environment variable is set with a valid API key.`,
-          );
-        }
-      }
-
-      throw new Error(`Mastra model router API error: ${response.status} - ${error}`);
-    }
-
-    const data: OpenAICompletionResponse = await response.json();
-    const choice = data.choices?.[0];
-
-    if (!choice) {
-      throw new Error('No choices returned from API');
-    }
-
-    const content: LanguageModelV2Content[] = [];
-
-    if (choice.message.content) {
-      content.push({
-        type: 'text',
-        text: choice.message.content,
-      });
-    }
-
-    if (choice.message.tool_calls) {
-      for (const toolCall of choice.message.tool_calls) {
-        content.push({
-          type: 'tool-call',
-          toolCallId: toolCall.id,
-          toolName: toolCall.function.name,
-          input: toolCall.function.arguments,
-        });
-      }
-    }
-
-    return {
-      content,
-      finishReason: this.mapFinishReason(choice.finish_reason),
-      usage: {
-        inputTokens: data.usage?.prompt_tokens || 0,
-        outputTokens: data.usage?.completion_tokens || 0,
-        totalTokens: data.usage?.total_tokens || 0,
-      },
-      warnings: [],
-      request: { body: JSON.stringify(body) },
-      response: { headers: Object.fromEntries(response.headers.entries()) },
-    };
+  async doGenerate(): Promise<never> {
+    throw new Error(
+      'doGenerate is not supported by OpenAICompatibleModel. ' +
+        'Mastra only uses streaming (doStream) for all LLM calls.',
+    );
   }
 
   async doStream(options: LanguageModelV2CallOptions): Promise<{
@@ -468,18 +337,7 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
     response?: { headers: Record<string, string> };
     warnings: LanguageModelV2CallWarning[];
   }> {
-    // Check if API key is required and missing (do this check here so error goes through stream)
-    if (!this.headers['Authorization'] && !this.headers['x-api-key'] && this.provider !== 'openai-compatible') {
-      const providerConfig = getProviderConfig(this.provider);
-      const errorMessage = providerConfig?.apiKeyEnvVar
-        ? `API key not found for provider "${this.provider}". Please set the ${providerConfig.apiKeyEnvVar} environment variable.`
-        : `API key not found for provider "${this.provider}". Please provide an API key in the configuration.`;
-      // throw new Error(errorMessage)
-      // Return a stream that throws an error immediately
-      // This will be caught by the execute wrapper and properly handled
-      throw new Error(errorMessage);
-    }
-
+    this.validateApiKey(); // Validate API key before making the request
     const { prompt, tools, toolChoice, providerOptions } = options;
 
     // TODO: real body type, not any
@@ -540,7 +398,7 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
         }
       }
 
-      throw new Error(`Mastra model router API error: ${response.status} - ${error}`);
+      throw new Error(`OpenAI-compatible API error: ${response.status} - ${error}`);
     }
 
     const reader = response.body?.getReader();

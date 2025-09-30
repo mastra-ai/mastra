@@ -45,7 +45,7 @@
   "author": "Mastra",
   "license": "Apache-2.0",
   "dependencies": {
-    "@mastra/react-hooks": "workspace:*",
+    "@mastra/react": "workspace:*",
     "@ai-sdk/ui-utils": "^1.2.11",
     "@assistant-ui/react": "^0.10.45",
     "@assistant-ui/react-markdown": "^0.10.9",
@@ -120,8 +120,8 @@
   },
   "devDependencies": {
     "@mastra/core": "workspace:*",
-    "@storybook/addon-docs": "^9.1.7",
-    "@storybook/react-vite": "^9.1.6",
+    "@storybook/addon-docs": "^9.1.8",
+    "@storybook/react-vite": "^9.1.8",
     "@types/node": "^20.19.0",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
@@ -131,7 +131,7 @@
     "clsx": "^2.1.1",
     "postcss": "^8.5.6",
     "rollup-plugin-node-externals": "^8.0.1",
-    "storybook": "^9.1.6",
+    "storybook": "^9.1.8",
     "tailwind-merge": "^3.3.1",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3",

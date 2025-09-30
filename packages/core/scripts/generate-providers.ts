@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { MastraModelGateway, type ProviderConfig } from '../src/llm/model/gateways/index.js';
+import type { MastraModelGateway, ProviderConfig } from '../src/llm/model/gateways/index.js';
 import { ModelsDevGateway } from '../src/llm/model/gateways/models-dev.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -135,11 +135,11 @@ export function isValidModelId(modelId: string): modelId is ModelRouterModelId {
   const outputPath = path.join(__dirname, '..', 'src', 'llm', 'model', 'provider-registry.generated.ts');
   await fs.writeFile(outputPath, output, 'utf-8');
 
-  console.log(`✅ Generated provider registry at: ${outputPath}`);
-  console.log(`\nRegistered providers:`);
+  console.info(`✅ Generated provider registry at: ${outputPath}`);
+  console.info(`\nRegistered providers:`);
 
   for (const [providerId, config] of Object.entries(allProviders)) {
-    console.log(`  - ${providerId}: ${config.name} (${config.models.length} models)`);
+    console.info(`  - ${providerId}: ${config.name} (${config.models.length} models)`);
   }
 }
 

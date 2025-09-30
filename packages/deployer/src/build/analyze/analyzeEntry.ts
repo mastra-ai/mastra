@@ -1,5 +1,6 @@
 import { noopLogger, type IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
+import nodeResolve from '@rollup/plugin-node-resolve';
 import json from '@rollup/plugin-json';
 import virtual from '@rollup/plugin-virtual';
 import { fileURLToPath } from 'node:url';
@@ -9,7 +10,7 @@ import { esbuild } from '../plugins/esbuild';
 import { isNodeBuiltin } from '../isNodeBuiltin';
 import { removeDeployer } from '../plugins/remove-deployer';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
-import { getPackageName, getPackageRootPath } from '../utils';
+import { getPackageName, getPackageRootPath, slash } from '../utils';
 import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import { DEPS_TO_IGNORE } from './constants';
@@ -23,7 +24,7 @@ function getInputPlugins(
   mastraEntry: string,
   { sourcemapEnabled }: { sourcemapEnabled: boolean },
 ): Plugin[] {
-  const normalizedMastraEntry = mastraEntry.replaceAll('\\', '/');
+  const normalizedMastraEntry = slash(mastraEntry);
   let virtualPlugin = null;
   if (isVirtualFile) {
     virtualPlugin = virtual({
@@ -44,7 +45,7 @@ function getInputPlugins(
         name: 'custom-alias-resolver',
         resolveId(id: string) {
           if (id === '#server') {
-            return fileURLToPath(import.meta.resolve('@mastra/deployer/server')).replaceAll('\\', '/');
+            return slash(fileURLToPath(import.meta.resolve('@mastra/deployer/server')));
           }
           if (id === '#mastra') {
             return normalizedMastraEntry;
@@ -102,7 +103,9 @@ async function captureDependenciesToOptimize(
       isWorkspace = workspaceMap.has(pkgName);
     }
 
-    depsToOptimize.set(dependency, { exports: bindings, rootPath, isWorkspace });
+    const normalizedRootPath = rootPath ? slash(rootPath) : null;
+
+    depsToOptimize.set(dependency, { exports: bindings, rootPath: normalizedRootPath, isWorkspace });
   }
 
   /**

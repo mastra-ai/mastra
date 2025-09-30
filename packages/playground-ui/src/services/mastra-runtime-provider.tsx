@@ -6,19 +6,25 @@ import {
   AppendMessage,
   AssistantRuntimeProvider,
 } from '@assistant-ui/react';
-import { useState, ReactNode, useEffect, useRef } from 'react';
+import { useState, ReactNode, useRef } from 'react';
 import { RuntimeContext } from '@mastra/core/di';
 import { ChatProps, Message } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@/lib/file/toBase64';
-import { useMastraClient } from '@mastra/react-hooks';
+import { useMastraClient } from '@mastra/react';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
-import { MastraModelOutput } from '@mastra/core/stream';
-import { flushSync } from 'react-dom';
-import { mapWorkflowStreamChunkToWatchResult } from '@/domains/workflows/utils';
-import { useModelReset } from '@/domains/agents/context/model-reset-context';
+import { MastraModelOutput, ReadonlyJSONObject } from '@mastra/core/stream';
+
+import { handleNetworkMessageFromMemory } from './agent-network-message';
+import {
+  createRootToolAssistantMessage,
+  handleAgentChunk,
+  handleStreamChunk,
+  handleWorkflowChunk,
+} from './stream-chunk-message';
+import { ModelSettings, useChat } from '@mastra/react';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -79,6 +85,80 @@ const convertToAIAttachments = async (attachments: AppendMessage['attachments'])
   return Promise.all(promises);
 };
 
+const initializeMessageState = (initialMessages: Message[]) => {
+  // @ts-expect-error - TODO: fix the ThreadMessageLike type, it's missing some properties like "data" from the role.
+  const convertedMessages: ThreadMessageLike[] = initialMessages
+    ?.map((message: Message) => {
+      let content;
+      try {
+        content = JSON.parse(message.content);
+        if (content.isNetwork) {
+          return handleNetworkMessageFromMemory(content);
+        }
+      } catch (e) {}
+
+      const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
+        type: image.contentType.startsWith(`image/`)
+          ? 'image'
+          : image.contentType.startsWith(`audio/`)
+            ? 'audio'
+            : 'file',
+        mimeType: image.contentType,
+        image: image.url,
+      }));
+
+      const formattedParts = (message.parts || [])
+        .map(part => {
+          if (part.type === 'reasoning') {
+            return {
+              type: 'reasoning',
+              text:
+                part.reasoning ||
+                part?.details
+                  ?.filter(detail => detail.type === 'text')
+                  ?.map(detail => detail.text)
+                  .join(' '),
+            };
+          }
+          if (part.type === 'tool-invocation') {
+            if (part.toolInvocation.state === 'result') {
+              return {
+                type: 'tool-call',
+                toolCallId: part.toolInvocation.toolCallId,
+                toolName: part.toolInvocation.toolName,
+                args: part.toolInvocation.args,
+                result: part.toolInvocation.result,
+              };
+            }
+          }
+
+          if (part.type === 'file') {
+            return {
+              type: 'file',
+              mimeType: part.mimeType,
+              data: part.data,
+            };
+          }
+
+          if (part.type === 'text') {
+            return {
+              type: 'text',
+              text: part.text,
+            };
+          }
+        })
+        .filter(Boolean);
+
+      return {
+        ...message,
+        content: [...formattedParts, ...attachmentsAsContentParts],
+      };
+    })
+    .filter(Boolean);
+
+  return convertedMessages;
+};
+
 export function MastraRuntimeProvider({
   children,
   agentId,
@@ -94,8 +174,19 @@ export function MastraRuntimeProvider({
 }> &
   ChatProps) {
   const [isRunning, setIsRunning] = useState(false);
-  const [messages, setMessages] = useState<ThreadMessageLike[]>([]);
-  const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
+
+  const {
+    messages,
+    setMessages,
+    streamVNext,
+    network,
+    cancelRun,
+    isRunning: isRunningStreamVNext,
+  } = useChat<ThreadMessageLike>({
+    agentId,
+    initializeMessages: () => (memory ? initializeMessageState(initialMessages || []) : []),
+  });
+
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -111,7 +202,7 @@ export function MastraRuntimeProvider({
     instructions,
     chatWithGenerate,
     chatWithGenerateVNext,
-    chatWithStreamVNext,
+    chatWithNetwork,
     providerOptions,
   } = settings?.modelSettings ?? {};
   const toolCallIdToName = useRef<Record<string, string>>({});
@@ -121,97 +212,27 @@ export function MastraRuntimeProvider({
     runtimeContextInstance.set(key, value);
   });
 
-  useEffect(() => {
-    const hasNewInitialMessages = initialMessages && initialMessages?.length > messages?.length;
-    if (
-      messages.length === 0 ||
-      currentThreadId !== threadId ||
-      (hasNewInitialMessages && currentThreadId === threadId)
-    ) {
-      if (initialMessages && threadId && memory) {
-        const convertedMessages: ThreadMessageLike[] = initialMessages
-          ?.map((message: Message) => {
-            const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
-              type: image.contentType.startsWith(`image/`)
-                ? 'image'
-                : image.contentType.startsWith(`audio/`)
-                  ? 'audio'
-                  : 'file',
-              mimeType: image.contentType,
-              image: image.url,
-            }));
-
-            const formattedParts = (message.parts || [])
-              .map(part => {
-                if (part.type === 'reasoning') {
-                  return {
-                    type: 'reasoning',
-                    text:
-                      part.reasoning ||
-                      part?.details
-                        ?.filter(detail => detail.type === 'text')
-                        ?.map(detail => detail.text)
-                        .join(' '),
-                  };
-                }
-                if (part.type === 'tool-invocation') {
-                  if (part.toolInvocation.state === 'result') {
-                    return {
-                      type: 'tool-call',
-                      toolCallId: part.toolInvocation.toolCallId,
-                      toolName: part.toolInvocation.toolName,
-                      args: part.toolInvocation.args,
-                      result: part.toolInvocation.result,
-                    };
-                  }
-                }
-
-                if (part.type === 'file') {
-                  return {
-                    type: 'file',
-                    mimeType: part.mimeType,
-                    data: part.data,
-                  };
-                }
-
-                if (part.type === 'text') {
-                  return {
-                    type: 'text',
-                    text: part.text,
-                  };
-                }
-              })
-              .filter(Boolean);
-
-            return {
-              ...message,
-              content: [...formattedParts, ...attachmentsAsContentParts],
-            } as ThreadMessageLike;
-          })
-          .filter(Boolean);
-        setMessages(convertedMessages);
-        setCurrentThreadId(threadId);
-      }
-    }
-  }, [initialMessages, threadId, memory]);
+  const modelSettingsArgs: ModelSettings = {
+    frequencyPenalty,
+    presencePenalty,
+    maxRetries,
+    temperature,
+    topK,
+    topP,
+    maxTokens,
+    instructions,
+    providerOptions,
+  };
 
   const baseClient = useMastraClient();
-  const { triggerReset } = useModelReset();
 
   const onNew = async (message: AppendMessage) => {
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');
 
-    // Check and reset model if incomplete before sending message
-    triggerReset();
-
     const attachments = await convertToAIAttachments(message.attachments);
 
     const input = message.content[0].text;
-    setMessages(currentConversation => [
-      ...currentConversation,
-      { role: 'user', content: input, attachments: message.attachments },
-    ]);
-    setIsRunning(true);
+    setMessages(s => [...s, { role: 'user', content: input, attachments: message.attachments }]);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -227,9 +248,13 @@ export function MastraRuntimeProvider({
 
     try {
       function handleGenerateResponse(generatedResponse: Awaited<ReturnType<MastraModelOutput['getFullOutput']>>) {
-        if (generatedResponse.response && 'messages' in generatedResponse.response && generatedResponse.response.messages) {
+        if (
+          generatedResponse.response &&
+          'messages' in generatedResponse.response &&
+          generatedResponse.response.messages
+        ) {
           const latestMessage = generatedResponse.response.messages.reduce(
-            (acc: ThreadMessageLike, message: any) => {
+            (acc: ThreadMessageLike, message) => {
               const _content = Array.isArray(acc.content) ? acc.content : [];
 
               if (typeof message.content === 'string') {
@@ -243,20 +268,20 @@ export function MastraRuntimeProvider({
                       text: message.content,
                     },
                   ],
-                } as ThreadMessageLike;
+                };
               }
 
               if (message.role === 'assistant') {
                 const toolCallContent = Array.isArray(message.content)
-                  ? message.content.find((content: any) => content.type === 'tool-call')
+                  ? message.content.find(content => content.type === 'tool-call')
                   : undefined;
 
                 const reasoningContent = Array.isArray(message.content)
-                  ? message.content.find((content: any) => content.type === 'reasoning')
+                  ? message.content.find(content => content.type === 'reasoning')
                   : undefined;
 
                 if (toolCallContent) {
-                  const newContent = message.content.map((c: any) => {
+                  const newContent = message.content.map(c => {
                     if (c.type === 'tool-call' && c.toolCallId === toolCallContent?.toolCallId) {
                       return {
                         ...c,
@@ -268,31 +293,31 @@ export function MastraRuntimeProvider({
                     return c;
                   });
 
-                  const containsToolCall = newContent.some((c: any) => c.type === 'tool-call');
+                  const containsToolCall = newContent.some(c => c.type === 'tool-call');
 
                   return {
                     ...acc,
                     content: containsToolCall
                       ? [...(reasoningContent ? [reasoningContent] : []), ...newContent]
                       : [..._content, ...(reasoningContent ? [reasoningContent] : []), toolCallContent],
-                  } as ThreadMessageLike;
+                  };
                 }
 
                 const textContent = Array.isArray(message.content)
-                  ? message.content.find((content: any) => content.type === 'text' && content.text)
+                  ? message.content.find(content => content.type === 'text' && content.text)
                   : undefined;
 
                 if (textContent) {
                   return {
                     ...acc,
                     content: [..._content, ...(reasoningContent ? [reasoningContent] : []), textContent],
-                  } as ThreadMessageLike;
+                  };
                 }
               }
 
               if (message.role === 'tool') {
                 const toolResult = Array.isArray(message.content)
-                  ? message.content.find((content: any) => content.type === 'tool-result')
+                  ? message.content.find(content => content.type === 'tool-result')
                   : undefined;
 
                 if (toolResult) {
@@ -312,17 +337,17 @@ export function MastraRuntimeProvider({
                           ..._content,
                           { type: 'tool-result', toolCallId: toolResult.toolCallId, result: toolResult.output?.value },
                         ],
-                  } as ThreadMessageLike;
+                  };
                 }
 
                 return {
                   ...acc,
                   content: [..._content, toolResult],
-                } as ThreadMessageLike;
+                };
               }
               return acc;
             },
-            { role: 'assistant', content: [] } as ThreadMessageLike,
+            { role: 'assistant', content: [] },
           );
 
           setMessages(currentConversation => [...currentConversation, latestMessage]);
@@ -334,371 +359,173 @@ export function MastraRuntimeProvider({
       }
 
       if (modelVersion === 'v2') {
-        if (chatWithGenerateVNext) {
-          const response = await agent.generateVNext({
-            messages: [
+        if (chatWithNetwork) {
+          let currentEntityId: string | undefined;
+
+          await network({
+            coreUserMessages: [
               {
                 role: 'user',
                 content: input,
               },
               ...attachments,
             ],
-            runId: agentId,
-            modelSettings: {
-              frequencyPenalty,
-              presencePenalty,
-              maxRetries,
-              temperature,
-              topK,
-              topP,
-              maxOutputTokens: maxTokens,
-            },
-            providerOptions: providerOptions as any,
-            instructions,
             runtimeContext: runtimeContextInstance,
-            ...(memory ? { threadId, resourceId: agentId } : {}),
-          });
+            threadId,
+            modelSettings: modelSettingsArgs,
+            signal: controller.signal,
+            onNetworkChunk: (chunk, conversation) => {
+              if (chunk.type.startsWith('agent-execution-event-')) {
+                const agentChunk = chunk.payload;
 
-          handleGenerateResponse(response);
-          setIsRunning(false);
-          return;
-        } else {
-          const response = await agent.streamVNext({
-            messages: [
-              {
-                role: 'user',
-                content: input,
-              },
-              ...attachments,
-            ],
-            runId: agentId,
-            modelSettings: {
-              frequencyPenalty,
-              presencePenalty,
-              maxRetries,
-              maxOutputTokens: maxTokens,
-              temperature,
-              topK,
-              topP,
-            },
-            instructions,
-            runtimeContext: runtimeContextInstance,
-            ...(memory ? { threadId, resourceId: agentId } : {}),
-            providerOptions: providerOptions as any,
-          });
+                if (!currentEntityId) return conversation;
 
-          if (!response.body) {
-            throw new Error('No response body');
-          }
-          let content = '';
-          let assistantMessageAdded = false;
-          let assistantToolCallAddedForUpdater = false;
-          let assistantToolCallAddedForContent = false;
+                return handleAgentChunk({ agentChunk, conversation, entityName: currentEntityId });
+              } else if (chunk.type === 'tool-execution-start') {
+                const { args: argsData } = chunk.payload;
 
-          function updater() {
-            setMessages(currentConversation => {
-              const message: ThreadMessageLike = {
-                role: 'assistant',
-                content: [{ type: 'text', text: content }],
-              };
+                const nestedArgs = argsData.args || {};
+                const mastraMetadata = argsData.__mastraMetadata || {};
+                const selectionReason = argsData.selectionReason || '';
 
-              if (!assistantMessageAdded) {
-                assistantMessageAdded = true;
-                if (assistantToolCallAddedForUpdater) {
-                  assistantToolCallAddedForUpdater = false;
-                }
-                return [...currentConversation, message];
-              }
-
-              if (assistantToolCallAddedForUpdater) {
-                // add as new message item in messages array if tool call was added
-                assistantToolCallAddedForUpdater = false;
-                return [...currentConversation, message];
-              }
-              return [...currentConversation.slice(0, -1), message];
-            });
-          }
-
-          await response.processDataStream({
-            onChunk: async chunk => {
-              switch (chunk.type) {
-                case 'text-delta': {
-                  if (assistantToolCallAddedForContent) {
-                    // start new content value to add as next message item in messages array
-                    assistantToolCallAddedForContent = false;
-                    content = chunk.payload.text;
-                  } else {
-                    content += chunk.payload.text;
-                  }
-
-                  updater();
-                  break;
-                }
-
-                case 'tool-output': {
-                  if (!chunk.payload.output?.type.startsWith('workflow-')) return;
-
-                  flushSync(() => {
-                    setMessages(currentConversation => {
-                      const lastMessage = currentConversation[currentConversation.length - 1];
-                      const contentArray = Array.isArray(lastMessage.content)
-                        ? lastMessage.content
-                        : [{ type: 'text', text: lastMessage.content }];
-
-                      const newMessage = {
-                        ...lastMessage,
-                        content: contentArray.map(part => {
-                          if (part.type === 'tool-call') {
-                            return {
-                              ...part,
-                              ...chunk.payload,
-                              args: {
-                                ...part.args,
-                                __mastraMetadata: {
-                                  ...part.args?.__mastraMetadata,
-                                  workflowFullState: mapWorkflowStreamChunkToWatchResult(
-                                    part.args?.__mastraMetadata?.workflowFullState || {},
-                                    chunk?.payload?.output,
-                                  ),
-                                  isStreaming: true,
-                                },
-                              },
-                            };
-                          }
-
-                          return part;
-                        }),
-                      };
-
-                      return [...currentConversation.slice(0, -1), newMessage];
-                    });
-                  });
-
-                  break;
-                }
-
-                case 'tool-call': {
-                  // Update the messages state
-                  setMessages(currentConversation => {
-                    // Get the last message (should be the assistant's message)
-                    const lastMessage = currentConversation[currentConversation.length - 1];
-
-                    // Only process if the last message is from the assistant
-                    if (lastMessage && lastMessage.role === 'assistant') {
-                      // Create a new message with the tool call part
-                      const updatedMessage: ThreadMessageLike = {
-                        ...lastMessage,
-                        content: Array.isArray(lastMessage.content)
-                          ? [
-                              ...lastMessage.content,
-                              {
-                                type: 'tool-call',
-                                toolCallId: chunk.payload.toolCallId,
-                                toolName: chunk.payload.toolName,
-                                args: {
-                                  ...chunk.payload.args,
-                                  __mastraMetadata: {
-                                    ...chunk.payload.args?.__mastraMetadata,
-                                    isStreaming: true,
-                                  },
-                                },
-                              },
-                            ]
-                          : [
-                              ...(typeof lastMessage.content === 'string'
-                                ? [{ type: 'text', text: lastMessage.content }]
-                                : []),
-                              {
-                                type: 'tool-call',
-                                toolCallId: chunk.payload.toolCallId,
-                                toolName: chunk.payload.toolName,
-                                args: {
-                                  ...chunk.payload.args,
-                                  __mastraMetadata: {
-                                    ...chunk.payload.args?.__mastraMetadata,
-                                    isStreaming: true,
-                                  },
-                                },
-                              },
-                            ],
-                      };
-
-                      assistantToolCallAddedForUpdater = true;
-                      assistantToolCallAddedForContent = true;
-
-                      // Replace the last message with the updated one
-                      return [...currentConversation.slice(0, -1), updatedMessage];
-                    }
-
-                    // If there's no assistant message yet, create one
-                    const newMessage: ThreadMessageLike = {
-                      role: 'assistant',
-                      content: [
-                        { type: 'text', text: content },
-                        {
-                          type: 'tool-call',
-                          toolCallId: chunk.payload.toolCallId,
-                          toolName: chunk.payload.toolName,
-                          args: {
-                            ...chunk.payload.args,
-__mastraMetadata: { ...chunk.payload.args?.__mastraMetadata, isStreaming: true } as any,
+                return handleStreamChunk({
+                  chunk: {
+                    ...chunk,
+                    type: 'tool-call',
+                    payload: {
+                      ...chunk.payload,
+                      toolCallId: argsData.toolCallId || 'unknown',
+                      toolName: argsData.toolName || 'unknown',
+                      args: {
+                        ...nestedArgs,
+                        __mastraMetadata: {
+                          ...mastraMetadata,
+                          networkMetadata: {
+                            selectionReason,
+                            input: nestedArgs as ReadonlyJSONObject,
                           },
                         },
-                      ],
-                    };
-                    assistantToolCallAddedForUpdater = true;
-                    assistantToolCallAddedForContent = true;
-                    return [...currentConversation, newMessage];
-                  });
-                  toolCallIdToName.current[chunk.payload.toolCallId] = chunk.payload.toolName;
-                  break;
+                      },
+                    },
+                  },
+                  conversation,
+                });
+              } else if (chunk.type === 'tool-execution-end') {
+                const next = handleStreamChunk({
+                  chunk: { ...chunk, type: 'tool-result' },
+                  conversation,
+                });
+
+                if (
+                  chunk.payload?.toolName === 'updateWorkingMemory' &&
+                  typeof chunk.payload.result === 'object' &&
+                  'success' in chunk.payload.result! &&
+                  chunk.payload.result?.success
+                ) {
+                  refreshWorkingMemory?.();
                 }
 
-                case 'tool-result': {
-                  // Update the messages state
-                  setMessages(currentConversation => {
-                    // Get the last message (should be the assistant's message)
-                    const lastMessage = currentConversation[currentConversation.length - 1];
+                return next;
+              } else if (chunk.type.startsWith('workflow-execution-event-')) {
+                const workflowChunk = chunk.payload as object;
 
-                    // Only process if the last message is from the assistant and has content array
-                    if (lastMessage && lastMessage.role === 'assistant' && Array.isArray(lastMessage.content)) {
-                      // Find the tool call content part that this result belongs to
-                      const updatedContent = lastMessage.content.map(part => {
-                        if (
-                          typeof part === 'object' &&
-                          part.type === 'tool-call' &&
-                          part.toolCallId === chunk.payload.toolCallId
-                        ) {
-                          return {
-                            ...part,
-                            result: chunk.payload.result,
-                          };
-                        }
-                        return part;
-                      });
+                if (!currentEntityId) return conversation;
 
-                      // Create a new message with the updated content
-                      const updatedMessage: ThreadMessageLike = {
-                        ...lastMessage,
-                        content: updatedContent,
-                      };
-                      // Replace the last message with the updated one
-                      return [...currentConversation.slice(0, -1), updatedMessage];
-                    }
-                    return currentConversation;
-                  });
-                  try {
-                    const toolName = toolCallIdToName.current[chunk.payload.toolCallId];
-                    if (toolName === 'updateWorkingMemory' && (chunk.payload.result as any)?.success) {
-                      await refreshWorkingMemory?.();
-                    }
-                  } finally {
-                    // Clean up
-                    delete toolCallIdToName.current[chunk.payload.toolCallId];
-                  }
-                  break;
-                }
+                return handleWorkflowChunk({ workflowChunk, conversation, entityName: currentEntityId });
+              } else if (chunk.type === 'workflow-execution-start' || chunk.type === 'agent-execution-start') {
+                currentEntityId = chunk.payload?.args?.primitiveId;
 
-                case 'error': {
-                  let errorMessage = 'An error occurred';
-                  const error = chunk.payload.error as any;
-                  if (typeof error === 'string') {
-                    errorMessage = error;
-                  } else if (error?.message) {
-                    errorMessage = error.message;
-                  } else if (chunk.payload) {
-                    errorMessage = JSON.stringify(chunk.payload);
-                  }
+                const runId = chunk.payload.runId;
 
-                  // Add specific handling for common errors
-                  if (errorMessage.includes('401') || errorMessage.toLowerCase().includes('unauthorized')) {
-                    errorMessage = 'Authentication failed. Please check your API key configuration.';
-                  } else if (errorMessage.includes('403') || errorMessage.toLowerCase().includes('forbidden')) {
-                    errorMessage = 'Access denied. Please verify your API key has the necessary permissions.';
-                  } else if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('rate limit')) {
-                    errorMessage = 'Rate limit exceeded. Please wait a moment before trying again.';
-                  } else if (
-                    errorMessage.includes('500') ||
-                    errorMessage.includes('502') ||
-                    errorMessage.includes('503')
-                  ) {
-                    errorMessage = 'The service is temporarily unavailable. Please try again later.';
-                  }
+                if (!currentEntityId || !runId) return conversation;
 
-                  // Add error message to chat instead of throwing
-                  // We'll use a special text format that the UI can recognize as an error
-                  setMessages(currentConversation => [
-                    ...currentConversation,
-                    {
-                      role: 'assistant',
-                      content: [
-                        {
-                          type: 'text',
-                          text: `__ERROR__:${errorMessage}`,
-                        },
-                      ],
-                    } as ThreadMessageLike,
-                  ]);
-                  setIsRunning(false);
-                  break;
-                }
-
-                case 'finish': {
-                  handleFinishReason(chunk.payload.finishReason as string);
-                  break;
-                }
-
-                case 'reasoning-delta': {
-                  setMessages(currentConversation => {
-                    // Get the last message (should be the assistant's message)
-                    const lastMessage = currentConversation[currentConversation.length - 1];
-
-                    // Only process if the last message is from the assistant
-                    if (lastMessage && lastMessage.role === 'assistant' && Array.isArray(lastMessage.content)) {
-                      // Find and update the reasoning content type
-                      const updatedContent = lastMessage.content.map(part => {
-                        if (typeof part === 'object' && part.type === 'reasoning') {
-                          return {
-                            ...part,
-                            text: part.text + chunk.payload.text,
-                          };
-                        }
-                        return part;
-                      });
-                      // Create a new message with the updated reasoning content
-                      const updatedMessage: ThreadMessageLike = {
-                        ...lastMessage,
-                        content: updatedContent,
-                      };
-
-                      // Replace the last message with the updated one
-                      return [...currentConversation.slice(0, -1), updatedMessage];
-                    }
-
-                    // If there's no assistant message yet, create one
-                    const newMessage: ThreadMessageLike = {
-                      role: 'assistant',
-                      content: [
-                        {
-                          type: 'reasoning',
-                          text: chunk.payload.text,
-                        },
-                        { type: 'text', text: content },
-                      ],
-                    };
-                    return [...currentConversation, newMessage];
-                  });
-                  break;
-                }
+                return createRootToolAssistantMessage({
+                  entityName: currentEntityId,
+                  conversation,
+                  runId,
+                  chunk,
+                  from: chunk.type === 'agent-execution-start' ? 'AGENT' : 'WORKFLOW',
+                  networkMetadata: {
+                    selectionReason: chunk?.payload?.args?.selectionReason || '',
+                    input: chunk?.payload?.args?.prompt,
+                  },
+                });
+              } else if (chunk.type === 'network-execution-event-step-finish') {
+                return [
+                  ...conversation,
+                  { role: 'assistant', content: [{ type: 'text', text: chunk?.payload?.result || '' }] },
+                ];
+              } else {
+                return handleStreamChunk({ chunk, conversation });
               }
             },
           });
+        } else {
+          if (chatWithGenerateVNext) {
+            setIsRunning(true);
+            const response = await agent.generateVNext({
+              messages: [
+                {
+                  role: 'user',
+                  content: input,
+                },
+                ...attachments,
+              ],
+              runId: agentId,
+              modelSettings: {
+                frequencyPenalty,
+                presencePenalty,
+                maxRetries,
+                temperature,
+                topK,
+                topP,
+                maxOutputTokens: maxTokens,
+              },
+              providerOptions,
+              instructions,
+              runtimeContext: runtimeContextInstance,
+              ...(memory ? { threadId, resourceId: agentId } : {}),
+            });
 
-          setIsRunning(false);
-          return;
+            handleGenerateResponse(response);
+            setIsRunning(false);
+            return;
+          } else {
+            await streamVNext({
+              coreUserMessages: [
+                {
+                  role: 'user',
+                  content: input,
+                },
+                ...attachments,
+              ],
+              runtimeContext: runtimeContextInstance,
+              threadId,
+              modelSettings: modelSettingsArgs,
+              onChunk: (chunk, conversation) => {
+                const next = handleStreamChunk({ chunk, conversation });
+
+                if (
+                  chunk.type === 'tool-result' &&
+                  chunk.payload?.toolName === 'updateWorkingMemory' &&
+                  typeof chunk.payload.result === 'object' &&
+                  'success' in chunk.payload.result! &&
+                  chunk.payload.result?.success
+                ) {
+                  refreshWorkingMemory?.();
+                }
+
+                return next;
+              },
+              signal: controller.signal,
+            });
+
+            return;
+          }
         }
       } else {
         if (chatWithGenerate) {
+          setIsRunning(true);
           const generateResponse = await agent.generate({
             messages: [
               {
@@ -719,11 +546,11 @@ __mastraMetadata: { ...chunk.payload.args?.__mastraMetadata, isStreaming: true }
             instructions,
             runtimeContext: runtimeContextInstance,
             ...(memory ? { threadId, resourceId: agentId } : {}),
-            providerOptions: providerOptions as any,
+            providerOptions,
           });
           if (generateResponse.response && 'messages' in generateResponse.response) {
             const latestMessage = generateResponse.response.messages.reduce(
-              (acc, message) => {
+              (acc: ThreadMessageLike, message) => {
                 const _content = Array.isArray(acc.content) ? acc.content : [];
                 if (typeof message.content === 'string') {
                   return {
@@ -736,7 +563,7 @@ __mastraMetadata: { ...chunk.payload.args?.__mastraMetadata, isStreaming: true }
                         text: message.content,
                       },
                     ],
-                  } as ThreadMessageLike;
+                  };
                 }
                 if (message.role === 'assistant') {
                   const toolCallContent = Array.isArray(message.content)
@@ -760,7 +587,7 @@ __mastraMetadata: { ...chunk.payload.args?.__mastraMetadata, isStreaming: true }
                       content: containsToolCall
                         ? [...(reasoningContent ? [reasoningContent] : []), ...newContent]
                         : [..._content, ...(reasoningContent ? [reasoningContent] : []), toolCallContent],
-                    } as ThreadMessageLike;
+                    };
                   }
 
                   const textContent = Array.isArray(message.content)
@@ -771,7 +598,7 @@ __mastraMetadata: { ...chunk.payload.args?.__mastraMetadata, isStreaming: true }
                     return {
                       ...acc,
                       content: [..._content, ...(reasoningContent ? [reasoningContent] : []), textContent],
-                    } as ThreadMessageLike;
+                    };
                   }
                 }
 
@@ -797,22 +624,23 @@ __mastraMetadata: { ...chunk.payload.args?.__mastraMetadata, isStreaming: true }
                             ..._content,
                             { type: 'tool-result', toolCallId: toolResult.toolCallId, result: toolResult.result },
                           ],
-                    } as ThreadMessageLike;
+                    };
                   }
 
                   return {
                     ...acc,
                     content: [..._content, toolResult],
-                  } as ThreadMessageLike;
+                  };
                 }
                 return acc;
               },
-              { role: 'assistant', content: [] } as ThreadMessageLike,
+              { role: 'assistant', content: [] },
             );
-            setMessages(currentConversation => [...currentConversation, latestMessage]);
+            setMessages(currentConversation => [...currentConversation, latestMessage as ThreadMessageLike]);
             handleFinishReason(generateResponse.finishReason);
           }
         } else {
+          setIsRunning(true);
           const response = await agent.stream({
             messages: [
               {
@@ -833,7 +661,7 @@ __mastraMetadata: { ...chunk.payload.args?.__mastraMetadata, isStreaming: true }
             instructions,
             runtimeContext: runtimeContextInstance,
             ...(memory ? { threadId, resourceId: agentId } : {}),
-            providerOptions: providerOptions as any,
+            providerOptions,
           });
 
           if (!response.body) {
@@ -940,7 +768,7 @@ __mastraMetadata: { ...chunk.payload.args?.__mastraMetadata, isStreaming: true }
               });
               toolCallIdToName.current[value.toolCallId] = value.toolName;
             },
-            async onToolResultPart(value: any) {
+            async onToolResultPart(value) {
               // Update the messages state
               setMessages(currentConversation => {
                 // Get the last message (should be the assistant's message)
@@ -1044,46 +872,9 @@ __mastraMetadata: { ...chunk.payload.args?.__mastraMetadata, isStreaming: true }
         return;
       }
 
-      // Extract a user-friendly error message
-      let errorMessage = 'An error occurred while processing your request.';
-
-      if (error.message) {
-        errorMessage = error.message;
-      } else if (typeof error === 'string') {
-        errorMessage = error;
-      } else if (error.response?.data?.error) {
-        // Handle API response errors
-        errorMessage = error.response.data.error.message || error.response.data.error;
-      } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.statusText) {
-        errorMessage = `Request failed: ${error.statusText}`;
-      }
-
-      // Add specific handling for common errors
-      if (errorMessage.includes('401') || errorMessage.toLowerCase().includes('unauthorized')) {
-        errorMessage = '❌ Authentication failed. Please check your API key configuration.';
-      } else if (errorMessage.includes('403') || errorMessage.toLowerCase().includes('forbidden')) {
-        errorMessage = '❌ Access denied. Please verify your API key has the necessary permissions.';
-      } else if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('rate limit')) {
-        errorMessage = '⚠️ Rate limit exceeded. Please wait a moment before trying again.';
-      } else if (errorMessage.includes('500') || errorMessage.includes('502') || errorMessage.includes('503')) {
-        errorMessage = '⚠️ The service is temporarily unavailable. Please try again later.';
-      } else if (errorMessage.toLowerCase().includes('api key') || errorMessage.toLowerCase().includes('api_key')) {
-        errorMessage = `❌ ${errorMessage}`;
-      }
-
       setMessages(currentConversation => [
         ...currentConversation,
-        {
-          role: 'assistant',
-          content: [
-            {
-              type: 'text',
-              text: errorMessage,
-            },
-          ],
-        },
+        { role: 'assistant', content: [{ type: 'text', text: `${error}` }] },
       ]);
     } finally {
       // Clean up the abort controller reference
@@ -1096,13 +887,14 @@ __mastraMetadata: { ...chunk.payload.args?.__mastraMetadata, isStreaming: true }
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
       setIsRunning(false);
+      cancelRun?.();
     }
   };
 
   const { adapters, isReady } = useAdapters(agentId);
 
   const runtime = useExternalStoreRuntime({
-    isRunning,
+    isRunning: isRunning || isRunningStreamVNext,
     messages,
     convertMessage,
     onNew,
