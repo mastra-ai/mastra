@@ -9,6 +9,8 @@ import type { Processor } from '../index';
 
 export type { StructuredOutputOptions } from '../../agent/types';
 
+export const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
+
 /**
  * StructuredOutputProcessor transforms unstructured agent output into structured JSON
  * using an internal structuring agent and provides real-time streaming support.
@@ -22,7 +24,7 @@ export type { StructuredOutputOptions } from '../../agent/types';
  * - Automatic instruction generation based on schema
  */
 export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements Processor {
-  readonly name = 'structured-output';
+  readonly name = STRUCTURED_OUTPUT_PROCESSOR_NAME;
 
   public schema: OUTPUT;
   private structuringAgent: Agent;

@@ -20,6 +20,7 @@ import type {
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
+import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
 
 export class JsonToSseTransformStream extends TransformStream<unknown, string> {
   constructor() {
@@ -213,7 +214,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
              * Add base stream controller to structured output processor state
              * so it can be used to enqueue chunks into the main stream from the structuring agent stream
              */
-            const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
             if (!processorStates.has(STRUCTURED_OUTPUT_PROCESSOR_NAME)) {
               const structuredOutputProcessorState = new ProcessorState(STRUCTURED_OUTPUT_PROCESSOR_NAME);
               structuredOutputProcessorState.customState = { controller };
