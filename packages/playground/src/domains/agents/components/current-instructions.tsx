@@ -21,25 +21,28 @@ interface CurrentInstructionsProps {
   onShowHistory: () => void;
 }
 
-const resolveInstructions = (instructions?: AgentInstructions) => {
+const resolveInstructionPart = (part: any) => {
+  if (typeof part === 'string') {
+    return part.trim();
+  }
+  return part.text?.trim() || '';
+};
+
+const resolveInstructions = (instructions?: AgentInstructions): string => {
   if (typeof instructions === 'string') {
     return instructions.trim();
   }
 
   if (typeof instructions === 'object' && 'content' in instructions) {
+    if (Array.isArray(instructions.content)) {
+      return instructions.content.map(resolveInstructionPart).join('\n\n').trim();
+    }
+
     return instructions.content.trim();
   }
 
   if (Array.isArray(instructions)) {
-    return instructions
-      .map(instruction => {
-        if (typeof instruction === 'string') {
-          return instruction.trim();
-        }
-        return instruction.content?.trim() || '';
-      })
-      .join('\n\n')
-      .trim();
+    return instructions.map(resolveInstructions).join('\n\n').trim();
   }
 
   return '';
