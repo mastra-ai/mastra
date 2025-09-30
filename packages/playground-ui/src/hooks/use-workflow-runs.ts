@@ -1,4 +1,4 @@
-import { useMastraClient } from '@/contexts/mastra-client-context';
+import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
 export const useWorkflowRuns = (workflowId: string, { enabled = true }: { enabled?: boolean } = {}) => {

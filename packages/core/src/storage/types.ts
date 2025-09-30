@@ -182,6 +182,9 @@ export interface AISpanRecord {
   isEvent: boolean;
 }
 
+export type CreateAISpanRecord = Omit<AISpanRecord, 'createdAt' | 'updatedAt'>;
+export type UpdateAISpanRecord = Omit<CreateAISpanRecord, 'spanId' | 'traceId'>;
+
 export interface AITraceRecord {
   traceId: string;
   spans: AISpanRecord[];

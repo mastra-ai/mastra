@@ -29,7 +29,7 @@ export interface NetworkArgs<TMessage> {
   signal?: AbortSignal;
 }
 
-export const useMastraChat = <TMessage>({ agentId, initializeMessages }: MastraChatProps<TMessage>) => {
+export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatProps<TMessage>) => {
   const [messages, setMessages] = useState<TMessage[]>(initializeMessages || []);
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);

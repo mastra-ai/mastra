@@ -126,6 +126,7 @@ export class LibSQLStore extends MastraStorage {
       createTable: true,
       deleteMessages: true,
       aiTracing: true,
+      getScoresBySpan: true,
     };
   }
 
@@ -485,6 +486,18 @@ export class LibSQLStore extends MastraStorage {
     args: AITracesPaginatedArg,
   ): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
     return this.stores.observability!.getAITracesPaginated(args);
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    return this.stores.scores.getScoresBySpan({ traceId, spanId, pagination });
   }
 
   async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {

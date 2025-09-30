@@ -67,6 +67,7 @@ export class UpstashStore extends MastraStorage {
       hasColumn: false,
       createTable: false,
       deleteMessages: true,
+      getScoresBySpan: true,
     };
   }
 
@@ -406,5 +407,17 @@ export class UpstashStore extends MastraStorage {
     source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     return this.stores.scores.getScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    return this.stores.scores.getScoresBySpan({ traceId, spanId, pagination });
   }
 }
