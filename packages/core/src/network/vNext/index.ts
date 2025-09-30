@@ -6,7 +6,7 @@ import type { MessageListInput } from '../../agent/message-list';
 import { MastraBase } from '../../base';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import { RegisteredLogger } from '../../logger';
-import { RESOURCE_TYPES } from '../../loop/types';
+import { PRIMITIVE_TYPES } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import type { MastraMessageV2, MastraMemory } from '../../memory';
 import { RuntimeContext } from '../../runtime-context';
@@ -331,7 +331,7 @@ export class NewAgentNetwork extends MastraBase {
       inputSchema: z.object({
         iteration: z.number(),
         task: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         threadId: z.string().optional(),
         threadResourceId: z.string().optional(),
       }),
@@ -413,7 +413,7 @@ export class NewAgentNetwork extends MastraBase {
         iteration: z.number(),
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         result: z.string().optional(),
         threadId: z.string().optional(),
         threadResourceId: z.string().optional(),
@@ -423,7 +423,7 @@ export class NewAgentNetwork extends MastraBase {
       outputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
@@ -477,7 +477,7 @@ export class NewAgentNetwork extends MastraBase {
       inputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         result: z.string().optional(),
         iteration: z.number(),
         threadId: z.string().optional(),
@@ -488,7 +488,7 @@ export class NewAgentNetwork extends MastraBase {
       outputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
@@ -544,7 +544,7 @@ export class NewAgentNetwork extends MastraBase {
             return {
               task: inputData.task,
               resourceId: '',
-              resourceType: 'none' as z.infer<typeof RESOURCE_TYPES>,
+              resourceType: 'none' as z.infer<typeof PRIMITIVE_TYPES>,
               prompt: '',
               result: completionResult.object.finalResult,
               isComplete: true,
@@ -583,7 +583,7 @@ export class NewAgentNetwork extends MastraBase {
         const options = {
           output: z.object({
             resourceId: z.string(),
-            resourceType: RESOURCE_TYPES,
+            resourceType: PRIMITIVE_TYPES,
             prompt: z.string(),
             selectionReason: z.string(),
           }),
@@ -616,7 +616,7 @@ export class NewAgentNetwork extends MastraBase {
       inputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
@@ -626,7 +626,7 @@ export class NewAgentNetwork extends MastraBase {
       outputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         result: z.string(),
         isComplete: z.boolean().optional(),
         iteration: z.number(),
@@ -777,7 +777,7 @@ export class NewAgentNetwork extends MastraBase {
       inputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
@@ -787,7 +787,7 @@ export class NewAgentNetwork extends MastraBase {
       outputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         result: z.string(),
         isComplete: z.boolean().optional(),
         iteration: z.number(),
@@ -925,7 +925,7 @@ export class NewAgentNetwork extends MastraBase {
       inputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
@@ -935,7 +935,7 @@ export class NewAgentNetwork extends MastraBase {
       outputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         result: z.string(),
         isComplete: z.boolean().optional(),
         iteration: z.number(),
@@ -1011,7 +1011,7 @@ export class NewAgentNetwork extends MastraBase {
       inputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
@@ -1039,7 +1039,7 @@ export class NewAgentNetwork extends MastraBase {
       inputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         result: z.string().optional(),
         iteration: z.number(),
         threadId: z.string().optional(),
@@ -1050,7 +1050,7 @@ export class NewAgentNetwork extends MastraBase {
       outputSchema: z.object({
         task: z.string(),
         resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
+        resourceType: PRIMITIVE_TYPES,
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),

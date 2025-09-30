@@ -17,8 +17,8 @@ export type ScoringPrompts = {
 
 export type ScoringInput = {
   runId?: string;
-  input?: Record<string, any>[];
-  output: Record<string, any>;
+  input?: any;
+  output: any;
   additionalContext?: Record<string, any>;
   runtimeContext?: Record<string, any>;
   tracingContext?: TracingContext;
@@ -27,8 +27,8 @@ export type ScoringInput = {
 export type ScoringHookInput = {
   runId?: string;
   scorer: Record<string, any>;
-  input: Record<string, any>[];
-  output: Record<string, any>;
+  input: any;
+  output: any;
   metadata?: Record<string, any>;
   additionalContext?: Record<string, any>;
   source: ScoringSource;
@@ -38,6 +38,7 @@ export type ScoringHookInput = {
   tracingContext?: TracingContext;
   structuredOutput?: boolean;
   traceId?: string;
+  spanId?: string;
   resourceId?: string;
   threadId?: string;
 };
@@ -129,6 +130,7 @@ export const saveScorePayloadSchema = z.object({
   scorer: z.record(z.string(), z.any()),
 
   traceId: z.string().optional(),
+  spanId: z.string().optional(),
   preprocessStepResult: z.record(z.string(), z.any()).optional(),
   extractStepResult: z.record(z.string(), z.any()).optional(),
   analyzeStepResult: z.record(z.string(), z.any()).optional(),

@@ -1,3 +1,4 @@
+import type { ReadableStream } from 'stream/web';
 import { parsePartialJson, processDataStream } from '@ai-sdk/ui-utils';
 import type {
   JSONValue,
@@ -16,7 +17,6 @@ import type { OutputSchema, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodType } from 'zod';
-
 import type {
   GenerateParams,
   GetAgentResponse,
@@ -86,12 +86,10 @@ async function executeToolCallAndRespond({
           },
         );
 
+        // Build updated messages from the response, adding the tool result
+        // Do NOT re-include the original user message to avoid storage duplicates
         const updatedMessages = [
-          {
-            role: 'user',
-            content: params.messages,
-          },
-          ...(response.response as unknown as { messages: CoreMessage[] }).messages,
+          ...(response.response.messages || []),
           {
             role: 'tool',
             content: [
@@ -297,11 +295,9 @@ export class Agent extends BaseResource {
             },
           );
 
+          // Build updated messages from the response, adding the tool result
+          // Do NOT re-include the original user message to avoid storage duplicates
           const updatedMessages = [
-            {
-              role: 'user',
-              content: params.messages,
-            },
             ...(response.response as unknown as { messages: CoreMessage[] }).messages,
             {
               role: 'tool',
@@ -488,7 +484,7 @@ export class Agent extends BaseResource {
     }
 
     await processDataStream({
-      stream,
+      stream: stream as ReadableStream<Uint8Array>,
       onTextPart(value) {
         if (currentTextPart == null) {
           currentTextPart = {
@@ -790,7 +786,7 @@ export class Agent extends BaseResource {
     // Add the processDataStream method to the response
     streamResponse.processDataStream = async (options = {}) => {
       await processDataStream({
-        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        stream: streamResponse.body as unknown as globalThis.ReadableStream<Uint8Array>,
         ...options,
       });
     };
@@ -1192,7 +1188,7 @@ export class Agent extends BaseResource {
 
       // Process the other branch for chat response handling
       this.processChatResponse_vNext({
-        stream: streamForProcessing,
+        stream: streamForProcessing as unknown as ReadableStream<Uint8Array>,
         update: ({ message }) => {
           const existingIndex = messages.findIndex(m => m.id === message.id);
 
@@ -1211,10 +1207,12 @@ export class Agent extends BaseResource {
               toolCalls.push(toolCall);
             }
 
+            let shouldExecuteClientTool = false;
             // Handle tool calls if needed
             for (const toolCall of toolCalls) {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
+                shouldExecuteClientTool = true;
                 const result = await clientTool.execute(
                   {
                     context: toolCall?.args,
@@ -1258,13 +1256,10 @@ export class Agent extends BaseResource {
                   toolInvocation.result = result;
                 }
 
-                // Convert messages to the correct format for the recursive call
-                const originalMessages = processedParams.messages;
-                const messageArray = Array.isArray(originalMessages) ? originalMessages : [originalMessages];
+                // Build updated messages for the recursive call
+                // Do NOT re-include the original messages to avoid storage duplicates
                 const updatedMessages =
-                  lastMessage != null
-                    ? [...messageArray, ...messages.filter(m => m.id !== lastMessage.id), lastMessage]
-                    : [...messageArray, ...messages];
+                  lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
 
                 // Recursively call stream with updated messages
                 this.processStreamResponse_vNext(
@@ -1277,6 +1272,12 @@ export class Agent extends BaseResource {
                   console.error('Error processing stream response:', error);
                 });
               }
+            }
+
+            if (!shouldExecuteClientTool) {
+              setTimeout(() => {
+                writable.close();
+              }, 0);
             }
           } else {
             setTimeout(() => {
@@ -1469,7 +1470,7 @@ export class Agent extends BaseResource {
 
       // Process the other branch for chat response handling
       this.processChatResponse({
-        stream: streamForProcessing,
+        stream: streamForProcessing as unknown as ReadableStream<Uint8Array>,
         update: ({ message }) => {
           const existingIndex = messages.findIndex(m => m.id === message.id);
 
@@ -1551,15 +1552,11 @@ export class Agent extends BaseResource {
                   writer.releaseLock();
                 }
 
-                // Convert messages to the correct format for the recursive call
-                const originalMessages = processedParams.messages;
-                const messageArray = Array.isArray(originalMessages) ? originalMessages : [originalMessages];
-
                 // Recursively call stream with updated messages
                 this.processStreamResponse(
                   {
                     ...processedParams,
-                    messages: [...messageArray, ...messages.filter(m => m.id !== lastMessage.id), lastMessage],
+                    messages: [...messages.filter(m => m.id !== lastMessage.id), lastMessage],
                   },
                   writable,
                 ).catch(error => {
