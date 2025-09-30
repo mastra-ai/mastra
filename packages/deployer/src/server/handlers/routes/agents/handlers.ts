@@ -1,4 +1,5 @@
 import type { Mastra } from '@mastra/core';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { getProviderConfig } from '@mastra/core/llm';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
@@ -328,11 +329,37 @@ export async function streamVNextGenerateHandler(c: Context): Promise<Response |
 
 export async function streamNetworkHandler(c: Context) {
   try {
-    const mastra = c.get('mastra');
+    const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const body = await c.req.json();
     const logger = mastra.getLogger();
+
+    // Validate agent exists and has memory before starting stream
+    const agent = mastra.getAgent(agentId);
+    if (!agent) {
+      throw new MastraError({
+        id: 'AGENT_NOT_FOUND',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'Agent not found',
+      });
+    }
+
+    // Check if agent has memory configured before starting the stream
+    const memory = await agent.getMemory({ runtimeContext });
+
+    if (!memory) {
+      throw new MastraError({
+        id: 'AGENT_NETWORK_MEMORY_REQUIRED',
+        domain: ErrorDomain.AGENT_NETWORK,
+        category: ErrorCategory.USER,
+        text: 'Memory is required for the agent network to function properly. Please configure memory for the agent.',
+        details: {
+          status: 400,
+        },
+      });
+    }
 
     c.header('Transfer-Encoding', 'chunked');
 

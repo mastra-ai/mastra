@@ -898,7 +898,7 @@ export class Agent<
     this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
   }
 
-  __updateModel({ model }: { model: DynamicArgument<MastraLanguageModel> }) {
+  __updateModel({ model }: { model: DynamicArgument<MastraModelConfig> }) {
     this.model = model;
     this.logger.debug(`[Agents:${this.name}] Model updated.`, { model: this.model, name: this.name });
   }
@@ -924,7 +924,7 @@ export class Agent<
     maxRetries,
   }: {
     id: string;
-    model?: DynamicArgument<MastraLanguageModel>;
+    model?: DynamicArgument<MastraModelConfig>;
     enabled?: boolean;
     maxRetries?: number;
   }) {

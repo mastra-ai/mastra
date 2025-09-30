@@ -222,7 +222,25 @@ export const handleStreamChunk = ({ chunk, conversation }: HandleStreamChunkOpti
     }
 
     case 'finish': {
+      const lastMessage = conversation[conversation.length - 1];
+
       handleFinishReason(chunk.payload.stepResult.reason);
+      // Only process if the last message is from the assistant
+      if (lastMessage && lastMessage.role === 'assistant') {
+        // Create a new message with the modelMetadata in metadata
+        const updatedMessage: ThreadMessageLike = {
+          ...lastMessage,
+          metadata: {
+            custom: {
+              modelMetadata: chunk.payload.metadata.modelMetadata,
+            },
+          },
+        };
+
+        // Replace the last message with the updated one
+        return [...conversation.slice(0, -1), updatedMessage];
+      }
+
       return [...conversation];
     }
 
