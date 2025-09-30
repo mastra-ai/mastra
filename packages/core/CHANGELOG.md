@@ -1,5 +1,39 @@
 # @mastra/core
 
+## 0.19.0-alpha.1
+
+### Minor Changes
+
+- Add spanId column to scores table ([#8154](https://github.com/mastra-ai/mastra/pull/8154))
+
+- changed ai_trace_spans table schema to use text for span_type column. ([#8027](https://github.com/mastra-ai/mastra/pull/8027))
+
+### Patch Changes
+
+- Core error processing - safeParse error object ([#8312](https://github.com/mastra-ai/mastra/pull/8312))
+
+- Fix score input and output types ([#8153](https://github.com/mastra-ai/mastra/pull/8153))
+
+- make suspend optional and move types.ts containing DynamicArgument to types folder ([#8305](https://github.com/mastra-ai/mastra/pull/8305))
+
+- Bring back ToolInvocationOptions for createTool execute function ([#8206](https://github.com/mastra-ai/mastra/pull/8206))
+
+- Throw is memory is not passed to the routing agent. ([#8313](https://github.com/mastra-ai/mastra/pull/8313))
+
+- Return the selection reason as the result if the agent could not route and pick a primitive ([#8308](https://github.com/mastra-ai/mastra/pull/8308))
+
+- Mastra model router ([#8235](https://github.com/mastra-ai/mastra/pull/8235))
+
+- fixNetworkChunkType ([#8210](https://github.com/mastra-ai/mastra/pull/8210))
+
+- Show model that worked when there are model fallbacks ([#8167](https://github.com/mastra-ai/mastra/pull/8167))
+
+- Support tracing options for workflow streaming endpoints ([#8278](https://github.com/mastra-ai/mastra/pull/8278))
+
+- Improve error processing -don't mask useful errors ([#8270](https://github.com/mastra-ai/mastra/pull/8270))
+
+- [CLOUD-500] Refactor trace transform to agent payload ([#8280](https://github.com/mastra-ai/mastra/pull/8280))
+
 ## 0.18.1-alpha.0
 
 ### Patch Changes
