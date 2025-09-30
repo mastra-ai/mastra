@@ -6,6 +6,7 @@ import { MessageList } from '../../../agent/message-list';
 import { safeParseErrorObject } from '../../../error/utils.js';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
+import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
 import { MastraModelOutput } from '../../../stream/base/output';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type {
@@ -360,14 +361,14 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         'raw',
       ].includes(chunk.type)
     ) {
+      const transformedChunk = convertMastraChunkToAISDKv5({
+        chunk,
+      });
       if (chunk.type === 'raw' && !includeRawChunks) {
         return;
       }
 
-      // TODO: transform chunk to AISDKv5 if format === 'aisdk'
-      if (options?.onChunk) {
-        await options?.onChunk?.(chunk);
-      }
+      await options?.onChunk?.({ chunk: transformedChunk } as any);
     }
 
     if (runState.state.hasErrored) {

@@ -1,5 +1,6 @@
 import type { ToolSet } from 'ai-v5';
 import z from 'zod';
+import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
@@ -83,7 +84,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
           rest.controller.enqueue(chunk);
 
           if (initialResult?.metadata?.modelVersion === 'v2') {
-            await rest.options?.onChunk?.(chunk);
+            await rest.options?.onChunk?.({
+              chunk: convertMastraChunkToAISDKv5({
+                chunk,
+              }),
+            } as any);
           }
 
           const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
