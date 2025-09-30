@@ -148,7 +148,17 @@ export type WorkflowStreamEvent =
     }
   | {
       type: 'workflow-finish';
-      payload: {};
+      payload: {
+        workflowStatus: WorkflowRunStatus;
+        output: {
+          usage: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+          };
+        };
+        metadata: Record<string, any>;
+      };
     }
   | {
       type: 'workflow-canceled';

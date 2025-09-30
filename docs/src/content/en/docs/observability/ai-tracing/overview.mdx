@@ -88,13 +88,14 @@ Mastra provides two built-in exporters that work out of the box:
 ### External Exporters
 
 In addition to the internal exporters, Mastra supports integration with popular observability platforms. These exporters allow you to leverage your existing monitoring infrastructure and take advantage of platform-specific features like alerting, dashboards, and correlation with other application metrics.
- 
-- **[Langfuse](/docs/observability/ai-tracing/exporters/langfuse)** - Sends traces to the Langfuse open-source LLM engineering platform
+
 - **[Braintrust](/docs/observability/ai-tracing/exporters/braintrust)** - Exports traces to Braintrust's eval and observability platform
+- **[Langfuse](/docs/observability/ai-tracing/exporters/langfuse)** - Sends traces to the Langfuse open-source LLM engineering platform
+- **[LangSmith](/docs/observability/ai-tracing/exporters/langsmith)** - Pushes traces into LangSmith’s observability and evaluation toolkit
+- **[OpenTelemetry](/docs/observability/ai-tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
+  - Supports: Dash0, Laminar, New Relic, SigNoz, Traceloop, Zipkin, and others!
 
 - **Arize** - Coming soon!
-- **LangSmith** - Coming soon!
-- **OpenTelemetry** - Coming soon!
 
 ## Sampling Strategies
 
@@ -386,15 +387,15 @@ execute: async ({ input, tracingContext }) => {
     const results = await db.query(input.query);
     querySpan?.end({
       output: results.data,
-      metadata: { 
+      metadata: {
         rowsReturned: results.length,
         queryTimeMs: results.executionTime,
-        cacheHit: results.fromCache 
+        cacheHit: results.fromCache
       }
     });
     return results;
   } catch (error) {
-    querySpan?.error({ 
+    querySpan?.error({
       error,
       metadata: { retryable: isRetryableError(error) }
     });
@@ -403,7 +404,7 @@ execute: async ({ input, tracingContext }) => {
 }
 ```
 
-Child spans automatically inherit the trace context from their parent, maintaining the relationship hierarchy in your observability platform. 
+Child spans automatically inherit the trace context from their parent, maintaining the relationship hierarchy in your observability platform.
 
 ## Span Processors
 
@@ -422,12 +423,12 @@ import type { AISpanProcessor, AnyAISpan } from '@mastra/core/ai-tracing';
 
 export class LowercaseInputProcessor implements AISpanProcessor {
   name = 'lowercase-processor';
-  
+
   process(span: AnyAISpan): AnyAISpan {
     span.input = `${span.input}`.toLowerCase()
     return span;
   }
-  
+
   async shutdown(): Promise<void> {
     // Cleanup if needed
   }
@@ -472,7 +473,7 @@ const result = await agent.generate({
 
 console.log('Trace ID:', result.traceId);
 
-// Using stream  
+// Using stream
 const streamResult = await agent.stream({
   messages: [{ role: 'user', content: 'Tell me a story' }]
 });
@@ -558,6 +559,7 @@ Traces are available in multiple locations:
 - [ConsoleExporter](/reference/observability/ai-tracing/exporters/console-exporter) - Debug output
 - [Langfuse](/reference/observability/ai-tracing/exporters/langfuse) - Langfuse integration
 - [Braintrust](/reference/observability/ai-tracing/exporters/braintrust) - Braintrust integration
+- [OpenTelemetry](/reference/observability/ai-tracing/exporters/otel) - OTEL-compatible platforms
 
 ### Processors
 - [Sensitive Data Filter](/docs/observability/ai-tracing/processors/sensitive-data-filter) - Data redaction

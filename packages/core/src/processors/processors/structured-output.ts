@@ -1,6 +1,7 @@
 import type { TransformStreamDefaultController } from 'stream/web';
 import { Agent } from '../../agent';
 import type { StructuredOutputOptions } from '../../agent/types';
+import { InternalSpans } from '../../ai-tracing';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
@@ -48,6 +49,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
       name: 'structured-output-structurer',
       instructions: options.instructions || this.generateInstructions(),
       model: modelToUse,
+      options: { tracingPolicy: { internal: InternalSpans.ALL } },
     });
   }
 

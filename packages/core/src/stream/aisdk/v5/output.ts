@@ -5,6 +5,8 @@ import { createTextStreamResponse, createUIMessageStream, createUIMessageStreamR
 import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
 import type z from 'zod';
 import type { MessageList } from '../../../agent/message-list';
+import { getValidTraceId } from '../../../ai-tracing';
+import type { TracingContext } from '../../../ai-tracing';
 import type { MastraModelOutput } from '../../base/output';
 import type { OutputSchema } from '../../base/schema';
 import type { ChunkType } from '../../types';
@@ -17,6 +19,7 @@ type AISDKV5OutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   toolCallStreaming?: boolean;
   includeRawChunks?: boolean;
   output?: OUTPUT;
+  tracingContext?: TracingContext;
 };
 
 export type AIV5FullStreamPart<T = undefined> = T extends undefined
@@ -33,6 +36,12 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   #modelOutput: MastraModelOutput<OUTPUT>;
   #options: AISDKV5OutputStreamOptions<OUTPUT>;
   #messageList: MessageList;
+
+  /**
+   * Trace ID used on the execution (if the execution was traced).
+   */
+  public traceId?: string;
+
   constructor({
     modelOutput,
     options,
@@ -45,6 +54,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
     this.#modelOutput = modelOutput;
     this.#options = options;
     this.#messageList = messageList;
+    this.traceId = getValidTraceId(options.tracingContext?.currentSpan);
   }
 
   toTextStreamResponse(init?: ResponseInit): Response {
@@ -359,6 +369,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
       error: this.error,
       tripwire: this.#modelOutput.tripwire,
       tripwireReason: this.#modelOutput.tripwireReason,
+      traceId: this.traceId,
       ...(object ? { object } : {}),
     };
 

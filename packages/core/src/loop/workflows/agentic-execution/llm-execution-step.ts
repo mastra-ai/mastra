@@ -3,6 +3,7 @@ import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2, LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import type { ToolSet } from 'ai-v5';
 import { MessageList } from '../../../agent/message-list';
+import { safeParseErrorObject } from '../../../error/utils.js';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { MastraModelOutput } from '../../../stream/base/output';
@@ -333,7 +334,8 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
 
         let e = chunk.payload.error as any;
         if (typeof e === 'object') {
-          e = new Error(e?.message || 'Unknown error');
+          const errorMessage = safeParseErrorObject(e);
+          e = new Error(errorMessage);
           Object.assign(e, chunk.payload.error);
         }
 

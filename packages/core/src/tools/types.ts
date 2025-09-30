@@ -62,7 +62,7 @@ export interface ToolExecutionContext<
   runtimeContext: RuntimeContext;
   writer?: ToolStream<any>;
   tracingContext?: TracingContext;
-  suspend: (suspendPayload: InferZodLikeSchema<TSuspendSchema>) => Promise<any>;
+  suspend?: (suspendPayload: InferZodLikeSchema<TSuspendSchema>) => Promise<any>;
   resumeData?: InferZodLikeSchema<TResumeSchema>;
 }
 

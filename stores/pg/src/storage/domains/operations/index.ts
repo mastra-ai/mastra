@@ -7,6 +7,8 @@ import {
   TABLE_TRACES,
   TABLE_EVALS,
   TABLE_SCORERS,
+  TABLE_AI_SPANS,
+  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
   StorageColumn,
@@ -44,6 +46,51 @@ export class StoreOperationsPG extends StoreOperations {
     );
 
     return !!result;
+  }
+
+  /**
+   * Prepares values for insertion, handling JSONB columns by stringifying them
+   */
+  private prepareValuesForInsert(record: Record<string, any>, tableName: TABLE_NAMES): any[] {
+    return Object.entries(record).map(([key, value]) => {
+      // Get the schema for this table to determine column types
+      const schema = TABLE_SCHEMAS[tableName];
+      const columnSchema = schema?.[key];
+
+      // If the column is JSONB and the value is an object/array, stringify it
+      if (columnSchema?.type === 'jsonb' && value !== null && typeof value === 'object') {
+        return JSON.stringify(value);
+      }
+      return value;
+    });
+  }
+
+  /**
+   * Adds timestamp Z columns to a record if timestamp columns exist
+   */
+  private addTimestampZColumns(record: Record<string, any>): void {
+    if (record.createdAt) {
+      record.createdAtZ = record.createdAt;
+    }
+    if (record.created_at) {
+      record.created_atZ = record.created_at;
+    }
+    if (record.updatedAt) {
+      record.updatedAtZ = record.updatedAt;
+    }
+  }
+
+  /**
+   * Prepares a value for database operations, handling Date objects and JSON serialization
+   */
+  private prepareValue(value: any): any {
+    if (value instanceof Date) {
+      return value.toISOString();
+    } else if (typeof value === 'object' && value !== null) {
+      return JSON.stringify(value);
+    } else {
+      return value;
+    }
   }
 
   private async setupSchema() {
@@ -99,21 +146,11 @@ export class StoreOperationsPG extends StoreOperations {
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
-      if (record.createdAt) {
-        record.createdAtZ = record.createdAt;
-      }
-
-      if (record.created_at) {
-        record.created_atZ = record.created_at;
-      }
-
-      if (record.updatedAt) {
-        record.updatedAtZ = record.updatedAt;
-      }
+      this.addTimestampZColumns(record);
 
       const schemaName = getSchemaName(this.schemaName);
       const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
-      const values = Object.values(record);
+      const values = this.prepareValuesForInsert(record, tableName);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
 
       await this.client.none(
@@ -232,6 +269,11 @@ export class StoreOperationsPG extends StoreOperations {
         schema,
         ifNotExists: timeZColumnNames,
       });
+
+      // Set up timestamp triggers for AI spans table
+      if (tableName === TABLE_AI_SPANS) {
+        await this.setupTimestampTriggers(tableName);
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -244,6 +286,52 @@ export class StoreOperationsPG extends StoreOperations {
         },
         error,
       );
+    }
+  }
+
+  /**
+   * Set up timestamp triggers for a table to automatically manage createdAt/updatedAt
+   */
+  private async setupTimestampTriggers(tableName: TABLE_NAMES): Promise<void> {
+    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+
+    try {
+      const triggerSQL = `
+        -- Create or replace the trigger function
+        CREATE OR REPLACE FUNCTION trigger_set_timestamps()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            IF TG_OP = 'INSERT' THEN
+                NEW."createdAt" = NOW();
+                NEW."updatedAt" = NOW();
+                NEW."createdAtZ" = NOW();
+                NEW."updatedAtZ" = NOW();
+            ELSIF TG_OP = 'UPDATE' THEN
+                NEW."updatedAt" = NOW();
+                NEW."updatedAtZ" = NOW();
+                -- Prevent createdAt from being changed
+                NEW."createdAt" = OLD."createdAt";
+                NEW."createdAtZ" = OLD."createdAtZ";
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        -- Drop existing trigger if it exists
+        DROP TRIGGER IF EXISTS ${tableName}_timestamps ON ${fullTableName};
+
+        -- Create the trigger
+        CREATE TRIGGER ${tableName}_timestamps
+            BEFORE INSERT OR UPDATE ON ${fullTableName}
+            FOR EACH ROW
+            EXECUTE FUNCTION trigger_set_timestamps();
+      `;
+
+      await this.client.none(triggerSQL);
+      this.logger?.debug?.(`Set up timestamp triggers for table ${fullTableName}`);
+    } catch (error) {
+      // Log warning but don't fail table creation
+      this.logger?.warn?.(`Failed to set up timestamp triggers for ${fullTableName}:`, error);
     }
   }
 
@@ -411,8 +499,8 @@ export class StoreOperationsPG extends StoreOperations {
 
       // Check if index already exists
       const indexExists = await this.client.oneOrNone(
-        `SELECT 1 FROM pg_indexes 
-         WHERE indexname = $1 
+        `SELECT 1 FROM pg_indexes
+         WHERE indexname = $1
          AND schemaname = $2`,
         [name, schemaName],
       );
@@ -490,8 +578,8 @@ export class StoreOperationsPG extends StoreOperations {
       // Check if index exists first
       const schemaName = this.schemaName || 'public';
       const indexExists = await this.client.oneOrNone(
-        `SELECT 1 FROM pg_indexes 
-         WHERE indexname = $1 
+        `SELECT 1 FROM pg_indexes
+         WHERE indexname = $1
          AND schemaname = $2`,
         [indexName, schemaName],
       );
@@ -530,7 +618,7 @@ export class StoreOperationsPG extends StoreOperations {
 
       if (tableName) {
         query = `
-          SELECT 
+          SELECT
             i.indexname as name,
             i.tablename as table,
             i.indexdef as definition,
@@ -541,14 +629,14 @@ export class StoreOperationsPG extends StoreOperations {
           JOIN pg_class c ON c.relname = i.indexname AND c.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = i.schemaname)
           JOIN pg_index ix ON ix.indexrelid = c.oid
           JOIN pg_attribute a ON a.attrelid = ix.indrelid AND a.attnum = ANY(ix.indkey)
-          WHERE i.schemaname = $1 
+          WHERE i.schemaname = $1
           AND i.tablename = $2
           GROUP BY i.indexname, i.tablename, i.indexdef, ix.indisunique, c.oid
         `;
         params = [schemaName, tableName];
       } else {
         query = `
-          SELECT 
+          SELECT
             i.indexname as name,
             i.tablename as table,
             i.indexdef as definition,
@@ -642,6 +730,27 @@ export class StoreOperationsPG extends StoreOperations {
           table: TABLE_SCORERS,
           columns: ['trace_id', 'span_id', 'created_at DESC'],
         },
+        // AI Spans indexes for optimal trace querying
+        {
+          name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
+          table: TABLE_AI_SPANS,
+          columns: ['traceId', 'startedAt DESC'],
+        },
+        {
+          name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
+          table: TABLE_AI_SPANS,
+          columns: ['parentSpanId', 'startedAt DESC'],
+        },
+        {
+          name: `${schemaPrefix}mastra_ai_spans_name_idx`,
+          table: TABLE_AI_SPANS,
+          columns: ['name'],
+        },
+        {
+          name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
+          table: TABLE_AI_SPANS,
+          columns: ['spanType', 'startedAt DESC'],
+        },
       ];
 
       for (const indexOptions of indexes) {
@@ -673,7 +782,7 @@ export class StoreOperationsPG extends StoreOperations {
 
       // First get basic index info and stats
       const query = `
-        SELECT 
+        SELECT
           i.indexname as name,
           i.tablename as table,
           i.indexdef as definition,
@@ -690,7 +799,7 @@ export class StoreOperationsPG extends StoreOperations {
         JOIN pg_attribute a ON a.attrelid = ix.indrelid AND a.attnum = ANY(ix.indkey)
         JOIN pg_am am ON c.relam = am.oid
         LEFT JOIN pg_stat_user_indexes s ON s.indexrelname = i.indexname AND s.schemaname = i.schemaname
-        WHERE i.schemaname = $1 
+        WHERE i.schemaname = $1
         AND i.indexname = $2
         GROUP BY i.indexname, i.tablename, i.indexdef, ix.indisunique, c.oid, am.amname, s.idx_scan, s.idx_tup_read, s.idx_tup_fetch
       `;
@@ -730,6 +839,146 @@ export class StoreOperationsPG extends StoreOperations {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             indexName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Update a single record in the database
+   */
+  async update({
+    tableName,
+    keys,
+    data,
+  }: {
+    tableName: TABLE_NAMES;
+    keys: Record<string, any>;
+    data: Record<string, any>;
+  }): Promise<void> {
+    try {
+      const setColumns: string[] = [];
+      const setValues: any[] = [];
+      let paramIndex = 1;
+
+      // Build SET clause
+      Object.entries(data).forEach(([key, value]) => {
+        const parsedKey = parseSqlIdentifier(key, 'column name');
+        setColumns.push(`"${parsedKey}" = $${paramIndex++}`);
+        setValues.push(this.prepareValue(value));
+      });
+
+      // Build WHERE clause
+      const whereConditions: string[] = [];
+      const whereValues: any[] = [];
+
+      Object.entries(keys).forEach(([key, value]) => {
+        const parsedKey = parseSqlIdentifier(key, 'column name');
+        whereConditions.push(`"${parsedKey}" = $${paramIndex++}`);
+        whereValues.push(this.prepareValue(value));
+      });
+
+      const tableName_ = getTableName({
+        indexName: tableName,
+        schemaName: getSchemaName(this.schemaName),
+      });
+
+      const sql = `UPDATE ${tableName_} SET ${setColumns.join(', ')} WHERE ${whereConditions.join(' AND ')}`;
+      const values = [...setValues, ...whereValues];
+
+      await this.client.none(sql, values);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_UPDATE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Update multiple records in a single batch transaction
+   */
+  async batchUpdate({
+    tableName,
+    updates,
+  }: {
+    tableName: TABLE_NAMES;
+    updates: Array<{
+      keys: Record<string, any>;
+      data: Record<string, any>;
+    }>;
+  }): Promise<void> {
+    try {
+      await this.client.query('BEGIN');
+      for (const { keys, data } of updates) {
+        await this.update({ tableName, keys, data });
+      }
+      await this.client.query('COMMIT');
+    } catch (error) {
+      await this.client.query('ROLLBACK');
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_BATCH_UPDATE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+            numberOfRecords: updates.length,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Delete multiple records by keys
+   */
+  async batchDelete({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any>[] }): Promise<void> {
+    try {
+      if (keys.length === 0) {
+        return;
+      }
+
+      const tableName_ = getTableName({
+        indexName: tableName,
+        schemaName: getSchemaName(this.schemaName),
+      });
+
+      await this.client.tx(async t => {
+        for (const keySet of keys) {
+          const conditions: string[] = [];
+          const values: any[] = [];
+          let paramIndex = 1;
+
+          Object.entries(keySet).forEach(([key, value]) => {
+            const parsedKey = parseSqlIdentifier(key, 'column name');
+            conditions.push(`"${parsedKey}" = $${paramIndex++}`);
+            values.push(value);
+          });
+
+          const sql = `DELETE FROM ${tableName_} WHERE ${conditions.join(' AND ')}`;
+          await t.none(sql, values);
+        }
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_BATCH_DELETE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+            numberOfRecords: keys.length,
           },
         },
         error,
