@@ -443,6 +443,7 @@ export class Workflow extends BaseResource {
     runId?: string;
     inputData: Record<string, any>;
     runtimeContext?: RuntimeContext | Record<string, any>;
+    tracingOptions?: TracingOptions;
   }) {
     const searchParams = new URLSearchParams();
 
@@ -455,7 +456,7 @@ export class Workflow extends BaseResource {
       `/api/workflows/${this.workflowId}/stream?${searchParams.toString()}`,
       {
         method: 'POST',
-        body: { inputData: params.inputData, runtimeContext },
+        body: { inputData: params.inputData, runtimeContext, tracingOptions: params.tracingOptions },
         stream: true,
       },
     );
@@ -576,6 +577,7 @@ export class Workflow extends BaseResource {
     inputData: Record<string, any>;
     runtimeContext?: RuntimeContext;
     closeOnSuspend?: boolean;
+    tracingOptions?: TracingOptions;
   }) {
     const searchParams = new URLSearchParams();
 
@@ -588,7 +590,12 @@ export class Workflow extends BaseResource {
       `/api/workflows/${this.workflowId}/streamVNext?${searchParams.toString()}`,
       {
         method: 'POST',
-        body: { inputData: params.inputData, runtimeContext, closeOnSuspend: params.closeOnSuspend },
+        body: {
+          inputData: params.inputData,
+          runtimeContext,
+          closeOnSuspend: params.closeOnSuspend,
+          tracingOptions: params.tracingOptions,
+        },
         stream: true,
       },
     );
