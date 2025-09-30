@@ -179,24 +179,20 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
     }
 
     const sections: string[] = [];
-    if (textChunks.length > 0) {
-      sections.push(`# Assistant Response\n${textChunks.join('')}`);
-    }
     if (reasoningChunks.length > 0) {
-      sections.push(`# Reasoning\n${reasoningChunks.join('')}`);
+      sections.push(`# Assistant Reasoning\n${reasoningChunks.join('')}`);
     }
-
     if (toolCalls.length > 0) {
       const toolCallsText = toolCalls
         .map(tc => {
-          const args = JSON.stringify(tc.payload.args, null, 2);
+          const args = typeof tc.payload.args === 'object' ? JSON.stringify(tc.payload.args, null) : tc.payload.args;
           const output =
             tc.payload.output !== undefined
-              ? `\nOutput: ${typeof tc.payload.output === 'object' ? JSON.stringify(tc.payload.output, null, 2) : tc.payload.output}`
+              ? `${typeof tc.payload.output === 'object' ? JSON.stringify(tc.payload.output, null) : tc.payload.output}`
               : '';
-          return `**${tc.payload.toolName}**\nInput:\n\`\`\`json\n${args}\n\`\`\`${output}`;
+          return `## ${tc.payload.toolName}\n### Input: ${args}\n### Output: ${output}`;
         })
-        .join('\n\n');
+        .join('\n');
       sections.push(`# Tool Calls\n${toolCallsText}`);
     }
 
@@ -205,12 +201,15 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
         .map(tr => {
           const result = tr.payload.result;
           if (result === undefined || result === null) {
-            return 'Result: null';
+            return `${tr.payload.toolName}: null`;
           }
-          return `Result: ${JSON.stringify(result, null, 2)}`;
+          return `${tr.payload.toolName}: ${typeof result === 'object' ? JSON.stringify(result, null, 2) : result}`;
         })
-        .join('\n\n');
+        .join('\n');
       sections.push(`# Tool Results\n${resultsText}`);
+    }
+    if (textChunks.length > 0) {
+      sections.push(`# Assistant Response\n${textChunks.join('')}`);
     }
 
     return sections.join('\n\n');

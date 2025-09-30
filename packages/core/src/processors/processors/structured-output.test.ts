@@ -353,8 +353,11 @@ describe('StructuredOutputProcessor', () => {
       expect(prompt).toContain('User input');
       expect(prompt).toContain('Agent response');
       expect(prompt).toContain('# Tool Calls');
-      expect(prompt).toContain('**calculator**');
+      expect(prompt).toContain('## calculator');
+      expect(prompt).toContain('### Input:');
+      expect(prompt).toContain('### Output:');
       expect(prompt).toContain('# Tool Results');
+      expect(prompt).toContain('calculator:');
     });
   });
 
@@ -437,7 +440,7 @@ describe('StructuredOutputProcessor', () => {
       const call = (processor['structuringAgent'].streamVNext as any).mock.calls[0];
       const prompt = call[0];
 
-      expect(prompt).toContain('# Reasoning');
+      expect(prompt).toContain('# Assistant Reasoning');
       expect(prompt).toContain('I need to analyze the color and intensity');
       expect(prompt).toContain('# Assistant Response');
       expect(prompt).toContain('The answer is blue and bright');
