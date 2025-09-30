@@ -1,5 +1,15 @@
 # create-mastra
 
+## 0.13.3-alpha.1
+
+### Patch Changes
+
+- Fixed an issue in playground where text-start/end parts were ignored in handleStreamChunk and tool ordering vs text wasn't retained ([#8234](https://github.com/mastra-ai/mastra/pull/8234))
+
+- Add conditional chaining to scorer.agentNames return ([#8199](https://github.com/mastra-ai/mastra/pull/8199))
+
+- Show model that worked when there are model fallbacks ([#8167](https://github.com/mastra-ai/mastra/pull/8167))
+
 ## 0.13.3-alpha.0
 
 ### Patch Changes
