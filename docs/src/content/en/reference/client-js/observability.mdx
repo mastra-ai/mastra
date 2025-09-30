@@ -58,6 +58,18 @@ const result = await mastraClient.score({
 });
 ```
 
+## Getting Scores by Span
+
+Retrieve scores for a specific span within a trace:
+
+```typescript
+const scores = await mastraClient.getScoresBySpan({
+  traceId: "trace-123",
+  spanId: "span-456",
+  page: 1,
+  perPage: 20
+});
+```
 ## Related
 
 - [Agents API](./agents) - Learn about agent interactions that generate traces
