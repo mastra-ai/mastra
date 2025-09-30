@@ -5,6 +5,7 @@ import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
 import { getValidTraceId } from '../../ai-tracing';
 import { MastraBase } from '../../base';
+import { safeParseErrorObject } from '../../error/utils.js';
 import type { ProcessorRunnerMode, ProcessorState } from '../../processors/runner';
 import { ProcessorRunner } from '../../processors/runner';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
@@ -681,8 +682,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#status = 'failed';
 
               // Reject all delayed promises on error
-              const error =
-                typeof self.#error === 'object' ? new Error(self.#error.message) : new Error(String(self.#error));
+              const errorMessage = (self.#error as any)?.message || safeParseErrorObject(self.#error);
+              const error = new Error(errorMessage);
 
               Object.values(self.#delayedPromises).forEach(promise => promise.reject(error));
 
@@ -700,6 +701,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       options: {
         toolCallStreaming: options?.toolCallStreaming,
         output: options?.output,
+        tracingContext: options?.tracingContext,
       },
     });
 

@@ -142,6 +142,16 @@ export const mastraClient = new MastraClient({
       type: "string[]",
       description: "Returns the list of configured log transport types.",
     },
+    {
+      name: "getAITrace(traceId)",
+      type: "Promise<AITraceRecord>",
+      description: "Retrieves a specific AI trace by ID, including all its spans and details.",
+    },
+    {
+      name: "getAITraces(params)",
+      type: "Promise<GetAITracesResponse>",
+      description: "Retrieves paginated list of AI trace root spans with optional filtering. Use getAITrace() to get complete traces with all spans.",
+    },
   ]}
 />
 
