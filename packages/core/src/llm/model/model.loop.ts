@@ -303,11 +303,12 @@ export class MastraLLMVNext extends MastraBase {
 
             llmAISpan?.end({
               output: {
-                text: props?.text,
+                files: props?.files,
+                object: props?.object,
                 reasoning: props?.reasoning,
                 reasoningText: props?.reasoningText,
-                files: props?.files,
                 sources: props?.sources,
+                text: props?.text,
                 warnings: props?.warnings,
               },
               attributes: {

@@ -334,7 +334,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
 
         let e = chunk.payload.error as any;
         if (typeof e === 'object') {
-          e = new Error(e?.message || 'Unknown error');
+          e = new Error(JSON.stringify(e));
           Object.assign(e, chunk.payload.error);
         }
 
