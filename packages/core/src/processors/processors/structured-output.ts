@@ -6,6 +6,7 @@ import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
 import type { InferSchemaOutput } from '../../stream/base/schema';
+import type { ToolCallChunk, ToolResultChunk } from '../../stream/types';
 import type { Processor } from '../index';
 
 export type { StructuredOutputOptions } from '../../agent/types';
@@ -151,208 +152,68 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
 
   /**
    * Build a structured markdown prompt from stream parts
-   * Groups consecutive chunks by type and source to create readable sections
+   * Collects chunks by type and formats them in a consistent structure
    */
   private buildStructuringPrompt(streamParts: ChunkType[]): string {
-    const sections: { heading: string; content: string[] }[] = [];
-    let currentSection: { heading: string; content: string[] } | null = null;
+    const textChunks: string[] = [];
+    const reasoningChunks: string[] = [];
+    const toolCalls: ToolCallChunk[] = [];
+    const toolResults: ToolResultChunk[] = [];
 
+    // Collect chunks by type
     for (const part of streamParts) {
       switch (part.type) {
         case 'text-delta':
-          const textHeading = this.getHeadingForTextChunk(part.from);
-
-          // Continue current section if same heading, otherwise start new one
-          if (currentSection && currentSection.heading === textHeading) {
-            currentSection.content.push(part.payload.text);
-          } else {
-            // Start new text section
-            if (currentSection) {
-              sections.push(currentSection);
-            }
-            currentSection = {
-              heading: textHeading,
-              content: [part.payload.text],
-            };
-          }
+          textChunks.push(part.payload.text);
           break;
-
         case 'reasoning-delta':
-          const reasoningHeading = '# Assistant thought';
-
-          if (currentSection && currentSection.heading === reasoningHeading) {
-            currentSection.content.push(part.payload.text);
-          } else {
-            if (currentSection) {
-              sections.push(currentSection);
-            }
-            currentSection = {
-              heading: reasoningHeading,
-              content: [part.payload.text],
-            };
-          }
+          reasoningChunks.push(part.payload.text);
           break;
-
         case 'tool-call':
-          // Finish current section and add tool call
-          if (currentSection) {
-            sections.push(currentSection);
-            currentSection = null;
-          }
-
-          const toolName = part.payload.toolName || 'Unknown Tool';
-          const toolArgs = part.payload.args ? JSON.stringify(part.payload.args, null, 2) : '{}';
-          const toolOutput = part.payload.output !== undefined ? part.payload.output : null;
-
-          const content = [`Input:\n\`\`\`json\n${toolArgs}\n\`\`\``];
-          if (toolOutput !== null) {
-            const outputType = typeof toolOutput;
-            if (outputType === 'string' || outputType === 'number' || outputType === 'boolean') {
-              content.push(`\nOutput: ${String(toolOutput)}`);
-            } else {
-              content.push(`\nOutput:\n\`\`\`json\n${JSON.stringify(toolOutput, null, 2)}\n\`\`\``);
-            }
-          }
-
-          sections.push({
-            heading: `# Tool Call: ${toolName}`,
-            content,
-          });
+          toolCalls.push(part);
           break;
-
         case 'tool-result':
-          // Finish current section and add tool result
-          if (currentSection) {
-            sections.push(currentSection);
-            currentSection = null;
-          }
+          toolResults.push(part);
+          break;
+      }
+    }
 
-          const result = part.payload.result;
-          let resultContent: string;
+    const sections: string[] = [];
+    if (textChunks.length > 0) {
+      sections.push(`# Assistant Response\n${textChunks.join('')}`);
+    }
+    if (reasoningChunks.length > 0) {
+      sections.push(`# Reasoning\n${reasoningChunks.join('')}`);
+    }
 
+    if (toolCalls.length > 0) {
+      const toolCallsText = toolCalls
+        .map(tc => {
+          const args = JSON.stringify(tc.payload.args, null, 2);
+          const output =
+            tc.payload.output !== undefined
+              ? `\nOutput: ${typeof tc.payload.output === 'object' ? JSON.stringify(tc.payload.output, null, 2) : tc.payload.output}`
+              : '';
+          return `**${tc.payload.toolName}**\nInput:\n\`\`\`json\n${args}\n\`\`\`${output}`;
+        })
+        .join('\n\n');
+      sections.push(`# Tool Calls\n${toolCallsText}`);
+    }
+
+    if (toolResults.length > 0) {
+      const resultsText = toolResults
+        .map(tr => {
+          const result = tr.payload.result;
           if (result === undefined || result === null) {
-            resultContent = 'Output: null';
-          } else {
-            const resultType = typeof result;
-            if (resultType === 'string' || resultType === 'number' || resultType === 'boolean') {
-              resultContent = `Output: ${String(result)}`;
-            } else {
-              resultContent = `Output:\n\`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\``;
-            }
+            return 'Result: null';
           }
-
-          sections.push({
-            heading: '# Tool Result',
-            content: [resultContent],
-          });
-          break;
-
-        case 'source':
-          // Finish current section and add source
-          if (currentSection) {
-            sections.push(currentSection);
-            currentSection = null;
-          }
-
-          const source = part.payload;
-          sections.push({
-            heading: '# Source',
-            content: [
-              `Title: ${source.title || 'N/A'}\nURL: ${source.url || 'N/A'}\nType: ${source.sourceType}\nFilename: ${source.filename || 'N/A'}`,
-            ],
-          });
-          break;
-
-        case 'file':
-          // Finish current section and add file
-          if (currentSection) {
-            sections.push(currentSection);
-            currentSection = null;
-          }
-
-          const file = part.payload;
-          sections.push({
-            heading: '# File',
-            content: [
-              `Type: ${file.mimeType || 'unknown'}\nData: ${typeof file.data === 'string' ? file.data.substring(0, 100) + '...' : '[Binary Data]'}`,
-            ],
-          });
-          break;
-
-        // Skip metadata and control chunks
-        case 'response-metadata':
-        case 'text-start':
-        case 'text-end':
-        case 'reasoning-start':
-        case 'reasoning-end':
-        case 'reasoning-signature':
-        case 'redacted-reasoning':
-        case 'tool-call-input-streaming-start':
-        case 'tool-call-delta':
-        case 'tool-call-input-streaming-end':
-        case 'tool-error':
-        case 'tool-output':
-        case 'step-start':
-        case 'step-finish':
-        case 'step-output':
-        case 'workflow-step-output':
-        case 'start':
-        case 'finish':
-        case 'error':
-        case 'abort':
-        case 'raw':
-        case 'watch':
-        case 'tripwire':
-        case 'object':
-          // These are control chunks or handled elsewhere, skip them
-          break;
-
-        default:
-          // For any other chunk types, close current section if needed
-          if (currentSection) {
-            sections.push(currentSection);
-            currentSection = null;
-          }
-          break;
-      }
+          return `Result: ${JSON.stringify(result, null, 2)}`;
+        })
+        .join('\n\n');
+      sections.push(`# Tool Results\n${resultsText}`);
     }
 
-    // Add any remaining section
-    if (currentSection) {
-      sections.push(currentSection);
-    }
-
-    // Format the final output - group sections with same heading
-    const formattedSections: string[] = [];
-    let lastHeading = '';
-
-    for (const section of sections) {
-      if (section.heading !== lastHeading) {
-        formattedSections.push(section.heading);
-        lastHeading = section.heading;
-      }
-      formattedSections.push(section.content.join(''));
-    }
-
-    return formattedSections.join('\n\n');
-  }
-
-  /**
-   * Get the appropriate heading for text chunks based on the 'from' field
-   */
-  private getHeadingForTextChunk(from: ChunkFrom): string {
-    switch (from) {
-      case ChunkFrom.AGENT:
-        return '# Assistant said';
-      case ChunkFrom.USER:
-        return '# User said';
-      case ChunkFrom.SYSTEM:
-        return '# System message';
-      case ChunkFrom.WORKFLOW:
-        return '# Text from Workflow';
-      default:
-        return `# ${String(from)}`;
-    }
+    return sections.join('\n\n');
   }
 
   /**
