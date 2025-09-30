@@ -1,12 +1,9 @@
 import type {
   LanguageModelV2,
   LanguageModelV2CallOptions,
-  LanguageModelV2Content,
   LanguageModelV2FinishReason,
-  LanguageModelV2Usage,
   LanguageModelV2StreamPart,
   LanguageModelV2CallWarning,
-  SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
 import { parseModelString, getProviderConfig } from './provider-registry.generated';
 import type { ModelRouterModelId } from './provider-registry.generated';
@@ -83,35 +80,6 @@ interface OpenAIStreamChunk {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
-  };
-}
-
-// TODO: get these types from openai
-interface OpenAICompletionResponse {
-  id: string;
-  object: string;
-  created: number;
-  model: string;
-  choices: Array<{
-    index: number;
-    message: {
-      role: string;
-      content: string | null;
-      tool_calls?: Array<{
-        id: string;
-        type: string;
-        function: {
-          name: string;
-          arguments: string;
-        };
-      }>;
-    };
-    finish_reason: string | null;
-  }>;
-  usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
   };
 }
 
@@ -359,7 +327,7 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
   async doGenerate(): Promise<never> {
     throw new Error(
       'doGenerate is not supported by OpenAICompatibleModel. ' +
-      'Mastra only uses streaming (doStream) for all LLM calls.'
+        'Mastra only uses streaming (doStream) for all LLM calls.',
     );
   }
 
