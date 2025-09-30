@@ -133,7 +133,6 @@ export async function runScorerOnTarget({
   });
 
   const result = await scorer.run(scorerRun);
-  const traceId = `${target.traceId}${target.spanId ? `-${target.spanId}` : ''}`;
   const scorerResult = {
     ...result,
     scorer: {
@@ -141,7 +140,8 @@ export async function runScorerOnTarget({
       name: scorer.name,
       description: scorer.description,
     },
-    traceId,
+    traceId: target.traceId,
+    spanId: target.spanId,
     entityId: span.name,
     entityType: span.spanType,
     entity: { traceId: span.traceId, spanId: span.spanId },
