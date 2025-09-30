@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import {
   Badge,
@@ -28,13 +28,20 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
 
   const { createWorkflowRun } = useExecuteWorkflow();
   const { resumeWorkflow } = useResumeWorkflow();
-  const { streamWorkflow, streamResult, isStreaming } = useStreamWorkflow();
+  const { streamWorkflow, streamResult, isStreaming, observeWorkflowStream, closeStreamsAndReset } =
+    useStreamWorkflow();
   const { mutateAsync: cancelWorkflowRun, isPending: isCancellingWorkflowRun } = useCancelWorkflowRun();
 
   const [runId, setRunId] = useState<string>('');
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
 
   const stepsCount = Object.keys(workflow?.steps ?? {}).length;
+
+  useEffect(() => {
+    if (!runId && !params?.runId) {
+      closeStreamsAndReset();
+    }
+  }, [runId, params]);
 
   return (
     <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto">
@@ -90,6 +97,19 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
               workflowId={workflowId}
               runId={params?.runId}
               onPressRun={({ workflowId, runId }) => navigate(`/workflows/${workflowId}/graph/${runId}`)}
+              onPressBackToRuns={() => navigate(`/workflows/${workflowId}/graph`)}
+              setRunId={setRunId}
+              workflow={workflow ?? undefined}
+              isLoading={isLoading}
+              createWorkflowRun={createWorkflowRun.mutateAsync}
+              streamWorkflow={streamWorkflow.mutateAsync}
+              resumeWorkflow={resumeWorkflow.mutateAsync}
+              streamResult={streamResult}
+              isStreamingWorkflow={isStreaming}
+              isResumingWorkflow={resumeWorkflow.isPending}
+              isCancellingWorkflowRun={isCancellingWorkflowRun}
+              cancelWorkflowRun={cancelWorkflowRun}
+              observeWorkflowStream={observeWorkflowStream.mutate}
             />
           </TabContent>
 

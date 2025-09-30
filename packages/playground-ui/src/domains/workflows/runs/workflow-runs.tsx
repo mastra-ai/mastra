@@ -3,14 +3,28 @@ import { Txt } from '@/ds/components/Txt';
 import { formatDate } from 'date-fns';
 import clsx from 'clsx';
 import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
+import { WorkflowTrigger, WorkflowTriggerProps } from '../workflow/workflow-trigger';
+import { convertWorkflowRunStateToWatchResult } from '../utils';
+import { Icon } from '@/ds/icons';
+import { ChevronLeftIcon } from 'lucide-react';
+import { Button } from '@/ds/components/Button';
+import { isObjectEmpty } from '@/lib/object';
 
-export interface WorkflowRunsProps {
+export interface WorkflowRunsProps extends Omit<WorkflowTriggerProps, 'paramsRunId' | 'workflowId'> {
   workflowId: string;
   runId?: string;
   onPressRun: ({ workflowId, runId }: { workflowId: string; runId: string }) => void;
+  onPressBackToRuns: () => void;
 }
 
-export const WorkflowRuns = ({ workflowId, runId, onPressRun }: WorkflowRunsProps) => {
+export const WorkflowRuns = ({
+  workflowId,
+  runId,
+  onPressRun,
+  onPressBackToRuns,
+  observeWorkflowStream,
+  ...triggerProps
+}: WorkflowRunsProps) => {
   const { isLoading, data: runs } = useWorkflowRuns(workflowId);
 
   if (isLoading) {
@@ -29,6 +43,39 @@ export const WorkflowRuns = ({ workflowId, runId, onPressRun }: WorkflowRunsProp
         <Txt variant="ui-md" className="text-icon6 text-center">
           No previous run
         </Txt>
+      </div>
+    );
+  }
+
+  const run = actualRuns.find(run => run.runId === runId);
+  const runSnapshot = run?.snapshot;
+
+  const runResult =
+    runSnapshot && typeof runSnapshot === 'object' ? convertWorkflowRunStateToWatchResult(runSnapshot) : null;
+  const runStatus = runResult?.payload?.workflowState?.status;
+
+  if (runId) {
+    return (
+      <div className="h-full grid grid-rows-[1fr_auto]">
+        <div className="px-5 space-y-2">
+          <Button onClick={onPressBackToRuns} variant="light">
+            <Icon>
+              <ChevronLeftIcon />
+            </Icon>
+            Back to runs
+          </Button>
+        </div>
+        <WorkflowTrigger
+          {...triggerProps}
+          streamResult={isObjectEmpty(triggerProps.streamResult ?? {}) ? runResult : triggerProps.streamResult}
+          paramsRunId={runId}
+          workflowId={workflowId}
+          observeWorkflowStream={() => {
+            if (runStatus !== 'success' && runStatus !== 'failed' && runStatus !== 'canceled') {
+              observeWorkflowStream?.({ workflowId, runId });
+            }
+          }}
+        />
       </div>
     );
   }

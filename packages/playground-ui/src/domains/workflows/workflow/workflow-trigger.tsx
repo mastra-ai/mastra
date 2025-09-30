@@ -22,6 +22,7 @@ import { SyntaxHighlighter } from '@/components/ui/syntax-highlighter';
 import { Dialog, DialogPortal, DialogTitle, DialogContent } from '@/components/ui/dialog';
 import { WorkflowStatus } from './workflow-status';
 import { WorkflowInputData } from './workflow-input-data';
+import { isObjectEmpty } from '@/lib/object';
 
 interface SuspendedStep {
   stepId: string;
@@ -31,8 +32,9 @@ interface SuspendedStep {
   isLoading: boolean;
 }
 
-interface WorkflowTriggerProps {
+export interface WorkflowTriggerProps {
   workflowId: string;
+  paramsRunId?: string;
   setRunId?: (runId: string) => void;
   workflow?: GetWorkflowResponse;
   isLoading?: boolean;
@@ -51,6 +53,7 @@ interface WorkflowTriggerProps {
     inputData: Record<string, unknown>;
     runtimeContext: Record<string, unknown>;
   }) => Promise<void>;
+  observeWorkflowStream?: ({ workflowId, runId }: { workflowId: string; runId: string }) => void;
   resumeWorkflow: ({
     workflowId,
     step,
@@ -76,12 +79,14 @@ interface WorkflowTriggerProps {
 
 export function WorkflowTrigger({
   workflowId,
+  paramsRunId,
   setRunId,
   workflow,
   isLoading,
   createWorkflowRun,
   resumeWorkflow,
   streamWorkflow,
+  observeWorkflowStream,
   isStreamingWorkflow,
   streamResult,
   isResumingWorkflow,
@@ -145,11 +150,21 @@ export function WorkflowTrigger({
   const streamResultToUse = result ?? streamResult;
 
   useEffect(() => {
+    if (paramsRunId && observeWorkflowStream) {
+      observeWorkflowStream({ workflowId, runId: paramsRunId });
+      setInnerRunId(paramsRunId);
+    }
+  }, [paramsRunId]);
+
+  useEffect(() => {
     setIsRunning(isStreamingWorkflow);
   }, [isStreamingWorkflow]);
 
   useEffect(() => {
-    if (!streamResultToUse?.payload?.workflowState?.steps || !result?.runId) return;
+    if (!streamResultToUse?.payload?.workflowState?.steps || !result?.runId) {
+      setSuspendedSteps([]);
+      return;
+    }
 
     const suspended = Object.entries(streamResultToUse?.payload?.workflowState?.steps || {})
       .filter(([_, { status }]) => status === 'suspended')
@@ -214,8 +229,9 @@ export function WorkflowTrigger({
                   setPayload(data);
                   handleExecuteWorkflow(data);
                 }}
+                withoutSubmit={!!paramsRunId}
               />
-            ) : (
+            ) : !!paramsRunId ? null : (
               <Button
                 className="w-full"
                 variant="light"
@@ -320,7 +336,7 @@ export function WorkflowTrigger({
         )}
       </div>
 
-      {result && (
+      {result && !isObjectEmpty(result) && (
         <div className="p-5 border-b-sm border-border1">
           <WorkflowJsonDialog result={result} />
         </div>

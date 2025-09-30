@@ -20,6 +20,7 @@ import {
   streamVNextWorkflowHandler,
   watchWorkflowHandler,
   resumeStreamWorkflowHandler,
+  observeStreamVNextWorkflowHandler,
 } from './handlers';
 import {
   createLegacyWorkflowRunHandler,
@@ -713,6 +714,37 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
       tags: ['workflows'],
     }),
     streamVNextWorkflowHandler,
+  );
+
+  router.post(
+    '/:workflowId/observe-streamVNext',
+    describeRoute({
+      description: 'Observe workflow stream in real-time using the VNext streaming API',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'workflow stream vNext observed',
+        },
+        404: {
+          description: 'workflow not found',
+        },
+      },
+      tags: ['workflows'],
+    }),
+    observeStreamVNextWorkflowHandler,
   );
 
   router.post(
