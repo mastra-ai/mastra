@@ -120,7 +120,7 @@
   },
   "devDependencies": {
     "@mastra/core": "workspace:*",
-    "@storybook/addon-docs": "^9.1.7",
+    "@storybook/addon-docs": "^9.1.8",
     "@storybook/react-vite": "^9.1.8",
     "@types/node": "^20.19.0",
     "@types/react": "^19.1.9",
