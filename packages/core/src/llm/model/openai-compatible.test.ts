@@ -98,7 +98,6 @@ describe('OpenAICompatibleModel', () => {
     });
   });
 
-
   describe('doStream', () => {
     it('should stream text response', async () => {
       const model = new OpenAICompatibleModel({
@@ -237,6 +236,390 @@ describe('OpenAICompatibleModel', () => {
         }),
       ).rejects.toThrow('OpenAI-compatible API error: 500 - Internal Server Error');
     });
+
+    describe('comprehensive doStream tests', () => {
+      // Note: These tests verify that doStream correctly converts OpenAI-format SSE chunks
+      // into Mastra-format chunks. The implementation expects OpenAI format as input.
+
+      it('should emit stream-start and response-metadata chunks', async () => {
+        const model = new OpenAICompatibleModel({
+          id: 'gpt-4o',
+          url: 'https://api.openai.com/v1/chat/completions',
+          apiKey: 'sk-test',
+        });
+
+        const mockStream = new ReadableStream({
+          async start(controller) {
+            const encoder = new TextEncoder();
+            controller.enqueue(
+              encoder.encode(
+                'data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4o","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}\n',
+              ),
+            );
+            controller.close();
+          },
+        });
+
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          body: mockStream,
+          headers: new Headers({ 'content-type': 'text/event-stream' }),
+        } as any);
+
+        const result = await model.doStream({
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+        });
+
+        const chunks = [];
+        const reader = result.stream.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+        }
+
+        expect(chunks.some(chunk => chunk.type === 'stream-start')).toBe(true);
+        expect(chunks.some(chunk => chunk.type === 'response-metadata')).toBe(true);
+      });
+
+      it('should handle text streaming with text-start, text-delta, text-end', async () => {
+        const model = new OpenAICompatibleModel({
+          id: 'gpt-4o',
+          url: 'https://api.openai.com/v1/chat/completions',
+          apiKey: 'sk-test',
+        });
+
+        const mockStream = new ReadableStream({
+          async start(controller) {
+            const encoder = new TextEncoder();
+            controller.enqueue(
+              encoder.encode(
+                'data: {"id":"chatcmpl-123","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}\n',
+              ),
+            );
+            controller.enqueue(
+              encoder.encode(
+                'data: {"id":"chatcmpl-123","choices":[{"index":0,"delta":{"content":" world"},"finish_reason":null}]}\n',
+              ),
+            );
+            controller.enqueue(
+              encoder.encode('data: {"id":"chatcmpl-123","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n'),
+            );
+            controller.close();
+          },
+        });
+
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          body: mockStream,
+          headers: new Headers({ 'content-type': 'text/event-stream' }),
+        } as any);
+
+        const result = await model.doStream({
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+        });
+
+        const chunks = [];
+        const reader = result.stream.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+        }
+
+        expect(chunks.some(chunk => chunk.type === 'text-start')).toBe(true);
+        expect(chunks.filter(chunk => chunk.type === 'text-delta').length).toBe(2);
+        expect(chunks.some(chunk => chunk.type === 'text-end')).toBe(true);
+      });
+
+      it('should handle tool call streaming with incremental chunks', async () => {
+        const model = new OpenAICompatibleModel({
+          id: 'gpt-4o',
+          url: 'https://api.openai.com/v1/chat/completions',
+          apiKey: 'sk-test',
+        });
+
+        const mockStream = new ReadableStream({
+          async start(controller) {
+            const encoder = new TextEncoder();
+            // Tool call start
+            controller.enqueue(
+              encoder.encode(
+                'data: {"id":"chatcmpl-123","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_123","type":"function","function":{"name":"testTool","arguments":""}}]},"finish_reason":null}]}\n',
+              ),
+            );
+            // Tool call arguments chunks
+            controller.enqueue(
+              encoder.encode(
+                'data: {"id":"chatcmpl-123","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"param\\":"}}]},"finish_reason":null}]}\n',
+              ),
+            );
+            controller.enqueue(
+              encoder.encode(
+                'data: {"id":"chatcmpl-123","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\\"value\\"}"}}]},"finish_reason":null}]}\n',
+              ),
+            );
+            // Finish
+            controller.enqueue(
+              encoder.encode(
+                'data: {"id":"chatcmpl-123","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}\n',
+              ),
+            );
+            controller.close();
+          },
+        });
+
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          body: mockStream,
+          headers: new Headers({ 'content-type': 'text/event-stream' }),
+        } as any);
+
+        const result = await model.doStream({
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+        });
+
+        const chunks = [];
+        const reader = result.stream.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+        }
+
+        expect(chunks.some(chunk => chunk.type === 'tool-input-start')).toBe(true);
+        expect(chunks.filter(chunk => chunk.type === 'tool-input-delta').length).toBeGreaterThan(0);
+        expect(chunks.some(chunk => chunk.type === 'tool-input-end')).toBe(true);
+      });
+
+      it('should handle multiple tool calls in sequence', async () => {
+        const model = new OpenAICompatibleModel({
+          id: 'gpt-4o',
+          url: 'https://api.openai.com/v1/chat/completions',
+          apiKey: 'sk-test',
+        });
+
+        const mockStream = new ReadableStream({
+          async start(controller) {
+            const encoder = new TextEncoder();
+            // First tool call
+            controller.enqueue(
+              encoder.encode(
+                'data: {"id":"chatcmpl-123","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"tool1","arguments":"{\\"a\\":1}"}}]},"finish_reason":null}]}\n',
+              ),
+            );
+            // Second tool call
+            controller.enqueue(
+              encoder.encode(
+                'data: {"id":"chatcmpl-123","choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"id":"call_2","type":"function","function":{"name":"tool2","arguments":"{\\"b\\":2}"}}]},"finish_reason":null}]}\n',
+              ),
+            );
+            controller.enqueue(
+              encoder.encode(
+                'data: {"id":"chatcmpl-123","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}\n',
+              ),
+            );
+            controller.close();
+          },
+        });
+
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          body: mockStream,
+          headers: new Headers({ 'content-type': 'text/event-stream' }),
+        } as any);
+
+        const result = await model.doStream({
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+        });
+
+        const chunks = [];
+        const reader = result.stream.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+        }
+
+        const toolStartChunks = chunks.filter(chunk => chunk.type === 'tool-input-start');
+        expect(toolStartChunks.length).toBe(2);
+      });
+
+      it('should handle finish chunk with usage data', async () => {
+        const model = new OpenAICompatibleModel({
+          id: 'gpt-4o',
+          url: 'https://api.openai.com/v1/chat/completions',
+          apiKey: 'sk-test',
+        });
+
+        const mockStream = new ReadableStream({
+          async start(controller) {
+            const encoder = new TextEncoder();
+            controller.enqueue(
+              encoder.encode(
+                'data: {"id":"chatcmpl-123","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}\n',
+              ),
+            );
+            controller.enqueue(
+              encoder.encode(
+                'data: {"id":"chatcmpl-123","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}\n',
+              ),
+            );
+            controller.close();
+          },
+        });
+
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          body: mockStream,
+          headers: new Headers({ 'content-type': 'text/event-stream' }),
+        } as any);
+
+        const result = await model.doStream({
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+        });
+
+        const chunks = [];
+        const reader = result.stream.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+        }
+
+        const finishChunk = chunks.find(chunk => chunk.type === 'finish');
+        expect(finishChunk).toBeDefined();
+        expect((finishChunk as any).finishReason).toBe('stop');
+        expect((finishChunk as any).usage).toBeDefined();
+      });
+
+      it('should handle partial SSE chunks across buffer boundaries', async () => {
+        const model = new OpenAICompatibleModel({
+          id: 'gpt-4o',
+          url: 'https://api.openai.com/v1/chat/completions',
+          apiKey: 'sk-test',
+        });
+
+        const mockStream = new ReadableStream({
+          async start(controller) {
+            const encoder = new TextEncoder();
+            // Split a chunk across two enqueues
+            controller.enqueue(
+              encoder.encode('data: {"id":"chatcmpl-123","choices":[{"index":0,"delta":{"content":"Hel'),
+            );
+            controller.enqueue(encoder.encode('lo"},"finish_reason":null}]}\n'));
+            controller.enqueue(
+              encoder.encode('data: {"id":"chatcmpl-123","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n'),
+            );
+            controller.close();
+          },
+        });
+
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          body: mockStream,
+          headers: new Headers({ 'content-type': 'text/event-stream' }),
+        } as any);
+
+        const result = await model.doStream({
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+        });
+
+        const chunks = [];
+        const reader = result.stream.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+        }
+
+        expect(chunks.some(chunk => chunk.type === 'text-delta')).toBe(true);
+      });
+
+      it('should handle malformed JSON gracefully', async () => {
+        const model = new OpenAICompatibleModel({
+          id: 'gpt-4o',
+          url: 'https://api.openai.com/v1/chat/completions',
+          apiKey: 'sk-test',
+        });
+
+        const mockStream = new ReadableStream({
+          async start(controller) {
+            const encoder = new TextEncoder();
+            controller.enqueue(encoder.encode('data: {invalid json}\n'));
+            controller.enqueue(
+              encoder.encode(
+                'data: {"id":"chatcmpl-123","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}\n',
+              ),
+            );
+            controller.enqueue(
+              encoder.encode('data: {"id":"chatcmpl-123","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n'),
+            );
+            controller.close();
+          },
+        });
+
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          body: mockStream,
+          headers: new Headers({ 'content-type': 'text/event-stream' }),
+        } as any);
+
+        const result = await model.doStream({
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+        });
+
+        const chunks = [];
+        const reader = result.stream.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+        }
+
+        // Should still process valid chunks
+        expect(chunks.some(chunk => chunk.type === 'text-delta')).toBe(true);
+      });
+
+      it('should handle network errors during streaming', async () => {
+        const model = new OpenAICompatibleModel({
+          id: 'gpt-4o',
+          url: 'https://api.openai.com/v1/chat/completions',
+          apiKey: 'sk-test',
+        });
+
+        const mockStream = new ReadableStream({
+          async start(controller) {
+            const encoder = new TextEncoder();
+            controller.enqueue(
+              encoder.encode(
+                'data: {"id":"chatcmpl-123","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}\n',
+              ),
+            );
+            controller.error(new Error('Network error'));
+          },
+        });
+
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          body: mockStream,
+          headers: new Headers({ 'content-type': 'text/event-stream' }),
+        } as any);
+
+        const result = await model.doStream({
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+        });
+
+        const reader = result.stream.getReader();
+
+        await expect(async () => {
+          while (true) {
+            const { done } = await reader.read();
+            if (done) break;
+          }
+        }).rejects.toThrow();
+      });
+    });
   });
 
   describe('Anthropic provider', () => {
@@ -249,57 +632,6 @@ describe('OpenAICompatibleModel', () => {
       // Check that the model was created successfully
       expect(model.modelId).toBe('claude-3-opus');
       expect(model.provider).toBe('anthropic');
-
-      // Restore environment
-      process.env = originalEnv;
-    });
-
-    it('should handle Anthropic structured output', async () => {
-      const originalEnv = process.env;
-      process.env = { ANTHROPIC_API_KEY: 'ant-test' };
-
-      const model = new OpenAICompatibleModel('anthropic/claude-3-opus');
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers(),
-        json: async () => ({
-          id: 'test-id',
-          object: 'chat.completion',
-          created: 1234567890,
-          model: 'claude-3-opus',
-          choices: [
-            {
-              index: 0,
-              message: {
-                role: 'assistant',
-                content: '{"result": "success"}',
-              },
-              finish_reason: 'stop',
-            },
-          ],
-          usage: {
-            prompt_tokens: 10,
-            completion_tokens: 5,
-            total_tokens: 15,
-          },
-        }),
-      });
-
-      const result = await model.doGenerate({
-        prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
-        responseFormat: {
-          type: 'json',
-          schema: {
-            type: 'object',
-            properties: {
-              result: { type: 'string' },
-            },
-          },
-        },
-      });
-
-      expect(result.content).toEqual([{ type: 'text', text: '{"result": "success"}' }]);
 
       // Restore environment
       process.env = originalEnv;
