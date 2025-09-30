@@ -14,7 +14,6 @@ import {
   Observability,
 } from './resources';
 import { NetworkMemoryThread } from './resources/network-memory-thread';
-import { VNextNetwork } from './resources/vNextNetwork';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
@@ -442,23 +441,6 @@ export class MastraClient extends BaseResource {
     } else {
       return this.request(`/api/telemetry`);
     }
-  }
-
-  /**
-   * Retrieves all available vNext networks
-   * @returns Promise containing map of vNext network IDs to vNext network details
-   */
-  public getVNextNetworks(): Promise<Array<GetVNextNetworkResponse>> {
-    return this.request('/api/networks/v-next');
-  }
-
-  /**
-   * Gets a vNext network instance by ID
-   * @param networkId - ID of the vNext network to retrieve
-   * @returns vNext Network instance
-   */
-  public getVNextNetwork(networkId: string) {
-    return new VNextNetwork(this.options, networkId);
   }
 
   /**
