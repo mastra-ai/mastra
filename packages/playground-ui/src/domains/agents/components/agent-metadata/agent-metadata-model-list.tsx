@@ -65,17 +65,13 @@ export const AgentMetadataModelList = ({
             {modelConfigs.map((modelConfig, index) => (
               <Draggable key={modelConfig.id} draggableId={modelConfig.id} index={index}>
                 {provided => (
-                  <div
-                    ref={provided.innerRef}
-                    {...provided.draggableProps}
-                    {...provided.dragHandleProps}
-                    style={provided.draggableProps.style}
-                  >
+                  <div ref={provided.innerRef} {...provided.draggableProps} style={provided.draggableProps.style}>
                     <AgentMetadataModelListItem
                       modelConfig={modelConfig}
                       modelProviders={modelProviders}
                       updateModelInModelList={updateModel}
                       showDragHandle={hasMultipleModels}
+                      dragHandleProps={provided.dragHandleProps}
                     />
                   </div>
                 )}
@@ -94,6 +90,7 @@ interface AgentMetadataModelListItemProps {
   modelProviders: string[];
   updateModelInModelList: (params: UpdateModelInModelListParams) => Promise<{ message: string }>;
   showDragHandle: boolean;
+  dragHandleProps?: any;
 }
 
 const AgentMetadataModelListItem = ({
@@ -101,35 +98,38 @@ const AgentMetadataModelListItem = ({
   modelProviders,
   updateModelInModelList,
   showDragHandle,
+  dragHandleProps,
 }: AgentMetadataModelListItemProps) => {
   const [enabled, setEnabled] = useState(() => modelConfig.enabled);
 
   return (
-    <div className="flex items-center gap-2 p-2 rounded-lg bg-background hover:bg-muted/50 transition-colors">
-      {showDragHandle && (
-        <div className="text-icon3 cursor-grab active:cursor-grabbing flex-shrink-0">
-          <Icon>
-            <GripVertical />
-          </Icon>
+    <div className="rounded-lg bg-background hover:bg-muted/50 transition-colors">
+      <div className="flex items-center gap-2 p-2">
+        {showDragHandle && (
+          <div {...dragHandleProps} className="text-icon3 cursor-grab active:cursor-grabbing flex-shrink-0">
+            <Icon>
+              <GripVertical />
+            </Icon>
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <AgentMetadataModelSwitcher
+            defaultProvider={modelConfig.model.provider}
+            defaultModel={modelConfig.model.modelId}
+            updateModel={params => updateModelInModelList({ modelConfigId: modelConfig.id, model: params })}
+            modelProviders={modelProviders}
+            autoSave={true}
+          />
         </div>
-      )}
-      <div className="flex-1 min-w-0">
-        <AgentMetadataModelSwitcher
-          defaultProvider={modelConfig.model.provider}
-          defaultModel={modelConfig.model.modelId}
-          updateModel={params => updateModelInModelList({ modelConfigId: modelConfig.id, model: params })}
-          modelProviders={modelProviders}
-          autoSave={true}
+        <Switch
+          checked={enabled}
+          onCheckedChange={checked => {
+            setEnabled(checked);
+            updateModelInModelList({ modelConfigId: modelConfig.id, enabled: checked });
+          }}
+          className="flex-shrink-0"
         />
       </div>
-      <Switch
-        checked={enabled}
-        onCheckedChange={checked => {
-          setEnabled(checked);
-          updateModelInModelList({ modelConfigId: modelConfig.id, enabled: checked });
-        }}
-        className="flex-shrink-0"
-      />
     </div>
   );
 };
