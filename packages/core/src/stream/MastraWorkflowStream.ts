@@ -1,6 +1,6 @@
 import { ReadableStream } from 'stream/web';
 import type z from 'zod';
-import type { Run, Step } from '../workflows';
+import type { Run, Step, WorkflowRunStatus } from '../workflows';
 import type { ChunkType } from './types';
 import { ChunkFrom } from './types';
 
@@ -102,7 +102,7 @@ export class MastraWorkflowStream<
 
         const stream: ReadableStream<ChunkType> = await createStream(writer);
 
-        let workflowStatus = 'success';
+        let workflowStatus: WorkflowRunStatus = 'success';
 
         for await (const chunk of stream) {
           // update the usage count
