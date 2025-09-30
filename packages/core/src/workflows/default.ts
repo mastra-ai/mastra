@@ -6,6 +6,7 @@ import { AISpanType, wrapMastra, selectFields } from '../ai-tracing';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { IErrorDefinition } from '../error';
+import { safeParseErrorObject } from '../error/utils.js';
 import type { MastraScorers } from '../scores';
 import { runScorer } from '../scores/hooks';
 import type { ChunkType } from '../stream/types';
@@ -148,7 +149,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         base.error = error;
       } else {
         // For non-string, non-Error values, create a descriptive error
-        const errorMessage = typeof error === 'object' && error !== null ? JSON.stringify(error) : String(error);
+        const errorMessage = safeParseErrorObject(error);
         const errorObj = new Error('Unknown error: ' + errorMessage);
         base.error = errorObj?.stack ?? errorObj;
       }
