@@ -724,8 +724,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
             self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
           }
           // If stream ends without proper finish/error chunks, reject unresolved promises
-          // This must be in the final transformer in the fullStream pipeline
-          // to ensure all of the delayed promises had a chance to resolve or reject already
+          // This must be in the final transformer flush to ensure
+          // all of the delayed promises had a chance to resolve or reject already
           // Avoids promises hanging forever
           Object.entries(self.#delayedPromises).forEach(([key, promise]) => {
             if (promise.status.type === 'pending') {
