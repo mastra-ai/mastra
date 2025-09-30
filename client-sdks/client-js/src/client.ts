@@ -42,6 +42,7 @@ import type {
   GetScoresResponse,
   GetScoresByRunIdParams,
   GetScoresByEntityIdParams,
+  GetScoresBySpanParams,
   SaveScoreParams,
   SaveScoreResponse,
   GetAITracesResponse,
@@ -581,7 +582,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing the scorer
    */
   public getScorer(scorerId: string): Promise<GetScorerResponse> {
-    return this.request(`/api/scores/scorers/${scorerId}`);
+    return this.request(`/api/scores/scorers/${encodeURIComponent(scorerId)}`);
   }
 
   public getScoresByScorerId(params: GetScoresByScorerIdParams): Promise<GetScoresResponse> {
@@ -602,7 +603,7 @@ export class MastraClient extends BaseResource {
       searchParams.set('perPage', String(perPage));
     }
     const queryString = searchParams.toString();
-    return this.request(`/api/scores/scorer/${scorerId}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/scores/scorer/${encodeURIComponent(scorerId)}${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -622,7 +623,7 @@ export class MastraClient extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/scores/run/${runId}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/scores/run/${encodeURIComponent(runId)}${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -642,7 +643,9 @@ export class MastraClient extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/scores/entity/${entityType}/${entityId}${queryString ? `?${queryString}` : ''}`);
+    return this.request(
+      `/api/scores/entity/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}${queryString ? `?${queryString}` : ''}`,
+    );
   }
 
   /**
@@ -671,6 +674,10 @@ export class MastraClient extends BaseResource {
 
   getAITraces(params: AITracesPaginatedArg): Promise<GetAITracesResponse> {
     return this.observability.getTraces(params);
+  }
+
+  getScoresBySpan(params: GetScoresBySpanParams): Promise<GetScoresResponse> {
+    return this.observability.getScoresBySpan(params);
   }
 
   score(params: {
