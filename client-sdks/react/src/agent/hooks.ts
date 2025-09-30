@@ -91,6 +91,7 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
 
     await response.processDataStream({
       onChunk: (chunk: ChunkType) => {
+        // Without this, React might batch intermediate chunks which would break the message reconstruction over time
         flushSync(() => {
           setMessages(prev => onChunk(chunk, prev));
         });
