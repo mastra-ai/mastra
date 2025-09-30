@@ -6,9 +6,10 @@ import { CodeDisplay } from '@/components/ui/code-display';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import clsx from 'clsx';
+import { AgentInstructions } from '@mastra/core/agent';
 
 interface CurrentInstructionsProps {
-  instructions?: string;
+  instructions?: AgentInstructions;
   enhancedPrompt: string;
   isEnhancing: boolean;
   userComment: string;
@@ -19,6 +20,30 @@ interface CurrentInstructionsProps {
   agentId: string;
   onShowHistory: () => void;
 }
+
+const resolveInstructions = (instructions?: AgentInstructions) => {
+  if (typeof instructions === 'string') {
+    return instructions.trim();
+  }
+
+  if (typeof instructions === 'object' && 'content' in instructions) {
+    return instructions.content.trim();
+  }
+
+  if (Array.isArray(instructions)) {
+    return instructions
+      .map(instruction => {
+        if (typeof instruction === 'string') {
+          return instruction.trim();
+        }
+        return instruction.content?.trim() || '';
+      })
+      .join('\n\n')
+      .trim();
+  }
+
+  return '';
+};
 
 export function CurrentInstructions({
   instructions,
@@ -31,7 +56,7 @@ export function CurrentInstructions({
   onCommentChange,
   onShowHistory,
 }: CurrentInstructionsProps) {
-  const currentContent = enhancedPrompt || instructions?.trim();
+  const currentContent = enhancedPrompt || resolveInstructions(instructions);
 
   const { isCopied, handleCopy } = useCopyToClipboard({ text: currentContent || '' });
 
