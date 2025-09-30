@@ -40,12 +40,13 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
           parentSpanId: null,
           attributes: expect.objectContaining(span.attributes),
           metadata: expect.objectContaining(span.metadata),
-          createdAt: span.createdAt,
-          updatedAt: span.updatedAt,
           input: span.input,
           output: span.output,
           error: span.error,
         });
+        // Database should set createdAt/updatedAt, not preserve application-provided ones
+        expect(retrievedSpan?.createdAt).toBeDefined();
+        expect(retrievedSpan?.updatedAt).toBeDefined();
       });
     });
 

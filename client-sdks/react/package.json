@@ -1,5 +1,5 @@
 {
-  "name": "@mastra/react-hooks",
+  "name": "@mastra/react",
   "version": "0.0.1-alpha.1",
   "private": true,
   "type": "module",
@@ -8,7 +8,11 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "vite build",
-    "dev": "vite build --watch"
+    "dev": "vite build --watch",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage"
   },
   "files": [
     "src"
@@ -19,15 +23,18 @@
     "react-dom": "^19.1.1"
   },
   "devDependencies": {
+    "@ai-sdk/react": "^2.0.57",
     "@assistant-ui/react": "^0.10.45",
-    "eslint": "^9.35.0",
-    "typescript": "^5.8.3",
+    "@mastra/core": "workspace:*",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
-    "@mastra/core": "workspace:*",
+    "@vitejs/plugin-react": "^5.0.3",
+    "@vitest/ui": "^3.2.4",
+    "eslint": "^9.35.0",
+    "rollup-plugin-node-externals": "^8.0.1",
+    "typescript": "^5.8.3",
     "vite": "^7.1.7",
     "vite-plugin-dts": "^4.5.4",
-    "rollup-plugin-node-externals": "^8.0.1",
-    "@vitejs/plugin-react": "^5.0.3"
+    "vitest": "^3.2.4"
   }
 }
