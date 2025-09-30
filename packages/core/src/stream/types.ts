@@ -121,7 +121,7 @@ export interface MastraMetadata {
   selectionReason?: string;
 }
 
-export interface ToolCallPayload<TArgs = Record<string, any>, TOutput = unknown> {
+export interface ToolCallPayload<TArgs = unknown, TOutput = unknown> {
   toolCallId: string;
   toolName: string;
   args?: TArgs & {
