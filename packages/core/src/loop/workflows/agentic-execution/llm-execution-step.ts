@@ -30,7 +30,7 @@ type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   messageList: MessageList;
   outputStream: MastraModelOutput<OUTPUT>;
   runState: AgenticRunState;
-  options?: LoopConfig;
+  options?: LoopConfig<OUTPUT>;
   controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
   responseFromModel: {
     warnings: any;
@@ -359,16 +359,14 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         'raw',
       ].includes(chunk.type)
     ) {
-      const transformedChunk = convertMastraChunkToAISDKv5({
-        // @ts-ignore
-        chunk, // TODO: fix types here (is not assignable to type 'ChunkType'.)
-      });
-
       if (chunk.type === 'raw' && !includeRawChunks) {
         return;
       }
 
-      await options?.onChunk?.({ chunk: transformedChunk } as any);
+      // TODO: transform chunk to AISDKv5 if format === 'aisdk'
+      if (options?.onChunk) {
+        await options?.onChunk?.(chunk);
+      }
     }
 
     if (runState.state.hasErrored) {

@@ -84,11 +84,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
           rest.controller.enqueue(chunk);
 
           if (initialResult?.metadata?.modelVersion === 'v2') {
-            await rest.options?.onChunk?.({
-              chunk: convertMastraChunkToAISDKv5({
-                chunk,
-              }),
-            } as any);
+            await rest.options?.onChunk?.(chunk);
           }
 
           const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
