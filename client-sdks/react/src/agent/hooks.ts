@@ -144,7 +144,10 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
 
     await response.processDataStream({
       onChunk: (chunk: NetworkChunkType) => {
-        setMessages(prev => onNetworkChunk(chunk, prev));
+        flushSync(() => {
+          setMessages(prev => onNetworkChunk(chunk, prev));
+        });
+
         return Promise.resolve();
       },
     });
