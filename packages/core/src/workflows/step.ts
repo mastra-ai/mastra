@@ -41,6 +41,7 @@ export type ExecuteFunctionParams<TStepInput, TResumeSchema, TSuspendSchema, Eng
   engine: EngineType;
   abortSignal: AbortSignal;
   writer: ToolStream<ChunkType>;
+  validateSchemas?: boolean;
 };
 
 export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
@@ -71,6 +72,7 @@ export interface Step<
   >;
   scorers?: DynamicArgument<MastraScorers>;
   retries?: number;
+  component?: string;
 }
 
 export const getStepResult = (stepResults: Record<string, StepResult<any, any, any, any>>, step: any) => {

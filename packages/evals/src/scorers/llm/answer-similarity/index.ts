@@ -1,6 +1,5 @@
 import type { MastraLanguageModel } from '@mastra/core/agent';
 import { createScorer } from '@mastra/core/scores';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
 import { z } from 'zod';
 import { roundToTwoDecimals } from '../../../metrics/llm/utils';
 import { getAssistantMessageFromRunOutput } from '../../utils';
@@ -70,13 +69,14 @@ export function createAnswerSimilarityScorer({
   options?: AnswerSimilarityOptions;
 }) {
   const mergedOptions = { ...ANSWER_SIMILARITY_DEFAULT_OPTIONS, ...options };
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer({
     name: 'Answer Similarity Scorer',
     description: 'Evaluates how similar an agent output is to a ground truth answer for CI/CD testing',
     judge: {
       model,
       instructions: ANSWER_SIMILARITY_INSTRUCTIONS,
     },
+    type: 'agent',
   })
     .preprocess({
       description: 'Extract semantic units from output and ground truth',

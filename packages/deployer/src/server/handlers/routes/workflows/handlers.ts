@@ -77,7 +77,7 @@ export async function startAsyncWorkflowHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const runtimeContext = c.get('runtimeContext');
     const workflowId = c.req.param('workflowId');
-    const { inputData } = await c.req.json();
+    const { inputData, tracingOptions } = await c.req.json();
     const runId = c.req.query('runId');
 
     const result = await getOriginalStartAsyncWorkflowHandler({
@@ -86,6 +86,7 @@ export async function startAsyncWorkflowHandler(c: Context) {
       workflowId,
       runId,
       inputData,
+      tracingOptions,
     });
 
     return c.json(result);
@@ -99,7 +100,7 @@ export async function startWorkflowRunHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const runtimeContext = c.get('runtimeContext');
     const workflowId = c.req.param('workflowId');
-    const { inputData } = await c.req.json();
+    const { inputData, tracingOptions } = await c.req.json();
     const runId = c.req.query('runId');
 
     await getOriginalStartWorkflowRunHandler({
@@ -108,6 +109,7 @@ export async function startWorkflowRunHandler(c: Context) {
       workflowId,
       runId,
       inputData,
+      tracingOptions,
     });
 
     return c.json({ message: 'Workflow run started' });
@@ -355,7 +357,7 @@ export async function resumeAsyncWorkflowHandler(c: Context) {
     const runtimeContext = c.get('runtimeContext');
     const workflowId = c.req.param('workflowId');
     const runId = c.req.query('runId');
-    const { step, resumeData } = await c.req.json();
+    const { step, resumeData, tracingOptions } = await c.req.json();
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to resume workflow' });
@@ -367,6 +369,7 @@ export async function resumeAsyncWorkflowHandler(c: Context) {
       workflowId,
       runId,
       body: { step, resumeData },
+      tracingOptions,
     });
 
     return c.json(result);
@@ -381,7 +384,7 @@ export async function resumeWorkflowHandler(c: Context) {
     const runtimeContext = c.get('runtimeContext');
     const workflowId = c.req.param('workflowId');
     const runId = c.req.query('runId');
-    const { step, resumeData } = await c.req.json();
+    const { step, resumeData, tracingOptions } = await c.req.json();
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to resume workflow' });
@@ -393,6 +396,7 @@ export async function resumeWorkflowHandler(c: Context) {
       workflowId,
       runId,
       body: { step, resumeData },
+      tracingOptions,
     });
 
     return c.json({ message: 'Workflow run resumed' });

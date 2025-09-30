@@ -2,14 +2,14 @@ import { BadgeMessage } from '@/components/assistant-ui/tools/badges/agent-badge
 import { ThreadMessageLike } from '@assistant-ui/react';
 
 export const handleNetworkMessageFromMemory = (content: any): ThreadMessageLike => {
-  if (content.resourceType === 'workflow') {
+  if (content.primitiveType === 'workflow') {
     return {
       role: 'assistant',
       content: [
         {
           type: 'tool-call',
           toolCallId: content.finalResult.runId,
-          toolName: content.resourceId,
+          toolName: content.primitiveId,
           result: { runId: content.finalResult.runId },
           args: {
             __mastraMetadata: {
@@ -25,7 +25,7 @@ export const handleNetworkMessageFromMemory = (content: any): ThreadMessageLike 
     };
   }
 
-  if (content.resourceType === 'agent') {
+  if (content.primitiveType === 'agent') {
     const badgeMessages: BadgeMessage[] = [];
     let toolCalls: Record<string, any> = {};
 
@@ -68,7 +68,7 @@ export const handleNetworkMessageFromMemory = (content: any): ThreadMessageLike 
         {
           type: 'tool-call',
           toolCallId: content.finalResult.runId,
-          toolName: content.resourceId,
+          toolName: content.primitiveId,
           result: { runId: content.finalResult.runId },
           args: {
             __mastraMetadata: {
@@ -85,14 +85,14 @@ export const handleNetworkMessageFromMemory = (content: any): ThreadMessageLike 
     };
   }
 
-  if (content.resourceType === 'tool') {
+  if (content.primitiveType === 'tool') {
     return {
       role: 'assistant',
       content: [
         {
           type: 'tool-call',
           toolCallId: content.finalResult.toolCallId,
-          toolName: content.resourceId,
+          toolName: content.primitiveId,
           result: content.finalResult.result,
           args: {
             ...content?.input,

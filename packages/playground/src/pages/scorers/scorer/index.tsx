@@ -38,7 +38,11 @@ type ScoreItem = {
   score: number;
 };
 
-export default function Scorer() {
+export interface ScorerProps {
+  computeTraceLink: (traceId: string) => string;
+}
+
+export default function Scorer({ computeTraceLink }: ScorerProps) {
   const { scorerId } = useParams()! as { scorerId: string };
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedScoreId, setSelectedScoreId] = useState<string | undefined>();
@@ -88,16 +92,11 @@ export default function Scorer() {
       };
     }) || [];
 
-  const legacyWorkflows = workflows?.[0] || {};
-  const currentWorkflows = workflows?.[1] || {};
-
   const scorerWorkflows =
     scorer?.workflowIds.map(workflowId => {
       return {
         name: workflowId,
-        id: Object.entries({ ...legacyWorkflows, ...currentWorkflows }).find(
-          ([_, value]) => value.name === workflowId,
-        )?.[0],
+        id: Object.entries(workflows || {}).find(([_, value]) => value.name === workflowId)?.[0],
       };
     }) || [];
 
@@ -113,7 +112,7 @@ export default function Scorer() {
       value: (scorerEntities || []).map(entity => ({
         id: entity.id,
         name: entity.name || entity.id,
-        path: `${entity.type === 'AGENT' ? '/agents' : '/workflows'}/${entity.id}`,
+        path: `${entity.type === 'AGENT' ? '/agents' : '/workflows'}/${entity.name}`,
       })),
     },
   ];
@@ -124,7 +123,7 @@ export default function Scorer() {
 
   const [scoresPage, setScoresPage] = useState<number>(0);
 
-  const { scores: scoresData, isLoading: isScoresLoading } = useScoresByScorerId({
+  const { data: scoresData, isLoading: isScoresLoading } = useScoresByScorerId({
     scorerId,
     page: scoresPage,
     entityId: selectedEntityOption?.value === 'all' ? undefined : selectedEntityOption?.value,
@@ -144,7 +143,7 @@ export default function Scorer() {
       id: score.id,
       date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
       time: format(createdAtDate, 'h:mm:ss aaa'),
-      input: score?.input?.inputMessages?.[0]?.content || '',
+      input: JSON.stringify(score?.input),
       entityId: score.entityId,
       score: score.score,
     };
@@ -252,6 +251,7 @@ export default function Scorer() {
         onClose={() => setDialogIsOpen(false)}
         onNext={thereIsNextItem() ? toNextItem : undefined}
         onPrevious={thereIsPreviousItem() ? toPreviousItem : undefined}
+        computeTraceLink={(traceId, spanId) => `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`}
       />
     </>
   );
