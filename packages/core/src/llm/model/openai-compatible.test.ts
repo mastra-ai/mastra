@@ -21,6 +21,14 @@ describe('OpenAICompatibleModel', () => {
       expect(model.provider).toBe('openai');
     });
 
+    it('should create model with multi-slash magic string', () => {
+      // Test that provider is extracted from first slash, not last
+      // e.g., "fireworks/accounts/etc/model" -> provider: "fireworks", modelId: "accounts/etc/model"
+      const model = new OpenAICompatibleModel('openai/gpt-4o-2024-08-06');
+      expect(model.modelId).toBe('gpt-4o-2024-08-06');
+      expect(model.provider).toBe('openai');
+    });
+
     it('should create model with direct URL', () => {
       const model = new OpenAICompatibleModel('https://custom.api.com/v1/chat/completions');
       expect(model.modelId).toBe('unknown');
@@ -88,13 +96,15 @@ describe('OpenAICompatibleModel', () => {
     });
 
     it('should handle multi-slash provider IDs', () => {
+      // With new logic: first slash separates provider from model
+      // "chutes/Qwen/Qwen3-235B-A22B-Instruct-2507" -> provider: "chutes", modelId: "Qwen/Qwen3-235B-A22B-Instruct-2507"
       const model = new OpenAICompatibleModel({
         id: 'chutes/Qwen/Qwen3-235B-A22B-Instruct-2507',
         url: 'https://api.chutes.ai/v1/chat/completions',
         apiKey: 'sk-custom',
       });
       expect(model.modelId).toBe('chutes/Qwen/Qwen3-235B-A22B-Instruct-2507');
-      expect(model.provider).toBe('chutes/Qwen');
+      expect(model.provider).toBe('chutes');
     });
   });
 
@@ -646,13 +656,15 @@ describe('OpenAICompatibleModel', () => {
     });
 
     it('should handle Netlify provider', () => {
+      // With new logic: first slash separates provider from model
+      // "netlify/openai/gpt-4o" -> provider: "netlify", modelId: "openai/gpt-4o"
       const model = new OpenAICompatibleModel({
         id: 'netlify/openai/gpt-4o',
         url: 'https://api.netlify.com/v1/chat/completions',
         apiKey: 'sk-custom',
       });
       expect(model.modelId).toBe('netlify/openai/gpt-4o');
-      expect(model.provider).toBe('netlify/openai');
+      expect(model.provider).toBe('netlify');
     });
   });
 
