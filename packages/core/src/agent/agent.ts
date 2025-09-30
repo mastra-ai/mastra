@@ -2908,8 +2908,24 @@ export class Agent<
           throw mastraError;
         }
 
+        const modelId = modelConfig.id || model.modelId;
+        if (!modelId) {
+          const mastraError = new MastraError({
+            id: 'AGENT_PREPARE_MODELS_MISSING_MODEL_ID',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: {
+              agentName: this.name,
+            },
+            text: `[Agent:${this.name}] - Unable to determine model ID. Please provide an explicit ID in the model configuration.`,
+          });
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
+        }
+
         return {
-          id: modelConfig.id || model.modelId || 'unknown',
+          id: modelId,
           model: model as MastraLanguageModelV2,
           maxRetries: modelConfig.maxRetries ?? 0,
           enabled: modelConfig.enabled ?? true,
