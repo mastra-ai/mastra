@@ -9,8 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@mastra/playground-ui": "workspace:*",
-    "@mastra/react": "workspace:*",
+    "@mastra/playground-ui": "file:../../packages/playground-ui",
+    "@mastra/react": "file:../../client-sdks/react",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
