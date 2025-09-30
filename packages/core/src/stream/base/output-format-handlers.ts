@@ -103,10 +103,7 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
    * @param finalValue - The final parsed value to validate
    * @returns Promise resolving to validation result
    */
-  abstract validateAndTransformFinal(
-    finalValue: string,
-    previousObject: any,
-  ): Promise<ValidateAndTransformFinalResult<OUTPUT>>;
+  abstract validateAndTransformFinal(finalValue: string): Promise<ValidateAndTransformFinalResult<OUTPUT>>;
 
   /**
    * Preprocesses accumulated text to handle LLMs that wrap JSON in code blocks.
@@ -291,10 +288,7 @@ class ArrayFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFo
     return { shouldEmit: false };
   }
 
-  async validateAndTransformFinal(
-    _finalValue: string,
-    _previousObject: any,
-  ): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
+  async validateAndTransformFinal(_finalValue: string): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
     const resultValue = this.textPreviousFilteredArray;
 
     if (!resultValue) {
@@ -566,7 +560,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
         return;
       }
 
-      const finalResult = await handler.validateAndTransformFinal(accumulatedText, previousObject);
+      const finalResult = await handler.validateAndTransformFinal(accumulatedText);
 
       if (!finalResult.success) {
         controller.enqueue({
