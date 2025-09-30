@@ -45,3 +45,4 @@ mastra-cli.json
 
 *storybook.log
 storybook-static
+explorations/agent-builder-gh-repro/repro-agent.db
