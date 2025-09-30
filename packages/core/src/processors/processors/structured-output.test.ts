@@ -294,6 +294,7 @@ describe('StructuredOutputProcessor', () => {
           payload: {
             toolCallId: 'call-1',
             toolName: 'calculator',
+            // @ts-expect-error - tool call chunk args are unknown
             args: { operation: 'add', a: 1, b: 2 },
             output: 3,
           },
