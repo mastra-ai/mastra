@@ -17,22 +17,6 @@ export const Card = React.forwardRef<
 ));
 Card.displayName = "Card";
 
-export const CardLink = React.forwardRef<
-  HTMLAnchorElement,
-  React.AnchorHTMLAttributes<HTMLAnchorElement>
->(({ className, ...props }, ref) => (
-  <a
-    ref={ref}
-    className={cn(
-      "rounded-xl border bg-card text-card-foreground shadow",
-      className,
-    )}
-    style={{ display: "block" }}
-    {...props}
-  />
-));
-CardLink.displayName = "CardLink";
-
 export const CardHeader = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
