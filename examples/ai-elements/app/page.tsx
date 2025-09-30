@@ -1,6 +1,6 @@
 'use client';
 
-import { MastraReactProvider, MastraUIMessage, toNetworkUIMessage, toUIMessage, useChat } from '@mastra/react';
+import { MastraReactProvider, MastraUIMessage, toUIMessage, useChat } from '@mastra/react';
 import {
   Conversation,
   ConversationContent,
@@ -21,8 +21,8 @@ import { PlaygroundQueryClient, ReadonlyJSONObject, ToolFallback } from '@mastra
 
 function HomeInner() {
   const [input, setInput] = useState('');
-  const { messages, setMessages, network, isRunning } = useChat<MastraUIMessage>({
-    agentId: 'networkAgent',
+  const { messages, setMessages, streamVNext, isRunning } = useChat<MastraUIMessage>({
+    agentId: 'chefModelV2Agent',
   });
 
   const handleSubmit = (message: PromptInputMessage, event: FormEvent<HTMLFormElement>) => {
@@ -36,23 +36,21 @@ function HomeInner() {
         },
       ]);
 
-      network({
+      streamVNext({
         coreUserMessages: [
           {
             role: 'user',
             content: input,
           },
         ],
-        onNetworkChunk: (chunk, conversation) => {
-          return toNetworkUIMessage({ chunk, conversation });
+        onChunk: (chunk, conversation) => {
+          return toUIMessage({ chunk, conversation });
         },
       });
 
       setInput('');
     }
   };
-
-  console.log('lol', messages);
 
   return (
     <div className="max-w-4xl mx-auto p-6 relative size-full rounded-lg border h-[600px]">
@@ -90,14 +88,11 @@ function HomeInner() {
                                     ...(part.input as ReadonlyJSONObject),
                                     __mastraMetadata: {
                                       isStreaming: true,
-                                      from: (part.output as any)?.networkMetadata?.from,
-                                      workflowFullState: (part.output as any)?.result as ReadonlyJSONObject,
-                                      networkMetadata: (part.output as any)?.networkMetadata,
-                                      messages: (part.input as ReadonlyJSONObject)?.messages,
+                                      workflowFullState: part.output as ReadonlyJSONObject,
                                     },
                                   } as ReadonlyJSONObject
                                 }
-                                result={(part.output as any)?.result}
+                                result={part.output}
                                 addResult={() => {}}
                                 status={{ type: 'complete' }}
                               />

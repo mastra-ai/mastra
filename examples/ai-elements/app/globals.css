@@ -1,6 +1,5 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
-@import '@mastra/playground-ui/style.css';
 
 @custom-variant dark (&:is(.dark *));
 
