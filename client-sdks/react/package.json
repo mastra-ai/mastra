@@ -1,7 +1,17 @@
 {
   "name": "@mastra/react",
-  "version": "0.0.1-alpha.1",
+  "version": "0.0.1-alpha.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "client-sdks/react"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "homepage": "https://mastra.ai",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.cjs.js",
   "module": "dist/index.es.js",
@@ -15,7 +25,7 @@
     "test:coverage": "vitest --coverage"
   },
   "files": [
-    "src"
+    "dist"
   ],
   "dependencies": {
     "@mastra/client-js": "workspace:*",
