@@ -532,12 +532,13 @@ do:
     const allTracingInstances = getAllAITracing();
 
     allTracingInstances.forEach(tracing => {
+      const config = tracing.getConfig();
       const exporters = tracing.getExporters();
       exporters.forEach(exporter => {
         // Initialize exporter if it has an init method
         if ('init' in exporter && typeof exporter.init === 'function') {
           try {
-            exporter.init();
+            exporter.init(config);
           } catch (error) {
             this.#logger?.warn('Failed to initialize AI tracing exporter', {
               exporterName: exporter.name,

@@ -34,7 +34,7 @@ import Scorer from './pages/scorers/scorer';
 import Observability from './pages/observability';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
-import { MastraReactProvider } from '@mastra/react-hooks';
+import { MastraReactProvider } from '@mastra/react';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
