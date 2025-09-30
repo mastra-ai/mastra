@@ -15,6 +15,7 @@ import { EditIcon, GaugeIcon } from 'lucide-react';
 import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './agent-metadata-model-switcher';
 import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
 import { LoadingBadge } from '@/components/assistant-ui/tools/badges/loading-badge';
+import { cleanProviderId } from './utils';
 
 export interface AgentMetadataProps {
   agentId: string;
@@ -63,7 +64,8 @@ export const AgentMetadata = ({
   updateModelInModelList,
   reorderModelList,
 }: AgentMetadataProps) => {
-  const providerIcon = providerMapToIcon[(agent.provider || 'openai.chat') as keyof typeof providerMapToIcon];
+  const cleanedProvider = cleanProviderId(agent.provider || 'openai');
+  const providerIcon = providerMapToIcon[(cleanedProvider + '.chat') as keyof typeof providerMapToIcon] || providerMapToIcon['openai.chat'];
 
   const networkAgentsMap = agent.agents ?? {};
   const networkAgents = Object.values(networkAgentsMap);

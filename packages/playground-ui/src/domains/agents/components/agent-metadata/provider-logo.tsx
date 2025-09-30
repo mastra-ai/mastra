@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Icon } from '@/ds/icons';
 import { providerMapToIcon } from '../provider-map-icon';
+import { cleanProviderId as cleanProviderIdUtil } from './utils';
 
 interface ProviderLogoProps {
   providerId: string;
@@ -15,8 +16,11 @@ interface ProviderLogoProps {
 export const ProviderLogo = ({ providerId, className = '', size = 20 }: ProviderLogoProps) => {
   const [imageError, setImageError] = useState(false);
 
+  // Clean provider ID (remove .chat, .x, .messages, etc. suffixes)
+  const cleanedProviderId = cleanProviderIdUtil(providerId);
+
   // Clean up provider ID for models.dev (remove special characters like slashes)
-  const cleanProviderId = providerId.replace(/\//g, '-').toLowerCase();
+  const cleanProviderId = cleanedProviderId.replace(/\//g, '-').toLowerCase();
 
   // Get fallback icon from our existing mapping
   const getFallbackProviderIcon = (id: string): string => {
@@ -36,7 +40,7 @@ export const ProviderLogo = ({ providerId, className = '', size = 20 }: Provider
     return iconMap[id] || 'DEFAULT';
   };
 
-  const fallbackIcon = getFallbackProviderIcon(providerId);
+  const fallbackIcon = getFallbackProviderIcon(cleanedProviderId);
 
   // If we've already had an error or don't have a provider ID, show fallback
   if (imageError || !providerId) {

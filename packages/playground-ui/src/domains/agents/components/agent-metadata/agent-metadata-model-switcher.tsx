@@ -9,6 +9,7 @@ import { AlertCircle, Info } from 'lucide-react';
 import { useModelReset } from '../../context/model-reset-context';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { cleanProviderId } from './utils';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
@@ -263,7 +264,7 @@ export const AgentMetadataModelSwitcher = ({
                     <div className="relative">
                       <ProviderLogo providerId={currentModelProvider} size={16} />
                       {(() => {
-                        const provider = providers.find(p => p.id === currentModelProvider);
+                        const provider = providers.find(p => p.id === cleanProviderId(currentModelProvider));
                         if (provider) {
                           return (
                             <div
@@ -279,7 +280,7 @@ export const AgentMetadataModelSwitcher = ({
                     </div>
                   </div>
                   {(() => {
-                    const provider = providers.find(p => p.id === currentModelProvider);
+                    const provider = providers.find(p => p.id === cleanProviderId(currentModelProvider));
                     if (provider?.docUrl) {
                       return (
                         <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10">
@@ -305,7 +306,7 @@ export const AgentMetadataModelSwitcher = ({
                 value={
                   isSearching
                     ? providerSearch
-                    : providers.find(p => p.id === currentModelProvider)?.name || currentModelProvider || ''
+                    : providers.find(p => p.id === cleanProviderId(currentModelProvider))?.name || currentModelProvider || ''
                 }
                 onKeyDown={e => {
                   const filteredProviders = providers.filter(
