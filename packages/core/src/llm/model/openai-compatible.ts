@@ -418,7 +418,7 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
         }
       }
 
-      throw new Error(`OpenAI-compatible API error: ${response.status} - ${error}`);
+      throw new Error(`Mastra model router API error: ${response.status} - ${error}`);
     }
 
     const data: OpenAICompletionResponse = await response.json();
@@ -540,7 +540,7 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
         }
       }
 
-      throw new Error(`OpenAI-compatible API error: ${response.status} - ${error}`);
+      throw new Error(`Mastra model router API error: ${response.status} - ${error}`);
     }
 
     const reader = response.body?.getReader();
