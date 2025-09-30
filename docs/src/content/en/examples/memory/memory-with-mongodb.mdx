@@ -14,8 +14,7 @@ This example uses the `openai` model and requires a MongoDB database. Make sure 
 ```bash filename=".env" copy
 OPENAI_API_KEY=<your-api-key>
 MONGODB_URI=<your-connection-string>
-MONGODB_VECTOR_DB_NAME=<your-vector-db-name>
-MONGODB_STORAGE_DB_NAME=<your-storage-db-name>
+MONGODB_DB_NAME=<your-db-name>
 ```
 
 And install the following package:
@@ -41,7 +40,7 @@ export const mongodbAgent = new Agent({
   memory: new Memory({
     storage: new MongoDBStore({
       url: process.env.MONGODB_URI!,
-      dbName: process.env.MONGODB_STORAGE_DB_NAME!
+      dbName: process.env.MONGODB_DB_NAME!
     }),
     options: {
       threads: {
@@ -54,7 +53,11 @@ export const mongodbAgent = new Agent({
 
 ## Vector embeddings with MongoDB
 
-Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords). This setup uses FastEmbed, a local embedding model, to generate vector embeddings. 
+Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords). 
+
+> Note: You must use a deployment hosted on MongoDB Atlas to successfully use the MongoDB Vector database.
+
+This setup uses FastEmbed, a local embedding model, to generate vector embeddings. 
 To use this, install `@mastra/fastembed`:
 
 ```bash copy
@@ -77,11 +80,11 @@ export const mongodbAgent = new Agent({
   memory: new Memory({
     storage: new MongoDBStore({
       url: process.env.MONGODB_URI!,
-      dbName: process.env.MONGODB_STORAGE_DB_NAME!
+      dbName: process.env.MONGODB_DB_NAME!
     }),
     vector: new MongoDBVector({
       uri: process.env.MONGODB_URI!,
-      dbName: process.env.MONGODB_VECTOR_DB_NAME!
+      dbName: process.env.MONGODB_DB_NAME!
     }),
     embedder: fastembed,
     options: {
