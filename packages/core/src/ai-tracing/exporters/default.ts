@@ -4,7 +4,7 @@ import type { Mastra } from '../../mastra';
 import type { MastraStorage } from '../../storage/base';
 import type { CreateAISpanRecord, UpdateAISpanRecord } from '../../storage/types';
 import { AITracingEventType } from '../types';
-import type { AITracingEvent, AITracingExporter, AnyExportedAISpan, TracingStrategy } from '../types';
+import type { AITracingEvent, AITracingExporter, AnyExportedAISpan, TracingConfig, TracingStrategy } from '../types';
 
 interface BatchingConfig {
   maxBatchSize?: number; // Default: 1000 spans
@@ -125,7 +125,7 @@ export class DefaultExporter implements AITracingExporter {
   /**
    * Initialize the exporter (called after all dependencies are ready)
    */
-  init(): void {
+  init(_config?: TracingConfig): void {
     if (!this.mastra) {
       throw new Error('DefaultExporter: init() called before __registerMastra()');
     }
