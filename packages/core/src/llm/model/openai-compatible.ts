@@ -411,6 +411,7 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
     let sentStart = false;
     const toolCallBuffers = new Map<number, { id: string; name: string; args: string; sent?: boolean }>();
     const mapFinishReason = this.mapFinishReason.bind(this);
+    const modelId = this.modelId; // Capture modelId for use in stream
 
     let isActiveText = false;
 
@@ -461,7 +462,7 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
                     controller.enqueue({
                       type: 'response-metadata',
                       id: data.id,
-                      modelId: data.model || (this as any).modelId,
+                      modelId: data.model || modelId,
                       timestamp: new Date(data.created ? data.created * 1000 : Date.now()),
                     });
                     sentStart = true;
