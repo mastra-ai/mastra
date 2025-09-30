@@ -221,20 +221,11 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         },
       };
     case 'error':
-      // Extract error message properly - value.error should be a string now
-      const errorValue = value as any;
-      const errorMessage =
-        typeof errorValue.error === 'string'
-          ? errorValue.error
-          : errorValue.error?.message || errorValue.message || JSON.stringify(value) || 'An unknown error occurred';
-
       return {
         type: 'error',
         runId: ctx.runId,
         from: ChunkFrom.AGENT,
-        payload: {
-          error: errorMessage,
-        },
+        payload: value,
       };
 
     case 'raw':
