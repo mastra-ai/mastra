@@ -1,5 +1,5 @@
 ---
-'@mastra/libsql': patch
+'@mastra/libsql': minor
 ---
 
 Libsql get scores by span

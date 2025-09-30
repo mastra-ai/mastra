@@ -8,6 +8,8 @@ import { myWorkflow } from './workflows';
 import { chefModelV2Agent, networkAgent } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/scores';
 import { myWorkflowX } from './workflows/other';
+import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
+import { openai } from '@ai-sdk/openai';
 
 const storage = new LibSQLStore({
   url: 'file:./mastra.db',
@@ -48,8 +50,12 @@ export const mastra = new Mastra({
       },
     },
   ],
+  observability: {
+    default: { enabled: true },
+  },
   scorers: {
     testScorer,
+    answerRel: createAnswerRelevancyScorer({ model: openai('gpt-4o') }),
   },
   // telemetry: {
   //   enabled: false,
