@@ -1135,7 +1135,8 @@ Error message: Validation failed]`);
               ],
               "dynamicToolCalls": [],
               "dynamicToolResults": [],
-              "error": [Error: {"name":"AI_TypeValidationError","cause":"Validation failed","value":{"invalid":"Hello, world!"}}],
+              "error": [Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
+            Error message: Validation failed],
               "files": [],
               "finishReason": "error",
               "model": {
@@ -1163,6 +1164,11 @@ Error message: Validation failed]`);
                   },
                 ],
                 "modelId": "mock-model-id",
+                "modelMetadata": {
+                  "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
+                },
                 "timestamp": 1970-01-01T00:00:00.000Z,
                 "uiMessages": [
                   {
@@ -1215,6 +1221,11 @@ Error message: Validation failed]`);
                       },
                     ],
                     "modelId": "mock-model-id",
+                    "modelMetadata": {
+                      "modelId": "mock-model-id",
+                      "modelProvider": "mock-provider",
+                      "modelVersion": "v2",
+                    },
                     "timestamp": 1970-01-01T00:00:00.000Z,
                     "uiMessages": [
                       {
