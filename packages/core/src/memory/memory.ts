@@ -365,7 +365,11 @@ export abstract class MastraMemory extends MastraBase {
     saveThread?: boolean;
   }): Promise<StorageThreadType> {
     const thread: StorageThreadType = {
-      id: threadId || this.generateId(),
+      id: threadId || this.generateId({
+        type: 'memory',
+        resourceId,
+        threadId: threadId || 'new',
+      }),
       title: title || `New Thread ${new Date().toISOString()}`,
       resourceId,
       createdAt: new Date(),
@@ -416,7 +420,13 @@ export abstract class MastraMemory extends MastraBase {
     toolCallIds?: string[];
   }): Promise<MastraMessageV1> {
     const message: MastraMessageV1 = {
-      id: this.generateId(),
+      id: this.generateId({
+        type: 'memory',
+        threadId,
+        resourceId,
+        role,
+        contentType: type,
+      }),
       content,
       role,
       createdAt: new Date(),
@@ -435,10 +445,11 @@ export abstract class MastraMemory extends MastraBase {
 
   /**
    * Generates a unique identifier
+   * @param context - Optional context information about where the ID is being generated
    * @returns A unique string ID
    */
-  public generateId(): string {
-    return this.#mastra?.generateId() || crypto.randomUUID();
+  public generateId(context?: IdGeneratorContext): string {
+    return this.#mastra?.generateId(context) || crypto.randomUUID();
   }
 
   /**
