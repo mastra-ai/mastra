@@ -1607,16 +1607,16 @@ export interface ProviderConfig {
  * Parse a model string to extract provider and model ID
  * Examples:
  *   "openai/gpt-4o" -> { provider: "openai", modelId: "gpt-4o" }
+ *   "fireworks/accounts/etc/model" -> { provider: "fireworks", modelId: "accounts/etc/model" }
  *   "gpt-4o" -> { provider: null, modelId: "gpt-4o" }
  */
 export function parseModelString(modelString: string): { provider: string | null; modelId: string } {
   const firstSlashIndex = modelString.indexOf('/');
 
   if (firstSlashIndex !== -1) {
-    // Has at least one slash - extract everything before last slash as provider
-    const lastSlashIndex = modelString.lastIndexOf('/');
-    const provider = modelString.substring(0, lastSlashIndex);
-    const modelId = modelString.substring(lastSlashIndex + 1);
+    // Has at least one slash - extract everything before first slash as provider
+    const provider = modelString.substring(0, firstSlashIndex);
+    const modelId = modelString.substring(firstSlashIndex + 1);
 
     if (provider && modelId) {
       return {
