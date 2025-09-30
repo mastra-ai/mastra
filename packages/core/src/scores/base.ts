@@ -1,11 +1,12 @@
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { Agent } from '../agent';
+import { InternalSpans } from '../ai-tracing';
 import type { TracingContext } from '../ai-tracing';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import { createWorkflow, createStep } from '../workflows';
-import type { ScoringSamplingConfig } from './types';
+import type { ScoringSamplingConfig, ScorerRunInputForAgent, ScorerRunOutputForAgent } from './types';
 
 interface ScorerStepDefinition {
   name: string;
@@ -13,10 +14,17 @@ interface ScorerStepDefinition {
   isPromptObject: boolean;
 }
 
+// Predefined type shortcuts for common scorer patterns
+type ScorerTypeShortcuts = {
+  agent: {
+    input: ScorerRunInputForAgent;
+    output: ScorerRunOutputForAgent;
+  };
+};
+
 // Pipeline scorer
 // TInput and TRunOutput establish the type contract for the entire scorer pipeline,
 // ensuring type safety flows through all steps and contexts
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface ScorerConfig<TName extends string = string, TInput = any, TRunOutput = any> {
   name: TName;
   description: string;
@@ -24,6 +32,13 @@ interface ScorerConfig<TName extends string = string, TInput = any, TRunOutput =
     model: MastraLanguageModel;
     instructions: string;
   };
+  // Optional type specification - can be enum shortcut or explicit schemas
+  type?:
+    | keyof ScorerTypeShortcuts
+    | {
+        input: z.ZodSchema<TInput>;
+        output: z.ZodSchema<TRunOutput>;
+      };
 }
 
 // Standardized input type for all pipelines
@@ -178,6 +193,10 @@ class MastraScorer<
       | GenerateScorePromptObject<any, TInput, TRunOutput>
     > = new Map(),
   ) {}
+
+  get type() {
+    return this.config.type;
+  }
 
   get name(): TName {
     return this.config.name;
@@ -450,6 +469,12 @@ class MastraScorer<
         generateScorePrompt: z.string().optional(),
         generateReasonPrompt: z.string().optional(),
       }),
+      options: {
+        // mark all spans generated as part of the scorer workflow internal
+        tracingPolicy: {
+          internal: InternalSpans.ALL,
+        },
+      },
     });
 
     let chainedWorkflow = workflow;
@@ -501,7 +526,12 @@ class MastraScorer<
       });
     }
 
-    const judge = new Agent({ name: 'judge', model, instructions });
+    const judge = new Agent({
+      name: 'judge',
+      model,
+      instructions,
+      options: { tracingPolicy: { internal: InternalSpans.ALL } },
+    });
 
     // GenerateScore output must be a number
     if (scorerStep.name === 'generateScore') {
@@ -571,13 +601,36 @@ class MastraScorer<
   }
 }
 
+// Overload: enum type shortcuts (e.g., type: 'agent')
+export function createScorer<TName extends string, TType extends keyof ScorerTypeShortcuts>(
+  config: Omit<ScorerConfig<TName, any, any>, 'type'> & {
+    type: TType;
+  },
+): MastraScorer<TName, ScorerTypeShortcuts[TType]['input'], ScorerTypeShortcuts[TType]['output'], {}>;
+
+// Overload: infer TInput/TRunOutput from provided Zod schemas in config.type
+export function createScorer<
+  TName extends string,
+  TInputSchema extends z.ZodTypeAny,
+  TOutputSchema extends z.ZodTypeAny,
+>(
+  config: Omit<ScorerConfig<TName, z.infer<TInputSchema>, z.infer<TOutputSchema>>, 'type'> & {
+    type: { input: TInputSchema; output: TOutputSchema };
+  },
+): MastraScorer<TName, z.infer<TInputSchema>, z.infer<TOutputSchema>, {}>;
+
+// Overload: explicit generics (backwards compatible)
 export function createScorer<TInput = any, TRunOutput = any, TName extends string = string>(
   config: ScorerConfig<TName, TInput, TRunOutput>,
-): MastraScorer<TName, TInput, TRunOutput, {}> {
-  return new MastraScorer<TName, TInput, TRunOutput, {}>({
+): MastraScorer<TName, TInput, TRunOutput, {}>;
+
+// Implementation
+export function createScorer(config: any): any {
+  return new MastraScorer({
     name: config.name,
     description: config.description,
     judge: config.judge,
+    type: config.type,
   });
 }
 

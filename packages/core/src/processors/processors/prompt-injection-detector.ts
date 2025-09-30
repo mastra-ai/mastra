@@ -2,6 +2,7 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import { InternalSpans } from '../../ai-tracing';
 import type { TracingContext } from '../../ai-tracing';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { Processor } from '../index';
@@ -105,6 +106,7 @@ export class PromptInjectionDetector implements Processor {
       name: 'prompt-injection-detector',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
+      options: { tracingPolicy: { internal: InternalSpans.ALL } },
     });
   }
 
@@ -251,7 +253,7 @@ export class PromptInjectionDetector implements Processor {
     switch (strategy) {
       case 'block':
         abort(alertMessage);
-
+        return null;
       case 'warn':
         console.warn(`[PromptInjectionDetector] ${alertMessage}`);
         return null; // Return null to indicate no message modification
@@ -268,7 +270,6 @@ export class PromptInjectionDetector implements Processor {
           console.warn(`[PromptInjectionDetector] No rewrite available, filtering: ${alertMessage}`);
           return null; // Fallback to filtering if no rewrite available
         }
-
       default:
         return null;
     }

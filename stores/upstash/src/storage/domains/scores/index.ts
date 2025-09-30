@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
 import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
 import type { StoreOperationsUpstash } from '../operations';
@@ -121,7 +122,20 @@ export class ScoresUpstash extends ScoresStorage {
   }
 
   async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    const { key, processedRecord } = processRecord(TABLE_SCORERS, score);
+    let validatedScore: ValidatedSaveScorePayload;
+    try {
+      validatedScore = saveScorePayloadSchema.parse(score);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_UPSTASH_STORAGE_SAVE_SCORE_VALIDATION_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+    const { key, processedRecord } = processRecord(TABLE_SCORERS, validatedScore);
     try {
       await this.client.set(key, processedRecord);
       return { score };
@@ -210,6 +224,55 @@ export class ScoresUpstash extends ScoresStorage {
         if (!row || typeof row !== 'object') return false;
         if (row.entityId !== entityId) return false;
         if (entityType && row.entityType !== entityType) return false;
+        return true;
+      });
+    const total = filtered.length;
+    const { page, perPage } = pagination;
+    const start = page * perPage;
+    const end = start + perPage;
+    const paged = filtered.slice(start, end);
+    const scores = paged.map(row => transformScoreRow(row));
+    return {
+      scores,
+      pagination: {
+        total,
+        page,
+        perPage,
+        hasMore: end < total,
+      },
+    };
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination = { page: 0, perPage: 20 },
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination?: { page: number; perPage: number };
+  }): Promise<{
+    scores: ScoreRowData[];
+    pagination: { total: number; page: number; perPage: number; hasMore: boolean };
+  }> {
+    const pattern = `${TABLE_SCORERS}:*`;
+    const keys = await this.operations.scanKeys(pattern);
+    if (keys.length === 0) {
+      return {
+        scores: [],
+        pagination: { total: 0, page: pagination.page, perPage: pagination.perPage, hasMore: false },
+      };
+    }
+    const pipeline = this.client.pipeline();
+    keys.forEach(key => pipeline.get(key));
+    const results = await pipeline.exec();
+    // Filter out nulls and by traceId and spanId
+    const filtered = results
+      .map((row: any) => row as Record<string, any> | null)
+      .filter((row): row is Record<string, any> => {
+        if (!row || typeof row !== 'object') return false;
+        if (row.traceId !== traceId) return false;
+        if (row.spanId !== spanId) return false;
         return true;
       });
     const total = filtered.length;

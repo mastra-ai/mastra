@@ -1,0 +1,469 @@
+---
+title: "リファレンス: Lance Vector Store | Vector Databases | RAG | Mastra Docs"
+description: "MastraのLanceVectorStoreクラスのドキュメント。Lance列形式に基づく組み込みベクトルデータベースであるLanceDBを使用してベクトル検索を提供します。"
+---
+
+
+
+# Lance Vector Store
+
+LanceVectorStoreクラスは、Lance列形式上に構築された組み込みベクトルデータベースである[LanceDB](https://lancedb.github.io/lancedb/)を使用してベクトル検索を提供します。ローカル開発と本番デプロイメントの両方において、効率的なストレージと高速な類似性検索を提供します。
+
+
+
+## Factory Method
+
+LanceVectorStoreは作成にファクトリーパターンを使用します。コンストラクタを直接使用するのではなく、静的な`create()`メソッドを使用する必要があります。
+
+<PropertiesTable
+  content={[
+    {
+      name: "uri",
+      type: "string",
+      description: "LanceDBデータベースへのパスまたはクラウドデプロイメント用のURI",
+    },
+    {
+      name: "options",
+      type: "ConnectionOptions",
+      description:
+        "LanceDBの追加接続オプション",
+      isOptional: true,
+    },
+  ]}
+/>
+
+
+
+## コンストラクタの例
+
+静的なcreateメソッドを使用して`LanceVectorStore`インスタンスを作成できます：
+
+```ts
+import { LanceVectorStore } from "@mastra/lance";
+
+// ローカルデータベースに接続
+const vectorStore = await LanceVectorStore.create("/path/to/db");
+
+// LanceDBクラウドデータベースに接続
+const cloudStore = await LanceVectorStore.create("db://host:port");
+
+// オプション付きでクラウドデータベースに接続
+const s3Store = await LanceVectorStore.create("s3://bucket/db", { 
+  storageOptions: { timeout: '60s' }
+});
+```
+
+
+
+## メソッド
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "tableName",
+      type: "string",
+      description: "インデックスを作成するテーブルの名前",
+    },
+    {
+      name: "indexName",
+      type: "string",
+      description: "作成するインデックス（カラム名）の名前",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "ベクトルの次元数（埋め込みモデルと一致する必要があります）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "類似度検索の距離メトリック",
+    },
+    {
+      name: "indexConfig",
+      type: "LanceIndexConfig",
+      isOptional: true,
+      defaultValue: "{ type: 'hnsw' }",
+      description: "インデックス設定",
+    },
+  ]}
+/>
+
+#### LanceIndexConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: "'ivfflat' | 'hnsw'",
+      description: "インデックスタイプ",
+      defaultValue: "hnsw",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "ivfflat",
+              type: "ivfflat",
+              description:
+                "近似検索のためにベクトルをリストにクラスタリングします。",
+            },
+            {
+              name: "hnsw",
+              type: "hnsw",
+              description:
+                "高速な検索時間と高い再現率を提供するグラフベースのインデックス。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "numPartitions",
+      type: "number",
+      isOptional: true,
+      defaultValue: "128",
+      description: "IVFインデックスのパーティション数",
+    },
+    {
+      name: "numSubVectors",
+      type: "number",
+      isOptional: true,
+      defaultValue: "16",
+      description: "積量子化のサブベクトル数",
+    },
+    {
+      name: "hnsw",
+      type: "HNSWConfig",
+      isOptional: true,
+      description: "HNSW設定",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "m",
+              type: "number",
+              description:
+                "ノードあたりの最大接続数（デフォルト: 16）",
+              isOptional: true,
+            },
+            {
+              name: "efConstruction",
+              type: "number",
+              description: "構築時の複雑度（デフォルト: 100）",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### createTable()
+
+<PropertiesTable
+  content={[
+    {
+      name: "tableName",
+      type: "string",
+      description: "作成するテーブルの名前",
+    },
+    {
+      name: "data",
+      type: "Record<string, unknown>[] | TableLike",
+      description: "テーブルの初期データ",
+    },
+    {
+      name: "options",
+      type: "Partial<CreateTableOptions>",
+      isOptional: true,
+      description: "追加のテーブル作成オプション",
+    },
+  ]}
+/>
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "tableName",
+      type: "string",
+      description: "ベクトルをアップサートするテーブルの名前",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "埋め込みベクトルの配列",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "各ベクトルのメタデータ",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "オプションのベクトルID（提供されない場合は自動生成）",
+    },
+  ]}
+/>
+
+### query()
+
+
+
+<PropertiesTable
+  content={[
+    {
+      name: "tableName",
+      type: "string",
+      description: "クエリするテーブルの名前",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "クエリベクトル",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "返す結果の数",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "メタデータフィルター",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "結果にベクトルを含めるかどうか",
+    },
+    {
+      name: "columns",
+      type: "string[]",
+      isOptional: true,
+      defaultValue: "[]",
+      description: "結果に含める特定の列",
+    },
+    {
+      name: "includeAllColumns",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "結果にすべての列を含めるかどうか",
+    },
+  ]}
+/>
+
+### listTables()
+
+テーブル名の配列を文字列として返します。
+
+```typescript copy
+const tables = await vectorStore.listTables();
+// ['my_vectors', 'embeddings', 'documents']
+```
+
+### getTableSchema()
+
+<PropertiesTable
+  content={[
+    {
+      name: "tableName",
+      type: "string",
+      description: "記述するテーブルの名前",
+    },
+  ]}
+/>
+
+指定されたテーブルのスキーマを返します。
+
+### deleteTable()
+
+<PropertiesTable
+  content={[
+    {
+      name: "tableName",
+      type: "string",
+      description: "削除するテーブルの名前",
+    },
+  ]}
+/>
+
+### deleteAllTables()
+
+データベース内のすべてのテーブルを削除します。
+
+### listIndexes()
+
+インデックス名の配列を文字列として返します。
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "記述するインデックスの名前",
+    },
+  ]}
+/>
+
+インデックスに関する情報を返します：
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+  type: "ivfflat" | "hnsw";
+  config: {
+    m?: number;
+    efConstruction?: number;
+    numPartitions?: number;
+    numSubVectors?: number;
+  };
+}
+```
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "削除するインデックスの名前",
+    },
+  ]}
+/>
+
+### updateVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクトルを含むインデックスの名前",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "更新するベクトルのID",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "更新パラメータ",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "vector",
+              type: "number[]",
+              description: "新しいベクトル値",
+              isOptional: true,
+            },
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              description: "新しいメタデータ値",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### deleteVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクトルを含むインデックスの名前",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "削除するベクトルのID",
+    },
+  ]}
+/>
+
+### close()
+
+データベース接続を閉じます。
+
+
+
+## レスポンスタイプ
+
+クエリ結果は以下の形式で返されます：
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // Only included if includeVector is true
+  document?: string; // Document text if available
+}
+```
+
+
+
+## エラーハンドリング
+
+ストアは型付きエラーをスローし、それをキャッチできます：
+
+```typescript copy
+try {
+  await store.query({
+    tableName: "my_vectors",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error instanceof Error) {
+    console.log(error.message);
+  }
+}
+```
+
+
+
+## ベストプラクティス
+
+- 用途に適したインデックスタイプを使用してください：
+  - メモリに制約がない場合は、より良いリコールとパフォーマンスのためにHNSW
+  - 大規模データセットでのメモリ効率を重視する場合はIVF
+- 大規模データセットで最適なパフォーマンスを得るには、`numPartitions`と`numSubVectors`の値の調整を検討してください
+- データベースの使用が完了したら、`close()`メソッドを使用して適切に接続を閉じてください
+- フィルタリング操作を簡素化するため、一貫したスキーマでメタデータを保存してください
+
+
+
+## 関連
+
+- [メタデータフィルター](./metadata-filters)

@@ -5,6 +5,8 @@ import type { RuntimeContext } from '../../di';
 import type { PubSub } from '../../events';
 import { RegisteredLogger } from '../../logger';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { getStepResult } from '../step';
+import { validateStepInput } from '../utils';
 
 export class StepExecutor extends MastraBase {
   protected mastra?: Mastra;
@@ -28,6 +30,7 @@ export class StepExecutor extends MastraBase {
     runtimeContext: RuntimeContext;
     runCount?: number;
     foreachIdx?: number;
+    validateInputs?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
     const { step, stepResults, runId, runtimeContext, runCount = 0 } = params;
 
@@ -36,6 +39,12 @@ export class StepExecutor extends MastraBase {
     let suspended: { payload: any } | undefined;
     let bailed: { payload: any } | undefined;
     const startedAt = Date.now();
+    const { inputData, validationError } = await validateStepInput({
+      prevOutput: typeof params.foreachIdx === 'number' ? params.input?.[params.foreachIdx] : params.input,
+      step,
+      validateInputs: params.validateInputs ?? false,
+    });
+
     let stepInfo: {
       startedAt: number;
       payload: any;
@@ -45,7 +54,7 @@ export class StepExecutor extends MastraBase {
     } = {
       ...stepResults[step.id],
       startedAt,
-      payload: params.input ?? {},
+      payload: (typeof params.foreachIdx === 'number' ? params.input : inputData) ?? {},
     };
 
     if (params.resumeData) {
@@ -55,27 +64,20 @@ export class StepExecutor extends MastraBase {
     }
 
     try {
+      if (validationError) {
+        throw validationError;
+      }
+
       const stepResult = await step.execute({
         workflowId: params.workflowId,
         runId,
         mastra: this.mastra!,
         runtimeContext,
-        inputData: typeof params.foreachIdx === 'number' ? params.input?.[params.foreachIdx] : params.input,
+        inputData,
         runCount,
         resumeData: params.resumeData,
         getInitData: () => stepResults?.input as any,
-        getStepResult: (step: any) => {
-          if (!step?.id) {
-            return null;
-          }
-
-          const result = stepResults[step.id];
-          if (result?.status === 'success') {
-            return result.output;
-          }
-
-          return null;
-        },
+        getStepResult: getStepResult.bind(this, stepResults),
         suspend: async (suspendPayload: any): Promise<any> => {
           suspended = { payload: { ...suspendPayload, __workflow_meta: { runId, path: [step.id] } } };
         },
@@ -219,18 +221,7 @@ export class StepExecutor extends MastraBase {
       runCount,
       resumeData: resumeData,
       getInitData: () => stepResults?.input as any,
-      getStepResult: (step: any) => {
-        if (!step?.id) {
-          return null;
-        }
-
-        const result = stepResults[step.id];
-        if (result?.status === 'success') {
-          return result.output;
-        }
-
-        return null;
-      },
+      getStepResult: getStepResult.bind(this, stepResults),
       suspend: async (_suspendPayload: any): Promise<any> => {
         throw new Error('Not implemented');
       },
@@ -285,18 +276,7 @@ export class StepExecutor extends MastraBase {
         runCount,
         resumeData: params.resumeData,
         getInitData: () => stepResults?.input as any,
-        getStepResult: (step: any) => {
-          if (!step?.id) {
-            return null;
-          }
-
-          const result = stepResults[step.id];
-          if (result?.status === 'success') {
-            return result.output;
-          }
-
-          return null;
-        },
+        getStepResult: getStepResult.bind(this, stepResults),
         suspend: async (_suspendPayload: any): Promise<any> => {
           throw new Error('Not implemented');
         },
@@ -355,18 +335,7 @@ export class StepExecutor extends MastraBase {
         runCount,
         resumeData: params.resumeData,
         getInitData: () => stepResults?.input as any,
-        getStepResult: (step: any) => {
-          if (!step?.id) {
-            return null;
-          }
-
-          const result = stepResults[step.id];
-          if (result?.status === 'success') {
-            return result.output;
-          }
-
-          return null;
-        },
+        getStepResult: getStepResult.bind(this, stepResults),
         suspend: async (_suspendPayload: any): Promise<any> => {
           throw new Error('Not implemented');
         },

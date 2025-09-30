@@ -1,6 +1,5 @@
 import './index.css';
 
-export * from './contexts/mastra-client-context';
 export * from './domains/agents/index';
 export * from './domains/networks/index';
 export * from './domains/scores/index';
@@ -11,7 +10,6 @@ export * from './domains/traces/index';
 export * from './domains/observability/index';
 export * from './domains/resizable-panel';
 export * from './components/dynamic-form/index';
-export * from './components/ui/data-table';
 export * from './components/ui/containers';
 export * from './components/ui/elements';
 export * from './components/threads';
@@ -46,3 +44,4 @@ export * from './components/ui/searchbar';
 export * from './components/ui/kbd';
 export * from './components/ui/collapsible';
 export * from './domains/conversation/index';
+export * from './lib/errors';

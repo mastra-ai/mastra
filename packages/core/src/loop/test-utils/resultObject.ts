@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import {
-  createTestModel,
+  createTestModels,
   defaultSettings,
   mockDate,
   modelWithFiles,
@@ -28,7 +28,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       const result = loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           warnings: [{ type: 'other', message: 'test-warning' }],
         }),
         messageList,
@@ -53,7 +53,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       const result = loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: '1' },
             { type: 'text-delta', id: '1', delta: 'Hello' },
@@ -71,14 +71,12 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       await result.aisdk.v5.consumeStream();
 
       expect(await result.usage).toMatchInlineSnapshot(`
-            {
-              "cachedInputTokens": undefined,
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "reasoningTokens": undefined,
-              "totalTokens": 13,
-            }
-          `);
+        {
+          "inputTokens": 3,
+          "outputTokens": 10,
+          "totalTokens": 13,
+        }
+      `);
     });
   });
 
@@ -95,7 +93,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       const result = loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: '1' },
             { type: 'text-delta', id: '1', delta: 'Hello' },
@@ -129,7 +127,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       const result = loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: '1' },
             { type: 'text-delta', id: '1', delta: 'Hello' },
@@ -161,7 +159,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       const result = loopFn({
         runId,
-        model: modelWithReasoning,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         messageList,
         ...defaultSettings(),
       });
@@ -244,7 +242,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       const result = loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -280,7 +278,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       const result = loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -349,7 +347,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     it('should resolve with full text', async () => {
       const result = loopFn({
         runId,
-        model: createTestModel(),
+        models: createTestModels(),
         messageList: new MessageList(),
         ...defaultSettings(),
       });
@@ -365,7 +363,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         runId,
         messageList: new MessageList(),
-        model: modelWithReasoning,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         ...defaultSettings(),
       });
 
@@ -380,7 +378,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         runId,
         messageList: new MessageList(),
-        model: modelWithReasoning,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         ...defaultSettings(),
       });
 
@@ -395,7 +393,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         runId,
         messageList: new MessageList(),
-        model: modelWithSources,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
         ...defaultSettings(),
       });
 
@@ -410,7 +408,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         runId,
         messageList: new MessageList(),
-        model: modelWithFiles,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
         ...defaultSettings(),
       });
 
@@ -424,14 +422,14 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     it.todo('should add the reasoning from the model response to the step result', async () => {
       const result = loopFn({
         runId,
-        model: modelWithReasoning,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         messageList: new MessageList(),
         ...defaultSettings(),
       });
 
       await result.aisdk.v5.consumeStream();
 
-      const steps = result.aisdk.v5.steps;
+      const steps = await result.aisdk.v5.steps;
       // console.log('test-steps', JSON.stringify(steps, null, 2));
 
       expect(steps).toMatchInlineSnapshot(`
@@ -551,6 +549,8 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     },
                   ],
                   "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
                   "timestamp": 1970-01-01T00:00:00.000Z,
                 },
                 "usage": {
@@ -570,13 +570,13 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         runId,
         messageList: new MessageList(),
-        model: modelWithSources,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
         ...defaultSettings(),
       });
 
       await result.aisdk.v5.consumeStream();
 
-      expect(result.aisdk.v5.steps).toMatchInlineSnapshot(`
+      expect(await result.aisdk.v5.steps).toMatchInlineSnapshot(`
         [
           DefaultStepResult {
             "content": [
@@ -629,6 +629,8 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 },
               ],
               "modelId": "mock-model-id",
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
               "timestamp": 1970-01-01T00:00:00.000Z,
             },
             "usage": {
@@ -648,7 +650,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         runId,
         messageList: new MessageList(),
-        model: modelWithFiles,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
         ...defaultSettings(),
       });
 
@@ -658,7 +660,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       expect(steps).toMatchInlineSnapshot(`
         [
-          DefaultStepResult {
+          {
             "content": [
               {
                 "file": DefaultGeneratedFileWithType {
@@ -683,8 +685,34 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "type": "file",
               },
             ],
+            "dynamicToolCalls": [],
+            "dynamicToolResults": [],
+            "files": [
+              {
+                "from": "AGENT",
+                "payload": {
+                  "base64": "Hello World",
+                  "data": "Hello World",
+                  "mimeType": "text/plain",
+                },
+                "runId": "test-run-id",
+                "type": "file",
+              },
+              {
+                "from": "AGENT",
+                "payload": {
+                  "base64": "QkFVRw==",
+                  "data": "QkFVRw==",
+                  "mimeType": "image/jpeg",
+                },
+                "runId": "test-run-id",
+                "type": "file",
+              },
+            ],
             "finishReason": "stop",
             "providerMetadata": undefined,
+            "reasoning": [],
+            "reasoningText": "",
             "request": {},
             "response": {
               "headers": undefined,
@@ -713,13 +741,48 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 },
               ],
               "modelId": "mock-model-id",
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
               "timestamp": 1970-01-01T00:00:00.000Z,
+              "uiMessages": [
+                {
+                  "id": "msg-0",
+                  "metadata": {
+                    "__originalContent": "Hello!",
+                    "createdAt": 2024-01-01T00:00:00.002Z,
+                  },
+                  "parts": [
+                    {
+                      "mediaType": "text/plain",
+                      "providerMetadata": undefined,
+                      "type": "file",
+                      "url": "data:text/plain;base64,Hello World",
+                    },
+                    {
+                      "text": "Hello!",
+                      "type": "text",
+                    },
+                    {
+                      "mediaType": "image/jpeg",
+                      "providerMetadata": undefined,
+                      "type": "file",
+                      "url": "data:image/jpeg;base64,QkFVRw==",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+              ],
             },
+            "sources": [],
+            "staticToolCalls": [],
+            "staticToolResults": [],
+            "stepType": "initial",
+            "text": "Hello!",
+            "toolCalls": [],
+            "toolResults": [],
             "usage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
             "warnings": [],
@@ -743,7 +806,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         runId,
         messageList,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'tool-call',
@@ -798,7 +861,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         runId,
         messageList,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'tool-call',

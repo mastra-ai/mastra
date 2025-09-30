@@ -22,9 +22,9 @@ export class CloudDeployer extends Deployer {
     await copy(join(__dirname, '../templates', 'instrumentation-template.js'), instrumentationFile);
   }
   writePackageJson(outputDirectory: string, dependencies: Map<string, string>) {
-    dependencies.set('@mastra/loggers', '0.10.6');
-    dependencies.set('@mastra/libsql', '0.13.1');
-    dependencies.set('@mastra/cloud', '0.1.7');
+    dependencies.set('@mastra/loggers', '0.10.13');
+    dependencies.set('@mastra/libsql', '0.14.3');
+    dependencies.set('@mastra/cloud', '0.1.15');
     return super.writePackageJson(outputDirectory, dependencies);
   }
 
@@ -42,7 +42,15 @@ export class CloudDeployer extends Deployer {
 
     const defaultToolsPath = join(mastraDir, MASTRA_DIRECTORY, 'tools');
 
-    await this._bundle(this.getEntry(), mastraEntryFile, outputDirectory, [defaultToolsPath]);
+    await this._bundle(
+      this.getEntry(),
+      mastraEntryFile,
+      {
+        outputDirectory,
+        projectRoot: mastraDir,
+      },
+      [defaultToolsPath],
+    );
     process.chdir(currentCwd);
   }
 
@@ -61,7 +69,7 @@ import { HttpTransport } from '@mastra/loggers/http';
 import { evaluate } from '@mastra/core/eval';
 import { AvailableHooks, registerHook } from '@mastra/core/hooks';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
-
+import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces';
 const startTime = process.env.RUNNER_START_TIME ? new Date(process.env.RUNNER_START_TIME).getTime() : Date.now();
 const createNodeServerStartTime = Date.now();
 
@@ -152,6 +160,10 @@ if (process.env.MASTRA_STORAGE_URL && process.env.MASTRA_STORAGE_AUTH_TOKEN) {
       });
     }
   });
+}
+
+if (mastra?.getStorage()) {
+  mastra.__registerInternalWorkflow(scoreTracesWorkflow);
 }
 
 ${getAuthEntrypoint()}

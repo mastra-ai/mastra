@@ -1,11 +1,10 @@
 import { Mastra } from '@mastra/core';
 import { MockStore } from '@mastra/core/storage';
-import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';
-import { stringify } from 'superjson';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
+import { getWorkflowInfo } from '../utils';
 import {
   getWorkflowsHandler,
   getWorkflowByIdHandler,
@@ -90,42 +89,14 @@ function createReusableMockWorkflow(name: string) {
 }
 
 function serializeWorkflow(workflow: Workflow) {
-  return {
-    name: workflow.id,
-    description: workflow.description,
-    steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
-      acc[key] = {
-        id: step.id,
-        description: step.description,
-        inputSchema: step.inputSchema ? stringify(zodToJsonSchema(step.inputSchema)) : undefined,
-        outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
-        resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
-        suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
-      };
-      return acc;
-    }, {}),
-    allSteps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
-      acc[key] = {
-        id: step.id,
-        description: step.description,
-        inputSchema: step.inputSchema ? stringify(zodToJsonSchema(step.inputSchema)) : undefined,
-        outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
-        resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
-        suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
-        isWorkflow: step.component === 'WORKFLOW',
-      };
-      return acc;
-    }, {}),
-    inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
-    outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
-    stepGraph: workflow.serializedStepGraph,
-  };
+  return getWorkflowInfo(workflow);
 }
 
 describe('vNext Workflow Handlers', () => {
   let mockMastra: Mastra;
   let mockWorkflow: Workflow;
   let reusableWorkflow: Workflow;
+  const tracingOptions = { metadata: { test: true } };
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -196,6 +167,7 @@ describe('vNext Workflow Handlers', () => {
         mastra: mockMastra,
         workflowId: 'test-workflow',
         inputData: {},
+        tracingOptions,
       });
 
       expect(result.steps['test-step'].status).toEqual('success');
@@ -207,6 +179,7 @@ describe('vNext Workflow Handlers', () => {
         workflowId: 'test-workflow',
         runId: 'test-run',
         inputData: {},
+        tracingOptions,
       });
 
       expect(result.steps['test-step'].status).toEqual('success');
@@ -253,7 +226,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should get workflow run successfully', async () => {
-      const run = mockWorkflow.createRun({
+      const run = await mockWorkflow.createRunAsync({
         runId: 'test-run',
       });
 
@@ -299,7 +272,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should get workflow run execution result successfully', async () => {
-      const run = mockWorkflow.createRun({
+      const run = await mockWorkflow.createRunAsync({
         runId: 'test-run',
       });
       await run.start({ inputData: {} });
@@ -388,7 +361,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should start workflow run successfully', async () => {
-      const run = mockWorkflow.createRun({
+      const run = await mockWorkflow.createRunAsync({
         runId: 'test-run',
       });
 
@@ -399,6 +372,7 @@ describe('vNext Workflow Handlers', () => {
         workflowId: 'test-workflow',
         runId: 'test-run',
         inputData: { test: 'data' },
+        tracingOptions,
       });
 
       expect(result).toEqual({ message: 'Workflow run started' });
@@ -482,7 +456,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should resume workflow run successfully', async () => {
-      const run = reusableWorkflow.createRun({
+      const run = await reusableWorkflow.createRunAsync({
         runId: 'test-run',
       });
 
@@ -495,6 +469,7 @@ describe('vNext Workflow Handlers', () => {
         workflowId: reusableWorkflow.name,
         runId: 'test-run',
         body: { step: 'test-step', resumeData: { test: 'data' } },
+        tracingOptions,
       });
 
       expect(result).toEqual({ message: 'Workflow run resumed' });
@@ -521,7 +496,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should get workflow runs successfully (not empty)', async () => {
-      const run = mockWorkflow.createRun({
+      const run = await mockWorkflow.createRunAsync({
         runId: 'test-run',
       });
       await run.start({ inputData: {} });

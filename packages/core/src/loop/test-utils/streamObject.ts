@@ -15,7 +15,7 @@ import type { loop } from '../loop';
 import { createMockServerResponse } from './mock-server-response';
 import { mockDate, testUsage } from './utils';
 
-function createTestModel({
+function createTestModels({
   warnings = [],
   stream = convertArrayToReadableStream([
     {
@@ -55,9 +55,15 @@ function createTestModel({
   response?: { headers: Record<string, string> };
   warnings?: LanguageModelV2CallWarning[];
 } = {}) {
-  return new MockLanguageModelV2({
-    doStream: async () => ({ stream, request, response, warnings }),
-  });
+  return [
+    {
+      maxRetries: 0,
+      id: 'test-model',
+      model: new MockLanguageModelV2({
+        doStream: async () => ({ stream, request, response, warnings }),
+      }),
+    },
+  ];
 }
 
 export function verifyNoObjectGeneratedError(
@@ -85,7 +91,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       it('should resolve object promise without manual stream consumption', async () => {
         const result = loopFn({
           runId,
-          model: createTestModel(),
+          models: createTestModels(),
           output: z.object({ content: z.string() }),
           messageList: new MessageList(),
         });
@@ -102,7 +108,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       it('should work with array schemas too', async () => {
         const result = loopFn({
           runId,
-          model: createTestModel({
+          models: createTestModels({
             stream: convertArrayToReadableStream([
               { type: 'text-start', id: '1' },
               { type: 'text-delta', id: '1', delta: '{"elements":[{"content":"Hello, world!"}]}' },
@@ -127,7 +133,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       it('should still work when stream is manually consumed first', async () => {
         const result = loopFn({
           runId,
-          model: createTestModel(),
+          models: createTestModels(),
           output: z.object({ content: z.string() }),
           messageList: new MessageList(),
         });
@@ -147,11 +153,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     describe('output = "object"', () => {
       describe('result.objectStream', () => {
         it('should send object deltas', async () => {
-          const mockModel = createTestModel();
+          const mockModel = createTestModels();
           const messageList = new MessageList();
           const result = loopFn({
             runId,
-            model: mockModel,
+            models: mockModel,
             messageList,
             output: z.object({ content: z.string() }),
           });
@@ -172,7 +178,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           `);
 
           // TODO: responseFormat disabled in favor of json schema in system prompt
-          // expect(mockModel?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
+          // expect(mockModel[0]?.model?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
           //   {
           //     "schema": {
           //       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -193,10 +199,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         });
 
         it('should use name and description', async () => {
-          const model = createTestModel();
+          const models = createTestModels();
           const result = loopFn({
             runId,
-            model,
+            models,
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
           });
@@ -215,7 +221,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             },
           ]
         `);
-          expect(model.doStreamCalls?.[0]?.prompt).toMatchInlineSnapshot(`
+          expect(models[0]?.model?.doStreamCalls?.[0]?.prompt).toMatchInlineSnapshot(`
             [
               {
                 "content": "JSON schema:
@@ -237,7 +243,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           `);
 
           // TODO: responseFormat disabled in favor of json schema in system prompt
-          // expect(model?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
+          // expect(models[0]?.model?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
           //   {
           //     "schema": {
           //       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -260,11 +266,17 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should suppress error in partialObjectStream', async () => {
           const result = loopFn({
             runId,
-            model: new MockLanguageModelV2({
-              doStream: async () => {
-                throw new Error('test error');
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                model: new MockLanguageModelV2({
+                  doStream: async () => {
+                    throw new Error('test error');
+                  },
+                }),
               },
-            }),
+            ],
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
             options: {
@@ -280,11 +292,17 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
           const resultObject = loopFn({
             runId,
-            model: new MockLanguageModelV2({
-              doStream: async () => {
-                throw new Error('test error');
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                model: new MockLanguageModelV2({
+                  doStream: async () => {
+                    throw new Error('test error');
+                  },
+                }),
               },
-            }),
+            ],
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
             options: {
@@ -306,7 +324,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it.todo('should send full stream data', async () => {
           const result = loopFn({
             runId,
-            model: createTestModel(),
+            models: createTestModels(),
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
           });
@@ -368,6 +386,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     "response": {
       "id": "id-0",
       "modelId": "mock-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "type": "finish",
@@ -385,7 +405,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should send text stream', async () => {
           const result = loopFn({
             runId,
-            model: createTestModel(),
+            models: createTestModels(),
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
           });
@@ -415,7 +435,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should create a Response with a text stream', async () => {
           const result = loopFn({
             runId,
-            model: createTestModel(),
+            models: createTestModels(),
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
           });
@@ -443,7 +463,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const mockResponse = createMockServerResponse();
 
           const result = loopFn({
-            model: createTestModel(),
+            models: createTestModels(),
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
           });
@@ -480,7 +500,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.usage', () => {
         it('should resolve with token usage', async () => {
           const result = loopFn({
-            model: createTestModel({
+            models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
                 {
@@ -496,28 +516,24 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             messageList: new MessageList(),
           });
 
-          const expectedOutput = `
-          {
-            "cachedInputTokens": undefined,
-            "inputTokens": 3,
-            "outputTokens": 10,
-            "reasoningTokens": undefined,
-            "totalTokens": 13,
-          }
-        `;
-
           // consume stream (runs in parallel)
           // void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
           // expect(await result.usage).toMatchInlineSnapshot(expectedOutput);
           await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-          expect(await result.usage).toMatchInlineSnapshot(expectedOutput);
+          expect(await result.usage).toMatchInlineSnapshot(`
+            {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            }
+          `);
         });
       });
 
       describe('result.providerMetadata', () => {
         it('should resolve with provider metadata', async () => {
           const result = loopFn({
-            model: createTestModel({
+            models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
                 {
@@ -555,7 +571,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.response', () => {
         it('should resolve with response information', async () => {
           const result = loopFn({
-            model: createTestModel({
+            models: createTestModels({
               stream: convertArrayToReadableStream([
                 {
                   type: 'response-metadata',
@@ -637,31 +653,37 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.request', () => {
         it('should contain request information', async () => {
           const result = loopFn({
-            model: new MockLanguageModelV2({
-              doStream: async () => ({
-                stream: convertArrayToReadableStream([
-                  {
-                    type: 'response-metadata',
-                    id: 'id-0',
-                    modelId: 'mock-model-id',
-                    timestamp: new Date(0),
-                  },
-                  { type: 'text-start', id: '1' },
-                  {
-                    type: 'text-delta',
-                    id: '1',
-                    delta: '{"content": "Hello, world!"}',
-                  },
-                  { type: 'text-end', id: '1' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: testUsage,
-                  },
-                ]),
-                request: { body: 'test body' },
-              }),
-            }),
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                model: new MockLanguageModelV2({
+                  doStream: async () => ({
+                    stream: convertArrayToReadableStream([
+                      {
+                        type: 'response-metadata',
+                        id: 'id-0',
+                        modelId: 'mock-model-id',
+                        timestamp: new Date(0),
+                      },
+                      { type: 'text-start', id: '1' },
+                      {
+                        type: 'text-delta',
+                        id: '1',
+                        delta: '{"content": "Hello, world!"}',
+                      },
+                      { type: 'text-end', id: '1' },
+                      {
+                        type: 'finish',
+                        finishReason: 'stop',
+                        usage: testUsage,
+                      },
+                    ]),
+                    request: { body: 'test body' },
+                  }),
+                }),
+              },
+            ],
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
           });
@@ -681,25 +703,31 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should resolve with typed object', async () => {
           const result = loopFn({
             runId,
-            model: new MockLanguageModelV2({
-              doStream: async () => ({
-                stream: convertArrayToReadableStream([
-                  { type: 'text-start', id: '1' },
-                  { type: 'text-delta', id: '1', delta: '{ ' },
-                  { type: 'text-delta', id: '1', delta: '"content": ' },
-                  { type: 'text-delta', id: '1', delta: `"Hello, ` },
-                  { type: 'text-delta', id: '1', delta: `world` },
-                  { type: 'text-delta', id: '1', delta: `!"` },
-                  { type: 'text-delta', id: '1', delta: ' }' },
-                  { type: 'text-end', id: '1' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: testUsage,
-                  },
-                ]),
-              }),
-            }),
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                model: new MockLanguageModelV2({
+                  doStream: async () => ({
+                    stream: convertArrayToReadableStream([
+                      { type: 'text-start', id: '1' },
+                      { type: 'text-delta', id: '1', delta: '{ ' },
+                      { type: 'text-delta', id: '1', delta: '"content": ' },
+                      { type: 'text-delta', id: '1', delta: `"Hello, ` },
+                      { type: 'text-delta', id: '1', delta: `world` },
+                      { type: 'text-delta', id: '1', delta: `!"` },
+                      { type: 'text-delta', id: '1', delta: ' }' },
+                      { type: 'text-end', id: '1' },
+                      {
+                        type: 'finish',
+                        finishReason: 'stop',
+                        usage: testUsage,
+                      },
+                    ]),
+                  }),
+                }),
+              },
+            ],
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
           });
@@ -715,25 +743,31 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should reject object promise when the streamed object does not match the schema', async () => {
           const result = loopFn({
             runId,
-            model: new MockLanguageModelV2({
-              doStream: async () => ({
-                stream: convertArrayToReadableStream([
-                  { type: 'text-start', id: '1' },
-                  { type: 'text-delta', id: '1', delta: '{ ' },
-                  { type: 'text-delta', id: '1', delta: '"invalid": ' },
-                  { type: 'text-delta', id: '1', delta: `"Hello, ` },
-                  { type: 'text-delta', id: '1', delta: `world` },
-                  { type: 'text-delta', id: '1', delta: `!"` },
-                  { type: 'text-delta', id: '1', delta: ' }' },
-                  { type: 'text-end', id: '1' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: testUsage,
-                  },
-                ]),
-              }),
-            }),
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                model: new MockLanguageModelV2({
+                  doStream: async () => ({
+                    stream: convertArrayToReadableStream([
+                      { type: 'text-start', id: '1' },
+                      { type: 'text-delta', id: '1', delta: '{ ' },
+                      { type: 'text-delta', id: '1', delta: '"invalid": ' },
+                      { type: 'text-delta', id: '1', delta: `"Hello, ` },
+                      { type: 'text-delta', id: '1', delta: `world` },
+                      { type: 'text-delta', id: '1', delta: `!"` },
+                      { type: 'text-delta', id: '1', delta: ' }' },
+                      { type: 'text-end', id: '1' },
+                      {
+                        type: 'finish',
+                        finishReason: 'stop',
+                        usage: testUsage,
+                      },
+                    ]),
+                  }),
+                }),
+              },
+            ],
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
           });
@@ -747,25 +781,31 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should not lead to unhandled promise rejections when the streamed object does not match the schema', async () => {
           const result = loopFn({
             runId,
-            model: new MockLanguageModelV2({
-              doStream: async () => ({
-                stream: convertArrayToReadableStream([
-                  { type: 'text-start', id: '1' },
-                  { type: 'text-delta', id: '1', delta: '{ ' },
-                  { type: 'text-delta', id: '1', delta: '"invalid": ' },
-                  { type: 'text-delta', id: '1', delta: `"Hello, ` },
-                  { type: 'text-delta', id: '1', delta: `world` },
-                  { type: 'text-delta', id: '1', delta: `!"` },
-                  { type: 'text-delta', id: '1', delta: ' }' },
-                  { type: 'text-end', id: '1' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: testUsage,
-                  },
-                ]),
-              }),
-            }),
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                model: new MockLanguageModelV2({
+                  doStream: async () => ({
+                    stream: convertArrayToReadableStream([
+                      { type: 'text-start', id: '1' },
+                      { type: 'text-delta', id: '1', delta: '{ ' },
+                      { type: 'text-delta', id: '1', delta: '"invalid": ' },
+                      { type: 'text-delta', id: '1', delta: `"Hello, ` },
+                      { type: 'text-delta', id: '1', delta: `world` },
+                      { type: 'text-delta', id: '1', delta: `!"` },
+                      { type: 'text-delta', id: '1', delta: ' }' },
+                      { type: 'text-end', id: '1' },
+                      {
+                        type: 'finish',
+                        finishReason: 'stop',
+                        usage: testUsage,
+                      },
+                    ]),
+                  }),
+                }),
+              },
+            ],
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
           });
@@ -780,25 +820,31 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.finishReason', () => {
         it('should resolve with finish reason', async () => {
           const result = loopFn({
-            model: new MockLanguageModelV2({
-              doStream: async () => ({
-                stream: convertArrayToReadableStream([
-                  { type: 'text-start', id: '1' },
-                  { type: 'text-delta', id: '1', delta: '{ ' },
-                  { type: 'text-delta', id: '1', delta: '"content": ' },
-                  { type: 'text-delta', id: '1', delta: `"Hello, ` },
-                  { type: 'text-delta', id: '1', delta: `world` },
-                  { type: 'text-delta', id: '1', delta: `!"` },
-                  { type: 'text-delta', id: '1', delta: ' }' },
-                  { type: 'text-end', id: '1' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: testUsage,
-                  },
-                ]),
-              }),
-            }),
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                model: new MockLanguageModelV2({
+                  doStream: async () => ({
+                    stream: convertArrayToReadableStream([
+                      { type: 'text-start', id: '1' },
+                      { type: 'text-delta', id: '1', delta: '{ ' },
+                      { type: 'text-delta', id: '1', delta: '"content": ' },
+                      { type: 'text-delta', id: '1', delta: `"Hello, ` },
+                      { type: 'text-delta', id: '1', delta: `world` },
+                      { type: 'text-delta', id: '1', delta: `!"` },
+                      { type: 'text-delta', id: '1', delta: ' }' },
+                      { type: 'text-end', id: '1' },
+                      {
+                        type: 'finish',
+                        finishReason: 'stop',
+                        usage: testUsage,
+                      },
+                    ]),
+                  }),
+                }),
+              },
+            ],
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
           });
@@ -812,33 +858,39 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should be called when a valid object is generated', async () => {
           let result: any;
           const { objectStream } = loopFn({
-            model: new MockLanguageModelV2({
-              doStream: async () => ({
-                stream: convertArrayToReadableStream([
-                  {
-                    type: 'response-metadata',
-                    id: 'id-0',
-                    modelId: 'mock-model-id',
-                    timestamp: new Date(0),
-                  },
-                  { type: 'text-start', id: '1' },
-                  {
-                    type: 'text-delta',
-                    id: '1',
-                    delta: '{ "content": "Hello, world!" }',
-                  },
-                  { type: 'text-end', id: '1' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: testUsage,
-                    providerMetadata: {
-                      testProvider: { testKey: 'testValue' },
-                    },
-                  },
-                ]),
-              }),
-            }),
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                model: new MockLanguageModelV2({
+                  doStream: async () => ({
+                    stream: convertArrayToReadableStream([
+                      {
+                        type: 'response-metadata',
+                        id: 'id-0',
+                        modelId: 'mock-model-id',
+                        timestamp: new Date(0),
+                      },
+                      { type: 'text-start', id: '1' },
+                      {
+                        type: 'text-delta',
+                        id: '1',
+                        delta: '{ "content": "Hello, world!" }',
+                      },
+                      { type: 'text-end', id: '1' },
+                      {
+                        type: 'finish',
+                        finishReason: 'stop',
+                        usage: testUsage,
+                        providerMetadata: {
+                          testProvider: { testKey: 'testValue' },
+                        },
+                      },
+                    ]),
+                  }),
+                }),
+              },
+            ],
             output: z.object({ content: z.string() }),
             options: {
               onFinish: async event => {
@@ -863,8 +915,18 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "error": undefined,
               "files": [],
               "finishReason": "stop",
+              "model": {
+                "modelId": "mock-model-id",
+                "provider": "mock-provider",
+                "version": "v2",
+              },
               "object": {
                 "content": "Hello, world!",
+              },
+              "providerMetadata": {
+                "testProvider": {
+                  "testKey": "testValue",
+                },
               },
               "reasoning": [],
               "reasoningText": undefined,
@@ -906,19 +968,24 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "staticToolCalls": [],
               "staticToolResults": [],
               "steps": [
-                DefaultStepResult {
+                {
                   "content": [
                     {
                       "text": "{ "content": "Hello, world!" }",
                       "type": "text",
                     },
                   ],
+                  "dynamicToolCalls": [],
+                  "dynamicToolResults": [],
+                  "files": [],
                   "finishReason": "stop",
                   "providerMetadata": {
                     "testProvider": {
                       "testKey": "testValue",
                     },
                   },
+                  "reasoning": [],
+                  "reasoningText": "",
                   "request": {},
                   "response": {
                     "headers": undefined,
@@ -936,12 +1003,33 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     ],
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:00.000Z,
+                    "uiMessages": [
+                      {
+                        "id": "1234",
+                        "metadata": {
+                          "__originalContent": "{ "content": "Hello, world!" }",
+                          "createdAt": 2024-01-01T00:00:00.000Z,
+                        },
+                        "parts": [
+                          {
+                            "text": "{ "content": "Hello, world!" }",
+                            "type": "text",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                    ],
                   },
+                  "sources": [],
+                  "staticToolCalls": [],
+                  "staticToolResults": [],
+                  "stepType": "initial",
+                  "text": "{ "content": "Hello, world!" }",
+                  "toolCalls": [],
+                  "toolResults": [],
                   "usage": {
-                    "cachedInputTokens": undefined,
                     "inputTokens": 3,
                     "outputTokens": 10,
-                    "reasoningTokens": undefined,
                     "totalTokens": 13,
                   },
                   "warnings": [],
@@ -958,10 +1046,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "totalTokens": 13,
               },
               "usage": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "warnings": [],
@@ -972,31 +1058,37 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it("should be called when object doesn't match the schema", async () => {
           let result: any;
           const { objectStream, object } = loopFn({
-            model: new MockLanguageModelV2({
-              doStream: async () => ({
-                stream: convertArrayToReadableStream([
-                  {
-                    type: 'response-metadata',
-                    id: 'id-0',
-                    modelId: 'mock-model-id',
-                    timestamp: new Date(0),
-                  },
-                  { type: 'text-start', id: '1' },
-                  { type: 'text-delta', id: '1', delta: '{ ' },
-                  { type: 'text-delta', id: '1', delta: '"invalid": ' },
-                  { type: 'text-delta', id: '1', delta: `"Hello, ` },
-                  { type: 'text-delta', id: '1', delta: `world` },
-                  { type: 'text-delta', id: '1', delta: `!"` },
-                  { type: 'text-delta', id: '1', delta: ' }' },
-                  { type: 'text-end', id: '1' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: testUsage,
-                  },
-                ]),
-              }),
-            }),
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                model: new MockLanguageModelV2({
+                  doStream: async () => ({
+                    stream: convertArrayToReadableStream([
+                      {
+                        type: 'response-metadata',
+                        id: 'id-0',
+                        modelId: 'mock-model-id',
+                        timestamp: new Date(0),
+                      },
+                      { type: 'text-start', id: '1' },
+                      { type: 'text-delta', id: '1', delta: '{ ' },
+                      { type: 'text-delta', id: '1', delta: '"invalid": ' },
+                      { type: 'text-delta', id: '1', delta: `"Hello, ` },
+                      { type: 'text-delta', id: '1', delta: `world` },
+                      { type: 'text-delta', id: '1', delta: `!"` },
+                      { type: 'text-delta', id: '1', delta: ' }' },
+                      { type: 'text-end', id: '1' },
+                      {
+                        type: 'finish',
+                        finishReason: 'stop',
+                        usage: testUsage,
+                      },
+                    ]),
+                  }),
+                }),
+              },
+            ],
             output: z.object({ content: z.string() }),
             options: {
               onFinish: async event => {
@@ -1021,13 +1113,18 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               ],
               "dynamicToolCalls": [],
               "dynamicToolResults": [],
-              "error": [Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
-            Error message: Validation failed],
+              "error": [Error: {"name":"AI_TypeValidationError","cause":"Validation failed","value":{"invalid":"Hello, world!"}}],
               "files": [],
               "finishReason": "error",
+              "model": {
+                "modelId": "mock-model-id",
+                "provider": "mock-provider",
+                "version": "v2",
+              },
               "object": {
                 "invalid": "Hello, world!",
               },
+              "providerMetadata": undefined,
               "reasoning": [],
               "reasoningText": undefined,
               "request": {},
@@ -1068,15 +1165,20 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "staticToolCalls": [],
               "staticToolResults": [],
               "steps": [
-                DefaultStepResult {
+                {
                   "content": [
                     {
                       "text": "{ "invalid": "Hello, world!" }",
                       "type": "text",
                     },
                   ],
+                  "dynamicToolCalls": [],
+                  "dynamicToolResults": [],
+                  "files": [],
                   "finishReason": "error",
                   "providerMetadata": undefined,
+                  "reasoning": [],
+                  "reasoningText": "",
                   "request": {},
                   "response": {
                     "headers": undefined,
@@ -1094,12 +1196,33 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     ],
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:00.000Z,
+                    "uiMessages": [
+                      {
+                        "id": "1234",
+                        "metadata": {
+                          "__originalContent": "{ "invalid": "Hello, world!" }",
+                          "createdAt": 2024-01-01T00:00:00.000Z,
+                        },
+                        "parts": [
+                          {
+                            "text": "{ "invalid": "Hello, world!" }",
+                            "type": "text",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                    ],
                   },
+                  "sources": [],
+                  "staticToolCalls": [],
+                  "staticToolResults": [],
+                  "stepType": "initial",
+                  "text": "{ "invalid": "Hello, world!" }",
+                  "toolCalls": [],
+                  "toolResults": [],
                   "usage": {
-                    "cachedInputTokens": undefined,
                     "inputTokens": 3,
                     "outputTokens": 10,
-                    "reasoningTokens": undefined,
                     "totalTokens": 13,
                   },
                   "warnings": [],
@@ -1116,10 +1239,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "totalTokens": 13,
               },
               "usage": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "warnings": [],
@@ -1131,30 +1252,36 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('options.headers', () => {
         it('should pass headers to model', async () => {
           const result = loopFn({
-            model: new MockLanguageModelV2({
-              doStream: async ({ headers }) => {
-                expect(headers).toStrictEqual({
-                  'custom-request-header': 'request-header-value',
-                });
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                model: new MockLanguageModelV2({
+                  doStream: async ({ headers }) => {
+                    expect(headers).toStrictEqual({
+                      'custom-request-header': 'request-header-value',
+                    });
 
-                return {
-                  stream: convertArrayToReadableStream([
-                    { type: 'text-start', id: '1' },
-                    {
-                      type: 'text-delta',
-                      id: '1',
-                      delta: `{ "content": "headers test" }`,
-                    },
-                    { type: 'text-end', id: '1' },
-                    {
-                      type: 'finish',
-                      finishReason: 'stop',
-                      usage: testUsage,
-                    },
-                  ]),
-                };
+                    return {
+                      stream: convertArrayToReadableStream([
+                        { type: 'text-start', id: '1' },
+                        {
+                          type: 'text-delta',
+                          id: '1',
+                          delta: `{ "content": "headers test" }`,
+                        },
+                        { type: 'text-end', id: '1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  },
+                }),
               },
-            }),
+            ],
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
             modelSettings: { headers: { 'custom-request-header': 'request-header-value' } },
@@ -1175,30 +1302,36 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should pass provider options to model', async () => {
           const result = loopFn({
             runId,
-            model: new MockLanguageModelV2({
-              doStream: async ({ providerOptions }) => {
-                expect(providerOptions).toStrictEqual({
-                  aProvider: { someKey: 'someValue' },
-                });
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                model: new MockLanguageModelV2({
+                  doStream: async ({ providerOptions }) => {
+                    expect(providerOptions).toStrictEqual({
+                      aProvider: { someKey: 'someValue' },
+                    });
 
-                return {
-                  stream: convertArrayToReadableStream([
-                    { type: 'text-start', id: '1' },
-                    {
-                      type: 'text-delta',
-                      id: '1',
-                      delta: `{ "content": "provider metadata test" }`,
-                    },
-                    { type: 'text-end', id: '1' },
-                    {
-                      type: 'finish',
-                      finishReason: 'stop',
-                      usage: testUsage,
-                    },
-                  ]),
-                };
+                    return {
+                      stream: convertArrayToReadableStream([
+                        { type: 'text-start', id: '1' },
+                        {
+                          type: 'text-delta',
+                          id: '1',
+                          delta: `{ "content": "provider metadata test" }`,
+                        },
+                        { type: 'text-end', id: '1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  },
+                }),
               },
-            }),
+            ],
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
             providerOptions: {
@@ -1219,11 +1352,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       describe('custom schema', () => {
         it('should send object deltas', async () => {
-          const mockModel = createTestModel();
+          const models = createTestModels();
 
           const result = loopFn({
             runId,
-            model: mockModel,
+            models,
             output: jsonSchema({
               type: 'object',
               properties: { content: { type: 'string' } },
@@ -1250,7 +1383,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           expect(await convertAsyncIterableToArray(result.objectStream)).toMatchInlineSnapshot(expectedOutput);
 
           // TODO: responseFormat disabled in favor of json schema in system prompt
-          //   expect(mockModel.doStreamCalls[0].responseFormat).toMatchInlineSnapshot(`
+          //   expect(models?.[0]?.model?.doStreamCalls[0].responseFormat).toMatchInlineSnapshot(`
           //   {
           //     "description": undefined,
           //     "name": undefined,
@@ -1277,26 +1410,32 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should throw NoObjectGeneratedError when schema validation fails', async () => {
           const result = loopFn({
             runId,
-            model: new MockLanguageModelV2({
-              doStream: async () => ({
-                stream: convertArrayToReadableStream([
-                  { type: 'text-start', id: '1' },
-                  { type: 'text-delta', id: '1', delta: '{ "content": 123 }' },
-                  { type: 'text-end', id: '1' },
-                  {
-                    type: 'response-metadata',
-                    id: 'id-1',
-                    timestamp: new Date(123),
-                    modelId: 'model-1',
-                  },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: testUsage,
-                  },
-                ]),
-              }),
-            }),
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                model: new MockLanguageModelV2({
+                  doStream: async () => ({
+                    stream: convertArrayToReadableStream([
+                      { type: 'text-start', id: '1' },
+                      { type: 'text-delta', id: '1', delta: '{ "content": 123 }' },
+                      { type: 'text-end', id: '1' },
+                      {
+                        type: 'response-metadata',
+                        id: 'id-1',
+                        timestamp: new Date(123),
+                        modelId: 'model-1',
+                      },
+                      {
+                        type: 'finish',
+                        finishReason: 'stop',
+                        usage: testUsage,
+                      },
+                    ]),
+                  }),
+                }),
+              },
+            ],
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
           });
@@ -1322,26 +1461,32 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should throw NoObjectGeneratedError when parsing fails', async () => {
           const result = loopFn({
             runId,
-            model: new MockLanguageModelV2({
-              doStream: async () => ({
-                stream: convertArrayToReadableStream([
-                  { type: 'text-start', id: '1' },
-                  { type: 'text-delta', id: '1', delta: '{ broken json' },
-                  { type: 'text-end', id: '1' },
-                  {
-                    type: 'response-metadata',
-                    id: 'id-1',
-                    timestamp: new Date(123),
-                    modelId: 'model-1',
-                  },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: testUsage,
-                  },
-                ]),
-              }),
-            }),
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                model: new MockLanguageModelV2({
+                  doStream: async () => ({
+                    stream: convertArrayToReadableStream([
+                      { type: 'text-start', id: '1' },
+                      { type: 'text-delta', id: '1', delta: '{ broken json' },
+                      { type: 'text-end', id: '1' },
+                      {
+                        type: 'response-metadata',
+                        id: 'id-1',
+                        timestamp: new Date(123),
+                        modelId: 'model-1',
+                      },
+                      {
+                        type: 'finish',
+                        finishReason: 'stop',
+                        usage: testUsage,
+                      },
+                    ]),
+                  }),
+                }),
+              },
+            ],
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
           });
@@ -1367,23 +1512,29 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should throw NoObjectGeneratedError when no text is generated', async () => {
           const result = loopFn({
             runId,
-            model: new MockLanguageModelV2({
-              doStream: async () => ({
-                stream: convertArrayToReadableStream([
-                  {
-                    type: 'response-metadata',
-                    id: 'id-1',
-                    timestamp: new Date(123),
-                    modelId: 'model-1',
-                  },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: testUsage,
-                  },
-                ]),
-              }),
-            }),
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                model: new MockLanguageModelV2({
+                  doStream: async () => ({
+                    stream: convertArrayToReadableStream([
+                      {
+                        type: 'response-metadata',
+                        id: 'id-1',
+                        timestamp: new Date(123),
+                        modelId: 'model-1',
+                      },
+                      {
+                        type: 'finish',
+                        finishReason: 'stop',
+                        usage: testUsage,
+                      },
+                    ]),
+                  }),
+                }),
+              },
+            ],
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
           });
@@ -1413,7 +1564,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should handle complete ```json...``` code blocks', async () => {
           const result = loopFn({
             runId,
-            model: createTestModel({
+            models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
                 { type: 'text-delta', id: '1', delta: '```json\n' },
@@ -1451,7 +1602,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should handle ```json code blocks without newlines', async () => {
           const result = loopFn({
             runId,
-            model: createTestModel({
+            models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
                 { type: 'text-delta', id: '1', delta: '```json{"content": "Hello, world!"}```' },
@@ -1477,7 +1628,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should handle ```json prefix during streaming', async () => {
           const result = loopFn({
             runId,
-            model: createTestModel({
+            models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
                 { type: 'text-delta', id: '1', delta: '```json\n' },
@@ -1519,7 +1670,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should handle array wrapped in ```json...``` blocks', async () => {
           const result = loopFn({
             runId,
-            model: createTestModel({
+            models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
                 { type: 'text-delta', id: '1', delta: '```json\n' },
@@ -1546,7 +1697,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should handle partial array streaming with ```json prefix', async () => {
           const result = loopFn({
             runId,
-            model: createTestModel({
+            models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
                 { type: 'text-delta', id: '1', delta: '```json\n' },
@@ -1581,7 +1732,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should handle enum wrapped in ```json...``` blocks', async () => {
           const result = loopFn({
             runId,
-            model: createTestModel({
+            models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
                 { type: 'text-delta', id: '1', delta: '```json\n' },
@@ -1605,7 +1756,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should handle partial enum streaming with ```json prefix', async () => {
           const result = loopFn({
             runId,
-            model: createTestModel({
+            models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
                 { type: 'text-delta', id: '1', delta: '```json\n' },
@@ -1643,7 +1794,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         beforeEach(async () => {
           result = loopFn({
             runId,
-            model: createTestModel({
+            models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
                 { type: 'text-delta', id: '1', delta: '{"elements":[' },
@@ -1740,7 +1891,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         beforeEach(async () => {
           result = loopFn({
             runId,
-            model: createTestModel({
+            models: createTestModels({
               stream: convertArrayToReadableStream([
                 {
                   type: 'text-start',
@@ -1813,7 +1964,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should reject object promise when the streamed object does not match the schema', async () => {
           const result = loopFn({
             runId,
-            model: createTestModel({
+            models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
                 { type: 'text-delta', id: '1', delta: '{"elements":[' },
@@ -1856,7 +2007,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
     describe('output = "enum"', () => {
       it('should stream an enum value', async () => {
-        const mockModel = createTestModel({
+        const mockModels = createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: '1' },
             { type: 'text-delta', id: '1', delta: '{ ' },
@@ -1872,7 +2023,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         const result = loopFn({
           runId,
-          model: mockModel,
+          models: mockModels,
           output: z.enum(['sunny', 'rainy', 'snowy']),
           messageList: new MessageList(),
         });
@@ -1884,7 +2035,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         `);
 
         // TODO: responseFormat disabled in favor of json schema in system prompt
-        // expect(mockModel?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
+        // expect(mockModels?.[0]?.model?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
         //   {
         //     "schema": {
         //       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -1910,29 +2061,35 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       });
 
       it('should not stream incorrect values', async () => {
-        const mockModel = new MockLanguageModelV2({
-          doStream: {
-            stream: convertArrayToReadableStream([
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: '{ ' },
-              { type: 'text-delta', id: '1', delta: '"result": ' },
-              { type: 'text-delta', id: '1', delta: `"foo` },
-              { type: 'text-delta', id: '1', delta: `bar` },
-              { type: 'text-delta', id: '1', delta: `"` },
-              { type: 'text-delta', id: '1', delta: ' }' },
-              { type: 'text-end', id: '1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: testUsage,
+        const mockModels = [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockLanguageModelV2({
+              doStream: {
+                stream: convertArrayToReadableStream([
+                  { type: 'text-start', id: '1' },
+                  { type: 'text-delta', id: '1', delta: '{ ' },
+                  { type: 'text-delta', id: '1', delta: '"result": ' },
+                  { type: 'text-delta', id: '1', delta: `"foo` },
+                  { type: 'text-delta', id: '1', delta: `bar` },
+                  { type: 'text-delta', id: '1', delta: `"` },
+                  { type: 'text-delta', id: '1', delta: ' }' },
+                  { type: 'text-end', id: '1' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: testUsage,
+                  },
+                ]),
               },
-            ]),
+            }),
           },
-        });
+        ];
 
         const result = loopFn({
           runId,
-          model: mockModel,
+          models: mockModels,
           output: z.enum(['sunny', 'rainy', 'snowy']),
           messageList: new MessageList(),
         });
@@ -1941,7 +2098,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       });
 
       it('should handle ambiguous values', async () => {
-        const mockModel = createTestModel({
+        const mockModels = createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: '1' },
             { type: 'text-delta', id: '1', delta: '{ ' },
@@ -1960,7 +2117,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         const result = loopFn({
           runId,
-          model: mockModel,
+          models: mockModels,
           output: z.enum(['foobar', 'foobar2']),
           messageList: new MessageList(),
         });
@@ -1974,7 +2131,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       });
 
       it('should handle non-ambiguous values', async () => {
-        const mockModel = createTestModel({
+        const mockModels = createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: '1' },
             { type: 'text-delta', id: '1', delta: '{ ' },
@@ -1994,7 +2151,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         const result = loopFn({
           runId,
-          model: mockModel,
+          models: mockModels,
           output: z.enum(['foobar', 'barfoo']),
           messageList: new MessageList(),
         });
@@ -2011,30 +2168,36 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       it('should be able to repair a JSONParseError', async () => {
         const result = loopFn({
           runId,
-          model: new MockLanguageModelV2({
-            doStream: async () => ({
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                {
-                  type: 'text-delta',
-                  id: '1',
-                  delta: '{ "content": "provider metadata test" ',
-                },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: testUsage,
-                },
-              ]),
-            }),
-          }),
+          models: [
+            {
+              id: 'test-model',
+              maxRetries: 0,
+              model: new MockLanguageModelV2({
+                doStream: async () => ({
+                  stream: convertArrayToReadableStream([
+                    {
+                      type: 'response-metadata',
+                      id: 'id-0',
+                      modelId: 'mock-model-id',
+                      timestamp: new Date(0),
+                    },
+                    { type: 'text-start', id: '1' },
+                    {
+                      type: 'text-delta',
+                      id: '1',
+                      delta: '{ "content": "provider metadata test" ',
+                    },
+                    { type: 'text-end', id: '1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: testUsage,
+                    },
+                  ]),
+                }),
+              }),
+            },
+          ],
           output: z.object({ content: z.string() }),
           // TODO
           // options: {
@@ -2058,30 +2221,36 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       it('should be able to repair a TypeValidationError', async () => {
         const result = loopFn({
           runId,
-          model: new MockLanguageModelV2({
-            doStream: async () => ({
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                {
-                  type: 'text-delta',
-                  id: '1',
-                  delta: '{ "content-a": "provider metadata test" }',
-                },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: testUsage,
-                },
-              ]),
-            }),
-          }),
+          models: [
+            {
+              id: 'test-model',
+              maxRetries: 0,
+              model: new MockLanguageModelV2({
+                doStream: async () => ({
+                  stream: convertArrayToReadableStream([
+                    {
+                      type: 'response-metadata',
+                      id: 'id-0',
+                      modelId: 'mock-model-id',
+                      timestamp: new Date(0),
+                    },
+                    { type: 'text-start', id: '1' },
+                    {
+                      type: 'text-delta',
+                      id: '1',
+                      delta: '{ "content-a": "provider metadata test" }',
+                    },
+                    { type: 'text-end', id: '1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: testUsage,
+                    },
+                  ]),
+                }),
+              }),
+            },
+          ],
           output: z.object({ content: z.string() }),
           // TODO
           // options: {
@@ -2105,30 +2274,36 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       it('should be able to handle repair that returns null', async () => {
         const result = loopFn({
           runId,
-          model: new MockLanguageModelV2({
-            doStream: async () => ({
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                {
-                  type: 'text-delta',
-                  id: '1',
-                  delta: '{ "content-a": "provider metadata test" }',
-                },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: testUsage,
-                },
-              ]),
-            }),
-          }),
+          models: [
+            {
+              id: 'test-model',
+              maxRetries: 0,
+              model: new MockLanguageModelV2({
+                doStream: async () => ({
+                  stream: convertArrayToReadableStream([
+                    {
+                      type: 'response-metadata',
+                      id: 'id-0',
+                      modelId: 'mock-model-id',
+                      timestamp: new Date(0),
+                    },
+                    { type: 'text-start', id: '1' },
+                    {
+                      type: 'text-delta',
+                      id: '1',
+                      delta: '{ "content-a": "provider metadata test" }',
+                    },
+                    { type: 'text-end', id: '1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: testUsage,
+                    },
+                  ]),
+                }),
+              }),
+            },
+          ],
 
           output: z.object({ content: z.string() }),
 
@@ -2154,30 +2329,36 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       it('should be able to repair JSON wrapped with markdown code blocks', async () => {
         const result = loopFn({
           runId,
-          model: new MockLanguageModelV2({
-            doStream: async () => ({
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                {
-                  type: 'text-delta',
-                  id: '1',
-                  delta: '```json\n{ "content": "test message" }\n```',
-                },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: testUsage,
-                },
-              ]),
-            }),
-          }),
+          models: [
+            {
+              id: 'test-model',
+              maxRetries: 0,
+              model: new MockLanguageModelV2({
+                doStream: async () => ({
+                  stream: convertArrayToReadableStream([
+                    {
+                      type: 'response-metadata',
+                      id: 'id-0',
+                      modelId: 'mock-model-id',
+                      timestamp: new Date(0),
+                    },
+                    { type: 'text-start', id: '1' },
+                    {
+                      type: 'text-delta',
+                      id: '1',
+                      delta: '```json\n{ "content": "test message" }\n```',
+                    },
+                    { type: 'text-end', id: '1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: testUsage,
+                    },
+                  ]),
+                }),
+              }),
+            },
+          ],
           output: z.object({ content: z.string() }),
           // TODO
           // options: {
@@ -2204,26 +2385,32 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       it('should throw NoObjectGeneratedError when parsing fails with repairText', async () => {
         const result = loopFn({
           runId,
-          model: new MockLanguageModelV2({
-            doStream: async () => ({
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: '{ broken json' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: testUsage,
-                },
-              ]),
-            }),
-          }),
+          models: [
+            {
+              id: 'test-model',
+              maxRetries: 0,
+              model: new MockLanguageModelV2({
+                doStream: async () => ({
+                  stream: convertArrayToReadableStream([
+                    {
+                      type: 'response-metadata',
+                      id: 'id-0',
+                      modelId: 'mock-model-id',
+                      timestamp: new Date(0),
+                    },
+                    { type: 'text-start', id: '1' },
+                    { type: 'text-delta', id: '1', delta: '{ broken json' },
+                    { type: 'text-end', id: '1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: testUsage,
+                    },
+                  ]),
+                }),
+              }),
+            },
+          ],
           output: z.object({ content: z.string() }),
           // TODO
           // options: {

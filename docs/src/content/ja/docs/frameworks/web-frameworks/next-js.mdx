@@ -1,0 +1,338 @@
+---
+title: "Mastra と Next.js の始め方 | Mastra ガイド"
+description: Mastra を Next.js に統合するための手順ガイド。
+---
+
+import { Callout, Steps, Tabs } from "nextra/components";
+
+
+
+# Next.js プロジェクトに Mastra を統合する
+
+Mastra は Next.js と統合されており、次のことが簡単に行えます：
+
+- AI 機能を提供する柔軟な API の構築
+- フロントエンドとバックエンドを単一のコードベースで扱い、デプロイを簡素化
+- 効率的なサーバー／クライアントのワークフローのために、Next.js の組み込みの Server Actions（App Router）や API Routes（Pages Router）を活用
+
+このガイドを参考に、Next.js プロジェクトで Mastra のセットアップ（スキャフォルド）と統合を行いましょう。
+
+
+
+<Tabs items={["App Router", "Pages Router"]}>
+  <Tabs.Tab>
+    <Callout type="warning">
+      このガイドは、プロジェクトのルートで Next.js の App Router を使用していることを前提としています（例: `src/app` ではなく `app`）。
+    </Callout>
+
+    <Steps>
+      ## Mastra を統合する
+
+      プロジェクトに Mastra を組み込むには、次のいずれかの方法を使用します。
+
+      ### 1. ワンライナーを使う
+
+      以下のコマンドを実行して、妥当な初期設定で Weather エージェントをすばやく雛形生成します。
+
+      ```bash copy
+      npx mastra@latest init --dir . --components agents,tools --example --llm openai
+      ```
+
+      > 詳細は [mastra init](/reference/cli/init) を参照してください。
+
+      ### 2. 対話型 CLI を使う
+
+      セットアップをカスタマイズしたい場合は、`init` コマンドを実行し、プロンプトに従ってオプションを選択してください。
+
+      ```bash copy
+      npx mastra@latest init
+      ```
+
+      <Callout type="warning">
+        デフォルトでは、`mastra init` はインストール先として `src` を提案します。プロジェクトのルートで App Router（例: `app`、`src/app` ではない）を使用している場合は、プロンプトで `.` と入力してください。
+      </Callout>
+
+      ## API キーを設定する
+
+      ```bash filename=".env" copy
+      OPENAI_API_KEY=<your-api-key>
+      ```
+
+      > LLM プロバイダーごとに使用する環境変数名は異なります。詳細は [Model Capabilities](/docs/getting-started/model-capability) を参照してください。
+
+      ## Next.js を設定する
+
+      `next.config.ts` に以下を追加します:
+
+      ```typescript filename="next.config.ts" showLineNumbers copy
+      import type { NextConfig } from "next";
+
+      const nextConfig: NextConfig = {
+        serverExternalPackages: ["@mastra/*"],
+      };
+
+      export default nextConfig;
+      ```
+
+      ## Next.js の開発サーバーを起動する
+
+      通常どおり Next.js アプリを起動できます。
+
+      ## テスト用ディレクトリを作成する
+
+      テスト用に Page、Action、Form を含む新しいディレクトリを作成します。
+
+      ```bash copy
+      mkdir app/test
+      ```
+
+      ### テスト用 Action を作成する
+
+      新しい Action を作成し、次のサンプルコードを追加します。
+
+      ```bash copy
+      touch app/test/action.ts
+      ```
+
+      ```typescript filename="app/test/action.ts" showLineNumbers copy
+      "use server";
+
+      import { mastra } from "../../mastra";
+
+      export async function getWeatherInfo(formData: FormData) {
+        const city = formData.get("city")?.toString();
+        const agent = mastra.getAgent("weatherAgent");
+
+        const result = await agent.generate(`What's the weather like in ${city}?`);
+
+        return result.text;
+      }
+      ```
+
+      ### テスト用 Form を作成する
+
+      新しい Form コンポーネントを作成し、次のサンプルコードを追加します。
+
+      ```bash copy
+      touch app/test/form.tsx
+      ```
+
+      ```typescript filename="app/test/form.tsx" showLineNumbers copy
+      "use client";
+
+      import { useState } from "react";
+      import { getWeatherInfo } from "./action";
+
+      export function Form() {
+        const [result, setResult] = useState<string | null>(null);
+
+        async function handleSubmit(formData: FormData) {
+          const res = await getWeatherInfo(formData);
+          setResult(res);
+        }
+
+        return (
+          <>
+            <form action={handleSubmit}>
+              <input name="city" placeholder="Enter city" required />
+              <button type="submit">Get Weather</button>
+            </form>
+            {result && <pre>{result}</pre>}
+          </>
+        );
+      }
+      ```
+
+      ### テスト用 Page を作成する
+
+      新しい Page を作成し、次のサンプルコードを追加します。
+
+      ```bash copy
+      touch app/test/page.tsx
+      ```
+
+      ```typescript filename="app/test/page.tsx" showLineNumbers copy
+      import { Form } from "./form";
+
+      export default async function Page() {
+        return (
+          <>
+            <h1>Test</h1>
+            <Form />
+          </>
+        );
+      }
+      ```
+
+      > ブラウザで `/test` にアクセスして動作を確認できます。
+
+      都市名に「**London**」を入力すると、次のような結果が返ってきます。
+
+      ```plaintext
+      Agent response: The current weather in London is as follows:
+
+      - **Temperature:** 12.9°C (Feels like 9.7°C)
+      - **Humidity:** 63%
+      - **Wind Speed:** 14.7 km/h
+      - **Wind Gusts:** 32.4 km/h
+      - **Conditions:** Overcast
+
+      Let me know if you need more information!
+      ```
+    </Steps>
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    <Callout type="warning">
+      このガイドは、プロジェクトのルートで Next.js の Pages Router を使用していることを前提としています。例: `src/pages` ではなく `pages` を使用。
+    </Callout>
+
+    <Steps>
+      ## Mastra を導入する
+
+      プロジェクトに Mastra を組み込むには、次の2通りの方法があります。
+
+      ### 1. ワンライナーを使う
+
+      以下のコマンドを実行して、妥当な既定値付きのデフォルトの Weather エージェントを素早くスキャフォールドします。
+
+      ```bash copy
+      npx mastra@latest init --dir . --components agents,tools --example --llm openai
+      ```
+
+      > 詳細は [mastra init](/reference/cli/init) を参照してください。
+
+      ### 2. 対話型 CLI を使う
+
+      セットアップをカスタマイズしたい場合は、`init` コマンドを実行し、プロンプトで表示されるオプションから選択してください。
+
+      ```bash copy
+      npx mastra@latest init
+      ```
+
+      <Callout type="warning">
+        デフォルトでは、`mastra init` はインストール先として `src` を提案します。プロジェクトのルートで Pages Router（例: `pages`、`src/pages` ではない）を使用している場合は、プロンプトで `.` を入力してください。
+      </Callout>
+
+      ## API キーを設定する
+
+      ```bash filename=".env" copy
+      OPENAI_API_KEY=<your-api-key>
+      ```
+
+      > 各 LLM プロバイダーは異なる環境変数を使用します。詳細は [Model Capabilities](/docs/getting-started/model-capability) を参照してください。
+
+      ## Next.js を設定する
+
+      `next.config.ts` に以下を追加します:
+
+      ```typescript filename="next.config.ts" showLineNumbers copy
+      import type { NextConfig } from "next";
+
+      const nextConfig: NextConfig = {
+        serverExternalPackages: ["@mastra/*"],
+      };
+
+      export default nextConfig;
+      ```
+
+      ## Next.js の開発サーバーを起動する
+
+      通常どおりに Next.js アプリを起動できます。
+
+      ## テスト用 API Route を作成する
+
+      新しい API Route を作成し、サンプルコードを追加します。
+
+      ```bash copy
+      touch pages/api/test.ts
+      ```
+
+      ```typescript filename="pages/api/test.ts" showLineNumbers copy
+      import type { NextApiRequest, NextApiResponse } from "next";
+
+      import { mastra } from "../../mastra";
+
+      export default async function getWeatherInfo(
+        req: NextApiRequest,
+        res: NextApiResponse,
+      ) {
+        const city = req.body.city;
+        const agent = mastra.getAgent("weatherAgent");
+
+        const result = await agent.generate(`What's the weather like in ${city}?`);
+
+        return res.status(200).json(result.text);
+      }
+      ```
+
+      ## テストページを作成する
+
+      新しいページを作成し、サンプルコードを追加します。
+
+      ```bash copy
+      touch pages/test.tsx
+      ```
+
+      ```typescript filename="pages/test.tsx" showLineNumbers copy
+      import { useState } from "react";
+
+      export default function Test() {
+        const [result, setResult] = useState<string | null>(null);
+
+        async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+          event.preventDefault();
+
+          const formData = new FormData(event.currentTarget);
+          const city = formData.get("city")?.toString();
+
+          const response = await fetch("/api/test", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ city })
+          });
+
+          const text = await response.json();
+          setResult(text);
+        }
+
+        return (
+          <>
+            <h1>Test</h1>
+            <form onSubmit={handleSubmit}>
+              <input name="city" placeholder="Enter city" required />
+              <button type="submit">Get Weather</button>
+            </form>
+            {result && <pre>{result}</pre>}
+          </>
+        );
+      }
+      ```
+
+      > これで、ブラウザで `/test` にアクセスして試せます。
+
+      都市名として **London** を送信すると、次のような結果が返ります。
+
+      ```plaintext
+      Agent response: The current weather in London is as follows:
+
+      - **Temperature:** 12.9°C (Feels like 9.7°C)
+      - **Humidity:** 63%
+      - **Wind Speed:** 14.7 km/h
+      - **Wind Gusts:** 32.4 km/h
+      - **Conditions:** Overcast
+
+      Let me know if you need more information!
+      ```
+    </Steps>
+  </Tabs.Tab>
+</Tabs>
+
+
+
+
+
+## 次のステップ
+
+- [デプロイ | Vercel 上の Next.js](/docs/deployment/web-framework#with-nextjs-on-vercel)
+- [モノレポのデプロイ](../../deployment/monorepo.mdx)

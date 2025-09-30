@@ -1,11 +1,19 @@
 ---
-title: "リファレンス: 完全性 | メトリクス | Evals | Mastra ドキュメント"
-description: Mastraにおける完全性メトリクスのドキュメント。これは、LLMの出力が入力に含まれる主要な要素をどれだけ網羅しているかを評価します。
+title: "リファレンス: Completeness | Metrics | Evals | Mastra Docs"
+description: Mastraの完全性メトリックのドキュメント。入力に含まれる重要な要素をLLM出力がどの程度網羅的にカバーしているかを評価します。
 ---
+
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
 
 # CompletenessMetric
 
-`CompletenessMetric` クラスは、LLM の出力が入力に含まれる主要な要素をどれだけ網羅しているかを評価します。名詞、動詞、トピック、用語を分析し、カバレッジを判定して詳細な網羅度スコアを提供します。
+<ScorerCallout />
+
+`CompletenessMetric`クラスは、LLMの出力が入力に含まれる主要な要素をどの程度網羅的にカバーしているかを評価します。名詞、動詞、トピック、用語を分析してカバレッジを判定し、詳細な完全性スコアを提供します。
+
+
 
 ## 基本的な使い方
 
@@ -22,6 +30,8 @@ const result = await metric.measure(
 console.log(result.score); // Coverage score from 0-1
 console.log(result.info); // Object containing detailed metrics about element coverage
 ```
+
+
 
 ## measure() のパラメーター
 
@@ -41,6 +51,8 @@ console.log(result.info); // Object containing detailed metrics about element co
     },
   ]}
 />
+
+
 
 ## 戻り値
 
@@ -102,6 +114,8 @@ console.log(result.info); // Object containing detailed metrics about element co
   ]}
 />
 
+
+
 ## 要素抽出の詳細
 
 このメトリックは、いくつかの種類の要素を抽出し分析します：
@@ -118,6 +132,8 @@ console.log(result.info); // Object containing detailed metrics about element co
 - 単語境界の処理
 - 短い単語（3文字以下）の特別な処理
 - 要素の重複排除
+
+
 
 ## スコアリングの詳細
 
@@ -148,6 +164,8 @@ console.log(result.info); // Object containing detailed metrics about element co
 - 0.1-0.3：低いカバレッジ - ほとんどの主要な要素が欠落
 - 0.0：カバレッジなし - 出力に入力要素が全く含まれていない
 
+
+
 ## 分析付きの例
 
 ```typescript
@@ -171,6 +189,8 @@ const result = await metric.measure(
 //   }
 // }
 ```
+
+
 
 ## 関連
 

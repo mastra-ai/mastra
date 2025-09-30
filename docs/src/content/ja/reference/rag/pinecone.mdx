@@ -3,10 +3,14 @@ title: "リファレンス: Pinecone Vector Store | ベクターデータベー�
 description: Mastra における PineconeVector クラスのドキュメント。Pinecone のベクターデータベースへのインターフェースを提供します。
 ---
 
+
+
 # Pinecone ベクターストア
 
 PineconeVector クラスは、[Pinecone](https://www.pinecone.io/) のベクターデータベースへのインターフェースを提供します。
 リアルタイムのベクター検索を提供し、ハイブリッド検索、メタデータフィルタリング、ネームスペース管理などの機能を備えています。
+
+
 
 ## コンストラクターオプション
 
@@ -24,6 +28,8 @@ PineconeVector クラスは、[Pinecone](https://www.pinecone.io/) のベクタ�
     },
   ]}
 />
+
+
 
 ## メソッド
 
@@ -83,8 +89,7 @@ PineconeVector クラスは、[Pinecone](https://www.pinecone.io/) のベクタ�
       name: "ids",
       type: "string[]",
       isOptional: true,
-      description:
-        "オプションのベクトルID（提供されない場合は自動生成されます）",
+      description: "オプションのベクトルID（提供されない場合は自動生成されます）",
     },
     {
       name: "namespace",
@@ -221,6 +226,8 @@ interface IndexStats {
 
 ### deleteVector()
 
+
+
 <PropertiesTable
   content={[
     {
@@ -236,6 +243,8 @@ interface IndexStats {
   ]}
 />
 
+
+
 ## レスポンスタイプ
 
 クエリ結果は次の形式で返されます：
@@ -248,6 +257,8 @@ interface QueryResult {
   vector?: number[]; // Only included if includeVector is true
 }
 ```
+
+
 
 ## エラー処理
 
@@ -274,6 +285,8 @@ try {
 - `PINECONE_API_KEY`: あなたのPinecone APIキー
 - `PINECONE_ENVIRONMENT`: Pinecone環境（例: 'us-west1-gcp'）
 
+
+
 ## ハイブリッド検索
 
 Pineconeは、密ベクトルと疎ベクトルを組み合わせることでハイブリッド検索をサポートしています。ハイブリッド検索を利用するには、以下の手順に従ってください。
@@ -281,6 +294,8 @@ Pineconeは、密ベクトルと疎ベクトルを組み合わせることでハ
 1. `metric: 'dotproduct'` でインデックスを作成します
 2. アップサート時に、`sparseVectors` パラメータを使って疎ベクトルを指定します
 3. クエリ時に、`sparseVector` パラメータを使って疎ベクトルを指定します
+
+
 
 ## 関連
 

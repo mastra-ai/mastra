@@ -1,0 +1,152 @@
+---
+title: "リファレンス: Step クラス | ワークフロー | Mastra ドキュメント"
+description: ワークフロー内の個々の作業単位を定義するMastraのStepクラスに関するドキュメント。
+---
+
+
+
+# Step Class
+
+Stepクラスは、ワークフロー内の個々の作業単位を定義し、実行ロジック、データ検証、入出力処理をカプセル化します。
+ツールまたはエージェントをパラメータとして受け取り、それらから自動的にステップを作成できます。
+
+
+
+## 使用例
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  id: "step-1",
+  description: "入力値を出力に渡す",
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    value: z.number()
+  }),
+  execute: async ({ inputData }) => {
+    const { value } = inputData;
+    return {
+      value
+    };
+  }
+});
+```
+
+
+
+## コンストラクタパラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "ステップの一意識別子",
+      required: true,
+    },
+    {
+      name: "description",
+      type: "string",
+      description: "ステップが何を行うかのオプション説明",
+      required: false,
+    },
+    {
+      name: "inputSchema",
+      type: "z.ZodType<any>",
+      description: "入力構造を定義するZodスキーマ",
+      required: true,
+    },
+    {
+      name: "outputSchema",
+      type: "z.ZodType<any>",
+      description: "出力構造を定義するZodスキーマ",
+      required: true,
+    },
+    {
+      name: "resumeSchema",
+      type: "z.ZodType<any>",
+      description: "ステップを再開するためのオプションZodスキーマ",
+      required: false,
+    },
+    {
+      name: "suspendSchema",
+      type: "z.ZodType<any>",
+      description: "ステップを一時停止するためのオプションZodスキーマ",
+      required: false,
+    },
+    {
+      name: "execute",
+      type: "(params: ExecuteParams) => Promise<any>",
+      description: "ステップロジックを含む非同期関数",
+      required: true,
+    }
+  ]}
+/>
+
+### ExecuteParams
+
+<PropertiesTable
+  content={[
+    {
+      name: "inputData",
+      type: "z.infer<TStepInput>",
+      description: "inputSchemaに一致する入力データ",
+    },
+    {
+      name: "resumeData",
+      type: "z.infer<TResumeSchema>",
+      description:
+        "一時停止状態からステップを再開する際のresumeSchemaに一致する再開データ。ステップが再開される場合のみ存在します。",
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "Mastraサービス（エージェント、ツールなど）へのアクセス",
+    },
+    {
+      name: "getStepResult",
+      type: "(stepId: string) => any",
+      description: "他のステップの結果にアクセスする関数",
+    },
+    {
+      name: "getInitData",
+      type: "() => any",
+      description:
+        "任意のステップでワークフローの初期入力データにアクセスする関数",
+    },
+    {
+      name: "suspend",
+      type: "() => Promise<void>",
+      description: "ワークフロー実行を一時停止する関数",
+    },
+    {
+      name: "runId",
+      type: "string",
+      description: "現在の実行ID",
+    },
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      description:
+        "依存性注入とコンテキスト情報のためのランタイムコンテキスト。",
+    },
+    {
+      name: "runCount",
+      type: "number",
+      description: "この特定のステップの実行回数。ステップが実行されるたびに自動的に増加します",
+      isOptional: true,
+    }
+  ]}
+/>
+
+
+
+## 関連項目
+
+- [フロー制御](../../docs/workflows/control-flow.mdx)
+- [エージェントとツールの利用](../../docs/workflows/using-with-agents-and-tools.mdx)

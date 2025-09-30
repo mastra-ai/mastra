@@ -3,9 +3,13 @@ title: "リファレンス: PlayAI Voice | Voice Providers | Mastra ドキュメ
 description: "PlayAI voice 実装のドキュメント。テキスト読み上げ機能を提供します。"
 ---
 
+
+
 # PlayAI
 
 MastraにおけるPlayAIの音声実装は、PlayAIのAPIを利用してテキスト読み上げ機能を提供します。
+
+
 
 ## 使用例
 
@@ -31,6 +35,8 @@ const audioStream = await voice.speak("Hello, world!", {
     "s3://voice-cloning-zero-shot/b27bc13e-996f-4841-b584-4d35801aea98/original/manifest.json", // Dexter の音声
 });
 ```
+
+
 
 ## コンストラクタのパラメータ
 
@@ -80,6 +86,8 @@ const audioStream = await voice.speak("Hello, world!", {
     },
   ]}
 />
+
+
 
 ## メソッド
 
@@ -155,6 +163,8 @@ const audioStream = await voice.speak("Hello, world!", {
 ### listen()
 
 このメソッドはPlayAIではサポートされておらず、エラーが発生します。PlayAIは音声認識（音声からテキストへの変換）機能を提供していません。
+
+
 
 ## メモ
 

@@ -102,11 +102,16 @@ export class CloudflareDeployer extends Deployer {
     import { evaluate } from '@mastra/core/eval';
     import { AvailableHooks, registerHook } from '@mastra/core/hooks';
     import { TABLE_EVALS } from '@mastra/core/storage';
+    import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces';
     import { checkEvalStorageFields } from '@mastra/core/utils';
 
     export default {
       fetch: async (request, env, context) => {
         const _mastra = mastra();
+
+        if (_mastra.getStorage()) {
+          _mastra.__registerInternalWorkflow(scoreTracesWorkflow);
+        }
 
         registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
           evaluate({
@@ -191,8 +196,12 @@ process.versions.node = '${process.versions.node}';
     return inputOptions;
   }
 
-  async bundle(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths);
+  async bundle(
+    entryFile: string,
+    outputDirectory: string,
+    { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string },
+  ): Promise<void> {
+    return this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot, enableEsmShim: false }, toolsPaths);
   }
 
   async deploy(): Promise<void> {

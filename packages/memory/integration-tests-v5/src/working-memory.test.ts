@@ -536,7 +536,7 @@ describe('Working Memory Tests', () => {
               enabled: true,
               schema: z.object({
                 city: z.string(),
-                temperature: z.number().optional(),
+                temperature: z.number().describe('The number value of the temperature'),
               }),
             },
             lastMessages: 10,
@@ -561,7 +561,12 @@ describe('Working Memory Tests', () => {
 
         agent = new Agent({
           name: 'Memory Test Agent',
-          instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
+          instructions: `
+            You are a helpful AI agent. Always add working memory tags to remember user information.
+
+            Temperature, "temperature" should be reported as a number.
+            The location should be labeled "city" and reported as a string.
+            `,
           model: openai('gpt-4o'),
           memory,
         });
@@ -576,7 +581,7 @@ describe('Working Memory Tests', () => {
 
       it('should accept valid working memory updates matching the schema', async () => {
         const validMemory = { city: 'Austin', temperature: 85 };
-        await agent.generateVNext('I am in Austin and it is 85 degrees', {
+        await agent.generateVNext('I am in the city of Austin and it is 85 degrees.', {
           threadId: thread.id,
           resourceId,
         });
@@ -592,10 +597,12 @@ describe('Working Memory Tests', () => {
         await agent.generateVNext('Now I am in Seattle and it is 60 degrees', {
           threadId: thread.id,
           resourceId,
+          modelSettings: { temperature: 0 },
         });
         await agent.generateVNext('Now I am in Denver and it is 75 degrees', {
           threadId: thread.id,
           resourceId,
+          modelSettings: { temperature: 0 },
         });
 
         const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
@@ -1059,6 +1066,156 @@ describe('Working Memory Tests', () => {
       // This test would require a mock storage adapter that doesn't support resource working memory
       // For now, we'll just verify that LibSQL supports it
       expect(storage.supports.resourceWorkingMemory).toBe(true);
+    });
+  });
+
+  describe('Agent Network with Working Memory', () => {
+    let memory: Memory;
+    let storage: LibSQLStore;
+    let vector: LibSQLVector;
+
+    beforeEach(async () => {
+      // Create a new unique database file in the temp directory for each test
+      const dbPath = join(await mkdtemp(join(tmpdir(), `memory-network-test-${Date.now()}`)), 'test.db');
+      console.log('dbPath', dbPath);
+
+      storage = new LibSQLStore({
+        url: `file:${dbPath}`,
+      });
+      vector = new LibSQLVector({
+        connectionUrl: `file:${dbPath}`,
+      });
+
+      // Create memory instance with working memory enabled
+      memory = new Memory({
+        options: {
+          workingMemory: {
+            enabled: true,
+            scope: 'thread', // Test with thread scope first
+          },
+          lastMessages: 10,
+        },
+        storage,
+        vector,
+        embedder: fastembed,
+      });
+    });
+
+    afterEach(async () => {
+      //@ts-ignore
+      await storage.client.close();
+      //@ts-ignore
+      await vector.turso.close();
+    });
+
+    it('should handle working memory tools in agent network - thread scope', async () => {
+      // Create an agent that has memory capabilities
+      const memoryAgent = new Agent({
+        name: 'memory-agent',
+        instructions: 'You are a helpful assistant that can remember things when asked.',
+        description: 'Agent that can use working memory',
+        model: openai('gpt-4o'),
+        memory,
+      });
+
+      // Create the network orchestrator agent
+      const networkAgent = new Agent({
+        id: 'network-orchestrator',
+        name: 'network-orchestrator',
+        instructions: 'You help users and can remember things when they ask you to.',
+        model: openai('gpt-4o'),
+        agents: {
+          memoryAgent,
+        },
+        memory,
+      });
+
+      // This should trigger the routing agent to select the updateWorkingMemory tool
+      // and reproduce the error where inputData is undefined in toolStep
+      const threadId = randomUUID();
+      const result = await networkAgent.network('Please remember that my name is Goku', {
+        memory: {
+          thread: threadId,
+          resource: resourceId,
+        },
+      });
+
+      // Consume the stream
+      const chunks = [];
+      for await (const chunk of result) {
+        chunks.push(chunk);
+        if (chunk.type?.includes('error')) {
+          console.log('Error chunk:', chunk);
+        }
+      }
+
+      // Verify the working memory was updated
+      const workingMemory = await memory.getWorkingMemory({ threadId, resourceId });
+      console.log('Thread scope working memory:', workingMemory);
+      expect(workingMemory).toBeTruthy();
+      expect(workingMemory).toContain('Goku');
+    });
+
+    it('should handle working memory tools in agent network - resource scope', async () => {
+      // Create memory instance with resource-scoped working memory
+      const resourceMemory = new Memory({
+        options: {
+          workingMemory: {
+            enabled: true,
+            scope: 'resource', // Test with resource scope
+          },
+          lastMessages: 10,
+        },
+        storage,
+        vector,
+        embedder: fastembed,
+      });
+
+      // Create an agent that has memory capabilities
+      const memoryAgent = new Agent({
+        name: 'memory-agent',
+        instructions: 'You are a helpful assistant that can remember things when asked.',
+        description: 'Agent that can use working memory',
+        model: openai('gpt-4o'),
+        memory: resourceMemory,
+      });
+
+      // Create the network orchestrator agent
+      const networkAgent = new Agent({
+        id: 'network-orchestrator',
+        name: 'network-orchestrator',
+        instructions: 'You help users and can remember things when they ask you to.',
+        model: openai('gpt-4o'),
+        agents: {
+          memoryAgent,
+        },
+        memory: resourceMemory,
+      });
+
+      // This should trigger the routing agent to select the updateWorkingMemory tool
+      const threadId = randomUUID();
+      const result = await networkAgent.network('Please remember that my favorite color is blue', {
+        memory: {
+          thread: threadId,
+          resource: resourceId,
+        },
+      });
+
+      // Consume the stream
+      const chunks = [];
+      for await (const chunk of result) {
+        chunks.push(chunk);
+        if (chunk.type?.includes('error')) {
+          console.log('Error chunk:', chunk);
+        }
+      }
+
+      // Verify the working memory was updated
+      const workingMemory = await resourceMemory.getWorkingMemory({ threadId, resourceId });
+      console.log('Resource scope working memory:', workingMemory);
+      expect(workingMemory).toBeTruthy();
+      // Check for 'blue' case-insensitively since AI might capitalize it
+      expect(workingMemory?.toLowerCase()).toContain('blue');
     });
   });
 });

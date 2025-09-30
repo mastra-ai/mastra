@@ -1,11 +1,19 @@
 ---
-title: "リファレンス: Faithfulness | メトリクス | Evals | Mastra ドキュメント"
-description: Mastra における Faithfulness メトリクスのドキュメント。提供されたコンテキストと比較して、LLM の出力の事実的な正確性を評価します。
+title: "リファレンス: Faithfulness | Metrics | Evals | Mastra Docs"
+description: Mastraの忠実性メトリックのドキュメント。提供されたコンテキストと比較してLLM出力の事実的正確性を評価します。
 ---
 
-# FaithfulnessMetric リファレンス
+import { ScorerCallout } from '@/components/scorer-callout'
 
-Mastra の `FaithfulnessMetric` は、LLM の出力が提供されたコンテキストと比較してどれだけ事実に忠実であるかを評価します。出力から主張を抽出し、それらをコンテキストと照合することで、RAG パイプラインの応答の信頼性を測定する上で重要な役割を果たします。
+
+
+# FaithfulnessMetric Reference
+
+<ScorerCallout />
+
+Mastraの`FaithfulnessMetric`は、提供されたコンテキストと比較して、LLMの出力がどの程度事実的に正確であるかを評価します。出力からクレームを抽出し、コンテキストに対してそれらを検証するため、RAGパイプラインレスポンスの信頼性を測定するのに不可欠です。
+
+
 
 ## 基本的な使い方
 
@@ -31,6 +39,8 @@ const result = await metric.measure(
 console.log(result.score); // 1.0
 console.log(result.info.reason); // "All claims are supported by the context."
 ```
+
+
 
 ## コンストラクタのパラメータ
 
@@ -66,11 +76,14 @@ console.log(result.info.reason); // "All claims are supported by the context."
     {
       name: "context",
       type: "string[]",
-      description: "出力の主張が検証されるコンテキストチャンクの配列。",
+      description:
+        "出力の主張が検証されるコンテキストチャンクの配列。",
       isOptional: false,
     },
   ]}
 />
+
+
 
 ## measure() のパラメーター
 
@@ -90,6 +103,8 @@ console.log(result.info.reason); // "All claims are supported by the context."
     },
   ]}
 />
+
+
 
 ## 戻り値
 
@@ -122,6 +137,8 @@ console.log(result.info.reason); // "All claims are supported by the context."
   ]}
 />
 
+
+
 ## スコアリングの詳細
 
 このメトリックは、提供されたコンテキストに対するクレーム検証を通じて忠実性を評価します。
@@ -153,6 +170,8 @@ console.log(result.info.reason); // "All claims are supported by the context."
 - 0.4-0.6: 支持と矛盾が混在
 - 0.1-0.3: 支持は限定的で、多くが矛盾
 - 0.0: 支持されたクレームがない
+
+
 
 ## 応用例
 

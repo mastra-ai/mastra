@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { readFile } from 'fs/promises';
+import * as https from 'node:https';
 import { join } from 'path/posix';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
@@ -26,7 +27,7 @@ import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
 import { logsRouter } from './handlers/routes/logs/router';
 import { mcpRouter } from './handlers/routes/mcp/router';
 import { memoryRoutes } from './handlers/routes/memory/router';
-import { vNextNetworksRouter, networksRouter } from './handlers/routes/networks/router';
+import { vNextNetworksRouter } from './handlers/routes/networks/router';
 import { observabilityRouter } from './handlers/routes/observability/router';
 import { scoresRouter } from './handlers/routes/scores/router';
 import { telemetryRouter } from './handlers/routes/telemetry/router';
@@ -442,7 +443,6 @@ export async function createHonoServer(
   app.route('/api/agents', agentsRouter(bodyLimitOptions));
   // Networks routes
   app.route('/api/networks', vNextNetworksRouter(bodyLimitOptions));
-  app.route('/api/networks', networksRouter(bodyLimitOptions));
 
   if (options.isDev) {
     app.route('/api/agents', agentsRouterDev(bodyLimitOptions));
@@ -572,10 +572,12 @@ export async function createHonoServer(
       // Inject the server port information
       const serverOptions = mastra.getServer();
       const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
+      const hideCloudCta = process.env.MASTRA_HIDE_CLOUD_CTA === 'true';
       const host = serverOptions?.host ?? 'localhost';
 
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_HOST%%'`, `'${host}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PORT%%'`, `'${port}'`);
+      indexHtml = indexHtml.replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, `'${hideCloudCta}'`);
 
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }
@@ -600,20 +602,38 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   const app = await createHonoServer(mastra, options);
   const serverOptions = mastra.getServer();
 
+  const key =
+    serverOptions?.https?.key ??
+    (process.env.MASTRA_HTTPS_KEY ? Buffer.from(process.env.MASTRA_HTTPS_KEY, 'base64') : undefined);
+  const cert =
+    serverOptions?.https?.cert ??
+    (process.env.MASTRA_HTTPS_CERT ? Buffer.from(process.env.MASTRA_HTTPS_CERT, 'base64') : undefined);
+  const isHttpsEnabled = Boolean(key && cert);
+
+  const host = serverOptions?.host ?? 'localhost';
   const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
+  const protocol = isHttpsEnabled ? 'https' : 'http';
 
   const server = serve(
     {
       fetch: app.fetch,
       port,
       hostname: serverOptions?.host,
+      ...(isHttpsEnabled
+        ? {
+            createServer: https.createServer,
+            serverOptions: {
+              key,
+              cert,
+            },
+          }
+        : {}),
     },
     () => {
       const logger = mastra.getLogger();
-      const host = serverOptions?.host ?? 'localhost';
-      logger.info(` Mastra API running on port http://${host}:${port}/api`);
+      logger.info(` Mastra API running on port ${protocol}://${host}:${port}/api`);
       if (options?.playground) {
-        const playgroundUrl = `http://${host}:${port}`;
+        const playgroundUrl = `${protocol}://${host}:${port}`;
         logger.info(`👨‍💻 Playground available at ${playgroundUrl}`);
       }
 
