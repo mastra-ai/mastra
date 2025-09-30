@@ -7,17 +7,21 @@ import { join } from 'path';
 import { ensureDir, remove, pathExists } from 'fs-extra';
 
 // Mock the utilities that bundleExternals depends on
-vi.mock('../utils', () => ({
-  getCompiledDepCachePath: vi.fn((rootPath: string, fileName: string) =>
-    join(rootPath, 'node_modules', '.cache', fileName),
-  ),
-  getPackageRootPath: vi.fn((pkg: string) => {
-    if (pkg.startsWith('@workspace/')) return '/workspace/packages/' + pkg.split('/')[1];
-    if (pkg === 'lodash') return '/node_modules/lodash';
-    if (pkg === 'react') return '/node_modules/react';
-    return null;
-  }),
-}));
+vi.mock('../utils', async importOriginal => {
+  const actual = await importOriginal<typeof import('../utils')>();
+  return {
+    ...actual,
+    getCompiledDepCachePath: vi.fn((rootPath: string, fileName: string) =>
+      join(rootPath, 'node_modules', '.cache', fileName),
+    ),
+    getPackageRootPath: vi.fn((pkg: string) => {
+      if (pkg.startsWith('@workspace/')) return '/workspace/packages/' + pkg.split('/')[1];
+      if (pkg === 'lodash') return '/node_modules/lodash';
+      if (pkg === 'react') return '/node_modules/react';
+      return null;
+    }),
+  };
+});
 
 vi.mock('../plugins/esbuild', () => ({
   esbuild: vi.fn(() => ({ name: 'esbuild-mock' })),

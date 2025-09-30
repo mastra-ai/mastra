@@ -237,7 +237,9 @@ export abstract class Bundler extends MastraBundler {
           }
 
           const uniqueToolID = crypto.randomUUID();
-          inputs[`tools/${uniqueToolID}`] = entryFile;
+          // Normalize Windows paths to forward slashes for consistent handling
+          const normalizedEntryFile = entryFile.replaceAll('\\', '/');
+          inputs[`tools/${uniqueToolID}`] = normalizedEntryFile;
         } else {
           this.logger.warn(`Tool path ${path} does not exist, skipping...`);
         }

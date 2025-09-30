@@ -248,80 +248,69 @@ function findPrimaryLLMSpan(spanTree: SpanTree, rootAgentSpan: AISpanRecord): AI
 }
 
 /**
- * Transform trace to scorer input format
+ * Extract common trace validation and span tree building logic
  */
-export function transformTraceToScorerInput(trace: AITraceRecord): ScorerRunInputForAgent {
-  try {
-    validateTrace(trace);
-    const spanTree = buildSpanTree(trace.spans);
+function prepareTraceForTransformation(trace: AITraceRecord) {
+  validateTrace(trace);
+  const spanTree = buildSpanTree(trace.spans);
 
-    // Find the root agent run span
-    const rootAgentSpan = spanTree.rootSpans.find(span => span.spanType === 'agent_run') as AISpanRecord | undefined;
+  // Find the root agent run span
+  const rootAgentSpan = spanTree.rootSpans.find(span => span.spanType === 'agent_run') as AISpanRecord | undefined;
 
-    if (!rootAgentSpan) {
-      throw new Error('No root agent_run span found in trace');
-    }
-
-    const primaryLLMSpan = findPrimaryLLMSpan(spanTree, rootAgentSpan);
-    const inputMessages = extractInputMessages(rootAgentSpan);
-    const systemMessages = extractSystemMessages(primaryLLMSpan);
-
-    // Extract remembered messages from LLM span (excluding current input)
-    const currentInputContent = inputMessages[0]?.content || '';
-    const rememberedMessages = extractRememberedMessages(primaryLLMSpan, currentInputContent);
-
-    return {
-      // We do not keep track of the tool call ids in traces, so we need to cast to UIMessageWithMetadata
-      inputMessages: inputMessages as UIMessageWithMetadata[],
-      rememberedMessages: rememberedMessages as UIMessageWithMetadata[],
-      systemMessages,
-      taggedSystemMessages: {}, // Todo: Support tagged system messages
-    };
-  } catch (error) {
-    throw new Error(
-      `Failed to transform trace to scorer input: ${error instanceof Error ? error.message : 'Unknown error'}`,
-    );
+  if (!rootAgentSpan) {
+    throw new Error('No root agent_run span found in trace');
   }
+
+  return { spanTree, rootAgentSpan };
 }
 
-/**
- * Transform trace to scorer output format
- */
-export function transformTraceToScorerOutput(trace: AITraceRecord): ScorerRunOutputForAgent {
-  try {
-    validateTrace(trace);
-    const spanTree = buildSpanTree(trace.spans);
+export function transformTraceToScorerInputAndOutput(trace: AITraceRecord): {
+  input: ScorerRunInputForAgent;
+  output: ScorerRunOutputForAgent;
+} {
+  const { spanTree, rootAgentSpan } = prepareTraceForTransformation(trace);
 
-    const rootAgentSpan = spanTree.rootSpans.find(span => span.spanType === 'agent_run') as AISpanRecord | undefined;
-
-    if (!rootAgentSpan) {
-      throw new Error('No root agent_run span found in trace');
-    }
-
-    if (!rootAgentSpan.output) {
-      throw new Error('Root agent span has no output');
-    }
-
-    const toolInvocations = reconstructToolInvocations(spanTree, rootAgentSpan.spanId);
-
-    const responseText = rootAgentSpan.output.text || '';
-
-    const responseMessage: TransformedUIMessage = {
-      role: 'assistant',
-      content: responseText,
-      createdAt: new Date(rootAgentSpan.endedAt || rootAgentSpan.startedAt),
-      // @ts-ignore
-      parts: createMessageParts(toolInvocations, responseText),
-      experimental_attachments: [],
-      // Tool invocations are being deprecated however we need to support it for now
-      toolInvocations: toolInvocations as unknown as ToolInvocation[],
-    };
-
-    // We do not keep track of the tool call ids in traces, so we need to cast to UIMessageWithMetadata
-    return [responseMessage as UIMessageWithMetadata];
-  } catch (error) {
-    throw new Error(
-      `Failed to transform trace to scorer output: ${error instanceof Error ? error.message : 'Unknown error'}`,
-    );
+  if (!rootAgentSpan.output) {
+    throw new Error('Root agent span has no output');
   }
+
+  // Build input
+  const primaryLLMSpan = findPrimaryLLMSpan(spanTree, rootAgentSpan);
+  const inputMessages = extractInputMessages(rootAgentSpan);
+  const systemMessages = extractSystemMessages(primaryLLMSpan);
+
+  // Extract remembered messages from LLM span (excluding current input)
+  const currentInputContent = inputMessages[0]?.content || '';
+  const rememberedMessages = extractRememberedMessages(primaryLLMSpan, currentInputContent);
+
+  const input = {
+    // We do not keep track of the tool call ids in traces, so we need to cast to UIMessageWithMetadata
+    inputMessages: inputMessages as UIMessageWithMetadata[],
+    rememberedMessages: rememberedMessages as UIMessageWithMetadata[],
+    systemMessages,
+    taggedSystemMessages: {}, // Todo: Support tagged system messages
+  };
+
+  // Build output
+  const toolInvocations = reconstructToolInvocations(spanTree, rootAgentSpan.spanId);
+  const responseText = rootAgentSpan.output.text || '';
+
+  const responseMessage: TransformedUIMessage = {
+    role: 'assistant',
+    content: responseText,
+    createdAt: new Date(rootAgentSpan.endedAt || rootAgentSpan.startedAt),
+    // @ts-ignore
+    parts: createMessageParts(toolInvocations, responseText),
+    experimental_attachments: [],
+    // Tool invocations are being deprecated however we need to support it for now
+    toolInvocations: toolInvocations as unknown as ToolInvocation[],
+  };
+
+  // We do not keep track of the tool call ids in traces, so we need to cast to UIMessageWithMetadata
+  const output = [responseMessage as UIMessageWithMetadata];
+
+  return {
+    input,
+    output,
+  };
 }
