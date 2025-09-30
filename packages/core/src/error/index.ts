@@ -1,3 +1,5 @@
+import { safeParseErrorObject } from './utils.js';
+
 export enum ErrorDomain {
   TOOL = 'TOOL',
   AGENT = 'AGENT',
@@ -76,10 +78,7 @@ export class MastraBaseError<D, C> extends Error {
     if (originalError instanceof Error) {
       error = originalError;
     } else if (originalError) {
-      const errorMessage =
-        typeof originalError === 'object' && originalError !== null
-          ? JSON.stringify(originalError)
-          : String(originalError);
+      const errorMessage = safeParseErrorObject(originalError);
       error = new Error(errorMessage);
     }
 
