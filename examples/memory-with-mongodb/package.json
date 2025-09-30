@@ -1,0 +1,33 @@
+{
+  "name": "memory-with-mongodb",
+  "type": "module",
+  "version": "1.0.1",
+  "description": "",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "bun run --watch src/index.ts",
+    "chat": "bun run --watch src/chat.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@mastra/core": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/mongodb": "latest"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/memory": "link:../../packages/memory",
+      "@mastra/mongodb": "link:../../stores/mongodb"
+    }
+  },
+  "devDependencies": {
+    "dotenv": "^17.0.0",
+    "tsx": "^4.19.3"
+  },
+  "packageManager": "pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39"
+}
