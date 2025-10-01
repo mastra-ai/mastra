@@ -2,6 +2,7 @@ import { ToolsIcon } from '@/ds/icons';
 import { SyntaxHighlighter } from '../../../ui/syntax-highlighter';
 import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
+import { ToolApproval } from '../tool-approval';
 
 export interface ToolBadgeProps {
   toolName: string;
@@ -39,44 +40,46 @@ export const ToolBadge = ({
       <SyntaxHighlighter data={result} />
     );
 
-  console.log('lol', requireToolApproval);
-
   return (
-    <BadgeWrapper
-      icon={<ToolsIcon className="text-[#ECB047]" />}
-      title={toolName}
-      extraInfo={
-        networkMetadata && (
-          <NetworkChoiceMetadataDialogTrigger
-            selectionReason={networkMetadata?.selectionReason || ''}
-            input={networkMetadata?.input}
-          />
-        )
-      }
-    >
-      <div className="space-y-4">
-        <div>
-          <p className="font-medium pb-2">Tool arguments</p>
-          {argSlot}
-        </div>
-
-        {resultSlot !== undefined && (
+    <>
+      <BadgeWrapper
+        icon={<ToolsIcon className="text-[#ECB047]" />}
+        title={toolName}
+        extraInfo={
+          networkMetadata && (
+            <NetworkChoiceMetadataDialogTrigger
+              selectionReason={networkMetadata?.selectionReason || ''}
+              input={networkMetadata?.input}
+            />
+          )
+        }
+      >
+        <div className="space-y-4">
           <div>
-            <p className="font-medium pb-2">Tool result</p>
-            {resultSlot}
+            <p className="font-medium pb-2">Tool arguments</p>
+            {argSlot}
           </div>
-        )}
 
-        {toolOutput.length > 0 && (
-          <div>
-            <p className="font-medium pb-2">Tool output</p>
-
-            <div className="h-40 overflow-y-auto">
-              <SyntaxHighlighter data={toolOutput} />
+          {resultSlot !== undefined && (
+            <div>
+              <p className="font-medium pb-2">Tool result</p>
+              {resultSlot}
             </div>
-          </div>
-        )}
-      </div>
-    </BadgeWrapper>
+          )}
+
+          {toolOutput.length > 0 && (
+            <div>
+              <p className="font-medium pb-2">Tool output</p>
+
+              <div className="h-40 overflow-y-auto">
+                <SyntaxHighlighter data={toolOutput} />
+              </div>
+            </div>
+          )}
+        </div>
+      </BadgeWrapper>
+
+      {requireToolApproval && <ToolApproval />}
+    </>
   );
 };
