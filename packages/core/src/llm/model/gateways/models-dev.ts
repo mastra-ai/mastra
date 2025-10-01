@@ -128,7 +128,7 @@ export class ModelsDevGateway extends MastraModelGateway {
           apiKeyEnvVar,
           apiKeyHeader,
           name: providerInfo.name || providerId.charAt(0).toUpperCase() + providerId.slice(1),
-          models: modelIds,
+          models: modelIds.filter(id => !id.includes(`codex`)), // codex requires responses api
           docUrl: providerInfo.doc, // Include documentation URL if available
           gateway: `models.dev`,
         };
