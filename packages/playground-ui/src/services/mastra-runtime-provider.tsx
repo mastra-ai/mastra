@@ -11,7 +11,7 @@ import { RuntimeContext } from '@mastra/core/di';
 import { ChatProps, Message } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@/lib/file/toBase64';
-import { useMastraClient } from '@mastra/react';
+import { toAssistantUIMessage, useMastraClient } from '@mastra/react';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
@@ -178,6 +178,7 @@ export function MastraRuntimeProvider({
   const {
     messages,
     setMessages,
+    generateVNext,
     streamVNext,
     network,
     cancelRun,
@@ -186,6 +187,8 @@ export function MastraRuntimeProvider({
     agentId,
     initializeMessages: () => (memory ? initializeMessageState(initialMessages || []) : []),
   });
+
+  console.log('messages', messages);
 
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -472,33 +475,23 @@ export function MastraRuntimeProvider({
           });
         } else {
           if (chatWithGenerateVNext) {
-            setIsRunning(true);
-            const response = await agent.generateVNext({
-              messages: [
+            await generateVNext({
+              coreUserMessages: [
                 {
                   role: 'user',
                   content: input,
                 },
                 ...attachments,
               ],
-              runId: agentId,
-              modelSettings: {
-                frequencyPenalty,
-                presencePenalty,
-                maxRetries,
-                temperature,
-                topK,
-                topP,
-                maxOutputTokens: maxTokens,
-              },
-              providerOptions,
-              instructions,
               runtimeContext: runtimeContextInstance,
-              ...(memory ? { threadId, resourceId: agentId } : {}),
+              threadId,
+              modelSettings: modelSettingsArgs,
+              signal: controller.signal,
+              onFinish: messages => {
+                return messages.map(message => toAssistantUIMessage(message));
+              },
             });
 
-            handleGenerateResponse(response);
-            setIsRunning(false);
             return;
           } else {
             await streamVNext({
