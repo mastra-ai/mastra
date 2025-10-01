@@ -40,23 +40,20 @@ export class NetlifyGateway extends MastraModelGateway {
       throw new Error(`Failed to fetch from Netlify: ${response.statusText}`);
     }
     const data = (await response.json()) as NetlifyResponse;
-    const providerConfigs: Record<string, ProviderConfig> = {};
+    const netlify: ProviderConfig = {
+      apiKeyEnvVar: ['NETLIFY_TOKEN', 'NETLIFY_SITE_ID'],
+      apiKeyHeader: 'Authorization', // Netlify uses standard Bearer auth
+      name: `Netlify`,
+      models: [],
+    };
     // Convert Netlify format to our standard format
     for (const [providerId, provider] of Object.entries(data.providers)) {
-      // The generate-providers script will handle prefixing with "netlify/"
-      // We return unprefixed IDs here, just like ModelsDevGateway does
-      providerConfigs[providerId] = {
-        // URL will be dynamically built based on the user's Netlify site
-        // This placeholder is for registry generation
-        url: `NETLIFY_SITE_URL_PLACEHOLDER/${providerId}`,
-        apiKeyEnvVar: provider.token_env_var,
-        apiKeyHeader: 'Authorization', // Netlify uses standard Bearer auth
-        name: `${providerId.charAt(0).toUpperCase() + providerId.slice(1)} (via Netlify)`,
-        models: provider.models.sort(),
-      };
+      for (const model of provider.models) {
+        netlify.models.push(`${providerId}/${model}`);
+      }
     }
-    console.info(`Found ${Object.keys(providerConfigs).length} providers via Netlify Gateway`);
-    return providerConfigs;
+    console.info(`Found ${Object.keys(data.providers).length} models via Netlify Gateway`);
+    return { netlify };
   }
 
   async buildUrl(modelId: string, envVars: Record<string, string>): Promise<string | false> {
@@ -147,11 +144,6 @@ export class NetlifyGateway extends MastraModelGateway {
     return { token: tokenResponse.token, url: tokenResponse.url };
   }
   async buildHeaders(modelId: string, envVars: Record<string, string>): Promise<Record<string, string>> {
-    // Check if this model ID is for our gateway
-    if (!modelId.startsWith(`${this.prefix}/`)) {
-      return {};
-    }
-
     const siteId = envVars['NETLIFY_SITE_ID'];
     const netlifyToken = envVars['NETLIFY_TOKEN'];
 
