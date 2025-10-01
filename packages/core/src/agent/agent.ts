@@ -898,7 +898,7 @@ export class Agent<
     this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
   }
 
-  __updateModel({ model }: { model: DynamicArgument<MastraLanguageModel> }) {
+  __updateModel({ model }: { model: DynamicArgument<MastraModelConfig> }) {
     this.model = model;
     this.logger.debug(`[Agents:${this.name}] Model updated.`, { model: this.model, name: this.name });
   }
@@ -924,7 +924,7 @@ export class Agent<
     maxRetries,
   }: {
     id: string;
-    model?: DynamicArgument<MastraLanguageModel>;
+    model?: DynamicArgument<MastraModelConfig>;
     enabled?: boolean;
     maxRetries?: number;
   }) {
@@ -3539,7 +3539,7 @@ export class Agent<
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
     if (!generateDeprecationWarningShown) {
       this.logger.warn(
-        "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 30th, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
+        "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation the week of September 30th, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
       );
       generateDeprecationWarningShown = true;
     }
@@ -3909,7 +3909,7 @@ export class Agent<
   > {
     if (!streamDeprecationWarningShown) {
       this.logger.warn(
-        "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 30th, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
+        "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation the week of September 30th, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
       );
       streamDeprecationWarningShown = true;
     }

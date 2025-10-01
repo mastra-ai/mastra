@@ -1,13 +1,3 @@
-import { anthropic } from '@ai-sdk/anthropic';
-import { anthropic as anthropicV5 } from '@ai-sdk/anthropic-v5';
-import { google } from '@ai-sdk/google';
-import { google as googleV5 } from '@ai-sdk/google-v5';
-import { groq } from '@ai-sdk/groq';
-import { groq as groqV5 } from '@ai-sdk/groq-v5';
-import { openai } from '@ai-sdk/openai';
-import { openai as openaiV5 } from '@ai-sdk/openai-v5';
-import { xai } from '@ai-sdk/xai';
-import { xai as xaiV5 } from '@ai-sdk/xai-v5';
 import type { Agent, MastraLanguageModel } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
@@ -341,7 +331,7 @@ export function generateHandler({
 }) {
   const logger = mastra.getLogger();
   logger?.warn(
-    "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 30th, 2025. Please use generateLegacyHandler if you don't want to upgrade just yet.",
+    "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation the week of September 30th, 2025. Please use generateLegacyHandler if you don't want to upgrade just yet.",
   );
   return generateLegacyHandler({ mastra, ...args });
 }
@@ -461,7 +451,7 @@ export async function streamGenerateHandler({
 }) {
   const logger = mastra.getLogger();
   logger?.warn(
-    "Deprecation NOTICE:\n Stream method will switch to use streamVNext implementation September 30th, 2025. Please use streamGenerateLegacyHandler if you don't want to upgrade just yet.",
+    "Deprecation NOTICE:\n Stream method will switch to use streamVNext implementation the week of September 30th, 2025. Please use streamGenerateLegacyHandler if you don't want to upgrade just yet.",
   );
 
   return streamGenerateLegacyHandler({ mastra, ...args });
@@ -684,7 +674,7 @@ export async function updateAgentModelHandler({
   agentId: string;
   body: {
     modelId: string;
-    provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+    provider: string;
   };
 }): Promise<{ message: string }> {
   try {
@@ -694,33 +684,12 @@ export async function updateAgentModelHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const agentModel = await agent.getModel();
-    const modelVersion = agentModel.specificationVersion;
-
     const { modelId, provider } = body;
 
-    const providerMap = {
-      v1: {
-        openai: openai(modelId),
-        anthropic: anthropic(modelId),
-        groq: groq(modelId),
-        xai: xai(modelId),
-        google: google(modelId),
-      },
-      v2: {
-        openai: openaiV5(modelId),
-        anthropic: anthropicV5(modelId),
-        groq: groqV5(modelId),
-        xai: xaiV5(modelId),
-        google: googleV5(modelId),
-      },
-    };
+    // Use the universal Mastra router format: provider/model
+    const newModel = `${provider}/${modelId}`;
 
-    const modelVersionKey = modelVersion === 'v2' ? 'v2' : 'v1';
-
-    const model = providerMap[modelVersionKey][provider];
-
-    agent.__updateModel({ model });
+    agent.__updateModel({ model: newModel });
 
     return { message: 'Agent model updated' };
   } catch (error) {
@@ -769,7 +738,7 @@ export async function updateAgentModelInModelListHandler({
   body: {
     model?: {
       modelId: string;
-      provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+      provider: string;
     };
     maxRetries?: number;
     enabled?: boolean;
@@ -797,18 +766,11 @@ export async function updateAgentModelInModelListHandler({
       throw new HTTPException(400, { message: 'Model to update is not found in agent model list' });
     }
 
-    let model: MastraLanguageModel | undefined;
+    let model: string | undefined;
     if (bodyModel) {
       const { modelId, provider } = bodyModel;
-      const providerMap = {
-        openai: openaiV5(modelId),
-        anthropic: anthropicV5(modelId),
-        groq: groqV5(modelId),
-        xai: xaiV5(modelId),
-        google: googleV5(modelId),
-      };
-
-      model = providerMap[provider];
+      // Use the universal Mastra router format: provider/model
+      model = `${provider}/${modelId}`;
     }
 
     agent.updateModelInModelList({ id: modelConfigId, model, maxRetries, enabled });

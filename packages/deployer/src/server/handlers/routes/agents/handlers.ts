@@ -1,5 +1,7 @@
 import type { Mastra } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { getProviderConfig } from '@mastra/core/llm';
+import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import {
   getAgentsHandler as getOriginalAgentsHandler,
@@ -99,6 +101,32 @@ export async function getAgentsHandler(c: Context) {
   });
 
   return c.json(serializedAgents);
+}
+
+export async function getProvidersHandler(c: Context) {
+  try {
+    const providers = [];
+
+    // Check each provider in the registry
+    for (const [providerId, config] of Object.entries(PROVIDER_REGISTRY)) {
+      const envVar = config.apiKeyEnvVar;
+      const apiKey = process.env[envVar];
+      const providerConfig = getProviderConfig(providerId);
+
+      providers.push({
+        id: providerId,
+        name: config.name,
+        envVar: envVar,
+        connected: !!apiKey,
+        models: [...config.models], // Convert readonly array to mutable
+        docUrl: providerConfig?.docUrl || null,
+      });
+    }
+
+    return c.json({ providers });
+  } catch (error) {
+    return handleError(error, 'Error getting providers');
+  }
 }
 
 export async function getAgentByIdHandler(c: Context) {
@@ -468,8 +496,20 @@ export async function getModelProvidersHandler(c: Context) {
   const providers = Object.entries(AllowedProviderKeys);
   const envKeys = Object.keys(envVars);
   const availableProviders = providers.filter(([_, value]) => envKeys.includes(value) && !!envVars[value]);
-  const availableProvidersNames = availableProviders.map(([key]) => key);
-  return c.json(availableProvidersNames);
+
+  const providerInfo = availableProviders.map(([key, envVar]) => {
+    const providerConfig = getProviderConfig(key);
+    return {
+      id: key,
+      name: key.charAt(0).toUpperCase() + key.slice(1).replace(/-/g, ' '),
+      envVar,
+      hasApiKey: !!envVars[envVar],
+      docUrl: providerConfig?.docUrl || null,
+      models: providerConfig?.models || [],
+    };
+  });
+
+  return c.json(providerInfo);
 }
 
 export async function updateAgentModelInModelListHandler(c: Context) {
