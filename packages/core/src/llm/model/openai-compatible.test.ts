@@ -64,15 +64,28 @@ describe('OpenAICompatibleModel', () => {
 
       const model = new OpenAICompatibleModel('openai/gpt-4o');
 
-      const stream = await model.doStream({
+      const result = await model.doStream({
         prompt: [],
         providerOptions: {},
       });
 
-      // Collect stream chunks
+      // Collect stream chunks from ReadableStream
       const chunks: any[] = [];
-      for await (const chunk of stream) {
-        chunks.push(chunk);
+      const reader = result.stream.getReader();
+      
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          // Close the stream after reading the error part
+          if (value.type === 'error') {
+            await reader.cancel();
+            break;
+          }
+        }
+      } finally {
+        reader.releaseLock();
       }
 
       // Should have received an error chunk
