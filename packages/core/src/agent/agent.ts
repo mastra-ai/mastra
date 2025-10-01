@@ -3501,18 +3501,18 @@ export class Agent<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
   >(
-    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
+    options: AgentExecutionOptions<OUTPUT, FORMAT> & { runId: string },
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    return this.resumeStreamVNext({ approved: true }, streamOptions);
+    return this.resumeStreamVNext({ approved: true }, options);
   }
 
   async declineToolCall<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
   >(
-    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
+    options: AgentExecutionOptions<OUTPUT, FORMAT> & { runId: string },
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    return this.resumeStreamVNext({ approved: false }, streamOptions);
+    return this.resumeStreamVNext({ approved: false }, options);
   }
 
   async generate(
