@@ -19,6 +19,7 @@ export enum ErrorDomain {
   MASTRA = 'MASTRA',
   DEPLOYER = 'DEPLOYER',
   STORAGE = 'STORAGE',
+  MODEL_ROUTER = 'MODEL_ROUTER',
 }
 
 export enum ErrorCategory {

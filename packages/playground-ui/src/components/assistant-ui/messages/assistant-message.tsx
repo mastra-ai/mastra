@@ -2,10 +2,12 @@ import { ActionBarPrimitive, MessagePrimitive, ToolCallMessagePartComponent, use
 import { AudioLinesIcon, BrainIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
 
 import { MarkdownText } from './markdown-text';
+import { ErrorAwareText } from './error-aware-text';
 import { TooltipIconButton } from '../tooltip-icon-button';
 import { ToolFallback } from '@/components/assistant-ui/tools/tool-fallback';
 import { Reasoning } from './reasoning';
 import { cn } from '@/lib/utils';
+import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provider-logo';
 
 export interface AssistantMessageProps {
   ToolFallback?: ToolCallMessagePartComponent;
@@ -27,21 +29,21 @@ export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom, hasModelLis
       <div className="text-icon6 text-ui-lg leading-ui-lg">
         <MessagePrimitive.Parts
           components={{
-            Text: MarkdownText,
+            Text: ErrorAwareText,
             tools: { Fallback: ToolFallbackCustom || ToolFallback },
             Reasoning: Reasoning,
           }}
         />
       </div>
       {!isToolCallAndOrReasoning && (
-        <div className={cn('h-6 pt-1 flex gap-2 items-center', { 'pb-1': showModelUsed })}>
+        <div className={cn('h-6 pt-4 flex gap-2 items-center', { 'pb-1': showModelUsed })}>
           {showModelUsed && (
-            <>
-              <BrainIcon className="size-4" />
-              <span className="text-ui-sm leading-ui-sm text-icon6">
+            <div className="flex items-center gap-1.5">
+              <ProviderLogo providerId={modelMetadata.modelProvider} size={14} />
+              <span className="text-ui-xs leading-ui-xs">
                 {modelMetadata.modelProvider}/{modelMetadata.modelId}
               </span>
-            </>
+            </div>
           )}
           <AssistantActionBar />
         </div>

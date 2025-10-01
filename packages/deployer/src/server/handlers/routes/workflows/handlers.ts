@@ -171,7 +171,7 @@ export async function streamWorkflowHandler(c: Context) {
     const runtimeContext = c.get('runtimeContext');
     const logger = mastra.getLogger();
     const workflowId = c.req.param('workflowId');
-    const { inputData } = await c.req.json();
+    const { inputData, tracingOptions } = await c.req.json();
     const runId = c.req.query('runId');
 
     c.header('Transfer-Encoding', 'chunked');
@@ -186,6 +186,7 @@ export async function streamWorkflowHandler(c: Context) {
             runId,
             inputData,
             runtimeContext,
+            tracingOptions,
           });
 
           const reader = result.stream.getReader();
@@ -265,7 +266,7 @@ export async function streamVNextWorkflowHandler(c: Context) {
     const runtimeContext = c.get('runtimeContext');
     const logger = mastra.getLogger();
     const workflowId = c.req.param('workflowId');
-    const { inputData, closeOnSuspend } = await c.req.json();
+    const { inputData, closeOnSuspend, tracingOptions } = await c.req.json();
     const runId = c.req.query('runId');
 
     c.header('Transfer-Encoding', 'chunked');
@@ -281,6 +282,7 @@ export async function streamVNextWorkflowHandler(c: Context) {
             inputData,
             runtimeContext,
             closeOnSuspend,
+            tracingOptions,
           });
 
           const reader = result.getReader();
@@ -354,7 +356,7 @@ export async function resumeStreamWorkflowHandler(c: Context) {
     const runtimeContext = c.get('runtimeContext');
     const logger = mastra.getLogger();
     const workflowId = c.req.param('workflowId');
-    const { step, resumeData } = await c.req.json();
+    const { step, resumeData, tracingOptions } = await c.req.json();
     const runId = c.req.query('runId');
 
     c.header('Transfer-Encoding', 'chunked');
@@ -369,6 +371,7 @@ export async function resumeStreamWorkflowHandler(c: Context) {
             runId,
             body: { step, resumeData },
             runtimeContext,
+            tracingOptions,
           });
 
           const reader = result.getReader();

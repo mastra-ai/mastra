@@ -216,7 +216,12 @@ export const handleStreamChunk = ({ chunk, conversation }: HandleStreamChunkOpti
 
     case 'error': {
       if (typeof chunk.payload.error === 'string') {
-        throw new Error(chunk.payload.error);
+        // Add error message to conversation instead of throwing
+        const errorMessage: ThreadMessageLike = {
+          role: 'assistant',
+          content: `Error: ${chunk.payload.error}`,
+        };
+        return [...conversation, errorMessage];
       }
       return [...conversation];
     }
