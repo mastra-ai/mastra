@@ -148,9 +148,18 @@ export class InngestRun<
     while (runs?.[0]?.status !== 'Completed' || runs?.[0]?.event_id !== eventId) {
       await new Promise(resolve => setTimeout(resolve, 1000));
       runs = await this.getRuns(eventId);
+
       if (runs?.[0]?.status === 'Failed') {
-        throw new Error(`Function run ${runs?.[0]?.status}`);
-      } else if (runs?.[0]?.status === 'Cancelled') {
+        const snapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
+          workflowName: this.workflowId,
+          runId: this.runId,
+        });
+        return {
+          output: { result: { steps: snapshot?.context, status: 'failed', error: runs?.[0]?.output?.message } },
+        };
+      }
+
+      if (runs?.[0]?.status === 'Cancelled') {
         const snapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
           workflowName: this.workflowId,
           runId: this.runId,
