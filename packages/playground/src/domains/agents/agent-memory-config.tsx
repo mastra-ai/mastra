@@ -19,9 +19,10 @@ interface AgentMemoryConfigProps {
 }
 
 export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
-  const { data: config, isLoading } = useMemoryConfig(agentId);
+  const { data, isLoading } = useMemoryConfig(agentId);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['General', 'Semantic Recall']));
 
+  const config = data?.config;
   const configSections: MemoryConfigSection[] = useMemo(() => {
     if (!config) return [];
 
