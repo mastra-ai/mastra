@@ -1,29 +1,28 @@
-import { cn } from '@/lib/utils';
-import { SideDialog, TextAndIcon, KeyValueList } from '@/components/ui/elements';
+import { SideDialog, TextAndIcon, KeyValueList, type SideDialogRootProps } from '@/components/ui/elements';
 import { HashIcon, GaugeIcon } from 'lucide-react';
-
-import { MastraScorer } from '@mastra/core/scores';
 import { ClientScoreRowData } from '@mastra/client-js';
 import { useLinkComponent } from '@/lib/framework';
 
 type ScoreDialogProps = {
   score?: ClientScoreRowData;
-  scorer?: MastraScorer;
+  scorerName?: string;
   isOpen: boolean;
   onClose: () => void;
   onNext?: () => void;
   onPrevious?: () => void;
   computeTraceLink: (traceId: string, spanId?: string) => string;
+  dialogLevel?: SideDialogRootProps['level'];
 };
 
 export function ScoreDialog({
-  scorer,
+  scorerName,
   score,
   isOpen,
   onClose,
   onNext,
   onPrevious,
   computeTraceLink,
+  dialogLevel = 1,
 }: ScoreDialogProps) {
   const { Link } = useLinkComponent();
 
@@ -33,12 +32,12 @@ export function ScoreDialog({
       dialogDescription="View and analyze score details"
       isOpen={isOpen}
       onClose={onClose}
-      className={cn('w-[calc(100vw-20rem)] max-w-[80%]', '3xl:max-w-[65%]', '4xl:max-w-[55%]')}
+      level={dialogLevel}
     >
       <SideDialog.Top onNext={onNext} onPrevious={onPrevious} showInnerNav={true}>
         <div className="flex items-center gap-[1rem] text-icon4 text-[0.875rem]">
           <TextAndIcon>
-            <GaugeIcon /> {scorer?.config?.name}
+            <GaugeIcon /> {scorerName}
           </TextAndIcon>
           ›
           <TextAndIcon>

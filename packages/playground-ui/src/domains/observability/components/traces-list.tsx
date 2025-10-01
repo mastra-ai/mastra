@@ -1,15 +1,4 @@
-import {
-  EntryList,
-  // EntryListEntries,
-  // EntryListEntry,
-  // EntryListEntryStatusCol,
-  // EntryListEntryTextCol,
-  // EntryListHeader,
-  // EntryListMessage,
-  // EntryListTrim,
-  getShortId,
-} from '@/components/ui/elements';
-import { EntryListNextPageLoading } from '@/components/ui/elements/entry-list/entry-list-next-page-loading';
+import { EntryList, getShortId } from '@/components/ui/elements';
 import { format, isToday } from 'date-fns';
 
 export const tracesListColumns = [

@@ -197,6 +197,23 @@ function getTraceDetails(traceIdWithSpanId?: string) {
   return { traceId, spanId };
 }
 
+export async function getScoreByIdHandler({ mastra, id }: Context & { id: string }) {
+  try {
+    const score = await mastra.getStorage()?.getScoreById?.({ id });
+
+    if (!score) {
+      return null;
+    }
+
+    return {
+      ...score,
+      ...getTraceDetails(score.traceId),
+    };
+  } catch (error) {
+    return handleError(error, 'Error getting score by id');
+  }
+}
+
 export async function saveScoreHandler({ mastra, score }: Context & { score: ScoreRowData }) {
   try {
     const scores = (await mastra.getStorage()?.saveScore?.(score)) || [];

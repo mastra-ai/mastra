@@ -1,2 +1,3 @@
 export * from './MainContent';
-export * from './Buttons';
+export * from './buttons';
+export * from './sections';

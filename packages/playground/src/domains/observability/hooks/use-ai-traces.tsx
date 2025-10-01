@@ -44,6 +44,7 @@ export const useAITraces = ({ filters, dateRange }: AITracesFilters) => {
         dateRange,
         filters,
       }),
+    refetchInterval: 5000,
     initialPageParam: 0,
     getNextPageParam: (lastPage, _, lastPageParam) => {
       if (!lastPage?.length) {

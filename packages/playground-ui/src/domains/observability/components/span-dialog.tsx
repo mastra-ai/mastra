@@ -1,14 +1,5 @@
 import { cn } from '@/lib/utils';
-import {
-  SideDialog,
-  SideDialogTop,
-  KeyValueList,
-  type KeyValueListItemData,
-  TextAndIcon,
-  SideDialogHeader,
-  SideDialogHeading,
-  getShortId,
-} from '@/components/ui/elements';
+import { SideDialog, KeyValueList, type KeyValueListItemData, TextAndIcon, getShortId } from '@/components/ui/elements';
 import { PanelTopIcon, ChevronsLeftRightEllipsisIcon, HashIcon, EyeIcon } from 'lucide-react';
 import { TraceSpanUsage } from './trace-span-usage';
 import { SpanDetails } from './span-details';
@@ -47,11 +38,11 @@ export function SpanDialog({
       dialogDescription="View and analyze span details"
       isOpen={isOpen}
       onClose={onClose}
-      hasCloseButton={true}
-      className={cn('w-[calc(100vw-25rem)] max-w-[65%]', '3xl:max-w-[50%]', '4xl:max-w-[40%]')}
+      level={2}
+      //    className={cn('w-[calc(100vw-25rem)] max-w-[65%]', '3xl:max-w-[50%]', '4xl:max-w-[40%]')}
     >
       <div className="flex items-center justify-between pr-[1.5rem]">
-        <SideDialogTop onNext={onNext} onPrevious={onPrevious} showInnerNav={true}>
+        <SideDialog.Top onNext={onNext} onPrevious={onPrevious} showInnerNav={true}>
           <div className="flex items-center gap-[1rem] text-icon4 text-[0.875rem]">
             <TextAndIcon>
               <EyeIcon /> {getShortId(span?.traceId)}
@@ -62,7 +53,7 @@ export function SpanDialog({
               {getShortId(span?.spanId)}
             </TextAndIcon>
           </div>
-        </SideDialogTop>
+        </SideDialog.Top>
         <button className="flex items-center gap-1" onClick={onViewToggle}>
           <PanelTopIcon />
         </button>
@@ -70,14 +61,14 @@ export function SpanDialog({
 
       <div className="p-[1.5rem] px-[2.5rem] overflow-y-auto grid gap-[1.5rem] content-start">
         <div>
-          <SideDialogHeader className="flex gap-[1rem] items-baseline pr-[2.5rem]">
-            <SideDialogHeading>
+          <SideDialog.Header className="flex gap-[1rem] items-baseline pr-[2.5rem]">
+            <SideDialog.Heading>
               <ChevronsLeftRightEllipsisIcon /> {span?.name}
-            </SideDialogHeading>
+            </SideDialog.Heading>
             <TextAndIcon>
               <HashIcon /> {span?.spanId}
             </TextAndIcon>
-          </SideDialogHeader>
+          </SideDialog.Header>
 
           {span?.traceId && span?.spanId && (
             <div>

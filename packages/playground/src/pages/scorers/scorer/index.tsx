@@ -53,6 +53,8 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
     entityType: selectedEntityOption?.type === 'ALL' ? undefined : selectedEntityOption?.type,
   });
 
+  console.log({ scoresData });
+
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
 
   const agentOptions: EntityOptions[] =

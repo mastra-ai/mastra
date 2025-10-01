@@ -1,4 +1,4 @@
-import { SideDialogCodeSection, SideDialogHeading } from '@/components/ui/elements';
+import { SideDialog } from '@/components/ui/elements';
 import { ScoreTable } from '@/domains/scores/components/score-table';
 import { AISpanRecord } from '@mastra/core';
 import { GaugeIcon } from 'lucide-react';
@@ -15,16 +15,16 @@ export function SpanDetails({ span, onScorerTriggered }: SpanDetailsProps) {
 
   return (
     <div className="grid gap-[1.5rem] mb-[2rem]">
-      <SideDialogCodeSection title="Input" codeStr={JSON.stringify(span.input || null, null, 2)} />
-      <SideDialogCodeSection title="Output" codeStr={JSON.stringify(span.output || null, null, 2)} />
-      <SideDialogCodeSection title="Metadata" codeStr={JSON.stringify(span.metadata || null, null, 2)} />
-      <SideDialogCodeSection title="Attributes" codeStr={JSON.stringify(span.attributes || null, null, 2)} />
+      <SideDialog.CodeSection title="Input" codeStr={JSON.stringify(span.input || null, null, 2)} />
+      <SideDialog.CodeSection title="Output" codeStr={JSON.stringify(span.output || null, null, 2)} />
+      <SideDialog.CodeSection title="Metadata" codeStr={JSON.stringify(span.metadata || null, null, 2)} />
+      <SideDialog.CodeSection title="Attributes" codeStr={JSON.stringify(span.attributes || null, null, 2)} />
 
       {span?.links?.length > 0 && (
         <div className="pt-[2.5rem] pr-[2.5rem]">
-          <SideDialogHeading as="h2" className="pb-[1rem]">
+          <SideDialog.Heading as="h2" className="pb-[1rem]">
             <GaugeIcon /> Scores
-          </SideDialogHeading>
+          </SideDialog.Heading>
 
           <div className="bg-surface2 rounded-lg overflow-hidden border-sm border-border1">
             <ScoreTable

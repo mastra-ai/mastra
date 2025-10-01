@@ -1,22 +1,23 @@
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { Button } from '@/components/ui/elements/buttons';
 import { InfoIcon } from 'lucide-react';
-import { useTriggerScorer } from '../hooks/use-trigger-scorer';
+import { useTriggerScorer } from '@/domains/scores/hooks/use-trigger-scorer';
 import { AISpanRecord } from '@mastra/core';
 import { Message, SelectField, TextAndIcon } from '@/components/ui/elements';
 import { useState } from 'react';
 
-export interface ScorersDropdownProps {
+export interface TraceScoringProps {
   trace: AISpanRecord;
   spanId?: string;
   onScorerTriggered: (scorerName: string, traceId: string, spanId?: string) => void;
   entityType?: string;
 }
 
-export const ScorersDropdown = ({ trace, spanId, onScorerTriggered, entityType }: ScorersDropdownProps) => {
+export const TraceScoring = ({ trace, spanId, onScorerTriggered, entityType }: TraceScoringProps) => {
   const { data: scorers = {}, isLoading } = useScorers();
   const [selectedScorer, setSelectedScorer] = useState<string | null>(null);
-  const { mutate: triggerScorer, isPending, isSuccess, isError, error } = useTriggerScorer(onScorerTriggered);
+  const { mutate: triggerScorer, isPending, isSuccess } = useTriggerScorer(onScorerTriggered);
+  const [showMsg, setShowMsg] = useState(false);
 
   let scorerList = Object.entries(scorers)
     .map(([key, scorer]) => ({
@@ -35,13 +36,16 @@ export const ScorersDropdown = ({ trace, spanId, onScorerTriggered, entityType }
 
   const isWaiting = isPending || isLoading;
 
-  console.log({ isSuccess });
-
   const handleStartScoring = () => {
     if (selectedScorer) {
       triggerScorer({ scorerName: selectedScorer, traceId: trace.traceId, spanId });
       //  setSelectedScorer(null);
     }
+  };
+
+  const handleScorerChange = (val: string) => {
+    setSelectedScorer(val);
+    setShowMsg(false);
   };
 
   const selectedScorerDescription = scorerList.find(s => s.name === selectedScorer)?.description || '';
@@ -54,9 +58,7 @@ export const ScorersDropdown = ({ trace, spanId, onScorerTriggered, entityType }
             name={'select-scorer'}
             placeholder="Select a scorer..."
             options={scorerList.map(scorer => ({ label: scorer.name, value: scorer.name }))}
-            onValueChange={val => {
-              setSelectedScorer(val);
-            }}
+            onValueChange={handleScorerChange}
             value={selectedScorer || ''}
             className="min-w-[20rem]"
             disabled={isWaiting}
@@ -73,7 +75,7 @@ export const ScorersDropdown = ({ trace, spanId, onScorerTriggered, entityType }
         </Button>
       </div>
 
-      <Message isVisible={isSuccess} className="mt-[1rem]">
+      <Message isVisible={showMsg} className="mt-[1rem]">
         <InfoIcon /> Scorer triggered! When finished successfully, it will appear in the list below. It could take a
         moment.
       </Message>

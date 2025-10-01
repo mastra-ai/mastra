@@ -5,6 +5,8 @@ import { SideDialogContent } from './side-dialog-content';
 import { SideDialogHeader } from './side-dialog-header';
 import { SideDialogTop } from './side-dialog-top';
 
+export { type SideDialogRootProps } from './side-dialog-root';
+
 export const SideDialog = Object.assign(SideDialogRoot, {
   Top: SideDialogTop,
   Header: SideDialogHeader,

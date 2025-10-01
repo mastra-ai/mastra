@@ -1,14 +1,17 @@
 import { cn } from '@/lib/utils';
+import { SideDialog, KeyValueList, TextAndIcon, getShortId, Section } from '@/components/ui/elements';
+import { Sections } from '@/components/ui/containers';
 import {
-  SideDialog,
-  SideDialogTop,
-  KeyValueList,
-  TextAndIcon,
-  getShortId,
-  SideDialogHeader,
-  SideDialogHeading,
-} from '@/components/ui/elements';
-import { PanelLeftIcon, HashIcon, EyeIcon, ChevronsLeftRightEllipsisIcon, GaugeIcon } from 'lucide-react';
+  PanelLeftIcon,
+  HashIcon,
+  EyeIcon,
+  ChevronsLeftRightEllipsisIcon,
+  GaugeIcon,
+  Settings,
+  SettingsIcon,
+  CirclePlayIcon,
+  CircleGaugeIcon,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { TraceTimeline } from './trace-timeline';
 import { TraceSpanUsage } from './trace-span-usage';
@@ -21,6 +24,9 @@ import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
 import { UISpan } from '../types';
 import { ScorersDropdown } from '@/domains/scores/components/scorers-dropdown';
 import { ScoreTable } from '@/domains/scores/components/score-table';
+import { TraceScoreList } from './trace-score-list';
+import { Tabs } from '@/components/ui/elements/tabs/tabs';
+import { ScoreDialog, Tab, TraceScoring } from '@/index';
 
 type TraceDialogProps = {
   traceSpans?: AISpanRecord[];
@@ -46,8 +52,6 @@ export function TraceDialog({
   onNext,
   onPrevious,
   isLoadingSpans,
-  computeAgentsLink,
-  computeWorkflowsLink,
   onScorerTriggered,
   initialSpanId,
 }: TraceDialogProps) {
@@ -129,77 +133,90 @@ export function TraceDialog({
         dialogDescription="View and analyze trace details"
         isOpen={isOpen}
         onClose={onClose}
-        hasCloseButton={!dialogIsOpen || combinedView}
-        className={cn('w-[calc(100vw-20rem)] max-w-[80%]', '3xl:max-w-[65%]', '4xl:max-w-[55%]')}
+        level={1}
       >
-        <SideDialogTop onNext={onNext} onPrevious={onPrevious} showInnerNav={true}>
+        <SideDialog.Top onNext={onNext} onPrevious={onPrevious} showInnerNav={true}>
           <TextAndIcon>
             <EyeIcon /> {getShortId(traceId)}
           </TextAndIcon>
-        </SideDialogTop>
+        </SideDialog.Top>
 
-        <div
+        {/* <div
           className={cn('pt-[1.5rem] pl-[2.5rem] grid-rows-[auto_1fr] grid h-full overflow-y-auto', {
             'grid-rows-[auto_1fr_1fr]': selectedSpan && combinedView,
           })}
         >
-          <SideDialogHeader className="pr-[2.5rem]">
-            <SideDialogHeading>
+         */}
+        <SideDialog.Content>
+          <SideDialog.Header className="pr-[2.5rem]">
+            <SideDialog.Heading>
               <EyeIcon /> {traceDetails?.name}
-            </SideDialogHeading>
+            </SideDialog.Heading>
 
             <TextAndIcon>
               <HashIcon /> {traceId}
             </TextAndIcon>
-          </SideDialogHeader>
+          </SideDialog.Header>
 
-          <div className={cn('overflow-y-auto pb-[2.5rem]')}>
-            {traceDetails && (
-              <div>
-                <ScorersDropdown
-                  trace={traceDetails}
-                  spanId={selectedSpanId}
-                  onScorerTriggered={onScorerTriggered}
-                  entityType={entityType}
+          <Tabs defaultTab="timeline">
+            <Tabs.List>
+              <Tabs.Tab value="timeline">Details</Tabs.Tab>
+              <Tabs.Tab value="scores">
+                Scoring {traceDetails?.links?.length ? `(${traceDetails.links.length})` : '(0)'}
+              </Tabs.Tab>
+            </Tabs.List>
+            <Tabs.Content value="timeline">
+              {traceDetails?.metadata?.usage && (
+                <TraceSpanUsage
+                  traceUsage={traceDetails?.metadata?.usage}
+                  traceSpans={traceSpans}
+                  className="mt-[2rem] pr-[1.5rem]"
                 />
-              </div>
-            )}
+              )}
 
-            {traceDetails?.metadata?.usage && (
-              <TraceSpanUsage
-                traceUsage={traceDetails?.metadata?.usage}
-                traceSpans={traceSpans}
-                className="mt-[2rem] pr-[1.5rem]"
+              <KeyValueList data={traceInfo} LinkComponent={Link} className="mt-[2rem]" />
+
+              <TraceTimeline
+                hierarchicalSpans={hierarchicalSpans}
+                spans={traceSpans}
+                onSpanClick={handleSpanClick}
+                selectedSpanId={selectedSpanId}
+                isLoading={isLoadingSpans}
+                className="pr-[2.5rem] pt-[2.5rem]"
               />
-            )}
-            <KeyValueList data={traceInfo} LinkComponent={Link} className="mt-[2rem]" />
+            </Tabs.Content>
+            <Tabs.Content value="scores">
+              {traceDetails && (
+                <Sections>
+                  <Section>
+                    <Section.Header>
+                      <Section.Heading>
+                        <CircleGaugeIcon /> Scoring{' '}
+                      </Section.Heading>
+                    </Section.Header>
 
-            <TraceTimeline
-              hierarchicalSpans={hierarchicalSpans}
-              spans={traceSpans}
-              onSpanClick={handleSpanClick}
-              selectedSpanId={selectedSpanId}
-              isLoading={isLoadingSpans}
-              className="pr-[2.5rem] pt-[2.5rem]"
-            />
+                    <TraceScoring
+                      trace={traceDetails}
+                      spanId={selectedSpanId}
+                      onScorerTriggered={onScorerTriggered}
+                      entityType={entityType}
+                    />
+                  </Section>
 
-            {traceDetails?.links?.length > 0 && (
-              <div className="pt-[2.5rem] pr-[2.5rem]">
-                <SideDialogHeading as="h2" className="pb-[1rem]">
-                  <GaugeIcon /> Scores
-                </SideDialogHeading>
+                  <Section>
+                    <Section.Header>
+                      <Section.Heading>
+                        <GaugeIcon /> Scores
+                      </Section.Heading>
+                    </Section.Header>
+                    <TraceScoreList scores={traceDetails?.links} />
+                  </Section>
+                </Sections>
+              )}
+            </Tabs.Content>
+          </Tabs>
 
-                <div className="bg-surface2 rounded-lg overflow-hidden border-sm border-border1">
-                  <ScoreTable
-                    scores={traceDetails?.links}
-                    onItemClick={scorerName => onScorerTriggered(scorerName, traceDetails!.traceId, selectedSpanId)}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {selectedSpan && combinedView && (
+          {/* {selectedSpan && combinedView && (
             <div className="overflow-y-auto grid grid-rows-[auto_1fr] relative">
               <div className="absolute left-0 right-[2.5rem] h-[.5rem] bg-surface1 rounded-full top-0"></div>
               <div className="flex items-center justify-between pb-[.5rem] pt-[1rem] border-b border-border1 pr-[2.5rem]">
@@ -246,8 +263,8 @@ export function TraceDialog({
                 </div>
               </div>
             </div>
-          )}
-        </div>
+          )} */}
+        </SideDialog.Content>
       </SideDialog>
 
       {traceDetails && (

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { GetScorerResponse, GetScoresResponse } from '@mastra/client-js';
+import { GetScorerResponse, GetScoresResponse, ClientScoreRowData } from '@mastra/client-js';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { useQuery } from '@tanstack/react-query';
 
@@ -31,6 +31,34 @@ export const useScoresByEntityId = (entityId: string, entityType: string, page: 
   }, [entityId, entityType, page]);
 
   return { scores, isLoading };
+};
+
+export const useScoreById = (id: string) => {
+  const client = useMastraClient();
+  const [score, setScore] = useState<ClientScoreRowData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchScore = async () => {
+      setIsLoading(true);
+      try {
+        const res = await client.getScoreById({ id });
+        setScore(res);
+        setIsLoading(false);
+      } catch (error) {
+        setScore(null);
+        console.error('Error fetching score', error);
+        toast.error('Error fetching score');
+        setIsLoading(false);
+      }
+    };
+
+    if (id) {
+      fetchScore();
+    }
+  }, [id]);
+
+  return { score, isLoading };
 };
 
 type UseScoresByScorerIdProps = {
