@@ -7,7 +7,6 @@ import { UpdateModelParams } from '@mastra/client-js';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertCircle, Info } from 'lucide-react';
 import { useModelReset } from '../../context/model-reset-context';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { cleanProviderId } from './utils';
 
@@ -111,15 +110,31 @@ export const AgentMetadataModelSwitcher = ({
       );
     }
 
-    // Sort by connection status - connected providers first, then alphabetically
-    return filtered
-      .sort((a, b) => {
-        if (a.connected && !b.connected) return -1;
-        if (!a.connected && b.connected) return 1;
-        // If same connection status, sort alphabetically by name
-        return a.name.localeCompare(b.name);
-      })
-      .slice(0, searchTerm ? undefined : 20); // Show first 20 when no search
+    // Define popular providers in order
+    const popularProviders = ['openai', 'anthropic', 'google', 'openrouter', 'netlify'];
+
+    const getPopularityIndex = (providerId: string) => {
+      const cleanId = providerId.toLowerCase().split('.')[0]; // Handle IDs like "openai.chat"
+      const index = popularProviders.indexOf(cleanId);
+      return index === -1 ? popularProviders.length : index;
+    };
+
+    // Sort by: 1) connection status, 2) popularity, 3) alphabetically
+    return filtered.sort((a, b) => {
+      // First, sort by connection status - connected providers first
+      if (a.connected && !b.connected) return -1;
+      if (!a.connected && b.connected) return 1;
+
+      // Then by popularity
+      const aPopularity = getPopularityIndex(a.id);
+      const bPopularity = getPopularityIndex(b.id);
+      if (aPopularity !== bPopularity) {
+        return aPopularity - bPopularity;
+      }
+
+      // Finally, alphabetically by name
+      return a.name.localeCompare(b.name);
+    });
   }, [providers, providerSearch, isSearching]);
 
   // Filter models - this is computed inline in the original, but we'll keep it as a useMemo

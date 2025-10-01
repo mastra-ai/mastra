@@ -35,14 +35,14 @@ export const chefModelV2Agent = new Agent({
       ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
       You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
       `,
-  model: openai_v5('gpt-4o-mini'),
-  tools: {
-    cookingTool,
-    weatherInfo,
-  },
-  workflows: {
-    myWorkflow,
-  },
+  model: 'netlify/openai/gpt-4.1',
+  // tools: {
+  //   cookingTool,
+  //   weatherInfo,
+  // },
+  // workflows: {
+  //   myWorkflow,
+  // },
   scorers: ({ mastra }) => {
     if (!mastra) {
       throw new Error('Mastra not found');
@@ -53,7 +53,7 @@ export const chefModelV2Agent = new Agent({
       scorer1: { scorer: scorer1, sampling: { rate: 1, type: 'ratio' } },
     };
   },
-  memory,
+  // memory,
 });
 
 const weatherAgent = new Agent({

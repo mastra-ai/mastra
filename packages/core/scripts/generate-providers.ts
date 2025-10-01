@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { MastraModelGateway, ProviderConfig } from '../src/llm/model/gateways/index.js';
 import { ModelsDevGateway } from '../src/llm/model/gateways/models-dev.js';
+import { NetlifyGateway } from '../src/llm/model/gateways/netlify.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,11 +18,8 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
       const providers = await gateway.fetchProviders();
 
       for (const [providerId, config] of Object.entries(providers)) {
-        // Apply prefix if gateway has one
-        const finalProviderId = gateway.prefix ? `${gateway.prefix}/${providerId}` : providerId;
-
-        allProviders[finalProviderId] = config;
-        allModels[finalProviderId] = config.models;
+        allProviders[providerId] = config;
+        allModels[providerId] = config.models;
       }
     } catch (error) {
       console.error(`Failed to fetch from gateway ${gateway.name}:`, error);
@@ -35,10 +33,12 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
  * Generated from model gateway providers
  */
 
+import type { ProviderConfig } from './gateways/base';
+
 /**
  * Provider configurations for OpenAI-compatible APIs
  */
-export const PROVIDER_REGISTRY = ${JSON.stringify(allProviders, null, 2)} as const;
+export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = ${JSON.stringify(allProviders, null, 2)} as const;
 
 /**
  * Available models per provider
@@ -78,18 +78,6 @@ export function isProviderRegistered(providerId: string): boolean {
  */
 export function getRegisteredProviders(): string[] {
   return Object.keys(PROVIDER_REGISTRY);
-}
-
-/**
- * Provider configuration interface
- */
-export interface ProviderConfig {
-  url: string;
-  apiKeyEnvVar: string;
-  apiKeyHeader?: string;
-  name: string;
-  models: readonly string[];
-  docUrl?: string;
 }
 
 /**
@@ -146,7 +134,7 @@ export function isValidModelId(modelId: string): modelId is ModelRouterModelId {
 // Main execution
 async function main() {
   // Configure which gateways to use
-  const gateways: MastraModelGateway[] = [new ModelsDevGateway()];
+  const gateways: MastraModelGateway[] = [new ModelsDevGateway(), new NetlifyGateway()];
 
   await generateProviderRegistry(gateways);
 }
