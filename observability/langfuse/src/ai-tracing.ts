@@ -11,6 +11,8 @@ import type {
   AITracingEvent,
   AnyExportedAISpan,
   LLMGenerationAttributes,
+  AISpan,
+  ExportedAISpan,
 } from '@mastra/core/ai-tracing';
 import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
 import { ConsoleLogger } from '@mastra/core/logger';
@@ -98,6 +100,29 @@ export class LangfuseExporter implements AITracingExporter {
     if (this.realtime) {
       await this.client.flushAsync();
     }
+  }
+
+  async addScore({
+    traceId,
+    scorer,
+    spanMetadata,
+    metadata,
+  }: {
+    traceId: string;
+    scorer: string;
+    metadata: Record<string, any>;
+    spanMetadata: Record<string, any>;
+  }): Promise<void> {
+    if (!this.client) return;
+    await this.client.score({
+      id: `${traceId}-${scorer}`,
+      traceId,
+      name: scorer,
+      value: metadata.score,
+      ...(spanMetadata?.sessionId ? { sessionId: spanMetadata.sessionId } : {}),
+      metadata: { reason: metadata.reason },
+      dataType: 'NUMERIC',
+    });
   }
 
   private async handleSpanStarted(span: AnyExportedAISpan): Promise<void> {
