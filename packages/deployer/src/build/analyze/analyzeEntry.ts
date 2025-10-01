@@ -95,9 +95,9 @@ async function captureDependenciesToOptimize(
     );
   }
 
-  let entryRootPath = await getPackageRootPath(output.facadeModuleId);
-  if (!entryRootPath) {
-    entryRootPath = projectRoot;
+  let entryRootPath = projectRoot;
+  if (!output.facadeModuleId.startsWith('\x00virtual:')) {
+    entryRootPath = (await getPackageRootPath(output.facadeModuleId)) || projectRoot;
   }
 
   for (const [dependency, bindings] of Object.entries(output.importedBindings)) {
