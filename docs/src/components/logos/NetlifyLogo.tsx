@@ -1,9 +1,9 @@
 export const NetlifyLogo = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    width="128"
-    height="113"
     viewBox="0 0 128 113"
+    fill="currentColor"
+    className="w-full h-full"
     {...props}
   >
     <g clipPath="url(#clip0_236_138)">
