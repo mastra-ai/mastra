@@ -95,7 +95,10 @@ async function captureDependenciesToOptimize(
     );
   }
 
-  const entryRootPath = (await getPackageRootPath(output.facadeModuleId!))! + '/';
+  let entryRootPath = await getPackageRootPath(output.facadeModuleId);
+  if (!entryRootPath) {
+    entryRootPath = projectRoot;
+  }
 
   for (const [dependency, bindings] of Object.entries(output.importedBindings)) {
     if (isNodeBuiltin(dependency) || DEPS_TO_IGNORE.includes(dependency)) {

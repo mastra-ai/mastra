@@ -33,14 +33,17 @@ export async function getPackageRootPath(packageName: string, parentPath?: strin
   let rootPath: string | null;
 
   try {
-    const options: { paths?: string[] } = {};
+    let options: { paths?: string[] } | undefined = undefined;
     if (parentPath) {
       if (!parentPath.startsWith('file://')) {
         parentPath = pathToFileURL(parentPath).href;
       }
 
-      options.paths = [parentPath];
+      options = {
+        paths: [parentPath],
+      };
     }
+
     const pkg = await getPackageInfo(packageName, options);
     rootPath = pkg?.rootPath ?? null;
   } catch (e) {
