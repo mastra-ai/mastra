@@ -474,6 +474,41 @@ describe('vNext Workflow Handlers', () => {
 
       expect(result).toEqual({ message: 'Workflow run resumed' });
     });
+
+    it('should preserve resourceId when resuming workflow run after server restart', async () => {
+      const resourceId = 'user-test-123';
+
+      // Start a workflow with resourceId
+      const run = await reusableWorkflow.createRunAsync({
+        runId: 'test-run-with-resource',
+        resourceId,
+      });
+      await run.start({ inputData: {} });
+
+      const runBeforeRestart = await reusableWorkflow.getWorkflowRunById('test-run-with-resource');
+      expect(runBeforeRestart?.resourceId).toBe(resourceId);
+
+      // Simulate server restart with fresh instances (run not in memory)
+      const freshWorkflow = createReusableMockWorkflow('reusable-workflow');
+      const freshMastra = new Mastra({
+        logger: false,
+        workflows: { 'reusable-workflow': freshWorkflow },
+        storage: mockMastra.getStorage(),
+      });
+
+      await resumeWorkflowHandler({
+        mastra: freshMastra,
+        workflowId: 'reusable-workflow',
+        runId: 'test-run-with-resource',
+        body: { step: 'test-step', resumeData: { test: 'data' } },
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // resourceId should be preserved after resume
+      const runAfterResume = await freshWorkflow.getWorkflowRunById('test-run-with-resource');
+      expect(runAfterResume?.resourceId).toBe(resourceId);
+    });
   });
 
   describe('getWorkflowRunsHandler', () => {
