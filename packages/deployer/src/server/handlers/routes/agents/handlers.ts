@@ -1,7 +1,6 @@
 import type { Mastra } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { getProviderConfig } from '@mastra/core/llm';
-import { PROVIDER_REGISTRY } from '@mastra/core/llm';
+import { getProviderConfig, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import {
   getAgentsHandler as getOriginalAgentsHandler,
