@@ -24,7 +24,7 @@ export interface AgentMetadataModelSwitcherProps {
 interface Provider {
   id: string;
   name: string;
-  envVar: string | string[];
+  envVar: string;
   connected: boolean;
   docUrl?: string;
   models: string[];
@@ -672,9 +672,7 @@ export const AgentMetadataModelSwitcher = ({
                   <div className="text-xs mt-1">
                     Set the{' '}
                     <code className="px-1 py-0.5 bg-yellow-100 dark:bg-yellow-900/50 rounded">
-                      {typeof currentProvider.envVar === `string`
-                        ? currentProvider.envVar
-                        : currentProvider.envVar.join(`, `)}
+                      {currentProvider.envVar}
                     </code>{' '}
                     environment variable to use this provider.
                   </div>

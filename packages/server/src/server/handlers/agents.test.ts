@@ -1,6 +1,6 @@
+import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { getProvidersHandler } from './agents';
-import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 
 describe('getProvidersHandler', () => {
   // Store original env

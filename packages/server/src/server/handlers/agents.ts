@@ -1,4 +1,5 @@
-import type { Agent, MastraLanguageModel } from '@mastra/core/agent';
+import type { Agent } from '@mastra/core/agent';
+import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
@@ -778,5 +779,30 @@ export async function updateAgentModelInModelListHandler({
     return { message: 'Model list updated' };
   } catch (error) {
     return handleError(error, 'error updating model list');
+  }
+}
+
+export async function getProvidersHandler() {
+  try {
+    const providers = Object.entries(PROVIDER_REGISTRY).map(([id, provider]) => {
+      // Check if the provider is connected by checking for its API key env var(s)
+      const envVars = Array.isArray(provider.apiKeyEnvVar) 
+        ? provider.apiKeyEnvVar 
+        : [provider.apiKeyEnvVar];
+      const connected = envVars.every(envVar => !!process.env[envVar]);
+
+      return {
+        id,
+        name: provider.name,
+        envVar: provider.apiKeyEnvVar,
+        connected,
+        docUrl: provider.docUrl,
+        models: [...provider.models], // Convert readonly array to regular array
+      };
+    });
+
+    return { providers };
+  } catch (error) {
+    return handleError(error, 'error fetching providers');
   }
 }

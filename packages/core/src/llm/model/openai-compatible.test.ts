@@ -62,7 +62,7 @@ describe('OpenAICompatibleModel', () => {
       ).rejects.toThrow('No gateway can handle model: unknown-provider/gpt-4o');
     });
 
-    it('should throw error for missing API key when calling doStream', async () => {
+    it('should return error stream for missing API key when calling doStream', async () => {
       // Remove API key from environment
       const originalEnv = process.env.OPENAI_API_KEY;
       delete process.env.OPENAI_API_KEY;
@@ -76,14 +76,34 @@ describe('OpenAICompatibleModel', () => {
 
       const model = new OpenAICompatibleModel('openai/gpt-4o');
 
-      await expect(
-        model.doStream({
-          prompt: [],
-          providerOptions: {},
-        }),
-      ).rejects.toThrow(
-        'Authentication failed for provider "openai". Please ensure the OPENAI_API_KEY environment variable is set with a valid API key.',
-      );
+      const result = await model.doStream({
+        prompt: [],
+        providerOptions: {},
+      });
+
+      // Collect stream chunks from ReadableStream
+      const chunks: any[] = [];
+      const reader = result.stream.getReader();
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          // Close the stream after reading the error part
+          if (value.type === 'error') {
+            await reader.cancel();
+            break;
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      // Should have received an error chunk
+      expect(chunks.length).toBeGreaterThan(0);
+      expect(chunks[0].type).toBe('error');
+      expect(chunks[0].error).toContain('API key not found for provider "openai"');
 
       // Restore environment
       if (originalEnv) {

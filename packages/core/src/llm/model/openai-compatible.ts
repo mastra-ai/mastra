@@ -348,8 +348,8 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
     response?: { headers: Record<string, string> };
     warnings: LanguageModelV2CallWarning[];
   }> {
+    // Validate API key and return error stream if validation fails
     try {
-      // Validate API key and return error stream if validation fails
       this.validateApiKey();
     } catch (error) {
       // Return an error stream instead of throwing
