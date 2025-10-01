@@ -55,7 +55,7 @@ export function createAgenticExecutionWorkflow<
     .then(llmExecutionStep)
     .map(
       async ({ inputData }) => {
-        const typedInputData = inputData as LLMIterationData<Tools>;
+        const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
         if (modelStreamSpan && telemetry_settings?.recordOutputs !== false && typedInputData.output.toolCalls?.length) {
           modelStreamSpan.setAttribute(
             'stream.response.toolCalls',

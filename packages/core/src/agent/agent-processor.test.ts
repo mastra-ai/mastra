@@ -1,10 +1,9 @@
-import { openai } from '@ai-sdk/openai';
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV1 } from 'ai/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { Processor } from '../processors/index';
 import { RuntimeContext } from '../runtime-context';
 import type { MastraMessageV2 } from './types';
@@ -1247,7 +1246,7 @@ describe('Input and Output Processors with VNext Methods', () => {
     });
   });
 
-  function testStructuredOutput(format: 'aisdk' | 'mastra', model: MastraLanguageModel) {
+  function testStructuredOutput(format: 'aisdk' | 'mastra', model: LanguageModelV2) {
     describe('StructuredOutputProcessor Integration Tests', () => {
       describe('with real LLM', () => {
         it('should convert unstructured text to structured JSON for color analysis', async () => {
@@ -1271,32 +1270,17 @@ describe('Input and Output Processors with VNext Methods', () => {
             model,
           });
 
-          let result;
-
-          if (model.specificationVersion === 'v1') {
-            result = await agent.generate(
-              'Tell me about a vibrant sunset orange color. What are its properties and how does it make people feel?.',
-              {
-                structuredOutput: {
-                  schema: colorSchema,
-                  model, // Use smaller model for faster tests
-                  errorStrategy: 'strict',
-                },
+          const result = await agent.generateVNext(
+            'Tell me about a vibrant sunset orange color. What are its properties and how does it make people feel? Keep your response really short.',
+            {
+              structuredOutput: {
+                schema: colorSchema,
+                model, // Use smaller model for faster tests
+                errorStrategy: 'strict',
               },
-            );
-          } else {
-            result = await agent.generateVNext(
-              'Tell me about a vibrant sunset orange color. What are its properties and how does it make people feel? Keep your response really short.',
-              {
-                structuredOutput: {
-                  schema: colorSchema,
-                  model, // Use smaller model for faster tests
-                  errorStrategy: 'strict',
-                },
-                format,
-              },
-            );
-          }
+              format,
+            },
+          );
 
           // Verify we have both natural text AND structured data
           expect(result.text).toBeTruthy();
@@ -1356,26 +1340,17 @@ describe('Input and Output Processors with VNext Methods', () => {
           For beginners, starting with simple algorithms like linear regression or decision trees is recommended.
         `;
 
-          let result;
-
-          if (model.specificationVersion === 'v1') {
-            result = await agent.generate(`Analyze this article and extract key information:\n\n${articleText}`, {
-              structuredOutput: {
-                schema: articleSchema,
-                model,
-                errorStrategy: 'strict',
-              },
-            });
-          } else {
-            result = await agent.generateVNext(`Analyze this article and extract key information:\n\n${articleText}`, {
+          const result = await agent.generateVNext(
+            `Analyze this article and extract key information:\n\n${articleText}`,
+            {
               structuredOutput: {
                 schema: articleSchema,
                 model,
                 errorStrategy: 'strict',
               },
               format,
-            });
-          }
+            },
+          );
 
           // Verify we have both natural text AND structured data
           expect(result.text).toBeTruthy();
@@ -1433,32 +1408,19 @@ describe('Input and Output Processors with VNext Methods', () => {
             model,
           });
 
-          let result;
-
-          if (model.specificationVersion === 'v1') {
-            result = await agent.generate('Tell me about the weather today in a casual way.', {
-              structuredOutput: {
-                schema: strictSchema,
-                model,
-                errorStrategy: 'fallback',
-                fallbackValue,
-              },
-            });
-          } else {
-            result = await agent.generateVNext('Tell me about the weather today in a casual way.', {
-              structuredOutput: {
-                schema: strictSchema,
-                model: new MockLanguageModelV2({
-                  doStream: async () => {
-                    throw new Error('test error');
-                  },
-                }),
-                errorStrategy: 'fallback',
-                fallbackValue,
-              },
-              format,
-            });
-          }
+          const result = await agent.generateVNext('Tell me about the weather today in a casual way.', {
+            structuredOutput: {
+              schema: strictSchema,
+              model: new MockLanguageModelV2({
+                doStream: async () => {
+                  throw new Error('test error');
+                },
+              }),
+              errorStrategy: 'fallback',
+              fallbackValue,
+            },
+            format,
+          });
 
           // Should preserve natural text but return fallback object
           expect(result.text).toBeTruthy();
@@ -1485,32 +1447,17 @@ describe('Input and Output Processors with VNext Methods', () => {
             model, // Use faster model for idea generation
           });
 
-          let result;
-
-          if (model.specificationVersion === 'v1') {
-            result = await agent.generate(
-              'Come up with an innovative solution for reducing food waste in restaurants.',
-              {
-                structuredOutput: {
-                  schema: ideaSchema,
-                  model, // Use more powerful model for structuring
-                  errorStrategy: 'strict',
-                },
+          const result = await agent.generateVNext(
+            'Come up with an innovative solution for reducing food waste in restaurants.',
+            {
+              structuredOutput: {
+                schema: ideaSchema,
+                model,
+                errorStrategy: 'strict',
               },
-            );
-          } else {
-            result = await agent.generateVNext(
-              'Come up with an innovative solution for reducing food waste in restaurants.',
-              {
-                structuredOutput: {
-                  schema: ideaSchema,
-                  model,
-                  errorStrategy: 'strict',
-                },
-                format,
-              },
-            );
-          }
+              format,
+            },
+          );
 
           // Verify we have both natural text AND structured data
           expect(result.text).toBeTruthy();
@@ -1550,36 +1497,48 @@ describe('Input and Output Processors with VNext Methods', () => {
           model: model,
         });
 
-        let result;
-
-        if (model.specificationVersion === 'v1') {
-          return;
-        } else {
-          result = await agent.streamVNext(
-            `
-                Come up with an innovative solution for reducing food waste in restaurants. 
-                Make sure to include an idea, category, feasibility, and resources.
-              `,
-            {
-              format,
-              structuredOutput: {
-                schema: ideaSchema,
-                model,
-                errorStrategy: 'strict',
-              },
+        const result = await agent.streamVNext(
+          `
+              Come up with an innovative solution for reducing food waste in restaurants. 
+              Make sure to include an idea, category, feasibility, and resources.
+            `,
+          {
+            format,
+            structuredOutput: {
+              schema: ideaSchema,
+              model,
+              errorStrategy: 'strict',
             },
-          );
-        }
+          },
+        );
 
         for await (const _chunk of result.fullStream) {
-          // console.log(chunk)
+          // const timestamp = new Date().getTime();
+          // if (!chunk.type.includes('delta')) {
+          //   console.log(timestamp, chunk);
+          //   continue;
+          // }
+          // if (chunk.type === 'text-delta') {
+          //   const cyanColorCode = '\x1b[36m';
+          //   const resetColorCode = '\x1b[0m';
+          //   process.stdout.write(cyanColorCode);
+          //   process.stdout.write(chunk.payload.text);
+          //   process.stdout.write(resetColorCode);
+          //   continue;
+          // }
+          // if (chunk.metadata?.from === 'structured-output') {
+          //   const redColorCode = '\x1b[31m';
+          //   const resetColorCode = '\x1b[0m';
+          //   process.stdout.write(redColorCode);
+          //   console.log(timestamp, 'structuring agent chunk in main stream\n', chunk);
+          //   process.stdout.write(resetColorCode);
+          // }
         }
 
         console.log('getting text');
         const resultText = await result.text;
         console.log('getting object');
         const resultObj = await result.object;
-
         console.log('got result object', resultObj);
 
         // Verify we have both natural text AND structured data
@@ -1608,7 +1567,6 @@ describe('Input and Output Processors with VNext Methods', () => {
   }
 
   testStructuredOutput('aisdk', openai_v5('gpt-4o'));
-  testStructuredOutput('mastra', openai('gpt-4o'));
   testStructuredOutput('mastra', openai_v5('gpt-4o'));
 });
 
