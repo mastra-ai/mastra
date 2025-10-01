@@ -45,6 +45,7 @@ export interface ModelSettings {
   chatWithGenerateVNext?: boolean;
   chatWithStreamVNext?: boolean;
   chatWithNetwork?: boolean;
+  requireToolApproval?: boolean;
 }
 
 export interface AgentSettingsType {

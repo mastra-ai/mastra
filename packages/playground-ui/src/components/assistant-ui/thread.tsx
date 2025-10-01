@@ -28,14 +28,29 @@ export interface ThreadProps {
   agentId?: string;
   hasMemory?: boolean;
   hasModelList?: boolean;
+  requireToolApproval?: boolean;
 }
 
-export const Thread = ({ ToolFallback, agentName, agentId, hasMemory, hasModelList }: ThreadProps) => {
+export const Thread = ({
+  ToolFallback,
+  agentName,
+  agentId,
+  hasMemory,
+  hasModelList,
+  requireToolApproval,
+}: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
   const WrappedAssistantMessage = (props: MessagePrimitive.Root.Props) => {
-    return <AssistantMessage {...props} ToolFallback={ToolFallback} hasModelList={hasModelList} />;
+    return (
+      <AssistantMessage
+        {...props}
+        ToolFallback={ToolFallback}
+        hasModelList={hasModelList}
+        requireToolApproval={requireToolApproval}
+      />
+    );
   };
 
   return (
