@@ -20,7 +20,7 @@
     "@ai-sdk/anthropic": "^1.2.12",
     "@composio/core": "^0.1.52",
     "@composio/mastra": "^0.1.54",
-    "@mastra/core": "^0.19.0",
+    "@mastra/core": "^0.19.1",
     "@mastra/fastembed": "^0.10.5",
     "@mastra/libsql": "^0.15.0",
     "@mastra/loggers": "^0.10.14",
@@ -32,7 +32,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
-    "mastra": "^0.13.3",
+    "mastra": "^0.13.4",
     "prettier": "^3.6.2",
     "typescript": "^5.9.2"
   }
