@@ -5,8 +5,9 @@ import type {
   LanguageModelV2StreamPart,
   LanguageModelV2CallWarning,
 } from '@ai-sdk/provider-v5';
-import { parseModelString, getProviderConfig } from './provider-registry.generated';
-import type { ModelRouterModelId } from './provider-registry.generated';
+import { resolveModelConfig } from './gateway-resolver.js';
+import { parseModelString, getProviderConfig } from './provider-registry.generated.js';
+import type { ModelRouterModelId } from './provider-registry.generated.js';
 import type { OpenAICompatibleConfig } from './shared.types';
 
 // Helper function to resolve API key from environment
@@ -15,42 +16,17 @@ function resolveApiKey({ provider, apiKey }: { provider?: string; apiKey?: strin
 
   if (provider) {
     const config = getProviderConfig(provider);
-    if (config?.apiKeyEnvVar) {
+    if (typeof config?.apiKeyEnvVar === `string`) {
       return process.env[config.apiKeyEnvVar];
+    }
+    if (Array.isArray(config?.apiKeyEnvVar)) {
+      for (const key of config.apiKeyEnvVar) {
+        if (process.env[key]) return process.env[key];
+      }
     }
   }
 
   return undefined;
-}
-
-// Helper function to build headers for the request
-function buildHeaders(
-  apiKey?: string,
-  apiKeyHeader?: string,
-  customHeaders?: Record<string, string>,
-  provider?: string,
-): Record<string, string> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...customHeaders,
-  };
-
-  if (apiKey) {
-    // Use custom API key header if specified (e.g., 'x-api-key' for Anthropic)
-    if (apiKeyHeader === 'x-api-key') {
-      headers['x-api-key'] = apiKey;
-    } else {
-      // Default to Authorization Bearer format
-      headers['Authorization'] = `Bearer ${apiKey}`;
-    }
-  }
-
-  // Add provider-specific headers
-  if (provider === 'anthropic') {
-    headers['anthropic-version'] = '2023-06-01';
-  }
-
-  return headers;
 }
 
 // TODO: get these types from openai
@@ -93,9 +69,8 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
   readonly modelId: string;
   readonly provider: string;
 
-  private url: string;
-  private headers: Record<string, string>;
-  private apiKey: string | undefined;
+  private config: OpenAICompatibleConfig;
+  private fullModelId: string; // Store the full model ID for gateway resolution
 
   constructor(config: ModelRouterModelId | OpenAICompatibleConfig) {
     // Parse configuration
@@ -112,32 +87,27 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
       }
 
       if (isUrl) {
-        // If it's a direct URL
+        // If it's a direct URL - use as-is
         parsedConfig = {
           id: 'unknown',
           url: config,
         };
         this.provider = 'openai-compatible';
+        this.fullModelId = 'unknown';
+        this.config = { id: 'unknown', url: config };
       } else {
-        // Handle magic strings like "openai/gpt-4o" or "chutes/Qwen/Qwen3-235B-A22B-Instruct-2507"
-        // For multi-slash strings, extract just the provider (first part)
+        // Handle magic strings like "openai/gpt-4o" or "netlify/openai/gpt-4o"
+        this.fullModelId = config;
         const firstSlashIndex = config.indexOf('/');
 
         if (firstSlashIndex !== -1) {
           const provider = config.substring(0, firstSlashIndex);
           const modelId = config.substring(firstSlashIndex + 1);
 
-          const providerConfig = getProviderConfig(provider);
-          if (!providerConfig) {
-            throw new Error(`Unknown provider: ${provider}. Use a custom URL instead.`);
-          }
-
           parsedConfig = {
             id: modelId,
-            url: providerConfig.url,
             apiKey: resolveApiKey({ provider }),
           };
-
           this.provider = provider;
         } else {
           // No slash at all, treat as direct model ID
@@ -147,21 +117,14 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
     } else {
       // Handle config object
       parsedConfig = config;
+      this.fullModelId = config.id;
 
       // Extract provider from id if present
       const parsed = parseModelString(config.id);
+      this.provider = parsed.provider || 'openai-compatible';
 
-      if (!config.url && parsed.provider) {
-        // Use provider preset
-        const providerConfig = getProviderConfig(parsed.provider);
-        if (!providerConfig) {
-          throw new Error(`Unknown provider: ${parsed.provider}. Please provide a URL.`);
-        }
-        parsedConfig.url = providerConfig.url;
+      if (parsed.provider && parsed.modelId !== config.id) {
         parsedConfig.id = parsed.modelId;
-        this.provider = parsed.provider;
-      } else {
-        this.provider = parsed.provider || 'openai-compatible';
       }
 
       // Resolve API key if not provided
@@ -170,19 +133,9 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
       }
     }
 
-    // Validate we have a URL
-    if (!parsedConfig.url) {
-      throw new Error('URL is required for OpenAI-compatible model');
-    }
-
-    // Get provider config for headers
-    const providerConfig = this.provider !== 'openai-compatible' ? getProviderConfig(this.provider) : undefined;
-
-    // Set final properties
+    // Store the configuration
     this.modelId = parsedConfig.id;
-    this.url = parsedConfig.url;
-    this.apiKey = parsedConfig.apiKey; // Store API key for later validation
-    this.headers = buildHeaders(parsedConfig.apiKey, providerConfig?.apiKeyHeader, parsedConfig.headers, this.provider);
+    this.config = parsedConfig;
   }
 
   private convertMessagesToOpenAI(messages: LanguageModelV2CallOptions['prompt']): any[] {
@@ -307,9 +260,67 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
     }
   }
 
+  /**
+   * Resolve URL and headers for the request
+   * This is called fresh for each request to ensure we get the latest values
+   * (e.g., Netlify tokens can expire and need to be refreshed)
+   */
+  private async resolveRequestConfig(): Promise<{ url: string; headers: Record<string, string>; modelId: string }> {
+    // If they provide a url as a string or in the config object, we shouldn't use our gateway classes
+    const shouldUseGateway = !this.config.url;
+
+    if (shouldUseGateway) {
+      // Use gateway resolution - always get fresh values
+      const { url, headers, resolvedModelId } = await resolveModelConfig(this.fullModelId);
+
+      if (url === false) {
+        throw new Error(`No gateway can handle model: ${this.fullModelId}`);
+      }
+
+      // Merge headers with custom headers
+      const finalHeaders = {
+        'Content-Type': 'application/json',
+        ...headers,
+        ...this.config.headers,
+      };
+
+      return { url, headers: finalHeaders, modelId: resolvedModelId };
+    } else {
+      // Use static configuration
+      if (!this.config.url) {
+        throw new Error('URL is required for OpenAI-compatible model');
+      }
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...this.config.headers,
+      };
+
+      // Add auth header if API key is available
+      if (this.config.apiKey) {
+        // Check if we need a special header format
+        const providerConfig = this.provider !== 'openai-compatible' ? getProviderConfig(this.provider) : undefined;
+        if (providerConfig?.apiKeyHeader === 'x-api-key') {
+          headers['x-api-key'] = this.config.apiKey;
+        } else {
+          headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+        }
+      }
+
+      return { url: this.config.url, headers, modelId: this.modelId };
+    }
+  }
+
   private validateApiKey(): void {
+    // Skip validation for models that will use gateway resolution
+    // Gateway handles auth through its own mechanism (e.g., Netlify uses site ID + token)
+    const willUseGateway = !this.config.url;
+    if (willUseGateway) {
+      return;
+    }
+
     // Check if API key is required and missing
-    if (!this.apiKey && this.provider !== 'openai-compatible') {
+    if (!this.config.apiKey && this.provider !== 'openai-compatible') {
       // Get the provider config to find the env var name
       const providerConfig = getProviderConfig(this.provider);
       if (providerConfig?.apiKeyEnvVar) {
@@ -355,264 +366,291 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
       };
     }
 
-    const { prompt, tools, toolChoice, providerOptions } = options;
+    try {
+      // Resolve URL and headers
+      const { url, headers, modelId: resolvedModelId } = await this.resolveRequestConfig();
 
-    // TODO: real body type, not any
-    const body: any = {
-      messages: this.convertMessagesToOpenAI(prompt),
-      model: this.modelId,
-      stream: true,
-      ...providerOptions,
-    };
+      const { prompt, tools, toolChoice, providerOptions } = options;
 
-    const openAITools = this.convertToolsToOpenAI(tools);
-    if (openAITools) {
-      body.tools = openAITools;
-      if (toolChoice) {
-        body.tool_choice =
-          toolChoice.type === 'none'
-            ? 'none'
-            : toolChoice.type === 'required'
-              ? 'required'
-              : toolChoice.type === 'auto'
-                ? 'auto'
-                : toolChoice.type === 'tool'
-                  ? { type: 'function', function: { name: toolChoice.toolName } }
-                  : 'auto';
-      }
-    }
-
-    // Handle structured output
-    if (options.responseFormat?.type === 'json') {
-      body.response_format = {
-        type: 'json_schema',
-        json_schema: {
-          name: 'response',
-          strict: true,
-          schema: options.responseFormat.schema,
-        },
+      // TODO: real body type, not any
+      const body: any = {
+        messages: this.convertMessagesToOpenAI(prompt),
+        model: resolvedModelId,
+        stream: true,
+        ...providerOptions,
       };
-    }
 
-    const fetchArgs = {
-      method: 'POST',
-      headers: this.headers,
-      body: JSON.stringify(body),
-      signal: options.abortSignal,
-    };
-    const response = await fetch(this.url, fetchArgs);
-
-    if (!response.ok) {
-      const error = await response.text();
-
-      // Check for authentication errors
-      if (response.status === 401 || response.status === 403) {
-        const providerConfig = getProviderConfig(this.provider);
-        if (providerConfig?.apiKeyEnvVar) {
-          throw new Error(
-            `Authentication failed for provider "${this.provider}". Please ensure the ${providerConfig.apiKeyEnvVar} environment variable is set with a valid API key.`,
-          );
+      const openAITools = this.convertToolsToOpenAI(tools);
+      if (openAITools) {
+        body.tools = openAITools;
+        if (toolChoice) {
+          body.tool_choice =
+            toolChoice.type === 'none'
+              ? 'none'
+              : toolChoice.type === 'required'
+                ? 'required'
+                : toolChoice.type === 'auto'
+                  ? 'auto'
+                  : toolChoice.type === 'tool'
+                    ? { type: 'function', function: { name: toolChoice.toolName } }
+                    : 'auto';
         }
       }
 
-      throw new Error(`OpenAI-compatible API error: ${response.status} - ${error}`);
-    }
+      // Handle structured output
+      if (options.responseFormat?.type === 'json') {
+        body.response_format = {
+          type: 'json_schema',
+          json_schema: {
+            name: 'response',
+            strict: true,
+            schema: options.responseFormat.schema,
+          },
+        };
+      }
 
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error('Response body is not readable');
-    }
+      const fetchArgs = {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: options.abortSignal,
+      };
+      const response = await fetch(url, fetchArgs);
 
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let sentStart = false;
-    const toolCallBuffers = new Map<number, { id: string; name: string; args: string; sent?: boolean }>();
-    const mapFinishReason = this.mapFinishReason.bind(this);
-    const modelId = this.modelId; // Capture modelId for use in stream
+      if (!response.ok) {
+        const error = await response.text();
 
-    let isActiveText = false;
+        // Check for authentication errors
+        if (response.status === 401 || response.status === 403) {
+          const providerConfig = getProviderConfig(this.provider);
+          if (providerConfig?.apiKeyEnvVar) {
+            throw new Error(
+              `Authentication failed for provider "${this.provider}". Please ensure the ${providerConfig.apiKeyEnvVar} environment variable is set with a valid API key.`,
+            );
+          }
+        }
 
-    const stream = new ReadableStream<LanguageModelV2StreamPart>({
-      async start(controller) {
-        try {
-          // Send stream-start
-          controller.enqueue({
-            type: 'stream-start',
-            warnings: [],
-          });
+        throw new Error(`OpenAI-compatible API error: ${response.status} - ${error}`);
+      }
 
-          while (true) {
-            const { done, value } = await reader.read();
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('Response body is not readable');
+      }
 
-            if (done) {
-              // Parse and send any buffered tool calls that haven't been sent yet
-              for (const [_, toolCall] of toolCallBuffers) {
-                if (!toolCall.sent && toolCall.id && toolCall.name && toolCall.args) {
-                  controller.enqueue({
-                    type: 'tool-call',
-                    toolCallId: toolCall.id,
-                    toolName: toolCall.name,
-                    input: toolCall.args || '{}',
-                  });
-                }
-              }
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let sentStart = false;
+      const toolCallBuffers = new Map<number, { id: string; name: string; args: string; sent?: boolean }>();
+      const mapFinishReason = this.mapFinishReason.bind(this);
+      const modelId = this.modelId; // Capture modelId for use in stream
 
-              controller.close();
-              break;
-            }
+      let isActiveText = false;
 
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
+      const stream = new ReadableStream<LanguageModelV2StreamPart>({
+        async start(controller) {
+          try {
+            // Send stream-start
+            controller.enqueue({
+              type: 'stream-start',
+              warnings: [],
+            });
 
-            for (const line of lines) {
-              if (line.trim() === '' || line.trim() === 'data: [DONE]') {
-                continue;
-              }
+            while (true) {
+              const { done, value } = await reader.read();
 
-              if (line.startsWith('data: ')) {
-                try {
-                  const data: OpenAIStreamChunk = JSON.parse(line.slice(6));
-
-                  // Send response metadata from first chunk
-                  if (!sentStart && data.id) {
+              if (done) {
+                // Parse and send any buffered tool calls that haven't been sent yet
+                for (const [_, toolCall] of toolCallBuffers) {
+                  if (!toolCall.sent && toolCall.id && toolCall.name && toolCall.args) {
                     controller.enqueue({
-                      type: 'response-metadata',
-                      id: data.id,
-                      modelId: data.model || modelId,
-                      timestamp: new Date(data.created ? data.created * 1000 : Date.now()),
+                      type: 'tool-call',
+                      toolCallId: toolCall.id,
+                      toolName: toolCall.name,
+                      input: toolCall.args || '{}',
                     });
-                    sentStart = true;
                   }
+                }
 
-                  const choice = data.choices?.[0];
-                  if (!choice) continue;
+                controller.close();
+                break;
+              }
 
-                  // Handle text delta
-                  if (choice.delta?.content) {
-                    if (!isActiveText) {
-                      controller.enqueue({ type: 'text-start', id: 'text-1' });
-                      isActiveText = true;
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
+
+              for (const line of lines) {
+                if (line.trim() === '' || line.trim() === 'data: [DONE]') {
+                  continue;
+                }
+
+                if (line.startsWith('data: ')) {
+                  try {
+                    const data: OpenAIStreamChunk = JSON.parse(line.slice(6));
+
+                    // Send response metadata from first chunk
+                    if (!sentStart && data.id) {
+                      controller.enqueue({
+                        type: 'response-metadata',
+                        id: data.id,
+                        modelId: data.model || modelId,
+                        timestamp: new Date(data.created ? data.created * 1000 : Date.now()),
+                      });
+                      sentStart = true;
                     }
 
-                    controller.enqueue({
-                      type: 'text-delta',
-                      id: 'text-1',
-                      delta: choice.delta.content,
-                    });
-                  } else if (isActiveText) {
-                    controller.enqueue({ type: 'text-end', id: 'text-1' });
-                    isActiveText = false;
-                  }
+                    const choice = data.choices?.[0];
+                    if (!choice) continue;
 
-                  // Handle tool call deltas
-                  if (choice.delta?.tool_calls) {
-                    for (const toolCall of choice.delta.tool_calls) {
-                      const index = toolCall.index;
+                    // Handle text delta
+                    if (choice.delta?.content) {
+                      if (!isActiveText) {
+                        controller.enqueue({ type: 'text-start', id: 'text-1' });
+                        isActiveText = true;
+                      }
 
-                      if (!toolCallBuffers.has(index)) {
-                        // Send tool-input-start when we first see a tool call
-                        if (toolCall.id && toolCall.function?.name) {
-                          controller.enqueue({
-                            type: 'tool-input-start',
-                            id: toolCall.id,
-                            toolName: toolCall.function.name,
+                      controller.enqueue({
+                        type: 'text-delta',
+                        id: 'text-1',
+                        delta: choice.delta.content,
+                      });
+                    } else if (isActiveText) {
+                      controller.enqueue({ type: 'text-end', id: 'text-1' });
+                      isActiveText = false;
+                    }
+
+                    // Handle tool call deltas
+                    if (choice.delta?.tool_calls) {
+                      for (const toolCall of choice.delta.tool_calls) {
+                        const index = toolCall.index;
+
+                        if (!toolCallBuffers.has(index)) {
+                          // Send tool-input-start when we first see a tool call
+                          if (toolCall.id && toolCall.function?.name) {
+                            controller.enqueue({
+                              type: 'tool-input-start',
+                              id: toolCall.id,
+                              toolName: toolCall.function.name,
+                            });
+                          }
+
+                          toolCallBuffers.set(index, {
+                            id: toolCall.id || '',
+                            name: toolCall.function?.name || '',
+                            args: '',
                           });
                         }
 
-                        toolCallBuffers.set(index, {
-                          id: toolCall.id || '',
-                          name: toolCall.function?.name || '',
-                          args: '',
-                        });
-                      }
+                        const buffer = toolCallBuffers.get(index)!;
 
-                      const buffer = toolCallBuffers.get(index)!;
+                        if (toolCall.id) {
+                          buffer.id = toolCall.id;
+                        }
 
-                      if (toolCall.id) {
-                        buffer.id = toolCall.id;
-                      }
+                        if (toolCall.function?.name) {
+                          buffer.name = toolCall.function.name;
+                        }
 
-                      if (toolCall.function?.name) {
-                        buffer.name = toolCall.function.name;
-                      }
+                        if (toolCall.function?.arguments) {
+                          buffer.args += toolCall.function.arguments;
+                          controller.enqueue({
+                            type: 'tool-input-delta',
+                            id: buffer.id,
+                            delta: toolCall.function.arguments,
+                          });
 
-                      if (toolCall.function?.arguments) {
-                        buffer.args += toolCall.function.arguments;
-                        controller.enqueue({
-                          type: 'tool-input-delta',
-                          id: buffer.id,
-                          delta: toolCall.function.arguments,
-                        });
+                          // Check if tool call is complete (parsable JSON)
+                          try {
+                            JSON.parse(buffer.args);
+                            if (buffer.id && buffer.name) {
+                              controller.enqueue({
+                                type: 'tool-input-end',
+                                id: buffer.id,
+                              });
 
-                        // Check if tool call is complete (parsable JSON)
-                        try {
-                          JSON.parse(buffer.args);
-                          if (buffer.id && buffer.name) {
-                            controller.enqueue({
-                              type: 'tool-input-end',
-                              id: buffer.id,
-                            });
+                              controller.enqueue({
+                                type: 'tool-call',
+                                toolCallId: buffer.id,
+                                toolName: buffer.name,
+                                input: buffer.args,
+                              });
 
-                            controller.enqueue({
-                              type: 'tool-call',
-                              toolCallId: buffer.id,
-                              toolName: buffer.name,
-                              input: buffer.args,
-                            });
-
-                            toolCallBuffers.set(index, {
-                              id: buffer.id,
-                              name: buffer.name,
-                              args: buffer.args,
-                              sent: true,
-                            });
+                              toolCallBuffers.set(index, {
+                                id: buffer.id,
+                                name: buffer.name,
+                                args: buffer.args,
+                                sent: true,
+                              });
+                            }
+                          } catch {
+                            // Not complete JSON yet, continue buffering
                           }
-                        } catch {
-                          // Not complete JSON yet, continue buffering
                         }
                       }
                     }
-                  }
 
-                  // Handle finish
-                  if (choice.finish_reason) {
-                    // Don't send tool calls again - they've already been sent when complete
-                    toolCallBuffers.clear();
+                    // Handle finish
+                    if (choice.finish_reason) {
+                      // Don't send tool calls again - they've already been sent when complete
+                      toolCallBuffers.clear();
 
-                    controller.enqueue({
-                      type: 'finish',
-                      finishReason: mapFinishReason(choice.finish_reason),
-                      usage: data.usage
-                        ? {
-                            inputTokens: data.usage.prompt_tokens || 0,
-                            outputTokens: data.usage.completion_tokens || 0,
-                            totalTokens: data.usage.total_tokens || 0,
-                          }
-                        : {
-                            inputTokens: 0,
-                            outputTokens: 0,
-                            totalTokens: 0,
-                          },
-                    });
+                      controller.enqueue({
+                        type: 'finish',
+                        finishReason: mapFinishReason(choice.finish_reason),
+                        usage: data.usage
+                          ? {
+                              inputTokens: data.usage.prompt_tokens || 0,
+                              outputTokens: data.usage.completion_tokens || 0,
+                              totalTokens: data.usage.total_tokens || 0,
+                            }
+                          : {
+                              inputTokens: 0,
+                              outputTokens: 0,
+                              totalTokens: 0,
+                            },
+                      });
+                    }
+                  } catch (e) {
+                    console.error('Error parsing SSE data:', e);
                   }
-                } catch (e) {
-                  console.error('Error parsing SSE data:', e);
                 }
               }
             }
+          } catch (error) {
+            return {
+              stream: new ReadableStream({
+                start(controller) {
+                  controller.enqueue({
+                    type: 'error',
+                    error: error instanceof Error ? error.message : String(error),
+                  } as LanguageModelV2StreamPart);
+                },
+              }),
+              warnings: [],
+            };
           }
-        } catch (error) {
-          controller.error(error);
-        }
-      },
-    });
+        },
+      });
 
-    return {
-      stream,
-      request: { body: JSON.stringify(body) },
-      response: { headers: Object.fromEntries(response.headers.entries()) },
-      warnings: [],
-    };
+      return {
+        stream,
+        request: { body: JSON.stringify(body) },
+        response: { headers: Object.fromEntries(response.headers.entries()) },
+        warnings: [],
+      };
+    } catch (error) {
+      return {
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({
+              type: 'error',
+              error: error instanceof Error ? error.message : String(error),
+            } as LanguageModelV2StreamPart);
+          },
+        }),
+        warnings: [],
+      };
+    }
   }
 }

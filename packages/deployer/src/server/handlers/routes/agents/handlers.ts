@@ -1,4 +1,4 @@
-import type { Mastra } from '@mastra/core';
+import type { Mastra, ProviderConfig } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { getProviderConfig, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
@@ -107,16 +107,20 @@ export async function getProvidersHandler(c: Context) {
     const providers = [];
 
     // Check each provider in the registry
-    for (const [providerId, config] of Object.entries(PROVIDER_REGISTRY)) {
-      const envVar = config.apiKeyEnvVar;
-      const apiKey = process.env[envVar];
+    for (const [providerId, config] of Object.entries(PROVIDER_REGISTRY as Record<string, ProviderConfig>)) {
+      const hasApiKey = !!(typeof config.apiKeyEnvVar === `string`
+        ? process.env[config.apiKeyEnvVar]
+        : Array.isArray(config.apiKeyEnvVar)
+          ? config.apiKeyEnvVar.every((k: string) => !!process.env[k])
+          : false);
+
       const providerConfig = getProviderConfig(providerId);
 
       providers.push({
         id: providerId,
         name: config.name,
-        envVar: envVar,
-        connected: !!apiKey,
+        envVar: config.apiKeyEnvVar,
+        connected: hasApiKey,
         models: [...config.models], // Convert readonly array to mutable
         docUrl: providerConfig?.docUrl || null,
       });

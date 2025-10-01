@@ -785,8 +785,9 @@ export async function updateAgentModelInModelListHandler({
 export async function getProvidersHandler() {
   try {
     const providers = Object.entries(PROVIDER_REGISTRY).map(([id, provider]) => {
-      // Check if the provider is connected by checking for its API key env var
-      const connected = !!process.env[provider.apiKeyEnvVar];
+      // Check if the provider is connected by checking for its API key env var(s)
+      const envVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
+      const connected = envVars.every(envVar => !!process.env[envVar]);
 
       return {
         id,
