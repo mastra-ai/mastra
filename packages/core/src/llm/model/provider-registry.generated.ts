@@ -3,19 +3,12 @@
  * Generated from model gateway providers
  */
 
-import type { MastraModelGateway } from './gateways/base.js';
-import { ModelsDevGateway } from './gateways/models-dev.js';
-import { NetlifyGateway } from './gateways/netlify.js';
-
-/**
- * Gateway instances for runtime resolution
- */
-export const GATEWAYS: MastraModelGateway[] = [new NetlifyGateway(), new ModelsDevGateway()];
+import type { ProviderConfig } from './gateways/base';
 
 /**
  * Provider configurations for OpenAI-compatible APIs
  */
-export const PROVIDER_REGISTRY = {
+export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
   'moonshotai-cn': {
     url: 'https://api.moonshot.cn/v1/chat/completions',
     apiKeyEnvVar: 'MOONSHOT_API_KEY',
@@ -1694,18 +1687,6 @@ export function isProviderRegistered(providerId: string): boolean {
  */
 export function getRegisteredProviders(): string[] {
   return Object.keys(PROVIDER_REGISTRY);
-}
-
-/**
- * Provider configuration interface
- */
-export interface ProviderConfig {
-  url: string;
-  apiKeyEnvVar: string;
-  apiKeyHeader?: string;
-  name: string;
-  models: readonly string[];
-  docUrl?: string;
 }
 
 /**

@@ -1,18 +1,21 @@
 import type { MastraModelGateway } from './gateways/base.js';
-import { GATEWAYS } from './provider-registry.generated.js';
+import { ModelsDevGateway } from './gateways/models-dev.js';
+import { NetlifyGateway } from './gateways/netlify.js';
+
+const gateways = [new NetlifyGateway(), new ModelsDevGateway()];
 
 /**
  * Find the gateway that handles a specific model ID based on prefix
  */
 function findGatewayForModel(modelId: string): MastraModelGateway | null {
   // First, check for gateways with specific prefixes
-  const prefixedGateway = GATEWAYS.find((g: MastraModelGateway) => g.prefix && modelId.startsWith(`${g.prefix}/`));
+  const prefixedGateway = gateways.find((g: MastraModelGateway) => g.prefix && modelId.startsWith(`${g.prefix}/`));
   if (prefixedGateway) {
     return prefixedGateway;
   }
 
   // Then check gateways without prefixes (like models.dev) that might handle the model
-  const unprefixedGateways = GATEWAYS.filter((g: MastraModelGateway) => !g.prefix);
+  const unprefixedGateways = gateways.filter((g: MastraModelGateway) => !g.prefix);
   for (const gateway of unprefixedGateways) {
     // These gateways will check internally if they can handle the model
     return gateway; // For now, return the first unprefixed gateway (models.dev)

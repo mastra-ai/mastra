@@ -36,22 +36,12 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
  * Generated from model gateway providers
  */
 
-import type { MastraModelGateway } from './gateways/base.js';
-import { ModelsDevGateway } from './gateways/models-dev.js';
-import { NetlifyGateway } from './gateways/netlify.js';
-
-/**
- * Gateway instances for runtime resolution
- */
-export const GATEWAYS: MastraModelGateway[] = [
-  new NetlifyGateway(),
-  new ModelsDevGateway(),
-];
+import type { ProviderConfig } from './gateways/base';
 
 /**
  * Provider configurations for OpenAI-compatible APIs
  */
-export const PROVIDER_REGISTRY = ${JSON.stringify(allProviders, null, 2)} as const;
+export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = ${JSON.stringify(allProviders, null, 2)} as const;
 
 /**
  * Available models per provider
@@ -91,18 +81,6 @@ export function isProviderRegistered(providerId: string): boolean {
  */
 export function getRegisteredProviders(): string[] {
   return Object.keys(PROVIDER_REGISTRY);
-}
-
-/**
- * Provider configuration interface
- */
-export interface ProviderConfig {
-  url: string;
-  apiKeyEnvVar: string;
-  apiKeyHeader?: string;
-  name: string;
-  models: readonly string[];
-  docUrl?: string;
 }
 
 /**
