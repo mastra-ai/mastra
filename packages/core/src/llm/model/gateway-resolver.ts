@@ -33,6 +33,7 @@ export async function resolveModelConfig(
   resolvedModelId: string;
 }> {
   const gateway = findGatewayForModel(modelId);
+  console.info(`gateway`, gateway?.name);
 
   if (!gateway) {
     return { url: false, headers: {}, resolvedModelId: modelId };
@@ -45,8 +46,19 @@ export async function resolveModelConfig(
 
   const headers = gateway.buildHeaders ? await gateway.buildHeaders(modelId, envVars) : {};
 
-  // Resolve the model ID to the format expected by the provider
-  const resolvedModelId = gateway.resolveModelId ? gateway.resolveModelId(modelId) : modelId;
+  let resolvedModelId = modelId;
+
+  // remove any gateway prefix
+  const prefix = gateway.prefix ? `${gateway.prefix}/` : null;
+  if (prefix && resolvedModelId.startsWith(prefix)) {
+    resolvedModelId = resolvedModelId.substring(prefix.length);
+  }
+
+  // remove the provider id
+  const firstSlashIndex = resolvedModelId.indexOf('/');
+  if (firstSlashIndex !== -1) {
+    resolvedModelId = resolvedModelId.substring(firstSlashIndex + 1);
+  }
 
   return { url, headers, resolvedModelId };
 }

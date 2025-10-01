@@ -47,11 +47,4 @@ export abstract class MastraModelGateway {
     modelId: string,
     envVars: Record<string, string>,
   ): Record<string, string> | Promise<Record<string, string>>;
-
-  /**
-   * Resolve the model ID to the format expected by the provider
-   * For example, "netlify/openai/gpt-4o" might become just "gpt-4o"
-   * Default implementation returns the model ID as-is
-   */
-  resolveModelId?(modelId: string): string;
 }

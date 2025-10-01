@@ -187,28 +187,4 @@ export class NetlifyGateway extends MastraModelGateway {
       });
     }
   }
-
-  /**
-   * Resolve model ID for Netlify gateway
-   * Strips the netlify/ and provider/ prefixes to get just the model name
-   * e.g., "netlify/openai/gpt-4o" -> "gpt-4o"
-   */
-  resolveModelId(modelId: string): string {
-    // Remove netlify/ prefix if present
-    let resolved = modelId;
-    if (resolved.startsWith(`${this.prefix}/`)) {
-      resolved = resolved.substring(this.prefix!.length + 1);
-    }
-
-    // Remove provider prefix to get just the model name
-    // e.g., "openai/gpt-4o" -> "gpt-4o"
-    const parts = resolved.split('/');
-    if (parts.length >= 2) {
-      // Return everything after the first slash (the model name)
-      return parts.slice(1).join('/');
-    }
-
-    // If no provider prefix, return as-is
-    return resolved;
-  }
 }
