@@ -1,5 +1,15 @@
 # mastra
 
+## 0.13.4-alpha.1
+
+### Patch Changes
+
+- disable network label when memory is not enabled OR the agent has no subagents ([#8341](https://github.com/mastra-ai/mastra/pull/8341))
+
+- Updated dependencies [[`4a70ccc`](https://github.com/mastra-ai/mastra/commit/4a70ccc5cfa12ae9c2b36545a5814cd98e5a0ead)]:
+  - @mastra/core@0.19.1-alpha.1
+  - @mastra/deployer@0.19.1-alpha.1
+
 ## 0.13.4-alpha.0
 
 ### Patch Changes
