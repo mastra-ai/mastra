@@ -1,16 +1,16 @@
 ---
-title: "opencode | Models | Mastra"
-description: "Use opencode models with Mastra. 7 models available."
+title: "opencode zen | Models | Mastra"
+description: "Use opencode zen models with Mastra. 10 models available."
 ---
 
 import { ProviderModelsTable } from "@/components/provider-models-table";
 
 
-# <img src="https://models.dev/logos/opencode.svg" alt="opencode logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />opencode
+# <img src="https://models.dev/logos/opencode.svg" alt="opencode zen logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />opencode zen
 
-Access 7 opencode models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+Access 10 opencode zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
-Learn more in the [opencode documentation](https://opencode.ai/docs).
+Learn more in the [opencode zen documentation](https://opencode.ai/docs).
 
 ```bash
 OPENCODE_API_KEY=your-api-key
@@ -40,55 +40,23 @@ for await (const chunk of stream) {
 <ProviderModelsTable 
   models={[
   {
-    "model": "opencode/claude-3-5-haiku",
-    "imageInput": true,
+    "model": "opencode/qwen3-coder",
+    "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "objectGeneration": true,
     "toolUsage": true,
-    "toolStreaming": true,
     "reasoning": false,
-    "contextWindow": 200000,
-    "maxOutput": 8192,
-    "inputCost": 0.8,
-    "outputCost": 4
-  },
-  {
-    "model": "opencode/claude-sonnet-4",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "objectGeneration": true,
-    "toolUsage": true,
-    "toolStreaming": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 64000,
-    "inputCost": 3,
-    "outputCost": 15
-  },
-  {
-    "model": "opencode/grok-code",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "objectGeneration": true,
-    "toolUsage": true,
-    "toolStreaming": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 32000,
-    "inputCost": null,
-    "outputCost": null
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.45,
+    "outputCost": 1.8
   },
   {
     "model": "opencode/claude-opus-4-1",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "objectGeneration": true,
     "toolUsage": true,
-    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 32000,
@@ -96,27 +64,11 @@ for await (const chunk of stream) {
     "outputCost": 75
   },
   {
-    "model": "opencode/gpt-5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "objectGeneration": true,
-    "toolUsage": true,
-    "toolStreaming": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 1.25,
-    "outputCost": 10
-  },
-  {
     "model": "opencode/kimi-k2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "objectGeneration": true,
     "toolUsage": true,
-    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 262144,
@@ -124,18 +76,100 @@ for await (const chunk of stream) {
     "outputCost": 2.5
   },
   {
-    "model": "opencode/qwen3-coder",
+    "model": "opencode/claude-sonnet-4-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "opencode/gpt-5-codex",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "opencode/claude-3-5-haiku",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": 0.8,
+    "outputCost": 4
+  },
+  {
+    "model": "opencode/grok-code",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "objectGeneration": true,
     "toolUsage": true,
-    "toolStreaming": true,
-    "reasoning": false,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 256000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "opencode/code-supernova",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 1000000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "opencode/qwen3-max",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 65536,
-    "inputCost": 0.45,
-    "outputCost": 1.8
+    "inputCost": 1.6,
+    "outputCost": 6.4
+  },
+  {
+    "model": "opencode/claude-sonnet-4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "opencode/gpt-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
   }
 ]}
 />

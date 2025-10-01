@@ -1,6 +1,6 @@
 ---
 title: "ModelScope | Models | Mastra"
-description: "Use ModelScope models with Mastra. 8 models available."
+description: "Use ModelScope models with Mastra. 7 models available."
 ---
 
 import { ProviderModelsTable } from "@/components/provider-models-table";
@@ -8,7 +8,7 @@ import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="https://models.dev/logos/modelscope.svg" alt="ModelScope logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />ModelScope
 
-Access 8 ModelScope models through Mastra's model router. Authentication is handled automatically using the `MODELSCOPE_API_KEY` environment variable.
+Access 7 ModelScope models through Mastra's model router. Authentication is handled automatically using the `MODELSCOPE_API_KEY` environment variable.
 
 Learn more in the [ModelScope documentation](https://modelscope.cn/docs/model-service/API-Inference/intro).
 
@@ -40,58 +40,26 @@ for await (const chunk of stream) {
 <ProviderModelsTable 
   models={[
   {
+    "model": "modelscope/ZhipuAI/GLM-4.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "modelscope/Qwen/Qwen3-30B-A3B-Thinking-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "objectGeneration": true,
     "toolUsage": true,
-    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 32768,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "modelscope/Qwen/Qwen3-Coder-480B-A35B-Instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "objectGeneration": true,
-    "toolUsage": true,
-    "toolStreaming": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 66536,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "modelscope/Qwen/Qwen3-235B-A22B-Thinking-2507",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "objectGeneration": true,
-    "toolUsage": true,
-    "toolStreaming": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 131072,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "modelscope/Qwen/Qwen3-30B-A3B-Instruct-2507",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "objectGeneration": true,
-    "toolUsage": true,
-    "toolStreaming": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 16384,
     "inputCost": null,
     "outputCost": null
   },
@@ -100,9 +68,7 @@ for await (const chunk of stream) {
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "objectGeneration": true,
     "toolUsage": true,
-    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 131072,
@@ -114,9 +80,7 @@ for await (const chunk of stream) {
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "objectGeneration": true,
     "toolUsage": true,
-    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 65536,
@@ -124,30 +88,38 @@ for await (const chunk of stream) {
     "outputCost": null
   },
   {
-    "model": "modelscope/ZhipuAI/GLM-4.5",
+    "model": "modelscope/Qwen/Qwen3-Coder-480B-A35B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "objectGeneration": true,
     "toolUsage": true,
-    "toolStreaming": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 98304,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 66536,
     "inputCost": null,
     "outputCost": null
   },
   {
-    "model": "modelscope/moonshotai/Kimi-K2-Instruct",
+    "model": "modelscope/Qwen/Qwen3-30B-A3B-Instruct-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "objectGeneration": true,
     "toolUsage": true,
-    "toolStreaming": true,
     "reasoning": false,
-    "contextWindow": 128000,
+    "contextWindow": 262144,
     "maxOutput": 16384,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "modelscope/Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
   }

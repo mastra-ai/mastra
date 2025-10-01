@@ -1,16 +1,16 @@
 ---
-title: "Zhipu AI | Models | Mastra"
-description: "Use Zhipu AI models with Mastra. 5 models available."
+title: "Z.AI Coding Plan | Models | Mastra"
+description: "Use Z.AI Coding Plan models with Mastra. 5 models available."
 ---
 
 import { ProviderModelsTable } from "@/components/provider-models-table";
 
 
-# <img src="https://models.dev/logos/zhipuai.svg" alt="Zhipu AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Zhipu AI
+# <img src="https://models.dev/logos/zai-coding-plan.svg" alt="Z.AI Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Z.AI Coding Plan
 
-Access 5 Zhipu AI models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+Access 5 Z.AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
-Learn more in the [Zhipu AI documentation](https://docs.z.ai/guides/overview/pricing).
+Learn more in the [Z.AI Coding Plan documentation](https://docs.z.ai/devpack/overview).
 
 ```bash
 ZHIPU_API_KEY=your-api-key
@@ -22,7 +22,7 @@ import { Agent } from "@mastra/core";
 const agent = new Agent({
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "zhipuai/glm-4.5"
+  model: "zai-coding-plan/glm-4.5"
 });
 
 // Generate a response
@@ -40,19 +40,43 @@ for await (const chunk of stream) {
 <ProviderModelsTable 
   models={[
   {
-    "model": "zhipuai/glm-4.6",
+    "model": "zai-coding-plan/glm-4.5-flash",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
-    "inputCost": 0.6,
-    "outputCost": 2.2
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": null,
+    "outputCost": null
   },
   {
-    "model": "zhipuai/glm-4.5v",
+    "model": "zai-coding-plan/glm-4.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "zai-coding-plan/glm-4.5-air",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "zai-coding-plan/glm-4.5v",
     "imageInput": true,
     "audioInput": false,
     "videoInput": true,
@@ -60,42 +84,18 @@ for await (const chunk of stream) {
     "reasoning": true,
     "contextWindow": 64000,
     "maxOutput": 16384,
-    "inputCost": 0.6,
-    "outputCost": 1.8
+    "inputCost": null,
+    "outputCost": null
   },
   {
-    "model": "zhipuai/glm-4.5-air",
+    "model": "zai-coding-plan/glm-4.6",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 98304,
-    "inputCost": 0.2,
-    "outputCost": 1.1
-  },
-  {
-    "model": "zhipuai/glm-4.5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 98304,
-    "inputCost": 0.6,
-    "outputCost": 2.2
-  },
-  {
-    "model": "zhipuai/glm-4.5-flash",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 98304,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
   }
@@ -110,7 +110,7 @@ for await (const chunk of stream) {
 const agent = new Agent({
   name: "custom-agent",
   model: {
-    url: "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+    url: "https://api.z.ai/api/coding/paas/v4/chat/completions",
     modelId: "glm-4.5",
     apiKey: process.env.ZHIPU_API_KEY,
     headers: {
@@ -128,8 +128,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "zhipuai/glm-4.5"
-      : "zhipuai/glm-4.5-air";
+      ? "zai-coding-plan/glm-4.5"
+      : "zai-coding-plan/glm-4.5-air";
   }
 });
 ```

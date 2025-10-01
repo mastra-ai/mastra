@@ -40,27 +40,23 @@ for await (const chunk of stream) {
 <ProviderModelsTable 
   models={[
   {
-    "model": "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+    "model": "deepinfra/moonshotai/Kimi-K2-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "objectGeneration": true,
     "toolUsage": true,
-    "toolStreaming": true,
     "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 66536,
-    "inputCost": 0.3,
-    "outputCost": 1.2
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.5,
+    "outputCost": 2
   },
   {
     "model": "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "objectGeneration": true,
     "toolUsage": true,
-    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 66536,
@@ -68,32 +64,28 @@ for await (const chunk of stream) {
     "outputCost": 1.6
   },
   {
+    "model": "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 66536,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
     "model": "deepinfra/zai-org/GLM-4.5",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "objectGeneration": true,
     "toolUsage": true,
-    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 98304,
     "inputCost": 0.6,
     "outputCost": 2.2
-  },
-  {
-    "model": "deepinfra/moonshotai/Kimi-K2-Instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "objectGeneration": true,
-    "toolUsage": true,
-    "toolStreaming": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.5,
-    "outputCost": 2
   }
 ]}
 />

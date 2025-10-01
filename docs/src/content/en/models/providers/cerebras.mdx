@@ -44,9 +44,7 @@ for await (const chunk of stream) {
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "objectGeneration": true,
     "toolUsage": true,
-    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 131000,
     "maxOutput": 32000,
@@ -54,32 +52,28 @@ for await (const chunk of stream) {
     "outputCost": 1.2
   },
   {
-    "model": "cerebras/gpt-oss-120b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "objectGeneration": true,
-    "toolUsage": true,
-    "toolStreaming": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.25,
-    "outputCost": 0.69
-  },
-  {
     "model": "cerebras/qwen-3-coder-480b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "objectGeneration": true,
     "toolUsage": true,
-    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 131000,
     "maxOutput": 32000,
     "inputCost": 2,
     "outputCost": 2
+  },
+  {
+    "model": "cerebras/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.25,
+    "outputCost": 0.69
   }
 ]}
 />

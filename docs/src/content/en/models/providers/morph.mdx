@@ -40,13 +40,23 @@ for await (const chunk of stream) {
 <ProviderModelsTable 
   models={[
   {
+    "model": "morph/morph-v3-large",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 32000,
+    "inputCost": 0.9,
+    "outputCost": 1.9
+  },
+  {
     "model": "morph/auto",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "objectGeneration": false,
     "toolUsage": false,
-    "toolStreaming": false,
     "reasoning": false,
     "contextWindow": 32000,
     "maxOutput": 32000,
@@ -58,28 +68,12 @@ for await (const chunk of stream) {
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "objectGeneration": false,
     "toolUsage": false,
-    "toolStreaming": false,
     "reasoning": false,
     "contextWindow": 16000,
     "maxOutput": 16000,
     "inputCost": 0.8,
     "outputCost": 1.2
-  },
-  {
-    "model": "morph/morph-v3-large",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "objectGeneration": false,
-    "toolUsage": false,
-    "toolStreaming": false,
-    "reasoning": false,
-    "contextWindow": 32000,
-    "maxOutput": 32000,
-    "inputCost": 0.9,
-    "outputCost": 1.9
   }
 ]}
 />

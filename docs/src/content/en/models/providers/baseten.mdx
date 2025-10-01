@@ -22,7 +22,7 @@ import { Agent } from "@mastra/core";
 const agent = new Agent({
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "baseten/Moonshotai-Kimi-K2-Instruct-0905"
+  model: "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct"
 });
 
 // Generate a response
@@ -40,13 +40,11 @@ for await (const chunk of stream) {
 <ProviderModelsTable 
   models={[
   {
-    "model": "baseten/Moonshotai-Kimi-K2-Instruct-0905",
+    "model": "baseten/moonshotai/Kimi-K2-Instruct-0905",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "objectGeneration": true,
     "toolUsage": true,
-    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 262144,
@@ -54,13 +52,11 @@ for await (const chunk of stream) {
     "outputCost": 2.5
   },
   {
-    "model": "baseten/Qwen-Qwen3-Coder-480B-A35B-Instruct",
+    "model": "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "objectGeneration": true,
     "toolUsage": true,
-    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 66536,
@@ -79,7 +75,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://inference.baseten.co/v1/chat/completions",
-    modelId: "Moonshotai-Kimi-K2-Instruct-0905",
+    modelId: "Qwen3/Qwen3-Coder-480B-A35B-Instruct",
     apiKey: process.env.BASETEN_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -96,8 +92,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "baseten/Moonshotai-Kimi-K2-Instruct-0905"
-      : "baseten/Qwen-Qwen3-Coder-480B-A35B-Instruct";
+      ? "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct"
+      : "baseten/moonshotai/Kimi-K2-Instruct-0905";
   }
 });
 ```

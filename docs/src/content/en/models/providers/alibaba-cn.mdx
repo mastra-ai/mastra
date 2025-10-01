@@ -1,16 +1,16 @@
 ---
-title: "Alibaba | Models | Mastra"
-description: "Use Alibaba models with Mastra. 1 model available."
+title: "Alibaba (China) | Models | Mastra"
+description: "Use Alibaba (China) models with Mastra. 1 model available."
 ---
 
 import { ProviderModelsTable } from "@/components/provider-models-table";
 
 
-# <img src="https://models.dev/logos/alibaba.svg" alt="Alibaba logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Alibaba
+# <img src="https://models.dev/logos/alibaba-cn.svg" alt="Alibaba (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Alibaba (China)
 
-Access 1 Alibaba model through Mastra's model router. Authentication is handled automatically using the `DASHSCOPE_API_KEY` environment variable.
+Access 1 Alibaba (China) model through Mastra's model router. Authentication is handled automatically using the `DASHSCOPE_API_KEY` environment variable.
 
-Learn more in the [Alibaba documentation](https://www.alibabacloud.com/help/en/model-studio/models).
+Learn more in the [Alibaba (China) documentation](https://www.alibabacloud.com/help/en/model-studio/models).
 
 ```bash
 DASHSCOPE_API_KEY=your-api-key
@@ -22,7 +22,7 @@ import { Agent } from "@mastra/core";
 const agent = new Agent({
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "alibaba/qwen3-coder-plus"
+  model: "alibaba-cn/qwen3-coder-plus"
 });
 
 // Generate a response
@@ -40,7 +40,7 @@ for await (const chunk of stream) {
 <ProviderModelsTable 
   models={[
   {
-    "model": "alibaba/qwen3-coder-plus",
+    "model": "alibaba-cn/qwen3-coder-plus",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -62,7 +62,7 @@ for await (const chunk of stream) {
 const agent = new Agent({
   name: "custom-agent",
   model: {
-    url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
+    url: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
     modelId: "qwen3-coder-plus",
     apiKey: process.env.DASHSCOPE_API_KEY,
     headers: {
@@ -80,8 +80,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "alibaba/qwen3-coder-plus"
-      : "alibaba/qwen3-coder-plus";
+      ? "alibaba-cn/qwen3-coder-plus"
+      : "alibaba-cn/qwen3-coder-plus";
   }
 });
 ```

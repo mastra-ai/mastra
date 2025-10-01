@@ -6,7 +6,7 @@ description: "Use Moonshot AI (China) models with Mastra. 3 models available."
 import { ProviderModelsTable } from "@/components/provider-models-table";
 
 
-# <img src="https://models.dev/logos/moonshotai_cn.svg" alt="Moonshot AI (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Moonshot AI (China)
+# <img src="https://models.dev/logos/moonshotai-cn.svg" alt="Moonshot AI (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Moonshot AI (China)
 
 Access 3 Moonshot AI (China) models through Mastra's model router. Authentication is handled automatically using the `MOONSHOT_API_KEY` environment variable.
 
@@ -22,7 +22,7 @@ import { Agent } from "@mastra/core";
 const agent = new Agent({
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "moonshotai_cn/kimi-k2-0711-preview"
+  model: "moonshotai-cn/kimi-k2-0711-preview"
 });
 
 // Generate a response
@@ -38,7 +38,44 @@ for await (const chunk of stream) {
 ## Models
 
 <ProviderModelsTable 
-  models={[]}
+  models={[
+  {
+    "model": "moonshotai-cn/kimi-k2-0905-preview",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.6,
+    "outputCost": 2.5
+  },
+  {
+    "model": "moonshotai-cn/kimi-k2-0711-preview",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 16384,
+    "inputCost": 0.6,
+    "outputCost": 2.5
+  },
+  {
+    "model": "moonshotai-cn/kimi-k2-turbo-preview",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 2.4,
+    "outputCost": 10
+  }
+]}
 />
 
 ## Advanced Configuration
@@ -67,8 +104,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "moonshotai_cn/kimi-k2-0711-preview"
-      : "moonshotai_cn/kimi-k2-0905-preview";
+      ? "moonshotai-cn/kimi-k2-0711-preview"
+      : "moonshotai-cn/kimi-k2-0905-preview";
   }
 });
 ```

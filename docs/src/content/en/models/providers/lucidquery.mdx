@@ -1,19 +1,19 @@
 ---
-title: "Upstage | Models | Mastra"
-description: "Use Upstage models with Mastra. 2 models available."
+title: "LucidQuery AI | Models | Mastra"
+description: "Use LucidQuery AI models with Mastra. 2 models available."
 ---
 
 import { ProviderModelsTable } from "@/components/provider-models-table";
 
 
-# <img src="https://models.dev/logos/upstage.svg" alt="Upstage logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Upstage
+# <img src="https://models.dev/logos/lucidquery.svg" alt="LucidQuery AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LucidQuery AI
 
-Access 2 Upstage models through Mastra's model router. Authentication is handled automatically using the `UPSTAGE_API_KEY` environment variable.
+Access 2 LucidQuery AI models through Mastra's model router. Authentication is handled automatically using the `LUCIDQUERY_API_KEY` environment variable.
 
-Learn more in the [Upstage documentation](https://developers.upstage.ai).
+Learn more in the [LucidQuery AI documentation](https://lucidquery.com).
 
 ```bash
-UPSTAGE_API_KEY=your-api-key
+LUCIDQUERY_API_KEY=your-api-key
 ```
 
 ```typescript
@@ -22,7 +22,7 @@ import { Agent } from "@mastra/core";
 const agent = new Agent({
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "upstage/solar-mini"
+  model: "lucidquery/lucidnova-rf1-100b"
 });
 
 // Generate a response
@@ -40,28 +40,28 @@ for await (const chunk of stream) {
 <ProviderModelsTable 
   models={[
   {
-    "model": "upstage/solar-mini",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 32768,
-    "maxOutput": 4096,
-    "inputCost": 0.15,
-    "outputCost": 0.15
-  },
-  {
-    "model": "upstage/solar-pro2",
+    "model": "lucidquery/lucidquery-nexus-coder",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 65536,
-    "maxOutput": 8192,
-    "inputCost": 0.25,
-    "outputCost": 0.25
+    "contextWindow": 250000,
+    "maxOutput": 60000,
+    "inputCost": 2,
+    "outputCost": 5
+  },
+  {
+    "model": "lucidquery/lucidnova-rf1-100b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 120000,
+    "maxOutput": 8000,
+    "inputCost": 2,
+    "outputCost": 5
   }
 ]}
 />
@@ -74,9 +74,9 @@ for await (const chunk of stream) {
 const agent = new Agent({
   name: "custom-agent",
   model: {
-    url: "https://api.upstage.ai/chat/completions",
-    modelId: "solar-mini",
-    apiKey: process.env.UPSTAGE_API_KEY,
+    url: "https://lucidquery.com/api/v1/chat/completions",
+    modelId: "lucidnova-rf1-100b",
+    apiKey: process.env.LUCIDQUERY_API_KEY,
     headers: {
       "X-Custom-Header": "value"
     }
@@ -92,8 +92,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "upstage/solar-mini"
-      : "upstage/solar-pro2";
+      ? "lucidquery/lucidnova-rf1-100b"
+      : "lucidquery/lucidquery-nexus-coder";
   }
 });
 ```

@@ -1,19 +1,19 @@
 ---
-title: "GitHub Copilot | Models | Mastra"
-description: "Use GitHub Copilot models with Mastra. 16 models available."
+title: "Netlify | Models | Mastra"
+description: "Use Netlify models with Mastra. 32 models available."
 ---
 
 import { ProviderModelsTable } from "@/components/provider-models-table";
 
 
-# <img src="https://models.dev/logos/github_copilot.svg" alt="GitHub Copilot logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />GitHub Copilot
+# <img src="/logos/netlify.svg" alt="Netlify logo" className="inline w-8 h-8 mr-2 align-middle" />Netlify
 
-Access 16 GitHub Copilot models through Mastra's model router. Authentication is handled automatically using the `GITHUB_TOKEN` environment variable.
+Access 32 Netlify models through Mastra's model router. Authentication is handled automatically using the `NETLIFY_TOKEN,NETLIFY_SITE_ID` environment variable.
 
-Learn more in the [GitHub Copilot documentation](https://docs.github.com/en/copilot).
+Learn more in the [Netlify documentation](https://docs.netlify.com/build/ai-gateway/overview/).
 
 ```bash
-GITHUB_TOKEN=your-api-key
+NETLIFY_TOKEN,NETLIFY_SITE_ID=your-api-key
 ```
 
 ```typescript
@@ -22,7 +22,7 @@ import { Agent } from "@mastra/core";
 const agent = new Agent({
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "github_copilot/claude-3.5-sonnet"
+  model: "netlify/anthropic/claude-3-5-haiku-20241022"
 });
 
 // Generate a response
@@ -49,9 +49,9 @@ for await (const chunk of stream) {
 const agent = new Agent({
   name: "custom-agent",
   model: {
-    url: "https://api.githubcopilot.com/chat/completions",
-    modelId: "claude-3.5-sonnet",
-    apiKey: process.env.GITHUB_TOKEN,
+    url: "undefined",
+    modelId: "anthropic/claude-3-5-haiku-20241022",
+    apiKey: process.env.NETLIFY_TOKEN,NETLIFY_SITE_ID,
     headers: {
       "X-Custom-Header": "value"
     }
@@ -67,8 +67,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "github_copilot/claude-3.5-sonnet"
-      : "github_copilot/claude-3.7-sonnet";
+      ? "netlify/anthropic/claude-3-5-haiku-20241022"
+      : "netlify/anthropic/claude-3-5-haiku-latest";
   }
 });
 ```
