@@ -1,4 +1,4 @@
-import { ToolCallMessagePartComponent, ToolCallMessagePartProps } from '@assistant-ui/react';
+import { ToolCallMessagePartProps } from '@assistant-ui/react';
 
 import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
@@ -6,10 +6,9 @@ import { useWorkflow } from '@/hooks/use-workflows';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { LoadingBadge } from './badges/loading-badge';
 import { AgentBadge } from './badges/agent-badge';
+import { useAssistantMessage } from '../messages/context';
 
-export interface ToolFallbackProps extends ToolCallMessagePartProps {
-  requireToolApproval?: boolean;
-}
+export type ToolFallbackProps = ToolCallMessagePartProps<any, any>;
 
 export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackProps) => {
   return (
@@ -19,7 +18,8 @@ export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackP
   );
 };
 
-const ToolFallbackInner = ({ toolName, result, args, requireToolApproval }: ToolFallbackProps) => {
+const ToolFallbackInner = ({ toolName, result, args }: ToolFallbackProps) => {
+  const { requireToolApproval } = useAssistantMessage();
   // We need to handle the stream data even if the workflow is not resolved yet
   // The response from the fetch request resolving the workflow might theoretically
   // be resolved after we receive the first stream event

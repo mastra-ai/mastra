@@ -1,19 +1,13 @@
-import {
-  ActionBarPrimitive,
-  MessagePrimitive,
-  ToolCallMessagePartComponent,
-  ToolCallMessagePartProps,
-  useMessage,
-} from '@assistant-ui/react';
-import { AudioLinesIcon, BrainIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
+import { ActionBarPrimitive, MessagePrimitive, ToolCallMessagePartComponent, useMessage } from '@assistant-ui/react';
+import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
 
-import { MarkdownText } from './markdown-text';
 import { ErrorAwareText } from './error-aware-text';
 import { TooltipIconButton } from '../tooltip-icon-button';
 import { ToolFallback } from '@/components/assistant-ui/tools/tool-fallback';
 import { Reasoning } from './reasoning';
 import { cn } from '@/lib/utils';
 import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provider-logo';
+import { AssistantMessageProvider } from './context';
 
 export interface AssistantMessageProps {
   ToolFallback?: ToolCallMessagePartComponent;
@@ -35,35 +29,33 @@ export const AssistantMessage = ({
 
   const showModelUsed = hasModelList && modelMetadata;
 
-  const WrappedToolFallack = (props: ToolCallMessagePartProps & { requireToolApproval?: boolean }) => {
-    return <ToolFallback {...props} requireToolApproval={requireToolApproval} />;
-  };
-
   return (
-    <MessagePrimitive.Root className="max-w-full" data-message-id={messageId}>
-      <div className="text-icon6 text-ui-lg leading-ui-lg">
-        <MessagePrimitive.Parts
-          components={{
-            Text: ErrorAwareText,
-            tools: { Fallback: WrappedToolFallack },
-            Reasoning: Reasoning,
-          }}
-        />
-      </div>
-      {!isToolCallAndOrReasoning && (
-        <div className={cn('h-6 pt-4 flex gap-2 items-center', { 'pb-1': showModelUsed })}>
-          {showModelUsed && (
-            <div className="flex items-center gap-1.5">
-              <ProviderLogo providerId={modelMetadata.modelProvider} size={14} />
-              <span className="text-ui-xs leading-ui-xs">
-                {modelMetadata.modelProvider}/{modelMetadata.modelId}
-              </span>
-            </div>
-          )}
-          <AssistantActionBar />
+    <AssistantMessageProvider value={{ requireToolApproval }}>
+      <MessagePrimitive.Root className="max-w-full" data-message-id={messageId}>
+        <div className="text-icon6 text-ui-lg leading-ui-lg">
+          <MessagePrimitive.Parts
+            components={{
+              Text: ErrorAwareText,
+              tools: { Fallback: ToolFallbackCustom || ToolFallback },
+              Reasoning: Reasoning,
+            }}
+          />
         </div>
-      )}
-    </MessagePrimitive.Root>
+        {!isToolCallAndOrReasoning && (
+          <div className={cn('h-6 pt-4 flex gap-2 items-center', { 'pb-1': showModelUsed })}>
+            {showModelUsed && (
+              <div className="flex items-center gap-1.5">
+                <ProviderLogo providerId={modelMetadata.modelProvider} size={14} />
+                <span className="text-ui-xs leading-ui-xs">
+                  {modelMetadata.modelProvider}/{modelMetadata.modelId}
+                </span>
+              </div>
+            )}
+            <AssistantActionBar />
+          </div>
+        )}
+      </MessagePrimitive.Root>
+    </AssistantMessageProvider>
   );
 };
 
