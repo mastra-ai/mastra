@@ -16,8 +16,13 @@ function resolveApiKey({ provider, apiKey }: { provider?: string; apiKey?: strin
 
   if (provider) {
     const config = getProviderConfig(provider);
-    if (config?.apiKeyEnvVar) {
+    if (typeof config?.apiKeyEnvVar === `string`) {
       return process.env[config.apiKeyEnvVar];
+    }
+    if (Array.isArray(config?.apiKeyEnvVar)) {
+      for (const key of config.apiKeyEnvVar) {
+        if (process.env[key]) return process.env[key];
+      }
     }
   }
 

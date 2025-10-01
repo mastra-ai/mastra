@@ -177,7 +177,7 @@ export class ModelsDevGateway extends MastraModelGateway {
       return {};
     }
 
-    const apiKey = envVars[config.apiKeyEnvVar];
+    const apiKey = typeof config.apiKeyEnvVar === `string` ? envVars[config.apiKeyEnvVar] : undefined; // we only use single string env var for models.dev for now
     if (!apiKey) {
       return {};
     }

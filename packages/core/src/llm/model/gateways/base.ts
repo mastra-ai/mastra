@@ -4,9 +4,9 @@
  */
 
 export interface ProviderConfig {
-  url: string;
-  apiKeyEnvVar: string;
+  url?: string;
   apiKeyHeader?: string;
+  apiKeyEnvVar: string | string[];
   name: string;
   models: string[];
   docUrl?: string; // Optional documentation URL

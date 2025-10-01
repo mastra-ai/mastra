@@ -7,7 +7,6 @@ import { UpdateModelParams } from '@mastra/client-js';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertCircle, Info } from 'lucide-react';
 import { useModelReset } from '../../context/model-reset-context';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { cleanProviderId } from './utils';
 
@@ -25,7 +24,7 @@ export interface AgentMetadataModelSwitcherProps {
 interface Provider {
   id: string;
   name: string;
-  envVar: string;
+  envVar: string | string[];
   connected: boolean;
   docUrl?: string;
   models: string[];
@@ -657,7 +656,9 @@ export const AgentMetadataModelSwitcher = ({
                   <div className="text-xs mt-1">
                     Set the{' '}
                     <code className="px-1 py-0.5 bg-yellow-100 dark:bg-yellow-900/50 rounded">
-                      {currentProvider.envVar}
+                      {typeof currentProvider.envVar === `string`
+                        ? currentProvider.envVar
+                        : currentProvider.envVar.join(`, `)}
                     </code>{' '}
                     environment variable to use this provider.
                   </div>

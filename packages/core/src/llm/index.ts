@@ -149,3 +149,5 @@ export type LLMStreamObjectOptions<Z extends ZodSchema | JSONSchema7 | undefined
   onFinish?: StreamObjectOnFinishCallback<any>;
 } & LLMInnerStreamOptions<Z> &
   DefaultLLMStreamObjectOptions;
+
+export type { ProviderConfig } from './model/gateways/base';
