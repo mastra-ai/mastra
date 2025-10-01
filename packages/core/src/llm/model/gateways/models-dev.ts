@@ -1,4 +1,3 @@
-import { PROVIDER_REGISTRY } from '../provider-registry.generated';
 import { MastraModelGateway } from './base.js';
 import type { ProviderConfig } from './base.js';
 
@@ -63,6 +62,8 @@ const OPENAI_COMPATIBLE_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
 export class ModelsDevGateway extends MastraModelGateway {
   readonly name = 'models.dev';
   readonly prefix = undefined; // No prefix for registry gateway
+
+  private providerConfigs: Record<string, ProviderConfig> = {};
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
     console.info('Fetching providers from models.dev API...');
@@ -130,7 +131,8 @@ export class ModelsDevGateway extends MastraModelGateway {
       }
     }
 
-    // No need to store anymore - we use the static registry
+    // Store for later use in buildUrl and buildHeaders
+    this.providerConfigs = providerConfigs;
 
     console.info(`Found ${Object.keys(providerConfigs).length} OpenAI-compatible providers`);
     console.info('Providers:', Object.keys(providerConfigs).sort());
@@ -147,8 +149,7 @@ export class ModelsDevGateway extends MastraModelGateway {
       return false; // Not a full model ID
     }
 
-    // Get config from the static registry
-    const config = PROVIDER_REGISTRY[provider as keyof typeof PROVIDER_REGISTRY];
+    const config = this.providerConfigs[provider];
 
     if (!config?.url) {
       return false; // We don't know how to handle this provider
@@ -158,7 +159,6 @@ export class ModelsDevGateway extends MastraModelGateway {
     const baseUrlEnvVar = `${provider.toUpperCase().replace(/-/g, '_')}_BASE_URL`;
     const customBaseUrl = envVars[baseUrlEnvVar];
 
-    // Always return the URL - let the model handle API key validation
     return customBaseUrl || config.url;
   }
 
@@ -171,8 +171,7 @@ export class ModelsDevGateway extends MastraModelGateway {
       return {};
     }
 
-    // Get config from the static registry
-    const config = PROVIDER_REGISTRY[provider as keyof typeof PROVIDER_REGISTRY];
+    const config = this.providerConfigs[provider];
 
     if (!config) {
       return {};
