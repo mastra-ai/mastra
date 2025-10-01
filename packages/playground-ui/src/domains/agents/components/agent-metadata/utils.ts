@@ -1,7 +1,7 @@
 /**
  * Removes common provider suffixes like .chat, .x, .messages, .completion
  * from provider IDs to get the clean provider name.
- * 
+ *
  * @example
  * cleanProviderId('cerebras.chat') // returns 'cerebras'
  * cleanProviderId('xai.x') // returns 'xai'

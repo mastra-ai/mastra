@@ -306,7 +306,9 @@ export const AgentMetadataModelSwitcher = ({
                 value={
                   isSearching
                     ? providerSearch
-                    : providers.find(p => p.id === cleanProviderId(currentModelProvider))?.name || currentModelProvider || ''
+                    : providers.find(p => p.id === cleanProviderId(currentModelProvider))?.name ||
+                      currentModelProvider ||
+                      ''
                 }
                 onKeyDown={e => {
                   const filteredProviders = providers.filter(
