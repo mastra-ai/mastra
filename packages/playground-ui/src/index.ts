@@ -1,6 +1,5 @@
 import './index.css';
 
-export * from './contexts/mastra-client-context';
 export * from './domains/agents/index';
 export * from './domains/networks/index';
 export * from './domains/scores/index';
@@ -46,3 +45,4 @@ export * from './components/ui/kbd';
 export * from './components/ui/collapsible';
 export * from './domains/conversation/index';
 export * from './lib/errors';
+export * from './components/assistant-ui/tools/tool-fallback';

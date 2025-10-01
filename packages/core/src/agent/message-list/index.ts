@@ -22,7 +22,7 @@ import type { AIV4Type, AIV5Type } from './types';
 import { getToolName } from './utils/ai-v5/tool';
 
 type AIV5LanguageModelV2Message = LanguageModelV2Prompt[0];
-type AIV5ResponseMessage = AIV5.StepResult<any>['response']['messages'][number];
+export type AIV5ResponseMessage = AIV5.StepResult<any>['response']['messages'][number];
 
 type MastraMessageShared = {
   id: string;

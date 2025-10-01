@@ -9,6 +9,7 @@ import {
   generateVNextHandler,
   getAgentByIdHandler,
   getAgentsHandler,
+  getProvidersHandler,
   getEvalsByAgentIdHandler,
   getLiveEvalsByAgentIdHandler,
   setAgentInstructionsHandler,
@@ -42,6 +43,20 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     getAgentsHandler,
+  );
+
+  router.get(
+    '/providers',
+    describeRoute({
+      description: 'Get all available model providers with connection status',
+      tags: ['agents'],
+      responses: {
+        200: {
+          description: 'List of model providers with their connection status',
+        },
+      },
+    }),
+    getProvidersHandler,
   );
 
   router.get(
@@ -147,6 +162,17 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 runId: { type: 'string' },
                 output: { type: 'object' },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the agent execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
               required: ['messages'],
             },
@@ -199,6 +225,17 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 runId: { type: 'string' },
                 output: { type: 'object' },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the agent execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
               required: ['messages'],
             },
@@ -357,6 +394,17 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 runId: { type: 'string' },
                 output: { type: 'object' },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the agent execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
               required: ['messages'],
             },
@@ -409,6 +457,17 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 runId: { type: 'string' },
                 output: { type: 'object' },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the agent execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
               required: ['messages'],
             },
@@ -475,6 +534,17 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                     { type: 'string', enum: ['auto', 'none', 'required'] },
                     { type: 'object', properties: { type: { type: 'string' }, toolName: { type: 'string' } } },
                   ],
+                },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the agent execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
                 },
               },
               required: ['messages'],

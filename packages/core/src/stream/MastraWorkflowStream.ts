@@ -1,6 +1,6 @@
 import { ReadableStream } from 'stream/web';
 import type z from 'zod';
-import type { Run, Step } from '../workflows';
+import type { Run, Step, WorkflowRunStatus } from '../workflows';
 import type { ChunkType } from './types';
 import { ChunkFrom } from './types';
 
@@ -78,9 +78,12 @@ export class MastraWorkflowStream<
                 chunk.payload?.output?.from === 'WORKFLOW' &&
                 chunk.payload?.output?.type === 'finish')
             ) {
-              const finishPayload = chunk.payload?.output.payload;
-              if (finishPayload) {
-                updateUsageCount(finishPayload.usage);
+              const output = chunk.payload?.output;
+              if (output && 'payload' in output && output.payload) {
+                const finishPayload = output.payload;
+                if ('usage' in finishPayload && finishPayload.usage) {
+                  updateUsageCount(finishPayload.usage);
+                }
               }
             }
 
@@ -99,7 +102,7 @@ export class MastraWorkflowStream<
 
         const stream: ReadableStream<ChunkType> = await createStream(writer);
 
-        let workflowStatus = 'success';
+        let workflowStatus: WorkflowRunStatus = 'success';
 
         for await (const chunk of stream) {
           // update the usage count
@@ -123,7 +126,7 @@ export class MastraWorkflowStream<
           payload: {
             workflowStatus,
             output: {
-              usage: this.#usageCount as any,
+              usage: this.#usageCount,
             },
             metadata: {},
           },

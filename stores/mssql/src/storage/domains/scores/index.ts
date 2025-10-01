@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData } from '@mastra/core/scores';
+import type { ScoreRowData, ValidatedSaveScorePayload } from '@mastra/core/scores';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
 import type { ConnectionPool } from 'mssql';
@@ -78,6 +79,20 @@ export class ScoresMSSQL extends ScoresStorage {
   }
 
   async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    let validatedScore: ValidatedSaveScorePayload;
+    try {
+      validatedScore = saveScorePayloadSchema.parse(score);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_MSSQL_STORE_SAVE_SCORE_VALIDATION_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+
     try {
       // Generate ID like other storage implementations
       const scoreId = crypto.randomUUID();
@@ -93,7 +108,7 @@ export class ScoresMSSQL extends ScoresStorage {
         runtimeContext,
         entity,
         ...rest
-      } = score;
+      } = validatedScore;
 
       await this.operations.insert({
         tableName: TABLE_SCORERS,
@@ -308,6 +323,71 @@ export class ScoresMSSQL extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { entityId, entityType },
+        },
+        error,
+      );
+    }
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    try {
+      const request = this.pool.request();
+      request.input('p1', traceId);
+      request.input('p2', spanId);
+
+      const totalResult = await request.query(
+        `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [traceId] = @p1 AND [spanId] = @p2`,
+      );
+
+      const total = totalResult.recordset[0]?.count || 0;
+
+      if (total === 0) {
+        return {
+          pagination: {
+            total: 0,
+            page: pagination.page,
+            perPage: pagination.perPage,
+            hasMore: false,
+          },
+          scores: [],
+        };
+      }
+
+      const limit = pagination.perPage + 1;
+      const dataRequest = this.pool.request();
+      dataRequest.input('p1', traceId);
+      dataRequest.input('p2', spanId);
+      dataRequest.input('p3', limit);
+      dataRequest.input('p4', pagination.page * pagination.perPage);
+
+      const result = await dataRequest.query(
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [traceId] = @p1 AND [spanId] = @p2 ORDER BY [createdAt] DESC OFFSET @p4 ROWS FETCH NEXT @p3 ROWS ONLY`,
+      );
+
+      return {
+        pagination: {
+          total: Number(total),
+          page: pagination.page,
+          perPage: pagination.perPage,
+          hasMore: result.recordset.length > pagination.perPage,
+        },
+        scores: result.recordset.slice(0, pagination.perPage).map(row => transformScoreRow(row)),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_SCORES_BY_SPAN_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { traceId, spanId },
         },
         error,
       );

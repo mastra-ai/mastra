@@ -1,3 +1,4 @@
+import type { ReadableStream } from 'stream/web';
 import { parsePartialJson, processDataStream } from '@ai-sdk/ui-utils';
 import type {
   JSONValue,
@@ -16,7 +17,6 @@ import type { OutputSchema, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodType } from 'zod';
-
 import type {
   GenerateParams,
   GetAgentResponse,
@@ -86,12 +86,10 @@ async function executeToolCallAndRespond({
           },
         );
 
+        // Build updated messages from the response, adding the tool result
+        // Do NOT re-include the original user message to avoid storage duplicates
         const updatedMessages = [
-          {
-            role: 'user',
-            content: params.messages,
-          },
-          ...(response.response as unknown as { messages: CoreMessage[] }).messages,
+          ...(response.response.messages || []),
           {
             role: 'tool',
             content: [
@@ -223,7 +221,7 @@ export class Agent extends BaseResource {
     StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
   >(params: GenerateParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
     console.warn(
-      "Deprecation NOTICE:\Generate method will switch to use generateVNext implementation September 30th, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
+      "Deprecation NOTICE: Generate method will switch to use generateVNext implementation the week of September 30th, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
     );
     // @ts-expect-error - generic type issues
     return this.generateLegacy(params);
@@ -297,11 +295,9 @@ export class Agent extends BaseResource {
             },
           );
 
+          // Build updated messages from the response, adding the tool result
+          // Do NOT re-include the original user message to avoid storage duplicates
           const updatedMessages = [
-            {
-              role: 'user',
-              content: params.messages,
-            },
             ...(response.response as unknown as { messages: CoreMessage[] }).messages,
             {
               role: 'tool',
@@ -488,7 +484,7 @@ export class Agent extends BaseResource {
     }
 
     await processDataStream({
-      stream,
+      stream: stream as ReadableStream<Uint8Array>,
       onTextPart(value) {
         if (currentTextPart == null) {
           currentTextPart = {
@@ -747,7 +743,7 @@ export class Agent extends BaseResource {
     }
   > {
     console.warn(
-      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 30th, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
+      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation the week of September 30th, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
     );
     return this.streamLegacy(params);
   }
@@ -790,7 +786,7 @@ export class Agent extends BaseResource {
     // Add the processDataStream method to the response
     streamResponse.processDataStream = async (options = {}) => {
       await processDataStream({
-        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        stream: streamResponse.body as unknown as globalThis.ReadableStream<Uint8Array>,
         ...options,
       });
     };
@@ -1160,8 +1156,8 @@ export class Agent extends BaseResource {
       // Use tee() to split the stream into two branches
       const [streamForWritable, streamForProcessing] = response.body.tee();
 
-      // Pipe one branch to the writable stream without holding a persistent lock
-      streamForWritable
+      // Track the pipe promise so we can wait for it before closing
+      const pipePromise = streamForWritable
         .pipeTo(
           new WritableStream<Uint8Array>({
             async write(chunk) {
@@ -1191,8 +1187,8 @@ export class Agent extends BaseResource {
         });
 
       // Process the other branch for chat response handling
-      this.processChatResponse_vNext({
-        stream: streamForProcessing,
+      await this.processChatResponse_vNext({
+        stream: streamForProcessing as unknown as ReadableStream<Uint8Array>,
         update: ({ message }) => {
           const existingIndex = messages.findIndex(m => m.id === message.id);
 
@@ -1211,10 +1207,12 @@ export class Agent extends BaseResource {
               toolCalls.push(toolCall);
             }
 
+            let shouldExecuteClientTool = false;
             // Handle tool calls if needed
             for (const toolCall of toolCalls) {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
+                shouldExecuteClientTool = true;
                 const result = await clientTool.execute(
                   {
                     context: toolCall?.args,
@@ -1258,35 +1256,37 @@ export class Agent extends BaseResource {
                   toolInvocation.result = result;
                 }
 
-                // Convert messages to the correct format for the recursive call
-                const originalMessages = processedParams.messages;
-                const messageArray = Array.isArray(originalMessages) ? originalMessages : [originalMessages];
+                // Build updated messages for the recursive call
+                // Do NOT re-include the original messages to avoid storage duplicates
                 const updatedMessages =
-                  lastMessage != null
-                    ? [...messageArray, ...messages.filter(m => m.id !== lastMessage.id), lastMessage]
-                    : [...messageArray, ...messages];
+                  lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
+
+                // Wait for current pipe to complete before starting recursive call
+                await pipePromise;
 
                 // Recursively call stream with updated messages
-                this.processStreamResponse_vNext(
+                await this.processStreamResponse_vNext(
                   {
                     ...processedParams,
                     messages: updatedMessages,
                   },
                   writable,
-                ).catch(error => {
-                  console.error('Error processing stream response:', error);
-                });
+                );
               }
             }
-          } else {
-            setTimeout(() => {
+
+            if (!shouldExecuteClientTool) {
+              // Wait for pipe to complete before closing
+              await pipePromise;
               writable.close();
-            }, 0);
+            }
+          } else {
+            // Wait for pipe to complete before closing
+            await pipePromise;
+            writable.close();
           }
         },
         lastMessage: undefined,
-      }).catch(error => {
-        console.error('Error processing stream response:', error);
       });
     } catch (error) {
       console.error('Error processing stream response:', error);
@@ -1469,7 +1469,7 @@ export class Agent extends BaseResource {
 
       // Process the other branch for chat response handling
       this.processChatResponse({
-        stream: streamForProcessing,
+        stream: streamForProcessing as unknown as ReadableStream<Uint8Array>,
         update: ({ message }) => {
           const existingIndex = messages.findIndex(m => m.id === message.id);
 
@@ -1551,15 +1551,11 @@ export class Agent extends BaseResource {
                   writer.releaseLock();
                 }
 
-                // Convert messages to the correct format for the recursive call
-                const originalMessages = processedParams.messages;
-                const messageArray = Array.isArray(originalMessages) ? originalMessages : [originalMessages];
-
                 // Recursively call stream with updated messages
                 this.processStreamResponse(
                   {
                     ...processedParams,
-                    messages: [...messageArray, ...messages.filter(m => m.id !== lastMessage.id), lastMessage],
+                    messages: [...messages.filter(m => m.id !== lastMessage.id), lastMessage],
                   },
                   writable,
                 ).catch(error => {

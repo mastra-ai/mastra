@@ -1,4 +1,4 @@
-import { useMastraClient } from '@/contexts/mastra-client-context';
+import { useMastraClient } from '@mastra/react';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 

@@ -709,6 +709,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           : undefined,
       runCount,
       foreachIdx: step.type === 'foreach' ? executionPath[1] : undefined,
+      validateInputs: workflow.options.validateInputs,
     });
     runtimeContext = Object.fromEntries(rc.entries());
 

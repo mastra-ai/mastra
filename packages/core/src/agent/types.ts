@@ -1,4 +1,4 @@
-import type { GenerateTextOnStepFinishCallback, TelemetrySettings } from 'ai';
+import type { GenerateTextOnStepFinishCallback, TelemetrySettings, ToolSet } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
@@ -11,16 +11,16 @@ import type {
   DefaultLLMTextOptions,
   OutputType,
   SystemMessage,
+  MastraModelConfig,
 } from '../llm';
 import type {
   StreamTextOnFinishCallback,
   StreamTextOnStepFinishCallback,
   StreamObjectOnFinishCallback,
 } from '../llm/model/base.types';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { MemoryConfig, StorageThreadType } from '../memory/types';
+import type { MastraLanguageModel, MemoryConfig, StorageThreadType } from '../memory/types';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import type { RuntimeContext } from '../runtime-context';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
@@ -38,6 +38,7 @@ import type { SaveQueueManager } from './save-queue';
 
 export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
 export type { Message as AiMessageType } from 'ai';
+export type { LLMStepResult } from '../stream/types';
 
 export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5>;
 
@@ -68,6 +69,23 @@ export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;
 }
 
+// This is used in place of DynamicArgument so that model router IDE autocomplete works.
+// Without this TS doesn't understand the function/string union type from DynamicArgument
+type DynamicModel = ({
+  runtimeContext,
+  mastra,
+}: {
+  runtimeContext: RuntimeContext;
+  mastra?: Mastra;
+}) => Promise<MastraModelConfig> | MastraModelConfig;
+
+type ModelWithRetries = {
+  id?: string;
+  model: MastraModelConfig | DynamicModel;
+  maxRetries?: number; //defaults to 0
+  enabled?: boolean; //defaults to true
+};
+
 export interface AgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
@@ -77,13 +95,7 @@ export interface AgentConfig<
   name: TAgentId;
   description?: string;
   instructions: DynamicAgentInstructions;
-  model:
-    | DynamicArgument<MastraLanguageModel>
-    | {
-        model: DynamicArgument<MastraLanguageModel>;
-        maxRetries?: number; //defaults to 0
-        enabled?: boolean; //defaults to true
-      }[];
+  model: MastraModelConfig | DynamicModel | ModelWithRetries[];
   maxRetries?: number; //defaults to 0
   tools?: DynamicArgument<TTools>;
   workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
@@ -276,7 +288,7 @@ export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boole
 export type AgentExecuteOnFinishOptions = {
   instructions: SystemMessage;
   runId: string;
-  result: Record<string, any>;
+  result: Parameters<StreamTextOnFinishCallback<ToolSet>>[0] & { object?: unknown };
   thread: StorageThreadType | null | undefined;
   readOnlyMemory?: boolean;
   threadId?: string;

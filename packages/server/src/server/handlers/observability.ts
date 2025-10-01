@@ -1,4 +1,4 @@
-import type { AITracesPaginatedArg } from '@mastra/core';
+import type { AITracesPaginatedArg, StoragePagination } from '@mastra/core';
 import { scoreTraces } from '@mastra/core/scores/scoreTraces';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
@@ -139,5 +139,27 @@ export async function scoreTracesHandler({ mastra, body }: ScoreTracesContext) {
     };
   } catch (error) {
     handleError(error, 'Error processing trace scoring');
+  }
+}
+
+export async function getScoresBySpan({
+  mastra,
+  traceId,
+  spanId,
+  pagination,
+}: Context & { traceId: string; spanId: string; pagination: StoragePagination }) {
+  try {
+    const storage = mastra.getStorage();
+    if (!storage) {
+      throw new HTTPException(500, { message: 'Storage is not available' });
+    }
+
+    if (!traceId || !spanId) {
+      throw new HTTPException(400, { message: 'Trace ID and span ID are required' });
+    }
+
+    return await storage.getScoresBySpan({ traceId, spanId, pagination });
+  } catch (error) {
+    return handleError(error, 'Error getting scores by span');
   }
 }

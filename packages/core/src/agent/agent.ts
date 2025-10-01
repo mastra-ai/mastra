@@ -27,7 +27,14 @@ import type {
   StreamTextResult,
 } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
-import type { TripwireProperties, MastraLanguageModel, MastraLanguageModelV2 } from '../llm/model/shared.types';
+import { OpenAICompatibleModel } from '../llm/model/openai-compatible';
+import type {
+  TripwireProperties,
+  MastraLanguageModel,
+  MastraLanguageModelV2,
+  MastraModelConfig,
+  OpenAICompatibleConfig,
+} from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
@@ -81,6 +88,13 @@ import type {
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
+
+type ModelFallbacks = {
+  id: string;
+  model: DynamicArgument<MastraModelConfig>;
+  maxRetries: number;
+  enabled: boolean;
+}[];
 
 function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
   if (value instanceof Promise) {
@@ -145,14 +159,7 @@ export class Agent<
   public name: TAgentId;
   #instructions: DynamicAgentInstructions;
   readonly #description?: string;
-  model:
-    | DynamicArgument<MastraLanguageModel>
-    | {
-        id: string;
-        model: DynamicArgument<MastraLanguageModel>;
-        maxRetries: number;
-        enabled: boolean;
-      }[];
+  model: DynamicArgument<MastraModelConfig> | ModelFallbacks;
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
@@ -751,19 +758,20 @@ export class Agent<
     model,
   }: {
     runtimeContext?: RuntimeContext;
-    model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel>;
+    model?: DynamicArgument<MastraModelConfig>;
   } = {}): MastraLLM | Promise<MastraLLM> {
     // If model is provided, resolve it; otherwise use the agent's model
-    const modelToUse = model
-      ? typeof model === 'function'
-        ? model({ runtimeContext, mastra: this.#mastra })
-        : model
-      : this.getModel({ runtimeContext });
+    const modelToUse = this.getModel({ modelConfig: model, runtimeContext });
 
     return resolveMaybePromise(modelToUse, resolvedModel => {
       let llm: MastraLLM | Promise<MastraLLM>;
       if (resolvedModel.specificationVersion === 'v2') {
-        llm = this.prepareModels(runtimeContext, model).then(models => {
+        const modelsPromise =
+          Array.isArray(this.model) && !model
+            ? this.prepareModels(runtimeContext)
+            : this.prepareModels(runtimeContext, resolvedModel);
+
+        llm = modelsPromise.then(models => {
           const enabledModels = models.filter(model => model.enabled);
           return new MastraLLMVNext({
             models: enabledModels,
@@ -792,126 +800,88 @@ export class Agent<
     });
   }
 
+  // Returns true for model router config object
+  private isOpenaiCompatibleObjectConfig(
+    modelConfig: DynamicArgument<MastraModelConfig>,
+  ): modelConfig is OpenAICompatibleConfig {
+    if (typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) return false;
+    // Check for OpenAICompatibleConfig specifically - it should have 'id' but NOT 'model'
+    // ModelWithRetries has both 'id' and 'model', so we exclude it
+    // TODO: should probably do some additional checking using providers list to see if the ID starts with a known provider
+    // we can also do some duck typing around optional properties like url/apiKey/etc
+    if (typeof modelConfig === 'object' && 'id' in modelConfig && !('model' in modelConfig)) return true;
+    return false;
+  }
+
+  /**
+   * Resolves a model configuration to a LanguageModel instance
+   * @param modelConfig The model configuration (magic string, config object, or LanguageModel)
+   * @returns A LanguageModel instance
+   */
+  private async resolveModelConfig(
+    modelConfig: DynamicArgument<MastraModelConfig>,
+    runtimeContext: RuntimeContext,
+  ): Promise<MastraLanguageModel> {
+    // If it's already a LanguageModel, return it
+    if (typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) {
+      return modelConfig;
+    }
+
+    // If it's a string (magic string like "openai/gpt-4o" or URL) or OpenAICompatibleConfig, create OpenAICompatibleModel
+    if (typeof modelConfig === 'string' || this.isOpenaiCompatibleObjectConfig(modelConfig)) {
+      return new OpenAICompatibleModel(modelConfig);
+    }
+
+    if (typeof modelConfig === `function`) {
+      const fromDynamic = await modelConfig({ runtimeContext, mastra: this.#mastra });
+      if (typeof fromDynamic === `string` || this.isOpenaiCompatibleObjectConfig(fromDynamic)) {
+        return new OpenAICompatibleModel(fromDynamic);
+      }
+      return fromDynamic;
+    }
+
+    const mastraError = new MastraError({
+      id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      details: {
+        agentName: this.name,
+      },
+      text: `[Agent:${this.name}] - No model provided`,
+    });
+    this.logger.trackException(mastraError);
+    this.logger.error(mastraError.toString());
+    throw mastraError;
+  }
+
   /**
    * Gets the model, resolving it if it's a function
    * @param options Options for getting the model
    * @returns A promise that resolves to the model
    */
-  public getModel({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
+  public getModel({
+    runtimeContext = new RuntimeContext(),
+    modelConfig = this.model,
+  }: { runtimeContext?: RuntimeContext; modelConfig?: Agent['model'] } = {}):
     | MastraLanguageModel
     | Promise<MastraLanguageModel> {
-    if (typeof this.model !== 'function') {
-      if (!this.model) {
-        const mastraError = new MastraError({
-          id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          details: {
-            agentName: this.name,
-          },
-          text: `[Agent:${this.name}] - No model provided`,
-        });
-        this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
-        throw mastraError;
-      }
+    if (!Array.isArray(modelConfig)) return this.resolveModelConfig(modelConfig, runtimeContext);
 
-      let modelToUse: MastraLanguageModel | DynamicArgument<MastraLanguageModel>;
-
-      if (Array.isArray(this.model)) {
-        if (this.model.length === 0 || !this.model[0]) {
-          const mastraError = new MastraError({
-            id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
-            domain: ErrorDomain.AGENT,
-            category: ErrorCategory.USER,
-            details: {
-              agentName: this.name,
-            },
-            text: `[Agent:${this.name}] - Empty model list provided`,
-          });
-          this.logger.trackException(mastraError);
-          this.logger.error(mastraError.toString());
-          throw mastraError;
-        }
-        modelToUse = this.model[0].model;
-
-        if (typeof modelToUse !== 'function' && modelToUse.specificationVersion !== 'v2') {
-          const mastraError = new MastraError({
-            id: 'AGENT_GET_MODEL_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
-            domain: ErrorDomain.AGENT,
-            category: ErrorCategory.USER,
-            details: {
-              agentName: this.name,
-            },
-            text: `[Agent:${this.name}] - Only v2 models are allowed when an array of models is provided`,
-          });
-          this.logger.trackException(mastraError);
-          this.logger.error(mastraError.toString());
-          throw mastraError;
-        }
-      } else {
-        modelToUse = this.model;
-      }
-
-      if (typeof modelToUse === 'function') {
-        const result = modelToUse({ runtimeContext, mastra: this.#mastra });
-        return resolveMaybePromise(result, model => {
-          if (!model) {
-            const mastraError = new MastraError({
-              id: 'AGENT_GET_MODEL_FUNCTION_EMPTY_RETURN',
-              domain: ErrorDomain.AGENT,
-              category: ErrorCategory.USER,
-              details: {
-                agentName: this.name,
-              },
-              text: `[Agent:${this.name}] - Function-based model returned empty value`,
-            });
-            this.logger.trackException(mastraError);
-            this.logger.error(mastraError.toString());
-            throw mastraError;
-          }
-
-          if (Array.isArray(this.model) && model.specificationVersion !== 'v2') {
-            const mastraError = new MastraError({
-              id: 'AGENT_GET_MODEL_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
-              domain: ErrorDomain.AGENT,
-              category: ErrorCategory.USER,
-              details: {
-                agentName: this.name,
-              },
-              text: `[Agent:${this.name}] - Only v2 models are allowed when an array of models is provided`,
-            });
-            this.logger.trackException(mastraError);
-            this.logger.error(mastraError.toString());
-            throw mastraError;
-          }
-
-          return model;
-        });
-      }
-
-      return modelToUse;
+    if (modelConfig.length === 0 || !modelConfig[0]) {
+      const mastraError = new MastraError({
+        id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: `[Agent:${this.name}] - Empty model list provided`,
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
-
-    const result = this.model({ runtimeContext, mastra: this.#mastra });
-    return resolveMaybePromise(result, model => {
-      if (!model) {
-        const mastraError = new MastraError({
-          id: 'AGENT_GET_MODEL_FUNCTION_EMPTY_RETURN',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          details: {
-            agentName: this.name,
-          },
-          text: `[Agent:${this.name}] - Function-based model returned empty value`,
-        });
-        this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
-        throw mastraError;
-      }
-
-      return model;
-    });
+    return this.resolveModelConfig(modelConfig[0].model, runtimeContext);
   }
 
   public async getModelList(
@@ -928,7 +898,7 @@ export class Agent<
     this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
   }
 
-  __updateModel({ model }: { model: DynamicArgument<MastraLanguageModel> }) {
+  __updateModel({ model }: { model: DynamicArgument<MastraModelConfig> }) {
     this.model = model;
     this.logger.debug(`[Agents:${this.name}] Model updated.`, { model: this.model, name: this.name });
   }
@@ -954,7 +924,7 @@ export class Agent<
     maxRetries,
   }: {
     id: string;
-    model?: DynamicArgument<MastraLanguageModel>;
+    model?: DynamicArgument<MastraModelConfig>;
     enabled?: boolean;
     maxRetries?: number;
   }) {
@@ -2888,7 +2858,7 @@ export class Agent<
 
   private async prepareModels(
     runtimeContext: RuntimeContext,
-    model?: DynamicArgument<MastraLanguageModel>,
+    model?: DynamicArgument<MastraLanguageModel> | ModelFallbacks,
   ): Promise<Array<AgentModelManagerConfig>> {
     if (model || !Array.isArray(this.model)) {
       const modelToUse = model ?? this.model;
@@ -2921,10 +2891,7 @@ export class Agent<
 
     const models = await Promise.all(
       this.model.map(async modelConfig => {
-        const model =
-          typeof modelConfig.model === 'function'
-            ? await modelConfig.model({ runtimeContext, mastra: this.#mastra })
-            : modelConfig.model;
+        const model = await this.resolveModelConfig(modelConfig.model, runtimeContext);
 
         if (model.specificationVersion !== 'v2') {
           const mastraError = new MastraError({
@@ -2941,11 +2908,27 @@ export class Agent<
           throw mastraError;
         }
 
+        const modelId = modelConfig.id || model.modelId;
+        if (!modelId) {
+          const mastraError = new MastraError({
+            id: 'AGENT_PREPARE_MODELS_MISSING_MODEL_ID',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: {
+              agentName: this.name,
+            },
+            text: `[Agent:${this.name}] - Unable to determine model ID. Please provide an explicit ID in the model configuration.`,
+          });
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
+        }
+
         return {
-          id: modelConfig.id,
+          id: modelId,
           model: model as MastraLanguageModelV2,
-          maxRetries: modelConfig.maxRetries,
-          enabled: modelConfig.enabled,
+          maxRetries: modelConfig.maxRetries ?? 0,
+          enabled: modelConfig.enabled ?? true,
         };
       }),
     );
@@ -3072,6 +3055,7 @@ export class Agent<
       executeOnFinish: this.#executeOnFinish.bind(this),
       outputProcessors: this.#outputProcessors,
       llm,
+      getTelemetry: this.#mastra?.getTelemetry?.bind(this.#mastra),
     };
 
     // Create the workflow with all necessary context
@@ -3119,19 +3103,18 @@ export class Agent<
     overrideScorers,
   }: AgentExecuteOnFinishOptions) {
     const resToLog = {
-      text: result?.text,
-      object: result?.object,
-      toolResults: result?.toolResults,
-      toolCalls: result?.toolCalls,
-      usage: result?.usage,
-      steps: result?.steps?.map((s: any) => {
+      text: result.text,
+      object: result.object,
+      toolResults: result.toolResults,
+      toolCalls: result.toolCalls,
+      usage: result.usage,
+      steps: result.steps.map(s => {
         return {
-          stepType: s?.stepType,
-          text: result?.text,
-          object: result?.object,
-          toolResults: result?.toolResults,
-          toolCalls: result?.toolCalls,
-          usage: result?.usage,
+          stepType: s.stepType,
+          text: s.text,
+          toolResults: s.toolResults,
+          toolCalls: s.toolCalls,
+          usage: s.usage,
         };
       }),
     };
@@ -3144,8 +3127,8 @@ export class Agent<
 
     const messageListResponses = messageList.get.response.aiV4.core();
 
-    const usedWorkingMemory = messageListResponses?.some(
-      m => m.role === 'tool' && m?.content?.some(c => c?.toolName === 'updateWorkingMemory'),
+    const usedWorkingMemory = messageListResponses.some(
+      m => m.role === 'tool' && m.content.some(c => c.toolName === 'updateWorkingMemory'),
     );
     // working memory updates the thread, so we need to get the latest thread if we used it
     const memory = await this.getMemory({ runtimeContext });
@@ -3158,6 +3141,7 @@ export class Agent<
         if (!responseMessages && result.object) {
           responseMessages = [
             {
+              id: result.response.id,
               role: 'assistant',
               content: [
                 {
@@ -3170,9 +3154,7 @@ export class Agent<
         }
 
         if (responseMessages) {
-          // @TODO: PREV VERSION DIDNT RETURN USER MESSAGES, SO WE FILTER THEM OUT
-          const filteredMessages = responseMessages.filter((m: any) => m.role !== 'user');
-          messageList.add(filteredMessages, 'response');
+          messageList.add(responseMessages, 'response');
         }
 
         if (!threadExists) {
@@ -3197,7 +3179,7 @@ export class Agent<
             shouldGenerate,
             model: titleModel,
             instructions: titleInstructions,
-          } = this.resolveTitleGenerationConfig(config?.threads?.generateTitle);
+          } = this.resolveTitleGenerationConfig(config.threads?.generateTitle);
 
           if (shouldGenerate && userMessage) {
             promises.push(
@@ -3251,6 +3233,7 @@ export class Agent<
       if (!responseMessages && result.object) {
         responseMessages = [
           {
+            id: result.response.id,
             role: 'assistant',
             content: [
               {
@@ -3279,9 +3262,9 @@ export class Agent<
 
     agentAISpan?.end({
       output: {
-        text: result?.text,
-        object: result?.object,
-        files: result?.files,
+        text: result.text,
+        object: result.object,
+        files: result.files,
       },
     });
   }
@@ -3316,14 +3299,7 @@ export class Agent<
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
   > {
     const result = await this.streamVNext(messages, options);
-
-    if (result.tripwire) {
-      return result as unknown as FORMAT extends 'aisdk'
-        ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
-        : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
-    }
-
-    let fullOutput = await result.getFullOutput();
+    const fullOutput = await result.getFullOutput();
 
     const error = fullOutput.error;
 
@@ -3331,7 +3307,7 @@ export class Agent<
       throw error;
     }
 
-    return fullOutput as unknown as FORMAT extends 'aisdk'
+    return fullOutput as FORMAT extends 'aisdk'
       ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
   }
@@ -3450,7 +3426,7 @@ export class Agent<
       });
     }
 
-    return result.result as unknown as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
+    return result.result as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
   }
 
   async resumeStreamVNext<
@@ -3583,7 +3559,7 @@ export class Agent<
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
     if (!generateDeprecationWarningShown) {
       this.logger.warn(
-        "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 30th, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
+        "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation the week of September 30th, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
       );
       generateDeprecationWarningShown = true;
     }
@@ -3953,7 +3929,7 @@ export class Agent<
   > {
     if (!streamDeprecationWarningShown) {
       this.logger.warn(
-        "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 30th, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
+        "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation the week of September 30th, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
       );
       streamDeprecationWarningShown = true;
     }

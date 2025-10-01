@@ -1,6 +1,7 @@
 import { spawn as nodeSpawn } from 'node:child_process';
 import type { SpawnOptions } from 'node:child_process';
 import { dirname } from 'node:path';
+import { slash } from '../build/utils';
 
 /**
  * Promisified version of Node.js spawn function
@@ -44,7 +45,7 @@ export function validate(file: string) {
       import.meta.resolve('@mastra/deployer/loader'),
       '--input-type=module',
       '-e',
-      `import('file://${file.replaceAll('\\', '/')}')`,
+      `import('file://${slash(file)}')`,
     ],
     {
       cwd: dirname(file),

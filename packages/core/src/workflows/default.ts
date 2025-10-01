@@ -6,6 +6,7 @@ import { AISpanType, wrapMastra, selectFields } from '../ai-tracing';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { IErrorDefinition } from '../error';
+import { safeParseErrorObject } from '../error/utils.js';
 import type { MastraScorers } from '../scores';
 import { runScorer } from '../scores/hooks';
 import type { ChunkType } from '../stream/types';
@@ -25,6 +26,7 @@ import type {
   StepResult,
   StepSuccess,
 } from './types';
+import { validateStepInput } from './utils';
 
 export type ExecutionContext = {
   workflowId: string;
@@ -139,13 +141,18 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         eventTimestamp: Date.now(),
       });
 
-      base.error =
-        error instanceof Error
-          ? (error?.stack ?? error)
-          : (lastOutput.error ??
-            (typeof error === 'string'
-              ? error
-              : (new Error('Unknown error: ' + error)?.stack ?? new Error('Unknown error: ' + error))));
+      if (error instanceof Error) {
+        base.error = error?.stack ?? error;
+      } else if (lastOutput.error) {
+        base.error = lastOutput.error;
+      } else if (typeof error === 'string') {
+        base.error = error;
+      } else {
+        // For non-string, non-Error values, create a descriptive error
+        const errorMessage = safeParseErrorObject(error);
+        const errorObj = new Error('Unknown error: ' + errorMessage);
+        base.error = errorObj?.stack ?? errorObj;
+      }
     } else if (lastOutput.status === 'suspended') {
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {
@@ -715,9 +722,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const resumeTime = resume?.steps[0] === step.id ? Date.now() : undefined;
     const stepCallId = randomUUID();
 
+    const { inputData, validationError } = await validateStepInput({
+      prevOutput,
+      step,
+      validateInputs: this.options?.validateInputs ?? false,
+    });
+
     const stepInfo = {
       ...stepResults[step.id],
-      ...(resume?.steps[0] === step.id ? { resumePayload: resume?.resumePayload } : { payload: prevOutput }),
+      ...(resume?.steps[0] === step.id ? { resumePayload: resume?.resumePayload } : { payload: inputData }),
       ...(startTime ? { startedAt: startTime } : {}),
       ...(resumeTime ? { resumedAt: resumeTime } : {}),
       status: 'running',
@@ -726,7 +739,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const stepAISpan = tracingContext.currentSpan?.createChildSpan({
       name: `workflow step: '${step.id}'`,
       type: AISpanType.WORKFLOW_STEP,
-      input: prevOutput,
+      input: inputData,
       attributes: {
         stepId: step.id,
       },
@@ -816,13 +829,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         let suspended: { payload: any } | undefined;
         let bailed: { payload: any } | undefined;
 
+        if (validationError) {
+          throw validationError;
+        }
+
         const result = await runStep({
           runId,
           resourceId,
           workflowId,
           mastra: this.mastra ? wrapMastra(this.mastra, { currentSpan: stepAISpan }) : undefined,
           runtimeContext,
-          inputData: prevOutput,
+          inputData,
           runCount: this.getOrGenerateRunCount(step.id),
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           tracingContext: { currentSpan: stepAISpan },
@@ -864,13 +881,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           ),
           // Disable scorers must be explicitly set to false they are on by default
           scorers: disableScorers === false ? undefined : step.scorers,
+          validateInputs: this.options?.validateInputs,
         });
 
         if (step.scorers) {
           await this.runScorers({
             scorers: step.scorers,
             runId,
-            input: prevOutput,
+            input: inputData,
             output: result,
             workflowId,
             stepId: step.id,

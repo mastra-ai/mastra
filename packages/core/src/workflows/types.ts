@@ -148,7 +148,17 @@ export type WorkflowStreamEvent =
     }
   | {
       type: 'workflow-finish';
-      payload: {};
+      payload: {
+        workflowStatus: WorkflowRunStatus;
+        output: {
+          usage: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+          };
+        };
+        metadata: Record<string, any>;
+      };
     }
   | {
       type: 'workflow-canceled';
@@ -276,6 +286,7 @@ export interface WorkflowRunState {
 
 export interface WorkflowOptions {
   tracingPolicy?: TracingPolicy;
+  validateInputs?: boolean;
 }
 
 export type WorkflowInfo = {
