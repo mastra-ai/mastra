@@ -65,6 +65,7 @@ export function createOnScorerHook(mastra: Mastra) {
                 metadata: {
                   score: runResult.score,
                   reason: runResult.reason ?? '',
+                  spanId: currentSpan.id,
                 },
               });
             }
