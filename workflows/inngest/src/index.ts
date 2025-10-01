@@ -1357,41 +1357,64 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       const isResume = !!resume?.steps?.length;
       let result: WorkflowResult<any, any, any>;
       let runId: string;
-      if (isResume) {
-        // @ts-ignore
-        runId = stepResults[resume?.steps?.[0]]?.payload?.__workflow_meta?.runId ?? randomUUID();
 
-        const snapshot: any = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
-          workflowName: step.id,
-          runId: runId,
-        });
+      try {
+        if (isResume) {
+          // @ts-ignore
+          runId = stepResults[resume?.steps?.[0]]?.payload?.__workflow_meta?.runId ?? randomUUID();
 
-        const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
-          function: step.getFunction(),
-          data: {
-            inputData,
+          const snapshot: any = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+            workflowName: step.id,
             runId: runId,
-            resume: {
+          });
+
+          const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
+            function: step.getFunction(),
+            data: {
+              inputData,
               runId: runId,
-              steps: resume.steps.slice(1),
-              stepResults: snapshot?.context as any,
-              resumePayload: resume.resumePayload,
-              // @ts-ignore
-              resumePath: snapshot?.suspendedPaths?.[resume.steps?.[1]] as any,
+              resume: {
+                runId: runId,
+                steps: resume.steps.slice(1),
+                stepResults: snapshot?.context as any,
+                resumePayload: resume.resumePayload,
+                // @ts-ignore
+                resumePath: snapshot?.suspendedPaths?.[resume.steps?.[1]] as any,
+              },
             },
-          },
-        })) as any;
-        result = invokeResp.result;
-        runId = invokeResp.runId;
-      } else {
-        const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
-          function: step.getFunction(),
-          data: {
-            inputData,
-          },
-        })) as any;
-        result = invokeResp.result;
-        runId = invokeResp.runId;
+          })) as any;
+          result = invokeResp.result;
+          runId = invokeResp.runId;
+        } else {
+          const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
+            function: step.getFunction(),
+            data: {
+              inputData,
+            },
+          })) as any;
+          result = invokeResp.result;
+          runId = invokeResp.runId;
+        }
+      } catch (e) {
+        // Nested workflow threw an error (likely from finalization step)
+        // The error cause should contain the workflow result with runId
+        const errorCause = (e as any)?.cause;
+
+        // Try to extract runId from error cause or generate new one
+        if (errorCause && typeof errorCause === 'object') {
+          result = errorCause as WorkflowResult<any, any, any>;
+          // The runId might be in the result's steps metadata
+          runId = errorCause.runId || randomUUID();
+        } else {
+          // Fallback: if we can't get the result from error, construct a basic failed result
+          runId = randomUUID();
+          result = {
+            status: 'failed',
+            error: e instanceof Error ? e : new Error(String(e)),
+            steps: {},
+            input: inputData,
+          } as WorkflowResult<any, any, any>;
+        }
       }
 
       const res = await this.inngestStep.run(

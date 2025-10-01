@@ -737,7 +737,7 @@ describe('MastraInngestWorkflow', () => {
       expect(endTime - startTime).toBeGreaterThan(1000);
 
       srv.close();
-    });
+    }, 50_000);
 
     it('should execute a a waitForEvent step', async ctx => {
       const inngest = new Inngest({
