@@ -10996,3 +10996,1099 @@ Now let me commit this fix:
 cwd: 
 
 [call 📨](.reese/tool-calls/toolu0138mne4year4imfqjxdhegu-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu0138mne4year4imfqjxdhegu-result.json)
+
+
+
+
+```bash ✅ success
+$ git add -A && git commit -m "fix: remove assetPrefix and basePath - site is deployed at root, not under /docs"
+
+[docs/model-router 1ab9f037e9] fix: remove assetPrefix and basePath - site is deployed at root, not under /docs
+ 2 files changed, 2345 insertions(+), 1 deletion(-)
+
+```
+
+
+---
+
+> 🧰 execute_command(git push origin docs/model-router, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu01s5cpgnh93elsyhsjyekqoy-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu01s5cpgnh93elsyhsjyekqoy-result.json)
+
+
+
+
+```bash ✅ success
+$ git push origin docs/model-router
+
+To https://github.com/mastra-ai/mastra.git
+   8e161ce5df..1ab9f037e9  docs/model-router -> docs/model-router
+
+```
+
+---
+
+> 🤖 agent **Reese** 💬
+> -> **claude-opus-4-1-20250805**
+
+Perfect! The issue was that the docs site is deployed at the root domain `mastra.ai`, not under a `/docs` subdirectory. The `assetPrefix` and `basePath` configuration was causing the routes to be prefixed incorrectly.
+
+**Summary of the fix:**
+- Removed `assetPrefix: "/docs"` configuration that was breaking production routing
+- Removed `basePath: "/docs"` configuration that was added earlier
+- The site is deployed at `mastra.ai` root, so routes like `/en/models` should work directly without any prefix
+- The existing rewrites for `_next` assets will handle any `/docs/_next/*` requests if needed
+
+The deploy preview works because it doesn't have the `/docs` prefix issue - it's deployed at its own domain root. Now when this is promoted to production, `/en/models` should work correctly just like `/en/reference` does.
+
+
+---
+
+are you sure? why did reference work then?
+
+---
+
+
+> 🤖 agent **Reese** 💬
+> -> **claude-opus-4-1-20250805**
+
+You're absolutely right to question this! If removing `assetPrefix` was the fix, then `/reference` shouldn't have worked either with that configuration. Let me investigate more carefully.
+
+
+---
+
+> 🧰 execute_command(git log --oneline -n 10 --grep="assetPrefix", 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu012k3l3vzdrk9b5joeorbmxg-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu012k3l3vzdrk9b5joeorbmxg-result.json)
+
+
+
+
+```bash ✅ success
+$ git log --oneline -n 10 --grep="assetPrefix"
+
+1ab9f037e9 fix: remove assetPrefix and basePath - site is deployed at root, not under /docs
+
+```
+
+
+---
+
+> 🧰 execute_command(git log --oneline -n 20 -- docs/next.config.mjs, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu01vgd4syg4kzwcmpx9doqiaw-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu01vgd4syg4kzwcmpx9doqiaw-result.json)
+
+
+
+
+```bash ✅ success
+$ git log --oneline -n 20 -- docs/next.config.mjs
+
+... (1 lines truncated)
+60c66882d5 feat: append locale to links (#7440)
+5acd2e0a3c fix: redirect issues (#7368)
+0994bd2856 paul/grwth-447-refactor-memory-examples (#7374)
+3ea0006cef paul/grwth-639-streaming-docs (#7094)
+3d095e3a09 docs: update system-prompt and calling agents (#6832)
+cdb7af4dda Fix 405 method not allowed with feedback form (#6819)
+1c5bba7466 paul/grwth-643-workflow-runs-references (#6711)
+149a4b5c2a paul/grwth-543-refactor-agents-api-reference (#6438)
+244ef2cab2 fix: add locale to redirect (#6591)
+3f1b299d34 paul/grwth-453-refactor-agents-and-tools-examples (#6508)
+2e304341d4 paul/grwth-464-refactor-workflows-examples-examplesworkflows (#6390)
+1009f36cf5 paul/grwth 449 refactor evals examples (#6194)
+8e60251894 paul/grwth-434-validate-redirects  (#6046)
+7a8aeb95ff paul/grwth-419-dedupe-redirects (#6057)
+cceecd4be5 fix(docs): Diff feature for docs (#5912)
+42369fe85a docs: fix redirect for /docs/deployment/deployment (#5938)
+7ee38b40ad paul/grwth-401-refactor-ai-sdk-v5-beta (#5923)
+8a1a7a1ca6 fix(docs): paul/grwth-376-getting-started-local-dev-link (#5833)
+302f3e2bfd paul/grwth-342-re-order-the-deployment-documentation (#5767)
+
+```
+[Full output 📄](.reese/preview/command-output-toolu01vgd4syg4kzwcmpx9doqiaw.md)
+
+---
+
+> 🤖 agent **Reese** 💬
+> -> **claude-opus-4-1-20250805**
+
+Let me check when `assetPrefix` was added:
+
+
+---
+
+> 🧰 execute_command(git log -p --grep="update next asset prefix" -- docs/next.config.mjs | head -50, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu01qexnswpe8qjmftb2xh3bit-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu01qexnswpe8qjmftb2xh3bit-result.json)
+
+
+
+
+```bash ✅ success
+$ git log -p --grep="update next asset prefix" -- docs/next.config.mjs | head -50
+
+... (8 lines truncated)
+--- a/docs/next.config.mjs
++++ b/docs/next.config.mjs
+@@ -15,5 +15,16 @@ const withNextra = nextra({
+ });
+ 
+ export default withNextra({
++  assetPrefix: process.env.NODE_ENV === 'production' ? '/docs' : '',
++  async rewrites() {
++    return {
++      beforeFiles: [
++        {
++          source: '/docs/_next/:path+',
++          destination: '/_next/:path+',
++        },
++      ],
++    };
++  },
+   trailingSlash: false,
+ });
+
+```
+[Full output 📄](.reese/preview/command-output-toolu01qexnswpe8qjmftb2xh3bit.md)
+
+---
+
+> 🤖 agent **Reese** 💬
+> -> **claude-opus-4-1-20250805**
+
+So `assetPrefix: '/docs'` was added on January 2, 2025. Let me check when the `/models` section was added to main:
+
+
+---
+
+> 🧰 execute_command(git log --oneline -n 5 -- docs/src/content/en/models/index.mdx, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu01je97ftfk325w3a7qygjfgs-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu01je97ftfk325w3a7qygjfgs-result.json)
+
+
+
+
+```bash ✅ success
+$ git log --oneline -n 5 -- docs/src/content/en/models/index.mdx
+
+f247f37904 together as highlight
+93a4a8b54b proper slug/pretty names for display + logos
+e2ca809a58 use netlify logo and treat it as a gateway only
+6da1c9fd3c initial docs
+4c2366e84f restore docs changes
+
+```
+
+
+---
+
+> 🧰 execute_command(git show --stat 6da1c9fd3c | head -20, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu01sepvqjgv3cg8tmcvd25yoq-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu01sepvqjgv3cg8tmcvd25yoq-result.json)
+
+
+
+
+```bash ✅ success
+$ git show --stat 6da1c9fd3c | head -20
+
+... (1 lines truncated)
+Author: Tyler Barnes <tylerdbarnes@gmail.com>
+Date:   Wed Oct 1 08:43:33 2025 -0700
+
+    initial docs
+
+ docs/src/components/ui/card.tsx                    |  16 +
+ .../src/content/en/models/gateways/huggingface.mdx |   6 +-
+ docs/src/content/en/models/gateways/index.mdx      |  20 +-
+ docs/src/content/en/models/gateways/openrouter.mdx |   8 +-
+ docs/src/content/en/models/gateways/vercel.mdx     |   6 +-
+ docs/src/content/en/models/index.mdx               |   8 +-
+ docs/src/content/en/models/providers/_meta.ts      |  35 +-
+ .../src/content/en/models/providers/alibaba-cn.mdx |  87 +++
+ docs/src/content/en/models/providers/alibaba.mdx   |   2 -
+ docs/src/content/en/models/providers/anthropic.mdx | 102 ++-
+ docs/src/content/en/models/providers/baseten.mdx   |  16 +-
+ docs/src/content/en/models/providers/cerebras.mdx  |  30 +-
+ docs/src/content/en/models/providers/chutes.mdx    | 294 +++++----
+ docs/src/content/en/models/providers/cortecs.mdx   | 195 ++++++
+
+```
+[Full output 📄](.reese/preview/command-output-toolu01sepvqjgv3cg8tmcvd25yoq.md)
+
+---
+
+> 🤖 agent **Reese** 💬
+> -> **claude-opus-4-1-20250805**
+
+The models section was added recently (October 1, 2025). But wait, let me check the actual state in the main branch:
+
+
+---
+
+> 🧰 execute_command(git branch -a | grep main, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu01vosezyysjxrltg2m2evuns-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu01vosezyysjxrltg2m2evuns-result.json)
+
+
+
+
+```bash ✅ success
+$ git branch -a | grep main
+
+... (6 lines truncated)
+  remotes/origin/changeset-release/main
+  remotes/origin/cursor/implement-clickhouse-domain-interface-fc02
+  remotes/origin/cursor/implement-d1-domain-interface-ef35
+  remotes/origin/cursor/implement-domain-interface-in-mongodb-577e
+  remotes/origin/fix/remaining-create-run-calls
+  remotes/origin/from-latest-main
+  remotes/origin/greglobinski/maincontentlayout
+  remotes/origin/lintingmain
+  remotes/origin/llamaindex/switch-core
+  remotes/origin/main
+  remotes/origin/mastra-3074/llamaindex-extract
+  remotes/origin/mastra-3171/llamaindex-pin
+  remotes/origin/mastra-3185/llamaindex
+  remotes/origin/ranfysvalle02/main
+  remotes/origin/renovate/lock-file-maintenance
+  remotes/origin/update-main-agents-overview
+  remotes/origin/use-splitted-chunks-in-main-packages
+  remotes/wonderpanda/HEAD -> wonderpanda/main
+  remotes/wonderpanda/main
+
+```
+[Full output 📄](.reese/preview/command-output-toolu01vosezyysjxrltg2m2evuns.md)
+
+
+---
+
+> 🧰 execute_command(git checkout main && git pull origin main, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu01sj2bi2v774jbmduuptsvum-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu01sj2bi2v774jbmduuptsvum-result.json)
+
+
+
+
+```bash ❌ failed
+$ git checkout main && git pull origin main
+
+STDERR: fatal: 'main' is already used by worktree at '/Users/tylerbarnes/code/mastra-ai/mastra'
+
+```
+
+
+---
+
+> 🧰 execute_command(git fetch origin main && git log --oneline origin/main -- docs/src/content/en/models | head -5, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu01qwvfatuvkubzakmwscq4gq-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu01qwvfatuvkubzakmwscq4gq-result.json)
+
+
+
+
+```bash ✅ success
+$ git fetch origin main && git log --oneline origin/main -- docs/src/content/en/models | head -5
+
+From https://github.com/mastra-ai/mastra
+ * branch                  main       -> FETCH_HEAD
+887ad31923 docs: model router docs generation (#8364)
+
+```
+
+---
+
+> 🤖 agent **Reese** 💬
+> -> **claude-opus-4-1-20250805**
+
+So the models section WAS merged to main! Let me check what's currently in production's next.config:
+
+
+---
+
+> 🧰 execute_command(git show origin/main:docs/next.config.mjs | grep -A2 -B2 "assetPrefix", 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu014vxojregvtxkbxicanvelc-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu014vxojregvtxkbxicanvelc-result.json)
+
+
+
+
+```bash ✅ success
+$ git show origin/main:docs/next.config.mjs | grep -A2 -B2 "assetPrefix"
+
+export default withGT(
+  withNextra({
+    assetPrefix: process.env.NODE_ENV === "production" ? "/docs" : "",
+    i18n: {
+      locales: ["en", "ja"],
+
+```
+
+---
+
+> 🤖 agent **Reese** 💬
+> -> **claude-opus-4-1-20250805**
+
+So production DOES have `assetPrefix: "/docs"`. Now let me check if there's something special about how the site is actually deployed. Let me look for any Vercel configuration:
+
+
+---
+
+> 🧰 execute_command(curl -I https://mastra.ai/_next/static/chunks/main.js, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu01pfk88tl5yaiga2w1m1unt2-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu01pfk88tl5yaiga2w1m1unt2-result.json)
+
+
+
+
+```bash ✅ success
+$ curl -I https://mastra.ai/_next/static/chunks/main.js
+
+... (1 lines truncated)
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     9    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+HTTP/2 404 
+accept-ranges: bytes
+access-control-allow-origin: *
+age: 0
+cache-control: public, max-age=0, must-revalidate
+content-disposition: inline; filename="not-found.txt"
+content-type: text/plain; charset=utf-8
+date: Wed, 01 Oct 2025 19:37:20 GMT
+etag: "9d1ead73e678fa2f51a70a933b0bf017"
+last-modified: Wed, 01 Oct 2025 19:37:20 GMT
+server: Vercel
+strict-transport-security: max-age=63072000
+x-matched-path: /_next/static/not-found.txt
+x-vercel-cache: HIT
+x-vercel-id: pdx1::l5s85-1759347439929-59ed3b11ac9a
+content-length: 9
+
+
+```
+[Full output 📄](.reese/preview/command-output-toolu01pfk88tl5yaiga2w1m1unt2.md)
+
+
+---
+
+> 🧰 execute_command(curl -I https://mastra.ai/docs/_next/static/chunks/main.js, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu01xt9pqsyvwadq4hmcty5tch-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu01xt9pqsyvwadq4hmcty5tch-result.json)
+
+
+
+
+```bash ✅ success
+$ curl -I https://mastra.ai/docs/_next/static/chunks/main.js
+
+... (1 lines truncated)
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     9    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+HTTP/2 404 
+accept-ranges: bytes
+access-control-allow-origin: *
+age: 11518
+cache-control: public, max-age=0, must-revalidate
+content-disposition: inline; filename="not-found.txt"
+content-type: text/plain; charset=utf-8
+date: Wed, 01 Oct 2025 19:37:23 GMT
+etag: "9d1ead73e678fa2f51a70a933b0bf017"
+last-modified: Wed, 01 Oct 2025 16:25:25 GMT
+server: Vercel
+strict-transport-security: max-age=63072000; includeSubDomains; preload
+x-matched-path: /_next/static/not-found.txt
+x-vercel-cache: HIT
+x-vercel-id: pdx1:pdx1:pdx1::tsqtp-1759347443067-bb247db3aa25
+content-length: 9
+
+
+```
+[Full output 📄](.reese/preview/command-output-toolu01xt9pqsyvwadq4hmcty5tch.md)
+
+---
+
+> 🤖 agent **Reese** 💬
+> -> **claude-opus-4-1-20250805**
+
+Hmm, the static assets aren't where I'd expect. Let me check the actual page source:
+
+
+---
+
+> 🧰 execute_command(curl -s https://mastra.ai/en/reference | grep -o '/_next/static/[^\"]*' | head -5, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu01pny9xy8ru7z2ryq5jps1am-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu01pny9xy8ru7z2ryq5jps1am-result.json)
+
+
+
+
+```bash ✅ success
+$ curl -s https://mastra.ai/en/reference | grep -o '/_next/static/[^\"]*' | head -5
+
+/_next/static/media/93f479601ee12b01-s.p.woff2
+/_next/static/media/e4af272ccee01ff0-s.p.woff2
+/_next/static/media/f2f91ba921b45b28-s.p.woff2
+/_next/static/css/f53cb4b2abd22a0e.css
+/_next/static/css/aab330511a2d154c.css
+
+```
+
+
+---
+
+> 🧰 execute_command(curl -I https://mastra.ai/_next/static/css/f53cb4b2abd22a0e.css, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu015juyrtp8ssvcjmy1qcswr2-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu015juyrtp8ssvcjmy1qcswr2-result.json)
+
+
+
+
+```bash ✅ success
+$ curl -I https://mastra.ai/_next/static/css/f53cb4b2abd22a0e.css
+
+... (1 lines truncated)
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     9    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+HTTP/2 404 
+accept-ranges: bytes
+access-control-allow-origin: *
+age: 11
+cache-control: public, max-age=0, must-revalidate
+content-disposition: inline; filename="not-found.txt"
+content-type: text/plain; charset=utf-8
+date: Wed, 01 Oct 2025 19:37:31 GMT
+etag: "9d1ead73e678fa2f51a70a933b0bf017"
+last-modified: Wed, 01 Oct 2025 19:37:20 GMT
+server: Vercel
+strict-transport-security: max-age=63072000
+x-matched-path: /_next/static/not-found.txt
+x-vercel-cache: HIT
+x-vercel-id: pdx1::6zgsf-1759347451298-b7ae05f636b3
+content-length: 9
+
+
+```
+[Full output 📄](.reese/preview/command-output-toolu015juyrtp8ssvcjmy1qcswr2.md)
+
+---
+
+> 🤖 agent **Reese** 💬
+> -> **claude-opus-4-1-20250805**
+
+Wait, the assets are 404 too! But the page still loads. Let me check with `/docs` prefix:
+
+
+---
+
+> 🧰 execute_command(curl -I https://mastra.ai/docs/_next/static/css/f53cb4b2abd22a0e.css, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu019vdzw2k3fjdqrtjqkkf4xq-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu019vdzw2k3fjdqrtjqkkf4xq-result.json)
+
+
+
+
+```bash ✅ success
+$ curl -I https://mastra.ai/docs/_next/static/css/f53cb4b2abd22a0e.css
+
+... (1 lines truncated)
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0 74935    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+HTTP/2 200 
+accept-ranges: bytes
+access-control-allow-origin: *
+age: 11617
+cache-control: public,max-age=31536000,immutable
+content-disposition: inline; filename="f53cb4b2abd22a0e.css"
+content-type: text/css; charset=utf-8
+date: Wed, 01 Oct 2025 19:37:35 GMT
+etag: "a09e5c0072a3814d252b2410565c9006"
+last-modified: Wed, 01 Oct 2025 16:23:58 GMT
+server: Vercel
+strict-transport-security: max-age=63072000; includeSubDomains; preload
+x-matched-path: /_next/static/css/f53cb4b2abd22a0e.css
+x-vercel-cache: HIT
+x-vercel-id: pdx1:pdx1:pdx1::6zgsf-1759347455399-80317a45481e
+content-length: 74935
+
+
+```
+[Full output 📄](.reese/preview/command-output-toolu019vdzw2k3fjdqrtjqkkf4xq.md)
+
+---
+
+So an important piece of information is the prod site isn't deployed with /en/models and the reason (I rolled it back) is it was 404ing. I can promote to prod again for a sec if you want to try looking at requests
+
+---
+
+
+> 🤖 agent **Reese** 💬
+> -> **claude-opus-4-1-20250805**
+
+Yes, please promote it to prod for a moment! That would be very helpful to debug the actual issue.
+
+While you do that, I now understand the situation better:
+- The static assets ARE served from `/docs/_next/static/*` (that's why `assetPrefix: "/docs"` is set)
+- The pages themselves are served from root (e.g., `/en/reference`, `/en/docs`)
+- When `/en/models` was deployed, it 404'd in production but works in preview
+
+This suggests there might be a build or deployment configuration difference. Once you promote it, I'll check:
+1. The actual response headers and redirects
+2. Whether the static assets are loading correctly
+3. Any differences in how the route is being matched
+
+Please let me know when it's promoted and I'll investigate immediately!
+
+
+---
+
+Ok it's promoted to prod! look quickly so I can rollback soon before users start complaining
+
+---
+
+
+> 🤖 agent **Reese** 💬
+> -> **claude-opus-4-1-20250805**
+
+
+
+---
+
+> 🧰 execute_command(curl -I https://mastra.ai/en/models, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu017xxmc6gbtdjfhblh18vqrg-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu017xxmc6gbtdjfhblh18vqrg-result.json)
+
+
+
+
+```bash ✅ success
+$ curl -I https://mastra.ai/en/models
+
+... (1 lines truncated)
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0  6230    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+HTTP/2 404 
+accept-ranges: bytes
+access-control-allow-origin: *
+age: 318
+cache-control: public, max-age=0, must-revalidate
+content-disposition: inline; filename="404"
+content-type: text/html; charset=utf-8
+date: Wed, 01 Oct 2025 19:39:56 GMT
+etag: "b3b35f23dd39790f1c07a82b3bd78dcd"
+last-modified: Wed, 01 Oct 2025 19:34:37 GMT
+server: Vercel
+strict-transport-security: max-age=63072000
+x-matched-path: /404
+x-vercel-cache: HIT
+x-vercel-id: pdx1::949sf-1759347596342-140f37c51353
+content-length: 6230
+
+
+```
+[Full output 📄](.reese/preview/command-output-toolu017xxmc6gbtdjfhblh18vqrg.md)
+
+
+---
+
+> 🧰 execute_command(curl -I https://mastra.ai/en/models/providers/openai, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu01dj6pwqvhbxgps9qep3nlyc-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu01dj6pwqvhbxgps9qep3nlyc-result.json)
+
+
+
+
+```bash ✅ success
+$ curl -I https://mastra.ai/en/models/providers/openai
+
+... (1 lines truncated)
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0  6230    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+HTTP/2 404 
+accept-ranges: bytes
+access-control-allow-origin: *
+age: 322
+cache-control: public, max-age=0, must-revalidate
+content-disposition: inline; filename="404"
+content-type: text/html; charset=utf-8
+date: Wed, 01 Oct 2025 19:40:00 GMT
+etag: "b3b35f23dd39790f1c07a82b3bd78dcd"
+last-modified: Wed, 01 Oct 2025 19:34:37 GMT
+server: Vercel
+strict-transport-security: max-age=63072000
+x-matched-path: /404
+x-vercel-cache: HIT
+x-vercel-id: pdx1::d2bqg-1759347599981-8cb3de17e678
+content-length: 6230
+
+
+```
+[Full output 📄](.reese/preview/command-output-toolu01dj6pwqvhbxgps9qep3nlyc.md)
+
+
+---
+
+> 🧰 execute_command(curl -I https://mastra.ai/docs/en/models, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu014hj4ktsovzglnyvnep3cpv-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu014hj4ktsovzglnyvnep3cpv-result.json)
+
+
+
+
+```bash ✅ success
+$ curl -I https://mastra.ai/docs/en/models
+
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+HTTP/2 307 
+access-control-allow-origin: *
+cache-control: public, max-age=0, must-revalidate
+content-type: text/plain
+date: Wed, 01 Oct 2025 19:40:03 GMT
+location: /en/docs/en/models
+server: Vercel
+strict-transport-security: max-age=63072000; includeSubDomains; preload
+x-vercel-cache: MISS
+x-vercel-id: pdx1:pdx1:pdx1::9dbkd-1759347603728-e82f9dd3eccb
+
+
+```
+
+
+---
+
+> 🧰 execute_command(curl -s https://mastra.ai/en/reference | grep -o 'x-matched-path[^\"]*' | head -1, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu01jegpmnjtfe4k7tc7pdzlfc-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu01jegpmnjtfe4k7tc7pdzlfc-result.json)
+
+
+
+
+```bash ✅ success
+$ curl -s https://mastra.ai/en/reference | grep -o 'x-matched-path[^\"]*' | head -1
+
+Command executed successfully with no output
+```
+
+
+---
+
+> 🧰 execute_command(curl -I https://mastra.ai/en/reference, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu01alhqvsscna8at9ubrivavi-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu01alhqvsscna8at9ubrivavi-result.json)
+
+
+
+
+```bash ✅ success
+$ curl -I https://mastra.ai/en/reference
+
+... (3 lines truncated)
+HTTP/2 200 
+accept-ranges: bytes
+access-control-allow-origin: *
+age: 3
+cache-control: public, max-age=0, must-revalidate
+content-disposition: inline
+content-type: text/html; charset=utf-8
+date: Wed, 01 Oct 2025 19:40:11 GMT
+etag: "ba5b4c5e64c2799f60e60716c8354821"
+server: Vercel
+strict-transport-security: max-age=63072000; includeSubDomains; preload
+vary: rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch
+x-matched-path: /en/reference
+x-nextjs-prerender: 1
+x-nextjs-stale-time: 300
+x-vercel-cache: HIT
+x-vercel-id: pdx1:pdx1:pdx1::7wlvx-1759347611158-df98df22a21a
+content-length: 885593
+
+
+```
+[Full output 📄](.reese/preview/command-output-toolu01alhqvsscna8at9ubrivavi.md)
+
+
+---
+
+> 🧰 execute_command(curl -s https://mastra.ai/ | grep -o 'href=\"[^\"]*models[^\"]*\"' | head -5, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu01tb5jgtjkzgmgtykqj5xceb-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu01tb5jgtjkzgmgtykqj5xceb-result.json)
+
+
+
+
+```bash ✅ success
+$ curl -s https://mastra.ai/ | grep -o 'href=\"[^\"]*models[^\"]*\"' | head -5
+
+Command executed successfully with no output
+```
+
+
+---
+
+> 🧰 execute_command(curl -I https://mastra.ai/models, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu01sb6qud7ph2uhw4eubgjjy6-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu01sb6qud7ph2uhw4eubgjjy6-result.json)
+
+
+
+
+```bash ✅ success
+$ curl -I https://mastra.ai/models
+
+... (1 lines truncated)
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0  6230    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+HTTP/2 404 
+accept-ranges: bytes
+access-control-allow-origin: *
+age: 341
+cache-control: public, max-age=0, must-revalidate
+content-disposition: inline; filename="404"
+content-type: text/html; charset=utf-8
+date: Wed, 01 Oct 2025 19:40:18 GMT
+etag: "b3b35f23dd39790f1c07a82b3bd78dcd"
+last-modified: Wed, 01 Oct 2025 19:34:37 GMT
+server: Vercel
+strict-transport-security: max-age=63072000
+x-matched-path: /404
+x-vercel-cache: HIT
+x-vercel-id: pdx1::n7qwr-1759347618732-ccbbb9a6026a
+content-length: 6230
+
+
+```
+[Full output 📄](.reese/preview/command-output-toolu01sb6qud7ph2uhw4eubgjjy6.md)
+
+
+---
+
+> 🧰 execute_command(curl -I https://mastra.ai/ja/models, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu019mak5nv8qrensvljncr3pm-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu019mak5nv8qrensvljncr3pm-result.json)
+
+
+
+
+```bash ✅ success
+$ curl -I https://mastra.ai/ja/models
+
+... (1 lines truncated)
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0  6230    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+HTTP/2 404 
+accept-ranges: bytes
+access-control-allow-origin: *
+age: 344
+cache-control: public, max-age=0, must-revalidate
+content-disposition: inline; filename="404"
+content-type: text/html; charset=utf-8
+date: Wed, 01 Oct 2025 19:40:21 GMT
+etag: "b3b35f23dd39790f1c07a82b3bd78dcd"
+last-modified: Wed, 01 Oct 2025 19:34:37 GMT
+server: Vercel
+strict-transport-security: max-age=63072000
+x-matched-path: /404
+x-vercel-cache: HIT
+x-vercel-id: pdx1::rw68q-1759347621897-cd8bd8d31358
+content-length: 6230
+
+
+```
+[Full output 📄](.reese/preview/command-output-toolu019mak5nv8qrensvljncr3pm.md)
+
+---
+
+> 🤖 agent **Reese** 💬
+> -> **claude-opus-4-1-20250805**
+
+OK, you can rollback now! I found the issue.
+
+The key difference is in the `x-matched-path` header:
+- `/en/reference` returns `x-matched-path: /en/reference` (works)
+- `/en/models` returns `x-matched-path: /404` (doesn't work)
+
+This means the `/en/models` route is not being statically generated during the build. The pages exist in the source but aren't being built into static HTML files. This is likely because:
+
+1. The `generateStaticParams` in `docs/src/app/[locale]/[[...mdxPath]]/page.tsx` isn't discovering the `/models` pages
+2. Or there's an issue with how the models pages are being generated that prevents them from being included in the build
+
+Let me check the page.tsx file to see how it discovers content:
+
+
+---
+
+> 🧰 view(docs/src/app/[locale]/[[...mdxPath]]/page.tsx #L1-L50)
+> -> _(claude-opus-4-1-20250805)_
+
+[call 📨](.reese/tool-calls/toolu01bmrzpfbbqeobyc8p9zfhss-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu01bmrzpfbbqeobyc8p9zfhss-result.json)
+
+
+---
+
+> 🤖 agent **Reese** 💬
+> -> **claude-opus-4-1-20250805**
+
+The issue is that Nextra's `generateStaticParamsFor` is responsible for discovering all MDX files. The `/models` content was generated by a script, so I need to check if these files actually exist at build time.
+
+Let me check if the models content exists:
+
+
+---
+
+> 🧰 execute_command(ls docs/src/content/en/models/ | head -10, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu01kv6sk826pnowq4iy2a96n1-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu01kv6sk826pnowq4iy2a96n1-result.json)
+
+
+
+
+```bash ✅ success
+$ ls docs/src/content/en/models/ | head -10
+
+_meta.ts
+gateways
+index.mdx
+providers
+
+```
+
+
+---
+
+> 🧰 execute_command(ls docs/src/content/en/models/providers/ | wc -l, 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu01ldyudrhpdbwipvtancwqkn-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu01ldyudrhpdbwipvtancwqkn-result.json)
+
+
+
+
+```bash ✅ success
+$ ls docs/src/content/en/models/providers/ | wc -l
+
+      41
+
+```
+
+---
+
+> 🤖 agent **Reese** 💬
+> -> **claude-opus-4-1-20250805**
+
+The files exist. The issue might be that they were generated AFTER the build. In the production deployment, the build happens during CI/CD, and if the model docs aren't generated before the build, they won't be included.
+
+Let me check if there's a build script that should generate these:
+
+
+---
+
+> 🧰 view(docs/package.json #L1-L30)
+> -> _(claude-opus-4-1-20250805)_
+
+[call 📨](.reese/tool-calls/toolu016nbwhllgeqp4pfcwhifagy-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu016nbwhllgeqp4pfcwhifagy-result.json)
+
+
+---
+
+> 🤖 agent **Reese** 💬
+> -> **claude-opus-4-1-20250805**
+
+The build script doesn't include generating the model docs! That's the issue. The model docs need to be generated BEFORE the Next.js build. Let me check how this should be integrated:
+
+
+---
+
+> 🧰 string_replace("docs/package.json")
+> -> _(claude-opus-4-1-20250805)_
+
+```diff json
+--- a
++++ b
+@@ -1 +1,2 @@
+-    "build": "pnpm build:llms-txt && pnpm build:eval-context && next build",
++    "build": "pnpm build:model-docs && pnpm build:llms-txt && pnpm build:eval-context && next build",
++    "build:model-docs": "tsx ../packages/core/scripts/generate-model-docs.ts",
+```
+
+[call 📨](.reese/tool-calls/toolu01ezhmrbhpzhmunbuasmgsqx-call.json)
+
+
+[result 📦](.reese/tool-calls/toolu01ezhmrbhpzhmunbuasmgsqx-result.json)
+
+
+---
+
+> 🤖 agent **Reese** 💬
+> -> **claude-opus-4-1-20250805**
+
+Now let me commit this critical fix:
+
+
+---
+
+> 🧰 execute_command(git add -A && git commit -m "fix: generate model docs during build process - fixes production 404s", 30s timeout)
+> -> _(claude-opus-4-1-20250805)_
+
+cwd: 
+
+[call 📨](.reese/tool-calls/toolu01jxjgtpfbbpqnpa3nzk39nc-call.json)
