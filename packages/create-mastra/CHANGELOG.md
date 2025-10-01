@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.13.4-alpha.0
+
+### Patch Changes
+
+- Added Mastra model router to Playground UI ([#8332](https://github.com/mastra-ai/mastra/pull/8332))
+
 ## 0.13.3
 
 ### Patch Changes
