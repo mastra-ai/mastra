@@ -422,6 +422,16 @@ export const redirectList = [
     permanent: true,
   },
   {
+    source: "/:locale/docs/models",
+    destination: "/:locale/models",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/models/:path*",
+    destination: "/:locale/models/:path*",
+    permanent: true,
+  },
+  {
     source: "/:locale/docs/showcase",
     destination: "/:locale/showcase",
     permanent: true,
