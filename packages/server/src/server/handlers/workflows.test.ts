@@ -1,7 +1,7 @@
 import { Mastra } from '@mastra/core';
 import { MockStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
-import type { Workflow, WorkflowRunState } from '@mastra/core/workflows';
+import type { Workflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import { getWorkflowInfo } from '../utils';
