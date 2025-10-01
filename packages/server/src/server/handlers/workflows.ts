@@ -512,7 +512,6 @@ export async function observeStreamVNextWorkflowHandler({
 
     // Get cached chunks first
     const cachedRunChunks = await serverCache.listFromTo(runId, 0);
-    console.info('======cachedRunChunks in observeStreamVNextWorkflowHandler====', cachedRunChunks);
 
     // Create a readable stream that first emits cached chunks, then the live stream
     const combinedStream = new ReadableStream<ChunkType>({
@@ -520,9 +519,7 @@ export async function observeStreamVNextWorkflowHandler({
         // First, emit all cached chunks
         const emitCachedChunks = async () => {
           for (const chunk of cachedRunChunks) {
-            console.info('======chunk to write in observeStreamVNextWorkflowHandler====', chunk);
             controller.enqueue(chunk as ChunkType);
-            console.info('======chunk in observeStreamVNextWorkflowHandler====', chunk);
           }
         };
 

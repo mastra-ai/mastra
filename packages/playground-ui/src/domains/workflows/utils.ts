@@ -91,6 +91,7 @@ export const mapWorkflowStreamChunkToWatchResult = (
 
     return {
       ...prev,
+      runId: chunk.runId,
       payload: {
         ...prev.payload,
         currentStep: {
@@ -117,6 +118,7 @@ export const mapWorkflowStreamChunkToWatchResult = (
 
     return {
       ...prev,
+      runId: chunk.runId,
       payload: {
         ...prev?.payload,
         currentStep: {
@@ -144,6 +146,7 @@ export const mapWorkflowStreamChunkToWatchResult = (
     const current = prev?.payload?.workflowState?.steps?.[chunk.payload.id] || {};
     return {
       ...prev,
+      runId: chunk.runId,
       payload: {
         ...prev?.payload,
         currentStep: {
@@ -173,6 +176,7 @@ export const mapWorkflowStreamChunkToWatchResult = (
 
     const next = {
       ...prev,
+      runId: chunk.runId,
       payload: {
         ...prev?.payload,
         currentStep: {
@@ -201,6 +205,7 @@ export const mapWorkflowStreamChunkToWatchResult = (
   if (chunk.type === 'workflow-canceled') {
     return {
       ...prev,
+      runId: chunk.runId,
       payload: {
         ...prev?.payload,
         workflowState: {
@@ -215,6 +220,7 @@ export const mapWorkflowStreamChunkToWatchResult = (
   if (chunk.type === 'workflow-finish') {
     return {
       ...prev,
+      runId: chunk.runId,
       payload: {
         ...prev?.payload,
         currentStep: undefined,

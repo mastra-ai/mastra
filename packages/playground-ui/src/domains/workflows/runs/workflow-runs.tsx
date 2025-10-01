@@ -67,6 +67,7 @@ export const WorkflowRuns = ({
         </div>
         <WorkflowTrigger
           {...triggerProps}
+          // isStreamingWorkflow={runStatus === 'suspended' ? false : triggerProps.isStreamingWorkflow}
           streamResult={isObjectEmpty(triggerProps.streamResult ?? {}) ? runResult : triggerProps.streamResult}
           paramsRunId={runId}
           workflowId={workflowId}

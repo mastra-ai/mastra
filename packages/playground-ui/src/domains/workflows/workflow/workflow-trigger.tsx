@@ -96,7 +96,6 @@ export function WorkflowTrigger({
   const { runtimeContext } = usePlaygroundStore();
   const { result, setResult, payload, setPayload } = useContext(WorkflowRunContext);
 
-  const [suspendedSteps, setSuspendedSteps] = useState<SuspendedStep[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [innerRunId, setInnerRunId] = useState<string>('');
   const [cancelResponse, setCancelResponse] = useState<{ message: string } | null>(null);
@@ -149,6 +148,15 @@ export function WorkflowTrigger({
 
   const streamResultToUse = result ?? streamResult;
 
+  const suspendedSteps = Object.entries(streamResultToUse?.payload?.workflowState?.steps || {})
+    .filter(([_, { status }]) => status === 'suspended')
+    .map(([stepId, { payload }]) => ({
+      stepId,
+      runId: streamResultToUse?.runId ?? '',
+      suspendPayload: payload,
+      isLoading: false,
+    }));
+
   useEffect(() => {
     if (paramsRunId && observeWorkflowStream) {
       observeWorkflowStream({ workflowId, runId: paramsRunId });
@@ -159,23 +167,6 @@ export function WorkflowTrigger({
   useEffect(() => {
     setIsRunning(isStreamingWorkflow);
   }, [isStreamingWorkflow]);
-
-  useEffect(() => {
-    if (!streamResultToUse?.payload?.workflowState?.steps || !result?.runId) {
-      setSuspendedSteps([]);
-      return;
-    }
-
-    const suspended = Object.entries(streamResultToUse?.payload?.workflowState?.steps || {})
-      .filter(([_, { status }]) => status === 'suspended')
-      .map(([stepId, { payload }]) => ({
-        stepId,
-        runId: result.runId,
-        suspendPayload: payload,
-        isLoading: false,
-      }));
-    setSuspendedSteps(suspended);
-  }, [streamResultToUse, result]);
 
   useEffect(() => {
     if (streamResult) {
