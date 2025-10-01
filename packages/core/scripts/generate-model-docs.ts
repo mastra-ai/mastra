@@ -214,6 +214,7 @@ description: "Use ${provider.name} models with Mastra. ${modelCount} model${mode
 ---
 
 import { ProviderModelsTable } from "@/components/provider-models-table";
+import { Callout } from "nextra/components";
 ${provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible' ? 'import { Tabs, Tab } from "@/components/tabs";' : ''}
 
 # <img src="${getLogoUrl(provider.id)}" alt="${provider.name} logo" className="${getLogoClass(provider.id)}" />${provider.name}
@@ -242,7 +243,19 @@ for await (const chunk of stream) {
   console.log(chunk);
 }
 \`\`\`
-
+${
+  provider.id === 'openai'
+    ? `
+<Callout type="info">
+Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-specific features may not be available. Check the [OpenAI documentation](https://platform.openai.com/docs/api-reference/chat) for details.
+</Callout>
+`
+    : `
+<Callout type="info">
+Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-specific features may not be available. Check the [${provider.name} documentation](${docUrl || '#'}) for details.
+</Callout>
+`
+}
 ## Models
 
 <ProviderModelsTable 
@@ -479,7 +492,7 @@ ${allModels.map(m => `| \`${m}\` |`).join('\n')}
       : '';
 
   // Generate logo markup - use component if available, otherwise use img tag
-  const logoImport = hasLogoComponent(gatewayName) ? `${getLogoComponentImport(gatewayName)}\n\n` : '';
+  const logoImport = hasLogoComponent(gatewayName) ? `${getLogoComponentImport(gatewayName)}\n` : '';
   const logoMarkup = hasLogoComponent(gatewayName)
     ? getLogoComponentJSX(gatewayName)
     : `<img src="${getLogoUrl(gatewayName)}" alt="${displayName} logo" className="${getLogoClass(gatewayName)}" />`;
@@ -489,7 +502,9 @@ title: "${displayName} | Models | Mastra"
 description: "Use AI models through ${displayName}."
 ---
 
-${logoImport}# ${logoMarkup}${displayName}
+${logoImport}import { Callout } from "nextra/components";
+
+# ${logoMarkup}${displayName}
 
 ${introText}
 
@@ -504,6 +519,10 @@ const agent = new Agent({
   model: "${gatewayName}/${providers[0]?.models[0] || 'model-name'}"
 });
 \`\`\`
+
+<Callout type="info">
+Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-specific features may not be available. ${docUrl ? `Check the [${displayName} documentation](${docUrl}) for details.` : `Check the ${displayName} documentation for details.`}
+</Callout>
 
 ## Configuration
 
@@ -567,8 +586,8 @@ Comes with environment variable detection to handle authentication, and full Typ
             <span>Fireworks AI</span>
           </div>
           <div className="flex items-center gap-2 text-sm">
-            <img src="${getLogoUrl('huggingface')}" alt="Hugging Face" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
-            <span>Hugging Face</span>
+            <img src="${getLogoUrl('togetherai')}" alt="Together AI" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+            <span>Together AI</span>
           </div>
         </div>
         <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ ${grouped.gateways.size - 3} more</div>
@@ -607,12 +626,15 @@ function generateGatewaysIndexPage(grouped: GroupedProviders): string {
   const orderedGateways = ['netlify', 'openrouter', 'fireworks-ai', 'groq', 'huggingface', 'togetherai', 'vercel'];
   const gatewaysList = orderedGateways.filter(g => grouped.gateways.has(g));
 
+  const hasNetlify = gatewaysList.includes('netlify');
+  const logoImport = hasNetlify ? '\nimport { NetlifyLogo } from "@/components/logos/NetlifyLogo";' : '';
+
   return `---
 title: "Gateways"
 description: "Access AI models through gateway providers with caching, rate limiting, and analytics."
 ---
 
-import { CardGrid, CardGridItem } from "@/components/cards/card-grid";
+import { CardGrid, CardGridItem } from "@/components/cards/card-grid";${logoImport}
 
 # Gateway Providers
 
@@ -621,13 +643,23 @@ Gateway providers aggregate multiple model providers and add features like cachi
 <CardGrid>
 ${gatewaysList
   .map(
-    g => `    <CardGridItem
+    g => {
+      if (g === 'netlify') {
+        return `    <CardGridItem
+      title="${formatProviderName(g).replace(/&/g, '&amp;')}"
+      description="${grouped.gateways.get(g)?.reduce((sum, p) => sum + p.models.length, 0) || 0} models"
+      href="./gateways/${g}"
+      logo={<NetlifyLogo />}
+    />`;
+      }
+      return `    <CardGridItem
       title="${formatProviderName(g).replace(/&/g, '&amp;')}"
       description="${grouped.gateways.get(g)?.reduce((sum, p) => sum + p.models.length, 0) || 0} models"
       href="./gateways/${g}"
       logo="${getLogoUrl(g)}"
-      ${g === 'netlify' ? 'preserveLogoColor={true}' : ''}
-    />`,
+      
+    />`;
+    }
   )
   .join('\n')}
 </CardGrid>`;
