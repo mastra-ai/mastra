@@ -1,5 +1,6 @@
 import { ModelSettings } from './types';
 import { useMastraClient } from '@/mastra-client-context';
+import { UIMessage } from '@ai-sdk/react';
 import { MastraClient } from '@mastra/client-js';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { RuntimeContext } from '@mastra/core/runtime-context';
@@ -12,28 +13,84 @@ export interface MastraChatProps<TMessage> {
   initializeMessages?: () => TMessage[];
 }
 
-export interface StreamArgs<TMessage> {
+interface SharedArgs {
   coreUserMessages: CoreUserMessage[];
   runtimeContext?: RuntimeContext;
   threadId?: string;
-  onChunk: (chunk: ChunkType, conversation: TMessage[]) => TMessage[];
   modelSettings?: ModelSettings;
   signal?: AbortSignal;
 }
 
-export interface NetworkArgs<TMessage> {
-  coreUserMessages: CoreUserMessage[];
-  runtimeContext?: RuntimeContext;
-  threadId?: string;
+export type generateArgs<TMessage> = SharedArgs & { onFinish: (messages: UIMessage[]) => TMessage[] };
+
+export type streamArgs<TMessage> = SharedArgs & {
+  onChunk: (chunk: ChunkType, conversation: TMessage[]) => TMessage[];
+};
+
+export type NetworkArgs<TMessage> = SharedArgs & {
   onNetworkChunk: (chunk: NetworkChunkType, conversation: TMessage[]) => TMessage[];
-  modelSettings?: ModelSettings;
-  signal?: AbortSignal;
-}
+};
 
 export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatProps<TMessage>) => {
   const [messages, setMessages] = useState<TMessage[]>(initializeMessages || []);
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
+
+  const generate = async ({
+    coreUserMessages,
+    runtimeContext,
+    threadId,
+    modelSettings,
+    signal,
+    onFinish,
+  }: generateArgs<TMessage>) => {
+    const {
+      frequencyPenalty,
+      presencePenalty,
+      maxRetries,
+      maxTokens,
+      temperature,
+      topK,
+      topP,
+      instructions,
+      providerOptions,
+    } = modelSettings || {};
+    setIsRunning(true);
+
+    // Create a new client instance with the abort signal
+    // We can't use useMastraClient hook here, so we'll create the client directly
+    const clientWithAbort = new MastraClient({
+      ...baseClient!.options,
+      abortSignal: signal,
+    });
+
+    const agent = clientWithAbort.getAgent(agentId);
+
+    const response = await agent.generate({
+      messages: coreUserMessages,
+      runId: agentId,
+      modelSettings: {
+        frequencyPenalty,
+        presencePenalty,
+        maxRetries,
+        maxOutputTokens: maxTokens,
+        temperature,
+        topK,
+        topP,
+      },
+      instructions,
+      runtimeContext,
+      ...(threadId ? { threadId, resourceId: agentId } : {}),
+      providerOptions: providerOptions as any,
+    });
+
+    setIsRunning(false);
+
+    if (response && 'uiMessages' in response.response && response.response.uiMessages) {
+      const formatted = onFinish(response.response.uiMessages);
+      setMessages(prev => [...prev, ...formatted]);
+    }
+  };
 
   const stream = async ({
     coreUserMessages,
@@ -42,7 +99,7 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
     onChunk,
     modelSettings,
     signal,
-  }: StreamArgs<TMessage>) => {
+  }: streamArgs<TMessage>) => {
     const {
       frequencyPenalty,
       presencePenalty,
@@ -158,6 +215,7 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
   return {
     network,
     stream,
+    generate,
     isRunning,
     messages,
     setMessages,
