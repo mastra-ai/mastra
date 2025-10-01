@@ -117,6 +117,7 @@ export class LangfuseExporter implements AITracingExporter {
     await this.client.score({
       id: `${traceId}-${scorer}`,
       traceId,
+      observationId: metadata.spanId,
       name: scorer,
       value: metadata.score,
       ...(spanMetadata?.sessionId ? { sessionId: spanMetadata.sessionId } : {}),
