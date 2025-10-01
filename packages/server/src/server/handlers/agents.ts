@@ -20,6 +20,10 @@ type GetBody<
   messages: Parameters<Agent[T]>[0];
 } & Parameters<Agent[T]>[1];
 
+type GetHITLBody<
+  T extends keyof Agent & { [K in keyof Agent]: Agent[K] extends (...args: any) => any ? K : never }[keyof Agent],
+> = Parameters<Agent[T]>[0];
+
 export async function getSerializedAgentTools(tools: Record<string, any>) {
   return Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
     const _tool = tool as any;
@@ -558,6 +562,100 @@ export function streamVNextGenerateHandler({
 
     const streamResult = agent.streamVNext(messages, {
       ...rest,
+      runtimeContext: finalRuntimeContext,
+      abortSignal,
+      format: body.format ?? 'mastra',
+    });
+
+    return streamResult;
+  } catch (error) {
+    return handleError(error, 'error streaming agent response');
+  }
+}
+
+export function approveToolCallHandler({
+  mastra,
+  runtimeContext,
+  agentId,
+  body,
+  abortSignal,
+}: Context & {
+  runtimeContext: RuntimeContext;
+  agentId: string;
+  body: GetHITLBody<'approveToolCall'> & {
+    runtimeContext?: string;
+    format?: 'aisdk' | 'mastra';
+  };
+  abortSignal?: AbortSignal;
+}): ReturnType<Agent['approveToolCall']> {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    // UI Frameworks may send "client tools" in the body,
+    // but it interferes with llm providers tool handling, so we remove them
+    sanitizeBody(body, ['tools']);
+
+    const { runId, runtimeContext: agentRuntimeContext, ...rest } = body;
+
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(Object.entries(agentRuntimeContext ?? {})),
+    ]);
+
+    const streamResult = agent.approveToolCall({
+      ...rest,
+      runId,
+      runtimeContext: finalRuntimeContext,
+      abortSignal,
+      format: body.format ?? 'mastra',
+    });
+
+    return streamResult;
+  } catch (error) {
+    return handleError(error, 'error streaming agent response');
+  }
+}
+
+export function declineToolCallHandler({
+  mastra,
+  runtimeContext,
+  agentId,
+  body,
+  abortSignal,
+}: Context & {
+  runtimeContext: RuntimeContext;
+  agentId: string;
+  body: GetHITLBody<'declineToolCall'> & {
+    runtimeContext?: string;
+    format?: 'aisdk' | 'mastra';
+  };
+  abortSignal?: AbortSignal;
+}): ReturnType<Agent['declineToolCall']> {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    // UI Frameworks may send "client tools" in the body,
+    // but it interferes with llm providers tool handling, so we remove them
+    sanitizeBody(body, ['tools']);
+
+    const { runId, runtimeContext: agentRuntimeContext, ...rest } = body;
+
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(Object.entries(agentRuntimeContext ?? {})),
+    ]);
+
+    const streamResult = agent.declineToolCall({
+      ...rest,
+      runId,
       runtimeContext: finalRuntimeContext,
       abortSignal,
       format: body.format ?? 'mastra',
