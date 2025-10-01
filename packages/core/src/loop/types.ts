@@ -23,7 +23,7 @@ import type {
   MastraOnStepFinishCallback,
   ModelManagerModelConfig,
 } from '../stream/types';
-import type { MastraIdGenerator } from '../types';
+import type { MastraIdGenerator } from '../types/dynamic-argument';
 
 export type StreamInternal = {
   now?: () => number;
