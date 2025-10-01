@@ -46,7 +46,7 @@ export class NetlifyGateway extends MastraModelGateway {
       name: `Netlify`,
       gateway: `netlify`,
       models: [],
-      docUrl: 'https://docs.netlify.com/build/build-with-ai/ai-gateway/overview',
+      docUrl: 'https://docs.netlify.com/build/ai-gateway/overview/',
     };
     // Convert Netlify format to our standard format
     for (const [providerId, provider] of Object.entries(data.providers)) {
