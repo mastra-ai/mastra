@@ -88,7 +88,7 @@ export type AgentExecutionOptions<
   onFinish?: FORMAT extends 'aisdk' ? StreamTextOnFinishCallback<any> : LoopConfig['onFinish'];
 
   /** Callback fired for each streaming chunk received */
-  onChunk?: LoopConfig['onChunk'];
+  onChunk?: LoopConfig<OUTPUT>['onChunk'];
   /** Callback fired when an error occurs during streaming */
   onError?: LoopConfig['onError'];
   /** Callback fired when streaming is aborted */
