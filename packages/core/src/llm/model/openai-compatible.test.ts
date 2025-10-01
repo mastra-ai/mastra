@@ -75,7 +75,6 @@ describe('OpenAICompatibleModel', () => {
       });
 
       const model = new OpenAICompatibleModel('openai/gpt-4o');
-
       const result = await model.doStream({
         prompt: [],
         providerOptions: {},
