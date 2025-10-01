@@ -1,8 +1,13 @@
 import type { MastraModelGateway } from './gateways/base.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
+import { PROVIDER_REGISTRY } from './provider-registry.generated.js';
 
-const gateways = [new NetlifyGateway(), new ModelsDevGateway()];
+function getStaticProvidersByGateway(name: string) {
+  return Object.fromEntries(Object.entries(PROVIDER_REGISTRY).filter(([_provider, config]) => config.gateway === name));
+}
+
+const gateways = [new NetlifyGateway(), new ModelsDevGateway(getStaticProvidersByGateway(`models.dev`))];
 
 /**
  * Find the gateway that handles a specific model ID based on prefix
@@ -36,7 +41,6 @@ export async function resolveModelConfig(
   resolvedModelId: string;
 }> {
   const gateway = findGatewayForModel(modelId);
-  console.info(`gateway`, gateway?.name);
 
   if (!gateway) {
     return { url: false, headers: {}, resolvedModelId: modelId };
@@ -64,20 +68,4 @@ export async function resolveModelConfig(
   }
 
   return { url, headers, resolvedModelId };
-}
-
-/**
- * Check if a model can be resolved by any gateway
- */
-export async function canResolveModel(
-  modelId: string,
-  envVars: Record<string, string> = process.env as Record<string, string>,
-): Promise<boolean> {
-  const gateway = findGatewayForModel(modelId);
-  if (!gateway) {
-    return false;
-  }
-
-  const url = await gateway.buildUrl(modelId, envVars);
-  return url !== false;
 }

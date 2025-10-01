@@ -65,6 +65,11 @@ export class ModelsDevGateway extends MastraModelGateway {
 
   private providerConfigs: Record<string, ProviderConfig> = {};
 
+  constructor(providerConfigs?: Record<string, ProviderConfig>) {
+    super();
+    if (providerConfigs) this.providerConfigs = providerConfigs;
+  }
+
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
     console.info('Fetching providers from models.dev API...');
 
@@ -125,6 +130,7 @@ export class ModelsDevGateway extends MastraModelGateway {
           name: providerInfo.name || providerId.charAt(0).toUpperCase() + providerId.slice(1),
           models: modelIds,
           docUrl: providerInfo.doc, // Include documentation URL if available
+          gateway: `models.dev`,
         };
       } else {
         console.info(`Skipped provider ${providerInfo.name}`);

@@ -44,6 +44,7 @@ export class NetlifyGateway extends MastraModelGateway {
       apiKeyEnvVar: ['NETLIFY_TOKEN', 'NETLIFY_SITE_ID'],
       apiKeyHeader: 'Authorization', // Netlify uses standard Bearer auth
       name: `Netlify`,
+      gateway: `netlify`,
       models: [],
     };
     // Convert Netlify format to our standard format

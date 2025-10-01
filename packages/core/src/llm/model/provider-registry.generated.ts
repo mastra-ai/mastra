@@ -16,6 +16,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
     name: 'Moonshot AI (China)',
     models: ['kimi-k2-0711-preview', 'kimi-k2-0905-preview', 'kimi-k2-turbo-preview'],
     docUrl: 'https://platform.moonshot.cn/docs/api/chat',
+    gateway: 'models.dev',
   },
   lucidquery: {
     url: 'https://lucidquery.com/api/v1/chat/completions',
@@ -24,6 +25,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
     name: 'LucidQuery AI',
     models: ['lucidnova-rf1-100b', 'lucidquery-nexus-coder'],
     docUrl: 'https://lucidquery.com/api/docs',
+    gateway: 'models.dev',
   },
   moonshotai: {
     url: 'https://api.moonshot.ai/v1/chat/completions',
@@ -32,6 +34,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
     name: 'Moonshot AI',
     models: ['kimi-k2-0711-preview', 'kimi-k2-0905-preview', 'kimi-k2-turbo-preview'],
     docUrl: 'https://platform.moonshot.ai/docs/api/chat',
+    gateway: 'models.dev',
   },
   'zai-coding-plan': {
     url: 'https://api.z.ai/api/coding/paas/v4/chat/completions',
@@ -40,6 +43,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
     name: 'Z.AI Coding Plan',
     models: ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6'],
     docUrl: 'https://docs.z.ai/devpack/overview',
+    gateway: 'models.dev',
   },
   alibaba: {
     url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
@@ -48,6 +52,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
     name: 'Alibaba',
     models: ['qwen3-coder-plus'],
     docUrl: 'https://www.alibabacloud.com/help/en/model-studio/models',
+    gateway: 'models.dev',
   },
   xai: {
     url: 'https://api.x.ai/v1/chat/completions',
@@ -77,6 +82,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'grok-vision-beta',
     ],
     docUrl: 'https://docs.x.ai/docs/models',
+    gateway: 'models.dev',
   },
   nvidia: {
     url: 'https://integrate.api.nvidia.com/v1/chat/completions',
@@ -99,6 +105,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'qwen/qwen3-coder-480b-a35b-instruct',
     ],
     docUrl: 'https://docs.api.nvidia.com/nim/',
+    gateway: 'models.dev',
   },
   upstage: {
     url: 'https://api.upstage.ai/chat/completions',
@@ -107,6 +114,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
     name: 'Upstage',
     models: ['solar-mini', 'solar-pro2'],
     docUrl: 'https://developers.upstage.ai/docs/apis/chat',
+    gateway: 'models.dev',
   },
   groq: {
     url: 'https://api.groq.com/openai/v1/chat/completions',
@@ -133,6 +141,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'qwen/qwen3-32b',
     ],
     docUrl: 'https://console.groq.com/docs/models',
+    gateway: 'models.dev',
   },
   'github-copilot': {
     url: 'https://api.githubcopilot.com/chat/completions',
@@ -160,6 +169,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'o4-mini',
     ],
     docUrl: 'https://docs.github.com/en/copilot',
+    gateway: 'models.dev',
   },
   mistral: {
     url: 'https://api.mistral.ai/v1/chat/completions',
@@ -188,6 +198,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'pixtral-large-latest',
     ],
     docUrl: 'https://docs.mistral.ai/getting-started/models/',
+    gateway: 'models.dev',
   },
   vercel: {
     url: 'https://ai-gateway.vercel.sh/v1/chat/completions',
@@ -260,6 +271,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'xai/grok-code-fast-1',
     ],
     docUrl: 'https://github.com/vercel/ai/tree/5eb85cc45a259553501f535b8ac79a77d0e79223/packages/gateway',
+    gateway: 'models.dev',
   },
   deepseek: {
     url: 'https://api.deepseek.com/chat/completions',
@@ -268,6 +280,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
     name: 'DeepSeek',
     models: ['deepseek-chat', 'deepseek-reasoner'],
     docUrl: 'https://platform.deepseek.com/api-docs/pricing',
+    gateway: 'models.dev',
   },
   'alibaba-cn': {
     url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
@@ -276,6 +289,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
     name: 'Alibaba (China)',
     models: ['qwen3-coder-plus'],
     docUrl: 'https://www.alibabacloud.com/help/en/model-studio/models',
+    gateway: 'models.dev',
   },
   venice: {
     url: 'https://api.venice.ai/api/v1/chat/completions',
@@ -298,6 +312,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'venice-uncensored',
     ],
     docUrl: 'https://docs.venice.ai',
+    gateway: 'models.dev',
   },
   chutes: {
     url: 'https://llm.chutes.ai/v1/chat/completions',
@@ -337,6 +352,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'zai-org/GLM-4.5-turbo',
     ],
     docUrl: 'https://llm.chutes.ai/v1/models',
+    gateway: 'models.dev',
   },
   cortecs: {
     url: 'https://api.cortecs.ai/v1/chat/completions',
@@ -356,6 +372,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'qwen3-coder-480b-a35b-instruct',
     ],
     docUrl: 'https://api.cortecs.ai/v1/models',
+    gateway: 'models.dev',
   },
   'github-models': {
     url: 'https://models.github.ai/inference/chat/completions',
@@ -420,6 +437,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'xai/grok-3-mini',
     ],
     docUrl: 'https://docs.github.com/en/github-models',
+    gateway: 'models.dev',
   },
   togetherai: {
     url: 'https://api.together.xyz/v1/chat/completions',
@@ -435,6 +453,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'openai/gpt-oss-120b',
     ],
     docUrl: 'https://docs.together.ai/docs/serverless-models',
+    gateway: 'models.dev',
   },
   baseten: {
     url: 'https://inference.baseten.co/v1/chat/completions',
@@ -443,6 +462,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
     name: 'Baseten',
     models: ['Qwen3/Qwen3-Coder-480B-A35B-Instruct', 'moonshotai/Kimi-K2-Instruct-0905'],
     docUrl: 'https://docs.baseten.co/development/model-apis/overview',
+    gateway: 'models.dev',
   },
   huggingface: {
     url: 'https://router.huggingface.co/v1/chat/completions',
@@ -462,6 +482,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'zai-org/GLM-4.5-Air',
     ],
     docUrl: 'https://huggingface.co/docs/inference-providers',
+    gateway: 'models.dev',
   },
   opencode: {
     url: 'https://opencode.ai/zen/v1/chat/completions',
@@ -482,6 +503,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'qwen3-max',
     ],
     docUrl: 'https://opencode.ai/docs',
+    gateway: 'models.dev',
   },
   fastrouter: {
     url: 'https://go.fastrouter.ai/api/v1/chat/completions',
@@ -505,6 +527,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'x-ai/grok-4',
     ],
     docUrl: 'https://fastrouter.ai/models',
+    gateway: 'models.dev',
   },
   google: {
     url: 'https://generativelanguage.googleapis.com/v1beta/chat/completions',
@@ -532,6 +555,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'gemini-live-2.5-flash-preview-native-audio',
     ],
     docUrl: 'https://ai.google.dev/gemini-api/docs/pricing',
+    gateway: 'models.dev',
   },
   inception: {
     url: 'https://api.inceptionlabs.ai/v1/chat/completions',
@@ -540,6 +564,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
     name: 'Inception',
     models: ['mercury', 'mercury-coder'],
     docUrl: 'https://platform.inceptionlabs.ai/docs',
+    gateway: 'models.dev',
   },
   wandb: {
     url: 'https://api.inference.wandb.ai/v1/chat/completions',
@@ -559,6 +584,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'moonshotai/Kimi-K2-Instruct',
     ],
     docUrl: 'https://weave-docs.wandb.ai/guides/integrations/inference/',
+    gateway: 'models.dev',
   },
   openai: {
     url: 'https://api.openai.com/v1/chat/completions',
@@ -595,6 +621,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'o4-mini-deep-research',
     ],
     docUrl: 'https://platform.openai.com/docs/models',
+    gateway: 'models.dev',
   },
   'zhipuai-coding-plan': {
     url: 'https://open.bigmodel.cn/api/coding/paas/v4/chat/completions',
@@ -603,6 +630,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
     name: 'Zhipu AI Coding Plan',
     models: ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6'],
     docUrl: 'https://docs.bigmodel.cn/cn/coding-plan/overview',
+    gateway: 'models.dev',
   },
   perplexity: {
     url: 'https://api.perplexity.ai/chat/completions',
@@ -611,6 +639,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
     name: 'Perplexity',
     models: ['sonar', 'sonar-pro', 'sonar-reasoning', 'sonar-reasoning-pro'],
     docUrl: 'https://docs.perplexity.ai',
+    gateway: 'models.dev',
   },
   openrouter: {
     url: 'https://openrouter.ai/api/v1/chat/completions',
@@ -722,6 +751,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'z-ai/glm-4.5v',
     ],
     docUrl: 'https://openrouter.ai/models',
+    gateway: 'models.dev',
   },
   synthetic: {
     url: 'https://api.synthetic.new/v1/chat/completions',
@@ -751,6 +781,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'hf:zai-org/GLM-4.5',
     ],
     docUrl: 'https://synthetic.new/pricing',
+    gateway: 'models.dev',
   },
   deepinfra: {
     url: 'https://api.deepinfra.com/v1/openai/chat/completions',
@@ -764,6 +795,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'zai-org/GLM-4.5',
     ],
     docUrl: 'https://deepinfra.com/models',
+    gateway: 'models.dev',
   },
   zhipuai: {
     url: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
@@ -772,6 +804,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
     name: 'Zhipu AI',
     models: ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6'],
     docUrl: 'https://docs.z.ai/guides/overview/pricing',
+    gateway: 'models.dev',
   },
   submodel: {
     url: 'https://llm.submodel.ai/v1/chat/completions',
@@ -790,6 +823,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'zai-org/GLM-4.5-FP8',
     ],
     docUrl: 'https://submodel.gitbook.io',
+    gateway: 'models.dev',
   },
   zai: {
     url: 'https://api.z.ai/api/paas/v4/chat/completions',
@@ -798,6 +832,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
     name: 'Z.AI',
     models: ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6'],
     docUrl: 'https://docs.z.ai/guides/overview/pricing',
+    gateway: 'models.dev',
   },
   inference: {
     url: 'https://inference.net/v1/chat/completions',
@@ -816,6 +851,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'qwen/qwen3-embedding-4b',
     ],
     docUrl: 'https://inference.net/models',
+    gateway: 'models.dev',
   },
   requesty: {
     url: 'https://router.requesty.ai/v1/chat/completions',
@@ -838,6 +874,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'openai/o4-mini',
     ],
     docUrl: 'https://requesty.ai/solution/llm-routing/models',
+    gateway: 'models.dev',
   },
   morph: {
     url: 'https://api.morphllm.com/v1/chat/completions',
@@ -846,6 +883,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
     name: 'Morph',
     models: ['auto', 'morph-v3-fast', 'morph-v3-large'],
     docUrl: 'https://docs.morphllm.com/api-reference/introduction',
+    gateway: 'models.dev',
   },
   lmstudio: {
     url: 'http://127.0.0.1:1234/v1/chat/completions',
@@ -854,6 +892,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
     name: 'LMStudio',
     models: ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'],
     docUrl: 'https://lmstudio.ai/models',
+    gateway: 'models.dev',
   },
   anthropic: {
     url: 'https://api.anthropic.com/v1/chat/completions',
@@ -874,6 +913,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'claude-sonnet-4-5-20250929',
     ],
     docUrl: 'https://docs.anthropic.com/en/docs/about-claude/models',
+    gateway: 'models.dev',
   },
   'fireworks-ai': {
     url: 'https://api.fireworks.ai/inference/v1/chat/completions',
@@ -893,6 +933,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'accounts/fireworks/models/qwen3-coder-480b-a35b-instruct',
     ],
     docUrl: 'https://fireworks.ai/docs/',
+    gateway: 'models.dev',
   },
   modelscope: {
     url: 'https://api-inference.modelscope.cn/v1/chat/completions',
@@ -909,6 +950,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'ZhipuAI/GLM-4.5',
     ],
     docUrl: 'https://modelscope.cn/docs/model-service/API-Inference/intro',
+    gateway: 'models.dev',
   },
   llama: {
     url: 'https://api.llama.com/compat/v1/chat/completions',
@@ -925,6 +967,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
       'llama-4-scout-17b-16e-instruct-fp8',
     ],
     docUrl: 'https://llama.developer.meta.com/docs/models',
+    gateway: 'models.dev',
   },
   cerebras: {
     url: 'https://api.cerebras.ai/v1/chat/completions',
@@ -933,42 +976,44 @@ export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = {
     name: 'Cerebras',
     models: ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'qwen-3-coder-480b'],
     docUrl: 'https://inference-docs.cerebras.ai/models/overview',
+    gateway: 'models.dev',
   },
   netlify: {
     apiKeyEnvVar: ['NETLIFY_TOKEN', 'NETLIFY_SITE_ID'],
     apiKeyHeader: 'Authorization',
     name: 'Netlify',
+    gateway: 'netlify',
     models: [
-      'anthropic/claude-opus-4-1-20250805',
-      'anthropic/claude-opus-4-20250514',
-      'anthropic/claude-sonnet-4-5-20250929',
       'anthropic/claude-3-7-sonnet-20250219',
       'anthropic/claude-3-7-sonnet-latest',
-      'anthropic/claude-sonnet-4-20250514',
       'anthropic/claude-3-5-haiku-20241022',
       'anthropic/claude-3-5-haiku-latest',
       'anthropic/claude-3-haiku-20240307',
+      'anthropic/claude-opus-4-20250514',
+      'anthropic/claude-sonnet-4-5-20250929',
+      'anthropic/claude-opus-4-1-20250805',
+      'anthropic/claude-sonnet-4-20250514',
+      'gemini/gemini-2.5-pro',
+      'gemini/gemini-flash-latest',
+      'gemini/gemini-2.5-flash',
       'gemini/gemini-flash-lite-latest',
-      'gemini/gemini-2.5-flash-lite-preview-09-2025',
-      'gemini/gemini-2.5-flash-lite',
       'gemini/gemini-2.0-flash',
       'gemini/gemini-2.0-flash-lite',
       'gemini/gemini-2.5-flash-image-preview',
-      'gemini/gemini-2.5-pro',
-      'gemini/gemini-flash-latest',
       'gemini/gemini-2.5-flash-preview-09-2025',
-      'gemini/gemini-2.5-flash',
+      'gemini/gemini-2.5-flash-lite-preview-09-2025',
+      'gemini/gemini-2.5-flash-lite',
+      'openai/gpt-5',
+      'openai/gpt-5-codex',
       'openai/gpt-5-mini',
       'openai/gpt-5-nano',
       'openai/gpt-4.1-mini',
       'openai/gpt-4.1-nano',
-      'openai/gpt-4o-mini',
-      'openai/o3',
-      'openai/gpt-5',
-      'openai/gpt-5-codex',
       'openai/gpt-4.1',
       'openai/gpt-4o',
+      'openai/gpt-4o-mini',
       'openai/o4-mini',
+      'openai/o3',
       'openai/o3-mini',
       'openai/codex-mini-latest',
     ],
@@ -1597,36 +1642,36 @@ export const PROVIDER_MODELS = {
   ],
   cerebras: ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'qwen-3-coder-480b'],
   netlify: [
-    'anthropic/claude-opus-4-1-20250805',
-    'anthropic/claude-opus-4-20250514',
-    'anthropic/claude-sonnet-4-5-20250929',
     'anthropic/claude-3-7-sonnet-20250219',
     'anthropic/claude-3-7-sonnet-latest',
-    'anthropic/claude-sonnet-4-20250514',
     'anthropic/claude-3-5-haiku-20241022',
     'anthropic/claude-3-5-haiku-latest',
     'anthropic/claude-3-haiku-20240307',
+    'anthropic/claude-opus-4-20250514',
+    'anthropic/claude-sonnet-4-5-20250929',
+    'anthropic/claude-opus-4-1-20250805',
+    'anthropic/claude-sonnet-4-20250514',
+    'gemini/gemini-2.5-pro',
+    'gemini/gemini-flash-latest',
+    'gemini/gemini-2.5-flash',
     'gemini/gemini-flash-lite-latest',
-    'gemini/gemini-2.5-flash-lite-preview-09-2025',
-    'gemini/gemini-2.5-flash-lite',
     'gemini/gemini-2.0-flash',
     'gemini/gemini-2.0-flash-lite',
     'gemini/gemini-2.5-flash-image-preview',
-    'gemini/gemini-2.5-pro',
-    'gemini/gemini-flash-latest',
     'gemini/gemini-2.5-flash-preview-09-2025',
-    'gemini/gemini-2.5-flash',
+    'gemini/gemini-2.5-flash-lite-preview-09-2025',
+    'gemini/gemini-2.5-flash-lite',
+    'openai/gpt-5',
+    'openai/gpt-5-codex',
     'openai/gpt-5-mini',
     'openai/gpt-5-nano',
     'openai/gpt-4.1-mini',
     'openai/gpt-4.1-nano',
-    'openai/gpt-4o-mini',
-    'openai/o3',
-    'openai/gpt-5',
-    'openai/gpt-5-codex',
     'openai/gpt-4.1',
     'openai/gpt-4o',
+    'openai/gpt-4o-mini',
     'openai/o4-mini',
+    'openai/o3',
     'openai/o3-mini',
     'openai/codex-mini-latest',
   ],

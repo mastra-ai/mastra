@@ -10,6 +10,7 @@ export interface ProviderConfig {
   name: string;
   models: string[];
   docUrl?: string; // Optional documentation URL
+  gateway: string;
 }
 
 export abstract class MastraModelGateway {
