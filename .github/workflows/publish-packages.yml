@@ -3,6 +3,7 @@ name: Prerelease
 permissions:
   contents: write
   pull-requests: write
+  id-token: write
 
 on:
   workflow_dispatch:
@@ -47,3 +48,5 @@ jobs:
 
       - name: Publish packages
         run: pnpm publish -r --tag alpha --access public
+        env:
+          NPM_CONFIG_PROVENANCE: true

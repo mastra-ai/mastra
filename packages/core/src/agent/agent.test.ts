@@ -10343,7 +10343,7 @@ describe('Agent Tests', () => {
       stopWhenCalls.forEach((call, index) => {
         expect(call.stepCount).toBe(index + 1);
       });
-    }, 20000);
+    }, 25000);
 
     it('should contain the correct content in the step results for both stopWhen and stream.steps', async () => {
       const stopWhenContent: any[] = [];

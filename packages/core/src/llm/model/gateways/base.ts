@@ -4,12 +4,13 @@
  */
 
 export interface ProviderConfig {
-  url: string;
-  apiKeyEnvVar: string;
+  url?: string;
   apiKeyHeader?: string;
+  apiKeyEnvVar: string | string[];
   name: string;
   models: string[];
   docUrl?: string; // Optional documentation URL
+  gateway: string;
 }
 
 export abstract class MastraModelGateway {
@@ -37,11 +38,14 @@ export abstract class MastraModelGateway {
    * @param envVars Environment variables available
    * @returns URL string if this gateway can handle the model, false otherwise
    */
-  abstract buildUrl(modelId: string, envVars: Record<string, string>): string | false;
+  abstract buildUrl(modelId: string, envVars: Record<string, string>): string | false | Promise<string | false>;
 
   /**
    * Build headers for the request
    * Optional - only needed if the gateway requires special headers
    */
-  buildHeaders?(modelId: string, envVars: Record<string, string>): Record<string, string>;
+  buildHeaders?(
+    modelId: string,
+    envVars: Record<string, string>,
+  ): Record<string, string> | Promise<Record<string, string>>;
 }
