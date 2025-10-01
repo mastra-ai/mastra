@@ -77,7 +77,9 @@ export type {
   StreamObjectResult,
   StreamTextResult,
 } from './model/base.types';
-export type { TripwireProperties } from './model/shared.types';
+export type { TripwireProperties, MastraModelConfig, OpenAICompatibleConfig } from './model/shared.types';
+export { OpenAICompatibleModel } from './model/openai-compatible';
+export { PROVIDER_REGISTRY, parseModelString, getProviderConfig } from './model/provider-registry.generated';
 
 export type OutputType = StructuredOutput | ZodSchema | JSONSchema7 | undefined;
 
@@ -147,3 +149,5 @@ export type LLMStreamObjectOptions<Z extends ZodSchema | JSONSchema7 | undefined
   onFinish?: StreamObjectOnFinishCallback<any>;
 } & LLMInnerStreamOptions<Z> &
   DefaultLLMStreamObjectOptions;
+
+export type { ProviderConfig } from './model/gateways/base';

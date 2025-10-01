@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import { safelyParseJSON, ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
@@ -141,6 +142,27 @@ export class ScoresPG extends ScoresStorage {
   }
 
   async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    let parsedScore: ValidatedSaveScorePayload;
+    try {
+      parsedScore = saveScorePayloadSchema.parse(score);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_SAVE_SCORE_FAILED_INVALID_SCORE_PAYLOAD',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            scorer: score.scorer.name,
+            entityId: score.entityId,
+            entityType: score.entityType,
+            traceId: score.traceId || '',
+            spanId: score.spanId || '',
+          },
+        },
+        error,
+      );
+    }
+
     try {
       // Generate ID like other storage implementations
       const id = crypto.randomUUID();
@@ -156,7 +178,7 @@ export class ScoresPG extends ScoresStorage {
         runtimeContext,
         entity,
         ...rest
-      } = score;
+      } = parsedScore;
 
       await this.operations.insert({
         tableName: TABLE_SCORERS,
@@ -284,6 +306,53 @@ export class ScoresPG extends ScoresStorage {
       throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema });
+      const countSQLResult = await this.client.oneOrNone<{ count: string }>(
+        `SELECT COUNT(*) as count FROM ${tableName} WHERE "traceId" = $1 AND "spanId" = $2`,
+        [traceId, spanId],
+      );
+
+      const total = Number(countSQLResult?.count ?? 0);
+
+      const result = await this.client.manyOrNone<ScoreRowData>(
+        `SELECT * FROM ${tableName} WHERE "traceId" = $1 AND "spanId" = $2 ORDER BY "createdAt" DESC LIMIT $3 OFFSET $4`,
+        [traceId, spanId, pagination.perPage + 1, pagination.page * pagination.perPage],
+      );
+
+      const hasMore = result.length > pagination.perPage;
+      const scores = result.slice(0, pagination.perPage).map(row => transformScoreRow(row)) ?? [];
+
+      return {
+        scores,
+        pagination: {
+          total,
+          page: pagination.page,
+          perPage: pagination.perPage,
+          hasMore,
+        },
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_SPAN_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

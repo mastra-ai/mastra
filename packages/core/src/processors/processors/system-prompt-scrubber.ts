@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
+import { InternalSpans } from '../../ai-tracing';
 import type { TracingContext } from '../../ai-tracing';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { ChunkType } from '../../stream';
@@ -80,6 +81,7 @@ export class SystemPromptScrubber implements Processor {
       name: 'system-prompt-detector',
       model: this.model,
       instructions: this.instructions,
+      options: { tracingPolicy: { internal: InternalSpans.ALL } },
     });
   }
 

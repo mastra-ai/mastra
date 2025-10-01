@@ -1,3 +1,4 @@
+import type { ReadableStream } from 'stream/web';
 import { parsePartialJson, processDataStream } from '@ai-sdk/ui-utils';
 import type {
   JSONValue,
@@ -16,7 +17,6 @@ import type { OutputSchema, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodType } from 'zod';
-
 import type {
   GenerateParams,
   GetAgentResponse,
@@ -459,7 +459,7 @@ export class Agent extends BaseResource {
     }
 
     await processDataStream({
-      stream,
+      stream: stream as ReadableStream<Uint8Array>,
       onTextPart(value) {
         if (currentTextPart == null) {
           currentTextPart = {
@@ -710,12 +710,6 @@ export class Agent extends BaseResource {
    * @param params - Stream parameters including prompt
    * @returns Promise containing the enhanced Response object with processDataStream method
    */
-
-  /**
-   * Streams a response from the agent
-   * @param params - Stream parameters including prompt
-   * @returns Promise containing the enhanced Response object with processDataStream method
-   */
   async streamLegacy<T extends JSONSchema7 | ZodType | undefined = undefined>(
     params: StreamLegacyParams<T>,
   ): Promise<
@@ -749,7 +743,7 @@ export class Agent extends BaseResource {
     // Add the processDataStream method to the response
     streamResponse.processDataStream = async (options = {}) => {
       await processDataStream({
-        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        stream: streamResponse.body as unknown as globalThis.ReadableStream<Uint8Array>,
         ...options,
       });
     };
@@ -1119,8 +1113,8 @@ export class Agent extends BaseResource {
       // Use tee() to split the stream into two branches
       const [streamForWritable, streamForProcessing] = response.body.tee();
 
-      // Pipe one branch to the writable stream without holding a persistent lock
-      streamForWritable
+      // Track the pipe promise so we can wait for it before closing
+      const pipePromise = streamForWritable
         .pipeTo(
           new WritableStream<Uint8Array>({
             async write(chunk) {
@@ -1150,8 +1144,8 @@ export class Agent extends BaseResource {
         });
 
       // Process the other branch for chat response handling
-      this.processChatResponse_vNext({
-        stream: streamForProcessing,
+      await this.processChatResponse_vNext({
+        stream: streamForProcessing as unknown as ReadableStream<Uint8Array>,
         update: ({ message }) => {
           const existingIndex = messages.findIndex(m => m.id === message.id);
 
@@ -1170,10 +1164,12 @@ export class Agent extends BaseResource {
               toolCalls.push(toolCall);
             }
 
+            let shouldExecuteClientTool = false;
             // Handle tool calls if needed
             for (const toolCall of toolCalls) {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
+                shouldExecuteClientTool = true;
                 const result = await clientTool.execute(
                   {
                     context: toolCall?.args,
@@ -1222,27 +1218,32 @@ export class Agent extends BaseResource {
                 const updatedMessages =
                   lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
 
+                // Wait for current pipe to complete before starting recursive call
+                await pipePromise;
+
                 // Recursively call stream with updated messages
-                this.processStreamResponse_vNext(
+                await this.processStreamResponse_vNext(
                   {
                     ...processedParams,
                     messages: updatedMessages,
                   },
                   writable,
-                ).catch(error => {
-                  console.error('Error processing stream response:', error);
-                });
+                );
               }
             }
-          } else {
-            setTimeout(() => {
+
+            if (!shouldExecuteClientTool) {
+              // Wait for pipe to complete before closing
+              await pipePromise;
               writable.close();
-            }, 0);
+            }
+          } else {
+            // Wait for pipe to complete before closing
+            await pipePromise;
+            writable.close();
           }
         },
         lastMessage: undefined,
-      }).catch(error => {
-        console.error('Error processing stream response:', error);
       });
     } catch (error) {
       console.error('Error processing stream response:', error);
@@ -1425,7 +1426,7 @@ export class Agent extends BaseResource {
 
       // Process the other branch for chat response handling
       this.processChatResponse({
-        stream: streamForProcessing,
+        stream: streamForProcessing as unknown as ReadableStream<Uint8Array>,
         update: ({ message }) => {
           const existingIndex = messages.findIndex(m => m.id === message.id);
 

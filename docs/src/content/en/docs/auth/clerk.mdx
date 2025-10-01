@@ -23,17 +23,17 @@ CLERK_JWKS_URI=https://your-clerk-domain.clerk.accounts.dev/.well-known/jwks.jso
 
 ## Installation
 
-Before you can use the `MastraAuthClerk` class you have to install the `@mastra/clerk-auth` package.
+Before you can use the `MastraAuthClerk` class you have to install the `@mastra/auth-clerk` package.
 
 ```bash copy
-npm install @mastra/clerk-auth@latest
+npm install @mastra/auth-clerk@latest
 ```
 
 ## Usage example
 
 ```typescript {2,7-11} filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
-import { MastraAuthClerk } from '@mastra/clerk-auth';
+import { MastraAuthClerk } from '@mastra/auth-clerk';
 
 export const mastra = new Mastra({
   // ..

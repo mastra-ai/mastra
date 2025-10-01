@@ -1,6 +1,7 @@
 const meta = {
   "mastra-scorer": "MastraScorer Class",
   "create-scorer": "createScorer",
+  "run-experiment": "runExperiment",
   "answer-relevancy": "AnswerRelevancy",
   "answer-similarity": "AnswerSimilarity",
   bias: "Bias",

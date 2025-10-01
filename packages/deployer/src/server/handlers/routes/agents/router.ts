@@ -8,6 +8,7 @@ import {
   generateHandler,
   getAgentByIdHandler,
   getAgentsHandler,
+  getProvidersHandler,
   getEvalsByAgentIdHandler,
   getLiveEvalsByAgentIdHandler,
   setAgentInstructionsHandler,
@@ -22,6 +23,8 @@ import {
   updateAgentModelInModelListHandler,
   streamNetworkHandler,
   sharedBodyOptions,
+  approveToolCallHandler,
+  declineToolCallHandler,
 } from './handlers';
 import { getListenerHandler, getSpeakersHandler, speakHandler, listenHandler } from './voice';
 
@@ -40,6 +43,20 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     getAgentsHandler,
+  );
+
+  router.get(
+    '/providers',
+    describeRoute({
+      description: 'Get all available model providers with connection status',
+      tags: ['agents'],
+      responses: {
+        200: {
+          description: 'List of model providers with their connection status',
+        },
+      },
+    }),
+    getProvidersHandler,
   );
 
   router.get(
@@ -145,6 +162,17 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 runId: { type: 'string' },
                 output: { type: 'object' },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the agent execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
               required: ['messages'],
             },
@@ -197,6 +225,17 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 runId: { type: 'string' },
                 output: { type: 'object' },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the agent execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
               required: ['messages'],
             },
@@ -356,6 +395,17 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 runId: { type: 'string' },
                 output: { type: 'object' },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the agent execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
               required: ['messages'],
             },
@@ -408,6 +458,17 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 runId: { type: 'string' },
                 output: { type: 'object' },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the agent execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
               required: ['messages'],
             },
@@ -474,6 +535,17 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                     { type: 'string', enum: ['auto', 'none', 'required'] },
                     { type: 'object', properties: { type: { type: 'string' }, toolName: { type: 'string' } } },
                   ],
+                },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the agent execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
                 },
               },
               required: ['messages'],
@@ -1236,6 +1308,90 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     executeAgentToolHandler,
+  );
+
+  router.post(
+    '/:agentId/approve-tool-call',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Approve a tool call in human-in-the-loop workflow',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                runId: { type: 'string', description: 'The run ID for the execution' },
+                runtimeContext: { type: 'object', description: 'Runtime context for the execution' },
+                format: { type: 'string', enum: ['aisdk', 'mastra'], description: 'Output format' },
+              },
+              required: ['runId'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Tool call approved and execution resumed',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    approveToolCallHandler,
+  );
+
+  router.post(
+    '/:agentId/decline-tool-call',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Decline a tool call in human-in-the-loop workflow',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                runId: { type: 'string', description: 'The run ID for the execution' },
+                runtimeContext: { type: 'object', description: 'Runtime context for the execution' },
+                format: { type: 'string', enum: ['aisdk', 'mastra'], description: 'Output format' },
+              },
+              required: ['runId'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Tool call declined and execution resumed',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    declineToolCallHandler,
   );
 
   return router;

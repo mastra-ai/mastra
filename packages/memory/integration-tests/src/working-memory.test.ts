@@ -564,7 +564,7 @@ describe('Working Memory Tests', () => {
           name: 'Memory Test Agent',
           instructions: `You are a helpful AI agent. Always add working memory tags to remember user information.
           
-          Temperature, "temperature" should be reported as a number.
+          Temperature, "temperature" should be reported as a number, not a string.
           The location should be labeled "city" and reported as a string.
           `,
           model: openai('gpt-4o'),
@@ -584,7 +584,7 @@ describe('Working Memory Tests', () => {
         await agent.generateLegacy('I am in Austin and it is 85 degrees', {
           threadId: thread.id,
           resourceId,
-          temperature: 0,
+          temperature: 0.1,
         });
 
         const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
@@ -598,12 +598,12 @@ describe('Working Memory Tests', () => {
         await agent.generateLegacy('Now I am in Seattle and it is 60 degrees', {
           threadId: thread.id,
           resourceId,
-          temperature: 0,
+          temperature: 0.1,
         });
         await agent.generateLegacy('Now I am in Denver and it is 75 degrees', {
           threadId: thread.id,
           resourceId,
-          temperature: 0,
+          temperature: 0.1,
         });
 
         const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });

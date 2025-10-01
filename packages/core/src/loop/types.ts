@@ -46,8 +46,8 @@ export type PrepareStepFunction<TOOLS extends ToolSet = ToolSet> = (options: {
   messages: Array<ModelMessage>;
 }) => PromiseLike<PrepareStepResult<TOOLS> | undefined> | PrepareStepResult<TOOLS> | undefined;
 
-export type LoopConfig = {
-  onChunk?: (chunk: ChunkType) => Promise<void> | void;
+export type LoopConfig<OUTPUT extends OutputSchema = undefined> = {
+  onChunk?: (chunk: ChunkType<OUTPUT>) => Promise<void> | void;
   onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
   onFinish?: MastraOnFinishCallback;
   onStepFinish?: MastraOnStepFinishCallback;
@@ -73,7 +73,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   modelSettings?: CallSettings;
   headers?: Record<string, string>;
   toolChoice?: ToolChoice<any>;
-  options?: LoopConfig;
+  options?: LoopConfig<OUTPUT>;
   providerOptions?: SharedV2ProviderOptions;
   tools?: Tools;
   outputProcessors?: OutputProcessor[];
@@ -106,8 +106,8 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema
 
 export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = {
   messageId: string;
-  controller: ReadableStreamDefaultController<ChunkType>;
-  writer: WritableStream<ChunkType>;
+  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
+  writer: WritableStream<ChunkType<OUTPUT>>;
   requireToolApproval?: boolean;
 } & LoopRun<Tools, OUTPUT>;
 

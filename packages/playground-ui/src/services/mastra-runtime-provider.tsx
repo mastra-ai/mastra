@@ -11,7 +11,7 @@ import { RuntimeContext } from '@mastra/core/di';
 import { ChatProps, Message } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@/lib/file/toBase64';
-import { useMastraClient } from '@mastra/react-hooks';
+import { useMastraClient } from '@mastra/react';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
@@ -24,7 +24,7 @@ import {
   handleStreamChunk,
   handleWorkflowChunk,
 } from './stream-chunk-message';
-import { ModelSettings, useMastraChat } from '@mastra/react-hooks';
+import { ModelSettings, useChat } from '@mastra/react';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -182,7 +182,7 @@ export function MastraRuntimeProvider({
     network,
     cancelRun,
     isRunning: isRunningStream,
-  } = useMastraChat<ThreadMessageLike>({
+  } = useChat<ThreadMessageLike>({
     agentId,
     initializeMessages: () => (memory ? initializeMessageState(initialMessages || []) : []),
   });
@@ -350,7 +350,17 @@ export function MastraRuntimeProvider({
             { role: 'assistant', content: [] },
           );
 
-          setMessages(currentConversation => [...currentConversation, latestMessage]);
+          setMessages(currentConversation => [
+            ...currentConversation,
+            {
+              ...latestMessage,
+              metadata: {
+                custom: {
+                  modelMetadata: generatedResponse.response.modelMetadata,
+                },
+              },
+            },
+          ]);
 
           if (generatedResponse.finishReason) {
             handleFinishReason(generatedResponse.finishReason);

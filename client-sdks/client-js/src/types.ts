@@ -291,7 +291,7 @@ export interface GetMemoryConfigParams {
   agentId: string;
 }
 
-export type GetMemoryConfigResponse = MemoryConfig;
+export type GetMemoryConfigResponse = { config: MemoryConfig };
 
 export interface GetNetworkMemoryThreadParams {
   resourceId: string;
@@ -515,6 +515,13 @@ export interface GetScoresByScorerIdParams {
 export interface GetScoresByEntityIdParams {
   entityId: string;
   entityType: string;
+  page?: number;
+  perPage?: number;
+}
+
+export interface GetScoresBySpanParams {
+  traceId: string;
+  spanId: string;
   page?: number;
   perPage?: number;
 }

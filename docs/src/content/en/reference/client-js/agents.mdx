@@ -169,7 +169,6 @@ Stream responses using the enhanced API with improved method signatures. This me
 const response = await agent.stream(
   "Tell me a story",
   {
-    format: 'mastra', // Default: Mastra's native format
     threadId: "thread-1",
     clientTools: { colorChangeTool },
   }
@@ -192,9 +191,9 @@ response.processDataStream({
 });
 ```
 
-The `format` parameter determines the output stream format:
-- `'mastra'` (default): Returns Mastra's native format
-- `'aisdk'`: Returns AI SDK v5 compatible format for frontend integration
+Currently, AI SDK V5 format is not supported in the client SDK.
+For AI SDK v5 compatible format, leverage the `@mastra/ai-sdk` package
+[AI SDK v5 Stream Compatibility](/docs/frameworks/agentic-uis/ai-sdk#enabling-stream-compatibility)
 
 ### Generate
 

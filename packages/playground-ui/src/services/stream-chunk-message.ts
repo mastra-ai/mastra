@@ -4,7 +4,6 @@ import { StreamChunk } from '@/types';
 import { ThreadMessageLike } from '@assistant-ui/react';
 import { ChunkType } from '@mastra/core';
 import { ReadonlyJSONObject } from '@mastra/core/stream';
-import { flushSync } from 'react-dom';
 
 export interface HandleStreamChunkOptions {
   conversation: ThreadMessageLike[];
@@ -13,40 +12,61 @@ export interface HandleStreamChunkOptions {
 
 export const handleStreamChunk = ({ chunk, conversation }: HandleStreamChunkOptions): ThreadMessageLike[] => {
   switch (chunk.type) {
-    default:
-      return [...conversation];
-
-    case 'text-start': {
+    case 'start': {
       const newMessage: ThreadMessageLike = {
         role: 'assistant',
-        content: [{ type: 'text', text: '' }],
+        content: [],
       };
 
       return [...conversation, newMessage];
     }
 
+    case 'text-start':
     case 'text-delta': {
+      // Always add a new last text chunk if one doesn't exist yet to maintain content ordering
       const lastMessage = conversation[conversation.length - 1];
-      if (lastMessage && lastMessage.role === 'assistant' && Array.isArray(lastMessage.content)) {
-        const updatedContent = lastMessage.content.map(part => {
-          if (typeof part === 'object' && part.type === 'text') {
-            return {
-              ...part,
-              text: part.text + chunk.payload.text,
-            };
-          }
-          return part;
-        });
+      if (!lastMessage) return conversation;
 
-        const updatedMessage: ThreadMessageLike = {
-          ...lastMessage,
-          content: updatedContent,
-        };
-
-        return [...conversation.slice(0, -1), updatedMessage];
+      if (
+        lastMessage.role === 'assistant' &&
+        typeof lastMessage.content !== `string` &&
+        (!lastMessage.content ||
+          lastMessage.content.length === 0 ||
+          lastMessage.content[lastMessage.content.length - 1]?.type !== `text`)
+      ) {
+        return [
+          ...conversation.slice(0, -1),
+          {
+            ...lastMessage,
+            content: [...(lastMessage.content || []), { type: 'text', text: '' }],
+          },
+        ];
       }
 
-      return [...conversation];
+      // if we're text start then all we need is the empty text part above
+      if (chunk.type === `text-start`) return conversation;
+
+      // otherwise continue to append the text deltas
+      if (typeof lastMessage.content === `string`) {
+        return [
+          ...conversation.slice(0, -1),
+          {
+            ...lastMessage,
+            content: lastMessage.content + chunk.payload.text,
+          },
+        ];
+      }
+
+      const lastPart = lastMessage.content?.[lastMessage.content.length - 1];
+      if (!lastPart || lastPart.type !== `text`) return conversation;
+
+      return [
+        ...conversation.slice(0, -1),
+        {
+          ...lastMessage,
+          content: [...lastMessage.content.slice(0, -1), { ...lastPart, text: lastPart.text + chunk.payload.text }],
+        },
+      ];
     }
 
     case 'tool-output': {
@@ -196,13 +216,36 @@ export const handleStreamChunk = ({ chunk, conversation }: HandleStreamChunkOpti
 
     case 'error': {
       if (typeof chunk.payload.error === 'string') {
-        throw new Error(chunk.payload.error);
+        // Add error message to conversation instead of throwing
+        const errorMessage: ThreadMessageLike = {
+          role: 'assistant',
+          content: `Error: ${chunk.payload.error}`,
+        };
+        return [...conversation, errorMessage];
       }
       return [...conversation];
     }
 
     case 'finish': {
+      const lastMessage = conversation[conversation.length - 1];
+
       handleFinishReason(chunk.payload.stepResult.reason);
+      // Only process if the last message is from the assistant
+      if (lastMessage && lastMessage.role === 'assistant') {
+        // Create a new message with the modelMetadata in metadata
+        const updatedMessage: ThreadMessageLike = {
+          ...lastMessage,
+          metadata: {
+            custom: {
+              modelMetadata: chunk.payload.metadata.modelMetadata,
+            },
+          },
+        };
+
+        // Replace the last message with the updated one
+        return [...conversation.slice(0, -1), updatedMessage];
+      }
+
       return [...conversation];
     }
 
@@ -245,6 +288,9 @@ export const handleStreamChunk = ({ chunk, conversation }: HandleStreamChunkOpti
 
       return [...conversation, newMessage];
     }
+
+    default:
+      return [...conversation];
   }
 };
 
