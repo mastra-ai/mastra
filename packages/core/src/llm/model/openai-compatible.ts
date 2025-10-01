@@ -366,8 +366,29 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
       };
     }
 
-    // Resolve URL and headers
-    const { url, headers, modelId: resolvedModelId } = await this.resolveRequestConfig();
+    let url: string;
+    let headers: Record<string, string>;
+    let resolvedModelId: string;
+
+    try {
+      // Resolve URL and headers
+      const config = await this.resolveRequestConfig();
+      url = config.url;
+      headers = config.headers;
+      resolvedModelId = config.modelId;
+    } catch (error) {
+      return {
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({
+              type: 'error',
+              error: error instanceof Error ? error.message : String(error),
+            } as LanguageModelV2StreamPart);
+          },
+        }),
+        warnings: [],
+      };
+    }
 
     const { prompt, tools, toolChoice, providerOptions } = options;
 
