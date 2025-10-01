@@ -120,23 +120,21 @@ export const AgentMetadataModelSwitcher = ({
     };
 
     // Sort by: 1) connection status, 2) popularity, 3) alphabetically
-    return filtered
-      .sort((a, b) => {
-        // First, sort by connection status - connected providers first
-        if (a.connected && !b.connected) return -1;
-        if (!a.connected && b.connected) return 1;
+    return filtered.sort((a, b) => {
+      // First, sort by connection status - connected providers first
+      if (a.connected && !b.connected) return -1;
+      if (!a.connected && b.connected) return 1;
 
-        // Then by popularity
-        const aPopularity = getPopularityIndex(a.id);
-        const bPopularity = getPopularityIndex(b.id);
-        if (aPopularity !== bPopularity) {
-          return aPopularity - bPopularity;
-        }
+      // Then by popularity
+      const aPopularity = getPopularityIndex(a.id);
+      const bPopularity = getPopularityIndex(b.id);
+      if (aPopularity !== bPopularity) {
+        return aPopularity - bPopularity;
+      }
 
-        // Finally, alphabetically by name
-        return a.name.localeCompare(b.name);
-      })
-      .slice(0, searchTerm ? undefined : 20); // Show first 20 when no search
+      // Finally, alphabetically by name
+      return a.name.localeCompare(b.name);
+    });
   }, [providers, providerSearch, isSearching]);
 
   // Filter models - this is computed inline in the original, but we'll keep it as a useMemo
