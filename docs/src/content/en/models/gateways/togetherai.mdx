@@ -3,6 +3,8 @@ title: "Together AI | Models | Mastra"
 description: "Use AI models through Together AI."
 ---
 
+import { Callout } from "nextra/components";
+
 # <img src="https://models.dev/logos/togetherai.svg" alt="Together AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Together AI
 
 Together AI aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 6 models through Mastra's model router.
@@ -20,6 +22,10 @@ const agent = new Agent({
   model: "togetherai/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8"
 });
 ```
+
+<Callout type="info">
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Together AI documentation](https://docs.together.ai/docs/serverless-models) for details.
+</Callout>
 
 ## Configuration
 

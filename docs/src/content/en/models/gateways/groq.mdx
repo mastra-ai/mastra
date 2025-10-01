@@ -3,6 +3,8 @@ title: "Groq | Models | Mastra"
 description: "Use AI models through Groq."
 ---
 
+import { Callout } from "nextra/components";
+
 # <img src="https://models.dev/logos/groq.svg" alt="Groq logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Groq
 
 Groq aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 17 models through Mastra's model router.
@@ -20,6 +22,10 @@ const agent = new Agent({
   model: "groq/deepseek-r1-distill-llama-70b"
 });
 ```
+
+<Callout type="info">
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Groq documentation](https://console.groq.com/docs/models) for details.
+</Callout>
 
 ## Configuration
 

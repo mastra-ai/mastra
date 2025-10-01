@@ -4,6 +4,7 @@ description: "Use Perplexity models with Mastra. 4 models available."
 ---
 
 import { ProviderModelsTable } from "@/components/provider-models-table";
+import { Callout } from "nextra/components";
 import { Tabs, Tab } from "@/components/tabs";
 
 # <img src="https://models.dev/logos/perplexity.svg" alt="Perplexity logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Perplexity
@@ -34,6 +35,10 @@ for await (const chunk of stream) {
   console.log(chunk);
 }
 ```
+
+<Callout type="info">
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Perplexity documentation](https://docs.perplexity.ai) for details.
+</Callout>
 
 ## Models
 

@@ -4,6 +4,7 @@ description: "Use AI models through Netlify."
 ---
 
 import { NetlifyLogo } from '@/components/logos/NetlifyLogo';
+import { Callout } from "nextra/components";
 
 # <NetlifyLogo className="inline w-8 h-8 mr-2 align-middle" />Netlify
 
@@ -22,6 +23,10 @@ const agent = new Agent({
   model: "netlify/anthropic/claude-3-5-haiku-20241022"
 });
 ```
+
+<Callout type="info">
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Netlify documentation](https://docs.netlify.com/build/ai-gateway/overview/) for details.
+</Callout>
 
 ## Configuration
 

@@ -4,6 +4,7 @@ description: "Use Moonshot AI models with Mastra. 3 models available."
 ---
 
 import { ProviderModelsTable } from "@/components/provider-models-table";
+import { Callout } from "nextra/components";
 
 
 # <img src="https://models.dev/logos/moonshotai.svg" alt="Moonshot AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Moonshot AI
@@ -34,6 +35,10 @@ for await (const chunk of stream) {
   console.log(chunk);
 }
 ```
+
+<Callout type="info">
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Moonshot AI documentation](https://platform.moonshot.ai) for details.
+</Callout>
 
 ## Models
 

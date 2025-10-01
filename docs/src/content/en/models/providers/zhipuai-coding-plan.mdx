@@ -4,6 +4,7 @@ description: "Use Zhipu AI Coding Plan models with Mastra. 5 models available."
 ---
 
 import { ProviderModelsTable } from "@/components/provider-models-table";
+import { Callout } from "nextra/components";
 
 
 # <img src="https://models.dev/logos/zhipuai-coding-plan.svg" alt="Zhipu AI Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Zhipu AI Coding Plan
@@ -34,6 +35,10 @@ for await (const chunk of stream) {
   console.log(chunk);
 }
 ```
+
+<Callout type="info">
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Zhipu AI Coding Plan documentation](https://docs.bigmodel.cn/cn/coding-plan/overview) for details.
+</Callout>
 
 ## Models
 
