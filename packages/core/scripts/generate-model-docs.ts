@@ -376,82 +376,6 @@ function getLogoComponentJSX(providerId: string): string {
 function generateGatewayPage(gatewayName: string, providers: ProviderInfo[]): string {
   const displayName = formatProviderName(gatewayName);
   const totalModels = providers.reduce((sum, p) => sum + p.models.length, 0);
-
-  let sections: string;
-
-  // Special handling for Vercel (standalone gateway without base providers)
-  if (gatewayName === 'vercel' && providers.length === 1 && !providers?.[0]?.baseProvider) {
-    const provider = providers[0];
-    const modelList = provider?.models
-      .slice(0, 10)
-      .map(m => `  - \`${m}\``)
-      .join('\n');
-    const hasMore = (provider?.models?.length || 0) > 10;
-
-    sections = `
-## Available Models
-
-Vercel AI Gateway provides access to ${provider?.models?.length || 0} models from various providers:
-
-${modelList}${hasMore ? `\n  - ... and ${Math.max((provider?.models?.length || 0) - 10, 0)} more models` : ''}
-
-Use any model with the \`vercel/\` prefix followed by the provider and model name:
-
-\`\`\`typescript
-// Examples
-model: "vercel/deepseek/deepseek-r1"
-model: "vercel/meta/llama-4-scout"  
-model: "vercel/openai/gpt-4o"
-\`\`\`
-`;
-  } else {
-    // Regular handling for other gateways (Netlify)
-    sections = providers
-      .map(provider => {
-        const baseProviderName = provider.baseProvider || 'unknown';
-        const modelList = provider.models
-          .slice(0, 5)
-          .map(m => `    - \`${m}\``)
-          .join('\n');
-        const hasMore = provider.models.length > 5;
-
-        return `
-## ${provider.name}
-
-Use ${baseProviderName} models through ${gatewayName} gateway:
-
-\`\`\`typescript
-model: "${provider.id}/${provider.models[0]}"
-\`\`\`
-
-### Available Models (${provider.models.length})
-
-${modelList}${hasMore ? `\n    - ... and ${provider.models.length - 5} more` : ''}
-`;
-      })
-      .join('\n');
-  }
-
-  const benefits =
-    gatewayName === 'netlify'
-      ? `- **Caching**: Automatic response caching for repeated queries
-- **Analytics**: Track usage across all models  
-- **Rate Limiting**: Built-in rate limiting and quotas
-- **Fallbacks**: Automatic fallback to other providers`
-      : gatewayName === 'vercel'
-        ? `- **Observability**: Built-in request tracking
-- **Edge Runtime**: Optimized for edge deployments
-- **Model Routing**: Automatic model selection based on availability
-- **Multiple Providers**: Access models from many providers through one gateway`
-        : `- **Observability**: Built-in request tracking
-- **Edge Runtime**: Optimized for edge deployments
-- **Model Routing**: Automatic model selection based on availability`;
-
-  // Adjust provider count for Vercel (it's one gateway serving many providers)
-  const providerCount =
-    gatewayName === 'vercel' && providers.length === 1 && !providers[0].baseProvider
-      ? 'multiple'
-      : providers.length.toString();
   // Get documentation URL if available
   // Special override for Vercel to use the AI SDK documentation
   let rawDocUrl: string | undefined;
@@ -751,43 +675,43 @@ async function generateDocs() {
   // Generate index page
   const indexContent = generateIndexPage(grouped);
   await fs.writeFile(path.join(docsDir, 'index.mdx'), indexContent);
-  console.log('✅ Generated models/index.mdx');
+  console.info('✅ Generated models/index.mdx');
 
   // Generate gateways overview page
   const gatewaysIndexContent = generateGatewaysIndexPage(grouped);
   await fs.writeFile(path.join(gatewaysDir, 'index.mdx'), gatewaysIndexContent);
-  console.log('✅ Generated gateways/index.mdx');
+  console.info('✅ Generated gateways/index.mdx');
 
   // Generate gateways _meta.ts
   const gatewaysMetaContent = generateGatewaysMeta(grouped);
   await fs.writeFile(path.join(gatewaysDir, '_meta.ts'), gatewaysMetaContent);
-  console.log('✅ Generated gateways/_meta.ts');
+  console.info('✅ Generated gateways/_meta.ts');
 
   // Generate providers overview page
   const providersIndexContent = generateProvidersIndexPage(grouped);
   await fs.writeFile(path.join(providersDir, 'index.mdx'), providersIndexContent);
-  console.log('✅ Generated providers/index.mdx');
+  console.info('✅ Generated providers/index.mdx');
 
   // Generate providers _meta.ts
   const providersMetaContent = generateProvidersMeta(grouped);
   await fs.writeFile(path.join(providersDir, '_meta.ts'), providersMetaContent);
-  console.log('✅ Generated providers/_meta.ts');
+  console.info('✅ Generated providers/_meta.ts');
 
   // Generate individual provider pages
   for (const provider of [...grouped.popular, ...grouped.other]) {
     const content = await generateProviderPage(provider);
     await fs.writeFile(path.join(providersDir, `${provider.id}.mdx`), content);
-    console.log(`✅ Generated providers/${provider.id}.mdx`);
+    console.info(`✅ Generated providers/${provider.id}.mdx`);
   }
 
   // Generate individual gateway pages
   for (const [gatewayName, providers] of grouped.gateways) {
     const content = generateGatewayPage(gatewayName, providers);
     await fs.writeFile(path.join(gatewaysDir, `${gatewayName}.mdx`), content);
-    console.log(`✅ Generated gateways/${gatewayName}.mdx`);
+    console.info(`✅ Generated gateways/${gatewayName}.mdx`);
   }
 
-  console.log(`
+  console.info(`
 📚 Documentation generated successfully!
    - ${grouped.popular.length + grouped.other.length} provider pages + 1 overview
    - ${grouped.gateways.size} gateway pages + 1 overview
