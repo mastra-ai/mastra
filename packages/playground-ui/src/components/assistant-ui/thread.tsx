@@ -27,14 +27,15 @@ export interface ThreadProps {
   agentName?: string;
   agentId?: string;
   hasMemory?: boolean;
+  hasModelList?: boolean;
 }
 
-export const Thread = ({ ToolFallback, agentName, agentId, hasMemory }: ThreadProps) => {
+export const Thread = ({ ToolFallback, agentName, agentId, hasMemory, hasModelList }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
   const WrappedAssistantMessage = (props: MessagePrimitive.Root.Props) => {
-    return <AssistantMessage {...props} ToolFallback={ToolFallback} />;
+    return <AssistantMessage {...props} ToolFallback={ToolFallback} hasModelList={hasModelList} />;
   };
 
   return (

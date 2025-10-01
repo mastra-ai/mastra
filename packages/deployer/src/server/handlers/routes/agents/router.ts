@@ -9,6 +9,7 @@ import {
   generateVNextHandler,
   getAgentByIdHandler,
   getAgentsHandler,
+  getProvidersHandler,
   getEvalsByAgentIdHandler,
   getLiveEvalsByAgentIdHandler,
   setAgentInstructionsHandler,
@@ -42,6 +43,20 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     getAgentsHandler,
+  );
+
+  router.get(
+    '/providers',
+    describeRoute({
+      description: 'Get all available model providers with connection status',
+      tags: ['agents'],
+      responses: {
+        200: {
+          description: 'List of model providers with their connection status',
+        },
+      },
+    }),
+    getProvidersHandler,
   );
 
   router.get(

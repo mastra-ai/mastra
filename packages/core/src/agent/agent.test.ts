@@ -3194,7 +3194,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       expect(result.text.toLowerCase()).toContain('google');
-    });
+    }, 10000);
   });
 
   describe(`${version} - agent tool handling`, () => {
