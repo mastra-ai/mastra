@@ -41,7 +41,8 @@ export const AgentMetadataModelSwitcher = ({
   const [selectedProvider, setSelectedProvider] = useState(defaultProvider || '');
   const [providerSearch, setProviderSearch] = useState('');
   const [modelSearch, setModelSearch] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
+  const [isSearchingProvider, setIsSearchingProvider] = useState(false);
+  const [isSearchingModel, setIsSearchingModel] = useState(false);
   const [showProviderSuggestions, setShowProviderSuggestions] = useState(false);
   const [loading, setLoading] = useState(false);
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -97,7 +98,7 @@ export const AgentMetadataModelSwitcher = ({
 
   // Filter and sort providers based on search and connection status
   const filteredProviders = useMemo(() => {
-    const searchTerm = isSearching ? providerSearch : '';
+    const searchTerm = isSearchingProvider ? providerSearch : '';
 
     let filtered = providers;
     if (searchTerm) {
@@ -133,19 +134,19 @@ export const AgentMetadataModelSwitcher = ({
       // Finally, alphabetically by name
       return a.name.localeCompare(b.name);
     });
-  }, [providers, providerSearch, isSearching]);
+  }, [providers, providerSearch, isSearchingProvider]);
 
   // Filter models - this is computed inline in the original, but we'll keep it as a useMemo
   const filteredModels = useMemo(() => {
     let filtered = allModels;
 
-    // Filter by selected provider first
+    // Always filter by selected provider if one is selected
     if (currentModelProvider) {
       filtered = filtered.filter(m => m.provider === currentModelProvider);
     }
 
     // Then filter by search term when searching
-    if (isSearching && modelSearch) {
+    if (isSearchingModel && modelSearch) {
       filtered = filtered.filter(m => m.model.toLowerCase().includes(modelSearch.toLowerCase()));
     }
 
@@ -153,7 +154,7 @@ export const AgentMetadataModelSwitcher = ({
     filtered.sort((a, b) => a.model.localeCompare(b.model));
 
     return filtered;
-  }, [allModels, modelSearch, currentModelProvider, isSearching]);
+  }, [allModels, modelSearch, currentModelProvider, isSearchingModel]);
 
   const [infoMsg, setInfoMsg] = useState('');
 
@@ -191,7 +192,7 @@ export const AgentMetadataModelSwitcher = ({
   const handleProviderSelect = async (provider: Provider) => {
     setSelectedProvider(provider.id);
     setProviderSearch('');
-    setIsSearching(false);
+    setIsSearchingProvider(false);
     setShowProviderSuggestions(false);
     setHighlightedProviderIndex(-1);
 
@@ -216,13 +217,21 @@ export const AgentMetadataModelSwitcher = ({
   // Register reset callback with context
   useEffect(() => {
     const resetIfIncomplete = () => {
+      // Don't reset if either picker is currently focused or their popovers are open
+      if (
+        modelInputRef.current === document.activeElement ||
+        providerInputRef.current === document.activeElement ||
+        showProviderSuggestions ||
+        showModelSuggestions
+      ) {
+        return;
+      }
+
       // Check if provider changed but no model selected
       const providerChanged = currentModelProvider && currentModelProvider !== defaultProvider;
       const modelEmpty = !selectedModel || selectedModel === '';
 
       if (providerChanged && modelEmpty) {
-        console.log('Incomplete model selection detected, reverting to defaults');
-
         // Reset to defaults
         setSelectedProvider(defaultProvider);
         setSelectedModel(defaultModel);
@@ -245,7 +254,16 @@ export const AgentMetadataModelSwitcher = ({
     return () => {
       registerResetFn(null);
     };
-  }, [registerResetFn, currentModelProvider, selectedModel, defaultProvider, defaultModel, updateModel]);
+  }, [
+    registerResetFn,
+    currentModelProvider,
+    selectedModel,
+    defaultProvider,
+    defaultModel,
+    updateModel,
+    showProviderSuggestions,
+    showModelSuggestions,
+  ]);
 
   if (providersLoading) {
     return (
@@ -265,13 +283,13 @@ export const AgentMetadataModelSwitcher = ({
             setShowProviderSuggestions(open);
             if (!open) {
               setProviderSearch('');
-              setIsSearching(false);
+              setIsSearchingProvider(false);
             }
           }}
         >
           <PopoverTrigger asChild>
             <div className="relative w-[200px]">
-              {!isSearching && currentModelProvider && (
+              {!isSearchingProvider && currentModelProvider && (
                 <>
                   <div className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none z-10">
                     <div className="relative">
@@ -314,10 +332,10 @@ export const AgentMetadataModelSwitcher = ({
               <Input
                 spellCheck="false"
                 ref={providerInputRef}
-                className={`w-full ${!isSearching && currentModelProvider ? 'pl-8 pr-8' : ''}`}
+                className={`w-full ${!isSearchingProvider && currentModelProvider ? 'pl-8 pr-8' : ''}`}
                 type="text"
                 value={
-                  isSearching
+                  isSearchingProvider
                     ? providerSearch
                     : providers.find(p => p.id === cleanProviderId(currentModelProvider))?.name ||
                       currentModelProvider ||
@@ -330,9 +348,9 @@ export const AgentMetadataModelSwitcher = ({
                       provider.id.toLowerCase().includes(providerSearch.toLowerCase()),
                   );
 
-                  if (!isSearching && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                  if (!isSearchingProvider && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
                     // Only clear search when actually typing, not when tabbing
-                    setIsSearching(true);
+                    setIsSearchingProvider(true);
                     setProviderSearch('');
                     setHighlightedProviderIndex(0);
                   } else if (showProviderSuggestions) {
@@ -372,7 +390,7 @@ export const AgentMetadataModelSwitcher = ({
                           } else {
                             // If no provider is highlighted, just close dropdown and let tab proceed
                             setShowProviderSuggestions(false);
-                            setIsSearching(false);
+                            setIsSearchingProvider(false);
                             setProviderSearch('');
                             setHighlightedProviderIndex(-1);
                           }
@@ -381,7 +399,7 @@ export const AgentMetadataModelSwitcher = ({
                         break;
                       case 'Escape':
                         e.preventDefault();
-                        setIsSearching(false);
+                        setIsSearchingProvider(false);
                         setProviderSearch('');
                         setHighlightedProviderIndex(-1);
                         setShowProviderSuggestions(false);
@@ -408,7 +426,7 @@ export const AgentMetadataModelSwitcher = ({
                   }
                 }}
                 onChange={e => {
-                  setIsSearching(true);
+                  setIsSearchingProvider(true);
                   setProviderSearch(e.target.value);
                   setHighlightedProviderIndex(0);
                 }}
@@ -478,7 +496,7 @@ export const AgentMetadataModelSwitcher = ({
             setShowModelSuggestions(open);
             if (!open) {
               setModelSearch('');
-              setIsSearching(false);
+              setIsSearchingModel(false);
             }
           }}
         >
@@ -492,7 +510,7 @@ export const AgentMetadataModelSwitcher = ({
               onChange={e => {
                 setSelectedModel(e.target.value);
                 setModelSearch(e.target.value);
-                setIsSearching(true);
+                setIsSearchingModel(true);
                 setHighlightedModelIndex(0);
               }}
               onClick={e => {
@@ -551,7 +569,7 @@ export const AgentMetadataModelSwitcher = ({
                       // User selected a model from the list
                       const model = filteredModels[highlightedModelIndex];
                       setModelSearch('');
-                      setIsSearching(false);
+                      setIsSearchingModel(false);
                       setShowModelSuggestions(false);
                       handleModelSelect(model.model);
                       // After selecting a model, focus the chat input
@@ -568,7 +586,7 @@ export const AgentMetadataModelSwitcher = ({
                     } else if (selectedModel && selectedModel.trim()) {
                       // User entered a custom model ID - use it as-is with the current provider
                       setModelSearch('');
-                      setIsSearching(false);
+                      setIsSearchingModel(false);
                       setShowModelSuggestions(false);
                       handleModelSelect(selectedModel.trim());
                       // After selecting a model, focus the chat input
@@ -623,7 +641,7 @@ export const AgentMetadataModelSwitcher = ({
                       onMouseDown={e => {
                         e.preventDefault();
                         setModelSearch('');
-                        setIsSearching(false);
+                        setIsSearchingModel(false);
                         handleModelSelect(model.model);
                         modelInputRef.current?.blur();
 
