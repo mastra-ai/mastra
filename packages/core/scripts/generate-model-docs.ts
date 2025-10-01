@@ -9,27 +9,27 @@ import { PROVIDER_REGISTRY } from '../src/llm/model/provider-registry.generated.
 function formatProviderName(name: string): string {
   // Special cases
   const specialCases: Record<string, string> = {
-    fireworks_ai: 'Fireworks AI',
+    'fireworks-ai': 'Fireworks AI',
     openrouter: 'OpenRouter',
     togetherai: 'Together AI',
     huggingface: 'Hugging Face',
     deepseek: 'DeepSeek',
     openai: 'OpenAI',
     xai: 'xAI',
-    github_copilot: 'GitHub Copilot',
-    github_models: 'GitHub Models',
-    deepinfra: 'DeepInfra',
+    'github-copilot': 'GitHub Copilot',
+    'github-models': 'GitHub Models',
+    deepinfra: 'Deep Infra',
     fastrouter: 'FastRouter',
-    baseten: 'BaseTen',
-    lmstudio: 'LM Studio',
+    baseten: 'Baseten',
+    lmstudio: 'LMStudio',
     modelscope: 'ModelScope',
-    moonshotai: 'MoonshotAI',
-    moonshotai_cn: 'MoonshotAI CN',
-    zhipuai: 'ZhipuAI',
+    moonshotai: 'Moonshot AI',
+    'moonshotai-cn': 'Moonshot AI (China)',
+    zhipuai: 'Zhipu AI',
     opencode: 'OpenCode',
   };
 
-  const lower = name.toLocaleLowerCase();
+  const lower = name.toLowerCase();
   if (specialCases[lower]) {
     return specialCases[lower];
   }
@@ -75,7 +75,7 @@ const POPULAR_PROVIDERS = ['openai', 'anthropic', 'google', 'deepseek', 'groq', 
 // Gateway prefixes - these are treated as gateways even if not prefixed
 const GATEWAY_PREFIXES = ['netlify'];
 // Providers that are actually gateways (aggregate multiple model providers)
-const GATEWAY_PROVIDERS = ['vercel', 'openrouter', 'fireworks_ai', 'groq', 'huggingface', 'togetherai'];
+const GATEWAY_PROVIDERS = ['vercel', 'openrouter', 'fireworks-ai', 'groq', 'huggingface', 'togetherai'];
 
 interface ProviderInfo {
   id: string;
@@ -563,7 +563,7 @@ Comes with environment variable detection to handle authentication, and full Typ
             <span>OpenRouter</span>
           </div>
           <div className="flex items-center gap-2 text-sm">
-            <img src="${getLogoUrl('fireworks_ai')}" alt="Fireworks AI" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+            <img src="${getLogoUrl('fireworks-ai')}" alt="Fireworks AI" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
             <span>Fireworks AI</span>
           </div>
           <div className="flex items-center gap-2 text-sm">
@@ -604,7 +604,7 @@ Comes with environment variable detection to handle authentication, and full Typ
 }
 
 function generateGatewaysIndexPage(grouped: GroupedProviders): string {
-  const orderedGateways = ['netlify', 'openrouter', 'fireworks_ai', 'groq', 'huggingface', 'togetherai', 'vercel'];
+  const orderedGateways = ['netlify', 'openrouter', 'fireworks-ai', 'groq', 'huggingface', 'togetherai', 'vercel'];
   const gatewaysList = orderedGateways.filter(g => grouped.gateways.has(g));
 
   return `---
@@ -681,6 +681,31 @@ export default meta;
 `;
 }
 
+function generateGatewaysMeta(grouped: GroupedProviders): string {
+  const orderedGateways = ['netlify', 'openrouter', 'fireworks-ai', 'groq', 'huggingface', 'togetherai', 'vercel'];
+  const gatewaysList = orderedGateways.filter(g => grouped.gateways.has(g));
+
+  // Build the meta object with index first, then all gateways in order
+  const metaEntries = ['  index: \"Overview\"'];
+
+  for (const gatewayId of gatewaysList) {
+    const providers = grouped.gateways.get(gatewayId);
+    if (providers && providers.length > 0) {
+      const name = formatProviderName(gatewayId);
+      // Quote keys that contain dashes or other special characters
+      const key = gatewayId.includes('-') ? `\"${gatewayId}\"` : gatewayId;
+      metaEntries.push(`  ${key}: \"${name}\"`);
+    }
+  }
+
+  return `const meta = {
+${metaEntries.join(',\n')},
+};
+
+export default meta;
+`;
+}
+
 async function generateDocs() {
   const docsDir = path.join(__dirname, '..', '..', '..', 'docs', 'src', 'content', 'en', 'models');
   const providersDir = path.join(docsDir, 'providers');
@@ -702,6 +727,11 @@ async function generateDocs() {
   const gatewaysIndexContent = generateGatewaysIndexPage(grouped);
   await fs.writeFile(path.join(gatewaysDir, 'index.mdx'), gatewaysIndexContent);
   console.log('✅ Generated gateways/index.mdx');
+
+  // Generate gateways _meta.ts
+  const gatewaysMetaContent = generateGatewaysMeta(grouped);
+  await fs.writeFile(path.join(gatewaysDir, '_meta.ts'), gatewaysMetaContent);
+  console.log('✅ Generated gateways/_meta.ts');
 
   // Generate providers overview page
   const providersIndexContent = generateProvidersIndexPage(grouped);

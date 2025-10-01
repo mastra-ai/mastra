@@ -14,7 +14,6 @@ const meta = {
   cortecs: "Cortecs",
   deepinfra: "Deep Infra",
   fastrouter: "FastRouter",
-  "fireworks-ai": "Fireworks AI",
   "github-copilot": "GitHub Copilot",
   "github-models": "GitHub Models",
   inception: "Inception",

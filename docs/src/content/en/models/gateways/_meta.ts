@@ -2,7 +2,7 @@ const meta = {
   index: "Overview",
   netlify: "Netlify",
   openrouter: "OpenRouter",
-  fireworks_ai: "Fireworks AI",
+  "fireworks-ai": "Fireworks AI",
   groq: "Groq",
   huggingface: "Hugging Face",
   togetherai: "Together AI",
