@@ -31,6 +31,7 @@ import type {
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
+import { NonRetriableError, RetryAfterError } from 'inngest';
 import type { Inngest, BaseContext, InngestFunction, RegisterOptions } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
 import { z } from 'zod';
@@ -603,6 +604,17 @@ export class InngestWorkflow<
           resume,
           abortController: new AbortController(),
           currentSpan: undefined, // TODO: Pass actual parent AI span from workflow execution context
+        });
+
+        // Final step to check workflow status and throw NonRetriableError if failed
+        // This is needed to ensure that the Inngest workflow run is marked as failed instead of success
+        await step.run(`workflow.${this.id}.finalize`, async () => {
+          if (result.status === 'failed') {
+            throw new NonRetriableError(`Workflow failed`, {
+              cause: result,
+            });
+          }
+          return result;
         });
 
         return { result, runId };
@@ -1524,8 +1536,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       return res.result as StepResult<any, any, any, any>;
     }
 
-    const stepRes = await this.inngestStep.run(`workflow.${executionContext.workflowId}.step.${step.id}`, async () => {
-      let execResults: {
+    let stepRes: {
+      result: {
         status: 'success' | 'failed' | 'suspended' | 'bailed';
         output?: any;
         startedAt: number;
@@ -1537,139 +1549,193 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         suspendedPayload?: any;
         suspendedAt?: number;
       };
-      let suspended: { payload: any } | undefined;
-      let bailed: { payload: any } | undefined;
+      executionContext: Omit<ExecutionContext, 'executionSpan'> & {
+        executionSpan: any;
+      };
+      stepResults: Record<
+        string,
+        StepResult<any, any, any, any> | (Omit<StepFailure<any, any, any>, 'error'> & { error?: string })
+      >;
+    };
 
-      try {
-        if (validationError) {
-          throw validationError;
+    try {
+      stepRes = await this.inngestStep.run(`workflow.${executionContext.workflowId}.step.${step.id}`, async () => {
+        let execResults: {
+          status: 'success' | 'failed' | 'suspended' | 'bailed';
+          output?: any;
+          startedAt: number;
+          endedAt?: number;
+          payload: any;
+          error?: string;
+          resumedAt?: number;
+          resumePayload?: any;
+          suspendedPayload?: any;
+          suspendedAt?: number;
+        };
+        let suspended: { payload: any } | undefined;
+        let bailed: { payload: any } | undefined;
+
+        try {
+          if (validationError) {
+            throw validationError;
+          }
+
+          const result = await step.execute({
+            runId: executionContext.runId,
+            mastra: this.mastra!,
+            runtimeContext,
+            writableStream,
+            inputData,
+            resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
+            tracingContext: {
+              currentSpan: stepAISpan,
+            },
+            getInitData: () => stepResults?.input as any,
+            getStepResult: getStepResult.bind(this, stepResults),
+            suspend: async (suspendPayload: any) => {
+              executionContext.suspendedPaths[step.id] = executionContext.executionPath;
+              suspended = { payload: suspendPayload };
+            },
+            bail: (result: any) => {
+              bailed = { payload: result };
+            },
+            resume: {
+              steps: resume?.steps?.slice(1) || [],
+              resumePayload: resume?.resumePayload,
+              // @ts-ignore
+              runId: stepResults[step.id]?.payload?.__workflow_meta?.runId,
+            },
+            [EMITTER_SYMBOL]: emitter,
+            engine: {
+              step: this.inngestStep,
+            },
+            abortSignal: abortController.signal,
+          });
+          const endedAt = Date.now();
+
+          execResults = {
+            status: 'success',
+            output: result,
+            startedAt,
+            endedAt,
+            payload: inputData,
+            resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
+            resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
+          };
+        } catch (e) {
+          const stepFailure: Omit<StepFailure<any, any, any>, 'error'> & { error?: string } = {
+            status: 'failed',
+            payload: inputData,
+            error: e instanceof Error ? e.message : String(e),
+            endedAt: Date.now(),
+            startedAt,
+            resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
+            resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
+          };
+
+          execResults = stepFailure;
+
+          const fallbackErrorMessage = `Step ${step.id} failed`;
+          stepAISpan?.error({ error: new Error(execResults.error ?? fallbackErrorMessage) });
+          throw new RetryAfterError(
+            execResults.error ?? fallbackErrorMessage,
+            executionContext.retryConfig.delay ?? executionContext.retryConfig.delay,
+            {
+              cause: execResults,
+            },
+          );
         }
 
-        const result = await step.execute({
-          runId: executionContext.runId,
-          mastra: this.mastra!,
-          runtimeContext,
-          writableStream,
-          inputData,
-          resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
-          tracingContext: {
-            currentSpan: stepAISpan,
+        if (suspended) {
+          execResults = {
+            status: 'suspended',
+            suspendedPayload: suspended.payload,
+            payload: inputData,
+            suspendedAt: Date.now(),
+            startedAt,
+            resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
+            resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
+          };
+        } else if (bailed) {
+          execResults = {
+            status: 'bailed',
+            output: bailed.payload,
+            payload: inputData,
+            endedAt: Date.now(),
+            startedAt,
+          };
+        }
+
+        await emitter.emit('watch', {
+          type: 'watch',
+          payload: {
+            currentStep: {
+              id: step.id,
+              ...execResults,
+            },
+            workflowState: {
+              status: 'running',
+              steps: { ...stepResults, [step.id]: execResults },
+              result: null,
+              error: null,
+            },
           },
-          getInitData: () => stepResults?.input as any,
-          getStepResult: getStepResult.bind(this, stepResults),
-          suspend: async (suspendPayload: any) => {
-            executionContext.suspendedPaths[step.id] = executionContext.executionPath;
-            suspended = { payload: suspendPayload };
-          },
-          bail: (result: any) => {
-            bailed = { payload: result };
-          },
-          resume: {
-            steps: resume?.steps?.slice(1) || [],
-            resumePayload: resume?.resumePayload,
-            // @ts-ignore
-            runId: stepResults[step.id]?.payload?.__workflow_meta?.runId,
-          },
-          [EMITTER_SYMBOL]: emitter,
-          engine: {
-            step: this.inngestStep,
-          },
-          abortSignal: abortController.signal,
+          eventTimestamp: Date.now(),
         });
-        const endedAt = Date.now();
 
-        execResults = {
-          status: 'success',
-          output: result,
-          startedAt,
-          endedAt,
-          payload: inputData,
-          resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
-          resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
-        };
-      } catch (e) {
-        execResults = {
-          status: 'failed',
-          payload: inputData,
-          error: e instanceof Error ? e.message : String(e),
-          endedAt: Date.now(),
-          startedAt,
-          resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
-          resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
-        };
-      }
+        if (execResults.status === 'suspended') {
+          await emitter.emit('watch-v2', {
+            type: 'workflow-step-suspended',
+            payload: {
+              id: step.id,
+              ...execResults,
+            },
+          });
+        } else {
+          await emitter.emit('watch-v2', {
+            type: 'workflow-step-result',
+            payload: {
+              id: step.id,
+              ...execResults,
+            },
+          });
 
-      if (suspended) {
-        execResults = {
-          status: 'suspended',
-          suspendedPayload: suspended.payload,
-          payload: inputData,
-          suspendedAt: Date.now(),
-          startedAt,
-          resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
-          resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
-        };
-      } else if (bailed) {
-        execResults = { status: 'bailed', output: bailed.payload, payload: inputData, endedAt: Date.now(), startedAt };
-      }
-
-      if (execResults.status === 'failed') {
-        if (executionContext.retryConfig.attempts > 0 && this.inngestAttempts < executionContext.retryConfig.attempts) {
-          const error = new Error(execResults.error);
-          stepAISpan?.error({ error });
-          throw error;
+          await emitter.emit('watch-v2', {
+            type: 'workflow-step-finish',
+            payload: {
+              id: step.id,
+              metadata: {},
+            },
+          });
         }
-      }
 
-      await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          currentStep: {
-            id: step.id,
-            ...execResults,
-          },
-          workflowState: {
-            status: 'running',
-            steps: { ...stepResults, [step.id]: execResults },
-            result: null,
-            error: null,
-          },
-        },
-        eventTimestamp: Date.now(),
+        stepAISpan?.end({ output: execResults });
+
+        return { result: execResults, executionContext, stepResults };
       });
+    } catch (e) {
+      const stepFailure: Omit<StepFailure<any, any, any>, 'error'> & { error?: string } =
+        e instanceof Error
+          ? (e?.cause as unknown as Omit<StepFailure<any, any, any>, 'error'> & { error?: string })
+          : {
+              status: 'failed' as const,
+              error: e instanceof Error ? e.message : String(e),
+              payload: inputData,
+              startedAt,
+              endedAt: Date.now(),
+            };
 
-      if (execResults.status === 'suspended') {
-        await emitter.emit('watch-v2', {
-          type: 'workflow-step-suspended',
-          payload: {
-            id: step.id,
-            ...execResults,
-          },
-        });
-      } else {
-        await emitter.emit('watch-v2', {
-          type: 'workflow-step-result',
-          payload: {
-            id: step.id,
-            ...execResults,
-          },
-        });
+      stepRes = {
+        result: stepFailure,
+        executionContext,
+        stepResults: {
+          ...stepResults,
+          [step.id]: stepFailure,
+        },
+      };
+    }
 
-        await emitter.emit('watch-v2', {
-          type: 'workflow-step-finish',
-          payload: {
-            id: step.id,
-            metadata: {},
-          },
-        });
-      }
-
-      stepAISpan?.end({ output: execResults });
-
-      return { result: execResults, executionContext, stepResults };
-    });
-
-    if (disableScorers !== false) {
+    if (disableScorers !== false && stepRes.result.status === 'success') {
       await this.inngestStep.run(`workflow.${executionContext.workflowId}.step.${step.id}.score`, async () => {
         if (step.scorers) {
           await this.runScorers({
