@@ -1,7 +1,6 @@
 {
   "name": "@mastra/react",
   "version": "0.0.2-alpha.0",
-  "private": true,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
@@ -25,7 +24,8 @@
     "test:coverage": "vitest --coverage"
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "dependencies": {
     "@mastra/client-js": "workspace:*",
