@@ -15,6 +15,8 @@ import { Txt } from '@/ds/components/Txt/Txt';
 import { AgentAdvancedSettings } from './agent-advanced-settings';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import clsx from 'clsx';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useId } from 'react';
 
 export interface AgentSettingsProps {
   modelVersion: string;
@@ -131,6 +133,8 @@ export const AgentSettings = ({ modelVersion, hasMemory = false, hasSubAgents = 
           </RadioGroup>
         </Entry>
 
+        {settings?.modelSettings?.chatWithStreamVNext && <AdditionalStreamOptions />}
+
         <div className="grid grid-cols-2 gap-8">
           <Entry label="Temperature">
             <div className="flex flex-row justify-between items-center gap-2">
@@ -186,5 +190,31 @@ export const AgentSettings = ({ modelVersion, hasMemory = false, hasSubAgents = 
         Reset
       </Button>
     </div>
+  );
+};
+
+const AdditionalStreamOptions = () => {
+  const { settings, setSettings } = useAgentSettings();
+
+  return (
+    <section className="p-4 rounded-lg border border-border1 bg-surface3">
+      <Entry label="Stream options">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="tool-approval"
+            checked={settings?.modelSettings?.requireToolApproval}
+            onCheckedChange={value =>
+              setSettings({
+                ...settings,
+                modelSettings: { ...settings?.modelSettings, requireToolApproval: Boolean(value) },
+              })
+            }
+          />
+          <Label className="text-icon6 text-ui-md" htmlFor="tool-approval">
+            Require tool approval
+          </Label>
+        </div>
+      </Entry>
+    </section>
   );
 };
