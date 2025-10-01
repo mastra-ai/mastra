@@ -5,7 +5,6 @@
 '@mastra/client-js': minor
 '@mastra/deployer-cloudflare': minor
 '@mastra/ai-sdk': minor
-'@mastra/react-hooks': minor
 '@mastra/deployer-netlify': minor
 '@mastra/deployer': minor
 '@mastra/inngest': minor

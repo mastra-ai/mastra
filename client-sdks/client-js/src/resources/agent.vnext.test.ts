@@ -126,7 +126,7 @@ describe('Agent vNext', () => {
       // Client tool executed
       expect(executeSpy).toHaveBeenCalledTimes(1);
       // Recursive request made
-      expect((global.fetch as any).mock.calls.filter((c: any[]) => (c?.[0] as string).includes('/vnext')).length).toBe(
+      expect((global.fetch as any).mock.calls.filter((c: any[]) => (c?.[0] as string).includes('/stream')).length).toBe(
         2,
       );
 
@@ -193,7 +193,9 @@ describe('Agent vNext', () => {
     expect(lastChunk?.payload?.stepResult?.reason).toBe('tool-calls');
 
     // Recursive request made
-    expect((global.fetch as any).mock.calls.filter((c: any[]) => (c?.[0] as string).includes('/vnext')).length).toBe(1);
+    expect((global.fetch as any).mock.calls.filter((c: any[]) => (c?.[0] as string).includes('/stream')).length).toBe(
+      1,
+    );
   });
 
   it('generate: returns JSON using mocked fetch', async () => {
