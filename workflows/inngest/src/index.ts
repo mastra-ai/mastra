@@ -1637,13 +1637,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
           const fallbackErrorMessage = `Step ${step.id} failed`;
           stepAISpan?.error({ error: new Error(execResults.error ?? fallbackErrorMessage) });
-          throw new RetryAfterError(
-            execResults.error ?? fallbackErrorMessage,
-            executionContext.retryConfig.delay ?? executionContext.retryConfig.delay,
-            {
-              cause: execResults,
-            },
-          );
+          throw new RetryAfterError(execResults.error ?? fallbackErrorMessage, executionContext.retryConfig.delay, {
+            cause: execResults,
+          });
         }
 
         if (suspended) {
