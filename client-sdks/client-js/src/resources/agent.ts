@@ -1156,8 +1156,8 @@ export class Agent extends BaseResource {
       // Use tee() to split the stream into two branches
       const [streamForWritable, streamForProcessing] = response.body.tee();
 
-      // Pipe one branch to the writable stream without holding a persistent lock
-      streamForWritable
+      // Track the pipe promise so we can wait for it before closing
+      const pipePromise = streamForWritable
         .pipeTo(
           new WritableStream<Uint8Array>({
             async write(chunk) {
@@ -1187,7 +1187,7 @@ export class Agent extends BaseResource {
         });
 
       // Process the other branch for chat response handling
-      this.processChatResponse_vNext({
+      await this.processChatResponse_vNext({
         stream: streamForProcessing as unknown as ReadableStream<Uint8Array>,
         update: ({ message }) => {
           const existingIndex = messages.findIndex(m => m.id === message.id);
@@ -1261,33 +1261,32 @@ export class Agent extends BaseResource {
                 const updatedMessages =
                   lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
 
+                // Wait for current pipe to complete before starting recursive call
+                await pipePromise;
+
                 // Recursively call stream with updated messages
-                this.processStreamResponse_vNext(
+                await this.processStreamResponse_vNext(
                   {
                     ...processedParams,
                     messages: updatedMessages,
                   },
                   writable,
-                ).catch(error => {
-                  console.error('Error processing stream response:', error);
-                });
+                );
               }
             }
 
             if (!shouldExecuteClientTool) {
-              setTimeout(() => {
-                writable.close();
-              }, 0);
+              // Wait for pipe to complete before closing
+              await pipePromise;
+              writable.close();
             }
           } else {
-            setTimeout(() => {
-              writable.close();
-            }, 0);
+            // Wait for pipe to complete before closing
+            await pipePromise;
+            writable.close();
           }
         },
         lastMessage: undefined,
-      }).catch(error => {
-        console.error('Error processing stream response:', error);
       });
     } catch (error) {
       console.error('Error processing stream response:', error);

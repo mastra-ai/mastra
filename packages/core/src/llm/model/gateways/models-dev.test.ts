@@ -208,9 +208,9 @@ describe('ModelsDevGateway', () => {
       expect(url).toBe(false);
     });
 
-    it('should return false when API key is missing', () => {
+    it('should return URL even when API key is missing', () => {
       const url = gateway.buildUrl('openai/gpt-4', {});
-      expect(url).toBe(false);
+      expect(url).toBe('https://api.openai.com/v1/chat/completions');
     });
 
     it('should use custom base URL from env vars', () => {
