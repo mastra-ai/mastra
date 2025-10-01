@@ -366,16 +366,279 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
       };
     }
 
-    let url: string;
-    let headers: Record<string, string>;
-    let resolvedModelId: string;
-
     try {
       // Resolve URL and headers
-      const config = await this.resolveRequestConfig();
-      url = config.url;
-      headers = config.headers;
-      resolvedModelId = config.modelId;
+      const { url, headers, modelId: resolvedModelId } = await this.resolveRequestConfig();
+
+      const { prompt, tools, toolChoice, providerOptions } = options;
+
+      // TODO: real body type, not any
+      const body: any = {
+        messages: this.convertMessagesToOpenAI(prompt),
+        model: resolvedModelId,
+        stream: true,
+        ...providerOptions,
+      };
+
+      const openAITools = this.convertToolsToOpenAI(tools);
+      if (openAITools) {
+        body.tools = openAITools;
+        if (toolChoice) {
+          body.tool_choice =
+            toolChoice.type === 'none'
+              ? 'none'
+              : toolChoice.type === 'required'
+                ? 'required'
+                : toolChoice.type === 'auto'
+                  ? 'auto'
+                  : toolChoice.type === 'tool'
+                    ? { type: 'function', function: { name: toolChoice.toolName } }
+                    : 'auto';
+        }
+      }
+
+      // Handle structured output
+      if (options.responseFormat?.type === 'json') {
+        body.response_format = {
+          type: 'json_schema',
+          json_schema: {
+            name: 'response',
+            strict: true,
+            schema: options.responseFormat.schema,
+          },
+        };
+      }
+
+      const fetchArgs = {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: options.abortSignal,
+      };
+      const response = await fetch(url, fetchArgs);
+
+      if (!response.ok) {
+        const error = await response.text();
+
+        // Check for authentication errors
+        if (response.status === 401 || response.status === 403) {
+          const providerConfig = getProviderConfig(this.provider);
+          if (providerConfig?.apiKeyEnvVar) {
+            throw new Error(
+              `Authentication failed for provider "${this.provider}". Please ensure the ${providerConfig.apiKeyEnvVar} environment variable is set with a valid API key.`,
+            );
+          }
+        }
+
+        throw new Error(`OpenAI-compatible API error: ${response.status} - ${error}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('Response body is not readable');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let sentStart = false;
+      const toolCallBuffers = new Map<number, { id: string; name: string; args: string; sent?: boolean }>();
+      const mapFinishReason = this.mapFinishReason.bind(this);
+      const modelId = this.modelId; // Capture modelId for use in stream
+
+      let isActiveText = false;
+
+      const stream = new ReadableStream<LanguageModelV2StreamPart>({
+        async start(controller) {
+          try {
+            // Send stream-start
+            controller.enqueue({
+              type: 'stream-start',
+              warnings: [],
+            });
+
+            while (true) {
+              const { done, value } = await reader.read();
+
+              if (done) {
+                // Parse and send any buffered tool calls that haven't been sent yet
+                for (const [_, toolCall] of toolCallBuffers) {
+                  if (!toolCall.sent && toolCall.id && toolCall.name && toolCall.args) {
+                    controller.enqueue({
+                      type: 'tool-call',
+                      toolCallId: toolCall.id,
+                      toolName: toolCall.name,
+                      input: toolCall.args || '{}',
+                    });
+                  }
+                }
+
+                controller.close();
+                break;
+              }
+
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
+
+              for (const line of lines) {
+                if (line.trim() === '' || line.trim() === 'data: [DONE]') {
+                  continue;
+                }
+
+                if (line.startsWith('data: ')) {
+                  try {
+                    const data: OpenAIStreamChunk = JSON.parse(line.slice(6));
+
+                    // Send response metadata from first chunk
+                    if (!sentStart && data.id) {
+                      controller.enqueue({
+                        type: 'response-metadata',
+                        id: data.id,
+                        modelId: data.model || modelId,
+                        timestamp: new Date(data.created ? data.created * 1000 : Date.now()),
+                      });
+                      sentStart = true;
+                    }
+
+                    const choice = data.choices?.[0];
+                    if (!choice) continue;
+
+                    // Handle text delta
+                    if (choice.delta?.content) {
+                      if (!isActiveText) {
+                        controller.enqueue({ type: 'text-start', id: 'text-1' });
+                        isActiveText = true;
+                      }
+
+                      controller.enqueue({
+                        type: 'text-delta',
+                        id: 'text-1',
+                        delta: choice.delta.content,
+                      });
+                    } else if (isActiveText) {
+                      controller.enqueue({ type: 'text-end', id: 'text-1' });
+                      isActiveText = false;
+                    }
+
+                    // Handle tool call deltas
+                    if (choice.delta?.tool_calls) {
+                      for (const toolCall of choice.delta.tool_calls) {
+                        const index = toolCall.index;
+
+                        if (!toolCallBuffers.has(index)) {
+                          // Send tool-input-start when we first see a tool call
+                          if (toolCall.id && toolCall.function?.name) {
+                            controller.enqueue({
+                              type: 'tool-input-start',
+                              id: toolCall.id,
+                              toolName: toolCall.function.name,
+                            });
+                          }
+
+                          toolCallBuffers.set(index, {
+                            id: toolCall.id || '',
+                            name: toolCall.function?.name || '',
+                            args: '',
+                          });
+                        }
+
+                        const buffer = toolCallBuffers.get(index)!;
+
+                        if (toolCall.id) {
+                          buffer.id = toolCall.id;
+                        }
+
+                        if (toolCall.function?.name) {
+                          buffer.name = toolCall.function.name;
+                        }
+
+                        if (toolCall.function?.arguments) {
+                          buffer.args += toolCall.function.arguments;
+                          controller.enqueue({
+                            type: 'tool-input-delta',
+                            id: buffer.id,
+                            delta: toolCall.function.arguments,
+                          });
+
+                          // Check if tool call is complete (parsable JSON)
+                          try {
+                            JSON.parse(buffer.args);
+                            if (buffer.id && buffer.name) {
+                              controller.enqueue({
+                                type: 'tool-input-end',
+                                id: buffer.id,
+                              });
+
+                              controller.enqueue({
+                                type: 'tool-call',
+                                toolCallId: buffer.id,
+                                toolName: buffer.name,
+                                input: buffer.args,
+                              });
+
+                              toolCallBuffers.set(index, {
+                                id: buffer.id,
+                                name: buffer.name,
+                                args: buffer.args,
+                                sent: true,
+                              });
+                            }
+                          } catch {
+                            // Not complete JSON yet, continue buffering
+                          }
+                        }
+                      }
+                    }
+
+                    // Handle finish
+                    if (choice.finish_reason) {
+                      // Don't send tool calls again - they've already been sent when complete
+                      toolCallBuffers.clear();
+
+                      controller.enqueue({
+                        type: 'finish',
+                        finishReason: mapFinishReason(choice.finish_reason),
+                        usage: data.usage
+                          ? {
+                              inputTokens: data.usage.prompt_tokens || 0,
+                              outputTokens: data.usage.completion_tokens || 0,
+                              totalTokens: data.usage.total_tokens || 0,
+                            }
+                          : {
+                              inputTokens: 0,
+                              outputTokens: 0,
+                              totalTokens: 0,
+                            },
+                      });
+                    }
+                  } catch (e) {
+                    console.error('Error parsing SSE data:', e);
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            return {
+              stream: new ReadableStream({
+                start(controller) {
+                  controller.enqueue({
+                    type: 'error',
+                    error: error instanceof Error ? error.message : String(error),
+                  } as LanguageModelV2StreamPart);
+                },
+              }),
+              warnings: [],
+            };
+          }
+        },
+      });
+
+      return {
+        stream,
+        request: { body: JSON.stringify(body) },
+        response: { headers: Object.fromEntries(response.headers.entries()) },
+        warnings: [],
+      };
     } catch (error) {
       return {
         stream: new ReadableStream({
@@ -389,265 +652,5 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
         warnings: [],
       };
     }
-
-    const { prompt, tools, toolChoice, providerOptions } = options;
-
-    // TODO: real body type, not any
-    const body: any = {
-      messages: this.convertMessagesToOpenAI(prompt),
-      model: resolvedModelId,
-      stream: true,
-      ...providerOptions,
-    };
-
-    const openAITools = this.convertToolsToOpenAI(tools);
-    if (openAITools) {
-      body.tools = openAITools;
-      if (toolChoice) {
-        body.tool_choice =
-          toolChoice.type === 'none'
-            ? 'none'
-            : toolChoice.type === 'required'
-              ? 'required'
-              : toolChoice.type === 'auto'
-                ? 'auto'
-                : toolChoice.type === 'tool'
-                  ? { type: 'function', function: { name: toolChoice.toolName } }
-                  : 'auto';
-      }
-    }
-
-    // Handle structured output
-    if (options.responseFormat?.type === 'json') {
-      body.response_format = {
-        type: 'json_schema',
-        json_schema: {
-          name: 'response',
-          strict: true,
-          schema: options.responseFormat.schema,
-        },
-      };
-    }
-
-    const fetchArgs = {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal: options.abortSignal,
-    };
-    const response = await fetch(url, fetchArgs);
-
-    if (!response.ok) {
-      const error = await response.text();
-
-      // Check for authentication errors
-      if (response.status === 401 || response.status === 403) {
-        const providerConfig = getProviderConfig(this.provider);
-        if (providerConfig?.apiKeyEnvVar) {
-          throw new Error(
-            `Authentication failed for provider "${this.provider}". Please ensure the ${providerConfig.apiKeyEnvVar} environment variable is set with a valid API key.`,
-          );
-        }
-      }
-
-      throw new Error(`OpenAI-compatible API error: ${response.status} - ${error}`);
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error('Response body is not readable');
-    }
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let sentStart = false;
-    const toolCallBuffers = new Map<number, { id: string; name: string; args: string; sent?: boolean }>();
-    const mapFinishReason = this.mapFinishReason.bind(this);
-    const modelId = this.modelId; // Capture modelId for use in stream
-
-    let isActiveText = false;
-
-    const stream = new ReadableStream<LanguageModelV2StreamPart>({
-      async start(controller) {
-        try {
-          // Send stream-start
-          controller.enqueue({
-            type: 'stream-start',
-            warnings: [],
-          });
-
-          while (true) {
-            const { done, value } = await reader.read();
-
-            if (done) {
-              // Parse and send any buffered tool calls that haven't been sent yet
-              for (const [_, toolCall] of toolCallBuffers) {
-                if (!toolCall.sent && toolCall.id && toolCall.name && toolCall.args) {
-                  controller.enqueue({
-                    type: 'tool-call',
-                    toolCallId: toolCall.id,
-                    toolName: toolCall.name,
-                    input: toolCall.args || '{}',
-                  });
-                }
-              }
-
-              controller.close();
-              break;
-            }
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-
-            for (const line of lines) {
-              if (line.trim() === '' || line.trim() === 'data: [DONE]') {
-                continue;
-              }
-
-              if (line.startsWith('data: ')) {
-                try {
-                  const data: OpenAIStreamChunk = JSON.parse(line.slice(6));
-
-                  // Send response metadata from first chunk
-                  if (!sentStart && data.id) {
-                    controller.enqueue({
-                      type: 'response-metadata',
-                      id: data.id,
-                      modelId: data.model || modelId,
-                      timestamp: new Date(data.created ? data.created * 1000 : Date.now()),
-                    });
-                    sentStart = true;
-                  }
-
-                  const choice = data.choices?.[0];
-                  if (!choice) continue;
-
-                  // Handle text delta
-                  if (choice.delta?.content) {
-                    if (!isActiveText) {
-                      controller.enqueue({ type: 'text-start', id: 'text-1' });
-                      isActiveText = true;
-                    }
-
-                    controller.enqueue({
-                      type: 'text-delta',
-                      id: 'text-1',
-                      delta: choice.delta.content,
-                    });
-                  } else if (isActiveText) {
-                    controller.enqueue({ type: 'text-end', id: 'text-1' });
-                    isActiveText = false;
-                  }
-
-                  // Handle tool call deltas
-                  if (choice.delta?.tool_calls) {
-                    for (const toolCall of choice.delta.tool_calls) {
-                      const index = toolCall.index;
-
-                      if (!toolCallBuffers.has(index)) {
-                        // Send tool-input-start when we first see a tool call
-                        if (toolCall.id && toolCall.function?.name) {
-                          controller.enqueue({
-                            type: 'tool-input-start',
-                            id: toolCall.id,
-                            toolName: toolCall.function.name,
-                          });
-                        }
-
-                        toolCallBuffers.set(index, {
-                          id: toolCall.id || '',
-                          name: toolCall.function?.name || '',
-                          args: '',
-                        });
-                      }
-
-                      const buffer = toolCallBuffers.get(index)!;
-
-                      if (toolCall.id) {
-                        buffer.id = toolCall.id;
-                      }
-
-                      if (toolCall.function?.name) {
-                        buffer.name = toolCall.function.name;
-                      }
-
-                      if (toolCall.function?.arguments) {
-                        buffer.args += toolCall.function.arguments;
-                        controller.enqueue({
-                          type: 'tool-input-delta',
-                          id: buffer.id,
-                          delta: toolCall.function.arguments,
-                        });
-
-                        // Check if tool call is complete (parsable JSON)
-                        try {
-                          JSON.parse(buffer.args);
-                          if (buffer.id && buffer.name) {
-                            controller.enqueue({
-                              type: 'tool-input-end',
-                              id: buffer.id,
-                            });
-
-                            controller.enqueue({
-                              type: 'tool-call',
-                              toolCallId: buffer.id,
-                              toolName: buffer.name,
-                              input: buffer.args,
-                            });
-
-                            toolCallBuffers.set(index, {
-                              id: buffer.id,
-                              name: buffer.name,
-                              args: buffer.args,
-                              sent: true,
-                            });
-                          }
-                        } catch {
-                          // Not complete JSON yet, continue buffering
-                        }
-                      }
-                    }
-                  }
-
-                  // Handle finish
-                  if (choice.finish_reason) {
-                    // Don't send tool calls again - they've already been sent when complete
-                    toolCallBuffers.clear();
-
-                    controller.enqueue({
-                      type: 'finish',
-                      finishReason: mapFinishReason(choice.finish_reason),
-                      usage: data.usage
-                        ? {
-                            inputTokens: data.usage.prompt_tokens || 0,
-                            outputTokens: data.usage.completion_tokens || 0,
-                            totalTokens: data.usage.total_tokens || 0,
-                          }
-                        : {
-                            inputTokens: 0,
-                            outputTokens: 0,
-                            totalTokens: 0,
-                          },
-                    });
-                  }
-                } catch (e) {
-                  console.error('Error parsing SSE data:', e);
-                }
-              }
-            }
-          }
-        } catch (error) {
-          controller.error(error);
-        }
-      },
-    });
-
-    return {
-      stream,
-      request: { body: JSON.stringify(body) },
-      response: { headers: Object.fromEntries(response.headers.entries()) },
-      warnings: [],
-    };
   }
 }
