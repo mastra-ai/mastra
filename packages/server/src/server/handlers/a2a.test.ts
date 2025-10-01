@@ -1,3 +1,4 @@
+import { openai } from '@ai-sdk/openai';
 import type { Task, MessageSendParams } from '@mastra/core/a2a';
 import { MastraA2AError } from '@mastra/core/a2a';
 import type { AgentConfig } from '@mastra/core/agent';
@@ -63,7 +64,7 @@ describe('A2A Handler', () => {
       const mockAgent = new MockAgent({
         name: 'test-agent',
         instructions: 'test instructions',
-        model: 'openai/gpt-4o',
+        model: openai('gpt-4o'),
       });
 
       mockMastra = createMockMastra({
@@ -149,7 +150,7 @@ describe('A2A Handler', () => {
       const mockAgent = new MockAgent({
         name: 'test-agent',
         instructions: 'test instructions',
-        model: 'openai/gpt-4o',
+        model: openai('gpt-4o'),
       });
 
       mockMastra = createMockMastra({
@@ -393,7 +394,7 @@ describe('A2A Handler', () => {
       const mockAgent = new MockAgent({
         name: 'test-agent',
         instructions: 'test instructions',
-        model: 'openai/gpt-4o',
+        model: openai('gpt-4o'),
       });
       mockMastra = createMockMastra({ 'test-agent': mockAgent });
       mockTaskStore = new InMemoryTaskStore();

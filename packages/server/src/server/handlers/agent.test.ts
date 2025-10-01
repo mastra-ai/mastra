@@ -1,3 +1,5 @@
+import { openai } from '@ai-sdk/openai';
+import { openai as openaiV5 } from '@ai-sdk/openai-v5';
 import type { AgentConfig } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/di';
@@ -61,7 +63,7 @@ const makeMockAgent = (config?: Partial<AgentConfig>) =>
   new MockAgent({
     name: 'test-agent',
     instructions: 'test instructions',
-    model: 'openai/gpt-4o',
+    model: openai('gpt-4o'),
     ...(config || {}),
   });
 
@@ -93,11 +95,7 @@ describe('Agent Handlers', () => {
 
     mockMultiModelAgent = makeMockAgent({
       name: 'test-multi-model-agent',
-      model: [
-        { model: { modelId: 'gpt-4o-mini', provider: 'openai.responses', modelVersion: 'v2' } },
-        { model: { modelId: 'gpt-4o', provider: 'openai.responses', modelVersion: 'v2' } },
-        { model: { modelId: 'gpt-4.1', provider: 'openai.responses', modelVersion: 'v2' } },
-      ],
+      model: [{ model: openaiV5('gpt-4o-mini') }, { model: openaiV5('gpt-4o') }, { model: openaiV5('gpt-4.1') }],
     });
 
     mockMastra = makeMastraMock({
