@@ -21,9 +21,9 @@ interface SharedArgs {
   signal?: AbortSignal;
 }
 
-export type generateArgs<TMessage> = SharedArgs & { onFinish: (messages: UIMessage[]) => TMessage[] };
+export type GenerateArgs<TMessage> = SharedArgs & { onFinish: (messages: UIMessage[]) => TMessage[] };
 
-export type streamArgs<TMessage> = SharedArgs & {
+export type StreamArgs<TMessage> = SharedArgs & {
   onChunk: (chunk: ChunkType, conversation: TMessage[]) => TMessage[];
 };
 
@@ -43,7 +43,7 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
     modelSettings,
     signal,
     onFinish,
-  }: generateArgs<TMessage>) => {
+  }: GenerateArgs<TMessage>) => {
     const {
       frequencyPenalty,
       presencePenalty,
@@ -99,7 +99,7 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
     onChunk,
     modelSettings,
     signal,
-  }: streamArgs<TMessage>) => {
+  }: StreamArgs<TMessage>) => {
     const {
       frequencyPenalty,
       presencePenalty,
