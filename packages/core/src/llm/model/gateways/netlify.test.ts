@@ -48,10 +48,11 @@ describe('NetlifyGateway', () => {
 
       expect(mockFetch).toHaveBeenCalledWith('https://api.netlify.com/api/v1/ai-gateway/providers');
       expect(providers).toBeDefined();
-      expect(Object.keys(providers).length).toBe(3);
+      expect(Object.keys(providers).length).toBe(1);
+      expect(providers['netlify']).toBeDefined();
     });
 
-    it('should return unprefixed provider IDs (prefixing happens in generate script)', async () => {
+    it('should return netlify provider with models prefixed by upstream provider', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => mockNetlifyResponse,
@@ -59,15 +60,11 @@ describe('NetlifyGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      // Provider IDs should be unprefixed at this level
-      expect(providers['openai']).toBeDefined();
-      expect(providers['anthropic']).toBeDefined();
-      expect(providers['gemini']).toBeDefined();
-
-      // Should NOT have prefixed IDs at this level
-      expect(providers['netlify/openai']).toBeUndefined();
-      expect(providers['netlify/anthropic']).toBeUndefined();
-      expect(providers['netlify/gemini']).toBeUndefined();
+      // Should have a single 'netlify' provider
+      expect(providers['netlify']).toBeDefined();
+      expect(providers['netlify'].models).toContain('openai/gpt-4o');
+      expect(providers['netlify'].models).toContain('anthropic/claude-3-5-haiku-20241022');
+      expect(providers['netlify'].models).toContain('gemini/gemini-2.5-flash');
     });
 
     it('should convert Netlify format to standard ProviderConfig format', async () => {
@@ -78,16 +75,16 @@ describe('NetlifyGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      const openaiConfig = providers['openai']!;
-      expect(openaiConfig).toBeDefined();
-      expect(openaiConfig.url).toBe('NETLIFY_SITE_URL_PLACEHOLDER/openai');
-      expect(openaiConfig.apiKeyEnvVar).toBe('OPENAI_API_KEY');
-      expect(openaiConfig.apiKeyHeader).toBe('Authorization');
-      expect(openaiConfig.name).toBe('Openai (via Netlify)');
-      expect(openaiConfig.models).toEqual(['gpt-3.5-turbo', 'gpt-4o', 'gpt-4o-mini', 'o1', 'o1-mini']);
+      const netlifyConfig = providers['netlify']!;
+      expect(netlifyConfig).toBeDefined();
+      expect(netlifyConfig.apiKeyEnvVar).toEqual(['NETLIFY_TOKEN', 'NETLIFY_SITE_ID']);
+      expect(netlifyConfig.apiKeyHeader).toBe('Authorization');
+      expect(netlifyConfig.name).toBe('Netlify');
+      expect(netlifyConfig.gateway).toBe('netlify');
+      expect(netlifyConfig.models.length).toBeGreaterThan(0);
     });
 
-    it('should sort model IDs alphabetically', async () => {
+    it('should include all models from all providers', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => mockNetlifyResponse,
@@ -95,9 +92,9 @@ describe('NetlifyGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      const openaiModels = providers['openai']!.models;
-      const sortedModels = [...openaiModels].sort();
-      expect(openaiModels).toEqual(sortedModels);
+      const netlifyModels = providers['netlify']!.models;
+      // Should have all models from all 3 providers (5 + 2 + 2 = 9 models)
+      expect(netlifyModels.length).toBe(9);
     });
 
     it('should handle API fetch errors gracefully', async () => {
@@ -111,12 +108,13 @@ describe('NetlifyGateway', () => {
   });
 
   describe('buildUrl', () => {
-    it('should return false when only domain is provided (token exchange required)', async () => {
-      const url = await gateway.buildUrl('netlify/openai/gpt-4o', {
-        NETLIFY_SITE_DOMAIN: 'example-site.netlify.app',
-        NETLIFY_API_KEY: 'netlify-key',
-      });
-      expect(url).toBe(false); // Token exchange is required
+    it('should throw error when only domain is provided (token exchange required)', async () => {
+      await expect(
+        gateway.buildUrl('netlify/openai/gpt-4o', {
+          NETLIFY_SITE_DOMAIN: 'example-site.netlify.app',
+          NETLIFY_API_KEY: 'netlify-key',
+        }),
+      ).rejects.toThrow('Missing NETLIFY_TOKEN');
     });
 
     it('should use token exchange when site ID and token are provided', async () => {
@@ -136,7 +134,7 @@ describe('NetlifyGateway', () => {
         NETLIFY_TOKEN: 'nfp_token',
       });
 
-      expect(url).toBe('https://site-id.netlify.app/.netlify/ai/completions');
+      expect(url).toBe('https://site-id.netlify.app/.netlify/ai/chat/completions');
       expect(mockFetch).toHaveBeenCalledWith('https://api.netlify.com/api/v1/sites/site-id-123/ai-gateway/token', {
         method: 'GET',
         headers: {
@@ -153,25 +151,28 @@ describe('NetlifyGateway', () => {
       expect(url).toBe(false);
     });
 
-    it('should return false when no site ID is available', async () => {
-      const url = await gateway.buildUrl('netlify/openai/gpt-4o', {
-        NETLIFY_TOKEN: 'nfp_token',
-      });
-      expect(url).toBe(false);
+    it('should throw error when no site ID is available', async () => {
+      await expect(
+        gateway.buildUrl('netlify/openai/gpt-4o', {
+          NETLIFY_TOKEN: 'nfp_token',
+        }),
+      ).rejects.toThrow('Missing NETLIFY_SITE_ID');
     });
 
-    it('should return false when no Netlify token is available', async () => {
-      const url = await gateway.buildUrl('netlify/openai/gpt-4o', {
-        NETLIFY_SITE_ID: 'site-id-123',
-      });
-      expect(url).toBe(false);
+    it('should throw error when no Netlify token is available', async () => {
+      await expect(
+        gateway.buildUrl('netlify/openai/gpt-4o', {
+          NETLIFY_SITE_ID: 'site-id-123',
+        }),
+      ).rejects.toThrow('Missing NETLIFY_TOKEN');
     });
 
-    it('should return false when only provider API key is available (token required)', async () => {
-      const url = await gateway.buildUrl('netlify/openai/gpt-4o', {
-        OPENAI_API_KEY: 'sk-test',
-      });
-      expect(url).toBe(false); // Token exchange is required
+    it('should throw error when only provider API key is available (token required)', async () => {
+      await expect(
+        gateway.buildUrl('netlify/openai/gpt-4o', {
+          OPENAI_API_KEY: 'sk-test',
+        }),
+      ).rejects.toThrow('Missing NETLIFY_TOKEN');
     });
 
     it('should handle token exchange with custom domain in response', async () => {
@@ -190,7 +191,7 @@ describe('NetlifyGateway', () => {
         NETLIFY_SITE_ID: 'site-id-custom',
         NETLIFY_TOKEN: 'nfp_token',
       });
-      expect(url).toBe('https://custom-domain.com/.netlify/ai/completions');
+      expect(url).toBe('https://custom-domain.com/.netlify/ai/chat/completions');
     });
 
     it('should handle URLs with trailing slashes in token response', async () => {
@@ -209,21 +210,22 @@ describe('NetlifyGateway', () => {
         NETLIFY_SITE_ID: 'site-id-slash',
         NETLIFY_TOKEN: 'nfp_token',
       });
-      expect(url).toBe('https://example-site.netlify.app/.netlify/ai/completions');
+      expect(url).toBe('https://example-site.netlify.app/.netlify/ai/chat/completions');
     });
 
-    it('should handle token fetch failure gracefully', async () => {
+    it('should throw error on token fetch failure', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 401,
         text: async () => 'Unauthorized',
       });
 
-      const url = await gateway.buildUrl('netlify/openai/gpt-4o', {
-        NETLIFY_SITE_ID: 'site-id-fail',
-        NETLIFY_TOKEN: 'invalid-token',
-      });
-      expect(url).toBe(false); // Should return false on error
+      await expect(
+        gateway.buildUrl('netlify/openai/gpt-4o', {
+          NETLIFY_SITE_ID: 'site-id-fail',
+          NETLIFY_TOKEN: 'invalid-token',
+        }),
+      ).rejects.toThrow('Failed to get Netlify AI Gateway token');
     });
 
     it('should return false for invalid model ID format', async () => {
@@ -238,7 +240,7 @@ describe('NetlifyGateway', () => {
   describe('buildHeaders', () => {
     it('should throw error when credentials are missing', async () => {
       await expect(gateway.buildHeaders('netlify/openai/gpt-4o', {})).rejects.toThrow(
-        'NETLIFY_SITE_ID and NETLIFY_TOKEN are required',
+        'Missing NETLIFY_TOKEN environment variable',
       );
     });
 
@@ -264,17 +266,9 @@ describe('NetlifyGateway', () => {
       });
     });
 
-    it('should return empty object for non-Netlify model IDs', async () => {
-      const headers = await gateway.buildHeaders('openai/gpt-4o', {
-        NETLIFY_SITE_ID: 'site-id',
-        NETLIFY_TOKEN: 'token',
-      });
-      expect(headers).toEqual({});
-    });
-
     it('should throw error when no token or credentials available', async () => {
       await expect(gateway.buildHeaders('netlify/openai/gpt-4o', {})).rejects.toThrow(
-        'NETLIFY_SITE_ID and NETLIFY_TOKEN are required for Netlify AI Gateway',
+        'Missing NETLIFY_TOKEN environment variable',
       );
     });
 
@@ -344,7 +338,8 @@ describe('NetlifyGateway', () => {
       });
 
       const providers = await gateway.fetchProviders();
-      expect(providers['openai']).toBeDefined();
+      expect(providers['netlify']).toBeDefined();
+      expect(providers['netlify'].models).toContain('openai/gpt-4o');
 
       // Mock token exchange for buildUrl
       const mockTokenResponse = {
@@ -364,7 +359,7 @@ describe('NetlifyGateway', () => {
       };
 
       const url = await gateway.buildUrl('netlify/openai/gpt-4o', envVars);
-      expect(url).toBe('https://my-site.netlify.app/.netlify/ai/completions');
+      expect(url).toBe('https://my-site.netlify.app/.netlify/ai/chat/completions');
 
       // buildHeaders should use the same cached token (no additional fetch)
       const headers = await gateway.buildHeaders('netlify/openai/gpt-4o', envVars);
@@ -404,13 +399,14 @@ describe('NetlifyGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      // Check all providers are present (unprefixed at this level)
-      expect(Object.keys(providers)).toEqual(['openai', 'anthropic', 'gemini']);
+      // Check that netlify provider is present
+      expect(Object.keys(providers)).toEqual(['netlify']);
 
-      // Verify each provider's configuration
-      expect(providers['openai']!.models).toContain('gpt-4o');
-      expect(providers['anthropic']!.models).toContain('claude-3-5-haiku-20241022');
-      expect(providers['gemini']!.models).toContain('gemini-2.5-flash');
+      // Verify models from all three upstream providers are included
+      expect(providers['netlify']!.models).toContain('openai/gpt-4o');
+      expect(providers['netlify']!.models).toContain('openai/o1');
+      expect(providers['netlify']!.models).toContain('anthropic/claude-3-5-haiku-20241022');
+      expect(providers['netlify']!.models).toContain('gemini/gemini-2.5-flash');
     });
   });
 });
