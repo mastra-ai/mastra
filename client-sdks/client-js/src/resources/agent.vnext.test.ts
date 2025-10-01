@@ -66,6 +66,13 @@ describe('Agent vNext', () => {
   });
 
   it('streamVNext: executes client tool and triggers recursive call on finish reason tool-calls', async () => {
+    // This test also verifies issue #8302 is fixed (WritableStream locked error)
+    // The error could occur at two locations during recursive stream calls:
+    // 1. writable.getWriter() during recursive pipe operation
+    // 2. writable.close() in setTimeout after stream finishes
+    // Both errors stem from the same race condition where the writable stream
+    // is locked by pipeTo() when code tries to access it.
+
     const toolCallId = 'call_1';
 
     // First cycle: emit tool-call and finish with tool-calls
@@ -92,30 +99,51 @@ describe('Agent vNext', () => {
       .mockResolvedValueOnce(sseResponse(firstCycle))
       .mockResolvedValueOnce(sseResponse(secondCycle));
 
-    const executeSpy = vi.fn(async () => ({ ok: true }));
-    const weatherTool = createTool({
-      id: 'weatherTool',
-      description: 'Weather',
-      inputSchema: z.object({ location: z.string() }),
-      outputSchema: z.object({ ok: z.boolean() }),
-      execute: executeSpy,
-    });
+    // Spy on console.error to verify no WritableStream locked errors occur (issue #8302)
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    const resp = await agent.streamVNext({ messages: 'weather?', clientTools: { weatherTool } });
+    try {
+      const executeSpy = vi.fn(async () => ({ ok: true }));
+      const weatherTool = createTool({
+        id: 'weatherTool',
+        description: 'Weather',
+        inputSchema: z.object({ location: z.string() }),
+        outputSchema: z.object({ ok: z.boolean() }),
+        execute: executeSpy,
+      });
 
-    let lastChunk = null;
-    await resp.processDataStream({
-      onChunk: async chunk => {
-        lastChunk = chunk;
-      },
-    });
+      const resp = await agent.streamVNext({ messages: 'weather?', clientTools: { weatherTool } });
 
-    expect(lastChunk?.type).toBe('finish');
-    expect(lastChunk?.payload?.stepResult?.reason).toBe('stop');
-    // Client tool executed
-    expect(executeSpy).toHaveBeenCalledTimes(1);
-    // Recursive request made
-    expect((global.fetch as any).mock.calls.filter((c: any[]) => (c?.[0] as string).includes('/vnext')).length).toBe(2);
+      let lastChunk = null;
+      await resp.processDataStream({
+        onChunk: async chunk => {
+          lastChunk = chunk;
+        },
+      });
+
+      expect(lastChunk?.type).toBe('finish');
+      expect(lastChunk?.payload?.stepResult?.reason).toBe('stop');
+      // Client tool executed
+      expect(executeSpy).toHaveBeenCalledTimes(1);
+      // Recursive request made
+      expect((global.fetch as any).mock.calls.filter((c: any[]) => (c?.[0] as string).includes('/vnext')).length).toBe(
+        2,
+      );
+
+      // Verify no WritableStream locked errors occurred (issue #8302)
+      const writableStreamError = consoleErrorSpy.mock.calls.find(call => {
+        const message = String(call[0]);
+        const error = call[1];
+        return (
+          message.includes('Error piping to writable stream') &&
+          error?.code === 'ERR_INVALID_STATE' &&
+          error?.message?.includes('WritableStream is locked')
+        );
+      });
+      expect(writableStreamError).toBeUndefined();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   it('streamVNext: step execution when client tool is present without an execute function', async () => {
