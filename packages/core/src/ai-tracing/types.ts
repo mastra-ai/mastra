@@ -659,6 +659,20 @@ export interface AITracingExporter {
   /** Export tracing events */
   exportEvent(event: AITracingEvent): Promise<void>;
 
+  addScore?({
+    traceId,
+    spanId,
+    scorer,
+    spanMetadata,
+    metadata,
+  }: {
+    traceId: string;
+    spanId?: string;
+    scorer: string;
+    metadata: Record<string, any>;
+    spanMetadata: Record<string, any>;
+  }): Promise<void>;
+
   /** Shutdown exporter */
   shutdown(): Promise<void>;
 }
