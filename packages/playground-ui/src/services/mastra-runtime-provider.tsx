@@ -201,8 +201,8 @@ export function MastraRuntimeProvider({
     topK,
     topP,
     instructions,
+    chatWithGenerateLegacy,
     chatWithGenerate,
-    chatWithStream,
     chatWithNetwork,
     providerOptions,
   } = settings?.modelSettings ?? {};
@@ -404,7 +404,7 @@ export function MastraRuntimeProvider({
           }
         }
       } else {
-        if (chatWithGenerate) {
+        if (chatWithGenerateLegacy) {
           setIsRunning(true);
           const generateResponse = await agent.generateLegacy({
             messages: [
