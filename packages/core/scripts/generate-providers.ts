@@ -18,11 +18,8 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
       const providers = await gateway.fetchProviders();
 
       for (const [providerId, config] of Object.entries(providers)) {
-        // Apply prefix if gateway has one
-        const finalProviderId = gateway.prefix ? `${gateway.prefix}/${providerId}` : providerId;
-
-        allProviders[finalProviderId] = config;
-        allModels[finalProviderId] = config.models;
+        allProviders[providerId] = config;
+        allModels[providerId] = config.models;
       }
     } catch (error) {
       console.error(`Failed to fetch from gateway ${gateway.name}:`, error);
