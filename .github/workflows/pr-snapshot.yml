@@ -18,6 +18,8 @@ jobs:
 
     permissions:
       pull-requests: read
+      contents: read
+      id-token: write
 
     steps:
       - uses: actions/create-github-app-token@v1
@@ -107,3 +109,5 @@ jobs:
 
       - name: Publish to npm
         run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }} --access public
+        env:
+          NPM_CONFIG_PROVENANCE: true

@@ -1,5 +1,12 @@
 # @internal/lint
 
+## 0.0.40
+
+### Patch Changes
+
+- Updated dependencies [[`4a70ccc`](https://github.com/mastra-ai/mastra/commit/4a70ccc5cfa12ae9c2b36545a5814cd98e5a0ead), [`0992b8b`](https://github.com/mastra-ai/mastra/commit/0992b8bf0f4f1ba7ad9940883ec4bb8d867d3105), [`283bea0`](https://github.com/mastra-ai/mastra/commit/283bea07adbaf04a27fa3ad2df611095e0825195)]:
+  - @mastra/core@0.19.1
+
 ## 0.0.39
 
 ### Patch Changes

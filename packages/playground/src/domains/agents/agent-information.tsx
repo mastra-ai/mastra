@@ -92,7 +92,13 @@ export function AgentInformation({ agentId }: { agentId: string }) {
           </TabContent>
           <TabContent value="model-settings">
             {isLoading && <Skeleton className="h-full" />}
-            {agent && <AgentSettings modelVersion={agent.modelVersion} />}
+            {agent && (
+              <AgentSettings
+                modelVersion={agent.modelVersion}
+                hasMemory={Boolean(memory?.result)}
+                hasSubAgents={Boolean(Object.keys(agent.agents || {}).length > 0)}
+              />
+            )}
           </TabContent>
           <TabContent value="memory">
             {isLoading ? <Skeleton className="h-full" /> : <AgentMemory agentId={agentId} />}

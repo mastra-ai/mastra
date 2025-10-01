@@ -18,6 +18,9 @@ interface ModelsDevResponse {
 // Special cases: providers that are OpenAI-compatible but have their own SDKs
 // These providers work with OpenAI-compatible endpoints even though models.dev
 // might list them with their own SDK packages
+// This constant is ONLY used during generation in fetchProviders() to determine
+// which providers from models.dev should be included in the registry.
+// At runtime, buildUrl() and buildHeaders() use the pre-generated PROVIDER_REGISTRY instead.
 const OPENAI_COMPATIBLE_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
   openai: {
     url: 'https://api.openai.com/v1/chat/completions',
@@ -56,14 +59,16 @@ const OPENAI_COMPATIBLE_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
   },
 };
 
-// Note: We don't exclude any providers by default. The logic below will determine
-// OpenAI compatibility based on the npm package, API URL availability, and our overrides.
-
 export class ModelsDevGateway extends MastraModelGateway {
   readonly name = 'models.dev';
   readonly prefix = undefined; // No prefix for registry gateway
 
   private providerConfigs: Record<string, ProviderConfig> = {};
+
+  constructor(providerConfigs?: Record<string, ProviderConfig>) {
+    super();
+    if (providerConfigs) this.providerConfigs = providerConfigs;
+  }
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
     console.info('Fetching providers from models.dev API...');
@@ -123,8 +128,9 @@ export class ModelsDevGateway extends MastraModelGateway {
           apiKeyEnvVar,
           apiKeyHeader,
           name: providerInfo.name || providerId.charAt(0).toUpperCase() + providerId.slice(1),
-          models: modelIds,
+          models: modelIds.filter(id => !id.includes(`codex`)), // codex requires responses api
           docUrl: providerInfo.doc, // Include documentation URL if available
+          gateway: `models.dev`,
         };
       } else {
         console.info(`Skipped provider ${providerInfo.name}`);
@@ -139,7 +145,7 @@ export class ModelsDevGateway extends MastraModelGateway {
     return providerConfigs;
   }
 
-  buildUrl(modelId: string, envVars: Record<string, string>): string | false {
+  buildUrl(modelId: string, envVars: Record<string, string>): string | false | Promise<string | false> {
     // Parse model ID to get provider
     const [provider, ...modelParts] = modelId.split('/');
 
@@ -150,14 +156,9 @@ export class ModelsDevGateway extends MastraModelGateway {
     }
 
     const config = this.providerConfigs[provider];
+
     if (!config?.url) {
       return false; // We don't know how to handle this provider
-    }
-
-    // Check if we have the required env var
-    const apiKey = envVars[config.apiKeyEnvVar!];
-    if (!apiKey) {
-      return false; // Can't build URL without API key
     }
 
     // Check for custom base URL from env vars
@@ -167,27 +168,31 @@ export class ModelsDevGateway extends MastraModelGateway {
     return customBaseUrl || config.url;
   }
 
-  buildHeaders(modelId: string, envVars: Record<string, string>): Record<string, string> {
+  buildHeaders(
+    modelId: string,
+    envVars: Record<string, string>,
+  ): Record<string, string> | Promise<Record<string, string>> {
     const [provider] = modelId.split('/');
     if (!provider) {
       return {};
     }
 
     const config = this.providerConfigs[provider];
+
     if (!config) {
       return {};
     }
 
-    const apiKey = envVars[config.apiKeyEnvVar!];
+    const apiKey = typeof config.apiKeyEnvVar === `string` ? envVars[config.apiKeyEnvVar] : undefined; // we only use single string env var for models.dev for now
     if (!apiKey) {
       return {};
     }
 
     const headers: Record<string, string> = {};
 
-    if (config.apiKeyHeader === 'Authorization') {
+    if (config.apiKeyHeader === 'Authorization' || !config.apiKeyHeader) {
       headers['Authorization'] = `Bearer ${apiKey}`;
-    } else if (config.apiKeyHeader) {
+    } else {
       headers[config.apiKeyHeader] = apiKey;
     }
 
