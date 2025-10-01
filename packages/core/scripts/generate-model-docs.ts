@@ -72,10 +72,8 @@ const __dirname = path.dirname(__filename);
 // Popular providers to show at the top of the sidebar
 const POPULAR_PROVIDERS = ['openai', 'anthropic', 'google', 'deepseek', 'groq', 'mistral', 'xai'];
 
-// Gateway prefixes - these are treated as gateways even if not prefixed
-const GATEWAY_PREFIXES = ['netlify'];
 // Providers that are actually gateways (aggregate multiple model providers)
-const GATEWAY_PROVIDERS = ['vercel', 'openrouter', 'fireworks-ai', 'groq', 'huggingface', 'togetherai'];
+const GATEWAY_PROVIDERS = ['vercel', 'openrouter', 'fireworks-ai', 'groq', 'huggingface', 'togetherai', 'netlify'];
 
 interface ProviderInfo {
   id: string;
@@ -102,21 +100,13 @@ function parseProviders(): GroupedProviders {
   const other: ProviderInfo[] = [];
 
   for (const [id, config] of Object.entries(PROVIDER_REGISTRY)) {
-    // Check if it's a prefixed gateway (like netlify/openai) or a standalone gateway (like vercel)
-    const isPrefixedGateway = GATEWAY_PREFIXES.some(prefix => id.startsWith(`${prefix}/`));
-    const isStandaloneGateway = GATEWAY_PROVIDERS.includes(id);
-    // Also treat the gateway prefix itself as a gateway (e.g., standalone "netlify")
-    const isGatewayPrefix = GATEWAY_PREFIXES.includes(id);
-    const isGateway = isPrefixedGateway || isStandaloneGateway || isGatewayPrefix;
+    // Check if it's a standalone gateway (like vercel, netlify, etc.)
+    const isGateway = GATEWAY_PROVIDERS.includes(id);
 
     let gatewayName: string | undefined;
     let baseProvider: string | undefined;
 
-    if (isPrefixedGateway) {
-      const parts = id.split('/');
-      gatewayName = parts[0];
-      baseProvider = parts.slice(1).join('/');
-    } else if (isStandaloneGateway || isGatewayPrefix) {
+    if (isGateway) {
       gatewayName = id;
       baseProvider = undefined; // Standalone gateways don't have a base provider
     }
@@ -288,8 +278,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "${provider.id}/${provider.models[0]}"
-      : "${provider.id}/${provider.models[Math.min(1, provider.models.length - 1)]}";
+      ? "${provider.id}/${provider.models[provider.models.length - 1]}"
+      : "${provider.id}/${provider.models[0]}";
   }
 });
 \`\`\`
@@ -473,7 +463,7 @@ function generateIndexPage(grouped: GroupedProviders): string {
 
   return `---
 title: "Models"
-description: "Explore ${totalProviders}+ AI providers and ${totalModels}+ models available in Mastra."
+  description: "Access ${totalProviders}+ AI providers and ${totalModels}+ models through Mastra's model router."
 ---
 
 import { CardGrid, CardGridItem } from "@/components/cards/card-grid";
@@ -547,7 +537,7 @@ Comes with environment variable detection to handle authentication, and full Typ
 }
 
 function generateGatewaysIndexPage(grouped: GroupedProviders): string {
-  const orderedGateways = ['netlify', 'openrouter', 'fireworks-ai', 'groq', 'huggingface', 'togetherai', 'vercel'];
+  const orderedGateways = ['openrouter', 'fireworks-ai', 'groq', 'huggingface', 'togetherai', 'vercel', 'netlify'];
   const gatewaysList = orderedGateways.filter(g => grouped.gateways.has(g));
 
   const hasNetlify = gatewaysList.includes('netlify');
@@ -636,7 +626,7 @@ export default meta;
 }
 
 function generateGatewaysMeta(grouped: GroupedProviders): string {
-  const orderedGateways = ['netlify', 'openrouter', 'fireworks-ai', 'groq', 'huggingface', 'togetherai', 'vercel'];
+  const orderedGateways = ['openrouter', 'fireworks-ai', 'groq', 'huggingface', 'togetherai', 'vercel', 'netlify'];
   const gatewaysList = orderedGateways.filter(g => grouped.gateways.has(g));
 
   // Build the meta object with index first, then all gateways in order
