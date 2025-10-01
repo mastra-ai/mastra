@@ -678,7 +678,6 @@ describe('vNext Workflow Handlers', () => {
         storage: mockMastra.getStorage(),
       });
 
-      // Note: watchWorkflowHandler returns a ReadableStream, we just verify it doesn't throw
       const stream = await watchWorkflowHandler({
         mastra: freshMastra,
         workflowId: 'test-workflow',
@@ -714,7 +713,6 @@ describe('vNext Workflow Handlers', () => {
         storage: mockMastra.getStorage(),
       });
 
-      // observeStreamWorkflowHandler requires server cache
       const stream = await observeStreamWorkflowHandler({
         mastra: freshMastra,
         workflowId: 'test-workflow',
@@ -757,8 +755,7 @@ describe('vNext Workflow Handlers', () => {
       });
       expect(result).toEqual({ message: 'Workflow run cancelled' });
 
-      // Note: cancel() doesn't update storage, so resourceId remains unchanged
-      // This is why this test passes - it's not actually a problem
+      // Verify resourceId is preserved
       const runAfter = await freshWorkflow.getWorkflowRunById('test-run-cancel-resource');
       expect(runAfter?.resourceId).toBe(resourceId);
     });
