@@ -1,4 +1,10 @@
-import { ActionBarPrimitive, MessagePrimitive, ToolCallMessagePartComponent, useMessage } from '@assistant-ui/react';
+import {
+  ActionBarPrimitive,
+  MessagePrimitive,
+  ToolCallMessagePartComponent,
+  ToolCallMessagePartProps,
+  useMessage,
+} from '@assistant-ui/react';
 import { AudioLinesIcon, BrainIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
 
 import { MarkdownText } from './markdown-text';
@@ -12,9 +18,14 @@ import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provide
 export interface AssistantMessageProps {
   ToolFallback?: ToolCallMessagePartComponent;
   hasModelList?: boolean;
+  requireToolApproval?: boolean;
 }
 
-export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom, hasModelList }: AssistantMessageProps) => {
+export const AssistantMessage = ({
+  ToolFallback: ToolFallbackCustom,
+  hasModelList,
+  requireToolApproval,
+}: AssistantMessageProps) => {
   const data = useMessage();
   const messageId = data.id;
 
@@ -24,13 +35,17 @@ export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom, hasModelLis
 
   const showModelUsed = hasModelList && modelMetadata;
 
+  const WrappedToolFallack = (props: ToolCallMessagePartProps & { requireToolApproval?: boolean }) => {
+    return <ToolFallback {...props} requireToolApproval={requireToolApproval} />;
+  };
+
   return (
     <MessagePrimitive.Root className="max-w-full" data-message-id={messageId}>
       <div className="text-icon6 text-ui-lg leading-ui-lg">
         <MessagePrimitive.Parts
           components={{
             Text: ErrorAwareText,
-            tools: { Fallback: ToolFallbackCustom || ToolFallback },
+            tools: { Fallback: WrappedToolFallack },
             Reasoning: Reasoning,
           }}
         />

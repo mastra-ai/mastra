@@ -30,7 +30,13 @@ export const AgentChat = ({
       settings={settings}
       runtimeContext={runtimeContext}
     >
-      <Thread agentName={agentName ?? ''} hasMemory={memory} agentId={agentId} hasModelList={Boolean(modelList)} />
+      <Thread
+        agentName={agentName ?? ''}
+        hasMemory={memory}
+        agentId={agentId}
+        hasModelList={Boolean(modelList)}
+        requireToolApproval={Boolean(settings?.modelSettings?.requireToolApproval)}
+      />
     </MastraRuntimeProvider>
   );
 };

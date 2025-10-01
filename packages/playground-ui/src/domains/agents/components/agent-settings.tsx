@@ -16,7 +16,6 @@ import { AgentAdvancedSettings } from './agent-advanced-settings';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import clsx from 'clsx';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useId } from 'react';
 
 export interface AgentSettingsProps {
   modelVersion: string;

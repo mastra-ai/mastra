@@ -21,9 +21,17 @@ export interface WorkflowBadgeProps {
     input?: string | Record<string, unknown>;
     selectionReason?: string;
   };
+  requireToolApproval?: boolean;
 }
 
-export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming, networkMetadata }: WorkflowBadgeProps) => {
+export const WorkflowBadge = ({
+  workflow,
+  runId,
+  workflowId,
+  isStreaming,
+  networkMetadata,
+  requireToolApproval,
+}: WorkflowBadgeProps) => {
   const { data: runs, isLoading: isRunsLoading } = useWorkflowRuns(workflowId, {
     enabled: Boolean(runId) && !isStreaming,
   });

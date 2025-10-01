@@ -12,9 +12,17 @@ export interface ToolBadgeProps {
     selectionReason?: string;
   };
   toolOutput: Array<{ toolId: string }>;
+  requireToolApproval?: boolean;
 }
 
-export const ToolBadge = ({ toolName, args, result, networkMetadata, toolOutput }: ToolBadgeProps) => {
+export const ToolBadge = ({
+  toolName,
+  args,
+  result,
+  networkMetadata,
+  toolOutput,
+  requireToolApproval,
+}: ToolBadgeProps) => {
   let argSlot = null;
 
   try {
@@ -30,6 +38,8 @@ export const ToolBadge = ({ toolName, args, result, networkMetadata, toolOutput 
     ) : (
       <SyntaxHighlighter data={result} />
     );
+
+  console.log('lol', requireToolApproval);
 
   return (
     <BadgeWrapper
