@@ -642,25 +642,23 @@ Gateway providers aggregate multiple model providers and add features like cachi
 
 <CardGrid>
 ${gatewaysList
-  .map(
-    g => {
-      if (g === 'netlify') {
-        return `    <CardGridItem
+  .map(g => {
+    if (g === 'netlify') {
+      return `    <CardGridItem
       title="${formatProviderName(g).replace(/&/g, '&amp;')}"
       description="${grouped.gateways.get(g)?.reduce((sum, p) => sum + p.models.length, 0) || 0} models"
       href="./gateways/${g}"
       logo={<NetlifyLogo />}
     />`;
-      }
-      return `    <CardGridItem
+    }
+    return `    <CardGridItem
       title="${formatProviderName(g).replace(/&/g, '&amp;')}"
       description="${grouped.gateways.get(g)?.reduce((sum, p) => sum + p.models.length, 0) || 0} models"
       href="./gateways/${g}"
       logo="${getLogoUrl(g)}"
       
     />`;
-    }
-  )
+  })
   .join('\n')}
 </CardGrid>`;
 }
