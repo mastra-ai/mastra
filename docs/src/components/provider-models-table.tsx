@@ -78,11 +78,7 @@ export function ProviderModelsTable({
               Context
             </TableHead>
           )}
-          <TableHead className="pb-2 font-bold text-center">JSON</TableHead>
           <TableHead className="pb-2 font-bold text-center">Tools</TableHead>
-          <TableHead className="pb-2 font-bold text-center">
-            Tool Streaming
-          </TableHead>
           {hasExtendedData && (
             <>
               <TableHead className="pb-2 font-bold text-center">
@@ -127,21 +123,7 @@ export function ProviderModelsTable({
               </TableCell>
             )}
             <TableCell className="text-center">
-              {model.objectGeneration ? (
-                <Check className="dark:text-green-400 text-[var(--light-green-accent-2)] inline-block w-[18px] h-[18px]" />
-              ) : (
-                <Cross className="inline-block w-[18px] h-[18px]" />
-              )}
-            </TableCell>
-            <TableCell className="text-center">
               {model.toolUsage ? (
-                <Check className="dark:text-green-400 text-[var(--light-green-accent-2)] inline-block w-[18px] h-[18px]" />
-              ) : (
-                <Cross className="inline-block w-[18px] h-[18px]" />
-              )}
-            </TableCell>
-            <TableCell className="text-center">
-              {model.toolStreaming ? (
                 <Check className="dark:text-green-400 text-[var(--light-green-accent-2)] inline-block w-[18px] h-[18px]" />
               ) : (
                 <Cross className="inline-block w-[18px] h-[18px]" />
