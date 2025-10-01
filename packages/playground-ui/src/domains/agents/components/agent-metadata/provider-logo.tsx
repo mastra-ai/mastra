@@ -36,14 +36,16 @@ export const ProviderLogo = ({ providerId, className = '', size = 20 }: Provider
       perplexity: 'perplexity',
       fireworks_ai: 'fireworks',
       openrouter: 'openrouter',
+      netlify: 'netlify',
     };
     return iconMap[id] || 'DEFAULT';
   };
 
   const fallbackIcon = getFallbackProviderIcon(cleanedProviderId);
+  const isGateway = ['netlify'].includes(cleanProviderId);
 
-  // If we've already had an error or don't have a provider ID, show fallback
-  if (imageError || !providerId) {
+  // If we've already had an error or don't have a provider ID or this is a special gateway case, show fallback
+  if (isGateway || imageError || !providerId) {
     if (providerMapToIcon[fallbackIcon as keyof typeof providerMapToIcon]) {
       return <Icon>{providerMapToIcon[fallbackIcon as keyof typeof providerMapToIcon]}</Icon>;
     }
