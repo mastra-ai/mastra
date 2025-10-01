@@ -11,7 +11,7 @@ import {
   AlgoliaSearchOptions,
   useAlgoliaSearch,
 } from "../hooks/use-algolia-search";
-import { BookIcon, BurgerIcon, JarvisIcon } from "./svgs/Icons";
+import { BookIcon, BurgerIcon } from "./svgs/Icons";
 import { SpinnerIcon } from "./svgs/spinner";
 import { Button } from "./ui/button";
 
