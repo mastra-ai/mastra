@@ -42,9 +42,9 @@ export function workflowLoopStream<
   streamState,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
-  return new ReadableStream<ChunkType>({
+  return new ReadableStream<ChunkType<OUTPUT>>({
     start: async controller => {
-      const writer = new WritableStream<ChunkType>({
+      const writer = new WritableStream<ChunkType<OUTPUT>>({
         write: chunk => {
           controller.enqueue(chunk);
         },
