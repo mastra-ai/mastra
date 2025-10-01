@@ -23,7 +23,7 @@ describe('NetlifyGateway - Real API Integration', () => {
 
     // Validate the netlify provider has the expected shape
     const netlifyProvider = providers['netlify'];
-    
+
     // Check required fields
     // Note: Netlify provider doesn't have a static URL - it's dynamically constructed via token exchange
     expect(netlifyProvider.url).toBeUndefined();
@@ -51,7 +51,7 @@ describe('NetlifyGateway - Real API Integration', () => {
     const hasOpenAIModels = netlifyProvider.models.some(m => m.startsWith('openai/'));
     const hasAnthropicModels = netlifyProvider.models.some(m => m.startsWith('anthropic/'));
     const hasGeminiModels = netlifyProvider.models.some(m => m.startsWith('gemini/'));
-    
+
     expect(hasOpenAIModels).toBe(true);
     expect(hasAnthropicModels).toBe(true);
     expect(hasGeminiModels).toBe(true);
