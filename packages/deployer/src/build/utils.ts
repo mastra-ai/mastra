@@ -2,6 +2,7 @@ import { execSync } from 'child_process';
 import { existsSync, mkdirSync } from 'fs';
 import { basename, join, relative } from 'path';
 import { getPackageInfo } from 'local-pkg';
+import { pathToFileURL } from 'url';
 
 export function upsertMastraDir({ dir = process.cwd() }: { dir?: string }) {
   const dirPath = join(dir, '.mastra');
@@ -28,11 +29,19 @@ export function getPackageName(id: string) {
 /**
  * Get package root path
  */
-export async function getPackageRootPath(packageName: string): Promise<string | null> {
+export async function getPackageRootPath(packageName: string, parentPath?: string): Promise<string | null> {
   let rootPath: string | null;
 
   try {
-    const pkg = await getPackageInfo(packageName);
+    const options: { paths?: string[] } = {};
+    if (parentPath) {
+      if (!parentPath.startsWith('file://')) {
+        parentPath = pathToFileURL(parentPath).href;
+      }
+
+      options.paths = [parentPath];
+    }
+    const pkg = await getPackageInfo(packageName, options);
     rootPath = pkg?.rootPath ?? null;
   } catch (e) {
     rootPath = null;
