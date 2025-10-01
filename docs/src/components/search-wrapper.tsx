@@ -1,4 +1,4 @@
-import DocsChat from "@/chatbot/components/chat-widget";
+// import DocsChat from "@/chatbot/components/chat-widget";
 import {
   Dialog,
   DialogBackdrop,
@@ -6,8 +6,8 @@ import {
   DialogTitle,
 } from "@headlessui/react";
 import { useEffect, useState } from "react";
-import { CustomSearch } from "./custom-search";
-import { getSearchPlaceholder } from "./search-placeholder";
+// import { CustomSearch } from "./custom-search";
+// import { getSearchPlaceholder } from "./search-placeholder";
 import { Shortcut } from "./shortcut";
 import { Button } from "./ui/button";
 import { CustomSearchWithoutAI } from "./custom-search-without-ai";
@@ -17,7 +17,7 @@ const INPUTS = new Set(["INPUT", "SELECT", "BUTTON", "TEXTAREA"]);
 export const SearchWrapper = ({ locale }: { locale: string }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAgentMode, setIsAgentMode] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  // const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -56,10 +56,10 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
     setIsAgentMode(false);
   }
 
-  function handleUseAgent({ searchQuery }: { searchQuery: string }) {
-    setIsAgentMode(true);
-    setSearchQuery(searchQuery);
-  }
+  // function handleUseAgent({ searchQuery }: { searchQuery: string }) {
+  //   setIsAgentMode(true);
+  //   setSearchQuery(searchQuery);
+  // }
 
   // Configure Algolia search options
   const searchOptions = {
@@ -103,10 +103,12 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
               </DialogTitle>
               <div className="w-full">
                 {isAgentMode ? (
-                  <DocsChat
-                    setIsAgentMode={setIsAgentMode}
-                    searchQuery={searchQuery}
-                  />
+                  // TODO; uncomment when re-enabling AI search
+                  // <DocsChat
+                  //   setIsAgentMode={setIsAgentMode}
+                  //   searchQuery={searchQuery}
+                  // />
+                  <></>
                 ) : (
                   <div className="p-[10px]">
                     <CustomSearchWithoutAI
