@@ -15,7 +15,7 @@ import { toAssistantUIMessage, useMastraClient } from '@mastra/react';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
-import { MastraModelOutput, ReadonlyJSONObject } from '@mastra/core/stream';
+import { ReadonlyJSONObject } from '@mastra/core/stream';
 
 import { handleNetworkMessageFromMemory } from './agent-network-message';
 import {
@@ -188,8 +188,6 @@ export function MastraRuntimeProvider({
     initializeMessages: () => (memory ? initializeMessageState(initialMessages || []) : []),
   });
 
-  console.log('messages', messages);
-
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -250,127 +248,6 @@ export function MastraRuntimeProvider({
     const agent = clientWithAbort.getAgent(agentId);
 
     try {
-      function handleGenerateResponse(generatedResponse: Awaited<ReturnType<MastraModelOutput['getFullOutput']>>) {
-        if (
-          generatedResponse.response &&
-          'messages' in generatedResponse.response &&
-          generatedResponse.response.messages
-        ) {
-          const latestMessage = generatedResponse.response.messages.reduce(
-            (acc: ThreadMessageLike, message) => {
-              const _content = Array.isArray(acc.content) ? acc.content : [];
-
-              if (typeof message.content === 'string') {
-                return {
-                  ...acc,
-                  content: [
-                    ..._content,
-                    ...(generatedResponse.reasoning ? [{ type: 'reasoning', text: generatedResponse.reasoning }] : []),
-                    {
-                      type: 'text',
-                      text: message.content,
-                    },
-                  ],
-                };
-              }
-
-              if (message.role === 'assistant') {
-                const toolCallContent = Array.isArray(message.content)
-                  ? message.content.find(content => content.type === 'tool-call')
-                  : undefined;
-
-                const reasoningContent = Array.isArray(message.content)
-                  ? message.content.find(content => content.type === 'reasoning')
-                  : undefined;
-
-                if (toolCallContent) {
-                  const newContent = message.content.map(c => {
-                    if (c.type === 'tool-call' && c.toolCallId === toolCallContent?.toolCallId) {
-                      return {
-                        ...c,
-                        toolCallId: toolCallContent.toolCallId,
-                        toolName: toolCallContent.toolName,
-                        args: toolCallContent.input,
-                      };
-                    }
-                    return c;
-                  });
-
-                  const containsToolCall = newContent.some(c => c.type === 'tool-call');
-
-                  return {
-                    ...acc,
-                    content: containsToolCall
-                      ? [...(reasoningContent ? [reasoningContent] : []), ...newContent]
-                      : [..._content, ...(reasoningContent ? [reasoningContent] : []), toolCallContent],
-                  };
-                }
-
-                const textContent = Array.isArray(message.content)
-                  ? message.content.find(content => content.type === 'text' && content.text)
-                  : undefined;
-
-                if (textContent) {
-                  return {
-                    ...acc,
-                    content: [..._content, ...(reasoningContent ? [reasoningContent] : []), textContent],
-                  };
-                }
-              }
-
-              if (message.role === 'tool') {
-                const toolResult = Array.isArray(message.content)
-                  ? message.content.find(content => content.type === 'tool-result')
-                  : undefined;
-
-                if (toolResult) {
-                  const newContent = _content.map(c => {
-                    if (c.type === 'tool-call' && c.toolCallId === toolResult?.toolCallId) {
-                      return { ...c, result: toolResult.output?.value };
-                    }
-                    return c;
-                  });
-                  const containsToolCall = newContent.some(c => c.type === 'tool-call');
-
-                  return {
-                    ...acc,
-                    content: containsToolCall
-                      ? newContent
-                      : [
-                          ..._content,
-                          { type: 'tool-result', toolCallId: toolResult.toolCallId, result: toolResult.output?.value },
-                        ],
-                  };
-                }
-
-                return {
-                  ...acc,
-                  content: [..._content, toolResult],
-                };
-              }
-              return acc;
-            },
-            { role: 'assistant', content: [] },
-          );
-
-          setMessages(currentConversation => [
-            ...currentConversation,
-            {
-              ...latestMessage,
-              metadata: {
-                custom: {
-                  modelMetadata: generatedResponse.response.modelMetadata,
-                },
-              },
-            },
-          ]);
-
-          if (generatedResponse.finishReason) {
-            handleFinishReason(generatedResponse.finishReason);
-          }
-        }
-      }
-
       if (modelVersion === 'v2') {
         if (chatWithNetwork) {
           let currentEntityId: string | undefined;
