@@ -1,16 +1,15 @@
-import type { ReadableStream } from 'stream/web';
-import { TransformStream } from 'stream/web';
-import { consumeStream } from 'ai-v5';
+import { EventEmitter } from 'events';
+import { ReadableStream, TransformStream } from 'stream/web';
 import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
 import { getValidTraceId } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { safeParseErrorObject } from '../../error/utils.js';
-import type { ProcessorRunnerMode, ProcessorState } from '../../processors/runner';
-import { ProcessorRunner } from '../../processors/runner';
+import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
+import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
 import type { WorkflowRunStatus } from '../../workflows';
-import { DelayedPromise } from '../aisdk/v5/compat';
+import { DelayedPromise, consumeStream } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import type {
@@ -37,11 +36,37 @@ export class JsonToSseTransformStream extends TransformStream<unknown, string> {
   }
 }
 
+/**
+ * Helper function to create a destructurable version of MastraModelOutput.
+ * This wraps the output to ensure properties maintain their context when destructured.
+ */
+export function createDestructurableOutput<OUTPUT extends OutputSchema = undefined>(
+  output: MastraModelOutput<OUTPUT>,
+): MastraModelOutput<OUTPUT> {
+  return new Proxy(output, {
+    get(target, prop, _receiver) {
+      // Use target as receiver to preserve private member access
+      const originalValue = Reflect.get(target, prop, target);
+
+      // For methods, return bound version
+      if (typeof originalValue === 'function') {
+        return originalValue.bind(target);
+      }
+
+      // For everything else (including getters), return as-is
+      return originalValue;
+    },
+  }) as MastraModelOutput<OUTPUT>;
+}
+
 export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
   #status: WorkflowRunStatus = 'running';
   #aisdkv5: AISDKV5OutputStream<OUTPUT>;
   #error: Error | string | { message: string; stack: string } | undefined;
   #baseStream: ReadableStream<ChunkType<OUTPUT>>;
+  #bufferedChunks: ChunkType<OUTPUT>[] = [];
+  #streamFinished = false;
+  #emitter = new EventEmitter();
   #bufferedSteps: LLMStepResult[] = [];
   #bufferedReasoningDetails: Record<string, LLMStepResult['reasoning'][number]> = {};
   #bufferedByStep: LLMStepResult = {
@@ -71,6 +96,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     finishReason: undefined,
   };
   #bufferedText: LLMStepResult['text'][] = [];
+  #bufferedObject: InferSchemaOutput<OUTPUT> | undefined;
   #bufferedTextChunks: Record<string, LLMStepResult['text'][]> = {};
   #bufferedSources: LLMStepResult['sources'] = [];
   #bufferedReasoning: LLMStepResult['reasoning'] = [];
@@ -107,7 +133,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     content: new DelayedPromise<LLMStepResult['content']>(),
   };
 
-  #streamConsumed = false;
+  #consumptionStarted = false;
   #returnScorerData = false;
 
   #model: {
@@ -125,7 +151,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * The processor runner for this stream.
    */
   public processorRunner?: ProcessorRunner;
-  private outputProcessorRunnerMode: ProcessorRunnerMode = false;
   /**
    * The message list for this stream.
    */
@@ -173,10 +198,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       });
     }
 
-    if (options.outputProcessorRunnerMode) {
-      this.outputProcessorRunnerMode = options.outputProcessorRunnerMode;
-    }
-
     this.messageList = messageList;
 
     const self = this;
@@ -184,11 +205,22 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     // Apply output processors if they exist
     let processedStream = stream;
     const processorRunner = this.processorRunner;
-    if (processorRunner && options.outputProcessorRunnerMode === `stream`) {
+    if (processorRunner && options.isLLMExecutionStep) {
       const processorStates = new Map<string, ProcessorState>();
+
       processedStream = stream.pipeThrough(
         new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
           async transform(chunk, controller) {
+            /**
+             * Add base stream controller to structured output processor state
+             * so it can be used to enqueue chunks into the main stream from the structuring agent stream
+             */
+            if (!processorStates.has(STRUCTURED_OUTPUT_PROCESSOR_NAME)) {
+              const structuredOutputProcessorState = new ProcessorState(STRUCTURED_OUTPUT_PROCESSOR_NAME);
+              structuredOutputProcessorState.customState = { controller };
+              processorStates.set(STRUCTURED_OUTPUT_PROCESSOR_NAME, structuredOutputProcessorState);
+            }
+
             const { part: processed, blocked, reason } = await processorRunner.processPart(chunk, processorStates);
             if (blocked) {
               // Emit a tripwire chunk so downstream knows about the abort
@@ -208,6 +240,13 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       );
     }
 
+    processedStream = processedStream.pipeThrough(
+      createObjectStreamTransformer({
+        isLLMExecutionStep: self.#options.isLLMExecutionStep,
+        schema: self.#options.output,
+      }),
+    );
+
     this.#baseStream = processedStream.pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
         transform: async (chunk, controller) => {
@@ -216,6 +255,18 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
             case 'tool-call-approval':
               self.#status = 'suspended';
               self.#delayedPromises.suspendPayload.resolve(chunk.payload);
+              break;
+            case 'raw':
+              if (!self.#options.includeRawChunks) {
+                return;
+              }
+              break;
+            case 'object-result':
+              self.#bufferedObject = chunk.object;
+              // Only resolve if not already rejected by validation error
+              if (self.#delayedPromises.object.status.type === 'pending') {
+                self.#delayedPromises.object.resolve(chunk.object);
+              }
               break;
             case 'source':
               self.#bufferedSources.push(chunk);
@@ -278,9 +329,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   bufferedReasoning.payload.providerMetadata = chunk.payload.providerMetadata;
                 }
               }
-
               break;
             }
+
             case 'reasoning-end': {
               const bufferedReasoning = self.#bufferedReasoningDetails[chunk.payload.id];
               if (chunk.payload.providerMetadata && bufferedReasoning) {
@@ -404,6 +455,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#tripwire = true;
               self.#tripwireReason = chunk.payload?.tripwireReason || 'Content blocked';
               self.#finishReason = 'other';
+              // Mark stream as finished for EventEmitter
+              self.#streamFinished = true;
 
               // Resolve all delayed promises before terminating
               self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
@@ -424,8 +477,12 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#delayedPromises.totalUsage.resolve(self.#usageCount);
               self.#delayedPromises.content.resolve([]);
 
+              // Emit the tripwire chunk for listeners
+              self.#emitChunk(chunk);
               // Pass the tripwire chunk through
               controller.enqueue(chunk);
+              // Emit finish event for EventEmitter streams (since flush won't be called on terminate)
+              self.#emitter.emit('finish');
               // Terminate the stream
               controller.terminate();
               return;
@@ -461,30 +518,12 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               };
 
               try {
-                if (self.processorRunner && self.outputProcessorRunnerMode === `result`) {
+                if (self.processorRunner && !self.#options.isLLMExecutionStep) {
                   self.messageList = await self.processorRunner.runOutputProcessors(self.messageList);
                   const outputText = self.messageList.get.response.aiV4
                     .core()
                     .map(m => MessageList.coreContentToString(m.content))
                     .join('\n');
-
-                  const messages = self.messageList.get.response.v2();
-                  const messagesWithStructuredData = messages.filter(
-                    msg =>
-                      msg.content.metadata &&
-                      'structuredOutput' in msg.content.metadata &&
-                      msg.content.metadata.structuredOutput,
-                  );
-
-                  if (
-                    messagesWithStructuredData[0] &&
-                    messagesWithStructuredData[0].content.metadata?.structuredOutput
-                  ) {
-                    const structuredOutput = messagesWithStructuredData[0].content.metadata.structuredOutput;
-                    self.#delayedPromises.object.resolve(structuredOutput as InferSchemaOutput<OUTPUT>);
-                  } else if (!self.#options.output) {
-                    self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
-                  }
 
                   self.#delayedPromises.text.resolve(outputText);
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
@@ -502,27 +541,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   const textContent = self.#bufferedText.join('');
                   self.#delayedPromises.text.resolve(textContent);
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
-
-                  // Check for structuredOutput in metadata (from output processors in stream mode)
-                  const messages = self.messageList.get.response.v2();
-                  const messagesWithStructuredData = messages.filter(
-                    msg =>
-                      msg.content.metadata &&
-                      'structuredOutput' in msg.content.metadata &&
-                      msg.content.metadata.structuredOutput,
-                  );
-
-                  if (
-                    messagesWithStructuredData[0] &&
-                    // this is to make typescript happy
-                    messagesWithStructuredData[0].content.metadata?.structuredOutput
-                  ) {
-                    const structuredOutput = messagesWithStructuredData[0].content.metadata.structuredOutput;
-                    self.#delayedPromises.object.resolve(structuredOutput as InferSchemaOutput<OUTPUT>);
-                  } else if (!self.#options.output && self.#delayedPromises.object.status.type !== 'resolved') {
-                    // Resolve object promise to avoid hanging
-                    self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
-                  }
                 }
               } catch (error) {
                 if (error instanceof TripWire) {
@@ -535,7 +553,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   self.#delayedPromises.finishReason.resolve('error');
                   self.#delayedPromises.text.resolve('');
                 }
-                self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
+                if (self.#delayedPromises.object.status.type !== 'resolved') {
+                  self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
+                }
               }
 
               // Resolve all delayed promises with final values
@@ -597,17 +617,19 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   // Custom properties (not part of standard callback)
                   ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
                   object:
-                    self.#delayedPromises.object.status.type === 'resolved'
-                      ? self.#delayedPromises.object.status.value
-                      : self.#options.output && baseFinishStep.text
-                        ? (() => {
-                            try {
-                              return JSON.parse(baseFinishStep.text);
-                            } catch {
-                              return undefined;
-                            }
-                          })()
-                        : undefined,
+                    self.#delayedPromises.object.status.type === 'rejected'
+                      ? undefined
+                      : self.#delayedPromises.object.status.type === 'resolved'
+                        ? self.#delayedPromises.object.status.value
+                        : self.#options.output && baseFinishStep.text
+                          ? (() => {
+                              try {
+                                return JSON.parse(baseFinishStep.text);
+                              } catch {
+                                return undefined;
+                              }
+                            })()
+                          : undefined,
                 };
 
                 await options?.onFinish?.(onFinishPayload);
@@ -674,23 +696,46 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
                 options.rootSpan.end();
               }
-
               break;
 
             case 'error':
               self.#error = chunk.payload.error as Error | string | { message: string; stack: string };
               self.#status = 'failed';
+              self.#streamFinished = true; // Mark stream as finished for EventEmitter
 
               // Reject all delayed promises on error
               const errorMessage = (self.#error as any)?.message || safeParseErrorObject(self.#error);
               const error = new Error(errorMessage);
 
-              Object.values(self.#delayedPromises).forEach(promise => promise.reject(error));
+              Object.values(self.#delayedPromises).forEach(promise => {
+                if (promise.status.type === 'pending') {
+                  promise.reject(error);
+                }
+              });
 
               break;
           }
-
+          self.#emitChunk(chunk);
           controller.enqueue(chunk);
+        },
+        flush: () => {
+          if (!self.#options.output && self.#delayedPromises.object.status.type !== 'resolved') {
+            // always resolve object promise as undefined if still hanging in flush and no output schema provided
+            self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
+          }
+          // If stream ends without proper finish/error chunks, reject unresolved promises
+          // This must be in the final transformer flush to ensure
+          // all of the delayed promises had a chance to resolve or reject already
+          // Avoids promises hanging forever
+          Object.entries(self.#delayedPromises).forEach(([key, promise]) => {
+            if (promise.status.type === 'pending') {
+              promise.reject(new Error(`promise '${key}' was not resolved or rejected when stream finished`));
+            }
+          });
+
+          // Emit finish event for EventEmitter streams
+          self.#streamFinished = true;
+          self.#emitter.emit('finish');
         },
       }),
     );
@@ -704,43 +749,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
         tracingContext: options?.tracingContext,
       },
     });
-
-    // Bind methods to ensure they work when destructured
-    const methodsToBind = [
-      { name: 'consumeStream', fn: this.consumeStream },
-      { name: 'getFullOutput', fn: this.getFullOutput },
-      { name: 'teeStream', fn: this.teeStream },
-    ] as const;
-
-    methodsToBind.forEach(({ name, fn }) => {
-      // Type-safe method binding for destructuring support
-      (this as Record<string, unknown>)[name] = fn.bind(this);
-    });
-
-    // Convert getters to bound properties to support destructuring
-    // We need to do this because getters lose their 'this' context when destructured
-    const bindGetter = <T>(name: string, getter: () => T) => {
-      Object.defineProperty(this, name, {
-        get: getter.bind(this),
-        enumerable: true,
-        configurable: true,
-      });
-    };
-
-    // Get the prototype to access the getters
-    const proto = Object.getPrototypeOf(this);
-    const descriptors = Object.getOwnPropertyDescriptors(proto);
-
-    // Bind all getters from the prototype
-    for (const [key, descriptor] of Object.entries(descriptors)) {
-      if (descriptor.get && key !== 'constructor') {
-        bindGetter(key, descriptor.get);
-      }
-    }
   }
 
   #getDelayedPromise<T>(promise: DelayedPromise<T>): Promise<T> {
-    if (!this.#streamConsumed) {
+    if (!this.#consumptionStarted) {
       void this.consumeStream();
     }
     return promise.promise;
@@ -783,49 +795,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     return this.#getDelayedPromise(this.#delayedPromises.suspendPayload);
   }
 
-  teeStream() {
-    const [stream1, stream2] = this.#baseStream.tee();
-    this.#baseStream = stream2;
-    return stream1;
-  }
-
   /**
    * Stream of all chunks. Provides complete control over stream processing.
    */
   get fullStream() {
-    const self = this;
-
-    let fullStream = this.teeStream();
-
-    return fullStream
-      .pipeThrough(
-        createObjectStreamTransformer({
-          schema: self.#options.output,
-          onFinish: data => self.#delayedPromises.object.resolve(data),
-        }),
-      )
-      .pipeThrough(
-        new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
-          transform(chunk, controller) {
-            if (chunk.type === 'raw' && !self.#options.includeRawChunks) {
-              return;
-            }
-
-            controller.enqueue(chunk);
-          },
-          flush: () => {
-            // If stream ends without proper finish/error chunks, reject unresolved promises
-            // This must be in the final transformer in the fullStream pipeline
-            // to ensure all of the delayed promises had a chance to resolve or reject already
-            // Avoids promises hanging forever
-            Object.entries(self.#delayedPromises).forEach(([key, promise]) => {
-              if (promise.status.type === 'pending') {
-                promise.reject(new Error(`Stream ${key} terminated unexpectedly`));
-              }
-            });
-          },
-        }),
-      );
+    return this.#createEventedStream();
   }
 
   /**
@@ -944,16 +918,15 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   }
 
   async consumeStream(options?: ConsumeStreamOptions): Promise<void> {
-    this.#streamConsumed = true;
+    if (this.#consumptionStarted) {
+      return;
+    }
+
+    this.#consumptionStarted = true;
+
     try {
       await consumeStream({
-        stream: this.fullStream.pipeThrough(
-          new TransformStream({
-            transform(chunk, controller) {
-              controller.enqueue(chunk);
-            },
-          }),
-        ) as Parameters<typeof consumeStream>[0]['stream'],
+        stream: this.#baseStream as globalThis.ReadableStream<any>,
         onError: options?.onError,
       });
     } catch (error) {
@@ -1070,7 +1043,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * ```
    */
   get objectStream() {
-    return this.fullStream.pipeThrough(
+    return this.#createEventedStream().pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, PartialSchemaOutput<OUTPUT>>({
         transform(chunk, controller) {
           if (chunk.type === 'object') {
@@ -1087,7 +1060,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   get elementStream(): ReadableStream<InferSchemaOutput<OUTPUT> extends Array<infer T> ? T : never> {
     let publishedElements = 0;
 
-    return this.fullStream.pipeThrough(
+    return this.#createEventedStream().pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, InferSchemaOutput<OUTPUT> extends Array<infer T> ? T : never>({
         transform(chunk, controller) {
           if (chunk.type === 'object') {
@@ -1107,13 +1080,13 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * Stream of only text content, filtering out metadata and other chunk types.
    */
   get textStream() {
-    const self = this;
-    const outputSchema = getTransformedSchema(self.#options.output);
+    const outputSchema = getTransformedSchema(this.#options.output);
+
     if (outputSchema?.outputFormat === 'array') {
-      return this.fullStream.pipeThrough(createJsonTextStreamTransformer(self.#options.output));
+      return this.#createEventedStream().pipeThrough(createJsonTextStreamTransformer(this.#options.output));
     }
 
-    return this.teeStream().pipeThrough(
+    return this.#createEventedStream().pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, string>({
         transform(chunk, controller) {
           if (chunk.type === 'text-delta') {
@@ -1137,7 +1110,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * ```
    */
   get object() {
-    if (!this.processorRunner && !this.#options.output) {
+    if (!this.processorRunner && !this.#options.output && this.#delayedPromises.object.status.type === 'pending') {
       this.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
     }
 
@@ -1158,6 +1131,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   _getImmediateText() {
     return this.#bufferedText.join('');
   }
+
+  /** @internal */
+  _getImmediateObject() {
+    return this.#bufferedObject;
+  }
   /** @internal */
   _getImmediateUsage() {
     return this.#usageCount;
@@ -1169,6 +1147,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   /** @internal */
   _getImmediateFinishReason() {
     return this.#finishReason;
+  }
+  /** @internal  */
+  _getBaseStream() {
+    return this.#baseStream;
   }
 
   #getTotalUsage(): LanguageModelUsage {
@@ -1188,6 +1170,56 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       reasoningTokens: this.#usageCount.reasoningTokens,
       cachedInputTokens: this.#usageCount.cachedInputTokens,
     };
+  }
+
+  #emitChunk(chunk: ChunkType<OUTPUT>) {
+    this.#bufferedChunks.push(chunk); // add to bufferedChunks for replay in new streams
+    this.#emitter.emit('chunk', chunk); // emit chunk for existing listener streams
+  }
+
+  #createEventedStream() {
+    const self = this;
+
+    return new ReadableStream<ChunkType<OUTPUT>>({
+      start(controller) {
+        // Replay existing buffered chunks
+        self.#bufferedChunks.forEach(chunk => {
+          controller.enqueue(chunk);
+        });
+
+        // If stream already finished, close immediately
+        if (self.#streamFinished) {
+          controller.close();
+          return;
+        }
+
+        // Listen for new chunks and stream finish
+        const chunkHandler = (chunk: ChunkType<OUTPUT>) => {
+          controller.enqueue(chunk);
+        };
+
+        const finishHandler = () => {
+          self.#emitter.off('chunk', chunkHandler);
+          self.#emitter.off('finish', finishHandler);
+          controller.close();
+        };
+
+        self.#emitter.on('chunk', chunkHandler);
+        self.#emitter.on('finish', finishHandler);
+      },
+
+      pull(_controller) {
+        // Only start consumption when someone is actively reading the stream
+        if (!self.#consumptionStarted) {
+          void self.consumeStream();
+        }
+      },
+
+      cancel() {
+        // Stream was cancelled, clean up
+        self.#emitter.removeAllListeners();
+      },
+    });
   }
 
   get status() {
