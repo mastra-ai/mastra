@@ -80,8 +80,8 @@ const GATEWAY_PROVIDERS = ['vercel', 'openrouter', 'fireworks_ai', 'groq', 'hugg
 interface ProviderInfo {
   id: string;
   name: string;
-  url: string;
-  apiKeyEnvVar: string;
+  url?: string;
+  apiKeyEnvVar: string | string[];
   apiKeyHeader: string;
   models: readonly string[];
   isGateway: boolean;
@@ -105,7 +105,9 @@ function parseProviders(): GroupedProviders {
     // Check if it's a prefixed gateway (like netlify/openai) or a standalone gateway (like vercel)
     const isPrefixedGateway = GATEWAY_PREFIXES.some(prefix => id.startsWith(`${prefix}/`));
     const isStandaloneGateway = GATEWAY_PROVIDERS.includes(id);
-    const isGateway = isPrefixedGateway || isStandaloneGateway;
+    // Also treat the gateway prefix itself as a gateway (e.g., standalone "netlify")
+    const isGatewayPrefix = GATEWAY_PREFIXES.includes(id);
+    const isGateway = isPrefixedGateway || isStandaloneGateway || isGatewayPrefix;
 
     let gatewayName: string | undefined;
     let baseProvider: string | undefined;
@@ -114,9 +116,9 @@ function parseProviders(): GroupedProviders {
       const parts = id.split('/');
       gatewayName = parts[0];
       baseProvider = parts.slice(1).join('/');
-    } else if (isStandaloneGateway) {
+    } else if (isStandaloneGateway || isGatewayPrefix) {
       gatewayName = id;
-      baseProvider = undefined; // Vercel doesn't have a base provider, it routes to many
+      baseProvider = undefined; // Standalone gateways don't have a base provider
     }
 
     const providerInfo: ProviderInfo = {
@@ -334,6 +336,30 @@ function getLogoClass(providerId: string): string {
   return `${baseClass} dark:invert dark:brightness-0 dark:contrast-200`;
 }
 
+/**
+ * Check if a provider has a React logo component
+ */
+function hasLogoComponent(providerId: string): boolean {
+  const providersWithComponents = ['netlify'];
+  return providersWithComponents.includes(providerId);
+}
+
+/**
+ * Get the logo component import statement for a provider
+ */
+function getLogoComponentImport(providerId: string): string {
+  const componentName = providerId.charAt(0).toUpperCase() + providerId.slice(1) + 'Logo';
+  return `import { ${componentName} } from '@/components/logos/${componentName}';`;
+}
+
+/**
+ * Get the logo component JSX for a provider
+ */
+function getLogoComponentJSX(providerId: string): string {
+  const componentName = providerId.charAt(0).toUpperCase() + providerId.slice(1) + 'Logo';
+  return `<${componentName} className="inline w-8 h-8 mr-2 align-middle" />`;
+}
+
 function generateGatewayPage(gatewayName: string, providers: ProviderInfo[]): string {
   const displayName = formatProviderName(gatewayName);
   const totalModels = providers.reduce((sum, p) => sum + p.models.length, 0);
@@ -341,20 +367,20 @@ function generateGatewayPage(gatewayName: string, providers: ProviderInfo[]): st
   let sections: string;
 
   // Special handling for Vercel (standalone gateway without base providers)
-  if (gatewayName === 'vercel' && providers.length === 1 && !providers[0].baseProvider) {
+  if (gatewayName === 'vercel' && providers.length === 1 && !providers?.[0]?.baseProvider) {
     const provider = providers[0];
-    const modelList = provider.models
+    const modelList = provider?.models
       .slice(0, 10)
       .map(m => `  - \`${m}\``)
       .join('\n');
-    const hasMore = provider.models.length > 10;
+    const hasMore = (provider?.models?.length || 0) > 10;
 
     sections = `
 ## Available Models
 
-Vercel AI Gateway provides access to ${provider.models.length} models from various providers:
+Vercel AI Gateway provides access to ${provider?.models?.length || 0} models from various providers:
 
-${modelList}${hasMore ? `\n  - ... and ${provider.models.length - 10} more models` : ''}
+${modelList}${hasMore ? `\n  - ... and ${Math.max((provider?.models?.length || 0) - 10, 0)} more models` : ''}
 
 Use any model with the \`vercel/\` prefix followed by the provider and model name:
 
@@ -452,12 +478,18 @@ ${allModels.map(m => `| \`${m}\` |`).join('\n')}
 `
       : '';
 
+  // Generate logo markup - use component if available, otherwise use img tag
+  const logoImport = hasLogoComponent(gatewayName) ? `${getLogoComponentImport(gatewayName)}\n\n` : '';
+  const logoMarkup = hasLogoComponent(gatewayName)
+    ? getLogoComponentJSX(gatewayName)
+    : `<img src="${getLogoUrl(gatewayName)}" alt="${displayName} logo" className="${getLogoClass(gatewayName)}" />`;
+
   return `---
 title: "${displayName} | Models | Mastra"  
 description: "Use AI models through ${displayName}."
 ---
 
-# <img src="${getLogoUrl(gatewayName)}" alt="${displayName} logo" className="${getLogoClass(gatewayName)}" />${displayName}
+${logoImport}# ${logoMarkup}${displayName}
 
 ${introText}
 
@@ -631,16 +663,16 @@ ${allProviders
 
 function generateProvidersMeta(grouped: GroupedProviders): string {
   const allProviders = [...grouped.popular, ...grouped.other];
-  
+
   // Build the meta object with index first, then all providers in order
   const metaEntries = ['  index: "Overview"'];
-  
+
   for (const provider of allProviders) {
     // Quote keys that contain dashes or other special characters
     const key = provider.id.includes('-') ? `"${provider.id}"` : provider.id;
     metaEntries.push(`  ${key}: "${provider.name}"`);
   }
-  
+
   return `const meta = {
 ${metaEntries.join(',\n')},
 };
@@ -713,4 +745,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   });
 }
 
-export { generateDocs, parseProviders, generateProviderPage, generateGatewayPage, generateIndexPage, generateProvidersMeta };
+export {
+  generateDocs,
+  parseProviders,
+  generateProviderPage,
+  generateGatewayPage,
+  generateIndexPage,
+  generateProvidersMeta,
+};
