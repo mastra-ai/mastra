@@ -3211,9 +3211,11 @@ describe('MastraInngestWorkflow', () => {
       await resetInngest();
 
       const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: {} });
 
-      // The workflow should throw because step2 fails
-      await expect(run.start({ inputData: {} })).rejects.toThrow('Function run Failed');
+      expect(result.steps.step1.status).toBe('success');
+      expect(result.steps.step2.status).toBe('failed');
+      expect(result.status).toBe('failed');
 
       srv.close();
 
