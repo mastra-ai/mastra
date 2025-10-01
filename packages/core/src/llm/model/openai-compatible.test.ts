@@ -72,7 +72,7 @@ describe('OpenAICompatibleModel', () => {
       // Collect stream chunks from ReadableStream
       const chunks: any[] = [];
       const reader = result.stream.getReader();
-      
+
       try {
         while (true) {
           const { done, value } = await reader.read();
