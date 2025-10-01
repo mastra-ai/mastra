@@ -10,6 +10,7 @@ import { CustomSearch } from "./custom-search";
 import { getSearchPlaceholder } from "./search-placeholder";
 import { Shortcut } from "./shortcut";
 import { Button } from "./ui/button";
+import { CustomSearchWithoutAI } from "./custom-search-without-ai";
 
 const INPUTS = new Set(["INPUT", "SELECT", "BUTTON", "TEXTAREA"]);
 
@@ -108,12 +109,18 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
                   />
                 ) : (
                   <div className="p-[10px]">
+                    <CustomSearchWithoutAI
+                      searchOptions={searchOptions}
+                      closeModal={close}
+                    />
+                    {/* 
+                      disabling AI search for now
                     <CustomSearch
                       placeholder={getSearchPlaceholder(locale)}
                       searchOptions={searchOptions}
                       onUseAgent={handleUseAgent}
                       closeModal={close}
-                    />
+                    /> */}
                   </div>
                 )}
               </div>
