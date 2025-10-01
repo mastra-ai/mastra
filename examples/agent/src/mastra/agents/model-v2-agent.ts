@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { cookingTool } from '../tools';
 import { myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
+import { openai } from '@ai-sdk/openai';
 
 export const weatherInfo = createTool({
   id: 'weather-info',
@@ -24,7 +26,34 @@ export const weatherInfo = createTool({
   },
 });
 
-const memory = new Memory();
+const memory = new Memory({
+  storage: new LibSQLStore({
+    url: 'file:../../memory.db', // relative path from the `.mastra/output` directory
+  }), // Storage for message history
+  vector: new LibSQLVector({
+    connectionUrl: 'file:../../vector.db', // relative path from the `.mastra/output` directory
+  }), // Vector database for semantic search
+  embedder: openai.embedding('text-embedding-3-small'), // Embedder for message embeddings
+  options: {
+    lastMessages: 10, // Include the last 20 messages in the context
+    semanticRecall: {
+      topK: 3, // Retrieve 3 most similar messages
+      messageRange: 2, // Include 2 messages before and after each match
+      scope: 'resource', // Search across all threads for this user
+    },
+    // Enable working memory to remember user information
+    workingMemory: {
+      enabled: true,
+      template: `<user>
+         <first_name></first_name>
+         <username></username>
+         <preferences></preferences>
+         <interests></interests>
+         <conversation_style></conversation_style>
+       </user>`,
+    },
+  },
+});
 
 export const chefModelV2Agent = new Agent({
   name: 'Chef Agent V2 Model',
