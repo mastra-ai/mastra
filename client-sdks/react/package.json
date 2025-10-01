@@ -24,7 +24,8 @@
     "test:coverage": "vitest --coverage"
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "dependencies": {
     "@mastra/client-js": "workspace:*",
