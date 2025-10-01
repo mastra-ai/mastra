@@ -116,7 +116,7 @@ const Composer: FC<{ hasMemory?: boolean }> = ({ hasMemory }) => {
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
               className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent resize-none"
-              autoFocus
+              autoFocus={document.activeElement === document.body}
               placeholder="Enter your message..."
               name=""
               id=""
