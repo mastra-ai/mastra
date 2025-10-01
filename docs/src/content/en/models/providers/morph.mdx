@@ -109,8 +109,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "morph/auto"
-      : "morph/morph-v3-fast";
+      ? "morph/morph-v3-large"
+      : "morph/auto";
   }
 });
 ```

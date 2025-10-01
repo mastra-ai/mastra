@@ -121,8 +121,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "perplexity/sonar"
-      : "perplexity/sonar-pro";
+      ? "perplexity/sonar-reasoning-pro"
+      : "perplexity/sonar";
   }
 });
 ```

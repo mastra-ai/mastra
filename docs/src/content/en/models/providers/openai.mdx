@@ -397,8 +397,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "openai/gpt-3.5-turbo"
-      : "openai/gpt-4";
+      ? "openai/o4-mini-deep-research"
+      : "openai/gpt-3.5-turbo";
   }
 });
 ```

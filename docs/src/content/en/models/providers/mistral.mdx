@@ -301,8 +301,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "mistral/codestral-latest"
-      : "mistral/devstral-medium-2507";
+      ? "mistral/pixtral-large-latest"
+      : "mistral/codestral-latest";
   }
 });
 ```

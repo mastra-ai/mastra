@@ -229,8 +229,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "requesty/anthropic/claude-3-7-sonnet"
-      : "requesty/anthropic/claude-4-sonnet-20250522";
+      ? "requesty/openai/o4-mini"
+      : "requesty/anthropic/claude-3-7-sonnet";
   }
 });
 ```

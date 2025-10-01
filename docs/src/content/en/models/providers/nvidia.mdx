@@ -229,8 +229,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "nvidia/black-forest-labs/flux.1-dev"
-      : "nvidia/deepseek-ai/deepseek-v3.1";
+      ? "nvidia/qwen/qwen3-coder-480b-a35b-instruct"
+      : "nvidia/black-forest-labs/flux.1-dev";
   }
 });
 ```

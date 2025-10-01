@@ -97,8 +97,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct"
-      : "baseten/moonshotai/Kimi-K2-Instruct-0905";
+      ? "baseten/moonshotai/Kimi-K2-Instruct-0905"
+      : "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct";
   }
 });
 ```

@@ -157,8 +157,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "llama/cerebras-llama-4-maverick-17b-128e-instruct"
-      : "llama/cerebras-llama-4-scout-17b-16e-instruct";
+      ? "llama/llama-4-scout-17b-16e-instruct-fp8"
+      : "llama/cerebras-llama-4-maverick-17b-128e-instruct";
   }
 });
 ```

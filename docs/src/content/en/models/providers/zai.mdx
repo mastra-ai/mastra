@@ -133,8 +133,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "zai/glm-4.5"
-      : "zai/glm-4.5-air";
+      ? "zai/glm-4.6"
+      : "zai/glm-4.5";
   }
 });
 ```

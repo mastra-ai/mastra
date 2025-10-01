@@ -289,8 +289,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "google/gemini-1.5-flash"
-      : "google/gemini-1.5-flash-8b";
+      ? "google/gemini-live-2.5-flash-preview-native-audio"
+      : "google/gemini-1.5-flash";
   }
 });
 ```

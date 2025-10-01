@@ -229,8 +229,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "venice/deepseek-coder-v2-lite"
-      : "venice/deepseek-r1-671b";
+      ? "venice/venice-uncensored"
+      : "venice/deepseek-coder-v2-lite";
   }
 });
 ```

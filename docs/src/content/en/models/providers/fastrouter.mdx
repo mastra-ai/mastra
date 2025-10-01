@@ -241,8 +241,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "fastrouter/anthropic/claude-opus-4.1"
-      : "fastrouter/anthropic/claude-sonnet-4";
+      ? "fastrouter/x-ai/grok-4"
+      : "fastrouter/anthropic/claude-opus-4.1";
   }
 });
 ```

@@ -205,8 +205,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "opencode/claude-3-5-haiku"
-      : "opencode/claude-opus-4-1";
+      ? "opencode/qwen3-max"
+      : "opencode/claude-3-5-haiku";
   }
 });
 ```

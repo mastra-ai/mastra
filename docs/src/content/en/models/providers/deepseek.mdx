@@ -97,8 +97,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "deepseek/deepseek-chat"
-      : "deepseek/deepseek-reasoner";
+      ? "deepseek/deepseek-reasoner"
+      : "deepseek/deepseek-chat";
   }
 });
 ```

@@ -109,8 +109,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "lmstudio/openai/gpt-oss-20b"
-      : "lmstudio/qwen/qwen3-30b-a3b-2507";
+      ? "lmstudio/qwen/qwen3-coder-30b"
+      : "lmstudio/openai/gpt-oss-20b";
   }
 });
 ```

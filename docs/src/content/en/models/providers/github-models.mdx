@@ -733,8 +733,8 @@ const agent = new Agent({
   model: ({ runtimeContext }) => {
     const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced 
-      ? "github-models/ai21-labs/ai21-jamba-1.5-large"
-      : "github-models/ai21-labs/ai21-jamba-1.5-mini";
+      ? "github-models/xai/grok-3-mini"
+      : "github-models/ai21-labs/ai21-jamba-1.5-large";
   }
 });
 ```
