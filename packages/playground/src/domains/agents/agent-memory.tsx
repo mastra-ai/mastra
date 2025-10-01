@@ -25,8 +25,6 @@ export function AgentMemory({ agentId }: AgentMemoryProps) {
   const config = data?.config;
   const isSemanticRecallEnabled = Boolean(config?.semanticRecall);
 
-  console.log('confiaaaag', config);
-
   // Get memory search hook
   const { searchMemory } = useMemorySearch({
     agentId: agentId || '',
