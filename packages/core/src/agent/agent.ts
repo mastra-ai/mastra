@@ -3422,15 +3422,25 @@ export class Agent<
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
-        throw new MastraError({
-          id: 'AGENT_STREAM_VNEXT_FAILED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: result.error.message,
-          details: {
-            error: result.error.message,
+        const originalError: any = (result as any)?.error;
+        const errorMessage = originalError?.message || originalError?.toString?.() || 'Unknown error';
+        const errorDetails: Record<string, any> = {
+          error: errorMessage,
+        };
+        if (originalError?.stack) errorDetails.stack = originalError.stack;
+        if (originalError?.code) errorDetails.code = originalError.code;
+        if (originalError?.cause) errorDetails.cause = originalError.cause?.message || String(originalError.cause);
+
+        throw new MastraError(
+          {
+            id: 'AGENT_STREAM_VNEXT_FAILED',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            text: errorMessage,
+            details: errorDetails,
           },
-        });
+          originalError, // Preserve original error as cause
+        );
       }
       throw new MastraError({
         id: 'AGENT_STREAM_VNEXT_UNKNOWN_ERROR',
@@ -3500,15 +3510,25 @@ export class Agent<
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
-        throw new MastraError({
-          id: 'AGENT_STREAM_VNEXT_FAILED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: result.error.message,
-          details: {
-            error: result.error.message,
+        const originalError: any = (result as any)?.error;
+        const errorMessage = originalError?.message || originalError?.toString?.() || 'Unknown error';
+        const errorDetails: Record<string, any> = {
+          error: errorMessage,
+        };
+        if (originalError?.stack) errorDetails.stack = originalError.stack;
+        if (originalError?.code) errorDetails.code = originalError.code;
+        if (originalError?.cause) errorDetails.cause = originalError.cause?.message || String(originalError.cause);
+
+        throw new MastraError(
+          {
+            id: 'AGENT_STREAM_VNEXT_FAILED',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            text: errorMessage,
+            details: errorDetails,
           },
-        });
+          originalError, // Preserve original error as cause
+        );
       }
       throw new MastraError({
         id: 'AGENT_STREAM_VNEXT_UNKNOWN_ERROR',
