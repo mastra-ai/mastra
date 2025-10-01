@@ -1548,11 +1548,13 @@ export class Run<
     runtimeContext,
     onChunk,
     tracingContext,
+    tracingOptions,
   }: {
     inputData?: z.input<TInput>;
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     onChunk?: (chunk: StreamEvent) => Promise<unknown>;
+    tracingOptions?: TracingOptions;
   } = {}): {
     stream: ReadableStream<StreamEvent>;
     getWorkflowState: () => Promise<WorkflowResult<TInput, TOutput, TSteps>>;
@@ -1608,6 +1610,7 @@ export class Run<
       runtimeContext,
       format: 'aisdk',
       tracingContext,
+      tracingOptions,
     }).then(result => {
       if (result.status !== 'suspended') {
         this.closeStreamAction?.().catch(() => {});
@@ -1711,12 +1714,14 @@ export class Run<
     inputData,
     runtimeContext,
     tracingContext,
+    tracingOptions,
     format,
     closeOnSuspend = true,
   }: {
     inputData?: z.input<TInput>;
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
     format?: 'aisdk' | 'mastra' | undefined;
     closeOnSuspend?: boolean;
   } = {}): MastraWorkflowStream<TInput, TOutput, TSteps> {
@@ -1790,6 +1795,7 @@ export class Run<
           inputData,
           runtimeContext,
           tracingContext,
+          tracingOptions,
           writableStream: writable,
           format,
         }).then(result => {
@@ -1822,6 +1828,7 @@ export class Run<
     resumeData,
     runtimeContext,
     tracingContext,
+    tracingOptions,
     format,
   }: {
     resumeData?: z.input<TInput>;
@@ -1832,6 +1839,7 @@ export class Run<
       | string[];
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
     format?: 'aisdk' | 'mastra' | undefined;
   } = {}) {
     this.closeStreamAction = async () => {};
@@ -1901,6 +1909,7 @@ export class Run<
           step,
           runtimeContext,
           tracingContext,
+          tracingOptions,
           writableStream: writable,
           format,
           isVNext: true,
@@ -2127,6 +2136,7 @@ export class Run<
       .execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
         runId: this.runId,
+        resourceId: this.resourceId,
         graph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
         input: snapshot?.context?.input,

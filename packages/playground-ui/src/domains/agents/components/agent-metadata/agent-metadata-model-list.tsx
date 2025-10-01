@@ -1,11 +1,9 @@
 import { GetAgentResponse, ReorderModelListParams, UpdateModelInModelListParams } from '@mastra/client-js';
 import { DragDropContext, Draggable, DropResult, Droppable } from '@hello-pangea/dnd';
 import { useState } from 'react';
-import { providerMapToIcon } from '../provider-map-icon';
 import { AgentMetadataModelSwitcher } from './agent-metadata-model-switcher';
-import { Badge } from '@/ds/components/Badge';
 import { Icon } from '@/ds/icons';
-import { EditIcon, GripVertical } from 'lucide-react';
+import { GripVertical } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 
 type AgentMetadataModelListType = NonNullable<GetAgentResponse['modelList']>;
@@ -24,6 +22,7 @@ export const AgentMetadataModelList = ({
   reorderModelList,
 }: AgentMetadataModelListProps) => {
   const [modelConfigs, setModelConfigs] = useState(() => modelList);
+  const hasMultipleModels = modelConfigs.length > 1;
 
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) {
@@ -66,16 +65,13 @@ export const AgentMetadataModelList = ({
             {modelConfigs.map((modelConfig, index) => (
               <Draggable key={modelConfig.id} draggableId={modelConfig.id} index={index}>
                 {provided => (
-                  <div
-                    ref={provided.innerRef}
-                    {...provided.draggableProps}
-                    {...provided.dragHandleProps}
-                    style={provided.draggableProps.style}
-                  >
+                  <div ref={provided.innerRef} {...provided.draggableProps} style={provided.draggableProps.style}>
                     <AgentMetadataModelListItem
                       modelConfig={modelConfig}
                       modelProviders={modelProviders}
                       updateModelInModelList={updateModel}
+                      showDragHandle={hasMultipleModels}
+                      dragHandleProps={provided.dragHandleProps}
                     />
                   </div>
                 )}
@@ -93,55 +89,47 @@ interface AgentMetadataModelListItemProps {
   modelConfig: AgentMetadataModelListType[number];
   modelProviders: string[];
   updateModelInModelList: (params: UpdateModelInModelListParams) => Promise<{ message: string }>;
+  showDragHandle: boolean;
+  dragHandleProps?: any;
 }
 
 const AgentMetadataModelListItem = ({
   modelConfig,
   modelProviders,
   updateModelInModelList,
+  showDragHandle,
+  dragHandleProps,
 }: AgentMetadataModelListItemProps) => {
-  const [isEditingModel, setIsEditingModel] = useState(false);
   const [enabled, setEnabled] = useState(() => modelConfig.enabled);
 
-  const providerIcon =
-    providerMapToIcon[(modelConfig.model.provider || 'openai.chat') as keyof typeof providerMapToIcon];
-
-  return isEditingModel ? (
-    <AgentMetadataModelSwitcher
-      defaultProvider={modelConfig.model.provider}
-      defaultModel={modelConfig.model.modelId}
-      updateModel={params => updateModelInModelList({ modelConfigId: modelConfig.id, model: params })}
-      closeEditor={() => setIsEditingModel(false)}
-      modelProviders={modelProviders}
-    />
-  ) : (
-    <div className="flex items-center gap-2 p-2 rounded-lg bg-background hover:bg-muted/50 transition-colors">
-      <div className="text-icon3 cursor-grab active:cursor-grabbing">
-        <Icon>
-          <GripVertical />
-        </Icon>
+  return (
+    <div className="rounded-lg bg-background hover:bg-muted/50 transition-colors">
+      <div className="flex items-center gap-2 p-2">
+        {showDragHandle && (
+          <div {...dragHandleProps} className="text-icon3 cursor-grab active:cursor-grabbing flex-shrink-0">
+            <Icon>
+              <GripVertical />
+            </Icon>
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <AgentMetadataModelSwitcher
+            defaultProvider={modelConfig.model.provider}
+            defaultModel={modelConfig.model.modelId}
+            updateModel={params => updateModelInModelList({ modelConfigId: modelConfig.id, model: params })}
+            modelProviders={modelProviders}
+            autoSave={true}
+          />
+        </div>
+        <Switch
+          checked={enabled}
+          onCheckedChange={checked => {
+            setEnabled(checked);
+            updateModelInModelList({ modelConfigId: modelConfig.id, enabled: checked });
+          }}
+          className="flex-shrink-0"
+        />
       </div>
-      <Badge icon={providerIcon} className="font-medium">
-        {modelConfig.model.modelId || 'N/A'}
-      </Badge>
-      <Switch
-        checked={enabled}
-        onCheckedChange={checked => {
-          setEnabled(checked);
-          updateModelInModelList({ modelConfigId: modelConfig.id, enabled: checked });
-        }}
-      />
-      <button
-        onClick={() => setIsEditingModel(true)}
-        className="text-icon3 hover:text-icon6"
-        title="Edit model"
-        type="button"
-        aria-label="Edit model"
-      >
-        <Icon>
-          <EditIcon />
-        </Icon>
-      </button>
     </div>
   );
 };

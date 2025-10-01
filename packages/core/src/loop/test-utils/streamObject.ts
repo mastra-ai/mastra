@@ -14,6 +14,7 @@ import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import { createMockServerResponse } from './mock-server-response';
 import { mockDate, testUsage } from './utils';
+import { MastraError } from '../../error';
 
 function createTestModels({
   warnings = [],
@@ -288,9 +289,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         });
 
         it('should invoke onError callback with Error', async () => {
-          const result: Array<{ error: unknown }> = [];
+          const errors: Array<{ error: unknown }> = [];
 
-          const resultObject = loopFn({
+          const output = loopFn({
             runId,
             models: [
               {
@@ -307,14 +308,15 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             messageList: new MessageList(),
             options: {
               onError(event) {
-                result.push(event);
+                errors.push(event);
               },
             },
           });
 
           // consume stream
-          await resultObject.consumeStream();
-          expect(result).toStrictEqual([{ error: new Error('test error') }]);
+          await output.consumeStream();
+
+          expect(errors).toStrictEqual([{ error: new Error('test error') }]);
         });
       });
 
@@ -610,6 +612,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const expectedResponse = {
             id: 'id-0',
             modelId: 'mock-model-id',
+            modelMetadata: {
+              modelId: 'mock-model-id',
+              modelProvider: 'mock-provider',
+              modelVersion: 'v2',
+            },
             timestamp: new Date(0),
             headers: { call: '2' },
             // TODO: result.response contains messages array but didnt in v5
@@ -775,7 +782,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           // consume stream (runs in parallel)
           void convertAsyncIterableToArray(result.objectStream);
           // Expect the promise to be rejected with a validation error
-          await expect(result.object).rejects.toThrow('Validation failed');
+          await expect(result.object).rejects.toThrow('Type validation failed: Value: {"invalid":"Hello, world!"}.');
         });
 
         it('should not lead to unhandled promise rejections when the streamed object does not match the schema', async () => {
@@ -946,6 +953,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   },
                 ],
                 "modelId": "mock-model-id",
+                "modelMetadata": {
+                  "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
+                },
                 "timestamp": 1970-01-01T00:00:00.000Z,
                 "uiMessages": [
                   {
@@ -1002,6 +1014,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       },
                     ],
                     "modelId": "mock-model-id",
+                    "modelMetadata": {
+                      "modelId": "mock-model-id",
+                      "modelProvider": "mock-provider",
+                      "modelVersion": "v2",
+                    },
                     "timestamp": 1970-01-01T00:00:00.000Z,
                     "uiMessages": [
                       {
@@ -1055,9 +1072,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           `);
         });
 
-        it("should be called when object doesn't match the schema", async () => {
+        it("should be called when object doesn't match the schema without destructuring", async () => {
           let result: any;
-          const { objectStream, object } = loopFn({
+          const output = loopFn({
             models: [
               {
                 id: 'test-model',
@@ -1098,10 +1115,15 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             _internal: { generateId: () => '1234', currentDate: () => new Date(0), now: () => 0 },
             messageList: new MessageList(),
           });
-          // consume stream
-          await convertAsyncIterableToArray(objectStream);
+
+          await output.consumeStream();
+          await convertAsyncIterableToArray(output.objectStream);
+
           // consume expected error rejection
-          await object.catch(() => {});
+          await output.object.catch(err => {
+            expect(err).toMatchInlineSnapshot(`[Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
+Error message: Validation failed]`);
+          });
 
           expect(result!).toMatchInlineSnapshot(`
             {
@@ -1113,7 +1135,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               ],
               "dynamicToolCalls": [],
               "dynamicToolResults": [],
-              "error": [Error: {"name":"AI_TypeValidationError","cause":"Validation failed","value":{"invalid":"Hello, world!"}}],
+              "error": [Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
+            Error message: Validation failed],
               "files": [],
               "finishReason": "error",
               "model": {
@@ -1121,9 +1144,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "provider": "mock-provider",
                 "version": "v2",
               },
-              "object": {
-                "invalid": "Hello, world!",
-              },
+              "object": undefined,
               "providerMetadata": undefined,
               "reasoning": [],
               "reasoningText": undefined,
@@ -1143,6 +1164,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   },
                 ],
                 "modelId": "mock-model-id",
+                "modelMetadata": {
+                  "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
+                },
                 "timestamp": 1970-01-01T00:00:00.000Z,
                 "uiMessages": [
                   {
@@ -1195,6 +1221,218 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       },
                     ],
                     "modelId": "mock-model-id",
+                    "modelMetadata": {
+                      "modelId": "mock-model-id",
+                      "modelProvider": "mock-provider",
+                      "modelVersion": "v2",
+                    },
+                    "timestamp": 1970-01-01T00:00:00.000Z,
+                    "uiMessages": [
+                      {
+                        "id": "1234",
+                        "metadata": {
+                          "__originalContent": "{ "invalid": "Hello, world!" }",
+                          "createdAt": 2024-01-01T00:00:00.000Z,
+                        },
+                        "parts": [
+                          {
+                            "text": "{ "invalid": "Hello, world!" }",
+                            "type": "text",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                    ],
+                  },
+                  "sources": [],
+                  "staticToolCalls": [],
+                  "staticToolResults": [],
+                  "stepType": "initial",
+                  "text": "{ "invalid": "Hello, world!" }",
+                  "toolCalls": [],
+                  "toolResults": [],
+                  "usage": {
+                    "inputTokens": 3,
+                    "outputTokens": 10,
+                    "totalTokens": 13,
+                  },
+                  "warnings": [],
+                },
+              ],
+              "text": "{ "invalid": "Hello, world!" }",
+              "toolCalls": [],
+              "toolResults": [],
+              "totalUsage": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
+              "usage": {
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "totalTokens": 13,
+              },
+              "warnings": [],
+            }
+          `);
+        });
+
+        it("should be called when object doesn't match the schema with destructuring", async () => {
+          let result: any;
+          const { consumeStream, objectStream, object } = loopFn({
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                model: new MockLanguageModelV2({
+                  doStream: async () => ({
+                    stream: convertArrayToReadableStream([
+                      {
+                        type: 'response-metadata',
+                        id: 'id-0',
+                        modelId: 'mock-model-id',
+                        timestamp: new Date(0),
+                      },
+                      { type: 'text-start', id: '1' },
+                      { type: 'text-delta', id: '1', delta: '{ ' },
+                      { type: 'text-delta', id: '1', delta: '"invalid": ' },
+                      { type: 'text-delta', id: '1', delta: `"Hello, ` },
+                      { type: 'text-delta', id: '1', delta: `world` },
+                      { type: 'text-delta', id: '1', delta: `!"` },
+                      { type: 'text-delta', id: '1', delta: ' }' },
+                      { type: 'text-end', id: '1' },
+                      {
+                        type: 'finish',
+                        finishReason: 'stop',
+                        usage: testUsage,
+                      },
+                    ]),
+                  }),
+                }),
+              },
+            ],
+            output: z.object({ content: z.string() }),
+            options: {
+              onFinish: async event => {
+                result = event;
+              },
+            },
+            _internal: { generateId: () => '1234', currentDate: () => new Date(0), now: () => 0 },
+            messageList: new MessageList(),
+          });
+
+          await consumeStream();
+          await convertAsyncIterableToArray(objectStream);
+
+          // consume expected error rejection
+          await object.catch(err => {
+            expect(err).toMatchInlineSnapshot(`[Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
+Error message: Validation failed]`);
+          });
+
+          expect(result!).toMatchInlineSnapshot(`
+            {
+              "content": [
+                {
+                  "text": "{ "invalid": "Hello, world!" }",
+                  "type": "text",
+                },
+              ],
+              "dynamicToolCalls": [],
+              "dynamicToolResults": [],
+              "error": [Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
+            Error message: Validation failed],
+              "files": [],
+              "finishReason": "error",
+              "model": {
+                "modelId": "mock-model-id",
+                "provider": "mock-provider",
+                "version": "v2",
+              },
+              "object": undefined,
+              "providerMetadata": undefined,
+              "reasoning": [],
+              "reasoningText": undefined,
+              "request": {},
+              "response": {
+                "headers": undefined,
+                "id": "id-0",
+                "messages": [
+                  {
+                    "content": [
+                      {
+                        "text": "{ "invalid": "Hello, world!" }",
+                        "type": "text",
+                      },
+                    ],
+                    "role": "assistant",
+                  },
+                ],
+                "modelId": "mock-model-id",
+                "modelMetadata": {
+                  "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
+                },
+                "timestamp": 1970-01-01T00:00:00.000Z,
+                "uiMessages": [
+                  {
+                    "id": "1234",
+                    "metadata": {
+                      "__originalContent": "{ "invalid": "Hello, world!" }",
+                      "createdAt": 2024-01-01T00:00:00.000Z,
+                    },
+                    "parts": [
+                      {
+                        "text": "{ "invalid": "Hello, world!" }",
+                        "type": "text",
+                      },
+                    ],
+                    "role": "assistant",
+                  },
+                ],
+              },
+              "sources": [],
+              "staticToolCalls": [],
+              "staticToolResults": [],
+              "steps": [
+                {
+                  "content": [
+                    {
+                      "text": "{ "invalid": "Hello, world!" }",
+                      "type": "text",
+                    },
+                  ],
+                  "dynamicToolCalls": [],
+                  "dynamicToolResults": [],
+                  "files": [],
+                  "finishReason": "error",
+                  "providerMetadata": undefined,
+                  "reasoning": [],
+                  "reasoningText": "",
+                  "request": {},
+                  "response": {
+                    "headers": undefined,
+                    "id": "id-0",
+                    "messages": [
+                      {
+                        "content": [
+                          {
+                            "text": "{ "invalid": "Hello, world!" }",
+                            "type": "text",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                    ],
+                    "modelId": "mock-model-id",
+                    "modelMetadata": {
+                      "modelId": "mock-model-id",
+                      "modelProvider": "mock-provider",
+                      "modelVersion": "v2",
+                    },
                     "timestamp": 1970-01-01T00:00:00.000Z,
                     "uiMessages": [
                       {
@@ -1879,7 +2117,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         it('should stream elements individually in elementStream', async () => {
           const arr = await convertAsyncIterableToArray(result.aisdk.v5.elementStream);
-          console.log('arr22', arr);
           assert.deepStrictEqual(arr, [{ content: 'element 1' }, { content: 'element 2' }, { content: 'element 3' }]);
         });
       });

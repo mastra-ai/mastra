@@ -1,7 +1,9 @@
-import { MockLanguageModelV1 } from 'ai/test';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import type { TransformStreamDefaultController } from 'stream/web';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import z from 'zod';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { ChunkType } from '../../stream/types';
+import { ChunkFrom } from '../../stream/types';
 import { StructuredOutputProcessor } from './structured-output';
 
 describe('StructuredOutputProcessor', () => {
@@ -12,18 +14,37 @@ describe('StructuredOutputProcessor', () => {
   });
 
   let processor: StructuredOutputProcessor<typeof testSchema>;
-  let mockAbort: ReturnType<typeof vi.fn>;
-  let mockModel: MockLanguageModelV1;
+  let mockModel: MockLanguageModelV2;
+
+  // Helper to create a mock controller that captures enqueued chunks
+  function createMockController() {
+    const enqueuedChunks: any[] = [];
+    return {
+      controller: {
+        enqueue: vi.fn((chunk: any) => {
+          enqueuedChunks.push(chunk);
+        }),
+        terminate: vi.fn(),
+        error: vi.fn(),
+      } as unknown as TransformStreamDefaultController<any>,
+      enqueuedChunks,
+    };
+  }
+
+  // Helper to create a mock abort function
+  function createMockAbort() {
+    return vi.fn((reason?: string) => {
+      throw new Error(reason || 'Aborted');
+    }) as any;
+  }
 
   beforeEach(() => {
-    mockModel = new MockLanguageModelV1({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        text: '{"color": "blue", "intensity": "bright"}',
-        finishReason: 'stop',
-        usage: { completionTokens: 10, promptTokens: 5 },
+    mockModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'text-delta' as const, id: 'text-1', delta: '{"color": "blue", "intensity": "bright"}' },
+        ]),
       }),
-      defaultObjectGenerationMode: 'json',
     });
 
     processor = new StructuredOutputProcessor({
@@ -31,64 +52,75 @@ describe('StructuredOutputProcessor', () => {
       model: mockModel,
       errorStrategy: 'strict',
     });
-    mockAbort = vi.fn();
   });
 
-  describe('processOutputResult', () => {
-    const createMessage = (text: string): MastraMessageV2 => ({
-      id: 'test-id',
-      role: 'assistant',
-      content: {
-        format: 2,
-        parts: [{ type: 'text', text }],
-      },
-      createdAt: new Date(),
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  describe('processOutputStream', () => {
+    it('should pass through non-finish chunks unchanged', async () => {
+      const { controller } = createMockController();
+      const abort = createMockAbort();
+
+      const textChunk = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'text-delta' as const,
+        payload: { id: 'test-id', text: 'Hello' },
+      };
+
+      const result = await processor.processOutputStream({
+        part: textChunk,
+        streamParts: [],
+        state: { controller },
+        abort,
+      });
+
+      expect(result).toBe(textChunk);
+      expect(controller.enqueue).not.toHaveBeenCalled();
     });
 
-    it('should process unstructured text and return formatted JSON', async () => {
-      const message = createMessage('The color is blue and it has bright intensity');
+    it('should call abort with strict error strategy', async () => {
+      const { controller } = createMockController();
+      const abort = createMockAbort();
 
-      // Mock the structuring agent's generate method
-      vi.spyOn(processor['structuringAgent'], 'generate').mockResolvedValueOnce({
-        text: JSON.stringify({ color: 'blue', intensity: 'bright' }),
-        object: { color: 'blue', intensity: 'bright' },
-        finishReason: 'stop',
-        usage: { completionTokens: 10, promptTokens: 5 },
-      } as any);
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
 
-      const result = await processor.processOutputResult({
-        messages: [message],
-        abort: mockAbort as any,
-      });
+      const mockStream = {
+        fullStream: convertArrayToReadableStream([
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'error',
+            payload: { error: new Error('Structuring failed') },
+          },
+        ]),
+      };
 
-      expect(result).toHaveLength(1);
-      // Should preserve original text
-      expect(result[0].content.parts[0]).toEqual({
-        type: 'text',
-        text: 'The color is blue and it has bright intensity',
-      });
-      // Should add structured data to content.metadata
-      expect(result[0].content.metadata).toEqual({
-        structuredOutput: { color: 'blue', intensity: 'bright' },
-      });
-      expect(mockAbort).not.toHaveBeenCalled();
+      vi.spyOn(processor['structuringAgent'], 'streamVNext').mockResolvedValue(mockStream as any);
+
+      await expect(
+        processor.processOutputStream({
+          part: finishChunk,
+          streamParts: [],
+          state: { controller },
+          abort,
+        }),
+      ).rejects.toThrow();
     });
 
-    it('should abort when structuring agent fails with strict strategy', async () => {
-      const message = createMessage('some text that cannot be structured');
-
-      // Mock the structuring agent to fail
-      vi.spyOn(mockModel, 'doGenerate').mockRejectedValueOnce(new Error('Structuring failed'));
-
-      await processor.processOutputResult({
-        messages: [message],
-        abort: mockAbort as any,
-      });
-
-      expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('[StructuredOutputProcessor] Processing failed'));
-    });
-
-    it('should use fallback value with fallback strategy', async () => {
+    it('should enqueue fallback value with fallback strategy', async () => {
       const fallbackProcessor = new StructuredOutputProcessor({
         schema: testSchema,
         model: mockModel,
@@ -96,75 +128,236 @@ describe('StructuredOutputProcessor', () => {
         fallbackValue: { color: 'default', intensity: 'medium' },
       });
 
-      const message = createMessage('some text');
+      const { controller, enqueuedChunks } = createMockController();
+      const abort = createMockAbort();
 
-      // Mock the structuring agent to fail
-      vi.spyOn(mockModel, 'doGenerate').mockRejectedValueOnce(new Error('Structuring failed'));
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
 
-      const result = await fallbackProcessor.processOutputResult({
-        messages: [message],
-        abort: mockAbort as any,
+      const mockStream = {
+        fullStream: convertArrayToReadableStream([
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'error',
+            payload: { error: new Error('Structuring failed') },
+          },
+        ]),
+      };
+
+      vi.spyOn(fallbackProcessor['structuringAgent'], 'streamVNext').mockResolvedValue(mockStream as any);
+
+      await fallbackProcessor.processOutputStream({
+        part: finishChunk,
+        streamParts: [],
+        state: { controller },
+        abort,
       });
 
-      expect(result[0].content.metadata).toEqual({
-        structuredOutput: { color: 'default', intensity: 'medium' },
-      });
-      expect(mockAbort).not.toHaveBeenCalled();
+      expect(enqueuedChunks).toHaveLength(1);
+      expect(enqueuedChunks[0].type).toBe('object-result');
+      expect(enqueuedChunks[0].object).toEqual({ color: 'default', intensity: 'medium' });
+      expect(enqueuedChunks[0].metadata.fallback).toBe(true);
     });
 
-    it('should warn and continue with warn strategy', async () => {
+    it('should warn but not abort with warn strategy', async () => {
       const warnProcessor = new StructuredOutputProcessor({
         schema: testSchema,
         model: mockModel,
         errorStrategy: 'warn',
       });
 
+      const { controller } = createMockController();
+      const abort = createMockAbort();
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      const message = createMessage('some text');
-
-      // Mock the structuring agent to fail
-      vi.spyOn(mockModel, 'doGenerate').mockRejectedValueOnce(new Error('Structuring failed'));
-
-      const result = await warnProcessor.processOutputResult({
-        messages: [message],
-        abort: mockAbort as any,
-      });
-
-      expect(result[0]).toEqual(message); // unchanged
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[StructuredOutputProcessor] Processing failed'));
-      expect(mockAbort).not.toHaveBeenCalled();
-
-      consoleSpy.mockRestore();
-    });
-
-    it('should skip non-assistant messages', async () => {
-      const userMessage: MastraMessageV2 = {
-        id: 'user-id',
-        role: 'user',
-        content: {
-          format: 2,
-          parts: [{ type: 'text', text: 'Hello' }],
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
         },
-        createdAt: new Date(),
       };
 
-      const result = await processor.processOutputResult({
-        messages: [userMessage],
-        abort: mockAbort as any,
+      const mockStream = {
+        fullStream: convertArrayToReadableStream([
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'error',
+            payload: { error: new Error('Structuring failed') },
+          },
+        ]),
+      };
+
+      vi.spyOn(warnProcessor['structuringAgent'], 'streamVNext').mockResolvedValue(mockStream as any);
+
+      await warnProcessor.processOutputStream({
+        part: finishChunk,
+        streamParts: [],
+        state: { controller },
+        abort,
       });
 
-      expect(result[0]).toEqual(userMessage); // unchanged
+      expect(consoleSpy).toHaveBeenCalled();
+      expect(abort).not.toHaveBeenCalled();
     });
 
-    it('should handle messages with empty content', async () => {
-      const message = createMessage('   '); // just whitespace
-      const result = await processor.processOutputResult({
-        messages: [message],
-        abort: mockAbort as any,
+    it('should only process once even if called multiple times', async () => {
+      const { controller } = createMockController();
+      const abort = createMockAbort();
+
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+
+      const mockStream = {
+        fullStream: convertArrayToReadableStream([
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'object-result',
+            object: { color: 'blue', intensity: 'bright' },
+          },
+        ]),
+      };
+
+      const streamVNextSpy = vi
+        .spyOn(processor['structuringAgent'], 'streamVNext')
+        .mockResolvedValue(mockStream as any);
+
+      // Call processOutputStream twice with finish chunks
+      await processor.processOutputStream({
+        part: finishChunk,
+        streamParts: [],
+        state: { controller },
+        abort,
       });
 
-      expect(result[0]).toEqual(message); // unchanged
+      await processor.processOutputStream({
+        part: finishChunk,
+        streamParts: [],
+        state: { controller },
+        abort,
+      });
+
+      // Should only call streamVNext once (guarded by isStructuringAgentStreamStarted)
+      expect(streamVNextSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('prompt building', () => {
+    it('should build prompt from different chunk types', async () => {
+      const { controller } = createMockController();
+      const abort = createMockAbort();
+
+      const streamParts: ChunkType[] = [
+        // Text chunks
+        {
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          type: 'text-delta' as const,
+          payload: { id: '1', text: 'User input' },
+        },
+        {
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          type: 'text-delta' as const,
+          payload: { id: '2', text: 'Agent response' },
+        },
+        // Tool call chunk
+        {
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          type: 'tool-call' as const,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'calculator',
+            // @ts-expect-error - tool call chunk args are unknown
+            args: { operation: 'add', a: 1, b: 2 },
+            output: 3,
+          },
+        },
+        // Tool result chunk
+        {
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          type: 'tool-result' as const,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'calculator',
+            result: 3,
+          },
+        },
+      ];
+
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+
+      // Mock the structuring agent
+      const mockStream = {
+        fullStream: convertArrayToReadableStream([
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'object-result',
+            object: { color: 'green', intensity: 'low', count: 5 },
+          },
+        ]),
+      };
+
+      vi.spyOn(processor['structuringAgent'], 'streamVNext').mockResolvedValue(mockStream as any);
+
+      await processor.processOutputStream({
+        part: finishChunk,
+        streamParts,
+        state: { controller },
+        abort,
+      });
+
+      // Check that the prompt was built correctly with all the different sections
+      const call = (processor['structuringAgent'].streamVNext as any).mock.calls[0];
+      const prompt = call[0];
+
+      expect(prompt).toContain('# Assistant Response');
+      expect(prompt).toContain('User input');
+      expect(prompt).toContain('Agent response');
+      expect(prompt).toContain('# Tool Calls');
+      expect(prompt).toContain('## calculator');
+      expect(prompt).toContain('### Input:');
+      expect(prompt).toContain('### Output:');
+      expect(prompt).toContain('# Tool Results');
+      expect(prompt).toContain('calculator:');
     });
   });
 
@@ -174,69 +367,83 @@ describe('StructuredOutputProcessor', () => {
 
       expect(instructions).toContain('data structuring specialist');
       expect(instructions).toContain('JSON format');
+      expect(instructions).toContain('Extract relevant information');
       expect(typeof instructions).toBe('string');
-      expect(instructions.length).toBeGreaterThan(0);
+    });
+
+    it('should use custom instructions if provided', () => {
+      const customInstructions = 'Custom structuring instructions';
+      const customProcessor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        instructions: customInstructions,
+      });
+
+      // The custom instructions should be used instead of generated ones
+      expect((customProcessor as any).structuringAgent.instructions).toBe(customInstructions);
     });
   });
 
   describe('integration scenarios', () => {
-    it('should handle complex nested schema', async () => {
-      const complexSchema = z.object({
-        user: z.object({
-          name: z.string(),
-          preferences: z.object({
-            theme: z.enum(['light', 'dark']),
-            notifications: z.boolean(),
-          }),
-        }),
-        metadata: z.record(z.string()),
-      });
+    it('should handle reasoning chunks', async () => {
+      const { controller } = createMockController();
+      const abort = createMockAbort();
 
-      const complexProcessor = new StructuredOutputProcessor({
-        schema: complexSchema,
-        model: mockModel,
-      });
+      const streamParts = [
+        {
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          type: 'reasoning-delta' as const,
+          payload: { id: '1', text: 'I need to analyze the color and intensity' },
+        },
+        {
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          type: 'text-delta' as const,
+          payload: { id: '2', text: 'The answer is blue and bright' },
+        },
+      ];
 
-      const expectedObject = {
-        user: {
-          name: 'John',
-          preferences: {
-            theme: 'dark' as const,
-            notifications: true,
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+
+      const mockStream = {
+        fullStream: convertArrayToReadableStream([
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'object-result',
+            object: { color: 'blue', intensity: 'bright' },
           },
-        },
-        metadata: { source: 'test' },
+        ]),
       };
 
-      const message: MastraMessageV2 = {
-        id: 'test-id',
-        role: 'assistant',
-        content: {
-          format: 2,
-          parts: [
-            { type: 'text', text: 'Some unstructured text about John who prefers dark theme and wants notifications' },
-          ],
-        },
-        createdAt: new Date(),
-      };
+      vi.spyOn(processor['structuringAgent'], 'streamVNext').mockResolvedValue(mockStream as any);
 
-      // Mock the structuring agent's generate method to return the expected structured data
-      vi.spyOn(complexProcessor['structuringAgent'], 'generate').mockResolvedValueOnce({
-        text: JSON.stringify(expectedObject),
-        object: expectedObject,
-        finishReason: 'stop',
-        usage: { completionTokens: 10, promptTokens: 5 },
-      } as any);
-
-      const result = await complexProcessor.processOutputResult({
-        messages: [message],
-        abort: mockAbort as any,
+      await processor.processOutputStream({
+        part: finishChunk,
+        streamParts,
+        state: { controller },
+        abort,
       });
 
-      expect(result[0].content.metadata).toEqual({
-        structuredOutput: expectedObject,
-      });
-      expect(mockAbort).not.toHaveBeenCalled();
+      // Check that the prompt includes reasoning
+      const call = (processor['structuringAgent'].streamVNext as any).mock.calls[0];
+      const prompt = call[0];
+
+      expect(prompt).toContain('# Assistant Reasoning');
+      expect(prompt).toContain('I need to analyze the color and intensity');
+      expect(prompt).toContain('# Assistant Response');
+      expect(prompt).toContain('The answer is blue and bright');
     });
   });
 });
