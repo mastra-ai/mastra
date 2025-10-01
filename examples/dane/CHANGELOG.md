@@ -1,5 +1,12 @@
 # @mastra/dane
 
+## 0.1.4-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`4a70ccc`](https://github.com/mastra-ai/mastra/commit/4a70ccc5cfa12ae9c2b36545a5814cd98e5a0ead)]:
+  - @mastra/core@0.19.1-alpha.1
+
 ## 0.1.4-alpha.0
 
 ### Patch Changes
