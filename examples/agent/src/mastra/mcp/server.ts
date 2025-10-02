@@ -218,6 +218,40 @@ export const myMcpServerTwo = new MCPServer({
         }
       },
     }),
+    longRunningTask: createTool({
+      id: 'longRunningTask',
+      description: 'Simulates a long running task.',
+      inputSchema: z.object({
+        interval: z.number().describe('Interval in milliseconds between notifications').default(1000),
+        count: z.number().describe('Number of notifications to send (0 for 100)').default(10),
+      }),
+      execute: async ({ context }, options) => {
+        const { interval, count } = context;
+        const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+        let counter = 0;
+
+        while (count === 0 || counter < count) {
+          counter++;
+          try {
+            await options.extra.sendNotification({
+              method: 'notifications/progress',
+              params: {
+                progress: counter,
+                total: count,
+                message: `Long running task in progress. ${counter} / ${count}`,
+                progressToken: options.extra._meta?.progressToken,
+              },
+            });
+          } catch (error) {
+            console.error('Error sending notification:', error);
+          }
+          // Wait for the specified interval
+          await sleep(interval);
+        }
+
+        return 'Long running task completed.';
+      },
+    }),
   },
 });
 
