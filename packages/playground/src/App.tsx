@@ -44,6 +44,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/chat/${threadId}`,
   workflowsLink: () => `/workflows`,
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
+  workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
   networkLink: (networkId: string) => `/networks/v-next/${networkId}/chat`,
   networkNewThreadLink: (networkId: string) => `/networks/v-next/${networkId}/chat/${uuid()}`,
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
@@ -173,8 +174,8 @@ function App() {
                     }
                   >
                     <Route path="traces" element={<WorkflowTracesPage />} />
-                    <Route path="/workflows/:workflowId/graph" element={<Workflow />} />
-                    <Route path="/workflows/:workflowId/graph/:runId" element={<Workflow />} />
+                    <Route path="graph" element={<Workflow />} />
+                    <Route path="graph/:runId" element={<Workflow />} />
                   </Route>
 
                   <Route path="/" element={<NavigateTo to="/agents" />} />
