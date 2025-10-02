@@ -291,7 +291,7 @@ export interface GetMemoryConfigParams {
   agentId: string;
 }
 
-export type GetMemoryConfigResponse = MemoryConfig;
+export type GetMemoryConfigResponse = { config: MemoryConfig };
 
 export interface GetNetworkMemoryThreadParams {
   resourceId: string;

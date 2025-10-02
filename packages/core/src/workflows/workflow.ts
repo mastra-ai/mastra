@@ -2174,6 +2174,7 @@ export class Run<
       .execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
         runId: this.runId,
+        resourceId: this.resourceId,
         graph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
         input: snapshot?.context?.input,

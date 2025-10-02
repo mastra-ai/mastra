@@ -29,21 +29,19 @@ export const mapWorkflowStreamChunkToWatchResult = (
         workflowState: {
           ...prev?.payload?.workflowState,
           status: 'running',
-          steps: {},
+          steps: prev?.payload?.workflowState?.steps || {},
         },
       },
     };
   }
 
   if (chunk.type === 'workflow-step-start') {
-    const current = prev?.payload?.workflowState?.steps?.[chunk.payload.id] || {};
-
     return {
       ...prev,
       payload: {
-        ...prev.payload,
+        ...prev?.payload,
         currentStep: {
-          id: chunk.payload.id,
+          ...prev?.payload?.currentStep,
           ...chunk.payload,
         },
         workflowState: {
@@ -51,7 +49,7 @@ export const mapWorkflowStreamChunkToWatchResult = (
           steps: {
             ...prev?.payload?.workflowState?.steps,
             [chunk.payload.id]: {
-              ...(current || {}),
+              ...prev?.payload?.workflowState?.steps?.[chunk.payload.id],
               ...chunk.payload,
             },
           },
@@ -90,14 +88,12 @@ export const mapWorkflowStreamChunkToWatchResult = (
   }
 
   if (chunk.type === 'workflow-step-waiting') {
-    const current = prev?.payload?.workflowState?.steps?.[chunk.payload.id] || {};
     return {
       ...prev,
       payload: {
         ...prev?.payload,
         currentStep: {
-          id: chunk.payload.id,
-          ...(prev?.payload?.currentStep || {}),
+          ...prev?.payload?.currentStep,
           ...chunk.payload,
         },
         workflowState: {
@@ -106,7 +102,7 @@ export const mapWorkflowStreamChunkToWatchResult = (
           steps: {
             ...prev?.payload?.workflowState?.steps,
             [chunk.payload.id]: {
-              ...current,
+              ...prev?.payload?.workflowState?.steps?.[chunk.payload.id],
               ...chunk.payload,
             },
           },
@@ -117,25 +113,20 @@ export const mapWorkflowStreamChunkToWatchResult = (
   }
 
   if (chunk.type === 'workflow-step-result') {
-    const status = chunk.payload.status;
-    const current = prev?.payload?.workflowState?.steps?.[chunk.payload.id] || {};
-
     const next = {
       ...prev,
       payload: {
-        ...prev?.payload,
+        ...(prev?.payload || {}),
         currentStep: {
-          id: chunk.payload.id,
-          ...(prev?.payload?.currentStep || {}),
+          ...prev?.payload?.currentStep,
           ...chunk.payload,
         },
         workflowState: {
           ...prev?.payload?.workflowState,
-          status,
           steps: {
             ...prev?.payload?.workflowState?.steps,
             [chunk.payload.id]: {
-              ...current,
+              ...prev?.payload?.workflowState?.steps?.[chunk.payload.id],
               ...chunk.payload,
             },
           },
@@ -403,8 +394,7 @@ export const toUIMessage = ({
           // Handle workflow-related output chunks
           if (chunk.payload.output?.type?.startsWith('workflow-')) {
             // Get existing workflow state from the output field
-            const currentOutput = (toolPart.output as any) || {};
-            const existingWorkflowState = currentOutput || {};
+            const existingWorkflowState = (toolPart.output as WorkflowWatchResult) || ({} as WorkflowWatchResult);
 
             // Use the mapWorkflowStreamChunkToWatchResult pattern for accumulation
             const updatedWorkflowState = mapWorkflowStreamChunkToWatchResult(

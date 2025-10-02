@@ -2158,8 +2158,8 @@ importers:
         specifier: ^4.23.14
         version: 4.23.14(@babel/runtime@7.28.3)(@codemirror/autocomplete@6.18.6)(@codemirror/language@6.11.1)(@codemirror/lint@6.8.5)(@codemirror/search@6.5.11)(@codemirror/state@6.5.2)(@codemirror/theme-one-dark@6.1.3)(@codemirror/view@6.37.2)(codemirror@6.0.2)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       '@xyflow/react':
-        specifier: ^12.8.5
-        version: 12.8.5(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+        specifier: ^12.8.6
+        version: 12.8.6(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -2402,8 +2402,8 @@ importers:
         specifier: ^4.23.14
         version: 4.23.14(@babel/runtime@7.28.3)(@codemirror/autocomplete@6.18.6)(@codemirror/language@6.11.1)(@codemirror/lint@6.8.5)(@codemirror/search@6.5.11)(@codemirror/state@6.5.2)(@codemirror/theme-one-dark@6.1.3)(@codemirror/view@6.37.2)(codemirror@6.0.2)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       '@xyflow/react':
-        specifier: ^12.8.5
-        version: 12.8.5(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+        specifier: ^12.8.6
+        version: 12.8.6(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       cmdk:
         specifier: ^1.1.1
         version: 1.1.1(@types/react-dom@19.1.9(@types/react@19.1.13))(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
@@ -2417,8 +2417,8 @@ importers:
         specifier: ^0.474.0
         version: 0.474.0(react@19.1.1)
       motion:
-        specifier: ^12.23.13
-        version: 12.23.16(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+        specifier: ^12.23.22
+        version: 12.23.22(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       prettier:
         specifier: ^3.6.2
         version: 3.6.2
@@ -10547,14 +10547,14 @@ packages:
     resolution: {integrity: sha512-w22aaed73CWhTL5ndqepzCjkM5S18F3/wnkPQ6oIBjqD5K2t7y+nxCi7d83pNDjdJrVqaQKeJQ5TePvQP4oX7g==}
     engines: {node: '>=16'}
 
-  '@xyflow/react@12.8.5':
-    resolution: {integrity: sha512-NRwcE8QE7dh6BbaIT7GmNccP7/RMDZJOKtzK4HQw599TAfzC8e5E/zw/7MwtpnSbbkqBYc+jZyOisd57sp/hPQ==}
+  '@xyflow/react@12.8.6':
+    resolution: {integrity: sha512-SksAm2m4ySupjChphMmzvm55djtgMDPr+eovPDdTnyGvShf73cvydfoBfWDFllooIQ4IaiUL5yfxHRwU0c37EA==}
     peerDependencies:
       react: '>=17'
       react-dom: '>=17'
 
-  '@xyflow/system@0.0.69':
-    resolution: {integrity: sha512-+KYwHDnsapZQ1xSgsYwOKYN93fUR770LwfCT5qrvcmzoMaabO1rHa6twiEk7E5VUIceWciF8ukgfq9JC83B5jQ==}
+  '@xyflow/system@0.0.70':
+    resolution: {integrity: sha512-PpC//u9zxdjj0tfTSmZrg3+sRbTz6kop/Amky44U2Dl51sxzDTIUfXMwETOYpmr2dqICWXBIJwXL2a9QWtX2XA==}
 
   abbrev@1.1.1:
     resolution: {integrity: sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==}
@@ -12341,8 +12341,8 @@ packages:
       react-dom:
         optional: true
 
-  framer-motion@12.23.16:
-    resolution: {integrity: sha512-N81A8hiHqVsexOzI3wzkibyLURW1nEJsZaRuctPhG4AdbbciYu+bKJq9I2lQFzAO4Bx3h4swI6pBbF/Hu7f7BA==}
+  framer-motion@12.23.22:
+    resolution: {integrity: sha512-ZgGvdxXCw55ZYvhoZChTlG6pUuehecgvEAJz0BHoC5pQKW1EC5xf1Mul1ej5+ai+pVY0pylyFfdl45qnM1/GsA==}
     peerDependencies:
       '@emotion/is-prop-valid': '*'
       react: ^18.0.0 || ^19.0.0
@@ -14071,8 +14071,8 @@ packages:
   motion-dom@11.18.1:
     resolution: {integrity: sha512-g76KvA001z+atjfxczdRtw/RXOM3OMSdd1f4DL77qCTF/+avrRJiawSG4yDibEQ215sr9kpinSlX2pCTJ9zbhw==}
 
-  motion-dom@12.23.12:
-    resolution: {integrity: sha512-RcR4fvMCTESQBD/uKQe49D5RUeDOokkGRmz4ceaJKDBgHYtZtntC/s2vLvY38gqGaytinij/yi3hMcWVcEF5Kw==}
+  motion-dom@12.23.21:
+    resolution: {integrity: sha512-5xDXx/AbhrfgsQmSE7YESMn4Dpo6x5/DTZ4Iyy4xqDvVHWvFVoV+V2Ri2S/ksx+D40wrZ7gPYiMWshkdoqNgNQ==}
 
   motion-utils@11.18.1:
     resolution: {integrity: sha512-49Kt+HKjtbJKLtgO/LKj9Ld+6vw9BjH5d9sc40R/kVyH8GLAXgT42M2NnuPcJNuA3s9ZfZBUcwIgpmZWGEE+hA==}
@@ -14080,8 +14080,8 @@ packages:
   motion-utils@12.23.6:
     resolution: {integrity: sha512-eAWoPgr4eFEOFfg2WjIsMoqJTW6Z8MTUCgn/GZ3VRpClWBdnbjryiA3ZSNLyxCTmCQx4RmYX6jX1iWHbenUPNQ==}
 
-  motion@12.23.16:
-    resolution: {integrity: sha512-8vVuxZgcfGZm4kgSqFgGrhQ+6034y4UuEsqCX8s7UYeoQ+NO3R9LV5AyDlVr2Mb7xvS7ZM5s/XkTurWbWQ+UHA==}
+  motion@12.23.22:
+    resolution: {integrity: sha512-iSq6X9vLHbeYwmHvhK//+U74ROaPnZmBuy60XZzqNl0QtZkWfoZyMDHYnpKuWFv0sNMqHgED8aCXk94LCoQPGg==}
     peerDependencies:
       '@emotion/is-prop-valid': '*'
       react: ^18.0.0 || ^19.0.0
@@ -25392,9 +25392,9 @@ snapshots:
       - koa
       - next
 
-  '@xyflow/react@12.8.5(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
+  '@xyflow/react@12.8.6(@types/react@19.1.13)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
     dependencies:
-      '@xyflow/system': 0.0.69
+      '@xyflow/system': 0.0.70
       classcat: 5.0.5
       react: 19.1.1
       react-dom: 19.1.1(react@19.1.1)
@@ -25403,7 +25403,7 @@ snapshots:
       - '@types/react'
       - immer
 
-  '@xyflow/system@0.0.69':
+  '@xyflow/system@0.0.70':
     dependencies:
       '@types/d3-drag': 3.0.7
       '@types/d3-interpolate': 3.0.4
@@ -27623,9 +27623,9 @@ snapshots:
       react: 19.1.1
       react-dom: 19.1.1(react@19.1.1)
 
-  framer-motion@12.23.16(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
+  framer-motion@12.23.22(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
     dependencies:
-      motion-dom: 12.23.12
+      motion-dom: 12.23.21
       motion-utils: 12.23.6
       tslib: 2.8.1
     optionalDependencies:
@@ -29626,7 +29626,7 @@ snapshots:
     dependencies:
       motion-utils: 11.18.1
 
-  motion-dom@12.23.12:
+  motion-dom@12.23.21:
     dependencies:
       motion-utils: 12.23.6
 
@@ -29634,9 +29634,9 @@ snapshots:
 
   motion-utils@12.23.6: {}
 
-  motion@12.23.16(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
+  motion@12.23.22(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
     dependencies:
-      framer-motion: 12.23.16(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+      framer-motion: 12.23.22(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       tslib: 2.8.1
     optionalDependencies:
       react: 19.1.1

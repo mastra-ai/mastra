@@ -3,11 +3,17 @@ import { join } from 'path';
 import process from 'process';
 import { Deployer } from '@mastra/deployer';
 import { move } from 'fs-extra/esm';
+import type { VcConfig, VcConfigOverrides, VercelDeployerOptions } from './types';
 
 export class VercelDeployer extends Deployer {
-  constructor() {
+  private vcConfigOverrides: VcConfigOverrides = {};
+
+  constructor(options: VercelDeployerOptions = {}) {
     super({ name: 'VERCEL' });
     this.outputDir = join('.vercel', 'output', 'functions', 'index.func');
+
+    // Store all overrides centrally
+    this.vcConfigOverrides = { ...options };
   }
 
   async prepare(outputDirectory: string): Promise<void> {
@@ -111,19 +117,21 @@ export const HEAD = handle(app);
     );
 
     const nodeVersion = process.version?.split('.')?.[0]?.replace('v', '') ?? '22';
-    writeFileSync(
-      join(outputDirectory, this.outputDir, '.vc-config.json'),
-      JSON.stringify(
-        {
-          handler: 'index.mjs',
-          launcherType: 'Nodejs',
-          runtime: `nodejs${nodeVersion}.x`,
-          shouldAddHelpers: true,
-        },
-        null,
-        2,
-      ),
-    );
+
+    const vcConfig: VcConfig = {
+      handler: 'index.mjs',
+      launcherType: 'Nodejs',
+      runtime: `nodejs${nodeVersion}.x`,
+      shouldAddHelpers: true,
+    };
+
+    // Merge supported overrides
+    const { maxDuration, memory, regions } = this.vcConfigOverrides;
+    if (typeof maxDuration === 'number') vcConfig.maxDuration = maxDuration;
+    if (typeof memory === 'number') vcConfig.memory = memory;
+    if (Array.isArray(regions) && regions.length > 0) vcConfig.regions = regions;
+
+    writeFileSync(join(outputDirectory, this.outputDir, '.vc-config.json'), JSON.stringify(vcConfig, null, 2));
 
     await move(join(outputDirectory, '.vercel', 'output'), join(process.cwd(), '.vercel', 'output'), {
       overwrite: true,
@@ -144,7 +152,7 @@ export const HEAD = handle(app);
     if (hasLibsql) {
       this.logger.error(
         `Vercel Deployer does not support @libsql/client(which may have been installed by @mastra/libsql) as a dependency. 
-        Use other Mastra Storage options instead e.g @mastra/pg`,
+				Use other Mastra Storage options instead e.g @mastra/pg`,
       );
       process.exit(1);
     }
