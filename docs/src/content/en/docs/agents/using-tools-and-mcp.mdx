@@ -27,7 +27,7 @@ export const weatherTool = createTool({
     city: z.string(),
   }),
   execute: async ({ context }) => {
-    const { city } = context
+    const { city } = context;
     const response = await fetch(`https://weather.service?city=${city}`);
 
     const { temperature, conditions } = await response.json();
