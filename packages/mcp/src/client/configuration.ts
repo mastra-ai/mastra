@@ -4,6 +4,7 @@ import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/p
 import type {
   ElicitRequest,
   ElicitResult,
+  ProgressNotification,
   Prompt,
   Resource,
   ResourceTemplate,
@@ -70,6 +71,31 @@ To fix this you have three different options:
     this.addToInstanceCache();
     return this;
   }
+
+  public get progress() {
+    this.addToInstanceCache();
+    return {
+      onUpdate: async (serverName: string, handler: (params: ProgressNotification['params']) => void) => {
+        try {
+          const internalClient = await this.getConnectedClientForServer(serverName);
+          return internalClient.progress.onUpdate(handler);
+        } catch (err) {
+          throw new MastraError(
+            {
+              id: 'MCP_CLIENT_ON_UPDATE_PROGRESS_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.THIRD_PARTY,
+              details: {
+                serverName,
+              },
+            },
+            err,
+          );
+        }
+      },
+    };
+  }
+  
   public get elicitation() {
     this.addToInstanceCache();
     return {
