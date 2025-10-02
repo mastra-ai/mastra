@@ -9,16 +9,48 @@ export function getAuthEntrypoint() {
     }
 
     async authenticateToken (...args) {
-      if (typeof args[0] === 'string') {
-        const token = args[0].replace('Bearer ', '');
-        const validTokens = [];
-        ${process.env.PLAYGROUND_JWT_TOKEN ? `validTokens.push('${process.env.PLAYGROUND_JWT_TOKEN}');` : ''}
-        ${process.env.BUSINESS_JWT_TOKEN ? `validTokens.push('${process.env.BUSINESS_JWT_TOKEN}');` : ''}
+      // args[0] = Authorization header, args[1] = Hono request object
+      const authHeader = args[0];
+      const request = args[1];
+      
+      // Check Authorization header (can be either businessJwtToken or playgroundJwtToken)
+      if (typeof authHeader === 'string') {
+        const token = authHeader.replace('Bearer ', '');
         
-        if (validTokens.includes(token)) {
+        // Check if it matches BUSINESS_JWT_TOKEN (only if defined)
+        ${
+          process.env.BUSINESS_JWT_TOKEN
+            ? `if (token === '${process.env.BUSINESS_JWT_TOKEN}') {
           return { id: 'business-api' }
+        }`
+            : ''
+        }
+        
+        // Check if it matches PLAYGROUND_JWT_TOKEN (only if defined)
+        ${
+          process.env.PLAYGROUND_JWT_TOKEN
+            ? `if (token === '${process.env.PLAYGROUND_JWT_TOKEN}') {
+          return { id: 'business-api' }
+        }`
+            : ''
         }
       }
+      
+      // Check X-Playground-Access header (new playground token)
+      if (request && request.header) {
+        const playgroundHeader = request.header('X-Playground-Access');
+        if (playgroundHeader && typeof playgroundHeader === 'string') {
+          const token = playgroundHeader.replace('Bearer ', '');
+          ${
+            process.env.PLAYGROUND_JWT_TOKEN
+              ? `if (token === '${process.env.PLAYGROUND_JWT_TOKEN}') {
+            return { id: 'business-api' }
+          }`
+              : ''
+          }
+        }
+      }
+      
       return this.auth.authenticateToken(...args)
     }
 
