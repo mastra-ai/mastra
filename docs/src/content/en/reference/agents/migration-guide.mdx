@@ -1,23 +1,18 @@
-import { Callout } from 'nextra/components';
-import { Tag } from '@/components/tag';
-
 # Migration Guide: VNext to Standard APIs
-
-<Callout type="info">
- The `streamVNext()` and `generateVNext()` methods in Mastra agents are becoming the default `stream()` and `generate()` methods respectively.
-</Callout>
-
-<Callout type="warning">
-  **Important Naming Clarification**: 
-  - The `streamVNext()` and `generateVNext()` methods have been renamed to `stream()` and `generate()` respectively. These are now the primary APIs for AI SDK v5.
-  - The original `stream()` and `generate()` methods have been renamed to `streamLegacy()` and `generateLegacy()` to maintain backward compatibility with AI SDK v4.
-  - If your code currently uses `agent.stream()` and you're getting an error about needing AI SDK v5 models, it means you need to use `agent.streamLegacy()` instead to continue using v5 models.
-  - Similarly, if your code uses `agent.generate()` and encounters the same error, you should use `agent.generateLegacy()` for v4 model compatibility.
-</Callout>
 
 ## Overview
 
 As of `v 0.20.00`, the `streamVNext()` and `generateVNext()` methods in Mastra agents have been renamed to `stream()` and `generate()` respectively. These are now the standard APIs with full AI SDK v5 compatibility. The original `stream()` and `generate()` methods have been renamed to `streamLegacy()` and `generateLegacy()` to maintain backward compatibility with AI SDK v4.
+
+### Continue using AI SDK v4 models
+- Rename all your `stream()` and `generate()` calls to `streamLegacy()` and `generateLegacy()` respectively. No other change is needed.
+
+### Continue using AI SDK v5 models
+- Rename all your `streamVNext()` and `generateVNext()` calls to `stream()` and `generate()` respectively. No other change is needed.
+
+### Upgrade from AI SDK v4 models to v5 models
+
+First bump all your model provider packages by a major version. This will ensure that they are all v5 models now. Follow the guide below to understand the differences.
 
 ## Key Differences
 
