@@ -10,6 +10,54 @@
 '@mastra/core': minor
 'mastra': minor
 '@mastra/rag': minor
+
+'@mastra/deployer-cloud': patch
+'@mastra/deployer-cloudflare': patch
+'@mastra/deployer-netlify': patch
+'@mastra/deployer-vercel': patch
+'@mastra/braintrust': patch
+'@mastra/langfuse': patch
+'@mastra/langsmith': patch
+'@mastra/otel-exporter': patch
+'@mastra/cloud': patch
+'@mastra/evals': patch
+'@mastra/loggers': patch
+'@mastra/mcp': patch
+'@mastra/mcp-registry-registry': patch
+'@mastra/memory': patch
+'@mastra/google-cloud-pubsub': patch
+'@mastra/astra': patch
+'@mastra/chroma': patch
+'@mastra/clickhouse': patch
+'@mastra/cloudflare': patch
+'@mastra/cloudflare-d1': patch
+'@mastra/couchbase': patch
+'@mastra/dynamodb': patch
+'@mastra/lance': patch
+'@mastra/libsql': patch
+'@mastra/mongodb': patch
+'@mastra/mssql': patch
+'@mastra/opensearch': patch
+'@mastra/pg': patch
+'@mastra/pinecone': patch
+'@mastra/qdrant': patch
+'@mastra/s3vectors': patch
+'@mastra/turbopuffer': patch
+'@mastra/upstash': patch
+'@mastra/vectorize': patch
+'@mastra/voice-azure': patch
+'@mastra/voice-cloudflare': patch
+'@mastra/voice-deepgram': patch
+'@mastra/voice-elevenlabs': patch
+'@mastra/voice-gladia': patch
+'@mastra/voice-google': patch
+'@mastra/voice-google-gemini-live': patch
+'@mastra/voice-murf': patch
+'@mastra/voice-openai': patch
+'@mastra/voice-openai-realtime': patch
+'@mastra/voice-playai': patch
+'@mastra/voice-sarvam': patch
+'@mastra/voice-speechify': patch
 ---
 
 Breaking change to move the agent.streamVNext/generateVNext implementation to the default stream/generate. The old stream/generate have now been moved to streamLegacy and generateLegacy
