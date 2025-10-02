@@ -31,6 +31,7 @@ vi.mock('./utils/constants.js', () => ({
   LOCAL: false,
   BUILD_URL: '',
   BUSINESS_JWT_TOKEN: '',
+  PLAYGROUND_JWT_TOKEN: '',
   USER_IP_ADDRESS: '',
   PROJECT_ENV_VARS: {},
   PROJECT_ROOT: '/project',
@@ -242,6 +243,7 @@ describe('CloudDeployer', () => {
       expect(entry).toContain('process.env.CI');
       expect(entry).toContain('process.env.BUSINESS_API_RUNNER_LOGS_ENDPOINT');
       expect(entry).toContain('process.env.BUSINESS_JWT_TOKEN');
+      expect(entry).toContain('process.env.PLAYGROUND_JWT_TOKEN');
       expect(entry).toContain('process.env.MASTRA_STORAGE_URL');
       expect(entry).toContain('process.env.MASTRA_STORAGE_AUTH_TOKEN');
 
