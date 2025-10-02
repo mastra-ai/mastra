@@ -31,7 +31,7 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
     useStreamWorkflow();
   const { mutateAsync: cancelWorkflowRun, isPending: isCancellingWorkflowRun } = useCancelWorkflowRun();
 
-  const [, setRunId] = useState<string>('');
+  const [runId, setRunId] = useState<string>('');
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
 
   const stepsCount = Object.keys(workflow?.steps ?? {}).length;
