@@ -1868,6 +1868,7 @@ export class Run<
     tracingContext,
     tracingOptions,
     format,
+    onChunk,
   }: {
     resumeData?: z.input<TInput>;
     step?:
@@ -1879,6 +1880,7 @@ export class Run<
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     format?: 'aisdk' | 'mastra' | undefined;
+    onChunk?: (chunk: ChunkType) => Promise<unknown>;
   } = {}) {
     this.closeStreamAction = async () => {};
 
@@ -1907,6 +1909,9 @@ export class Run<
           try {
             for (const chunk of chunkToWrite) {
               await watchWriter.write(chunk);
+              if (onChunk) {
+                await onChunk(chunk);
+              }
             }
           } finally {
             watchWriter.releaseLock();
@@ -1934,6 +1939,8 @@ export class Run<
 
         this.closeStreamAction = async () => {
           unwatch();
+          await Promise.all(this.#observerHandlers.map(handler => handler()));
+          this.#observerHandlers = [];
 
           try {
             await writable.close();

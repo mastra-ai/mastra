@@ -702,12 +702,19 @@ export async function resumeStreamWorkflowHandler({
     }
 
     const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
+    const serverCache = mastra.getServerCache();
 
-    const stream = await _run.resumeStreamVNext({
+    const stream = _run.resumeStreamVNext({
       step: body.step,
       resumeData: body.resumeData,
       runtimeContext,
       tracingOptions,
+      onChunk: async chunk => {
+        if (serverCache) {
+          const cacheKey = runId;
+          await serverCache.listPush(cacheKey, chunk);
+        }
+      },
     });
 
     return stream;

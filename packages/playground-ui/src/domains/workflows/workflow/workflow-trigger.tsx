@@ -66,11 +66,8 @@ export interface WorkflowTriggerProps {
     runId: string;
     resumeData: Record<string, unknown>;
     runtimeContext: Record<string, unknown>;
-  }) => Promise<{
-    message: string;
-  }>;
+  }) => Promise<void>;
   streamResult: WorkflowWatchResult | null;
-  isResumingWorkflow: boolean;
   isCancellingWorkflowRun: boolean;
   cancelWorkflowRun: ({ workflowId, runId }: { workflowId: string; runId: string }) => Promise<{
     message: string;
@@ -89,7 +86,6 @@ export function WorkflowTrigger({
   observeWorkflowStream,
   isStreamingWorkflow,
   streamResult,
-  isResumingWorkflow,
   isCancellingWorkflowRun,
   cancelWorkflowRun,
 }: WorkflowTriggerProps) {
@@ -199,7 +195,7 @@ export function WorkflowTrigger({
   return (
     <div className="h-full pt-3 pb-12">
       <div className="space-y-4 px-5 pb-5 border-b-sm border-border1">
-        {(isResumingWorkflow || (isSuspendedSteps && isStreamingWorkflow)) && (
+        {isSuspendedSteps && isStreamingWorkflow && (
           <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mx-5 -mt-5 border-b-sm border-border1">
             <Icon>
               <Loader2 className="animate-spin text-icon6" />
@@ -266,7 +262,7 @@ export function WorkflowTrigger({
                 )}
                 <WorkflowInputData
                   schema={stepSchema}
-                  isSubmitLoading={isResumingWorkflow}
+                  isSubmitLoading={isStreamingWorkflow}
                   submitButtonLabel="Resume"
                   onSubmit={data => {
                     const stepIds = step.stepId?.split('.');

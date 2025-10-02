@@ -92,7 +92,7 @@ const JSONInput = ({
   withoutSubmit,
 }: WorkflowInputDataProps) => {
   const [errors, setErrors] = useState<string[]>([]);
-  const [inputData, setInputData] = useState<string>(JSON.stringify(defaultValues ?? {}, null, 2));
+  const [inputData, setInputData] = useState<string>(() => JSON.stringify(defaultValues ?? {}, null, 2));
 
   const handleSubmit = () => {
     setErrors([]);

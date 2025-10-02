@@ -80,7 +80,7 @@ export const mapWorkflowStreamChunkToWatchResult = (
         workflowState: {
           ...prev?.payload?.workflowState,
           status: 'running',
-          steps: {},
+          steps: prev?.runId === chunk.runId ? (prev?.payload?.workflowState?.steps ?? {}) : {},
         },
       },
     };

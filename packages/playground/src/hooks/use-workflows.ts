@@ -180,6 +180,7 @@ export const useStreamWorkflow = () => {
   const [isStreaming, setIsStreaming] = useState(false);
   const readerRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);
   const observerRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);
+  const resumeStreamRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);
   const isMountedRef = useRef(true);
 
   // Cleanup on unmount
@@ -231,7 +232,7 @@ export const useStreamWorkflow = () => {
         runtimeContext.set(key as keyof RuntimeContext, value);
       });
       const workflow = client.getWorkflow(workflowId);
-      const stream = await workflow.streamVNext({ runId, inputData, runtimeContext, closeOnSuspend: false });
+      const stream = await workflow.streamVNext({ runId, inputData, runtimeContext, closeOnSuspend: true });
 
       if (!stream) throw new Error('No stream returned');
 
@@ -335,6 +336,79 @@ export const useStreamWorkflow = () => {
     },
   });
 
+  const resumeWorkflowStream = useMutation({
+    mutationFn: async ({
+      workflowId,
+      runId,
+      step,
+      resumeData,
+      runtimeContext: playgroundRuntimeContext,
+    }: {
+      workflowId: string;
+      step: string | string[];
+      runId: string;
+      resumeData: Record<string, unknown>;
+      runtimeContext: Record<string, unknown>;
+    }) => {
+      // Clean up any existing reader before starting new stream
+      if (resumeStreamRef.current) {
+        resumeStreamRef.current.releaseLock();
+      }
+
+      if (!isMountedRef.current) return;
+
+      setIsStreaming(true);
+      const workflow = client.getWorkflow(workflowId);
+      const runtimeContext = new RuntimeContext();
+      Object.entries(playgroundRuntimeContext).forEach(([key, value]) => {
+        runtimeContext.set(key as keyof RuntimeContext, value);
+      });
+      const stream = await workflow.resumeStreamVNext({ runId, step, resumeData, runtimeContext });
+
+      if (!stream) throw new Error('No stream returned');
+
+      // Get a reader from the ReadableStream and store it in ref
+      const reader = stream.getReader();
+      resumeStreamRef.current = reader;
+
+      try {
+        while (true) {
+          if (!isMountedRef.current) break;
+
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          // Only update state if component is still mounted
+          if (isMountedRef.current) {
+            setStreamResult(prev => {
+              const newResult = mapWorkflowStreamChunkToWatchResult(prev, value);
+              return newResult;
+            });
+
+            if (value.type === 'workflow-step-start') {
+              setIsStreaming(true);
+            }
+
+            if (value.type === 'workflow-step-suspended') {
+              setIsStreaming(false);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error resuming workflow stream:', error);
+        //silent error
+      } finally {
+        if (isMountedRef.current) {
+          setIsStreaming(false);
+        }
+        if (resumeStreamRef.current) {
+          resumeStreamRef.current.releaseLock();
+          resumeStreamRef.current = null;
+        }
+      }
+    },
+  });
+
   const closeStreamsAndReset = () => {
     setIsStreaming(false);
     setStreamResult({} as WorkflowWatchResult);
@@ -354,6 +428,14 @@ export const useStreamWorkflow = () => {
       }
       observerRef.current = null;
     }
+    if (resumeStreamRef.current) {
+      try {
+        resumeStreamRef.current.releaseLock();
+      } catch (error) {
+        // Reader might already be released, ignore the error
+      }
+      resumeStreamRef.current = null;
+    }
   };
 
   return {
@@ -362,6 +444,7 @@ export const useStreamWorkflow = () => {
     isStreaming,
     observeWorkflowStream,
     closeStreamsAndReset,
+    resumeWorkflowStream,
   };
 };
 

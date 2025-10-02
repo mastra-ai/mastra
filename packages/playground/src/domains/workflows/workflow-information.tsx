@@ -12,7 +12,7 @@ import {
   useWorkflow,
 } from '@mastra/playground-ui';
 
-import { useExecuteWorkflow, useResumeWorkflow, useStreamWorkflow, useCancelWorkflowRun } from '@/hooks/use-workflows';
+import { useExecuteWorkflow, useStreamWorkflow, useCancelWorkflowRun } from '@/hooks/use-workflows';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { CopyIcon } from 'lucide-react';
@@ -26,9 +26,14 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
   const { data: workflow, isLoading } = useWorkflow(workflowId);
 
   const { createWorkflowRun } = useExecuteWorkflow();
-  const { resumeWorkflow } = useResumeWorkflow();
-  const { streamWorkflow, streamResult, isStreaming, observeWorkflowStream, closeStreamsAndReset } =
-    useStreamWorkflow();
+  const {
+    streamWorkflow,
+    streamResult,
+    isStreaming,
+    observeWorkflowStream,
+    closeStreamsAndReset,
+    resumeWorkflowStream,
+  } = useStreamWorkflow();
   const { mutateAsync: cancelWorkflowRun, isPending: isCancellingWorkflowRun } = useCancelWorkflowRun();
 
   const [runId, setRunId] = useState<string>('');
@@ -81,10 +86,9 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
                 isLoading={isLoading}
                 createWorkflowRun={createWorkflowRun.mutateAsync}
                 streamWorkflow={streamWorkflow.mutateAsync}
-                resumeWorkflow={resumeWorkflow.mutateAsync}
+                resumeWorkflow={resumeWorkflowStream.mutateAsync}
                 streamResult={streamResult}
                 isStreamingWorkflow={isStreaming}
-                isResumingWorkflow={resumeWorkflow.isPending}
                 isCancellingWorkflowRun={isCancellingWorkflowRun}
                 cancelWorkflowRun={cancelWorkflowRun}
               />
@@ -101,10 +105,9 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
               isLoading={isLoading}
               createWorkflowRun={createWorkflowRun.mutateAsync}
               streamWorkflow={streamWorkflow.mutateAsync}
-              resumeWorkflow={resumeWorkflow.mutateAsync}
+              resumeWorkflow={resumeWorkflowStream.mutateAsync}
               streamResult={streamResult}
               isStreamingWorkflow={isStreaming}
-              isResumingWorkflow={resumeWorkflow.isPending}
               isCancellingWorkflowRun={isCancellingWorkflowRun}
               cancelWorkflowRun={cancelWorkflowRun}
               observeWorkflowStream={observeWorkflowStream.mutate}

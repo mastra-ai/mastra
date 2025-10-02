@@ -737,23 +737,73 @@ export class Workflow extends BaseResource {
    * @param params - Object containing the runId, step, resumeData and runtimeContext
    * @returns Promise containing the workflow resume results
    */
-  resumeStreamVNext(params: {
+  async resumeStreamVNext(params: {
     runId: string;
     step: string | string[];
     resumeData?: Record<string, any>;
     runtimeContext?: RuntimeContext | Record<string, any>;
     tracingOptions?: TracingOptions;
   }): Promise<ReadableStream> {
+    const searchParams = new URLSearchParams();
+    searchParams.set('runId', params.runId);
     const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
-    return this.request(`/api/workflows/${this.workflowId}/resume-stream?runId=${params.runId}`, {
-      method: 'POST',
-      body: {
-        step: params.step,
-        resumeData: params.resumeData,
-        runtimeContext,
-        tracingOptions: params.tracingOptions,
+    const response: Response = await this.request(
+      `/api/workflows/${this.workflowId}/resume-stream?${searchParams.toString()}`,
+      {
+        method: 'POST',
+        body: {
+          step: params.step,
+          resumeData: params.resumeData,
+          runtimeContext,
+          tracingOptions: params.tracingOptions,
+        },
+        stream: true,
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to stream vNext workflow: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    //using undefined instead of empty string to avoid parsing errors
+    let failedChunk: string | undefined = undefined;
+
+    // Create a transform stream that processes the response body
+    const transformStream = new TransformStream<ArrayBuffer, StreamVNextChunkType>({
+      start() {},
+      async transform(chunk, controller) {
+        try {
+          // Decode binary data to text
+          const decoded = new TextDecoder().decode(chunk);
+
+          // Split by record separator
+          const chunks = decoded.split(RECORD_SEPARATOR);
+
+          // Process each chunk
+          for (const chunk of chunks) {
+            if (chunk) {
+              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
+              try {
+                const parsedChunk = JSON.parse(newChunk);
+                controller.enqueue(parsedChunk);
+                failedChunk = undefined;
+              } catch {
+                failedChunk = newChunk;
+              }
+            }
+          }
+        } catch {
+          // Silently ignore processing errors
+        }
       },
     });
+
+    // Pipe the response body through the transform stream
+    return response.body.pipeThrough(transformStream);
   }
   /**
    * Watches workflow transitions in real-time
