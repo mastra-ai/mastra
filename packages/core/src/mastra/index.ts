@@ -767,7 +767,7 @@ do:
    *     weatherAgent: new Agent({
    *       name: 'weather-agent',
    *       instructions: 'You provide weather information',
-   *       model: openai('gpt-4o')
+   *       model: 'openai/gpt-5'
    *     })
    *   }
    * });
