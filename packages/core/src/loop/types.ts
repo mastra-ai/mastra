@@ -15,7 +15,7 @@ import type { MessageList } from '../agent/message-list';
 import type { AISpan, AISpanType } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { OutputProcessor } from '../processors';
+import type { OutputProcessor, ProcessorState } from '../processors';
 import type { OutputSchema } from '../stream/base/schema';
 import type {
   ChunkType,
@@ -102,6 +102,7 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema
     serialize: () => any;
     deserialize: (state: any) => void;
   };
+  processorStates?: Map<string, ProcessorState<OUTPUT>>;
 };
 
 export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = {
