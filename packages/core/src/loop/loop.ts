@@ -2,6 +2,7 @@ import { generateId } from 'ai-v5';
 import type { ToolSet } from 'ai-v5';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { ConsoleLogger } from '../logger';
+import type { ProcessorState } from '../processors';
 import { createDestructurableOutput, MastraModelOutput } from '../stream/base/output';
 import type { OutputSchema } from '../stream/base/schema';
 import { getRootSpan } from './telemetry';
@@ -99,6 +100,11 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   const deserializeStreamState = (state: any) => {
     modelOutput?.deserializeState(state);
   };
+
+  // Create processor states map that will be shared across all LLM execution steps
+  const processorStates =
+    outputProcessors && outputProcessors.length > 0 ? new Map<string, ProcessorState<OUTPUT>>() : undefined;
+
   const workflowLoopProps: LoopRun<Tools, OUTPUT> = {
     resumeContext,
     models,
@@ -120,6 +126,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       serialize: serializeStreamState,
       deserialize: deserializeStreamState,
     },
+    processorStates,
     ...rest,
   };
 
