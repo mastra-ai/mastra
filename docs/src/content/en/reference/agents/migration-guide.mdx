@@ -4,34 +4,32 @@ import { Tag } from '@/components/tag';
 # Migration Guide: VNext to Standard APIs
 
 <Callout type="info">
-  This guide covers the migration from the original `generate()` and `stream()` methods (now renamed to `generateLegacy()` and `streamLegacy()`) to the new standard `generate()` and `stream()` methods (formerly `generateVNext()` and `streamVNext()`).
+ The `streamVNext()` and `generateVNext()` methods in Mastra agents are becoming the default `stream()` and `generate()` methods respectively.
 </Callout>
 
 <Callout type="warning">
   **Important Naming Clarification**: 
-  - The `streamVNext()` and `generateVNext()` methods have been renamed to `stream()` and `generate()` respectively. These are now the primary APIs for V2 models.
-  - The original `stream()` and `generate()` methods have been renamed to `streamLegacy()` and `generateLegacy()` to maintain backward compatibility with V1 models.
-  - If your code currently uses `agent.stream()` and you're getting an error about needing AI SDK v5 models, it means you need to use `agent.streamLegacy()` instead to continue using V1 models.
-  - Similarly, if your code uses `agent.generate()` and encounters the same error, you should use `agent.generateLegacy()` for V1 model compatibility.
+  - The `streamVNext()` and `generateVNext()` methods have been renamed to `stream()` and `generate()` respectively. These are now the primary APIs for AI SDK v5.
+  - The original `stream()` and `generate()` methods have been renamed to `streamLegacy()` and `generateLegacy()` to maintain backward compatibility with AI SDK v4.
+  - If your code currently uses `agent.stream()` and you're getting an error about needing AI SDK v5 models, it means you need to use `agent.streamLegacy()` instead to continue using v5 models.
+  - Similarly, if your code uses `agent.generate()` and encounters the same error, you should use `agent.generateLegacy()` for v4 model compatibility.
 </Callout>
 
 ## Overview
 
-The `streamVNext()` and `generateVNext()` methods in Mastra agents have been renamed to `stream()` and `generate()` respectively. These are now the standard APIs for V2 models with full AI SDK v5 compatibility. The original `stream()` and `generate()` methods have been renamed to `streamLegacy()` and `generateLegacy()` to maintain backward compatibility with V1 models.
-
-**Deprecation Notice**: The legacy methods will be deprecated on September 23rd, 2025.
+As of `v 0.20.00`, the `streamVNext()` and `generateVNext()` methods in Mastra agents have been renamed to `stream()` and `generate()` respectively. These are now the standard APIs for V2 models with full AI SDK v5 compatibility. The original `stream()` and `generate()` methods have been renamed to `streamLegacy()` and `generateLegacy()` to maintain backward compatibility with V1 models.
 
 ## Key Differences
 
 ### 1. Model Version Support
 
-- **Legacy APIs (`generateLegacy`, `streamLegacy`)**: Only support V1 models
-- **Current APIs (`generate`, `stream`)**: Only support V2 models
+- **Legacy APIs (`generateLegacy`, `streamLegacy`)**: Only support AI SDK v4 models
+- **Current APIs (`generate`, `stream`)**: Only support AI SDK v5 models
 
 ### 2. Output Format Options
 
 - **Legacy APIs**: Limited output formatting
-- **Current APIs**: Support both Mastra native format and AI SDK v5 compatibility mode via `format` option
+- **Current APIs**: Support both Mastra native format and AI SDK v5 compatibility mode via the `format` option
 
 ### 3. Return Types
 
@@ -113,10 +111,9 @@ const streamResult = await agent.stream(messages, {
 | `toolChoice` | `toolChoice` | Same location |
 | `providerOptions` | `providerOptions` | Same location |
 
-## Enhanced Features in Standard APIs
 
-### 1. Format Options
-The current APIs support a `format` option that allows you to choose between Mastra's native format and AI SDK v5 compatibility:
+## Format Options
+The current APIs support a `format` option that allows you to choose between Mastra's native format, AI SDK v5, and other frontends like `copilotkit` and `assistant-ui`:
 
 ```typescript
 // Mastra native format (default)
@@ -130,100 +127,20 @@ const result = await agent.stream(messages, {
 });
 ```
 
-### 2. Callback System
-Current APIs organize callbacks in a dedicated object:
+## Return Type Differences
 
-```typescript
-const result = await agent.stream(messages, {
-  callbacks: {
-    onFinish: (result) => console.log('Finished:', result),
-    onStepFinish: (step) => console.log('Step finished:', step),
-    onChunk: (chunk) => console.log('Chunk received:', chunk),
-    onError: (error) => console.log('Error occurred:', error),
-    onAbort: () => console.log('Stream aborted')
-  }
-});
-```
-
-### 3. Structured Output Configuration
-The `structuredOutput` parameter in current APIs includes additional options:
-
-```typescript
-const result = await agent.generate(messages, {
-  structuredOutput: {
-    schema: userSchema,
-    model: openai('gpt-4o'),
-    errorStrategy: 'retry',
-    fallbackValue: { name: 'Unknown', age: 0 }
-  }
-});
-```
-
-## Important Notes
-
-1. **Model Version Check**: Current APIs will throw an error if used with V1 models. Ensure your models are V2 compatible.
-
-2. **Return Type Differences**: The return types are different between legacy and current APIs. Update your code to handle the new return structures.
-
-3. **Callback Organization**: Callbacks are now organized under a `callbacks` object rather than being top-level parameters.
-
-4. **Model Settings**: Model-specific settings like `temperature` are now grouped under `modelSettings`.
-
-5. **API Status**: These APIs are now the default implementation in Mastra.
-
-## Common Migration Scenarios
-
-### Scenario 1: Simple Chat Application
-If your application uses basic chat functionality:
-
-```typescript
-// Before
-const response = await agent.generateLegacy(messages);
-
-// After  
-const response = await agent.generate(messages);
-```
-
-### Scenario 2: Application with Temperature Control
-If you customize model parameters:
-
-```typescript
-// Before
-const response = await agent.generateLegacy(messages, {
-  temperature: 0.3
-});
-
-// After
-const response = await agent.generate(messages, {
-  modelSettings: {
-    temperature: 0.3
-  }
-});
-```
-
-### Scenario 3: Streaming with Callbacks
-If you use streaming with event handlers:
-
-```typescript
-// Before
-const stream = await agent.streamLegacy(messages, {
-  onFinish: handleFinish,
-  onStepFinish: handleStep
-});
-
-// After
-const stream = await agent.stream(messages, {
-  callbacks: {
-    onFinish: handleFinish,
-    onStepFinish: handleStep
-  }
-});
-```
 
 ## Migration Checklist
 
-- [ ] Identify which models you're using (V1 or V2)
-- [ ] Update method calls (`generate` → `generateLegacy` or use new `generate` with V2 models)
+### If you're already using `streamVNext` and `generateVNext`
+
+Just find/replace the methods to `stream` and `generate` respectively.
+
+### If you're using the old `stream` and `generate`
+
+Decide whether you want to upgrade or not. If you don't, just find/replace to `streamLegacy` and `generateLegacy`. Otherwise, follow this list: 
+
+
 - [ ] Move model settings to `modelSettings` object
 - [ ] Move callbacks to `callbacks` object
 - [ ] Test return type handling in your application
