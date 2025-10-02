@@ -371,20 +371,6 @@ export class Mastra<
    * The constructor initializes all the components specified in the config, sets up
    * internal systems like logging and telemetry, and registers components with each other.
    *
-   * ## Initialization Order
-   * 1. **Server Cache**: Internal cache for temporary server data
-   * 2. **Events & PubSub**: Event system and pub/sub infrastructure
-   * 3. **Logger**: Logging system (defaults to ConsoleLogger)
-   * 4. **Telemetry**: OpenTelemetry tracing and metrics
-   * 5. **AI Observability**: AI-specific tracing and monitoring
-   * 6. **Storage**: Data persistence layer
-   * 7. **Vectors**: Vector stores for semantic search
-   * 8. **MCP Servers**: Model Context Protocol servers
-   * 9. **Agents**: AI agents with tools and memory
-   * 10. **Networks**: Agent networks for multi-agent systems
-   * 11. **Workflows**: Both legacy and modern workflow systems
-   * 12. **Scorers**: Evaluation and scoring systems
-   *
    * @example
    * ```typescript
    * const mastra = new Mastra({
