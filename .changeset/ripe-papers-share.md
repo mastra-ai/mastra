@@ -3,13 +3,9 @@
 'create-mastra': minor
 '@mastra/playground-ui': minor
 '@mastra/client-js': minor
-'@mastra/deployer-cloudflare': minor
 '@mastra/ai-sdk': minor
-'@mastra/deployer-netlify': minor
 '@mastra/deployer': minor
 '@mastra/inngest': minor
-'@mastra/deployer-vercel': minor
-'@mastra/deployer-cloud': minor
 '@mastra/server': minor
 '@mastra/core': minor
 'mastra': minor
