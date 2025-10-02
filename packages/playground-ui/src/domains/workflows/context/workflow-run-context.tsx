@@ -24,7 +24,7 @@ export function WorkflowRunProvider({
   const [result, setResult] = useState<WorkflowWatchResult | null>(() =>
     snapshot ? convertWorkflowRunStateToWatchResult(snapshot) : null,
   );
-  const [payload, setPayload] = useState<any>(null);
+  const [payload, setPayload] = useState<any>(() => snapshot?.context?.input ?? null);
 
   const clearData = () => {
     setResult(null);
@@ -34,6 +34,7 @@ export function WorkflowRunProvider({
   useEffect(() => {
     if (snapshot?.runId) {
       setResult(convertWorkflowRunStateToWatchResult(snapshot));
+      setPayload(snapshot.context?.input);
     }
   }, [snapshot]);
 
