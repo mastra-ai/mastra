@@ -682,9 +682,7 @@ export const AgentMetadataModelSwitcher = ({
                 <AlertDescription as="p">
                   Set the{' '}
                   <code className="px-1 py-0.5 bg-yellow-100 dark:bg-yellow-900/50 rounded">
-                    {Array.isArray(currentProvider.envVar)
-                      ? currentProvider.envVar.join(', ')
-                      : currentProvider.envVar}
+                    {Array.isArray(currentProvider.envVar) ? currentProvider.envVar.join(', ') : currentProvider.envVar}
                   </code>{' '}
                   environment{' '}
                   {Array.isArray(currentProvider.envVar) && currentProvider.envVar.length > 1
