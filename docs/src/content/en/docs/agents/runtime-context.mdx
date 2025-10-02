@@ -96,7 +96,7 @@ const agent = mastra.getAgent("testWeatherAgent");
 
 const runtimeContext = new RuntimeContext<WeatherRuntimeContext>();
 
-runtimeContext.set("temperature-unit", "fahrenheit");
+runtimeContext.set("temperature-unit", "celsius");
 
 const response = await agent.generate("What's the weather in London?", {
   runtimeContext
