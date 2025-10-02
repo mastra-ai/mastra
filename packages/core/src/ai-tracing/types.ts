@@ -672,7 +672,7 @@ export interface AITracingExporter {
     score: number;
     reason?: string;
     scorerName: string;
-    metadata: Record<string, any>;
+    metadata?: Record<string, any>;
   }): Promise<void>;
 
   /** Shutdown exporter */
