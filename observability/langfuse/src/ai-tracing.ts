@@ -100,44 +100,6 @@ export class LangfuseExporter implements AITracingExporter {
     }
   }
 
-  async addScoreToTrace({
-    traceId,
-    spanId,
-    score,
-    reason,
-    scorerName,
-    metadata,
-  }: {
-    traceId: string;
-    spanId?: string;
-    score: number;
-    reason?: string;
-    scorerName: string;
-    metadata: Record<string, any>;
-  }): Promise<void> {
-    if (!this.client) return;
-
-    try {
-      await this.client.score({
-        id: `${traceId}-${scorerName}`,
-        traceId,
-        observationId: spanId,
-        name: scorerName,
-        value: score,
-        ...(metadata?.sessionId ? { sessionId: metadata.sessionId } : {}),
-        metadata: { reason },
-        dataType: 'NUMERIC',
-      });
-    } catch (error) {
-      this.logger.error('Langfuse exporter: Error adding score to trace', {
-        error,
-        traceId,
-        spanId,
-        scorerName,
-      });
-    }
-  }
-
   private async handleSpanStarted(span: AnyExportedAISpan): Promise<void> {
     if (span.isRootSpan) {
       this.initTrace(span);
@@ -375,6 +337,44 @@ export class LangfuseExporter implements AITracingExporter {
     }
 
     return payload;
+  }
+
+  async addScoreToTrace({
+    traceId,
+    spanId,
+    score,
+    reason,
+    scorerName,
+    metadata,
+  }: {
+    traceId: string;
+    spanId?: string;
+    score: number;
+    reason?: string;
+    scorerName: string;
+    metadata: Record<string, any>;
+  }): Promise<void> {
+    if (!this.client) return;
+
+    try {
+      await this.client.score({
+        id: `${traceId}-${scorerName}`,
+        traceId,
+        observationId: spanId,
+        name: scorerName,
+        value: score,
+        ...(metadata?.sessionId ? { sessionId: metadata.sessionId } : {}),
+        metadata: { reason },
+        dataType: 'NUMERIC',
+      });
+    } catch (error) {
+      this.logger.error('Langfuse exporter: Error adding score to trace', {
+        error,
+        traceId,
+        spanId,
+        scorerName,
+      });
+    }
   }
 
   async shutdown(): Promise<void> {
