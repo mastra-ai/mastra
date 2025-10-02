@@ -32,7 +32,6 @@ import type {
   SaveMessageToMemoryResponse,
   McpServerListResponse,
   McpServerToolListResponse,
-  GetVNextNetworkResponse,
   GetNetworkMemoryThreadParams,
   CreateNetworkMemoryThreadParams,
   SaveNetworkMessageToMemoryParams,
