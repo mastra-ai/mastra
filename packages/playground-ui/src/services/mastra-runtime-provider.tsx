@@ -169,8 +169,9 @@ export function MastraRuntimeProvider({
   children: ReactNode;
 }> &
   ChatProps) {
+  const initializeMessages = () => (memory ? initializeMessageState(initialMessages || []) : []);
   const [isLegacyRunning, setIsLegacyRunning] = useState(false);
-  const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>([]);
+  const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>(initializeMessages());
 
   const {
     setMessages,
@@ -182,7 +183,7 @@ export function MastraRuntimeProvider({
     isRunning: isRunningStream,
   } = useChat<ThreadMessageLike>({
     agentId,
-    initializeMessages: () => (memory ? initializeMessageState(initialMessages || []) : []),
+    initializeMessages,
   });
 
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
