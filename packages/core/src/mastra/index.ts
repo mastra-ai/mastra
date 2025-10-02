@@ -756,9 +756,6 @@ do:
   /**
    * Retrieves a registered agent by its name.
    *
-   * Agents are autonomous AI systems that can use tools, maintain memory, and perform
-   * complex tasks. Each agent is registered with a unique name that serves as its identifier.
-   *
    * @template TAgentName - The specific agent name type from the registered agents
    * @throws {MastraError} When the agent with the specified name is not found
    *
@@ -878,10 +875,6 @@ do:
   /**
    * Retrieves a registered vector store by its name.
    *
-   * Vector stores are used for semantic search, retrieval-augmented generation (RAG),
-   * and storing embeddings. They enable agents and workflows to perform similarity
-   * searches over large datasets of text, images, or other vectorized content.
-   *
    * @template TVectorName - The specific vector store name type from the registered vectors
    * @throws {MastraError} When the vector store with the specified name is not found
    *
@@ -940,10 +933,6 @@ do:
   /**
    * Returns all registered vector stores as a record keyed by their names.
    *
-   * Vector stores enable semantic search and retrieval-augmented generation (RAG)
-   * capabilities. This method provides access to all configured vector stores for
-   * bulk operations or discovery.
-   *
    * @example Listing all vector stores
    * ```typescript
    * const mastra = new Mastra({
@@ -969,10 +958,6 @@ do:
 
   /**
    * Gets the currently configured deployment provider.
-   *
-   * Deployment providers handle the publishing and hosting of Mastra applications
-   * to various cloud platforms and services. This method returns the deployer
-   * instance that was configured during Mastra initialization.
    *
    * @example
    * ```typescript
