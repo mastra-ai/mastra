@@ -253,71 +253,13 @@ const result = await agent.generate(messages, {
 });
 ```
 
-## Using Processors with Agents
-
-Configure processors when calling agent methods:
-
-```typescript
-const result = await agent.stream(messages, {
-  inputProcessors: [moderationProcessor, piiDetector],
-  outputProcessors: [structuredOutputProcessor]
-});
-```
-
 ### Execution Order
 
 1. **Input processors** run sequentially before LLM call
 2. **Output stream processors** run for each chunk during streaming
 3. **Output result processors** run after streaming/generation completes
 
-### Error Handling
 
-Use `abort()` to stop execution:
+See the [Output Processors documentation](/docs/agents/output-processors) for details on processing LLM responses.
+See the [Input Processors documentation](/docs/agents/input-processors) for details on processing prompt messages.
 
-```typescript
-if (violatesPolicy(content)) {
-  abort('Content policy violation detected');
-}
-```
-
-The abort function throws a `TripWire` error that propagates to the caller.
-
-## Built-in Processors
-
-Mastra provides built-in processor implementations:
-
-- **ModerationProcessor** - Content moderation with configurable categories
-- **PIIDetector** - PII detection and redaction
-- **PromptInjectionDetector** - Detect prompt injection attempts
-- **LanguageDetector** - Language detection and translation
-- **StructuredOutputProcessor** - Convert output to JSON
-- **TokenLimiterProcessor** - Limit token count in messages
-- **UnicodeNormalizer** - Normalize Unicode characters
-- **SystemPromptScrubber** - Detect system prompt leakage
-- **BatchPartsProcessor** - Batch stream chunks for efficiency
-
-## Creating Custom Processors
-
-Implement the `Processor` interface:
-
-```typescript
-import type { InputProcessor } from '@mastra/core';
-
-class CustomProcessor implements InputProcessor {
-  readonly name = 'custom-processor';
-
-  async processInput({ messages, abort }) {
-    // Your logic here
-    return messages;
-  }
-}
-
-const processor = new CustomProcessor();
-const result = await agent.stream(messages, {
-  inputProcessors: [processor]
-});
-```
-
-<Callout type="warning">
-Processors run synchronously in the execution pipeline. Avoid expensive operations that impact latency.
-</Callout>
