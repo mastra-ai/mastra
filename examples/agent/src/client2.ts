@@ -23,7 +23,7 @@ async function main() {
     },
   });
 
-  mcpClient.progress.onUpdate('myMcpServerTwo', progressHandler);
+  await mcpClient.progress.onUpdate('myMcpServerTwo', progressHandler);
 
   try {
     console.log('Connecting to MCP server...');
