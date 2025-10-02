@@ -604,15 +604,15 @@ describe('MastraMCPClient - Progress Tests', () => {
 
         for (let i = 1; i <= count; i++) {
           if (extra._meta?.progressToken) {
-          await testServer.mcpServer.server.notification({
-            method: 'notifications/progress',
-            params: {
-              progress: i,
-              total: count,
-              message: `Long task progress ${i}/${count}`,
-              // Use a fixed token for test assertions; server may also attach a token automatically
-              progressToken: extra._meta.progressToken
-            },
+            await testServer.mcpServer.server.notification({
+              method: 'notifications/progress',
+              params: {
+                progress: i,
+                total: count,
+                message: `Long task progress ${i}/${count}`,
+                // Use a fixed token for test assertions; server may also attach a token automatically
+                progressToken: extra._meta.progressToken,
+              },
             });
           }
           await sleep(delayMs);
