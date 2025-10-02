@@ -102,7 +102,7 @@ export interface Config<
   /**
    * Logger implementation for application logging and debugging.
    * Set to `false` to disable logging entirely.
-   * @default ConsoleLogger with INFO level in development, WARN in production
+   * @default `INFO` level in development, `WARN` in production.
    */
   logger?: TLogger | false;
 
