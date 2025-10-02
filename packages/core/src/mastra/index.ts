@@ -76,7 +76,6 @@ export interface Config<
   TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
 > {
   /**
-   * AI agents that can perform tasks using tools and memory.
    * Agents are autonomous systems that can make decisions and take actions.
    */
   agents?: TAgents;
@@ -113,7 +112,6 @@ export interface Config<
   legacy_workflows?: TLegacyWorkflows;
 
   /**
-   * Modern workflow definitions for orchestrating complex sequences of operations.
    * Workflows provide type-safe, composable task execution with built-in error handling.
    */
   workflows?: TWorkflows;
@@ -150,7 +148,6 @@ export interface Config<
   server?: ServerConfig;
 
   /**
-   * Model Context Protocol (MCP) servers for extending agent capabilities.
    * MCP servers provide tools and resources that agents can use.
    */
   mcpServers?: TMCPServers;
@@ -167,7 +164,6 @@ export interface Config<
   pubsub?: PubSub;
 
   /**
-   * Evaluation scorers for measuring and improving AI system performance.
    * Scorers help assess the quality of agent responses and workflow outputs.
    */
   scorers?: TScorers;
@@ -206,23 +202,7 @@ export interface Config<
  *
  * The `Mastra` class serves as the main entry point and registry for all components in a Mastra application.
  * It coordinates the interaction between agents, workflows, storage systems, and other services.
- *
- * ## Key Features
- * - **Agent Management**: Register and access AI agents with tools and memory
- * - **Workflow Orchestration**: Execute complex, type-safe workflows with built-in error handling
- * - **Storage Integration**: Persist data, conversation history, and application state
- * - **Observability**: Built-in logging, telemetry, and tracing for monitoring
- * - **Event System**: Pub/sub architecture for event-driven communication
- * - **Extensibility**: Support for MCP servers, custom tools, and third-party integrations
- *
- * ## Architecture
- * Think of `Mastra` as a top-level registry where:
- * - **Agents** are autonomous AI systems that can use tools and maintain memory
- * - **Workflows** are deterministic sequences of operations with type safety
- * - **Tools** are functions that agents can call (registered with agents, not Mastra directly)
- * - **Storage** provides persistence for conversations, state, and application data
- * - **Integrations** make external services accessible across the entire system
- *
+
  * @template TAgents - Record of agent instances keyed by their names
  * @template TLegacyWorkflows - Record of legacy workflow instances for backward compatibility
  * @template TWorkflows - Record of modern workflow instances
