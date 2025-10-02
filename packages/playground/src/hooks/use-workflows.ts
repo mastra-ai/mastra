@@ -203,6 +203,14 @@ export const useStreamWorkflow = () => {
         }
         observerRef.current = null;
       }
+      if (resumeStreamRef.current) {
+        try {
+          resumeStreamRef.current.releaseLock();
+        } catch (error) {
+          // Reader might already be released, ignore the error
+        }
+        resumeStreamRef.current = null;
+      }
     };
   }, []);
 
