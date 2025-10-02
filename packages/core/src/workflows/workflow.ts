@@ -42,6 +42,36 @@ import type {
   WorkflowRunState,
 } from './types';
 
+/**
+ * Maps a value within the scope of the workflow to the input of the next step or workflow.
+ *
+ * Supported mappings:
+ * - previous step output
+ * - init data (input data of the workflow itself)
+ * @param params Configuration parameters for the mapping
+ * @param params.step The step to map the value from
+ * @param params.initData The reference to the workflow to map the value from
+ * @param params.path The path to the value to extract initData or step output to bind. `.` can be used to map the entire step output or init data.
+ * @returns The mapped variable
+ *
+ * @example
+ * ```typescript
+ * workflow
+ *   .then(step1)
+ *   .map({
+ *     test: mapVariable({
+ *       initData: workflow,
+ *       path: 'myInputProperty1.myProperty2',
+ *     }),
+ *     test2: mapVariable({
+ *       step: step1,
+ *       path: '.',
+ *     }),
+ *   })
+ *   .then(step2)
+ *   .commit();
+ * ```
+ */
 export function mapVariable<TStep extends Step<string, any, any, any, any, any>>({
   step,
   path,
@@ -107,11 +137,89 @@ type ToolStep<
  * @param params Configuration parameters for the step
  * @param params.id Unique identifier for the step
  * @param params.description Optional description of what the step does
- * @param params.inputSchema Zod schema defining the input structure
- * @param params.outputSchema Zod schema defining the output structure
- * @param params.execute Function that performs the step's operations
+ * @param params.inputSchema Zod schema defining the input structure of the inputData argument of the execute function
+ * @param params.outputSchema Zod schema defining the output structure of the returned value of the execute function.
+ * @param params.resumeSchema Zod schema defining the structure of the resumeData argument of the execute function.
+ * @param params.suspendSchema Zod schema defining the structure of the input of the suspend function argumentof the execute function.
+ * @param params.retries Number of retries to attempt if the step fails.
+ * @param params.scorers DynamicArgument<MastraScorers> - Optional scorers to use for the step.
+ * @param params.execute Function that performs the step's operations. The arguments of the execute function are:
+ * - inputData
+ * - resumeData
+ * - suspend
+ * - mastra
+ * - runtimeContext
+ * - abortSignal
+ * - writer
+ * - abort
+ * - bail
  * @returns A Step object that can be added to the workflow
+ *
+ * A step can also be created from a Tool, Agent or Workflow
+ *
+ *
+ * @example
+ * ```typescript
+ * import { createStep } from "@mastra/core/workflows"
+ *
+ * const step1 = createStep({
+ *   id: 'step1',
+ *   inputSchema: z.object({
+ *    start: z.string()
+ *   }),
+ *   outputSchema: z.object({
+ *     start: z.string()
+ *     }),
+ *   }),
+ *   execute: async ({ inputData }) => {
+ *     return inputData;
+ *   },
+ * });
+ *
+ * const step2 = createStep({
+ *   id: 'step2',
+ *   inputSchema: z.object({
+ *     start: z.string()
+ *   }),
+ *   resumeSchema: z.object({
+ *     resume: z.string()
+ *   }),
+ *   suspendSchema: z.object({
+ *     message: z.string()
+ *   }),
+ *   outputSchema: z.object({
+ *     fullText: z.string()
+ *   }),
+ *   execute: async ({ inputData, resumeData, suspend }) => {
+ *     if (!resumeData.resume) {
+ *       return suspend({ message: 'Please provide the resume value' });
+ *     }
+ *     const fullText = `${inputData.start} ${resumeData.resume}`;
+ *     return {
+ *       fullText,
+ *     };
+ *   },
+ * });
+ *
+ * ```
+ *
+ * @example
+ * ```typescript
+ * import { myTool } from "../tools"
+ * import { createStep } from "@mastra/core/workflows"
+ *
+ * const stepFromTool = createStep(myTool)
+ * ```
+ *
+ * @example
+ * ```typescript
+ * import { myAgent } from "../agents"
+ * import { createStep } from "@mastra/core/workflows"
+ *
+ * const stepFromAgent = createStep(myAgent)
+ * ```
  */
+
 export function createStep<
   TStepId extends string,
   TStepInput extends z.ZodType<any>,
@@ -292,6 +400,29 @@ export function createStep<
   };
 }
 
+/**
+ * Clones a step and returns a new step with the same configuration but a new id.
+ * @param step - The step to clone.
+ * @param opts - The options for the new step - id (id of the new step).
+ * @returns The cloned step.
+ *
+ * @example
+ * ```typescript
+ * const step = createStep({
+ *   id: 'step1',
+ *   inputSchema: z.object({ start: z.string() }),
+ *   outputSchema: z.object({ fullText: z.string() }),
+ *   execute: async ({ inputData }) => {
+ *     return {
+ *       fullText: inputData.start,
+ *     };
+ *   },
+ * });
+ *
+ * const clonedStep = cloneStep(step, { id: 'step2' });
+ * ```
+ */
+
 export function cloneStep<TStepId extends string>(
   step: Step<string, any, any, any, any, DefaultEngineType>,
   opts: { id: TStepId },
@@ -307,6 +438,40 @@ export function cloneStep<TStepId extends string>(
   };
 }
 
+/**
+ * Creates a new workflow.
+ * @param params - The parameters for the new workflow.
+ * @param params.id - The id of the workflow.
+ * @param params.description - The description of the workflow.
+ * @param params.inputSchema - Zod schema defining the input structure of the inputData of the first step in the workflow
+ * @param params.outputSchema - Zod schema defining the output structure of the returned value of the last step in the workflow.
+ * @param params.steps - The steps in the workflow.
+ * @param params.retryConfig - The retry configuration of the workflow. Contains the number of attempts and the delay between attempts.
+ * @param params.options - The options of the workflow. Contains the tracingPolicy and the validateInputs option.
+ * @param params.mastra - The Mastra instance.
+ * @returns The new workflow.
+ *
+ * A workflow can also be created from a WorkflowConfig object.
+ *
+ * @example
+ * ```typescript
+ * const workflow = createWorkflow({
+ *   id: 'workflow1',
+ *   description: 'My workflow',
+ *   inputSchema: z.object({
+ *     input: z.string(),
+ *   }),
+ *   outputSchema: z.object({
+ *     output: z.string(),
+ *   }),
+ *   retryConfig: { attempts: 3, delay: 1000 },
+ *   options: { tracingPolicy: { internal: InternalSpans.ALL }, validateInputs: true },
+ *   steps: [step1],
+ * }).then(step1).commit();
+ *
+ * ```
+ *
+ */
 export function createWorkflow<
   TWorkflowId extends string = string,
   TInput extends z.ZodType<any> = z.ZodType<any>,
@@ -322,6 +487,31 @@ export function createWorkflow<
 >(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
   return new Workflow<DefaultEngineType, TSteps, TWorkflowId, TInput, TOutput, TInput>(params);
 }
+
+/**
+ * Clones a workflow and returns a new workflow with the same configuration but a new id.
+ * @param workflow - The workflow to clone.
+ * @param opts - The options for the new workflow - id (id of the new workflow).
+ * @returns The cloned workflow.
+ *
+ * @example
+ * ```typescript
+ * const workflow = createWorkflow({
+ *   id: 'workflow1',
+ *   description: 'My workflow',
+ *   inputSchema: z.object({
+ *     input: z.string(),
+ *   }),
+ *   outputSchema: z.object({
+ *     output: z.string(),
+ *   }),
+ *   retryConfig: { attempts: 3, delay: 1000 },
+ *   options: { tracingPolicy: { internal: InternalSpans.ALL }, validateInputs: true },
+ *   steps: [step1],
+ * }).then(step1).commit();
+ * const clonedWorkflow = cloneWorkflow(workflow, { id: 'cloned-workflow' });
+ * ```
+ */
 
 export function cloneWorkflow<
   TWorkflowId extends string = string,
