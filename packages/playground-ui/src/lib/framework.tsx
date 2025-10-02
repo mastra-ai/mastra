@@ -22,6 +22,7 @@ type LinkComponentPaths = {
 
   workflowsLink: () => string;
   workflowLink: (workflowId: string) => string;
+  workflowRunLink: (workflowId: string, runId: string) => string;
 
   networkLink: (networkId: string) => string;
   networkNewThreadLink: (networkId: string) => string;
@@ -47,6 +48,7 @@ const LinkComponentContext = createContext<{
     agentNewThreadLink: () => '',
     workflowsLink: () => '',
     workflowLink: () => '',
+    workflowRunLink: () => '',
     networkLink: () => '',
     networkNewThreadLink: () => '',
     networkThreadLink: () => '',

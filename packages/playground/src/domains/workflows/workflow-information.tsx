@@ -1,28 +1,14 @@
 import { useState } from 'react';
 
-import {
-  Badge,
-  WorkflowIcon,
-  WorkflowTrigger,
-  PlaygroundTabs,
-  TabList,
-  Tab,
-  TabContent,
-  EntityHeader,
-  useWorkflow,
-} from '@mastra/playground-ui';
+import { Badge, WorkflowIcon, WorkflowTrigger, EntityHeader, useWorkflow } from '@mastra/playground-ui';
 
 import { useExecuteWorkflow, useResumeWorkflow, useStreamWorkflow, useCancelWorkflowRun } from '@/hooks/use-workflows';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { CopyIcon } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { WorkflowRuns } from '@mastra/playground-ui';
-import { useNavigate, useParams } from 'react-router';
 
 export function WorkflowInformation({ workflowId }: { workflowId: string }) {
-  const params = useParams();
-  const navigate = useNavigate();
   const { data: workflow, isLoading } = useWorkflow(workflowId);
 
   const { createWorkflowRun } = useExecuteWorkflow();
@@ -36,7 +22,7 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
   const stepsCount = Object.keys(workflow?.steps ?? {}).length;
 
   return (
-    <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto">
+    <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto border-l-sm border-border1">
       <EntityHeader icon={<WorkflowIcon />} title={workflow?.name || ''} isLoading={isLoading}>
         <div className="flex items-center gap-2 pt-2">
           <Tooltip>
@@ -57,40 +43,22 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
       </EntityHeader>
 
       <div className="overflow-y-auto border-t-sm border-border1">
-        <PlaygroundTabs defaultTab="run" className="h-[unset]">
-          <TabList className="sticky top-0 bg-surface3 z-10">
-            <Tab value="run" onClick={() => navigate(`/workflows/${workflowId}/graph`)}>
-              Run
-            </Tab>
-            <Tab value="runs">Runs</Tab>
-          </TabList>
-
-          <TabContent value="run">
-            {workflowId ? (
-              <WorkflowTrigger
-                workflowId={workflowId}
-                setRunId={setRunId}
-                workflow={workflow ?? undefined}
-                isLoading={isLoading}
-                createWorkflowRun={createWorkflowRun.mutateAsync}
-                streamWorkflow={streamWorkflow.mutateAsync}
-                resumeWorkflow={resumeWorkflow.mutateAsync}
-                streamResult={streamResult}
-                isStreamingWorkflow={isStreaming}
-                isResumingWorkflow={resumeWorkflow.isPending}
-                isCancellingWorkflowRun={isCancellingWorkflowRun}
-                cancelWorkflowRun={cancelWorkflowRun}
-              />
-            ) : null}
-          </TabContent>
-          <TabContent value="runs">
-            <WorkflowRuns
-              workflowId={workflowId}
-              runId={params?.runId}
-              onPressRun={({ workflowId, runId }) => navigate(`/workflows/${workflowId}/graph/${runId}`)}
-            />
-          </TabContent>
-        </PlaygroundTabs>
+        {workflowId ? (
+          <WorkflowTrigger
+            workflowId={workflowId}
+            setRunId={setRunId}
+            workflow={workflow ?? undefined}
+            isLoading={isLoading}
+            createWorkflowRun={createWorkflowRun.mutateAsync}
+            streamWorkflow={streamWorkflow.mutateAsync}
+            resumeWorkflow={resumeWorkflow.mutateAsync}
+            streamResult={streamResult}
+            isStreamingWorkflow={isStreaming}
+            isResumingWorkflow={resumeWorkflow.isPending}
+            isCancellingWorkflowRun={isCancellingWorkflowRun}
+            cancelWorkflowRun={cancelWorkflowRun}
+          />
+        ) : null}
       </div>
     </div>
   );
