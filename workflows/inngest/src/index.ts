@@ -11,7 +11,6 @@ import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool, ToolStream } from '@mastra/core/tools';
 import { getStepResult, Workflow, Run, DefaultExecutionEngine, validateStepInput } from '@mastra/core/workflows';
 import type {
-  StepWithComponent,
   ExecuteFunction,
   ExecutionContext,
   ExecutionEngine,
@@ -28,6 +27,7 @@ import type {
   StreamEvent,
   ChunkType,
   ExecutionEngineOptions,
+  StepWithComponent,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
@@ -742,31 +742,61 @@ export function createStep<
           args: inputData,
         };
 
-        const { fullStream } = await params.stream(inputData.prompt, {
-          runtimeContext,
-          tracingContext,
-          onFinish: result => {
-            streamPromise.resolve(result.text);
-          },
-          abortSignal,
-        });
+        if ((await params.getLLM()).getModel().specificationVersion === `v1`) {
+          const { fullStream } = await params.streamLegacy(inputData.prompt, {
+            runtimeContext,
+            tracingContext,
+            onFinish: result => {
+              streamPromise.resolve(result.text);
+            },
+            abortSignal,
+          });
 
-        if (abortSignal.aborted) {
-          return abort();
-        }
+          if (abortSignal.aborted) {
+            return abort();
+          }
 
-        await emitter.emit('watch-v2', {
-          type: 'tool-call-streaming-start',
-          ...(toolData ?? {}),
-        });
+          await emitter.emit('watch-v2', {
+            type: 'tool-call-streaming-start',
+            ...(toolData ?? {}),
+          });
 
-        for await (const chunk of fullStream) {
-          if (chunk.type === 'text-delta') {
-            await emitter.emit('watch-v2', {
-              type: 'tool-call-delta',
-              ...(toolData ?? {}),
-              argsTextDelta: chunk.payload.text,
-            });
+          for await (const chunk of fullStream) {
+            if (chunk.type === 'text-delta') {
+              await emitter.emit('watch-v2', {
+                type: 'tool-call-delta',
+                ...(toolData ?? {}),
+                argsTextDelta: chunk.textDelta,
+              });
+            }
+          }
+        } else {
+          const { fullStream } = await params.stream(inputData.prompt, {
+            runtimeContext,
+            tracingContext,
+            onFinish: result => {
+              streamPromise.resolve(result.text);
+            },
+            abortSignal,
+          });
+
+          if (abortSignal.aborted) {
+            return abort();
+          }
+
+          await emitter.emit('watch-v2', {
+            type: 'tool-call-streaming-start',
+            ...(toolData ?? {}),
+          });
+
+          for await (const chunk of fullStream) {
+            if (chunk.type === 'text-delta') {
+              await emitter.emit('watch-v2', {
+                type: 'tool-call-delta',
+                ...(toolData ?? {}),
+                argsTextDelta: chunk.payload.text,
+              });
+            }
           }
         }
 
