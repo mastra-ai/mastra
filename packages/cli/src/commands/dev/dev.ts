@@ -90,7 +90,7 @@ const startServer = async (
       },
       stdio: ['inherit', 'pipe', 'pipe', 'ipc'],
       reject: false,
-      shell: true,
+      shell: process.platform !== 'win32',
     }) as any as ChildProcess;
 
     if (currentServerProcess?.exitCode && currentServerProcess?.exitCode !== 0) {
@@ -128,6 +128,13 @@ const startServer = async (
         }
       });
     }
+
+    // Handle IPC errors to prevent EPIPE crashes
+    currentServerProcess.on('error', (err: Error) => {
+      if ((err as any).code !== 'EPIPE') {
+        throw err;
+      }
+    });
 
     currentServerProcess.on('message', async (message: any) => {
       if (message?.type === 'server-ready') {

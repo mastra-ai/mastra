@@ -206,34 +206,53 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     let processedStream = stream;
     const processorRunner = this.processorRunner;
     if (processorRunner && options.isLLMExecutionStep) {
-      const processorStates = new Map<string, ProcessorState>();
+      // Use shared processor states if provided, otherwise create new ones
+      const processorStates = (options.processorStates || new Map<string, ProcessorState>()) as Map<
+        string,
+        ProcessorState<OUTPUT>
+      >;
 
       processedStream = stream.pipeThrough(
         new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
           async transform(chunk, controller) {
-            /**
-             * Add base stream controller to structured output processor state
-             * so it can be used to enqueue chunks into the main stream from the structuring agent stream
-             */
-            if (!processorStates.has(STRUCTURED_OUTPUT_PROCESSOR_NAME)) {
-              const structuredOutputProcessorState = new ProcessorState(STRUCTURED_OUTPUT_PROCESSOR_NAME);
-              structuredOutputProcessorState.customState = { controller };
-              processorStates.set(STRUCTURED_OUTPUT_PROCESSOR_NAME, structuredOutputProcessorState);
-            }
+            // Filter out intermediate finish chunks with 'tool-calls' reason
+            // These are internal signals that shouldn't reach output processors
 
-            const { part: processed, blocked, reason } = await processorRunner.processPart(chunk, processorStates);
-            if (blocked) {
-              // Emit a tripwire chunk so downstream knows about the abort
-              controller.enqueue({
-                type: 'tripwire',
-                payload: {
-                  tripwireReason: reason || 'Output processor blocked content',
-                },
-              } as ChunkType<OUTPUT>);
+            if (chunk.type === 'finish' && chunk.payload?.stepResult?.reason === 'tool-calls') {
+              controller.enqueue(chunk);
               return;
-            }
-            if (processed) {
-              controller.enqueue(processed as ChunkType<OUTPUT>);
+            } else {
+              /**
+               * Add/update base stream controller to structured output processor state
+               * so it can be used to enqueue chunks into the main stream from the structuring agent stream.
+               * Need to update controller on each new LLM execution step since each step has its own TransformStream.
+               */
+              if (!processorStates.has(STRUCTURED_OUTPUT_PROCESSOR_NAME)) {
+                const structuredOutputProcessorState = new ProcessorState<OUTPUT>(STRUCTURED_OUTPUT_PROCESSOR_NAME);
+                structuredOutputProcessorState.customState = { controller };
+                processorStates.set(STRUCTURED_OUTPUT_PROCESSOR_NAME, structuredOutputProcessorState);
+              } else {
+                // Update controller for new LLM execution step
+                const structuredOutputProcessorState = processorStates.get(STRUCTURED_OUTPUT_PROCESSOR_NAME);
+                if (structuredOutputProcessorState) {
+                  structuredOutputProcessorState.customState.controller = controller;
+                }
+              }
+
+              const { part: processed, blocked, reason } = await processorRunner.processPart(chunk, processorStates);
+              if (blocked) {
+                // Emit a tripwire chunk so downstream knows about the abort
+                controller.enqueue({
+                  type: 'tripwire',
+                  payload: {
+                    tripwireReason: reason || 'Output processor blocked content',
+                  },
+                } as ChunkType<OUTPUT>);
+                return;
+              }
+              if (processed) {
+                controller.enqueue(processed as ChunkType<OUTPUT>);
+              }
             }
           },
         }),
