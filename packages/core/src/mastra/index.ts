@@ -811,7 +811,7 @@ do:
    *     assistant: new Agent({
    *       name: 'assistant',
    *       instructions: 'You are a helpful assistant',
-   *       model: openai('gpt-4o')
+   *       model: 'openai/gpt-5'
    *     })
    *   }
    * });
