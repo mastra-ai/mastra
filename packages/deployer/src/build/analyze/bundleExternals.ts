@@ -8,12 +8,11 @@ import * as path from 'node:path';
 import { rollup, type OutputChunk, type OutputAsset, type Plugin } from 'rollup';
 import { esbuild } from '../plugins/esbuild';
 import { aliasHono } from '../plugins/hono-alias';
-import { getCompiledDepCachePath, getPackageRootPath, rollupSafeName, slash } from '../utils';
+import { getCompiledDepCachePath, getPackageInfo, rollupSafeName, slash } from '../utils';
 import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS, DEPRECATED_EXTERNALS } from './constants';
 import * as resolve from 'resolve.exports';
-import { getPackageInfo } from 'local-pkg';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 
 type VirtualDependency = {
@@ -119,7 +118,7 @@ async function getInputPlugins(
 ) {
   const transpilePackagesMap = new Map<string, string>();
   for (const pkg of transpilePackages) {
-    const dir = await getPackageRootPath(pkg);
+    const dir = (await getPackageInfo(pkg))?.rootPath || null;
 
     if (dir) {
       transpilePackagesMap.set(pkg, slash(dir));
@@ -162,18 +161,18 @@ async function getInputPlugins(
             }
 
             const info = virtualDependencies.get(id)!;
-            const pkgJson = await getPackageInfo(path.join(rootDir, info.name));
-            if (!pkgJson) {
+            const pkg = await getPackageInfo(path.join(rootDir, info.name));
+            if (!pkg) {
               return null;
             }
 
-            const pkgName = pkgJson.packageJson.name || '';
-            let resolvedPath: string | undefined = resolve.exports(pkgJson.packageJson, id.replace(pkgName, '.'))?.[0];
+            const pkgName = pkg.packageJson.name || '';
+            let resolvedPath: string | undefined = resolve.exports(pkg.packageJson, id.replace(pkgName, '.'))?.[0];
             if (!resolvedPath) {
-              resolvedPath = pkgJson!.packageJson.main ?? 'index.js';
+              resolvedPath = pkg!.packageJson.main ?? 'index.js';
             }
 
-            return await this.resolve(path.posix.join(pkgJson!.rootPath, resolvedPath), importer, options);
+            return await this.resolve(path.posix.join(pkg!.rootPath, resolvedPath), importer, options);
           },
         } satisfies Plugin)
       : null,

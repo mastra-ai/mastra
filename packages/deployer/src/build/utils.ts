@@ -1,8 +1,9 @@
 import { execSync } from 'child_process';
 import { existsSync, mkdirSync } from 'fs';
 import { basename, join, relative } from 'path';
-import { getPackageInfo } from 'local-pkg';
+import { getPackageInfo as getPackageInfoLocal, type PackageInfo } from 'local-pkg';
 import { pathToFileURL } from 'url';
+import { readJSON } from 'fs-extra/esm';
 
 export function upsertMastraDir({ dir = process.cwd() }: { dir?: string }) {
   const dirPath = join(dir, '.mastra');
@@ -29,28 +30,44 @@ export function getPackageName(id: string) {
 /**
  * Get package root path
  */
-export async function getPackageRootPath(packageName: string, parentPath?: string): Promise<string | null> {
-  let rootPath: string | null;
+export async function getPackageInfo(packageName: string, parentPath?: string): Promise<PackageInfo | undefined> {
+  let pkg: PackageInfo | undefined;
+  let options: { paths?: string[] } | undefined = undefined;
 
-  try {
-    let options: { paths?: string[] } | undefined = undefined;
-    if (parentPath) {
-      if (!parentPath.startsWith('file://')) {
-        parentPath = pathToFileURL(parentPath).href;
-      }
-
-      options = {
-        paths: [parentPath],
-      };
+  // Create paths option if parentPath is provided
+  if (parentPath) {
+    if (!parentPath.startsWith('file://')) {
+      parentPath = pathToFileURL(parentPath).href;
     }
 
-    const pkg = await getPackageInfo(packageName, options);
-    rootPath = pkg?.rootPath ?? null;
-  } catch (e) {
-    rootPath = null;
+    options = {
+      paths: [parentPath],
+    };
   }
 
-  return rootPath;
+  // Get package info
+  pkg = (await getPackageInfoLocal(packageName, options)) as PackageInfo | undefined;
+
+  //Extra logic for packageInfo resolution
+  if (pkg && pkg.rootPath && !pkg?.version) {
+    const realRootPath = pkg.rootPath.includes(pkg.name)
+      ? pkg.rootPath.slice(0, pkg.rootPath.lastIndexOf(pkg.name) + pkg.name.length)
+      : undefined;
+    if (realRootPath) {
+      try {
+        const realPackageJson = await readJSON(join(realRootPath, 'package.json'));
+        const realPkg = {
+          ...pkg,
+          version: realPackageJson.version,
+        };
+        pkg = realPkg as PackageInfo | undefined;
+      } catch (e) {
+        pkg = pkg as PackageInfo | undefined;
+      }
+    }
+  }
+
+  return pkg;
 }
 
 /**

@@ -10,11 +10,10 @@ import { esbuild } from '../plugins/esbuild';
 import { isNodeBuiltin } from '../isNodeBuiltin';
 import { removeDeployer } from '../plugins/remove-deployer';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
-import { getPackageName, getPackageRootPath, slash } from '../utils';
+import { getPackageName, getPackageInfo, slash } from '../utils';
 import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import { DEPS_TO_IGNORE } from './constants';
-import { getPackageInfo } from 'local-pkg';
 
 /**
  * Configures and returns the Rollup plugins needed for analyzing entry files.
@@ -97,7 +96,7 @@ async function captureDependenciesToOptimize(
 
   let entryRootPath = projectRoot;
   if (!output.facadeModuleId.startsWith('\x00virtual:')) {
-    entryRootPath = (await getPackageRootPath(output.facadeModuleId)) || projectRoot;
+    entryRootPath = (await getPackageInfo(output.facadeModuleId))?.rootPath || projectRoot;
   }
 
   for (const [dependency, bindings] of Object.entries(output.importedBindings)) {
@@ -111,7 +110,8 @@ async function captureDependenciesToOptimize(
     let isWorkspace = false;
 
     if (pkgName) {
-      rootPath = await getPackageRootPath(dependency, entryRootPath);
+      const pkg = await getPackageInfo(dependency, entryRootPath);
+      rootPath = pkg?.rootPath || null;
       isWorkspace = workspaceMap.has(pkgName);
     }
 
