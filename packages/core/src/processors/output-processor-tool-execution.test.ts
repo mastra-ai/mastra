@@ -6,8 +6,6 @@ import type { Processor } from './index';
 describe('Output Processor State Persistence Across Tool Execution', () => {
   it('should filter intermediate finish chunks and maintain state during tool execution', async () => {
     const capturedChunks: { type: string; accumulatedTypes: string[] }[] = [];
-
-    // Test processor that captures chunk types and accumulated state
     class StateTrackingProcessor implements Processor {
       name = 'state-tracking-processor';
 
@@ -98,33 +96,20 @@ describe('Output Processor State Persistence Across Tool Execution', () => {
       outputProcessors: [new StateTrackingProcessor()],
     });
 
-    // Stream the response
     const stream = await agent.streamVNext('Execute the test tool', {
       format: 'aisdk',
-      maxSteps: 5, // Allow multiple steps to continue after tool execution
+      maxSteps: 5,
     });
 
-    // Consume the stream
     const fullStreamChunks: any[] = [];
     for await (const chunk of stream.fullStream) {
       fullStreamChunks.push(chunk);
     }
 
-    console.log(
-      'Full stream chunk types:',
-      fullStreamChunks.map(c => c.type),
-    );
-
-    // VERIFICATION: Both issues are now fixed!
-
-    // Issue 2 Fix: Intermediate finish chunks with 'tool-calls' reason are filtered out
     const finishChunks = capturedChunks.filter(c => c.type === 'finish');
-    // Before fix: Would see 2 finish chunks (one with 'tool-calls' reason that shouldn't reach processors)
-    // After fix: No finish chunks reach the processor (the intermediate one is filtered)
-    expect(finishChunks.length).toBe(0);
+    // Output stream processor should just receive the final finish chunk
+    expect(finishChunks.length).toBe(1);
 
-    // Issue 1 Fix: Processor state persists across the stream (no reset)
-    // Find the tool-call chunk
     const toolCallIndex = capturedChunks.findIndex(c => c.type === 'tool-call');
     expect(toolCallIndex).toBe(1); // Should be the second chunk (after response-metadata)
 
@@ -134,8 +119,5 @@ describe('Output Processor State Persistence Across Tool Execution', () => {
 
     expect(capturedChunks[1]!.type).toBe('tool-call');
     expect(capturedChunks[1]!.accumulatedTypes).toEqual(['response-metadata', 'tool-call']);
-
-    // This demonstrates the fix: state is accumulating properly across chunks
-    // Before the fix, we would have seen state reset after the tool-call
   });
 });
