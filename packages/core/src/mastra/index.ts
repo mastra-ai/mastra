@@ -108,7 +108,7 @@ export interface Config<
 
   /**
    * Legacy workflow definitions for backward compatibility.
-   * @deprecated Use `workflows` instead for new implementations
+   * @deprecated Use `workflows` instead.
    */
   legacy_workflows?: TLegacyWorkflows;
 
