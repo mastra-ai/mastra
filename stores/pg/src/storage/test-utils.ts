@@ -548,6 +548,129 @@ export function pgTests() {
           }
         }, 120_000);
       });
+
+      describe('Heap Out of Memory Prevention', () => {
+        it('should handle multiple large workflow executions without crashing', async () => {
+          const createLargeWorkflowSnapshot = (runNumber: number): WorkflowRunState => {
+            // Create a large object that simulates a real workflow with large context
+            const largeContext = {
+              dealData: 'X'.repeat(100 * 1024 * 1024), // 100MB of context data
+              messages: Array.from({ length: 1000 }, (_, i) => ({
+                role: 'user',
+                content: 'Y'.repeat(10 * 1024), // 10KB per message
+                metadata: { index: i, timestamp: Date.now() },
+              })),
+              citations: Array.from({ length: 500 }, (_, i) => ({
+                id: `citation_${i}`,
+                text: 'Z'.repeat(5 * 1024), // 5KB per citation
+                source: `source_${i}`,
+              })),
+            };
+
+            const largeResult = {
+              stepOutputs: {
+                step1: 'A'.repeat(50 * 1024 * 1024), // 50MB
+                step2: 'B'.repeat(50 * 1024 * 1024), // 50MB
+                step3: 'C'.repeat(50 * 1024 * 1024), // 50MB
+              },
+              generatedContent: 'D'.repeat(30 * 1024 * 1024), // 30MB
+            };
+
+            return {
+              runId: `run_${runNumber}_${Date.now()}`,
+              status: 'running',
+              value: {},
+              context: largeContext as any,
+              result: largeResult,
+              serializedStepGraph: [],
+              activePaths: [],
+              suspendedPaths: {},
+              waitingPaths: {},
+              timestamp: Date.now(),
+            } as WorkflowRunState;
+          };
+
+          // Simulate multiple workflow executions like in the GitHub issue
+          const errors: Error[] = [];
+
+          for (let i = 1; i <= 3; i++) {
+            try {
+              const snapshot = createLargeWorkflowSnapshot(i);
+              await store.persistWorkflowSnapshot({
+                workflowName: `memory_test_workflow`,
+                runId: snapshot.runId,
+                snapshot,
+              });
+              // Should not reach here
+              expect.fail('Large snapshot should have been rejected');
+            } catch (error: any) {
+              errors.push(error);
+              // Verify the error has our custom fields
+              expect(error.id).toBeDefined();
+              expect(error.id).toMatch(/MASTRA_STORAGE_PAYLOAD_TOO_LARGE|MASTRA_STORAGE_JSON_STRINGIFY_FAILED/);
+            }
+          }
+
+          // All 3 executions should fail with our size limit error
+          expect(errors.length).toBe(3);
+
+          // Verify we get proper error messages, not heap crashes
+          errors.forEach(error => {
+            expect(error.message).toMatch(
+              /Workflow snapshot too large|JSON\.stringify failed|Database query formatting failed/,
+            );
+          });
+        }, 120_000);
+
+        it('should prevent memory accumulation with size limit enforcement', async () => {
+          // This test shows how our size checking prevents memory issues
+          const sizes = [50, 100, 150, 200, 250]; // Gradually increasing sizes in MB
+
+          let failedAtSize = 0;
+
+          for (const sizeMB of sizes) {
+            const largeString = 'X'.repeat(sizeMB * 1024 * 1024);
+            const snapshot = {
+              runId: `run_${sizeMB}_${Date.now()}`,
+              status: 'running',
+              value: {},
+              context: { input: {} } as any,
+              result: { largeData: largeString },
+              serializedStepGraph: [],
+              activePaths: [],
+              suspendedPaths: {},
+              waitingPaths: {},
+              timestamp: Date.now(),
+            } as WorkflowRunState;
+
+            try {
+              await store.persistWorkflowSnapshot({
+                workflowName: `gradual_test_${sizeMB}`,
+                runId: snapshot.runId,
+                snapshot,
+              });
+            } catch (error: any) {
+              // Should get our specific error messages
+              expect(error.message).toMatch(
+                /Workflow snapshot too large|JSON\.stringify failed|Database query formatting failed/,
+              );
+
+              // Record when we hit the limit
+              if (failedAtSize === 0) {
+                failedAtSize = sizeMB;
+              }
+            }
+
+            // Try to free memory
+            if (global.gc) {
+              global.gc();
+            }
+          }
+
+          // We should have hit the limit at 250MB (our limit is 200MB)
+          expect(failedAtSize).toBe(250);
+        }, 120_000);
+      });
     });
 
     describe('PgStorage Table Name Quoting', () => {

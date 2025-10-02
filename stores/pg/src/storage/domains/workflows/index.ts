@@ -95,18 +95,55 @@ export class WorkflowsPG extends WorkflowsStorage {
   }): Promise<void> {
     let snapshotString: string;
 
+    // Quick size estimation to prevent crashes
+    // Count string lengths as rough approximation
+    const estimateSize = (obj: any, depth = 0): number => {
+      if (depth > 10) return 100; // Prevent infinite recursion
+      if (typeof obj === 'string') return obj.length;
+      if (typeof obj === 'number' || typeof obj === 'boolean') return 8;
+      if (!obj) return 0;
+      if (Array.isArray(obj)) {
+        return obj.reduce((sum, item) => sum + estimateSize(item, depth + 1), 50);
+      }
+      if (typeof obj === 'object') {
+        return Object.entries(obj).reduce((sum, [k, v]) => sum + k.length + estimateSize(v, depth + 1), 100);
+      }
+      return 0;
+    };
+
+    const estimatedBytes = estimateSize(snapshot);
+    const estimatedMB = Math.round(estimatedBytes / 1024 / 1024);
+
+    // Prevent attempting JSON.stringify on payloads likely to cause heap errors
+    // Use conservative limit since estimation is rough
+    if (estimatedMB > 200) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_PAYLOAD_TOO_LARGE',
+        text: `Workflow snapshot too large (~${estimatedMB}MB). Maximum supported size is 200MB. Consider using external storage for large payloads.`,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: {
+          workflowName,
+          runId,
+          estimatedMB,
+          maxSizeMB: 200,
+        },
+      });
+    }
+
     try {
       snapshotString = JSON.stringify(snapshot);
     } catch (error) {
       throw new MastraError(
         {
           id: 'MASTRA_STORAGE_JSON_STRINGIFY_FAILED',
-          text: 'JSON.stringify failed - payload exceeds V8 string limit (~500MB)',
+          text: `JSON.stringify failed - payload (~${estimatedMB}MB) exceeds V8 string limit`,
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
             workflowName,
             runId,
+            estimatedMB,
           },
         },
         error,
