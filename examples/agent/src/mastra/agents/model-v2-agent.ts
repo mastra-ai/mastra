@@ -61,8 +61,8 @@ const weatherAgent = new Agent({
   instructions: `You are a weather agent that can help you get weather information for a given city`,
   description: `An agent that can help you get weather information for a given city`,
   model: openai_v5('gpt-4o-mini'),
-  workflows: {
-    myWorkflow,
+  tools: {
+    weatherInfo,
   },
 });
 

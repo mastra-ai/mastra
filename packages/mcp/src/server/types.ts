@@ -12,28 +12,32 @@ import type { z } from 'zod';
 
 export type MCPServerResourceContentCallback = ({
   uri,
+  extra,
 }: {
   uri: string;
+  extra: MCPRequestHandlerExtra;
 }) => Promise<MCPServerResourceContent | MCPServerResourceContent[]>;
 export type MCPServerResourceContent = { text?: string } | { blob?: string };
 export type MCPServerResources = {
-  listResources: () => Promise<Resource[]>;
+  listResources: ({ extra }: { extra: MCPRequestHandlerExtra }) => Promise<Resource[]>;
   getResourceContent: MCPServerResourceContentCallback;
-  resourceTemplates?: () => Promise<ResourceTemplate[]>;
+  resourceTemplates?: ({ extra }: { extra: MCPRequestHandlerExtra }) => Promise<ResourceTemplate[]>;
 };
 
 export type MCPServerPromptMessagesCallback = ({
   name,
   version,
   args,
+  extra,
 }: {
   name: string;
   version?: string;
   args?: any;
+  extra: MCPRequestHandlerExtra;
 }) => Promise<PromptMessage[]>;
 
 export type MCPServerPrompts = {
-  listPrompts: () => Promise<Prompt[]>;
+  listPrompts: ({ extra }: { extra: MCPRequestHandlerExtra }) => Promise<Prompt[]>;
   getPromptMessages?: MCPServerPromptMessagesCallback;
 };
 

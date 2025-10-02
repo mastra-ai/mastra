@@ -389,13 +389,13 @@ export class MCPServer extends MCPServerBase {
 
     // List resources handler
     if (capturedResourceOptions.listResources) {
-      serverInstance.setRequestHandler(ListResourcesRequestSchema, async () => {
+      serverInstance.setRequestHandler(ListResourcesRequestSchema, async (_request, extra) => {
         this.logger.debug('Handling ListResources request');
         if (this.definedResources) {
           return { resources: this.definedResources };
         } else {
           try {
-            const resources = await capturedResourceOptions.listResources!();
+            const resources = await capturedResourceOptions.listResources!({ extra });
             this.definedResources = resources;
             this.logger.debug(`Fetched and cached ${this.definedResources.length} resources.`);
             return { resources: this.definedResources };
@@ -409,13 +409,13 @@ export class MCPServer extends MCPServerBase {
 
     // Read resource handler
     if (capturedResourceOptions.getResourceContent) {
-      serverInstance.setRequestHandler(ReadResourceRequestSchema, async request => {
+      serverInstance.setRequestHandler(ReadResourceRequestSchema, async (request, extra) => {
         const startTime = Date.now();
         const uri = request.params.uri;
         this.logger.debug(`Handling ReadResource request for URI: ${uri}`);
 
         if (!this.definedResources) {
-          const resources = await this.resourceOptions?.listResources?.();
+          const resources = await this.resourceOptions?.listResources?.({ extra });
           if (!resources) throw new Error('Failed to load resources');
           this.definedResources = resources;
         }
@@ -428,7 +428,7 @@ export class MCPServer extends MCPServerBase {
         }
 
         try {
-          const resourcesOrResourceContent = await capturedResourceOptions.getResourceContent({ uri });
+          const resourcesOrResourceContent = await capturedResourceOptions.getResourceContent({ uri, extra });
           const resourcesContent = Array.isArray(resourcesOrResourceContent)
             ? resourcesOrResourceContent
             : [resourcesOrResourceContent];
@@ -462,13 +462,13 @@ export class MCPServer extends MCPServerBase {
 
     // Resource templates handler
     if (capturedResourceOptions.resourceTemplates) {
-      serverInstance.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
+      serverInstance.setRequestHandler(ListResourceTemplatesRequestSchema, async (_request, extra) => {
         this.logger.debug('Handling ListResourceTemplates request');
         if (this.definedResourceTemplates) {
           return { resourceTemplates: this.definedResourceTemplates };
         } else {
           try {
-            const templates = await capturedResourceOptions.resourceTemplates!();
+            const templates = await capturedResourceOptions.resourceTemplates!({ extra });
             this.definedResourceTemplates = templates;
             this.logger.debug(`Fetched and cached ${this.definedResourceTemplates.length} resource templates.`);
             return { resourceTemplates: this.definedResourceTemplates };
@@ -505,7 +505,7 @@ export class MCPServer extends MCPServerBase {
 
     // List prompts handler
     if (capturedPromptOptions.listPrompts) {
-      serverInstance.setRequestHandler(ListPromptsRequestSchema, async () => {
+      serverInstance.setRequestHandler(ListPromptsRequestSchema, async (_request, extra) => {
         this.logger.debug('Handling ListPrompts request');
         if (this.definedPrompts) {
           return {
@@ -513,7 +513,7 @@ export class MCPServer extends MCPServerBase {
           };
         } else {
           try {
-            const prompts = await capturedPromptOptions.listPrompts();
+            const prompts = await capturedPromptOptions.listPrompts({ extra });
             for (const prompt of prompts) {
               PromptSchema.parse(prompt);
             }
@@ -536,11 +536,11 @@ export class MCPServer extends MCPServerBase {
     if (capturedPromptOptions.getPromptMessages) {
       serverInstance.setRequestHandler(
         GetPromptRequestSchema,
-        async (request: { params: { name: string; version?: string; arguments?: any } }) => {
+        async (request: { params: { name: string; version?: string; arguments?: any } }, extra) => {
           const startTime = Date.now();
           const { name, version, arguments: args } = request.params;
           if (!this.definedPrompts) {
-            const prompts = await this.promptOptions?.listPrompts?.();
+            const prompts = await this.promptOptions?.listPrompts?.({ extra });
             if (!prompts) throw new Error('Failed to load prompts');
             this.definedPrompts = prompts;
           }
@@ -564,7 +564,7 @@ export class MCPServer extends MCPServerBase {
           try {
             let messages: any[] = [];
             if (capturedPromptOptions.getPromptMessages) {
-              messages = await capturedPromptOptions.getPromptMessages({ name, version, args });
+              messages = await capturedPromptOptions.getPromptMessages({ name, version, args, extra });
             }
             const duration = Date.now() - startTime;
             this.logger.info(

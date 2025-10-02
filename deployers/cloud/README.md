@@ -76,6 +76,9 @@ MASTRA_STORAGE_AUTH_TOKEN=your-auth-token
 BUSINESS_API_RUNNER_LOGS_ENDPOINT=your-logs-endpoint
 BUSINESS_JWT_TOKEN=your-jwt-token
 
+# Playground Configuration
+PLAYGROUND_JWT_TOKEN=your-playground-jwt-token
+
 # Runtime Configuration
 RUNNER_START_TIME=deployment-start-time
 CI=true|false

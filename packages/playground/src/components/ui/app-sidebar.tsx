@@ -121,11 +121,6 @@ const links = [
     icon: AgentIcon,
   },
   {
-    name: 'Networks',
-    url: '/networks',
-    icon: Network,
-  },
-  {
     name: 'Tools',
     url: '/tools',
     icon: ToolsIcon,

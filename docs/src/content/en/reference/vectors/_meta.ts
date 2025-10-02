@@ -1,0 +1,16 @@
+export default {
+  astra: "AstraVector",
+  chroma: "ChromaVector",
+  vectorize: "CloudflareVector",
+  couchbase: "CouchbaseVector",
+  lance: "LanceVector",
+  libsql: "LibSQLVector",
+  mongodb: "MongoDBVector",
+  opensearch: "OpenSearchVector",
+  pg: "PgVector",
+  pinecone: "PineconeVector",
+  qdrant: "QdrantVector",
+  s3vectors: "S3Vectors",
+  turbopuffer: "TurboPuffer",
+  upstash: "UpstashVector",
+};

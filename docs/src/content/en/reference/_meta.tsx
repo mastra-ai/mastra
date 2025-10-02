@@ -18,6 +18,7 @@ const meta: Meta = {
   memory: "Memory",
   rag: "RAG",
   storage: "Storage",
+  vectors: "Vectors",
   deployer: "Deployer",
   "client-js": "Client SDK",
   observability: "Observability",

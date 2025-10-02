@@ -51,9 +51,9 @@ export const mastra = new Mastra({
   scorers: {
     testScorer,
   },
-  // telemetry: {
-  //   enabled: false,
-  // }
+  telemetry: {
+    enabled: false,
+  },
   observability: {
     default: {
       enabled: true,
