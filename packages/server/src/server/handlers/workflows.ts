@@ -504,7 +504,7 @@ export async function observeStreamVNextWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = await workflow.createRunAsync({ runId });
+    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
     const serverCache = mastra.getServerCache();
     if (!serverCache) {
       throw new HTTPException(500, { message: 'Server cache not found' });
