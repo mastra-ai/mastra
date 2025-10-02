@@ -1,5 +1,6 @@
 import { createSampleThread } from '@internal/storage-test-utils';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import type { WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PostgresStore } from '.';
@@ -76,11 +77,22 @@ export function pgTests() {
 
     describe('Large Payload Handling', () => {
       it('should handle or fail gracefully when inserting a very large workflow snapshot payload', async () => {
-        // 100MB string payload
+        // 100MB string payload embedded in result
         const hugeString = 'A'.repeat(100 * 1024 * 1024);
-        const hugeSnapshot = { context: hugeString, meta: { ts: Date.now() } };
+        const hugeSnapshot = {
+          runId: 'run_' + Date.now(),
+          status: 'running',
+          value: {},
+          context: { input: {} } as any, // Cast to any to bypass strict typing for test
+          result: { largeData: hugeString }, // Store large data in result instead
+          serializedStepGraph: [],
+          activePaths: [],
+          suspendedPaths: {},
+          waitingPaths: {},
+          timestamp: Date.now(),
+        } as WorkflowRunState;
         const workflowName = 'large_payload_test';
-        const runId = 'run_' + Date.now();
+        const runId = hugeSnapshot.runId;
         let error: any = null;
         try {
           await store.persistWorkflowSnapshot({ workflowName, runId, snapshot: hugeSnapshot });
@@ -90,8 +102,9 @@ export function pgTests() {
         expect(error).toBeNull();
         const loadedSnapshot = await store.loadWorkflowSnapshot({ workflowName, runId });
         expect(loadedSnapshot).toBeDefined();
-        expect(loadedSnapshot.context).toEqual(hugeString);
-        expect(loadedSnapshot.meta.ts).toBeDefined();
+        expect(loadedSnapshot?.result).toBeDefined();
+        expect(loadedSnapshot?.result?.largeData).toEqual(hugeString);
+        expect(loadedSnapshot?.timestamp).toBeDefined();
       }, 120_000);
 
       it('should handle or fail gracefully when inserting a very large workflow snapshot with a huge object payload', async () => {
@@ -101,9 +114,20 @@ export function pgTests() {
           data: 'A'.repeat(4096), // 4KB per entry
           meta: { nested: { timestamp: Date.now(), rand: Math.random() } },
         }));
-        const hugeSnapshot = { context: hugeObjectArray, meta: { ts: Date.now() } };
+        const hugeSnapshot = {
+          runId: 'run_' + Date.now(),
+          status: 'running',
+          value: {},
+          context: { input: {} } as any, // Cast to any to bypass strict typing for test
+          result: { largeDataArray: hugeObjectArray }, // Store large array in result
+          serializedStepGraph: [],
+          activePaths: [],
+          suspendedPaths: {},
+          waitingPaths: {},
+          timestamp: Date.now(),
+        } as WorkflowRunState;
         const workflowName = 'large_object_payload_test';
-        const runId = 'run_' + Date.now();
+        const runId = hugeSnapshot.runId;
         let error: any = null;
         try {
           await store.persistWorkflowSnapshot({ workflowName, runId, snapshot: hugeSnapshot });
@@ -114,8 +138,9 @@ export function pgTests() {
 
         const loadedSnapshot = await store.loadWorkflowSnapshot({ workflowName, runId });
         expect(loadedSnapshot).toBeDefined();
-        expect(loadedSnapshot.context).toEqual(hugeObjectArray);
-        expect(loadedSnapshot.meta.ts).toBeDefined();
+        expect(loadedSnapshot?.result).toBeDefined();
+        expect(loadedSnapshot?.result?.largeDataArray).toEqual(hugeObjectArray);
+        expect(loadedSnapshot?.timestamp).toBeDefined();
       }, 120_000);
     });
 
