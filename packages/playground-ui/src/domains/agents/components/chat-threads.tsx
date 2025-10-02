@@ -135,7 +135,7 @@ function ThreadTitle({ title }: { title?: string }) {
     return <span className="text-muted-foreground">Chat from</span>;
   }
 
-  return <span className="truncate max-w-[14rem]">{title}</span>;
+  return <span className="truncate max-w-[14rem] text-muted-foreground">{title}</span>;
 }
 
 const formatDay = (date: Date) => {

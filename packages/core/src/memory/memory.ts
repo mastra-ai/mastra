@@ -208,6 +208,12 @@ export abstract class MastraMemory extends MastraBase {
       }
     }
 
+    if (!mergedConfig?.threads) {
+      mergedConfig.threads = {};
+    }
+
+    mergedConfig.threads.generateTitle = config?.threads?.generateTitle !== false;
+
     return mergedConfig;
   }
 
