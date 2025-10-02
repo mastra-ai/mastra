@@ -1,7 +1,7 @@
-import { MCPClient } from '@mastra/mcp';
+import { MCPClient, ProgressHandler } from '@mastra/mcp';
 // import type { ElicitationHandler } from '@mastra/mcp';
 
-const progressHandler = async (params: any) => {
+const progressHandler: ProgressHandler = async params => {
   console.log('\n📊 Progress Update:');
   console.log(`Progress Token: ${params.progressToken}`);
   console.log(`Progress: ${params.progress}`);
