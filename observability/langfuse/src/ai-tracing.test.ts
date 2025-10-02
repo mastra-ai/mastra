@@ -266,9 +266,6 @@ describe('LangfuseExporter', () => {
           input: 10,
           output: 5,
           total: 15,
-          inputTokens: 10,
-          outputTokens: 5,
-          totalTokens: 15,
         },
         metadata: {
           provider: 'openai',
@@ -486,7 +483,6 @@ describe('LangfuseExporter', () => {
           input: undefined,
           output: undefined,
           total: 150,
-          totalTokens: 150,
         },
       });
     });
