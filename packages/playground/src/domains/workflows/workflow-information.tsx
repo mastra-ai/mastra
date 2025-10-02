@@ -12,7 +12,6 @@ import {
   useWorkflow,
 } from '@mastra/playground-ui';
 
-import { WorkflowLogs } from './workflow-logs';
 import { useExecuteWorkflow, useResumeWorkflow, useStreamWorkflow, useCancelWorkflowRun } from '@/hooks/use-workflows';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -32,7 +31,7 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
     useStreamWorkflow();
   const { mutateAsync: cancelWorkflowRun, isPending: isCancellingWorkflowRun } = useCancelWorkflowRun();
 
-  const [runId, setRunId] = useState<string>('');
+  const [, setRunId] = useState<string>('');
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
 
   const stepsCount = Object.keys(workflow?.steps ?? {}).length;
@@ -71,7 +70,6 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
               Run
             </Tab>
             <Tab value="runs">Runs</Tab>
-            <Tab value="logs">Log Drains</Tab>
           </TabList>
 
           <TabContent value="run">
@@ -111,10 +109,6 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
               cancelWorkflowRun={cancelWorkflowRun}
               observeWorkflowStream={observeWorkflowStream.mutate}
             />
-          </TabContent>
-
-          <TabContent value="logs">
-            <WorkflowLogs runId={runId} />
           </TabContent>
         </PlaygroundTabs>
       </div>

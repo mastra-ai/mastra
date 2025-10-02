@@ -116,6 +116,7 @@
     "hono": "^4.9.7",
     "local-pkg": "^1.1.2",
     "resolve-from": "^5.0.0",
+    "resolve.exports": "^2.0.3",
     "rollup": "~4.50.2",
     "rollup-plugin-esbuild": "^6.2.1",
     "rollup-plugin-node-externals": "^8.0.1",
