@@ -3,8 +3,7 @@ import { randomUUID } from 'crypto';
 import { mastra } from './mastra';
 
 function log(message: string) {
-  console.log(`\n>>Prompt: ${message}
-`);
+  console.log(`\n>>Prompt: ${message}`);
   return message;
 }
 
