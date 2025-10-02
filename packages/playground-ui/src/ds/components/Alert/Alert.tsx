@@ -26,7 +26,7 @@ export const Alert = ({ children, variant = 'destructive' }: AlertProps) => {
   return (
     <div className={clsx(variantClasses[variant], 'p-2 rounded-md')}>
       <div className="flex items-start gap-2">
-        <Icon>
+        <Icon className="mt-0.5">
           <Ico />
         </Icon>
         <div>{children}</div>
@@ -37,7 +37,7 @@ export const Alert = ({ children, variant = 'destructive' }: AlertProps) => {
 
 export const AlertTitle = ({ children, as: As = 'h5' }: { children: React.ReactNode; as: TxtProps['as'] }) => {
   return (
-    <Txt as={As} variant="ui-md">
+    <Txt as={As} variant="ui-md" className="font-semibold">
       {children}
     </Txt>
   );
