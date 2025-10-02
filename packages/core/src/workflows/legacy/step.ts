@@ -1,12 +1,11 @@
-import type { z } from 'zod';
-
-import type { Mastra } from '../..';
+import type { Mastra } from '../../mastra';
+import type { ZodLikeSchema, InferZodLikeSchema } from '../../types/zod-compat';
 import type { RetryConfig, StepAction, StepExecutionContext } from './types';
 
 export class LegacyStep<
   TStepId extends string = any,
-  TSchemaIn extends z.ZodSchema | undefined = undefined,
-  TSchemaOut extends z.ZodSchema | undefined = undefined,
+  TSchemaIn extends ZodLikeSchema | undefined = undefined,
+  TSchemaOut extends ZodLikeSchema | undefined = undefined,
   TContext extends StepExecutionContext<TSchemaIn> = StepExecutionContext<TSchemaIn>,
 > implements StepAction<TStepId, TSchemaIn, TSchemaOut, TContext>
 {
@@ -14,8 +13,8 @@ export class LegacyStep<
   description?: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
-  payload?: TSchemaIn extends z.ZodSchema ? Partial<z.infer<TSchemaIn>> : unknown;
-  execute: (context: TContext) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
+  payload?: TSchemaIn extends ZodLikeSchema ? Partial<InferZodLikeSchema<TSchemaIn>> : unknown;
+  execute: (context: TContext) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown>;
   retryConfig?: RetryConfig;
   mastra?: Mastra;
 

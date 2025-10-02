@@ -16,49 +16,40 @@ import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 export const mastra = new Mastra({
   // ...
   deployer: new CloudflareDeployer({
-    scope: "your-account-id",
-    projectName: "your-project-name",
+    projectName: "hello-mastra",
     routes: [
       {
         pattern: "example.com/*",
         zone_name: "example.com",
-        custom_domain: true,
-      },
+        custom_domain: true
+      }
     ],
-    workerNamespace: "your-namespace",
-    auth: {
-      apiToken: "your-api-token",
-      apiEmail: "your-email",
+    workerNamespace: "my-namespace",
+    env: {
+      NODE_ENV: "production",
+      API_KEY: "<api-key>"
     },
     d1Databases: [
       {
-        binding: "binding-name",
-        database_name: "database-name",
-        database_id: "database-id",
-      },
+        binding: "DB",
+        database_name: "my-database",
+        database_id: "d1-database-id",
+        preview_database_id: "your-preview-database-id"
+      }
     ],
     kvNamespaces: [
       {
-        binding: "binding-name",
-        id: "namespace-id",
-      },
-    ],
-  }),
+        binding: "CACHE",
+        id: "kv-namespace-id"
+      }
+    ]
 });
 ```
 
 ## Parameters
 
-### Constructor Parameters
-
 <PropertiesTable
   content={[
-    {
-      name: "scope",
-      type: "string",
-      description: "Your Cloudflare account ID.",
-      isOptional: false,
-    },
     {
       name: "projectName",
       type: "string",
@@ -69,7 +60,7 @@ export const mastra = new Mastra({
     {
       name: "routes",
       type: "CFRoute[]",
-      description: "Array of route configurations for your worker.",
+      description: "Array of route configurations for your worker. Each route requires: pattern (string), zone_name (string), custom_domain (boolean, optional).",
       isOptional: true,
     },
     {
@@ -81,122 +72,20 @@ export const mastra = new Mastra({
     {
       name: "env",
       type: "Record<string, any>",
-      description:
-        "Environment variables to be included in the worker configuration.",
+      description: "Environment variables to be included in the worker configuration.",
       isOptional: true,
-    },
-    {
-      name: "auth",
-      type: "object",
-      description: "Cloudflare authentication details.",
-      isOptional: false,
     },
     {
       name: "d1Databases",
       type: "D1DatabaseBinding[]",
-      description: "Array of D1 database bindings for your worker.",
+      description: "Array of D1 database bindings. Each binding requires: binding (string), database_name (string), database_id (string), preview_database_id (string, optional).",
       isOptional: true,
     },
     {
       name: "kvNamespaces",
       type: "KVNamespaceBinding[]",
-      description: "Array of KV namespace bindings for your worker.",
+      description: "Array of KV namespace bindings. Each binding requires: binding (string), id (string).",
       isOptional: true,
-    },
-  ]}
-/>
-
-### auth Object
-
-<PropertiesTable
-  content={[
-    {
-      name: "apiToken",
-      type: "string",
-      description: "Your Cloudflare API token.",
-      isOptional: false,
-    },
-    {
-      name: "apiEmail",
-      type: "string",
-      description: "Your Cloudflare account email.",
-      isOptional: true,
-    },
-  ]}
-/>
-
-### CFRoute Object
-
-<PropertiesTable
-  content={[
-    {
-      name: "pattern",
-      type: "string",
-      description: "URL pattern to match (e.g., 'example.com/*').",
-      isOptional: false,
-    },
-    {
-      name: "zone_name",
-      type: "string",
-      description: "Domain zone name.",
-      isOptional: false,
-    },
-    {
-      name: "custom_domain",
-      type: "boolean",
-      description: "Whether to use a custom domain.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-  ]}
-/>
-
-### D1DatabaseBinding Object
-
-<PropertiesTable
-  content={[
-    {
-      name: "binding",
-      type: "string",
-      description: "Name used in Worker code (e.g., `env.testdb`).",
-      isOptional: false,
-    },
-    {
-      name: "database_name",
-      type: "string",
-      description: "Human-readable name (for dashboard).",
-      isOptional: false,
-    },
-    {
-      name: "database_id",
-      type: "string",
-      description: "Cloudflare D1 database ID.",
-      isOptional: false,
-    },
-    {
-      name: "preview_database_id",
-      type: "string",
-      description: "For preview deployments.",
-      isOptional: true,
-    },
-  ]}
-/>
-
-### KVNamespaceBinding Object
-
-<PropertiesTable
-  content={[
-    {
-      name: "binding",
-      type: "string",
-      description: "Name used in Worker code (e.g., `env.test_namespace`).",
-      isOptional: false,
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "Cloudflare KV namespace ID.",
-      isOptional: false,
     },
   ]}
 />

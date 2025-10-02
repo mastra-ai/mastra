@@ -7,8 +7,25 @@ import { HTMLHeaderTransformer, HTMLSectionTransformer } from './transformers/ht
 import { RecursiveJsonTransformer } from './transformers/json';
 import { LatexTransformer } from './transformers/latex';
 import { MarkdownHeaderTransformer, MarkdownTransformer } from './transformers/markdown';
+import { SemanticMarkdownTransformer } from './transformers/semantic-markdown';
+import { SentenceTransformer } from './transformers/sentence';
 import { TokenTransformer } from './transformers/token';
-import type { ChunkOptions, ChunkParams, ChunkStrategy, ExtractParams } from './types';
+import type {
+  ChunkParams,
+  ChunkStrategy,
+  ExtractParams,
+  HTMLChunkOptions,
+  RecursiveChunkOptions,
+  CharacterChunkOptions,
+  TokenChunkOptions,
+  MarkdownChunkOptions,
+  SemanticMarkdownChunkOptions,
+  JsonChunkOptions,
+  LatexChunkOptions,
+  SentenceChunkOptions,
+  StrategyOptions,
+} from './types';
+import { validateChunkParams } from './validation';
 
 export class MDocument {
   private chunks: Chunk[];
@@ -135,35 +152,35 @@ export class MDocument {
     }
   }
 
-  private async chunkBy(strategy: ChunkStrategy, options?: ChunkOptions): Promise<void> {
-    switch (strategy) {
-      case 'recursive':
-        await this.chunkRecursive(options);
-        break;
-      case 'character':
-        await this.chunkCharacter(options);
-        break;
-      case 'token':
-        await this.chunkToken(options);
-        break;
-      case 'markdown':
-        await this.chunkMarkdown(options);
-        break;
-      case 'html':
-        await this.chunkHTML(options);
-        break;
-      case 'json':
-        await this.chunkJSON(options);
-        break;
-      case 'latex':
-        await this.chunkLatex(options);
-        break;
-      default:
-        throw new Error(`Unknown strategy: ${strategy}`);
+  private _strategyMap?: { [S in ChunkStrategy]: (options?: StrategyOptions[S]) => Promise<void> };
+
+  private get strategyMap() {
+    if (!this._strategyMap) {
+      this._strategyMap = {
+        recursive: options => this.chunkRecursive(options),
+        character: options => this.chunkCharacter(options),
+        token: options => this.chunkToken(options),
+        markdown: options => this.chunkMarkdown(options),
+        html: options => this.chunkHTML(options),
+        json: options => this.chunkJSON(options),
+        latex: options => this.chunkLatex(options),
+        sentence: options => this.chunkSentence(options),
+        'semantic-markdown': options => this.chunkSemanticMarkdown(options),
+      };
+    }
+    return this._strategyMap;
+  }
+
+  private async chunkBy<K extends ChunkStrategy>(strategy: K, options?: StrategyOptions[K]): Promise<void> {
+    const chunkingFunc = this.strategyMap[strategy];
+    if (chunkingFunc) {
+      await chunkingFunc(options);
+    } else {
+      throw new Error(`Unknown strategy: ${strategy}`);
     }
   }
 
-  async chunkRecursive(options?: ChunkOptions): Promise<void> {
+  async chunkRecursive(options?: RecursiveChunkOptions): Promise<void> {
     if (options?.language) {
       const rt = RecursiveCharacterTransformer.fromLanguage(options.language, options);
       const textSplit = rt.transformDocuments(this.chunks);
@@ -171,28 +188,24 @@ export class MDocument {
       return;
     }
 
-    const rt = new RecursiveCharacterTransformer({
-      separators: options?.separators,
-      isSeparatorRegex: options?.isSeparatorRegex,
-      options,
-    });
+    const rt = new RecursiveCharacterTransformer(options);
     const textSplit = rt.transformDocuments(this.chunks);
     this.chunks = textSplit;
   }
 
-  async chunkCharacter(options?: ChunkOptions): Promise<void> {
+  async chunkCharacter(options?: CharacterChunkOptions): Promise<void> {
     const rt = new CharacterTransformer({
+      ...options,
       separator: options?.separator,
       isSeparatorRegex: options?.isSeparatorRegex,
-      options,
     });
     const textSplit = rt.transformDocuments(this.chunks);
     this.chunks = textSplit;
   }
 
-  async chunkHTML(options?: ChunkOptions): Promise<void> {
+  async chunkHTML(options?: HTMLChunkOptions): Promise<void> {
     if (options?.headers?.length) {
-      const rt = new HTMLHeaderTransformer(options.headers, options?.returnEachLine);
+      const rt = new HTMLHeaderTransformer(options as HTMLChunkOptions & { headers: [string, string][] });
 
       const textSplit = rt.transformDocuments(this.chunks);
       this.chunks = textSplit;
@@ -200,7 +213,7 @@ export class MDocument {
     }
 
     if (options?.sections?.length) {
-      const rt = new HTMLSectionTransformer(options.sections);
+      const rt = new HTMLSectionTransformer(options as HTMLChunkOptions & { sections: [string, string][] });
 
       const textSplit = rt.transformDocuments(this.chunks);
       this.chunks = textSplit;
@@ -210,7 +223,7 @@ export class MDocument {
     throw new Error('HTML chunking requires either headers or sections to be specified');
   }
 
-  async chunkJSON(options?: ChunkOptions): Promise<void> {
+  async chunkJSON(options?: JsonChunkOptions): Promise<void> {
     if (!options?.maxSize) {
       throw new Error('JSON chunking requires maxSize to be specified');
     }
@@ -229,13 +242,13 @@ export class MDocument {
     this.chunks = textSplit;
   }
 
-  async chunkLatex(options?: ChunkOptions): Promise<void> {
+  async chunkLatex(options?: LatexChunkOptions): Promise<void> {
     const rt = new LatexTransformer(options);
     const textSplit = rt.transformDocuments(this.chunks);
     this.chunks = textSplit;
   }
 
-  async chunkToken(options?: ChunkOptions): Promise<void> {
+  async chunkToken(options?: TokenChunkOptions): Promise<void> {
     const rt = TokenTransformer.fromTikToken({
       options,
       encodingName: options?.encodingName,
@@ -245,7 +258,7 @@ export class MDocument {
     this.chunks = textSplit;
   }
 
-  async chunkMarkdown(options?: ChunkOptions): Promise<void> {
+  async chunkMarkdown(options?: MarkdownChunkOptions): Promise<void> {
     if (options?.headers) {
       const rt = new MarkdownHeaderTransformer(options.headers, options?.returnEachLine, options?.stripHeaders);
       const textSplit = rt.transformDocuments(this.chunks);
@@ -258,10 +271,45 @@ export class MDocument {
     this.chunks = textSplit;
   }
 
+  async chunkSentence(options?: SentenceChunkOptions): Promise<void> {
+    if (!options?.maxSize) {
+      throw new Error('Sentence chunking requires maxSize to be specified');
+    }
+
+    const rt = new SentenceTransformer({
+      minSize: options?.minSize,
+      maxSize: options?.maxSize,
+      targetSize: options?.targetSize,
+      overlap: options?.overlap,
+      sentenceEnders: options?.sentenceEnders,
+      fallbackToWords: options?.fallbackToWords,
+      fallbackToCharacters: options?.fallbackToCharacters,
+      keepSeparator: options?.keepSeparator,
+      lengthFunction: options?.lengthFunction,
+      addStartIndex: options?.addStartIndex,
+      stripWhitespace: options?.stripWhitespace,
+    });
+
+    const textSplit = rt.transformDocuments(this.chunks);
+    this.chunks = textSplit;
+  }
+
+  async chunkSemanticMarkdown(options?: SemanticMarkdownChunkOptions): Promise<void> {
+    const rt = SemanticMarkdownTransformer.fromTikToken({
+      options,
+      encodingName: options?.encodingName,
+      modelName: options?.modelName,
+    });
+    const textSplit = rt.transformDocuments(this.chunks);
+    this.chunks = textSplit;
+  }
+
   async chunk(params?: ChunkParams): Promise<Chunk[]> {
     const { strategy: passedStrategy, extract, ...chunkOptions } = params || {};
     // Determine the default strategy based on type if not specified
     const strategy = passedStrategy || this.defaultStrategy();
+
+    validateChunkParams(strategy, chunkOptions);
 
     // Apply the appropriate chunking strategy
     await this.chunkBy(strategy, chunkOptions);

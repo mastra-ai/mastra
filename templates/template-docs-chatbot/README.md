@@ -1,263 +1,167 @@
-# Template: Docs Chatbot with MCP Server
+# Documentation Chatbot Template
 
-This template demonstrates how to build a documentation chatbot using **MCP (Model Control Protocol)** servers with Mastra. It shows how to define and consume an MCP server that provides tools for interacting with your documentation.
+A comprehensive monorepo template for building documentation chatbots using Mastra with separate MCP server and agent components.
 
-## 🎯 What This Template Shows
+## Architecture Overview
 
-This template illustrates the complete MCP workflow:
+This template demonstrates a modular architecture separating concerns between:
 
-1. **Define an MCP Server** - Creates tools that can interact with your documentation
-2. **Consume the MCP Server** - Connects to the server to use those tools
-3. **Agent Integration** - Uses an agent that can leverage the MCP tools
+- **MCP Server**: Standalone server that exposes documentation tools via HTTP/SSE
+- **Agent**: Mastra agent that consumes tools from the MCP server
+- **Web/Docs Apps**: Frontend applications for user interaction
 
-In this example, the "documentation" is **planet data**, but you can easily replace this with your own documentation source (APIs, databases, files, etc.).
+## What's inside?
 
-## 🔧 What is MCP?
+This template includes the following apps and packages:
 
-**Model Control Protocol (MCP)** is a standard for connecting AI assistants to external tools and data sources. It allows you to:
+### Apps
 
-- Create reusable tools that any MCP-compatible client can use
-- Securely expose your data and APIs to AI agents
-- Build modular, interoperable AI systems
+- `apps/agent`: Mastra agent that connects to MCP servers for documentation assistance
+- `apps/mcp-server`: Standalone MCP server exposing documentation tools
+- `apps/docs`: Next.js documentation site
+- `apps/web`: Next.js web application
 
-## 🏗️ Project Structure
+### Packages
 
-```
-src/
-├── data/
-│   └── functions.json          # Sample documentation data
-├── mastra/
-│   ├── agents/
-│   │   └── kepler-agent.ts  # Agent that uses MCP tools
-│   ├── mcp/
-│   │   ├── mcp-client.ts     # Client to connect to MCP server
-│   │   └── mcp-server.ts     # MCP server definition
-│   ├── tools/
-│   │   └── docs-tool.ts   # Tool for querying Kepler function data
-│   └── index.ts              # Main Mastra configuration
-└── scripts/
-    └── mcp-server-http.ts    # Standalone MCP server runner
-```
+- `packages/ui`: Shared React component library
+- `packages/eslint-config`: ESLint configurations
+- `packages/typescript-config`: TypeScript configurations
 
-## 🚀 Quick Start
+## Getting Started
 
-### 1. Install Dependencies
+1. Install dependencies:
+
+   ```bash
+   pnpm install
+   ```
+
+2. Set up environment files:
+
+   ```bash
+   # Copy environment files for each app
+   cp apps/mcp-server/.env.example apps/mcp-server/.env
+   cp apps/agent/.env.example apps/agent/.env
+   ```
+
+3. Add your OpenAI API key to `apps/agent/.env`:
+
+   ```
+   OPENAI_API_KEY=your_openai_api_key_here
+   ```
+
+4. Start the development servers:
+
+   ```bash
+   # Start all services
+   pnpm dev
+
+   # Or start individual services
+   pnpm dev:mcp      # MCP server (port 4111)
+   pnpm dev:agent    # Agent server (port 4112)
+   pnpm dev:web      # Web app (port 3000)
+   pnpm dev:docs     # Docs app (port 3001)
+   ```
+
+## Usage
+
+### MCP Server (Port 4111)
+
+The MCP server exposes documentation tools via HTTP/SSE:
 
 ```bash
-pnpm install
+# Check server status
+curl http://localhost:4111/mcp
+
+# Connect with MCP client
+curl -X POST http://localhost:4111/mcp/message \
+  -H "Content-Type: application/json" \
+  -d '{"method": "tools/list"}'
 ```
 
-### 2. Environment Variables
+### Agent Server (Port 4112)
 
-Create a `.env` file in the root directory:
-
-```env
-# Optional: Customize server URLs (defaults work for local development)
-MCP_SERVER_URL=http://localhost:4111/mcp
-SERVER_BASE_URL=http://localhost:4111
-
-# Optional: Set to production for HTTPS in deployed environments
-NODE_ENV=development
-```
-
-### 3. Run the Application
+The agent consumes MCP tools and provides chat functionality:
 
 ```bash
-# Start the Mastra server (includes MCP server)
-pnpm dev
+# Chat with the docs agent
+curl -X POST http://localhost:4112/agents/docsAgent/chat \
+  -H "Content-Type: application/json" \
+  -d '{"messages": [{"role": "user", "content": "Tell me about getPlanetaryData"}]}'
 
-# Or run the standalone MCP server
-pnpm run mcp-server
+# Health check
+curl http://localhost:4112/health
 ```
 
-### 4. Test the Setup
+## Development
 
-The server will start on `http://localhost:4112` with these endpoints:
+### Building
 
-- **Health Check**: `GET /health`
-- **MCP Info**: `GET /mcp/info`
-- **MCP Endpoint**: `GET /mcp` (Server-Sent Events)
-
-## 🛠️ How It Works
-
-### MCP Server (`src/mastra/mcp/mcp-server.ts`)
-
-The MCP server exposes tools that can interact with your documentation:
-
-```typescript
-export const mcpServer = new MCPServer({
-  name: 'Template Docs Chatbot MCP Server',
-  tools: {
-    keplerInfoTool, // Your documentation query tool
-  },
-});
-```
-
-### MCP Client (`src/mastra/mcp/mcp-client.ts`)
-
-The client connects to the MCP server to use its tools:
-
-```typescript
-export const mcpClient = new MCPClient({
-  servers: {
-    localTools: {
-      url: new URL(process.env.MCP_SERVER_URL || 'http://localhost:4111/mcp'),
-    },
-  },
-});
-```
-
-### Documentation Tool (`src/mastra/tools/docs-tool.ts`)
-
-Query documentation for Kepler project functions with their arguments:
-
-```typescript
-export const keplerInfoTool = createTool({
-  id: 'docs-tool',
-  description: 'Get detailed information about Kepler project functions, including arguments and helpful tips',
-  // ... tool configuration
-});
-```
-
-### Agent (`src/mastra/agents/kepler-agent.ts`)
-
-The Kepler Documentation Agent that can answer questions about available functions:
-
-```typescript
-export const keplerAgent = new Agent({
-  name: 'Kepler Documentation Agent',
-  instructions: 'You are a helpful assistant that provides information about Kepler project functions.',
-  // ... agent configuration
-});
-```
-
-## 🔄 Customizing for Your Documentation
-
-To adapt this template for your own documentation:
-
-### 1. Replace the Data Source
-
-- Update `src/data/functions.json` with your documentation data (including function arguments)
-- Or connect to your API, database, or file system
-
-### 2. Modify the Tool
-
-Edit `src/mastra/tools/docs-tool.ts`:
-
-```typescript
-export const myDocsInfoTool = createTool({
-  id: 'my-docs-info',
-  description: 'Search and retrieve information from my documentation',
-  inputSchema: z.object({
-    query: z.string().describe('Search query for documentation'),
-  }),
-  execute: async ({ context, input }) => {
-    // Implement your documentation search logic
-    const results = await searchMyDocs(input.query);
-    return { results };
-  },
-});
-```
-
-### 3. Update the Agent
-
-Modify `src/mastra/agents/kepler-agent.ts`:
-
-```typescript
-export const myDocsAgent = new Agent({
-  name: 'myDocsAgent',
-  instructions:
-    'You are a helpful assistant that provides information from our documentation. Use the available tools to search and retrieve relevant information.',
-  model: {
-    provider: 'ANTHROPIC',
-    name: 'claude-3-5-sonnet-20241022',
-  },
-  tools: await mcpClient.getTools(),
-});
-```
-
-### 4. Register Your Changes
-
-Update `src/mastra/index.ts`:
-
-```typescript
-export const mastra = new Mastra({
-  agents: {
-    myDocsAgent, // Your agent
-  },
-  mcpServers: {
-    myDocs: mcpServer, // Your MCP server
-  },
-  // ... rest of configuration
-});
-```
-
-## 🌐 Deployment
-
-This template is configured to work in both local and production environments:
-
-### Environment Variables for Production
-
-```env
-MCP_SERVER_URL=https://your-app.com/mcp
-SERVER_BASE_URL=https://your-app.com
-NODE_ENV=production
-```
-
-## 📡 API Endpoints
-
-### Health Check
-
-```
-GET /health
-```
-
-Returns server status and available services.
-
-### MCP Information
-
-```
-GET /mcp/info
-```
-
-Returns information about the MCP server and available tools.
-
-### MCP Server-Sent Events
-
-```
-GET /mcp
-```
-
-The main MCP endpoint for tool communication.
-
-## 🔧 Development
-
-### Available Scripts
+Build all apps and packages:
 
 ```bash
-# Start the main Mastra server
-pnpm start
-
-# Run standalone MCP server
-pnpm run mcp-server
-
-# Development mode with hot reload
-pnpm dev
+pnpm build
 ```
 
-### Adding New Tools
+Build specific apps:
 
-1. Create a new tool in `src/mastra/tools/`
-2. Register it in the MCP server (`src/mastra/mcp/mcp-server.ts`)
-3. The agent will automatically have access to use it
+```bash
+pnpm build --filter=@templates/mcp-server
+pnpm build --filter=@templates/agent
+```
 
-## 📚 Learn More
+### Development Scripts
+
+- `pnpm dev` - Start all development servers
+- `pnpm dev:mcp` - Start only MCP server
+- `pnpm dev:agent` - Start only agent server
+- `pnpm dev:web` - Start only web app
+- `pnpm dev:docs` - Start only docs app
+- `pnpm lint` - Run linting across all packages
+- `pnpm format` - Format code with Prettier
+- `pnpm check-types` - Run TypeScript type checking
+
+## Customization
+
+### MCP Server
+
+- Replace `apps/mcp-server/src/data/functions.json` with your documentation data
+- Modify tools in `apps/mcp-server/src/tools/`
+- Add new tools and register them in `apps/mcp-server/src/server.ts`
+
+### Agent
+
+- Update agent instructions in `apps/agent/src/mastra/agents/docs-agent.ts`
+- Configure MCP server connections in `apps/agent/src/mastra/mcp/mcp-client.ts`
+- Add new agents in `apps/agent/src/mastra/agents/`
+
+### Frontend Apps
+
+- Customize the web interface in `apps/web/`
+- Update documentation site in `apps/docs/`
+- Modify shared UI components in `packages/ui/`
+
+## Architecture Benefits
+
+This separation provides several advantages:
+
+1. **Modularity**: MCP server can be deployed independently and consumed by multiple clients
+2. **Scalability**: Each component can be scaled separately based on load
+3. **Flexibility**: Different frontends can consume the same MCP server
+4. **Development**: Teams can work on different components independently
+5. **Deployment**: Components can be deployed to different environments or platforms
+
+## Deployment
+
+Each app should be deployed independently:
+
+- **MCP Server**: Deploy as a standalone service (Docker, serverless, etc.)
+- **Agent**: Deploy with Mastra's built-in deployment options
+- **Web/Docs**: Deploy to Vercel, Netlify, or other hosting platforms
+
+The Agent app should be deployed first, then the deployment URL should be added to the MCP server's `MCP_SERVER_URL` environment variable.
+
+## Learn More
 
 - [Mastra Documentation](https://docs.mastra.ai)
-- [MCP Specification](https://spec.modelcontextprotocol.io)
-- [Agent Documentation](https://docs.mastra.ai/agents)
-- [Tools Documentation](https://docs.mastra.ai/tools)
-
-## 🤝 Contributing
-
-This is a template - feel free to fork it and adapt it for your needs! If you create improvements that could benefit others, consider contributing back.
+- [MCP Protocol](https://docs.mastra.ai/mcp)
+- [Turborepo Documentation](https://turborepo.com/docs)

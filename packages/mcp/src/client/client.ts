@@ -36,7 +36,8 @@ import {
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { z } from 'zod';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
-import type { JSONSchema } from 'zod-from-json-schema';
+import { convertJsonSchemaToZod as convertJsonSchemaToZodV3 } from 'zod-from-json-schema-v3';
+import type { JSONSchema } from 'zod-from-json-schema-v3';
 import { ElicitationClientActions } from './elicitationActions';
 import { PromptClientActions } from './promptActions';
 import { ResourceClientActions } from './resourceActions';
@@ -74,6 +75,7 @@ type StdioServerDefinition = BaseServerOptions & {
   url?: never; // Exclude 'url' for Stdio
   requestInit?: never; // Exclude HTTP options for Stdio
   eventSourceInit?: never; // Exclude HTTP options for Stdio
+  authProvider?: never; // Exclude HTTP options for Stdio
   reconnectionOptions?: never; // Exclude Streamable HTTP specific options
   sessionId?: never; // Exclude Streamable HTTP specific options
 };
@@ -89,6 +91,7 @@ type HttpServerDefinition = BaseServerOptions & {
   // Include relevant options from SDK HTTP transport types
   requestInit?: StreamableHTTPClientTransportOptions['requestInit'];
   eventSourceInit?: SSEClientTransportOptions['eventSourceInit'];
+  authProvider?: StreamableHTTPClientTransportOptions['authProvider'];
   reconnectionOptions?: StreamableHTTPClientTransportOptions['reconnectionOptions'];
   sessionId?: StreamableHTTPClientTransportOptions['sessionId'];
 };
@@ -167,7 +170,6 @@ export class InternalMastraMCPClient extends MastraBase {
     // Set up log message capturing
     this.setupLogging();
 
-
     this.resources = new ResourceClientActions({ client: this, logger: this.logger });
     this.prompts = new PromptClientActions({ client: this, logger: this.logger });
     this.elicitation = new ElicitationClientActions({ client: this, logger: this.logger });
@@ -237,7 +239,7 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private async connectHttp(url: URL) {
-    const { requestInit, eventSourceInit } = this.serverConfig;
+    const { requestInit, eventSourceInit, authProvider } = this.serverConfig;
 
     this.log('debug', `Attempting to connect to URL: ${url}`);
 
@@ -251,6 +253,7 @@ export class InternalMastraMCPClient extends MastraBase {
         const streamableTransport = new StreamableHTTPClientTransport(url, {
           requestInit,
           reconnectionOptions: this.serverConfig.reconnectionOptions,
+          authProvider: authProvider,
         });
         await this.client.connect(streamableTransport, {
           timeout:
@@ -269,7 +272,7 @@ export class InternalMastraMCPClient extends MastraBase {
       this.log('debug', 'Falling back to deprecated HTTP+SSE transport...');
       try {
         // Fallback to SSE transport
-        const sseTransport = new SSEClientTransport(url, { requestInit, eventSourceInit });
+        const sseTransport = new SSEClientTransport(url, { requestInit, eventSourceInit, authProvider });
         await this.client.connect(sseTransport, { timeout: this.serverConfig.timeout ?? this.timeout });
         this.transport = sseTransport;
         this.log('debug', 'Successfully connected using deprecated HTTP+SSE transport.');
@@ -315,7 +318,6 @@ export class InternalMastraMCPClient extends MastraBase {
             originalOnClose();
           }
         };
-
       } catch (e) {
         this.isConnected = null;
         reject(e);
@@ -463,12 +465,12 @@ export class InternalMastraMCPClient extends MastraBase {
 
   setElicitationRequestHandler(handler: ElicitationHandler): void {
     this.log('debug', 'Setting elicitation request handler');
-    this.client.setRequestHandler(ElicitRequestSchema, async (request) => {
+    this.client.setRequestHandler(ElicitRequestSchema, async request => {
       this.log('debug', `Received elicitation request: ${request.params.message}`);
       return handler(request.params);
     });
   }
-  
+
   private async convertInputSchema(
     inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'] | JSONSchema,
   ): Promise<z.ZodType> {
@@ -477,8 +479,14 @@ export class InternalMastraMCPClient extends MastraBase {
     }
 
     try {
-      await $RefParser.dereference(inputSchema)
-      return convertJsonSchemaToZod(inputSchema as JSONSchema);
+      await $RefParser.dereference(inputSchema);
+      const jsonSchemaToConvert = ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema;
+      if ('toJSONSchema' in z) {
+        //@ts-expect-error - zod type issue
+        return convertJsonSchemaToZod(jsonSchemaToConvert);
+      } else {
+        return convertJsonSchemaToZodV3(jsonSchemaToConvert);
+      }
     } catch (error: unknown) {
       let errorDetails: string | undefined;
       if (error instanceof Error) {
@@ -508,14 +516,20 @@ export class InternalMastraMCPClient extends MastraBase {
   private async convertOutputSchema(
     outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'] | JSONSchema,
   ): Promise<z.ZodType | undefined> {
-    if (!outputSchema) return
+    if (!outputSchema) return;
     if (isZodType(outputSchema)) {
       return outputSchema;
     }
 
     try {
-      await $RefParser.dereference(outputSchema)
-      return convertJsonSchemaToZod(outputSchema as JSONSchema);
+      await $RefParser.dereference(outputSchema);
+      const jsonSchemaToConvert = ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema;
+      if ('toJSONSchema' in z) {
+        //@ts-expect-error - zod type issue
+        return convertJsonSchemaToZod(jsonSchemaToConvert);
+      } else {
+        return convertJsonSchemaToZodV3(jsonSchemaToConvert);
+      }
     } catch (error: unknown) {
       let errorDetails: string | undefined;
       if (error instanceof Error) {

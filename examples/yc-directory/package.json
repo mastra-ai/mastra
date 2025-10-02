@@ -10,13 +10,13 @@
   },
   "keywords": [],
   "author": "",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "description": "",
   "dependencies": {
     "@mastra/core": "latest",
     "@mastra/loggers": "latest",
     "@mastra/evals": "latest",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@ai-sdk/openai": "latest",

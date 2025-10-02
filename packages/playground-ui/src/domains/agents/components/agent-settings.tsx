@@ -13,9 +13,66 @@ import { Icon } from '@/ds/icons/Icon';
 import { Txt } from '@/ds/components/Txt/Txt';
 
 import { AgentAdvancedSettings } from './agent-advanced-settings';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import clsx from 'clsx';
 
-export const AgentSettings = () => {
+export interface AgentSettingsProps {
+  modelVersion: string;
+  hasMemory?: boolean;
+  hasSubAgents?: boolean;
+}
+
+const NetworkCheckbox = ({ hasMemory, hasSubAgents }: { hasMemory: boolean; hasSubAgents: boolean }) => {
+  const isNetworkAvailable = hasMemory && hasSubAgents;
+
+  const radio = (
+    <div className="flex items-center gap-2">
+      <RadioGroupItem value="network" id="network" className="text-icon6" disabled={!isNetworkAvailable} />
+      <Label
+        className={clsx('text-icon6 text-ui-md', !isNetworkAvailable && '!text-icon3 cursor-not-allowed')}
+        htmlFor="network"
+      >
+        Network
+      </Label>
+    </div>
+  );
+
+  if (isNetworkAvailable) {
+    return radio;
+  }
+
+  const requirements = [];
+  if (!hasMemory) {
+    requirements.push('memory enabled');
+  }
+  if (!hasSubAgents) {
+    requirements.push('at least one sub-agent');
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{radio}</TooltipTrigger>
+      <TooltipContent>
+        <p>Network is not available. Please make sure you have {requirements.join(' and ')}.</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+};
+
+export const AgentSettings = ({ modelVersion, hasMemory = false, hasSubAgents = false }: AgentSettingsProps) => {
   const { settings, setSettings, resetAll } = useAgentSettings();
+
+  let radioValue;
+
+  if (modelVersion === 'v2') {
+    if (settings?.modelSettings?.chatWithNetwork) {
+      radioValue = 'network';
+    } else {
+      radioValue = settings?.modelSettings?.chatWithGenerateVNext ? 'generateVNext' : 'streamVNext';
+    }
+  } else {
+    radioValue = settings?.modelSettings?.chatWithGenerate ? 'generate' : 'stream';
+  }
 
   return (
     <div className="px-5 text-xs py-2 pb-4">
@@ -23,27 +80,54 @@ export const AgentSettings = () => {
         <Entry label="Chat Method">
           <RadioGroup
             orientation="horizontal"
-            value={settings?.modelSettings?.chatWithGenerate ? 'generate' : 'stream'}
+            value={radioValue}
             onValueChange={(value: string) =>
               setSettings({
                 ...settings,
-                modelSettings: { ...settings?.modelSettings, chatWithGenerate: value === 'generate' },
+                modelSettings: {
+                  ...settings?.modelSettings,
+                  chatWithGenerate: value === 'generate',
+                  chatWithGenerateVNext: value === 'generateVNext',
+                  chatWithStreamVNext: value === 'streamVNext',
+                  chatWithNetwork: value === 'network',
+                },
               })
             }
             className="flex flex-row gap-4"
           >
-            <div className="flex items-center gap-2">
-              <RadioGroupItem value="generate" id="generate" className="text-icon6" />
-              <Label className="text-icon6 text-ui-md" htmlFor="generate">
-                Generate
-              </Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <RadioGroupItem value="stream" id="stream" className="text-icon6" />
-              <Label className="text-icon6 text-ui-md" htmlFor="stream">
-                Stream
-              </Label>
-            </div>
+            {modelVersion !== 'v2' && (
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="generate" id="generate" className="text-icon6" />
+                <Label className="text-icon6 text-ui-md" htmlFor="generate">
+                  Generate
+                </Label>
+              </div>
+            )}
+            {modelVersion === 'v2' && (
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="generateVNext" id="generateVNext" className="text-icon6" />
+                <Label className="text-icon6 text-ui-md" htmlFor="generateVNext">
+                  Generate vNext
+                </Label>
+              </div>
+            )}
+            {modelVersion !== 'v2' && (
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="stream" id="stream" className="text-icon6" />
+                <Label className="text-icon6 text-ui-md" htmlFor="stream">
+                  Stream
+                </Label>
+              </div>
+            )}
+            {modelVersion === 'v2' && (
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="streamVNext" id="streamVNext" className="text-icon6" />
+                <Label className="text-icon6 text-ui-md" htmlFor="streamVNext">
+                  Stream vNext
+                </Label>
+              </div>
+            )}
+            {modelVersion === 'v2' && <NetworkCheckbox hasMemory={hasMemory} hasSubAgents={hasSubAgents} />}
           </RadioGroup>
         </Entry>
 

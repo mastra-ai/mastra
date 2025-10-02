@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { describe, it, expect } from 'vitest';
 
-import { createTestRun } from '../../utils';
+import { createAgentTestRun, createUIMessage } from '../../utils';
 import type { TestCase } from '../../utils';
 
 import { createToxicityScorer } from './index';
@@ -60,22 +60,30 @@ describe(
     const scorer = createToxicityScorer({ model });
 
     it('should detect direct personal attacks with backhanded compliments', async () => {
-      const result = await scorer.run(createTestRun(testCases[0].input, testCases[0].output));
+      const inputMessages = [createUIMessage({ role: 'user', content: testCases[0].input, id: 'test-input' })];
+      const output = [createUIMessage({ role: 'assistant', content: testCases[0].output, id: 'test-output' })];
+      const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
       expect(result.score).toBeCloseTo(testCases[0].expectedResult.score, 1);
     });
 
     it('should recognize professional, non-toxic feedback', async () => {
-      const result = await scorer.run(createTestRun(testCases[1].input, testCases[1].output));
+      const inputMessages = [createUIMessage({ role: 'user', content: testCases[1].input, id: 'test-input' })];
+      const output = [createUIMessage({ role: 'assistant', content: testCases[1].output, id: 'test-output' })];
+      const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
       expect(result.score).toBeCloseTo(testCases[1].expectedResult.score, 1);
     });
 
     it('should detect harsh criticism with condescending tone', async () => {
-      const result = await scorer.run(createTestRun(testCases[2].input, testCases[2].output));
+      const inputMessages = [createUIMessage({ role: 'user', content: testCases[2].input, id: 'test-input' })];
+      const output = [createUIMessage({ role: 'assistant', content: testCases[2].output, id: 'test-output' })];
+      const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
       expect(result.score).toBeCloseTo(testCases[2].expectedResult.score, 1);
     });
 
     it('should recognize constructive, solution-oriented feedback', async () => {
-      const result = await scorer.run(createTestRun(testCases[3].input, testCases[3].output));
+      const inputMessages = [createUIMessage({ role: 'user', content: testCases[3].input, id: 'test-input' })];
+      const output = [createUIMessage({ role: 'assistant', content: testCases[3].output, id: 'test-output' })];
+      const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
       expect(result.score).toBeCloseTo(testCases[3].expectedResult.score, 1);
     });
   },

@@ -21,6 +21,7 @@ export function pgTests() {
   describe('PG specific tests', () => {
     beforeAll(async () => {
       store = new PostgresStore(TEST_CONFIG);
+      await store.init();
     });
     afterAll(async () => {
       try {
@@ -124,6 +125,8 @@ export function pgTests() {
       const BASE_SCHEMA = {
         id: { type: 'integer', primaryKey: true, nullable: false },
         name: { type: 'text', nullable: true },
+        createdAt: { type: 'timestamp', nullable: false },
+        updatedAt: { type: 'timestamp', nullable: false },
       } as Record<string, StorageColumn>;
 
       beforeEach(async () => {
@@ -160,7 +163,7 @@ export function pgTests() {
 
         await store.insert({
           tableName: camelCaseTable as TABLE_NAMES,
-          record: { id: '1', name: 'Alice' },
+          record: { id: '1', name: 'Alice', createdAt: new Date(), updatedAt: new Date() },
         });
 
         const row: any = await store.load({
@@ -180,7 +183,7 @@ export function pgTests() {
 
         await store.insert({
           tableName: snakeCaseTable as TABLE_NAMES,
-          record: { id: '2', name: 'Bob' },
+          record: { id: '2', name: 'Bob', createdAt: new Date(), updatedAt: new Date() },
         });
 
         const row: any = await store.load({
@@ -373,40 +376,99 @@ export function pgTests() {
 
     describe('Validation', () => {
       const validConfig = TEST_CONFIG as any;
-      it('throws if connectionString is empty', () => {
-        expect(() => new PostgresStore({ connectionString: '' })).toThrow();
-        expect(() => new PostgresStore({ ...validConfig, connectionString: '' })).toThrow();
+
+      describe('Connection String Config', () => {
+        it('throws if connectionString is empty', () => {
+          expect(() => new PostgresStore({ connectionString: '' })).toThrow();
+          expect(() => new PostgresStore({ ...validConfig, connectionString: '' })).toThrow();
+        });
+        it('does not throw on non-empty connection string', () => {
+          expect(() => new PostgresStore({ connectionString })).not.toThrow();
+        });
       });
-      it('throws if host is missing or empty', () => {
-        expect(() => new PostgresStore({ ...validConfig, host: '' })).toThrow();
-        const { host, ...rest } = validConfig;
-        expect(() => new PostgresStore(rest as any)).toThrow();
+
+      describe('TCP Host Config', () => {
+        it('throws if host is missing or empty', () => {
+          expect(() => new PostgresStore({ ...validConfig, host: '' })).toThrow();
+          const { host, ...rest } = validConfig;
+          expect(() => new PostgresStore(rest as any)).toThrow();
+        });
+        it('throws if database is missing or empty', () => {
+          expect(() => new PostgresStore({ ...validConfig, database: '' })).toThrow();
+          const { database, ...rest } = validConfig;
+          expect(() => new PostgresStore(rest as any)).toThrow();
+        });
+        it('throws if user is missing or empty', () => {
+          expect(() => new PostgresStore({ ...validConfig, user: '' })).toThrow();
+          const { user, ...rest } = validConfig;
+          expect(() => new PostgresStore(rest as any)).toThrow();
+        });
+        it('throws if password is missing or empty', () => {
+          expect(() => new PostgresStore({ ...validConfig, password: '' })).toThrow();
+          const { password, ...rest } = validConfig;
+          expect(() => new PostgresStore(rest as any)).toThrow();
+        });
+        it('does not throw on valid config (host-based)', () => {
+          expect(() => new PostgresStore(validConfig)).not.toThrow();
+        });
       });
-      it('throws if connectionString is empty', () => {
-        expect(() => new PostgresStore({ connectionString: '' })).toThrow();
-        const { database, ...rest } = validConfig;
-        expect(() => new PostgresStore(rest as any)).toThrow();
+
+      describe('Cloud SQL Connector Config', () => {
+        it('accepts config with stream property (Cloud SQL connector)', () => {
+          const connectorConfig = {
+            user: 'test-user',
+            database: 'test-db',
+            ssl: { rejectUnauthorized: false },
+            stream: () => ({}), // Mock stream function
+          };
+          expect(() => new PostgresStore(connectorConfig as any)).not.toThrow();
+        });
+
+        it('accepts config with password function (IAM auth)', () => {
+          const iamConfig = {
+            user: 'test-user',
+            database: 'test-db',
+            host: 'localhost', // This could be present but ignored when password is a function
+            port: 5432,
+            password: () => Promise.resolve('dynamic-token'), // Mock password function
+            ssl: { rejectUnauthorized: false },
+          };
+          expect(() => new PostgresStore(iamConfig as any)).not.toThrow();
+        });
+
+        it('accepts generic pg ClientConfig', () => {
+          const clientConfig = {
+            user: 'test-user',
+            database: 'test-db',
+            application_name: 'test-app',
+            ssl: { rejectUnauthorized: false },
+            stream: () => ({}), // Mock stream
+          };
+          expect(() => new PostgresStore(clientConfig as any)).not.toThrow();
+        });
       });
-      it('throws if user is missing or empty', () => {
-        expect(() => new PostgresStore({ ...validConfig, user: '' })).toThrow();
-        const { user, ...rest } = validConfig;
-        expect(() => new PostgresStore(rest as any)).toThrow();
+
+      describe('Invalid Config', () => {
+        it('throws on invalid config (missing required fields)', () => {
+          expect(() => new PostgresStore({ user: 'test' } as any)).toThrow(
+            /invalid config.*Provide either.*connectionString.*host.*ClientConfig/,
+          );
+        });
+
+        it('throws on completely empty config', () => {
+          expect(() => new PostgresStore({} as any)).toThrow(
+            /invalid config.*Provide either.*connectionString.*host.*ClientConfig/,
+          );
+        });
       });
-      it('throws if database is missing or empty', () => {
-        expect(() => new PostgresStore({ ...validConfig, database: '' })).toThrow();
-        const { database, ...rest } = validConfig;
-        expect(() => new PostgresStore(rest as any)).toThrow();
-      });
-      it('throws if password is missing or empty', () => {
-        expect(() => new PostgresStore({ ...validConfig, password: '' })).toThrow();
-        const { password, ...rest } = validConfig;
-        expect(() => new PostgresStore(rest as any)).toThrow();
-      });
-      it('does not throw on valid config (host-based)', () => {
-        expect(() => new PostgresStore(validConfig)).not.toThrow();
-      });
-      it('does not throw on non-empty connection string', () => {
-        expect(() => new PostgresStore({ connectionString })).not.toThrow();
+
+      describe('Store Initialization', () => {
+        it('throws if store is not initialized', () => {
+          expect(() => new PostgresStore(validConfig).db.any('SELECT 1')).toThrow(
+            /PostgresStore: Store is not initialized/,
+          );
+          expect(() => new PostgresStore(validConfig).pgp).toThrow(/PostgresStore: Store is not initialized/);
+        });
       });
     });
   });

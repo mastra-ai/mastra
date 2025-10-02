@@ -38,7 +38,7 @@ export function WorkflowNestedNode({
   onShowTrace,
   onSendEvent,
 }: NodeProps<NestedNode> & WorkflowNestedNodeProps) {
-  const { steps, isRunning, runId } = useCurrentRun();
+  const { steps, runId } = useCurrentRun();
   const { showNestedGraph } = useContext(WorkflowNestedGraphContext);
 
   const { label, description, withoutTopHandle, withoutBottomHandle, stepGraph, mapConfig, event } = data;
@@ -53,24 +53,23 @@ export function WorkflowNestedNode({
       <div
         className={cn(
           'bg-surface3 rounded-lg w-[274px] border-sm border-border1 pt-2',
-          step?.status === 'success' && 'ring-2 ring-accent1 bg-accent1Darker',
-          step?.status === 'failed' && 'ring-2 ring-accent2 bg-accent2Darker',
-          step?.status === 'suspended' && 'ring-2 ring-accent3 bg-accent3Darker',
-          step?.status === 'waiting' && 'ring-2 ring-accent5 bg-accent5Darker',
-          step?.status === 'running' && 'ring-2 ring-accent6 bg-accent6Darker',
+          step?.status === 'success' && 'bg-accent1Darker',
+          step?.status === 'failed' && 'bg-accent2Darker',
+          step?.status === 'suspended' && 'bg-accent3Darker',
+          step?.status === 'waiting' && 'bg-accent5Darker',
+          step?.status === 'running' && 'bg-accent6Darker',
         )}
       >
         <div className={cn('flex items-center gap-2 px-3', !description && 'pb-2')}>
-          {isRunning && (
-            <Icon>
-              {step?.status === 'failed' && <CrossIcon className="text-accent2" />}
-              {step?.status === 'success' && <CheckIcon className="text-accent1" />}
-              {step?.status === 'suspended' && <PauseIcon className="text-accent3" />}
-              {step?.status === 'waiting' && <HourglassIcon className="text-accent5" />}
-              {step?.status === 'running' && <Loader2 className="text-accent6 animate-spin" />}
-              {!step && <CircleDashed className="text-icon2" />}
-            </Icon>
-          )}
+          <Icon>
+            {step?.status === 'failed' && <CrossIcon className="text-accent2" />}
+            {step?.status === 'success' && <CheckIcon className="text-accent1" />}
+            {step?.status === 'suspended' && <PauseIcon className="text-accent3" />}
+            {step?.status === 'waiting' && <HourglassIcon className="text-accent5" />}
+            {step?.status === 'running' && <Loader2 className="text-accent6 animate-spin" />}
+            {!step && <CircleDashed className="text-icon2" />}
+          </Icon>
+
           <Txt variant="ui-lg" className="text-icon6 font-medium inline-flex items-center gap-1 justify-between w-full">
             {label} {step?.startedAt && <Clock startedAt={step.startedAt} endedAt={step.endedAt} />}
           </Txt>

@@ -10,6 +10,7 @@ import { HTTPException } from '../http-exception';
 import {
   getMemoryStatusHandler,
   getThreadsHandler,
+  getThreadsPaginatedHandler,
   getThreadByIdHandler,
   saveMessagesHandler,
   createThreadHandler,
@@ -22,6 +23,7 @@ vi.mock('@mastra/core/memory');
 
 type MockedAbstractFn = {
   getThreadsByResourceId: Mock<MastraMemory['getThreadsByResourceId']>;
+  getThreadsByResourceIdPaginated: Mock<MastraMemory['getThreadsByResourceIdPaginated']>;
   getThreadById: Mock<MastraMemory['getThreadById']>;
   query: Mock<MastraMemory['query']>;
   saveMessages: Mock<MastraMemory['saveMessages']>;
@@ -50,6 +52,7 @@ describe('Memory Handlers', () => {
     // @ts-ignore
     mockMemory = new MastraMemory();
     mockMemory.getThreadsByResourceId = vi.fn();
+    mockMemory.getThreadsByResourceIdPaginated = vi.fn();
     mockMemory.getThreadById = vi.fn();
     mockMemory.query = vi.fn();
     mockMemory.saveMessages = vi.fn();
@@ -151,6 +154,193 @@ describe('Memory Handlers', () => {
       const result = await getThreadsHandler({ mastra, resourceId: 'test-resource', agentId: 'test-agent' });
       expect(result).toEqual(mockThreads);
       expect(mockMemory.getThreadsByResourceId).toBeCalledWith({ resourceId: 'test-resource' });
+    });
+  });
+
+  describe('getThreadsPaginatedHandler', () => {
+    it('should throw error when memory is not initialized', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': new Agent({
+            name: 'test-agent',
+            instructions: 'test-instructions',
+            model: {} as any,
+          }),
+        },
+      });
+      await expect(
+        getThreadsPaginatedHandler({
+          mastra,
+          resourceId: 'test-resource',
+          agentId: 'test-agent',
+          page: 0,
+          perPage: 10,
+          orderBy: 'createdAt',
+          sortDirection: 'DESC',
+        }),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
+    });
+
+    it('should throw error when resourceId is not provided', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        agents: { 'test-agent': mockAgent },
+      });
+      await expect(
+        getThreadsPaginatedHandler({
+          mastra,
+          agentId: 'test-agent',
+          page: 0,
+          perPage: 10,
+          orderBy: 'createdAt',
+          sortDirection: 'DESC',
+        }),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Argument "resourceId" is required' }));
+    });
+
+    it('should return paginated threads with default parameters', async () => {
+      const mockResult = {
+        threads: [createThread({ resourceId: 'test-resource' })],
+        total: 25,
+        page: 0,
+        perPage: 10,
+        hasMore: true,
+      };
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: { 'test-agent': mockAgent },
+      });
+
+      mockMemory.getThreadsByResourceIdPaginated.mockResolvedValue(mockResult);
+
+      const result = await getThreadsPaginatedHandler({
+        mastra,
+        resourceId: 'test-resource',
+        agentId: 'test-agent',
+        page: 0,
+        perPage: 10,
+        orderBy: 'createdAt',
+        sortDirection: 'DESC',
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockMemory.getThreadsByResourceIdPaginated).toBeCalledWith({
+        resourceId: 'test-resource',
+        page: 0,
+        perPage: 10,
+        orderBy: 'createdAt',
+        sortDirection: 'DESC',
+      });
+    });
+
+    it('should respect custom pagination parameters', async () => {
+      const mockResult = {
+        threads: [createThread({ resourceId: 'test-resource' })],
+        total: 50,
+        page: 1,
+        perPage: 20,
+        hasMore: true,
+      };
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: { 'test-agent': mockAgent },
+      });
+
+      mockMemory.getThreadsByResourceIdPaginated.mockResolvedValue(mockResult);
+
+      const result = await getThreadsPaginatedHandler({
+        mastra,
+        resourceId: 'test-resource',
+        agentId: 'test-agent',
+        page: 1,
+        perPage: 20,
+        orderBy: 'updatedAt',
+        sortDirection: 'ASC',
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockMemory.getThreadsByResourceIdPaginated).toBeCalledWith({
+        resourceId: 'test-resource',
+        page: 1,
+        perPage: 20,
+        orderBy: 'updatedAt',
+        sortDirection: 'ASC',
+      });
+    });
+
+    it('should handle sorting parameters correctly', async () => {
+      const mockResult = {
+        threads: [
+          createThread({ id: '1', resourceId: 'test-resource', title: 'Thread 1' }),
+          createThread({ id: '2', resourceId: 'test-resource', title: 'Thread 2' }),
+        ],
+        total: 2,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      };
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: { 'test-agent': mockAgent },
+      });
+
+      mockMemory.getThreadsByResourceIdPaginated.mockResolvedValue(mockResult);
+
+      // Test updatedAt DESC sorting
+      const result = await getThreadsPaginatedHandler({
+        mastra,
+        resourceId: 'test-resource',
+        agentId: 'test-agent',
+        page: 0,
+        perPage: 10,
+        orderBy: 'updatedAt',
+        sortDirection: 'DESC',
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(mockMemory.getThreadsByResourceIdPaginated).toBeCalledWith({
+        resourceId: 'test-resource',
+        page: 0,
+        perPage: 10,
+        orderBy: 'updatedAt',
+        sortDirection: 'DESC',
+      });
+    });
+
+    it('should handle edge cases with no threads', async () => {
+      const mockResult = {
+        threads: [],
+        total: 0,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      };
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: { 'test-agent': mockAgent },
+      });
+
+      mockMemory.getThreadsByResourceIdPaginated.mockResolvedValue(mockResult);
+
+      const result = await getThreadsPaginatedHandler({
+        mastra,
+        resourceId: 'non-existent-resource',
+        agentId: 'test-agent',
+        page: 0,
+        perPage: 10,
+        orderBy: 'createdAt',
+        sortDirection: 'DESC',
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(result.threads).toHaveLength(0);
+      expect(result.total).toBe(0);
+      expect(result.hasMore).toBe(false);
     });
   });
 

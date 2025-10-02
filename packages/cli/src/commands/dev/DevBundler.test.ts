@@ -1,4 +1,30 @@
+import { remove } from 'fs-extra/esm';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// Mock process.exit and process.argv to avoid CLI triggering
+const mockExit = vi.hoisted(() => vi.fn());
+vi.stubGlobal('process', {
+  ...process,
+  exit: mockExit,
+  argv: ['node', 'test'], // Override command line args
+});
+
+// Mock commander to prevent CLI from running
+vi.mock('commander', () => ({
+  Command: vi.fn(() => ({
+    name: vi.fn().mockReturnThis(),
+    version: vi.fn().mockReturnThis(),
+    addHelpText: vi.fn().mockReturnThis(),
+    action: vi.fn().mockReturnThis(),
+    command: vi.fn().mockReturnThis(),
+    description: vi.fn().mockReturnThis(),
+    option: vi.fn().mockReturnThis(),
+    parse: vi.fn(),
+    help: vi.fn(),
+  })),
+}));
+
+import { DevBundler } from './DevBundler';
 
 // Don't reference top-level variables in mock definitions
 vi.mock('@mastra/deployer/build', () => {
@@ -24,17 +50,20 @@ vi.mock('fs-extra', () => {
 });
 
 // Import DevBundler after mocks
-import { DevBundler } from './DevBundler';
 
 describe('DevBundler', () => {
   const originalEnv = process.env.NODE_ENV;
+  const originalExit = process.exit;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Mock process.exit to prevent it from actually exiting during tests
+    process.exit = vi.fn() as any;
   });
 
   afterEach(() => {
     process.env.NODE_ENV = originalEnv;
+    process.exit = originalExit;
   });
 
   describe('watch', () => {
@@ -44,18 +73,23 @@ describe('DevBundler', () => {
       const devBundler = new DevBundler();
       const { getWatcherInputOptions } = await import('@mastra/deployer/build');
 
-      // Act
-      await devBundler.watch('test-entry.js', 'output-dir', []);
+      const tmpDir = '.test-tmp';
+      try {
+        // Act
+        await devBundler.watch('test-entry.js', tmpDir, []);
 
-      // Assert
-      expect(getWatcherInputOptions).toHaveBeenCalledWith(
-        'test-entry.js',
-        'node',
-        {
-          'process.env.NODE_ENV': JSON.stringify('test-env'),
-        },
-        { sourcemap: false },
-      );
+        // Assert
+        expect(getWatcherInputOptions).toHaveBeenCalledWith(
+          'test-entry.js',
+          'node',
+          {
+            'process.env.NODE_ENV': JSON.stringify('test-env'),
+          },
+          expect.objectContaining({ sourcemap: false }),
+        );
+      } finally {
+        await remove(tmpDir);
+      }
     });
 
     it('should default to development when NODE_ENV is not set', async () => {
@@ -65,17 +99,21 @@ describe('DevBundler', () => {
       const { getWatcherInputOptions } = await import('@mastra/deployer/build');
 
       // Act
-      await devBundler.watch('test-entry.js', 'output-dir', []);
-
-      // Assert
-      expect(getWatcherInputOptions).toHaveBeenCalledWith(
-        'test-entry.js',
-        'node',
-        {
-          'process.env.NODE_ENV': JSON.stringify('development'),
-        },
-        { sourcemap: false },
-      );
+      const tmpDir = '.test-tmp';
+      await devBundler.watch('test-entry.js', tmpDir, []);
+      try {
+        // Assert
+        expect(getWatcherInputOptions).toHaveBeenCalledWith(
+          'test-entry.js',
+          'node',
+          {
+            'process.env.NODE_ENV': JSON.stringify('development'),
+          },
+          expect.objectContaining({ sourcemap: false }),
+        );
+      } finally {
+        await remove(tmpDir);
+      }
     });
   });
 });

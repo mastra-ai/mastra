@@ -14,6 +14,7 @@
   --border-2: hsla(0, 0%, 72%, 1);
   --border-radius-lg: 0.5rem;
   --diff-color: #2ea04326;
+  --button-outline: hsl(143, 97%, 54%);
 }
 
 .dark {
@@ -22,6 +23,7 @@
   --color-text-icon-6: hsla(0, 0%, 100%, 1);
   --primary: #050505;
   --border-2: hsla(0, 0%, 26%, 1);
+  --button-outline: hsla(125, 66%, 50%, 1);
 }
 
 @theme inline {
@@ -421,10 +423,6 @@ pre code.nextra-code:not([class*="twoslash-"]) > span[data-highlighted-line] {
   }
 }
 
-.nextra-code {
-  white-space: nowrap;
-}
-
 .nextra-code > span {
   white-space-collapse: preserve;
 }
@@ -508,10 +506,10 @@ aside > div:nth-child(1) ul li.active:has(> a) {
   }
 }
 
-aside > div:nth-child(1) ul li.active:has(a[href="/docs"]),
-aside > div:nth-child(1) ul li.active:has(a[href="/examples"]),
-aside > div:nth-child(1) ul li.active:has(a[href="/guides"]),
-aside > div:nth-child(1) ul li.active:has(a[href="/reference"]) {
+aside > div:nth-child(1) ul li.active:has(a[href$="/docs"]),
+aside > div:nth-child(1) ul li.active:has(a[href$="/examples"]),
+aside > div:nth-child(1) ul li.active:has(a[href$="/guides"]),
+aside > div:nth-child(1) ul li.active:has(a[href$="/reference"]) {
   &::before {
     content: "";
     background: transparent;
@@ -522,20 +520,20 @@ article main li:has(ul) ul {
   margin-top: calc(var(--x-spacing) * 2);
 }
 
-aside a[href="/docs"],
-aside button[data-href="/docs/reference"],
-aside a[href="/examples"],
-aside a[href="/guides"],
-aside a[href="/reference"] {
+aside a[href$="/docs"],
+aside button[data-href$="/docs/reference"],
+aside a[href$="/examples"],
+aside a[href$="/guides"],
+aside a[href$="/reference"] {
   position: relative;
   padding-inline-start: calc((var(--button-gap) * 3) + var(--icon-position));
 }
 
-aside a[href="/docs"]::before,
-aside button[data-href="/docs/reference"]::before,
-aside a[href="/examples"]::before,
-aside a[href="/guides"]::before,
-aside a[href="/reference"]::before {
+aside a[href$="/docs"]::before,
+aside button[data-href$="/docs/reference"]::before,
+aside a[href$="/examples"]::before,
+aside a[href$="/guides"]::before,
+aside a[href$="/reference"]::before {
   content: "";
   position: absolute;
   left: var(--icon-position);
@@ -547,18 +545,18 @@ aside a[href="/reference"]::before {
   background-repeat: no-repeat;
 }
 
-aside a[href="/docs"]::before,
-aside a[href="/examples"]::before,
-aside a[href="/guides"]::before {
+aside a[href$="/docs"]::before,
+aside a[href$="/examples"]::before,
+aside a[href$="/guides"]::before {
   background-image: url("icons/introduction.svg");
 }
 
-aside button[data-href="/docs/reference"]::before,
-aside a[href="/reference"]::before {
+aside button[data-href$="/docs/reference"]::before,
+aside a[href$="/reference"]::before {
   background-image: url("icons/reference.svg");
 }
 
-button[data-href="/docs/reference"] svg {
+button[data-href$="/docs/reference"] svg {
   display: none;
 }
 
@@ -595,23 +593,11 @@ aside > div:nth-child(1) button {
   }
 }
 
-.nextra-toc div > p {
+.nextra-toc div {
   position: relative;
   color: var(--color-el-3);
   font-weight: 500;
-  padding-inline-start: 2.24rem;
-
-  &::before {
-    content: "";
-    position: absolute;
-    left: 12px;
-    bottom: 1;
-    width: 1rem;
-    height: 1rem;
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-image: url("icons/on-this-page.svg");
-  }
+  --nextra-navbar-height: 20px;
 }
 
 .nextra-toc ul a {
@@ -740,5 +726,43 @@ table td code.nextra-code:not([class*="twoslash-"]) {
     position: absolute;
     left: 2.6rem;
     color: var(--content-color);
+  }
+}
+
+#headlessui-portal-root ul {
+  border-radius: 12px;
+  padding-inline: 0.25rem;
+  border-width: 0.5px;
+
+  &:focus {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+  &:focus-visible {
+    outline: none !important;
+    box-shadow: transparent !important;
+  }
+}
+
+#headlessui-portal-root ul li {
+  border-radius: 8px;
+}
+
+.nextra-breadcrumb + div {
+  border-radius: 10px !important;
+
+  &:focus-within {
+    outline: 2px solid var(--button-outline);
+  }
+}
+
+.nextra-breadcrumb + div button {
+  &:focus {
+    outline: none;
+    box-shadow: none;
+  }
+  &:focus-visible {
+    outline: none;
+    box-shadow: none;
   }
 }

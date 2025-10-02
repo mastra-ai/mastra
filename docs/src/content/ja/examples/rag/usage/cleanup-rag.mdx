@@ -5,10 +5,14 @@ description: LLMベースの処理を用いて、Mastraで情報密度を最適�
 
 import { GithubLink } from "@/components/github-link";
 
+
+
 # 情報密度の最適化
 
 この例では、Mastra、OpenAIの埋め込み、PGVectorによるベクトルストレージを用いたRetrieval-Augmented Generation（RAG）システムの実装方法を示します。
 このシステムでは、エージェントが初期チャンクをクリーンアップし、情報密度を最適化しつつデータの重複を排除します。
+
+
 
 ## 概要
 
@@ -26,6 +30,8 @@ import { GithubLink } from "@/components/github-link";
    - クリーニング後のセグメントに対して新たに埋め込みを作成
    - 最適化されたデータでベクトルストアを更新
 6. 同じクエリを再度実行し、応答品質の向上を確認
+
+
 
 ## セットアップ
 
@@ -54,6 +60,8 @@ import {
 } from "@mastra/rag";
 import { embedMany } from "ai";
 ```
+
+
 
 ## ツール作成
 
@@ -87,6 +95,8 @@ const documentChunkerTool = createDocumentChunkerTool({
 });
 ```
 
+
+
 ## エージェント設定
 
 クエリとクリーニングの両方を処理できる単一のMastraエージェントをセットアップします。
@@ -108,12 +118,16 @@ const ragAgent = new Agent({
 });
 ```
 
+
+
 ## PgVector と Mastra のインスタンス化
 
-以下のコンポーネントを使って PgVector と Mastra をインスタンス化します。
+次のコンポーネントを使って PgVector と Mastra をインスタンス化します。
 
 ```typescript copy showLineNumbers{41} filename="index.ts"
-const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
+const pgVector = new PgVector({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+});
 
 export const mastra = new Mastra({
   agents: { ragAgent },
@@ -121,6 +135,8 @@ export const mastra = new Mastra({
 });
 const agent = mastra.getAgent("ragAgent");
 ```
+
+
 
 ## ドキュメント処理
 
@@ -152,6 +168,8 @@ await vectorStore.upsert({
 });
 ```
 
+
+
 ## 初期クエリ
 
 まずは、生データにクエリを実行してベースラインを確認してみましょう。
@@ -164,9 +182,11 @@ console.log("\nQuery:", query);
 console.log("Response:", originalResponse.text);
 ```
 
-## データ最適化
 
-初期結果を確認した後、データをクリーンアップして品質を向上させることができます：
+
+## データの最適化
+
+初期結果を確認した後、データの品質を向上させるためにクリーニングを行うことができます：
 
 ```typescript copy showLineNumbers{79} filename="index.ts"
 const chunkPrompt = `Use the tool provided to clean the chunks. Make sure to filter out irrelevant information that is not space related and remove duplicates.`;
@@ -195,10 +215,13 @@ await vectorStore.createIndex({
 
 await vectorStore.upsert({
   indexName: "embeddings",
+  indexName: "embeddings",
   vectors: cleanedEmbeddings,
   metadata: updatedChunks?.map((chunk: any) => ({ text: chunk.text })),
 });
 ```
+
+
 
 ## 最適化されたクエリ
 

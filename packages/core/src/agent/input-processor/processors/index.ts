@@ -1,20 +1,18 @@
-export { UnicodeNormalizer, type UnicodeNormalizerOptions } from './unicode-normalizer';
+export { UnicodeNormalizerInputProcessor, type UnicodeNormalizerOptions } from './unicode-normalizer';
 export {
   ModerationInputProcessor,
   type ModerationOptions,
   type ModerationResult,
-  type ModerationCategories,
   type ModerationCategoryScores,
 } from './moderation';
 export {
-  PromptInjectionDetector,
+  PromptInjectionDetectorInputProcessor,
   type PromptInjectionOptions,
   type PromptInjectionResult,
-  type PromptInjectionCategories,
   type PromptInjectionCategoryScores,
 } from './prompt-injection-detector';
 export {
-  PIIDetector,
+  PIIDetectorInputProcessor,
   type PIIDetectorOptions,
   type PIIDetectionResult,
   type PIICategories,
@@ -22,7 +20,7 @@ export {
   type PIIDetection,
 } from './pii-detector';
 export {
-  LanguageDetector,
+  LanguageDetectorInputProcessor,
   type LanguageDetectorOptions,
   type LanguageDetectionResult,
   type LanguageDetection,

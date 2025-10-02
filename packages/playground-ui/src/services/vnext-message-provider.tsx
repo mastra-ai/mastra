@@ -1,5 +1,5 @@
 import React from 'react';
-import { TextContentPart, ThreadMessageLike } from '@assistant-ui/react';
+import { TextMessagePart, ThreadMessageLike } from '@assistant-ui/react';
 import { createContext, ReactNode, useContext, useState } from 'react';
 
 const MessagesContext = createContext<{
@@ -20,7 +20,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
       const lastMsg = msgs[msgs.length - 1];
 
       const content =
-        typeof lastMsg.content === 'string' ? lastMsg.content : (lastMsg.content?.[0] as TextContentPart).text;
+        typeof lastMsg.content === 'string' ? lastMsg.content : (lastMsg.content?.[0] as TextMessagePart).text;
 
       return [
         ...msgs.slice(0, -1),

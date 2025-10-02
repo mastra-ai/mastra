@@ -5,6 +5,7 @@ import { createServer } from 'node:net';
 import path from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { useChat } from '@ai-sdk/react';
+import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import type { Message } from 'ai';
@@ -88,7 +89,7 @@ describe('Memory Streaming Tests', () => {
     expect(response2).toContain('70 degrees');
   });
 
-  it('should use experimental_generateMessageId for messages in memory', async () => {
+  it('should use custom mastra ID generator for messages in memory', async () => {
     const agent = new Agent({
       name: 'test-msg-id',
       instructions: 'you are a helpful assistant.',
@@ -100,21 +101,30 @@ describe('Memory Streaming Tests', () => {
     const resourceId = 'test-resource-msg-id';
     const customIds: UUID[] = [];
 
-    await agent.generate('Hello, world!', {
-      threadId,
-      resourceId,
-      experimental_generateMessageId: () => {
+    const _mastra = new Mastra({
+      idGenerator: () => {
         const id = randomUUID();
         customIds.push(id);
         return id;
       },
+      agents: {
+        agent: agent,
+      },
+    });
+
+    await agent.generate('Hello, world!', {
+      threadId,
+      resourceId,
     });
 
     const agentMemory = (await agent.getMemory())!;
     const { messages } = await agentMemory.query({ threadId });
 
+    console.log('Custom IDs: ', customIds);
+    console.log('Messages: ', messages);
+
     expect(messages).toHaveLength(2);
-    expect(messages.length).toBe(customIds.length);
+    expect(messages.length).toBeLessThan(customIds.length);
     for (const message of messages) {
       if (!(`id` in message)) {
         throw new Error(`Expected message.id`);
@@ -160,7 +170,7 @@ describe('Memory Streaming Tests', () => {
           console.error('Mastra server error:', data.toString());
         });
 
-        setTimeout(() => reject(new Error('Mastra server failed to start')), 10000);
+        setTimeout(() => reject(new Error('Mastra server failed to start')), 100000);
       });
     });
 

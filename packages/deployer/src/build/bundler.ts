@@ -2,20 +2,35 @@ import alias from '@rollup/plugin-alias';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
-import { fileURLToPath } from 'node:url';
-import { rollup, type InputOptions, type OutputOptions } from 'rollup';
-import esbuild from 'rollup-plugin-esbuild';
-
-import type { analyzeBundle } from './analyze';
+import esmShim from '@rollup/plugin-esm-shim';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { rollup, type InputOptions, type OutputOptions, type Plugin } from 'rollup';
+import { esbuild } from './plugins/esbuild';
+import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
+import { analyzeBundle } from './analyze';
 import { removeDeployer } from './plugins/remove-deployer';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
+import { join } from 'node:path';
+import { slash } from './utils';
 
 export async function getInputOptions(
   entryFile: string,
   analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
   platform: 'node' | 'browser',
   env: Record<string, string> = { 'process.env.NODE_ENV': JSON.stringify('production') },
-  { sourcemap = false }: { sourcemap?: boolean } = {},
+  {
+    sourcemap = false,
+    isDev = false,
+    projectRoot,
+    workspaceRoot = undefined,
+    enableEsmShim = true,
+  }: {
+    sourcemap?: boolean;
+    isDev?: boolean;
+    workspaceRoot?: string;
+    projectRoot: string;
+    enableEsmShim?: boolean;
+  },
 ): Promise<InputOptions> {
   let nodeResolvePlugin =
     platform === 'node'
@@ -29,7 +44,6 @@ export async function getInputOptions(
         });
 
   const externalsCopy = new Set<string>();
-  debugger;
   // make all nested imports external from the same package
   for (const external of analyzedBundleInfo.externalDependencies) {
     if (external.startsWith('@')) {
@@ -44,18 +58,16 @@ export async function getInputOptions(
 
   const externals = Array.from(externalsCopy);
 
-  const normalizedEntryFile = entryFile.replaceAll('\\', '/');
+  const normalizedEntryFile = slash(entryFile);
   return {
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     treeshake: 'smallest',
     preserveSymlinks: true,
     external: externals,
     plugins: [
-      tsConfigPaths(),
       {
         name: 'alias-optimized-deps',
-        // @ts-ignore
-        resolveId(id) {
+        resolveId(id: string) {
           if (!analyzedBundleInfo.dependencies.has(id)) {
             return null;
           }
@@ -68,17 +80,29 @@ export async function getInputOptions(
             };
           }
 
+          const filename = analyzedBundleInfo.dependencies.get(id)!;
+          const absolutePath = join(workspaceRoot || projectRoot, filename);
+
+          // During `mastra dev` we want to keep deps as external
+          if (isDev) {
+            return {
+              id: process.platform === 'win32' ? pathToFileURL(absolutePath).href : absolutePath,
+              external: true,
+            };
+          }
+
+          // For production builds return the absolute path as-is so Rollup can handle itself
           return {
-            id: '.mastra/.build/' + analyzedBundleInfo.dependencies.get(id)!,
+            id: absolutePath,
             external: false,
           };
         },
-      },
+      } satisfies Plugin,
       alias({
         entries: [
           {
             find: /^\#server$/,
-            replacement: fileURLToPath(import.meta.resolve('@mastra/deployer/server')).replaceAll('\\', '/'),
+            replacement: slash(fileURLToPath(import.meta.resolve('@mastra/deployer/server'))),
           },
           {
             find: /^\@mastra\/server\/(.*)/,
@@ -94,6 +118,7 @@ export async function getInputOptions(
           { find: /^\#mastra$/, replacement: normalizedEntryFile },
         ],
       }),
+      tsConfigPaths(),
       {
         name: 'tools-rewriter',
         resolveId(id: string) {
@@ -104,13 +129,12 @@ export async function getInputOptions(
             };
           }
         },
-      },
+      } satisfies Plugin,
       esbuild({
-        target: 'node20',
         platform,
-        minify: false,
         define: env,
       }),
+      optimizeLodashImports(),
       commonjs({
         extensions: ['.js', '.ts'],
         transformMixedEsModules: true,
@@ -118,6 +142,7 @@ export async function getInputOptions(
           return externals.includes(id);
         },
       }),
+      enableEsmShim ? esmShim() : undefined,
       nodeResolvePlugin,
       // for debugging
       // {
@@ -138,9 +163,7 @@ export async function getInputOptions(
       // treeshake unused imports
       esbuild({
         include: entryFile,
-        target: 'node20',
         platform,
-        minify: false,
       }),
     ].filter(Boolean),
   } satisfies InputOptions;

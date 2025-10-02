@@ -1,10 +1,13 @@
-import type { LanguageModelV1 } from 'ai';
-import type { ZodTypeAny } from 'zod';
+import { z } from 'zod';
+import type { ZodType as ZodTypeV3 } from 'zod/v3';
+import type { ZodType as ZodTypeV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
-import { SchemaCompatLayer, isArr, isNumber, isObj, isOptional, isString, isUnion } from '../schema-compatibility';
+import { SchemaCompatLayer } from '../schema-compatibility';
+import type { ModelInformation } from '../types';
+import { isOptional, isObj, isArr, isUnion, isNumber, isString } from '../zodTypes';
 
 export class MetaSchemaCompatLayer extends SchemaCompatLayer {
-  constructor(model: LanguageModelV1) {
+  constructor(model: ModelInformation) {
     super(model);
   }
 
@@ -16,18 +19,20 @@ export class MetaSchemaCompatLayer extends SchemaCompatLayer {
     return this.getModel().modelId.includes('meta');
   }
 
-  processZodType(value: ZodTypeAny): ZodTypeAny {
-    if (isOptional(value)) {
+  processZodType(value: ZodTypeV3): ZodTypeV3;
+  processZodType(value: ZodTypeV4): ZodTypeV4;
+  processZodType(value: ZodTypeV3 | ZodTypeV4): ZodTypeV3 | ZodTypeV4 {
+    if (isOptional(z)(value)) {
       return this.defaultZodOptionalHandler(value, ['ZodObject', 'ZodArray', 'ZodUnion', 'ZodString', 'ZodNumber']);
-    } else if (isObj(value)) {
+    } else if (isObj(z)(value)) {
       return this.defaultZodObjectHandler(value);
-    } else if (isArr(value)) {
+    } else if (isArr(z)(value)) {
       return this.defaultZodArrayHandler(value, ['min', 'max']);
-    } else if (isUnion(value)) {
+    } else if (isUnion(z)(value)) {
       return this.defaultZodUnionHandler(value);
-    } else if (isNumber(value)) {
+    } else if (isNumber(z)(value)) {
       return this.defaultZodNumberHandler(value);
-    } else if (isString(value)) {
+    } else if (isString(z)(value)) {
       return this.defaultZodStringHandler(value);
     }
 

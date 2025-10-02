@@ -1,3 +1,8 @@
+---
+title: "Working Memory | Memory | Mastra Docs"
+description: "Learn how to configure working memory in Mastra to store persistent user data, preferences."
+---
+
 import YouTube from "@/components/youtube";
 
 # Working Memory
@@ -43,7 +48,7 @@ const agent = new Agent({
 
 Working memory is a block of Markdown text that the agent is able to update over time to store continuously relevant information:
 
-<YouTube id="ik-ld_XA96s" />
+<YouTube id="UMy_JHLf1n8" />
 
 ## Memory Persistence Scopes
 
@@ -61,9 +66,9 @@ const memory = new Memory({
       enabled: true,
       scope: 'thread', // Default - memory is isolated per thread
       template: `# User Profile
-- **Name**: 
-- **Interests**: 
-- **Current Goal**: 
+- **Name**:
+- **Interests**:
+- **Current Goal**:
 `,
     },
   },
@@ -87,11 +92,11 @@ const memory = new Memory({
       enabled: true,
       scope: 'resource', // Memory persists across all user threads
       template: `# User Profile
-- **Name**: 
-- **Location**: 
-- **Interests**: 
-- **Preferences**: 
-- **Long-term Goals**: 
+- **Name**:
+- **Location**:
+- **Interests**:
+- **Preferences**:
+- **Long-term Goals**:
 `,
     },
   },
@@ -137,23 +142,23 @@ const memory = new Memory({
       enabled: true,
       template: `
 # User Profile
- 
+
 ## Personal Info
- 
+
 - Name:
 - Location:
 - Timezone:
- 
+
 ## Preferences
- 
+
 - Communication Style: [e.g., Formal, Casual]
 - Project Goal:
 - Key Deadlines:
   - [Deadline 1]: [Date]
   - [Deadline 2]: [Date]
- 
+
 ## Session State
- 
+
 - Last Task Discussed:
 - Open Questions:
   - [Question 1]
@@ -298,9 +303,76 @@ again because it has been stored in working memory.
 If your agent is not properly updating working memory when you expect it to, you can add system
 instructions on _how_ and _when_ to use this template in your agent's `instructions` setting.
 
+## Setting Initial Working Memory
+
+While agents typically update working memory through the `updateWorkingMemory` tool, you can also set initial working memory programmatically when creating or updating threads. This is useful for injecting user data (like their name, preferences, or other info) that you want available to the agent without passing it in every request.
+
+### Setting Working Memory via Thread Metadata
+
+When creating a thread, you can provide initial working memory through the metadata's `workingMemory` key:
+
+```typescript filename="src/app/medical-consultation.ts" showLineNumbers copy
+// Create a thread with initial working memory
+const thread = await memory.createThread({
+  threadId: "thread-123",
+  resourceId: "user-456",
+  title: "Medical Consultation",
+  metadata: {
+    workingMemory: `# Patient Profile
+- Name: John Doe
+- Blood Type: O+
+- Allergies: Penicillin
+- Current Medications: None
+- Medical History: Hypertension (controlled)
+`
+  }
+});
+
+// The agent will now have access to this information in all messages
+await agent.generate("What's my blood type?", {
+  threadId: thread.id,
+  resourceId: "user-456"
+});
+// Response: "Your blood type is O+."
+```
+
+### Updating Working Memory Programmatically
+
+You can also update an existing thread's working memory:
+
+```typescript filename="src/app/medical-consultation.ts" showLineNumbers copy
+// Update thread metadata to add/modify working memory
+await memory.updateThread({
+  id: "thread-123",
+  title: thread.title,
+  metadata: {
+    ...thread.metadata,
+    workingMemory: `# Patient Profile
+- Name: John Doe
+- Blood Type: O+
+- Allergies: Penicillin, Ibuprofen  // Updated
+- Current Medications: Lisinopril 10mg daily  // Added
+- Medical History: Hypertension (controlled)
+`
+  }
+});
+```
+
+### Direct Memory Update
+
+Alternatively, use the `updateWorkingMemory` method directly:
+
+```typescript filename="src/app/medical-consultation.ts" showLineNumbers copy
+await memory.updateWorkingMemory({
+  threadId: "thread-123",
+  resourceId: "user-456", // Required for resource-scoped memory
+  workingMemory: "Updated memory content..."
+});
+```
+
 ## Examples
 
-- [Streaming working memory](/examples/memory/streaming-working-memory)
-- [Using a working memory template](/examples/memory/streaming-working-memory-advanced)
-- [Using a working memory schema](/examples/memory/streaming-working-memory-structured)
+- [Basic working memory](/examples/memory/working-memory-basic)
+- [Working memory with template](/examples/memory/working-memory-template)
+- [Working memory with schema](/examples/memory/working-memory-schema)
 - [Per-resource working memory](https://github.com/mastra-ai/mastra/tree/main/examples/memory-per-resource-example) - Complete example showing resource-scoped memory persistence

@@ -1,6 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { describe, it, expect, vi } from 'vitest';
-import { createTestRun } from '../../utils';
+import { createAgentTestRun, createUIMessage } from '../../utils';
 import { createBiasScorer } from './index';
 
 const testCases = [
@@ -108,42 +108,66 @@ describe('BiasMetric', () => {
   const scorer = createBiasScorer({ model });
 
   it('should detect multiple severe biases (political, geographical, age)', async () => {
-    const result = await scorer.run(createTestRun(testCases[0].input, testCases[0].output));
+    const inputMessages = [createUIMessage({ role: 'user', content: testCases[0].input, id: 'test-input' })];
+    const output = [createUIMessage({ role: 'assistant', content: testCases[0].output, id: 'test-output' })];
+
+    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCases[0].expectedResult.score, 1);
   });
 
   it('should recognize unbiased workplace descriptions', async () => {
-    const result = await scorer.run(createTestRun(testCases[1].input, testCases[1].output));
+    const inputMessages = [createUIMessage({ role: 'user', content: testCases[1].input, id: 'test-input' })];
+    const output = [createUIMessage({ role: 'assistant', content: testCases[1].output, id: 'test-output' })];
+
+    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCases[1].expectedResult.score, 1);
   });
 
   it('should recognize balanced academic success discussion', async () => {
-    const result = await scorer.run(createTestRun(testCases[2].input, testCases[2].output));
+    const inputMessages = [createUIMessage({ role: 'user', content: testCases[2].input, id: 'test-input' })];
+    const output = [createUIMessage({ role: 'assistant', content: testCases[2].output, id: 'test-output' })];
+
+    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCases[2].expectedResult.score, 1);
   });
 
   it('should detect multiple biases in STEM discussion', async () => {
-    const result = await scorer.run(createTestRun(testCases[3].input, testCases[3].output));
+    const inputMessages = [createUIMessage({ role: 'user', content: testCases[3].input, id: 'test-input' })];
+    const output = [createUIMessage({ role: 'assistant', content: testCases[3].output, id: 'test-output' })];
+
+    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCases[3].expectedResult.score, 1);
   });
 
   it('should detect intersectional bias in leadership roles', async () => {
-    const result = await scorer.run(createTestRun(testCases[4].input, testCases[4].output));
+    const inputMessages = [createUIMessage({ role: 'user', content: testCases[4].input, id: 'test-input' })];
+    const output = [createUIMessage({ role: 'assistant', content: testCases[4].output, id: 'test-output' })];
+
+    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCases[4].expectedResult.score, 1);
   });
 
   it('should detect gender and age bias in tech', async () => {
-    const result = await scorer.run(createTestRun(testCases[5].input, testCases[5].output));
+    const inputMessages = [createUIMessage({ role: 'user', content: testCases[5].input, id: 'test-input' })];
+    const output = [createUIMessage({ role: 'assistant', content: testCases[5].output, id: 'test-output' })];
+
+    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCases[5].expectedResult.score, 1);
   });
 
   it('should detect geographical and socioeconomic bias in education', async () => {
-    const result = await scorer.run(createTestRun(testCases[6].input, testCases[6].output));
+    const inputMessages = [createUIMessage({ role: 'user', content: testCases[6].input, id: 'test-input' })];
+    const output = [createUIMessage({ role: 'assistant', content: testCases[6].output, id: 'test-output' })];
+
+    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCases[6].expectedResult.score, 1);
   });
 
   it('should identify subtle political bias in economic policy', async () => {
-    const result = await scorer.run(createTestRun(testCases[7].input, testCases[7].output));
+    const inputMessages = [createUIMessage({ role: 'user', content: testCases[7].input, id: 'test-input' })];
+    const output = [createUIMessage({ role: 'assistant', content: testCases[7].output, id: 'test-output' })];
+
+    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCases[7].expectedResult.score, 1);
   });
 });

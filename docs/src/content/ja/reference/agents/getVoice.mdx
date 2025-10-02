@@ -1,109 +1,79 @@
 ---
 title: "リファレンス: Agent.getVoice() | エージェント | Mastra ドキュメント"
-description: "Mastraエージェントの`.getVoice()`メソッドに関するドキュメント。音声機能のための音声プロバイダーを取得します。"
+description: "Mastraエージェントの`Agent.getVoice()`メソッドのドキュメント。音声機能用の音声プロバイダを取得します。"
 ---
+
+
 
 # Agent.getVoice()
 
-`getVoice()`メソッドは、エージェントに設定された音声プロバイダーを取得し、それが関数の場合は解決します。このメソッドは、テキスト読み上げや音声認識機能のためにエージェントの音声機能にアクセスするために使用されます。
+`.getVoice()`メソッドは、エージェントに設定された音声プロバイダーを取得し、それが関数の場合は解決します。このメソッドは、音声合成と音声認識機能のためにエージェントの音声機能にアクセスする際に使用されます。
 
-## 構文
 
-```typescript
-getVoice({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}): CompositeVoice | Promise<CompositeVoice>
+
+## 使用例
+
+```typescript copy
+await agent.getVoice();
 ```
 
-## パラメーター
 
-<br />
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ runtimeContext?: RuntimeContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "ランタイムコンテキストを含むオプションの設定オブジェクト。",
+    },
+  ]}
+/>
+
+
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "voice",
+      type: "Promise<MastraVoice>",
+      description: "エージェントに設定された音声プロバイダー、または未設定の場合はデフォルトの音声プロバイダーを返すPromise。",
+    },
+  ]}
+/>
+
+
+
+## 詳細な使用例
+
+```typescript copy
+await agent.getVoice({
+  runtimeContext: new RuntimeContext()
+});
+```
+
+### オプションパラメータ
+
 <PropertiesTable
   content={[
     {
       name: "runtimeContext",
       type: "RuntimeContext",
       isOptional: true,
-      description:
-        "依存性注入やコンテキスト情報のためのランタイムコンテキスト。指定されていない場合は、新しい RuntimeContext インスタンスがデフォルトで使用されます。",
+      defaultValue: "new RuntimeContext()",
+      description: "依存性注入とコンテキスト情報のための実行時コンテキスト。",
     },
   ]}
 />
 
-## 戻り値
 
-`CompositeVoice`インスタンスまたは`CompositeVoice`インスタンスに解決されるPromiseを返します。エージェントに音声プロバイダーが設定されていない場合は、デフォルトの音声プロバイダーを返します。
 
-## 説明
+## 関連項目
 
-`getVoice()` メソッドは、エージェントの音声機能にアクセスするために使用されます。このメソッドは、音声プロバイダーを解決します。音声プロバイダーは、直接指定することも、関数から返されることもあります。
-
-音声プロバイダーによって以下が可能になります：
-
-- テキストを音声に変換する（発話）
-- 音声をテキストに変換する（聞き取り）
-- 利用可能なスピーカーや音声の取得
-
-## 例
-
-### 基本的な使い方
-
-```typescript
-import { Agent } from "@mastra/core/agent";
-import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
-import { openai } from "@ai-sdk/openai";
-
-// Create an agent with a voice provider
-const agent = new Agent({
-  name: "voice-assistant",
-  instructions: "You are a helpful voice assistant.",
-  model: openai("gpt-4o"),
-  voice: new ElevenLabsVoice({
-    apiKey: process.env.ELEVENLABS_API_KEY,
-  }),
-});
-
-// Get the voice provider
-const voice = await agent.getVoice();
-
-// Use the voice provider for text-to-speech
-const audioStream = await voice.speak("Hello, how can I help you today?");
-
-// Use the voice provider for speech-to-text
-const transcription = await voice.listen(audioStream);
-
-// Get available speakers
-const speakers = await voice.getSpeakers();
-console.log(speakers);
-```
-
-### RuntimeContextとの併用
-
-```typescript
-import { Agent } from "@mastra/core/agent";
-import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
-import { RuntimeContext } from "@mastra/core/runtime-context";
-import { openai } from "@ai-sdk/openai";
-
-// Create an agent with a dynamic voice provider
-const agent = new Agent({
-  name: "voice-assistant",
-  instructions: ({ runtimeContext }) => {
-    // Dynamic instructions based on runtime context
-    const instructions = runtimeContext.get("preferredVoiceInstructions");
-    return instructions || "You are a helpful voice assistant.";
-  },
-  model: openai("gpt-4o"),
-  voice: new ElevenLabsVoice({
-    apiKey: process.env.ELEVENLABS_API_KEY,
-  }),
-});
-
-// Create a runtime context with preferences
-const context = new RuntimeContext();
-context.set("preferredVoiceInstructions", "You are an evil voice assistant");
-
-// Get the voice provider using the runtime context
-const voice = await agent.getVoice({ runtimeContext: context });
-
-// Use the voice provider
-const audioStream = await voice.speak("Hello, how can I help you today?");
-```
+- [エージェントに音声を追加する](../../docs/agents/adding-voice.mdx)
+- [音声プロバイダー](../voice/mastra-voice.mdx)

@@ -1,41 +1,75 @@
 ---
-title: "Deploy A Mastra Server"
-description: "Deploy a Mastra server with middleware and other options"
+title: "Deploy a Mastra Server"
+description: "Learn how to deploy a Mastra server with build settings and deployment options."
 ---
 
-# Deploy A Mastra Server
+import { FileTree } from "nextra/components";
 
-Mastra builds to a standard Node.js server, so you can deploy it to any platform that supports Node.js applications.
+# Deploy a Mastra Server
 
-- Cloud VMs (AWS EC2, DigitalOcean Droplets, GCP Compute Engine)
-- Container platforms (Docker, Kubernetes)
-- Platform as a Service (Heroku, Railway)
-- Self-hosted servers
+Mastra runs as a standard Node.js server and can be deployed across a wide range of environments.
 
-See the [Cloud Providers](/docs/deployment/cloud-providers/) for more information.
+## Default project structure
 
-### Building
+The [getting started guide](/docs/getting-started/installation) scaffolds a project with sensible defaults to help you begin quickly. By default, the CLI organizes application files under the `src/mastra/` directory, resulting in a structure similar to the following:
 
-Build the application:
+<FileTree>
+  <FileTree.Folder name="src" defaultOpen>
+    <FileTree.Folder name="mastra" defaultOpen>
+      <FileTree.Folder name="agents" />
+      <FileTree.Folder name="tools" />
+      <FileTree.Folder name="workflows" />
+      <FileTree.File name="index.ts" />
+    </FileTree.Folder>
+  </FileTree.Folder>
+  <FileTree.File name="package.json" />
+  <FileTree.File name="tsconfig.json" />
+</FileTree>
+
+## Building
+
+The `mastra build` command starts the build process:
 
 ```bash copy
-# Build from current directory
 mastra build
-
-# Or specify a directory
-mastra build --dir ./my-project
 ```
 
-The build process:
+### Customizing the input directory
 
-1. Locates entry file (`src/mastra/index.ts` or `src/mastra/index.js`)
-2. Creates `.mastra` output directory
-3. Bundles code using Rollup with tree shaking and source maps
-4. Generates [Hono](https://hono.dev) HTTP server
+If your Mastra files are located elsewhere, use the `--dir` flag to specify the custom location. The `--dir` flag tells Mastra where to find your entry point file (`index.ts` or `index.js`) and related directories.
 
-See [`mastra build`](/reference/cli/build) for all options.
+```bash copy
+mastra build --dir ./my-project/mastra
+```
 
-### Running the Server
+## Build process
+
+The build process follows these steps:
+
+1. **Locates entry file**: Finds `index.ts` or `index.js` in your specified directory (default: `src/mastra/`).
+2. **Creates build directory**: Generates a `.mastra/` directory containing:
+    - **`.build`**: Contains dependency analysis, bundled dependencies, and build configuration files.
+    - **`output`**: Contains the production-ready application bundle with `index.mjs`, `instrumentation.mjs`, and project-specific files.
+3. **Copies static assets**: Copies the `public/` folder contents to the `output` directory for serving static files.
+4. **Bundles code**: Uses Rollup with tree shaking and source maps for optimization.
+5. **Generates server**: Creates a [Hono](https://hono.dev) HTTP server ready for deployment.
+
+### Build output structure
+
+After building, Mastra creates a `.mastra/` directory with the following structure:
+
+<FileTree>
+  <FileTree.Folder name=".mastra" defaultOpen>
+    <FileTree.Folder name=".build" />
+    <FileTree.Folder name="output" />
+  </FileTree.Folder>
+</FileTree>
+
+### `public` folder
+
+If a `public` folder exists in `src/mastra`, its contents are copied into the `.build/output` directory during the build process.
+
+## Running the Server
 
 Start the HTTP server:
 
@@ -43,14 +77,10 @@ Start the HTTP server:
 node .mastra/output/index.mjs
 ```
 
-### Enable Telemetry for build output
+## Enable Telemetry
 
-Load instrumentation for the build output like so:
+To enable telemetry and observability, load the instrumentation file:
 
 ```bash copy
 node --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs
 ```
-
-## Serverless Deployment
-
-Mastra also supports serverless deployment on Cloudflare Workers, Vercel, and Netlify. See [Serverless Platforms](/docs/deployment/serverless-platforms/) for more information.

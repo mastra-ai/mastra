@@ -1,0 +1,300 @@
+---
+title: "Example: Custom Judge | Scorers | Mastra Docs"
+description: Example of creating a custom based scorer using createScorer with prompt objects.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Custom Judge Scorer
+
+This example shows how to create a custom scorer using `createScorer` with prompt objects. We'll build a "Gluten Checker" that evaluates whether a recipe contains gluten, using a language model as the judge.
+
+## Installation
+
+```bash copy
+npm install @mastra/core
+```
+
+> For complete API documentation and configuration options, see [`createScorer`](/reference/scorers/create-scorer).
+
+## Create a custom scorer
+
+A custom scorer in Mastra uses `createScorer` with four core components:
+
+1. [**Judge Configuration**](#judge-configuration)
+2. [**Analysis Step**](#analysis-step)
+3. [**Score Generation**](#score-generation)
+4. [**Reason Generation**](#reason-generation)
+
+Together, these components allow you to define custom evaluation logic using LLMs as judges.
+
+> See [createScorer](/reference/scorers/create-scorer) for the full API and configuration options.
+
+```typescript filename="src/mastra/scorers/gluten-checker.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { createScorer } from '@mastra/core/scores';
+import { z } from 'zod';
+
+export const GLUTEN_INSTRUCTIONS = `You are a Chef that identifies if recipes contain gluten.`;
+
+export const generateGlutenPrompt = ({ output }: { output: string }) => `Check if this recipe is gluten-free.
+
+Check for:
+- Wheat
+- Barley
+- Rye
+- Common sources like flour, pasta, bread
+
+Example with gluten:
+"Mix flour and water to make dough"
+Response: {
+  "isGlutenFree": false,
+  "glutenSources": ["flour"]
+}
+
+Example gluten-free:
+"Mix rice, beans, and vegetables"
+Response: {
+  "isGlutenFree": true,
+  "glutenSources": []
+}
+
+Recipe to analyze:
+${output}
+
+Return your response in this format:
+{
+  "isGlutenFree": boolean,
+  "glutenSources": ["list ingredients containing gluten"]
+}`;
+
+export const generateReasonPrompt = ({
+  isGlutenFree,
+  glutenSources,
+}: {
+  isGlutenFree: boolean;
+  glutenSources: string[];
+}) => `Explain why this recipe is${isGlutenFree ? '' : ' not'} gluten-free.
+
+${glutenSources.length > 0 ? `Sources of gluten: ${glutenSources.join(', ')}` : 'No gluten-containing ingredients found'}
+
+Return your response in this format:
+"This recipe is [gluten-free/contains gluten] because [explanation]"`;
+
+export const glutenCheckerScorer = createScorer({
+  name: 'Gluten Checker',
+  description: 'Check if the output contains any gluten',
+  judge: {
+    model: openai('gpt-4o'),
+    instructions: GLUTEN_INSTRUCTIONS,
+  },
+})
+  .analyze({
+    description: 'Analyze the output for gluten',
+    outputSchema: z.object({
+      isGlutenFree: z.boolean(),
+      glutenSources: z.array(z.string()),
+    }),
+    createPrompt: ({ run }) => {
+      const { output } = run;
+      return generateGlutenPrompt({ output: output.text });
+    },
+  })
+  .generateScore(({ results }) => {
+    return results.analyzeStepResult.isGlutenFree ? 1 : 0;
+  })
+  .generateReason({
+    description: 'Generate a reason for the score',
+    createPrompt: ({ results }) => {
+      return generateReasonPrompt({
+        glutenSources: results.analyzeStepResult.glutenSources,
+        isGlutenFree: results.analyzeStepResult.isGlutenFree,
+      });
+    },
+  });
+```
+
+### Judge Configuration
+
+Sets up the LLM model and defines its role as a domain expert.
+
+```typescript
+judge: {
+  model: openai('gpt-4o'),
+  instructions: GLUTEN_INSTRUCTIONS,
+}
+```
+
+### Analysis Step
+
+Defines how the LLM should analyze the input and what structured output to return.
+
+```typescript
+.analyze({
+  description: 'Analyze the output for gluten',
+  outputSchema: z.object({
+    isGlutenFree: z.boolean(),
+    glutenSources: z.array(z.string()),
+  }),
+  createPrompt: ({ run }) => {
+    const { output } = run;
+    return generateGlutenPrompt({ output: output.text });
+  },
+})
+```
+
+The analysis step uses a prompt object to:
+- Provide a clear description of the analysis task
+- Define expected output structure with Zod schema (both boolean result and list of gluten sources)
+- Generate dynamic prompts based on the input content
+
+### Score Generation
+
+Converts the LLM's structured analysis into a numerical score.
+
+```typescript
+.generateScore(({ results }) => {
+  return results.analyzeStepResult.isGlutenFree ? 1 : 0;
+})
+```
+
+The score generation function takes the analysis results and applies business logic to produce a score. In this case, the LLM directly determines if the recipe is gluten-free, so we use that boolean result: 1 for gluten-free, 0 for contains gluten.
+
+### Reason Generation
+
+Provides human-readable explanations for the score using another LLM call.
+
+```typescript
+.generateReason({
+  description: 'Generate a reason for the score',
+  createPrompt: ({ results }) => {
+    return generateReasonPrompt({
+      glutenSources: results.analyzeStepResult.glutenSources,
+      isGlutenFree: results.analyzeStepResult.isGlutenFree,
+    });
+  },
+})
+```
+
+The reason generation step creates explanations that help users understand why a particular score was assigned, using both the boolean result and the specific gluten sources identified by the analysis step.
+```
+
+## High gluten-free example
+
+```typescript filename="src/example-high-gluten-free.ts" showLineNumbers copy
+const result = await glutenCheckerScorer.run({
+  input: [{ role: 'user', content: 'Mix rice, beans, and vegetables' }],
+  output: { text: 'Mix rice, beans, and vegetables' },
+});
+
+console.log('Score:', result.score);
+console.log('Gluten sources:', result.analyzeStepResult.glutenSources);
+console.log('Reason:', result.reason);
+```
+
+### High gluten-free output
+
+```typescript
+{
+  score: 1,
+  analyzeStepResult: { 
+    isGlutenFree: true,
+    glutenSources: [] 
+  },
+  reason: 'This recipe is gluten-free because rice, beans, and vegetables are naturally gluten-free ingredients that are safe for people with celiac disease.'
+}
+```
+
+## Partial gluten example
+
+```typescript filename="src/example-partial-gluten.ts" showLineNumbers copy
+const result = await glutenCheckerScorer.run({
+  input: [{ role: 'user', content: 'Mix flour and water to make dough' }],
+  output: { text: 'Mix flour and water to make dough' },
+});
+
+console.log('Score:', result.score);
+console.log('Gluten sources:', result.analyzeStepResult.glutenSources);
+console.log('Reason:', result.reason);
+```
+
+### Partial gluten output
+
+```typescript
+{
+  score: 0,
+  analyzeStepResult: { 
+    isGlutenFree: false,
+    glutenSources: ['flour'] 
+  },
+  reason: 'This recipe is not gluten-free because it contains flour. Regular flour is made from wheat and contains gluten, making it unsafe for people with celiac disease or gluten sensitivity.'
+}
+```
+
+## Low gluten-free example
+
+```typescript filename="src/example-low-gluten-free.ts" showLineNumbers copy
+const result = await glutenCheckerScorer.run({
+  input: [{ role: 'user', content: 'Add soy sauce and noodles' }],
+  output: { text: 'Add soy sauce and noodles' },
+});
+
+console.log('Score:', result.score);
+console.log('Gluten sources:', result.analyzeStepResult.glutenSources);
+console.log('Reason:', result.reason);
+```
+
+### Low gluten-free output
+
+```typescript
+{
+  score: 0,
+  analyzeStepResult: { 
+    isGlutenFree: false,
+    glutenSources: ['soy sauce', 'noodles'] 
+  },
+  reason: 'This recipe is not gluten-free because it contains soy sauce, noodles. Regular soy sauce contains wheat and most noodles are made from wheat flour, both of which contain gluten and are unsafe for people with gluten sensitivity.'
+}
+```
+
+## Understanding the results
+
+`.run()` returns a result in the following shape:
+
+```typescript
+{
+  runId: string,
+  analyzeStepResult: {
+    isGlutenFree: boolean,
+    glutenSources: string[]
+  },
+  score: number,
+  reason: string,
+  analyzePrompt?: string,
+  generateReasonPrompt?: string
+}
+```
+
+### score
+A score of 1 means the recipe is gluten-free. A score of 0 means gluten was detected.
+
+### runId
+The unique identifier for this scorer run.
+
+### analyzeStepResult
+Object with gluten analysis:
+- **isGlutenFree**: Boolean indicating if the recipe is safe for gluten-free diets
+- **glutenSources**: Array of gluten-containing ingredients found in the recipe.
+
+### reason
+Explanation of why the recipe is or is not gluten-free, generated by the LLM.
+
+### Prompt Fields
+- **analyzePrompt**: The actual prompt sent to the LLM for analysis
+- **generateReasonPrompt**: The actual prompt sent to the LLM for reasoning
+
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/scorers/custom-scorer"
+/>

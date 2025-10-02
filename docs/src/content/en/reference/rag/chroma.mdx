@@ -3,45 +3,87 @@ title: "Reference: Chroma Vector Store | Vector Databases | RAG | Mastra Docs"
 description: Documentation for the ChromaVector class in Mastra, which provides vector search using ChromaDB.
 ---
 
+import { Callout } from "nextra/components";
+
 # Chroma Vector Store
 
-The ChromaVector class provides vector search using [ChromaDB](https://www.trychroma.com/), an open-source embedding database.
+The ChromaVector class provides vector search using [Chroma](https://docs.trychroma.com/docs/overview/getting-started), an open-source embedding database.
 It offers efficient vector search with metadata filtering and hybrid search capabilities.
+
+<Callout type="info">
+  <b>Chroma Cloud</b>
+  <p>
+    Chroma Cloud powers serverless vector and full-text search. It's extremely fast, cost-effective, scalable and painless. Create a DB and try it out in under 30 seconds with $5 of free credits.
+
+    [Get started with Chroma Cloud](https://trychroma.com/signup)
+  </p>
+</Callout>
 
 ## Constructor Options
 
 <PropertiesTable
   content={[
     {
-      name: "path",
+      name: "host",
       type: "string",
-      description: "URL path to ChromaDB instance",
-    },
-    {
-      name: "auth",
-      type: "object",
       isOptional: true,
-      description: "Authentication configuration",
+      description: "The host address of the Chroma server. Defaults to 'localhost'",
     },
+    {
+      name: "port",
+      type: "number",
+      isOptional: true,
+      description: "The port number of the Chroma server. Defaults to 8000",
+    },
+    {
+      name: "ssl",
+      type: "boolean",
+      isOptional: true,
+      description: "Whether to use SSL/HTTPS for connections. Defaults to false",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      isOptional: true,
+      description: "A Chroma Cloud API key",
+    },
+    {
+      name: "tenant",
+      type: "string",
+      isOptional: true,
+      description: "The tenant name in the Chroma server to connect to. Defaults to 'default_tenant' for single-node Chroma. Auto-resolved for Chroma Cloud users based on the provided API key",
+    },
+    {
+      name: "database",
+      type: "string",
+      isOptional: true,
+      description: "The database name to connect to. Defaults to 'default_database' for single-node Chroma. Auto-resolved for Chroma Cloud users based on the provided API key",
+    },
+    {
+      name: "headers",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Additional HTTP headers to send with requests",
+    },
+    {
+      name: "fetchOptions",
+      type: "RequestInit",
+      isOptional: true,
+      description: "Additional fetch options for HTTP requests",
+    }
   ]}
 />
 
-### auth
+## Running a Chroma Server
 
-<PropertiesTable
-  content={[
-    {
-      name: "provider",
-      type: "string",
-      description: "Authentication provider",
-    },
-    {
-      name: "credentials",
-      type: "string",
-      description: "Authentication credentials",
-    },
-  ]}
-/>
+If you are a Chroma Cloud user, simply provide the `ChromaVector` constructor your API key, tenant, and database name.
+
+When you install the `@mastra/chroma` package, you get access to the [Chroma CLI](https://docs.trychroma.com/docs/cli/db), which can set these as environment variables for you: `chroma db connect [DB-NAME] --env-file`.
+
+Otherwise, you have several options for setting up your single-node Chroma server:
+* Run one locally using the Chroma CLI: `chroma run`. You can find more configuration options on the [Chroma docs](https://docs.trychroma.com/docs/cli/run).
+* Run on [Docker](https://docs.trychroma.com/guides/deploy/docker) using the official Chroma image.
+* Deploy your own Chroma server on your provider of choice. Chroma offers example templates for [AWS](https://docs.trychroma.com/guides/deploy/aws), [Azure](https://docs.trychroma.com/guides/deploy/azure), and [GCP](https://docs.trychroma.com/guides/deploy/gcp).
 
 ## Methods
 
@@ -66,6 +108,27 @@ It offers efficient vector search with metadata filtering and hybrid search capa
       defaultValue: "cosine",
       description: "Distance metric for similarity search",
     },
+  ]}
+/>
+
+### forkIndex()
+
+Note: Forking is only supported on Chroma Cloud, or if you deploy your own OSS **distributed** Chroma.
+
+`forkIndex` lets you fork an existing Chroma index instantly. Operations on the forked index do not affect the original one. Learn more on the [Chroma docs](https://docs.trychroma.com/cloud/collection-forking).
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to fork",
+    },
+    {
+      name: "newIndexName",
+      type: "string",
+      description: "The name of the forked index",
+    }
   ]}
 />
 
@@ -107,6 +170,20 @@ It offers efficient vector search with metadata filtering and hybrid search capa
 
 ### query()
 
+Query an index using a `queryVector`. Returns an array of semantically similar records in order of distance from the `queryVector`. Each record has the shape:
+
+```typescript
+{
+  id: string;
+  score: number;
+  document?: string;
+  metadata?: Record<string, string | number | boolean>;
+  embedding?: number[]
+}
+```
+
+You can also provide the shape of your metadata to a `query` call for type inference: `query<T>()`.
+
 <PropertiesTable
   content={[
     {
@@ -144,6 +221,70 @@ It offers efficient vector search with metadata filtering and hybrid search capa
       type: "Record<string, any>",
       isOptional: true,
       description: "Chroma-specific: Filter to apply on the document content",
+    },
+  ]}
+/>
+
+### get()
+
+Get records from your Chroma index by IDs, metadata, and document filters. It returns an array of records of the shape:
+
+```typescript
+{
+  id: string;
+  document?: string;
+  metadata?: Record<string, string | number | boolean>;
+  embedding?: number[]
+}
+```
+
+You can also provide the shape of your metadata to a `get` call for type inference: `get<T>()`.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to query",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "A list of record IDs to return. If not provided, all records are returned.",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filters.",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to include vectors in the results",
+    },
+    {
+      name: "documentFilter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Chroma-specific: Filter to apply on the document content",
+    },
+    {
+      name: "limit",
+      type: "number",
+      isOptional: true,
+      defaultValue: 100,
+      description: "The maximum number of records to return",
+    },
+    {
+      name: "offset",
+      type: "number",
+      isOptional: true,
+      defaultValue: 0,
+      description: "Offset for returning records. Use with `limit` to paginate results.",
     },
   ]}
 />

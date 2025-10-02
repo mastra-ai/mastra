@@ -1,6 +1,6 @@
 import { describe, expect, beforeEach, it, vi } from 'vitest';
-import { NetworkMemoryThread } from './network-memory-thread';
 import type { ClientOptions } from '../types';
+import { NetworkMemoryThread } from './network-memory-thread';
 
 // Mock fetch globally
 global.fetch = vi.fn();

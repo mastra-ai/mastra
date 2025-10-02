@@ -4,8 +4,11 @@ description: Example of using the Faithfulness metric to evaluate how factually 
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
 
 ## Faithfulness Evaluation
+
+<ScorerCallout />
 
 Use `FaithfulnessMetric` to evaluate whether the response makes claims that are supported by the provided context. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
 
@@ -171,6 +174,7 @@ An explanation for the score, with details including:
 - Summary of overall response reliability
 
 <GithubLink
+  outdated={true}
   marginTop='mt-16'
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/faithfulness"
 />

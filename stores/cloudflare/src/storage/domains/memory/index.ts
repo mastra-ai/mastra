@@ -1,14 +1,8 @@
-import type {
-  MastraMessageV1,
-  MastraMessageV2,
-  PaginationInfo,
-  StorageGetMessagesArg,
-  StorageResourceType,
-  StorageThreadType,
-} from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { PaginationInfo, StorageGetMessagesArg, StorageResourceType } from '@mastra/core/storage';
 import {
   ensureDate,
   MemoryStorage,
@@ -477,10 +471,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       for (const message of validatedMessages) {
         // Check if this message already exists in a different thread
         const existingMessage = await this.findMessageInAnyThread(message.id);
-        console.log(`Checking message ${message.id}: existing=${existingMessage?.threadId}, new=${message.threadId}`);
+        console.info(`Checking message ${message.id}: existing=${existingMessage?.threadId}, new=${message.threadId}`);
         if (existingMessage && existingMessage.threadId && existingMessage.threadId !== message.threadId) {
           // Message exists in a different thread, migrate it
-          console.log(`Migrating message ${message.id} from ${existingMessage.threadId} to ${message.threadId}`);
+          console.info(`Migrating message ${message.id} from ${existingMessage.threadId} to ${message.threadId}`);
           messageMigrationTasks.push(this.migrateMessage(message.id, existingMessage.threadId, message.threadId!));
         }
       }
@@ -519,7 +513,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
                   ...cleanMessage,
                   createdAt: serializeDate(cleanMessage.createdAt),
                 };
-                console.log(`Saving message ${message.id} with content:`, {
+                console.info(`Saving message ${message.id} with content:`, {
                   content: serializedMessage.content,
                   contentType: typeof serializedMessage.content,
                   isArray: Array.isArray(serializedMessage.content),
@@ -639,6 +633,8 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   }
 
   private async getRecentMessages(threadId: string, limit: number, messageIds: Set<string>): Promise<void> {
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
     if (limit <= 0) return;
 
     try {
@@ -646,7 +642,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       const latestIds = await this.getLastN(threadMessagesKey, limit);
       latestIds.forEach(id => messageIds.add(id));
     } catch {
-      console.log(`No message order found for thread ${threadId}, skipping latest messages`);
+      console.info(`No message order found for thread ${threadId}, skipping latest messages`);
     }
   }
 
@@ -692,7 +688,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           const data = await this.operations.getKV(TABLE_MESSAGES, key);
           if (!data) return null;
           const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-          console.log(`Retrieved message ${id} from thread ${threadId} with content:`, {
+          console.info(`Retrieved message ${id} from thread ${threadId} with content:`, {
             content: parsed.content,
             contentType: typeof parsed.content,
             isArray: Array.isArray(parsed.content),
@@ -716,21 +712,19 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     selectBy,
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    console.log(`getMessages called with format: ${format}, threadId: ${threadId}`);
-    if (!threadId) throw new Error('threadId is required');
+    console.info(`getMessages called with format: ${format}, threadId: ${threadId}`);
 
     // Default to v1 format if not specified
     const actualFormat = format || 'v1';
-    console.log(`Using format: ${actualFormat}`);
-
-    // Ensure threadId is provided
-    if (!threadId) throw new Error('threadId is required');
+    console.info(`Using format: ${actualFormat}`);
 
     const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
     const messageIds = new Set<string>();
     if (limit === 0 && !selectBy?.include?.length) return [];
 
     try {
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
       // Get included messages and recent messages in parallel
       await Promise.all([
         selectBy?.include?.length
@@ -788,7 +782,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       }));
       // For v1 format, return messages directly without using MessageList (like Upstash)
       if (actualFormat === `v1`) {
-        console.log(`Processing ${prepared.length} messages for v1 format - returning directly without MessageList`);
+        console.info(`Processing ${prepared.length} messages for v1 format - returning directly without MessageList`);
         // Return messages exactly as stored, without MessageList transformation
         return (prepared as MastraMessageV1[]).map(msg => ({
           ...msg,
@@ -808,6 +802,65 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           text: `Error retrieving messages for thread ${threadId}`,
           details: {
             threadId,
+            resourceId: resourceId ?? '',
+          },
+        },
+        error,
+      );
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
+      return [];
+    }
+  }
+
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format: 'v1';
+  }): Promise<MastraMessageV1[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v2';
+  }): Promise<MastraMessageV2[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    if (messageIds.length === 0) return [];
+
+    try {
+      // Fetch and parse all messages from their respective threads
+      const messages = (await Promise.all(messageIds.map(id => this.findMessageInAnyThread(id)))).filter(
+        result => !!result,
+      ) as (MastraMessageV1 & { _index: string })[];
+
+      // Remove _index and ensure dates before returning, just like Upstash
+      const prepared: MastraMessageV1[] = messages.map(({ _index, ...message }) => ({
+        ...message,
+        ...(message.type !== (`v2` as string) && { type: message.type }),
+        createdAt: ensureDate(message.createdAt)!,
+      }));
+      // For v2 format, use MessageList for proper conversion
+      const list = new MessageList().add(prepared, 'memory');
+      if (format === `v1`) return list.get.all.v1();
+      return list.get.all.v2();
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_GET_MESSAGES_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Error retrieving messages by ID`,
+          details: {
+            messageIds: JSON.stringify(messageIds),
           },
         },
         error,
@@ -821,9 +874,11 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   async getMessagesPaginated(
     args: StorageGetMessagesArg,
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    const { threadId, resourceId, selectBy, format = 'v1' } = args;
+    const { page = 0, perPage = 100 } = selectBy?.pagination || {};
+
     try {
-      const { threadId, selectBy, format = 'v1' } = args;
-      const { page = 0, perPage = 100 } = selectBy?.pagination || {};
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
       // Get all messages for the thread
       const messages =
@@ -856,15 +911,22 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         messages: paginatedMessages as MastraMessageV1[] | MastraMessageV2[],
       };
     } catch (error) {
-      throw new MastraError(
+      const mastraError = new MastraError(
         {
           id: 'CLOUDFLARE_STORAGE_GET_MESSAGES_PAGINATED_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: 'Failed to get messages with pagination',
+          details: {
+            threadId,
+            resourceId: resourceId ?? '',
+          },
         },
         error,
       );
+      this.logger?.trackException?.(mastraError);
+      this.logger?.error?.(mastraError.toString());
+      return { messages: [], total: 0, page, perPage: perPage || 40, hasMore: false };
     }
   }
 

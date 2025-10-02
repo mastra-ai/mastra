@@ -1,0 +1,86 @@
+---
+title: "リファレンス: Textual Difference | Scorers | Mastra Docs"
+description: "Mastraのテキスト差分スコアラーのドキュメント。シーケンスマッチングを使用して文字列間のテキスト差分を測定します。"
+---
+
+
+
+# Textual Difference Scorer
+
+`createTextualDifferenceScorer()`関数は、シーケンスマッチングを使用して2つの文字列間のテキストの違いを測定します。この関数は、あるテキストを別のテキストに変換するために必要な操作数を含む、変更に関する詳細な情報を提供します。
+
+使用例については、[Textual Difference Examples](/examples/scorers/textual-difference)を参照してください。
+
+
+
+## パラメータ
+
+`createTextualDifferenceScorer()` 関数はオプションを受け取りません。
+
+この関数は MastraScorer クラスのインスタンスを返します。`.run()` メソッドとその入出力の詳細については、[MastraScorer リファレンス](./mastra-scorer) を参照してください。
+
+
+
+## .run() の戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "実行のID（オプション）。",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description: "差分メトリクスを含むオブジェクト: { confidence: number, changes: number, lengthDiff: number }",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "類似度比率（0-1）。1は同一のテキストを示します。",
+    },
+  ]}
+/>
+
+
+
+## スコアリング詳細
+
+スコアラーは複数の指標を計算します：
+
+- **類似度比率**: テキスト間のシーケンスマッチングに基づく（0-1）
+- **変更数**: 必要な非一致操作の数
+- **長さの差**: テキスト長の正規化された差
+- **信頼度**: 長さの差に反比例
+
+### スコアリングプロセス
+
+1. テキストの差異を分析：
+   - 入力と出力間のシーケンスマッチングを実行
+   - 必要な変更操作の数をカウント
+   - 長さの差を測定
+2. メトリクスを計算：
+   - 類似度比率を計算
+   - 信頼度スコアを決定
+   - 重み付けスコアに結合
+
+最終スコア: `(similarity_ratio * confidence) * scale`
+
+### スコアの解釈
+
+（0からscale、デフォルト0-1）
+
+- 1.0: 同一テキスト - 差異なし
+- 0.7-0.9: 軽微な差異 - 少数の変更が必要
+- 0.4-0.6: 中程度の差異 - 重要な変更
+- 0.1-0.3: 大きな差異 - 広範囲な変更
+- 0.0: 完全に異なるテキスト
+
+
+
+## 関連
+
+- [Content Similarity Scorer](./content-similarity)
+- [Completeness Scorer](./completeness)
+- [Keyword Coverage Scorer](./keyword-coverage)

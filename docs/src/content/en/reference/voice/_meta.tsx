@@ -59,6 +59,7 @@ const meta = {
   deepgram: "Deepgram",
   elevenlabs: "ElevenLabs",
   google: "Google",
+  "google-gemini-live": "Google Gemini Live",
   murf: "Murf",
   openai: "OpenAI",
   "openai-realtime": "OpenAI Realtime",

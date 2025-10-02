@@ -1,24 +1,40 @@
 ---
 title: "概要"
-description: "Mastraを使った構築ガイド"
+description: "Mastraを使った構築に関するガイド"
 ---
+
+import { CardGrid, CardGridItem } from "@/components/cards/card-grid";
+
+
 
 # ガイド
 
-例では迅速な実装を示し、ドキュメントでは特定の機能を説明していますが、これらのガイドはやや長めで、Mastraのコアコンセプトを実証するように設計されています：
+サンプルは素早い実装を示し、ドキュメントは特定の機能を説明しますが、これらのガイドはもう少し長く、Mastraの中核概念を実演するように設計されています：
 
-## [AI リクルーター](/guides/guide/ai-recruiter)
-
-候補者の履歴書を処理し、面接を実施するワークフローを作成し、Mastraワークフローにおける分岐ロジックとLLM統合を実証します。
-
-## [シェフアシスタント](/guides/guide/chef-michel)
-
-利用可能な食材で料理を作るのを手伝うAIシェフエージェントを構築し、カスタムツールを使用してインタラクティブなエージェントを作成する方法を紹介します。
-
-## [研究論文アシスタント](/guides/guide/research-assistant)
-
-検索拡張生成（RAG）を使用して学術論文を分析するAI研究アシスタントを開発し、文書処理と質問応答を実証します。
-
-## [株価エージェント](/guides/guide/stock-agent)
-
-株価を取得するシンプルなエージェントを実装し、ツールの作成とMastraエージェントへの統合の基本を説明します。
+<CardGrid>
+    <CardGridItem
+      title="AI採用担当者"
+      description="候補者の履歴書を処理し面接を実施するワークフローを作成し、Mastraワークフローでの分岐ロジックとLLM統合を実演します。"
+      href="./guides/guide/ai-recruiter"
+    />
+    <CardGridItem
+      title="シェフアシスタント"
+      description="利用可能な食材でユーザーの料理を手助けするAIシェフエージェントを構築し、カスタムツールを使用したインタラクティブなエージェントの作成方法を示します。"
+      href="./guides/guide/chef-michel"
+    />
+    <CardGridItem
+      title="研究アシスタント"
+      description="検索拡張生成（RAG）を使用して学術論文を分析するAI研究アシスタントを開発し、文書処理と質問応答を実演します。"
+      href="./guides/guide/research-assistant"
+    />
+    <CardGridItem
+      title="株価エージェント"
+      description="株価を取得するシンプルなエージェントを実装し、ツールの作成とMastraエージェントとの統合の基本を説明します。"
+      href="./guides/guide/stock-agent"
+    />
+    <CardGridItem
+      title="Notes MCPサーバー"
+      description="ユーザーのメモ管理を支援するAIメモアシスタントを構築し、カスタムツールを使用したインタラクティブなエージェントの作成方法を示します。"
+      href="./guides/guide/notes-mcp-server"
+    />
+</CardGrid>

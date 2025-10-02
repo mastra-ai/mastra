@@ -1,3 +1,4 @@
+import type { TracingOptions } from '@mastra/core/ai-tracing';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type {
   ClientOptions,
@@ -8,9 +9,10 @@ import type {
   WorkflowWatchResult,
   GetWorkflowRunByIdResponse,
   GetWorkflowRunExecutionResultResponse,
+  StreamVNextChunkType,
 } from '../types';
 
-import { parseClientRuntimeContext } from '../utils';
+import { parseClientRuntimeContext, base64RuntimeContext, runtimeContextQueryString } from '../utils';
 import { BaseResource } from './base';
 
 const RECORD_SEPARATOR = '\x1E';
@@ -96,18 +98,25 @@ export class Workflow extends BaseResource {
 
   /**
    * Retrieves details about the workflow
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing workflow details including steps and graphs
    */
-  details(): Promise<GetWorkflowResponse> {
-    return this.request(`/api/workflows/${this.workflowId}`);
+  details(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetWorkflowResponse> {
+    return this.request(`/api/workflows/${this.workflowId}${runtimeContextQueryString(runtimeContext)}`);
   }
 
   /**
    * Retrieves all runs for a workflow
    * @param params - Parameters for filtering runs
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing workflow runs array
    */
-  runs(params?: GetWorkflowRunsParams): Promise<GetWorkflowRunsResponse> {
+  runs(
+    params?: GetWorkflowRunsParams,
+    runtimeContext?: RuntimeContext | Record<string, any>,
+  ): Promise<GetWorkflowRunsResponse> {
+    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
+
     const searchParams = new URLSearchParams();
     if (params?.fromDate) {
       searchParams.set('fromDate', params.fromDate.toISOString());
@@ -124,6 +133,9 @@ export class Workflow extends BaseResource {
     if (params?.resourceId) {
       searchParams.set('resourceId', params.resourceId);
     }
+    if (runtimeContextParam) {
+      searchParams.set('runtimeContext', runtimeContextParam);
+    }
 
     if (searchParams.size) {
       return this.request(`/api/workflows/${this.workflowId}/runs?${searchParams}`);
@@ -135,19 +147,26 @@ export class Workflow extends BaseResource {
   /**
    * Retrieves a specific workflow run by its ID
    * @param runId - The ID of the workflow run to retrieve
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing the workflow run details
    */
-  runById(runId: string): Promise<GetWorkflowRunByIdResponse> {
-    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}`);
+  runById(runId: string, runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetWorkflowRunByIdResponse> {
+    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}${runtimeContextQueryString(runtimeContext)}`);
   }
 
   /**
    * Retrieves the execution result for a specific workflow run by its ID
    * @param runId - The ID of the workflow run to retrieve the execution result for
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing the workflow run execution result
    */
-  runExecutionResult(runId: string): Promise<GetWorkflowRunExecutionResultResponse> {
-    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}/execution-result`);
+  runExecutionResult(
+    runId: string,
+    runtimeContext?: RuntimeContext | Record<string, any>,
+  ): Promise<GetWorkflowRunExecutionResultResponse> {
+    return this.request(
+      `/api/workflows/${this.workflowId}/runs/${runId}/execution-result${runtimeContextQueryString(runtimeContext)}`,
+    );
   }
 
   /**
@@ -174,29 +193,173 @@ export class Workflow extends BaseResource {
   }
 
   /**
+   * @deprecated Use createRunAsync() instead.
+   * @throws {Error} Always throws an error directing users to use createRunAsync()
+   */
+  async createRun(_params?: { runId?: string }): Promise<{
+    runId: string;
+    start: (params: {
+      inputData: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+    }) => Promise<{ message: string }>;
+    watch: (onRecord: (record: WorkflowWatchResult) => void) => Promise<void>;
+    resume: (params: {
+      step: string | string[];
+      resumeData?: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+    }) => Promise<{ message: string }>;
+    stream: (params: {
+      inputData: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+    }) => Promise<ReadableStream>;
+    startAsync: (params: {
+      inputData: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+    }) => Promise<WorkflowRunResult>;
+    resumeAsync: (params: {
+      step: string | string[];
+      resumeData?: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+    }) => Promise<WorkflowRunResult>;
+  }> {
+    throw new Error(
+      'createRun() has been deprecated. ' +
+        'Please use createRunAsync() instead.\n\n' +
+        'Migration guide:\n' +
+        '  Before: const run = workflow.createRun();\n' +
+        '  After:  const run = await workflow.createRunAsync();\n\n' +
+        'Note: createRunAsync() is an async method, so make sure your calling function is async.',
+    );
+  }
+
+  /**
    * Creates a new workflow run
    * @param params - Optional object containing the optional runId
-   * @returns Promise containing the runId of the created run
+   * @returns Promise containing the runId of the created run with methods to control execution
    */
-  createRun(params?: { runId?: string }): Promise<{ runId: string }> {
+  async createRunAsync(params?: { runId?: string }): Promise<{
+    runId: string;
+    start: (params: {
+      inputData: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+      tracingOptions?: TracingOptions;
+    }) => Promise<{ message: string }>;
+    watch: (onRecord: (record: WorkflowWatchResult) => void) => Promise<void>;
+    resume: (params: {
+      step: string | string[];
+      resumeData?: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+      tracingOptions?: TracingOptions;
+    }) => Promise<{ message: string }>;
+    stream: (params: {
+      inputData: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+    }) => Promise<ReadableStream>;
+    startAsync: (params: {
+      inputData: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+      tracingOptions?: TracingOptions;
+    }) => Promise<WorkflowRunResult>;
+    resumeAsync: (params: {
+      step: string | string[];
+      resumeData?: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+      tracingOptions?: TracingOptions;
+    }) => Promise<WorkflowRunResult>;
+    resumeStreamVNext: (params: {
+      step: string | string[];
+      resumeData?: Record<string, any>;
+      runtimeContext?: RuntimeContext | Record<string, any>;
+    }) => Promise<ReadableStream>;
+  }> {
     const searchParams = new URLSearchParams();
 
     if (!!params?.runId) {
       searchParams.set('runId', params.runId);
     }
 
-    return this.request(`/api/workflows/${this.workflowId}/create-run?${searchParams.toString()}`, {
-      method: 'POST',
-    });
-  }
+    const res = await this.request<{ runId: string }>(
+      `/api/workflows/${this.workflowId}/create-run?${searchParams.toString()}`,
+      {
+        method: 'POST',
+      },
+    );
 
-  /**
-   * Creates a new workflow run (alias for createRun)
-   * @param params - Optional object containing the optional runId
-   * @returns Promise containing the runId of the created run
-   */
-  createRunAsync(params?: { runId?: string }): Promise<{ runId: string }> {
-    return this.createRun(params);
+    const runId = res.runId;
+
+    return {
+      runId,
+      start: async (p: {
+        inputData: Record<string, any>;
+        runtimeContext?: RuntimeContext | Record<string, any>;
+        tracingOptions?: TracingOptions;
+      }) => {
+        return this.start({
+          runId,
+          inputData: p.inputData,
+          runtimeContext: p.runtimeContext,
+          tracingOptions: p.tracingOptions,
+        });
+      },
+      startAsync: async (p: {
+        inputData: Record<string, any>;
+        runtimeContext?: RuntimeContext | Record<string, any>;
+        tracingOptions?: TracingOptions;
+      }) => {
+        return this.startAsync({
+          runId,
+          inputData: p.inputData,
+          runtimeContext: p.runtimeContext,
+          tracingOptions: p.tracingOptions,
+        });
+      },
+      watch: async (onRecord: (record: WorkflowWatchResult) => void) => {
+        return this.watch({ runId }, onRecord);
+      },
+      stream: async (p: { inputData: Record<string, any>; runtimeContext?: RuntimeContext | Record<string, any> }) => {
+        return this.stream({ runId, inputData: p.inputData, runtimeContext: p.runtimeContext });
+      },
+      resume: async (p: {
+        step: string | string[];
+        resumeData?: Record<string, any>;
+        runtimeContext?: RuntimeContext | Record<string, any>;
+        tracingOptions?: TracingOptions;
+      }) => {
+        return this.resume({
+          runId,
+          step: p.step,
+          resumeData: p.resumeData,
+          runtimeContext: p.runtimeContext,
+          tracingOptions: p.tracingOptions,
+        });
+      },
+      resumeAsync: async (p: {
+        step: string | string[];
+        resumeData?: Record<string, any>;
+        runtimeContext?: RuntimeContext | Record<string, any>;
+        tracingOptions?: TracingOptions;
+      }) => {
+        return this.resumeAsync({
+          runId,
+          step: p.step,
+          resumeData: p.resumeData,
+          runtimeContext: p.runtimeContext,
+          tracingOptions: p.tracingOptions,
+        });
+      },
+      resumeStreamVNext: async (p: {
+        step: string | string[];
+        resumeData?: Record<string, any>;
+        runtimeContext?: RuntimeContext | Record<string, any>;
+      }) => {
+        return this.resumeStreamVNext({
+          runId,
+          step: p.step,
+          resumeData: p.resumeData,
+          runtimeContext: p.runtimeContext,
+        });
+      },
+    };
   }
 
   /**
@@ -208,11 +371,12 @@ export class Workflow extends BaseResource {
     runId: string;
     inputData: Record<string, any>;
     runtimeContext?: RuntimeContext | Record<string, any>;
+    tracingOptions?: TracingOptions;
   }): Promise<{ message: string }> {
     const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
     return this.request(`/api/workflows/${this.workflowId}/start?runId=${params.runId}`, {
       method: 'POST',
-      body: { inputData: params?.inputData, runtimeContext },
+      body: { inputData: params?.inputData, runtimeContext, tracingOptions: params.tracingOptions },
     });
   }
 
@@ -225,21 +389,23 @@ export class Workflow extends BaseResource {
     step,
     runId,
     resumeData,
+    tracingOptions,
     ...rest
   }: {
     step: string | string[];
     runId: string;
     resumeData?: Record<string, any>;
     runtimeContext?: RuntimeContext | Record<string, any>;
+    tracingOptions?: TracingOptions;
   }): Promise<{ message: string }> {
     const runtimeContext = parseClientRuntimeContext(rest.runtimeContext);
     return this.request(`/api/workflows/${this.workflowId}/resume?runId=${runId}`, {
       method: 'POST',
-      stream: true,
       body: {
         step,
         resumeData,
         runtimeContext,
+        tracingOptions,
       },
     });
   }
@@ -253,6 +419,7 @@ export class Workflow extends BaseResource {
     runId?: string;
     inputData: Record<string, any>;
     runtimeContext?: RuntimeContext | Record<string, any>;
+    tracingOptions?: TracingOptions;
   }): Promise<WorkflowRunResult> {
     const searchParams = new URLSearchParams();
 
@@ -264,7 +431,7 @@ export class Workflow extends BaseResource {
 
     return this.request(`/api/workflows/${this.workflowId}/start-async?${searchParams.toString()}`, {
       method: 'POST',
-      body: { inputData: params.inputData, runtimeContext },
+      body: { inputData: params.inputData, runtimeContext, tracingOptions: params.tracingOptions },
     });
   }
 
@@ -273,7 +440,12 @@ export class Workflow extends BaseResource {
    * @param params - Object containing the optional runId, inputData and runtimeContext
    * @returns Promise containing the workflow execution results
    */
-  async stream(params: { runId?: string; inputData: Record<string, any>; runtimeContext?: RuntimeContext }) {
+  async stream(params: {
+    runId?: string;
+    inputData: Record<string, any>;
+    runtimeContext?: RuntimeContext | Record<string, any>;
+    tracingOptions?: TracingOptions;
+  }) {
     const searchParams = new URLSearchParams();
 
     if (!!params?.runId) {
@@ -285,13 +457,13 @@ export class Workflow extends BaseResource {
       `/api/workflows/${this.workflowId}/stream?${searchParams.toString()}`,
       {
         method: 'POST',
-        body: { inputData: params.inputData, runtimeContext },
+        body: { inputData: params.inputData, runtimeContext, tracingOptions: params.tracingOptions },
         stream: true,
       },
     );
 
     if (!response.ok) {
-      throw new Error(`Failed to stream vNext workflow: ${response.statusText}`);
+      throw new Error(`Failed to stream workflow: ${response.statusText}`);
     }
 
     if (!response.body) {
@@ -320,7 +492,208 @@ export class Workflow extends BaseResource {
                 const parsedChunk = JSON.parse(newChunk);
                 controller.enqueue(parsedChunk);
                 failedChunk = undefined;
-              } catch (error) {
+              } catch {
+                failedChunk = newChunk;
+              }
+            }
+          }
+        } catch {
+          // Silently ignore processing errors
+        }
+      },
+    });
+
+    // Pipe the response body through the transform stream
+    return response.body.pipeThrough(transformStream);
+  }
+
+  /**
+   * Observes workflow stream for a workflow run
+   * @param params - Object containing the runId
+   * @returns Promise containing the workflow execution results
+   */
+  async observeStream(params: { runId: string }) {
+    const searchParams = new URLSearchParams();
+    searchParams.set('runId', params.runId);
+    const response: Response = await this.request(
+      `/api/workflows/${this.workflowId}/observe-stream?${searchParams.toString()}`,
+      {
+        method: 'POST',
+        stream: true,
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to observe workflow stream: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    //using undefined instead of empty string to avoid parsing errors
+    let failedChunk: string | undefined = undefined;
+
+    // Create a transform stream that processes the response body
+    const transformStream = new TransformStream<ArrayBuffer, { type: string; payload: any }>({
+      start() {},
+      async transform(chunk, controller) {
+        try {
+          // Decode binary data to text
+          const decoded = new TextDecoder().decode(chunk);
+
+          // Split by record separator
+          const chunks = decoded.split(RECORD_SEPARATOR);
+
+          // Process each chunk
+          for (const chunk of chunks) {
+            if (chunk) {
+              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
+              try {
+                const parsedChunk = JSON.parse(newChunk);
+                controller.enqueue(parsedChunk);
+                failedChunk = undefined;
+              } catch {
+                failedChunk = newChunk;
+              }
+            }
+          }
+        } catch {
+          // Silently ignore processing errors
+        }
+      },
+    });
+
+    // Pipe the response body through the transform stream
+    return response.body.pipeThrough(transformStream);
+  }
+
+  /**
+   * Starts a workflow run and returns a stream
+   * @param params - Object containing the optional runId, inputData and runtimeContext
+   * @returns Promise containing the workflow execution results
+   */
+  async streamVNext(params: {
+    runId?: string;
+    inputData?: Record<string, any>;
+    runtimeContext?: RuntimeContext;
+    closeOnSuspend?: boolean;
+    tracingOptions?: TracingOptions;
+  }) {
+    const searchParams = new URLSearchParams();
+
+    if (!!params?.runId) {
+      searchParams.set('runId', params.runId);
+    }
+
+    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    const response: Response = await this.request(
+      `/api/workflows/${this.workflowId}/streamVNext?${searchParams.toString()}`,
+      {
+        method: 'POST',
+        body: {
+          inputData: params.inputData,
+          runtimeContext,
+          closeOnSuspend: params.closeOnSuspend,
+          tracingOptions: params.tracingOptions,
+        },
+        stream: true,
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to stream vNext workflow: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    //using undefined instead of empty string to avoid parsing errors
+    let failedChunk: string | undefined = undefined;
+
+    // Create a transform stream that processes the response body
+    const transformStream = new TransformStream<ArrayBuffer, StreamVNextChunkType>({
+      start() {},
+      async transform(chunk, controller) {
+        try {
+          // Decode binary data to text
+          const decoded = new TextDecoder().decode(chunk);
+
+          // Split by record separator
+          const chunks = decoded.split(RECORD_SEPARATOR);
+
+          // Process each chunk
+          for (const chunk of chunks) {
+            if (chunk) {
+              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
+              try {
+                const parsedChunk = JSON.parse(newChunk);
+                controller.enqueue(parsedChunk);
+                failedChunk = undefined;
+              } catch {
+                failedChunk = newChunk;
+              }
+            }
+          }
+        } catch {
+          // Silently ignore processing errors
+        }
+      },
+    });
+
+    // Pipe the response body through the transform stream
+    return response.body.pipeThrough(transformStream);
+  }
+
+  /**
+   * Observes workflow vNext stream for a workflow run
+   * @param params - Object containing the runId
+   * @returns Promise containing the workflow execution results
+   */
+  async observeStreamVNext(params: { runId: string }) {
+    const searchParams = new URLSearchParams();
+    searchParams.set('runId', params.runId);
+
+    const response: Response = await this.request(
+      `/api/workflows/${this.workflowId}/observe-streamVNext?${searchParams.toString()}`,
+      {
+        method: 'POST',
+        stream: true,
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to observe stream vNext workflow: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    //using undefined instead of empty string to avoid parsing errors
+    let failedChunk: string | undefined = undefined;
+
+    // Create a transform stream that processes the response body
+    const transformStream = new TransformStream<ArrayBuffer, StreamVNextChunkType>({
+      start() {},
+      async transform(chunk, controller) {
+        try {
+          // Decode binary data to text
+          const decoded = new TextDecoder().decode(chunk);
+
+          // Split by record separator
+          const chunks = decoded.split(RECORD_SEPARATOR);
+
+          // Process each chunk
+          for (const chunk of chunks) {
+            if (chunk) {
+              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
+              try {
+                const parsedChunk = JSON.parse(newChunk);
+                controller.enqueue(parsedChunk);
+                failedChunk = undefined;
+              } catch {
                 failedChunk = newChunk;
               }
             }
@@ -345,6 +718,7 @@ export class Workflow extends BaseResource {
     step: string | string[];
     resumeData?: Record<string, any>;
     runtimeContext?: RuntimeContext | Record<string, any>;
+    tracingOptions?: TracingOptions;
   }): Promise<WorkflowRunResult> {
     const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
     return this.request(`/api/workflows/${this.workflowId}/resume-async?runId=${params.runId}`, {
@@ -353,10 +727,84 @@ export class Workflow extends BaseResource {
         step: params.step,
         resumeData: params.resumeData,
         runtimeContext,
+        tracingOptions: params.tracingOptions,
       },
     });
   }
 
+  /**
+   * Resumes a suspended workflow step that uses streamVNext asynchronously and returns a promise that resolves when the workflow is complete
+   * @param params - Object containing the runId, step, resumeData and runtimeContext
+   * @returns Promise containing the workflow resume results
+   */
+  async resumeStreamVNext(params: {
+    runId: string;
+    step: string | string[];
+    resumeData?: Record<string, any>;
+    runtimeContext?: RuntimeContext | Record<string, any>;
+    tracingOptions?: TracingOptions;
+  }): Promise<ReadableStream> {
+    const searchParams = new URLSearchParams();
+    searchParams.set('runId', params.runId);
+    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    const response: Response = await this.request(
+      `/api/workflows/${this.workflowId}/resume-stream?${searchParams.toString()}`,
+      {
+        method: 'POST',
+        body: {
+          step: params.step,
+          resumeData: params.resumeData,
+          runtimeContext,
+          tracingOptions: params.tracingOptions,
+        },
+        stream: true,
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to stream vNext workflow: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    //using undefined instead of empty string to avoid parsing errors
+    let failedChunk: string | undefined = undefined;
+
+    // Create a transform stream that processes the response body
+    const transformStream = new TransformStream<ArrayBuffer, StreamVNextChunkType>({
+      start() {},
+      async transform(chunk, controller) {
+        try {
+          // Decode binary data to text
+          const decoded = new TextDecoder().decode(chunk);
+
+          // Split by record separator
+          const chunks = decoded.split(RECORD_SEPARATOR);
+
+          // Process each chunk
+          for (const chunk of chunks) {
+            if (chunk) {
+              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
+              try {
+                const parsedChunk = JSON.parse(newChunk);
+                controller.enqueue(parsedChunk);
+                failedChunk = undefined;
+              } catch {
+                failedChunk = newChunk;
+              }
+            }
+          }
+        } catch {
+          // Silently ignore processing errors
+        }
+      },
+    });
+
+    // Pipe the response body through the transform stream
+    return response.body.pipeThrough(transformStream);
+  }
   /**
    * Watches workflow transitions in real-time
    * @param runId - Optional run ID to filter the watch stream

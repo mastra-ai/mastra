@@ -120,7 +120,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     topK = 10,
     filter,
     includeVector = false,
-    minScore = 0,
+    minScore = -1, // Default to -1 to include all results (cosine similarity ranges from -1 to 1)
   }: LibSQLQueryVectorParams): Promise<QueryResult[]> {
     try {
       if (!Number.isInteger(topK) || topK <= 0) {

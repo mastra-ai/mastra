@@ -1,6 +1,6 @@
 # @mastra/chroma
 
-Vector store implementation for ChromaDB using the official chromadb client with added dimension validation, collection management, and document storage capabilities.
+Vector store implementation for Chroma using the official `chromadb` client with added dimension validation, collection management, and document storage capabilities.
 
 ## Installation
 
@@ -8,18 +8,56 @@ Vector store implementation for ChromaDB using the official chromadb client with
 npm install @mastra/chroma
 ```
 
-## Usage
+## Instantiation
+
+### Local or Self-Deployments
+
+To run a Chroma server, use the [Chroma CLI](https://docs.trychroma.com/docs/cli/db). It is available to you when you install this package.
+
+```shell
+chroma run
+```
+
+You will now have a Chroma server running on `localhost:8000`.
+
+```typescript
+import { ChromaVector } from '@mastra/chroma';
+
+const vectorStore = new ChromaVector();
+```
+
+If you run a Chroma server locally with a different configuration, or [deploy](https://docs.trychroma.com/guides/deploy/client-server-mode) a Chroma server yourself, you can configure your `ChromaVector` instantiation with specific connection details:
 
 ```typescript
 import { ChromaVector } from '@mastra/chroma';
 
 const vectorStore = new ChromaVector({
-  path: 'http://localhost:8000',  // ChromaDB server URL
-  auth: {                         // Optional authentication
-    provider: 'token',
-    credentials: 'your-token'
-  }
+  host: 'your-host-address',
+  port: 8000,
+  ssl: false,
+  headers: {}, // any HTTP headers to send,
 });
+```
+
+### Chroma Cloud
+
+Provide your Chroma Cloud API key, tenant, and database.
+
+You can use the [Chroma CLI](https://docs.trychroma.com/docs/cli/db) to set these as environment variables: `chroma db connect [DB-NAME] --env-file`.
+
+```typescript
+import { ChromaVector } from '@mastra/chroma';
+
+const vectorStore = new ChromaVector({
+  apiKey: process.env.CHROMA_API_KEY,
+  tenant: process.env.CHROMA_TENANT,
+  database: process.env.CHROMA_DATABASE,
+});
+```
+
+## Usage
+
+```typescript
 
 // Create a new collection
 await vectorStore.createIndex({ indexName: 'myCollection', dimension: 1536, metric: 'cosine' });
@@ -45,18 +83,6 @@ const results = await vectorStore.query({
   documentFilter: { $contains: 'specific text' } // document content filter
 });
 ```
-
-## Configuration
-
-Required:
-
-- `path`: URL of your ChromaDB server
-
-Optional:
-
-- `auth`: Authentication configuration
-  - `provider`: Authentication provider
-  - `credentials`: Authentication credentials
 
 ## Features
 
@@ -92,5 +118,5 @@ Query results include:
 
 ## Related Links
 
-- [ChromaDB Documentation](https://docs.trychroma.com/)
-- [ChromaDB API Reference](https://docs.trychroma.com/api/client)
+- [Chroma Documentation](https://docs.trychroma.com/)
+- [Chroma API Reference](https://docs.trychroma.com/api/client)

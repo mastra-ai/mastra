@@ -32,25 +32,23 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
       if (!moduleName) {
         let importerMeta: { [PLUGIN_NAME]?: { resolved?: boolean } } = {};
 
+        const resolved = await this.resolve(request, importer, { skipSelf: true, ...options });
+        if (!resolved) {
+          return null;
+        }
+
         // If localResolve is true, we need to check if the importer has been resolved by the tsconfig-paths plugin
         // if so, we need to resolve the request from the importer instead of the root and mark it as external
         if (localResolve) {
           const importerInfo = this.getModuleInfo(importer);
-
           importerMeta = importerInfo?.meta || {};
 
           if (!request.startsWith('./') && !request.startsWith('../') && importerMeta?.[PLUGIN_NAME]?.resolved) {
             return {
-              id: resolveFrom(importer, request) ?? null,
-              external: true,
+              ...resolved,
+              external: !request.startsWith('hono/') && request !== 'hono',
             };
           }
-        }
-
-        const resolved = await this.resolve(request, importer, { skipSelf: true, ...options });
-
-        if (!resolved) {
-          return null;
         }
 
         return {

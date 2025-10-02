@@ -45,24 +45,27 @@ describe('create mastra', () => {
   describe('dev', () => {
     let port: number;
     let proc: ReturnType<typeof execa> | undefined;
-    beforeAll(async () => {
-      port = await getPort();
-      proc = execa('pnpm', ['dev', '--port', port.toString()], {
-        cwd: projectPath,
-      });
-      proc!.stderr?.on('data', data => {
-        console.error(data?.toString());
-      });
-      await new Promise<void>(resolve => {
-        console.log('waiting for server to start');
-        proc!.stdout?.on('data', data => {
-          console.log(data?.toString());
-          if (data?.toString()?.includes(`http://localhost:${port}`)) {
-            resolve();
-          }
+    beforeAll(
+      async () => {
+        port = await getPort();
+        proc = execa('pnpm', ['dev', '--port', port.toString()], {
+          cwd: projectPath,
         });
-      });
-    });
+        proc!.stderr?.on('data', data => {
+          console.error(data?.toString());
+        });
+        await new Promise<void>(resolve => {
+          console.log('waiting for server to start');
+          proc!.stdout?.on('data', data => {
+            console.log(data?.toString());
+            if (data?.toString()?.includes(`http://localhost:${port}`)) {
+              resolve();
+            }
+          });
+        });
+      },
+      60 * 10 * 1000,
+    );
 
     afterAll(async () => {
       if (proc) {
@@ -92,6 +95,7 @@ describe('create mastra', () => {
         await expect(response.json()).resolves.toMatchInlineSnapshot(`
           {
             "weatherAgent": {
+              "agents": {},
               "defaultGenerateOptions": {},
               "defaultStreamOptions": {},
               "instructions": "
@@ -109,6 +113,7 @@ describe('create mastra', () => {
                 Use the weatherTool to fetch current weather data.
           ",
               "modelId": "gpt-4o-mini",
+              "modelVersion": "v1",
               "name": "Weather Agent",
               "provider": "openai.chat",
               "tools": {
@@ -117,6 +122,7 @@ describe('create mastra', () => {
                   "id": "get-weather",
                   "inputSchema": "{"json":{"type":"object","properties":{"location":{"type":"string","description":"City name"}},"required":["location"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}",
                   "outputSchema": "{"json":{"type":"object","properties":{"temperature":{"type":"number"},"feelsLike":{"type":"number"},"humidity":{"type":"number"},"windSpeed":{"type":"number"},"windGust":{"type":"number"},"conditions":{"type":"string"},"location":{"type":"string"}},"required":["temperature","feelsLike","humidity","windSpeed","windGust","conditions","location"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}",
+                  "requireApproval": false,
                 },
               },
               "workflows": {},

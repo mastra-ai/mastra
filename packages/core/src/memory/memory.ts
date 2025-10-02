@@ -1,12 +1,12 @@
+import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
 import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 'ai';
-
 import { MessageList } from '../agent/message-list';
 import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-list';
 import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
-import type { MastraStorage, StorageGetMessagesArg, ThreadSortOptions } from '../storage';
+import type { MastraStorage, PaginationInfo, StorageGetMessagesArg, ThreadSortOptions } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
-import type { CoreTool } from '../tools';
+import type { ToolAction } from '../tools';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
 
@@ -33,7 +33,7 @@ export abstract class MemoryProcessor extends MastraBase {
    * @param messages The messages to process
    * @returns The processed messages
    */
-  process(messages: CoreMessage[], _opts: MemoryProcessorOpts): CoreMessage[] {
+  process(messages: CoreMessage[], _opts: MemoryProcessorOpts): CoreMessage[] | Promise<CoreMessage[]> {
     return messages;
   }
 }
@@ -70,7 +70,7 @@ export abstract class MastraMemory extends MastraBase {
 
   protected _storage?: MastraStorage;
   vector?: MastraVector;
-  embedder?: EmbeddingModel<string>;
+  embedder?: EmbeddingModel<string> | EmbeddingModelV2<string>;
   private processors: MemoryProcessor[] = [];
   protected threadConfig: MemoryConfig = { ...memoryDefaultOptions };
   #mastra?: Mastra;
@@ -155,11 +155,11 @@ export abstract class MastraMemory extends MastraBase {
    * This will be called when converting tools for the agent.
    * Implementations can override this to provide additional tools.
    */
-  public getTools(_config?: MemoryConfig): Record<string, CoreTool> {
+  public getTools(_config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
     return {};
   }
 
-  protected async createEmbeddingIndex(dimensions?: number): Promise<{ indexName: string }> {
+  protected async createEmbeddingIndex(dimensions?: number, config?: MemoryConfig): Promise<{ indexName: string }> {
     const defaultDimensions = 1536;
     const isDefault = dimensions === defaultDimensions;
     const usedDimensions = dimensions ?? defaultDimensions;
@@ -171,10 +171,28 @@ export abstract class MastraMemory extends MastraBase {
     if (typeof this.vector === `undefined`) {
       throw new Error(`Tried to create embedding index but no vector db is attached to this Memory instance.`);
     }
-    await this.vector.createIndex({
+
+    // Get index configuration from memory config
+    const semanticConfig = typeof config?.semanticRecall === 'object' ? config.semanticRecall : undefined;
+    const indexConfig = semanticConfig?.indexConfig;
+
+    // Base parameters that all vector stores support
+    const createParams: any = {
       indexName,
       dimension: usedDimensions,
-    });
+      ...(indexConfig?.metric && { metric: indexConfig.metric }),
+    };
+
+    // Add PG-specific configuration if provided
+    // Only PG vector store will use these parameters
+    if (indexConfig && (indexConfig.type || indexConfig.ivf || indexConfig.hnsw)) {
+      createParams.indexConfig = {};
+      if (indexConfig.type) createParams.indexConfig.type = indexConfig.type;
+      if (indexConfig.ivf) createParams.indexConfig.ivf = indexConfig.ivf;
+      if (indexConfig.hnsw) createParams.indexConfig.hnsw = indexConfig.hnsw;
+    }
+
+    await this.vector.createIndex(createParams);
     return { indexName };
   }
 
@@ -190,6 +208,12 @@ export abstract class MastraMemory extends MastraBase {
       }
     }
 
+    if (!mergedConfig?.threads) {
+      mergedConfig.threads = {};
+    }
+
+    mergedConfig.threads.generateTitle = config?.threads?.generateTitle !== false;
+
     return mergedConfig;
   }
 
@@ -198,12 +222,12 @@ export abstract class MastraMemory extends MastraBase {
    * @param messages The messages to process
    * @returns The processed messages
    */
-  protected applyProcessors(
+  protected async applyProcessors(
     messages: CoreMessage[],
     opts: {
       processors?: MemoryProcessor[];
     } & MemoryProcessorOpts,
-  ): CoreMessage[] {
+  ): Promise<CoreMessage[]> {
     const processors = opts.processors || this.processors;
     if (!processors || processors.length === 0) {
       return messages;
@@ -212,7 +236,7 @@ export abstract class MastraMemory extends MastraBase {
     let processedMessages = [...messages];
 
     for (const processor of processors) {
-      processedMessages = processor.process(processedMessages, {
+      processedMessages = await processor.process(processedMessages, {
         systemMessage: opts.systemMessage,
         newMessages: opts.newMessages,
         memorySystemMessage: opts.memorySystemMessage,
@@ -271,6 +295,14 @@ export abstract class MastraMemory extends MastraBase {
     orderBy,
     sortDirection,
   }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]>;
+
+  abstract getThreadsByResourceIdPaginated(
+    args: {
+      resourceId: string;
+      page: number;
+      perPage: number;
+    } & ThreadSortOptions,
+  ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
 
   /**
    * Saves or updates a thread

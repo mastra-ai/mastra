@@ -24,14 +24,11 @@ import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 export const mastra = new Mastra({
   // ...
   deployer: new CloudflareDeployer({
-    scope: "your-account-id",
     projectName: "hello-mastra",
-    scope: "",
-    auth: {
-      apiToken: process.env.CLOUDFLARE_API_TOKEN!,
-      apiEmail: "name@email.com"
-    }
-  })
+    env: {
+      NODE_ENV: "production",
+    },
+  }),
 });
 ```
 

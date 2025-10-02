@@ -1,5 +1,5 @@
 import { globby } from 'globby';
-import { it, describe, expect, beforeAll } from 'vitest';
+import { it, describe, expect } from 'vitest';
 import * as customResolve from 'resolve.exports';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -13,6 +13,7 @@ let allPackages = await globby(
     '!./docs/**',
     '!**/node_modules/**',
     '!**/integration-tests/**',
+    '!**/integration-tests-v5/**',
     '!./packages/_config/**',
     '!./e2e-tests/**',
     '!**/mcp-docs-server/**',
@@ -60,8 +61,8 @@ describe.for(allPackages.map(pkg => [relative(join(__dirname.replaceAll('\\', '/
         }
       });
 
-      it.skipIf(pkgName === 'packages/playground-ui' || pkgJson.name === 'mastra' || pkgJson.name === '@mastra/core')(
-        'should use .cjs and .d.cts extensions when using require',
+      it.skipIf(pkgName === 'packages/playground-ui' || pkgJson.name === 'mastra')(
+        'should use .cjs and .d.ts extensions when using require',
         async () => {
           if (importPath === './package.json') {
             return;
@@ -71,7 +72,7 @@ describe.for(allPackages.map(pkg => [relative(join(__dirname.replaceAll('\\', '/
           expect(exportConfig.require).toBeDefined();
           expect(exportConfig.require).not.toBe(expect.any(String));
           expect(extname(exportConfig.require.default)).toMatch(/\.cjs$/);
-          expect(exportConfig.require.types).toMatch(/\.d\.cts$/);
+          expect(exportConfig.require.types).toMatch(/\.d\.ts$/);
 
           const fileOutput = customResolve.exports(pkgJson, importPath, {
             require: true,

@@ -21,17 +21,6 @@ export type ChromaVectorFilter = VectorFilter<
   ChromaBlacklisted
 >;
 
-type ChromaDocumentOperatorValueMap = ChromaOperatorValueMap;
-
-type ChromaDocumentBlacklisted = Exclude<ChromaBlacklisted, '$contains'>;
-
-export type ChromaVectorDocumentFilter = VectorFilter<
-  keyof ChromaDocumentOperatorValueMap,
-  ChromaDocumentOperatorValueMap,
-  ChromaLogicalOperatorValueMap,
-  ChromaDocumentBlacklisted
->;
-
 /**
  * Translator for Chroma filter queries.
  * Maintains MongoDB-compatible syntax while ensuring proper validation
@@ -59,7 +48,7 @@ export class ChromaFilterTranslator extends BaseFilterTranslator<ChromaVectorFil
   private translateNode(node: ChromaVectorFilter, currentPath: string = ''): any {
     // Handle primitive values and arrays
     if (this.isRegex(node)) {
-      throw new Error('Regex is not supported in Chroma');
+      throw new Error('Regex is supported in Chroma via the `documentFilter` argument');
     }
     if (this.isPrimitive(node)) return this.normalizeComparisonValue(node);
     if (Array.isArray(node)) return { $in: this.normalizeArrayValues(node) };
@@ -70,6 +59,9 @@ export class ChromaFilterTranslator extends BaseFilterTranslator<ChromaVectorFil
     if (entries.length === 1 && firstEntry && this.isOperator(firstEntry[0])) {
       const [operator, value] = firstEntry;
       const translated = this.translateOperator(operator, value);
+      if (this.isLogicalOperator(operator) && Array.isArray(translated) && translated.length === 1) {
+        return translated[0];
+      }
       return this.isLogicalOperator(operator) ? { [operator]: translated } : translated;
     }
 

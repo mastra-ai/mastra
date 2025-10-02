@@ -1,5 +1,5 @@
 {
   "extends": "../../tsconfig.node.json",
-  "include": ["./global.d.ts", "src/**/*"],
+  "include": ["./global.d.ts", "src/**/*", "tsup.config.ts"],
   "exclude": ["node_modules", "**/*.test.ts", "**/__fixtures__/"]
 }

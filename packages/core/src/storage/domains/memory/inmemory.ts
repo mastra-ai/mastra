@@ -109,6 +109,8 @@ export class InMemoryMemory extends MemoryStorage {
   async getMessages<T extends MastraMessageV2[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
     this.logger.debug(`MockStore: getMessages called for thread ${threadId}`);
 
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
     // Handle include messages first
     const messages: MastraMessageV2[] = [];
 
@@ -216,15 +218,7 @@ export class InMemoryMemory extends MemoryStorage {
       } else if (!selectBy?.include || selectBy.include.length === 0) {
         // Convert and add all thread messages only if no include items
         for (const msg of threadMessages) {
-          const convertedMessage = {
-            id: msg.id,
-            threadId: msg.thread_id,
-            content: typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content,
-            role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
-            type: msg.type,
-            createdAt: msg.createdAt,
-            resourceId: msg.resourceId,
-          } as MastraMessageV2;
+          const convertedMessage = this.parseStoredMessage(msg);
           messages.push(convertedMessage);
         }
       }
@@ -234,6 +228,35 @@ export class InMemoryMemory extends MemoryStorage {
     messages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
     return messages as T;
+  }
+
+  protected parseStoredMessage(message: StorageMessageType): MastraMessageV2 {
+    const { resourceId, content, role, thread_id, ...rest } = message;
+    return {
+      ...rest,
+      threadId: thread_id,
+      ...(message.resourceId && { resourceId: message.resourceId }),
+      content: typeof content === 'string' ? content : JSON.parse(content),
+      role: role as MastraMessageV2['role'],
+    } satisfies MastraMessageV2;
+  }
+
+  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
+  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
+  async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    this.logger.debug(`MockStore: getMessagesById called`);
+
+    const rawMessages = messageIds.map(id => this.collection.messages.get(id)).filter(message => !!message);
+
+    const list = new MessageList().add(rawMessages.map(this.parseStoredMessage), 'memory');
+    if (format === 'v1') return list.get.all.v1();
+    return list.get.all.v2();
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
@@ -421,6 +444,8 @@ export class InMemoryMemory extends MemoryStorage {
     PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }
   > {
     this.logger.debug(`MockStore: getMessagesPaginated called for thread ${threadId}`);
+
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     const { page = 0, perPage = 40 } = selectBy?.pagination || {};
 

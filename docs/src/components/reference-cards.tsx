@@ -7,24 +7,108 @@ export const ReferenceCards = () => {
         "Core",
         "CLI",
         "Agents",
-        "Tools",
+        "Streaming",
         "Workflows",
-        "Networks",
+        "Legacy Workflows",
+        "Tools & MCP",
         "Memory",
-        "Storage",
+        "Networks",
         "RAG",
-        "Evals (Legacy)",
-        "Scorers",
-        "Voice",
-        "Observability",
-        "Client SDK",
+        "Storage",
         "Deployer",
+        "Client SDK",
+        "Observability",
+        "Evals",
+        "Scorers",
+        "Auth",
+        "Voice",
+        "Templates",
       ]}
       items={{
         Core: [
           {
-            title: "Mastra Class",
+            title: "Mastra",
             href: "/reference/core/mastra-class",
+          },
+          {
+            title: ".getAgent()",
+            href: "/reference/core/getAgent",
+          },
+          {
+            title: ".getAgents()",
+            href: "/reference/core/getAgents",
+          },
+          {
+            title: ".getAgentById()",
+            href: "/reference/core/getAgentById",
+          },
+          {
+            title: ".getWorkflow()",
+            href: "/reference/core/getWorkflow",
+          },
+          {
+            title: ".getWorkflows()",
+            href: "/reference/core/getWorkflows",
+          },
+          {
+            title: ".getMemory()",
+            href: "/reference/core/getMemory",
+          },
+          {
+            title: ".setStorage()",
+            href: "/reference/core/setStorage",
+          },
+          {
+            title: ".getServer()",
+            href: "/reference/core/getServer",
+          },
+          {
+            title: ".getMCPServer()",
+            href: "/reference/core/getMCPServer",
+          },
+          {
+            title: ".getVector()",
+            href: "/reference/core/getVector",
+          },
+          {
+            title: ".getVectors()",
+            href: "/reference/core/getVectors",
+          },
+          {
+            title: ".getDeployer()",
+            href: "/reference/core/getDeployer",
+          },
+          {
+            title: ".getStorage()",
+            href: "/reference/core/getStorage",
+          },
+          {
+            title: ".getMCPServers()",
+            href: "/reference/core/getMCPServers",
+          },
+          {
+            title: ".getTelemetry()",
+            href: "/reference/core/getTelemetry",
+          },
+          {
+            title: ".setTelemetry()",
+            href: "/reference/core/setTelemetry",
+          },
+          {
+            title: ".getLogs()",
+            href: "/reference/core/getLogs",
+          },
+          {
+            title: ".getLogsByRunId()",
+            href: "/reference/core/getLogsByRunId",
+          },
+          {
+            title: ".getLogger()",
+            href: "/reference/core/getLogger",
+          },
+          {
+            title: ".setLogger()",
+            href: "/reference/core/setLogger",
           },
         ],
         CLI: [
@@ -53,6 +137,10 @@ export const ReferenceCards = () => {
             href: "/reference/cli/lint",
           },
           {
+            title: "mastra scorers",
+            href: "/reference/cli/scorers",
+          },
+          {
             title: "mcp-docs-server",
             href: "/reference/cli/mcp-docs-server",
           },
@@ -63,47 +151,97 @@ export const ReferenceCards = () => {
             href: "/reference/agents/agent",
           },
           {
-            title: "getAgent()",
-            href: "/reference/agents/getAgent",
-          },
-          {
-            title: "createTool()",
-            href: "/reference/agents/createTool",
-          },
-          {
-            title: "generate()",
+            title: ".generate()",
             href: "/reference/agents/generate",
           },
           {
-            title: "stream()",
+            title: ".generateVNext() (Experimental)",
+            href: "/reference/agents/generateVNext",
+          },
+          {
+            title: ".stream()",
             href: "/reference/agents/stream",
           },
           {
-            title: "getWorkflows()",
+            title: ".streamVNext() (Experimental)",
+            href: "/reference/agents/streamVNext",
+          },
+          {
+            title: "MastraModelOutput",
+            href: "/reference/agents/MastraModelOutput",
+          },
+          {
+            title: "ChunkType",
+            href: "/reference/agents/ChunkType",
+          },
+          {
+            title: ".getWorkflows()",
             href: "/reference/agents/getWorkflows",
           },
           {
-            title: "getVoice()",
-            href: "/reference/agents/getVoice",
-          },
-          {
-            title: "getInstructions()",
-            href: "/reference/agents/getInstructions",
-          },
-          {
-            title: "getTools()",
+            title: ".getTools()",
             href: "/reference/agents/getTools",
           },
           {
-            title: "getModel()",
+            title: ".getScorers()",
+            href: "/reference/agents/getScorers",
+          },
+          {
+            title: ".getModel()",
             href: "/reference/agents/getModel",
           },
           {
-            title: "getMemory()",
+            title: ".getMemory()",
             href: "/reference/agents/getMemory",
           },
+          {
+            title: ".getVoice()",
+            href: "/reference/agents/getVoice",
+          },
+          {
+            title: ".getDescription()",
+            href: "/reference/agents/getDescription",
+          },
+          {
+            title: ".getInstructions()",
+            href: "/reference/agents/getInstructions",
+          },
+          {
+            title: ".getLLM()",
+            href: "/reference/agents/getLLM",
+          },
+          {
+            title: ".getDefaultGenerateOptions()",
+            href: "/reference/agents/getDefaultGenerateOptions",
+          },
+          {
+            title: ".getDefaultStreamOptions()",
+            href: "/reference/agents/getDefaultStreamOptions",
+          },
+          {
+            title: ".getDefaultVNextStreamOptions()",
+            href: "/reference/agents/getDefaultVNextStreamOptions",
+          },
         ],
-        Tools: [
+        Streaming: [
+          {
+            title: ".stream()",
+            href: "/reference/streaming/stream",
+          },
+          {
+            title: ".streamVNext() (Experimental)",
+            href: "/reference/streaming/streamVNext",
+          },
+          {
+            title: "MastraModelOutput",
+            href: "/reference/streaming/MastraModelOutput",
+          },
+          {
+            title: "ChunkType",
+            href: "/reference/streaming/ChunkType",
+          },
+        ],
+        "Tools & MCP": [
           {
             title: "createTool()",
             href: "/reference/tools/create-tool",
@@ -131,88 +269,186 @@ export const ReferenceCards = () => {
         ],
         Workflows: [
           {
-            title: "Workflow",
+            title: "Workflow Class",
             href: "/reference/workflows/workflow",
           },
           {
-            title: "createStep()",
+            title: "Step Class",
             href: "/reference/workflows/step",
           },
           {
-            title: "then()",
-            href: "/reference/workflows/then",
+            title: "Run Class",
+            href: "/reference/workflows/run",
           },
           {
-            title: "parallel()",
-            href: "/reference/workflows/parallel",
+            title: ".then()",
+            href: "/reference/workflows/workflow-methods/then",
           },
           {
-            title: "branch()",
-            href: "/reference/workflows/branch",
+            title: ".branch()",
+            href: "/reference/workflows/workflow-methods/branch",
           },
           {
-            title: "dowhile()",
-            href: "/reference/workflows/dowhile",
+            title: ".parallel()",
+            href: "/reference/workflows/workflow-methods/parallel",
           },
           {
-            title: "dountil()",
-            href: "/reference/workflows/dountil",
+            title: ".commit()",
+            href: "/reference/workflows/workflow-methods/commit",
           },
           {
-            title: "foreach()",
-            href: "/reference/workflows/foreach",
+            title: ".dowhile()",
+            href: "/reference/workflows/workflow-methods/dowhile",
           },
           {
-            title: "map()",
-            href: "/reference/workflows/map",
+            title: ".dountil()",
+            href: "/reference/workflows/workflow-methods/dountil",
           },
           {
-            title: "sleep()",
-            href: "/reference/workflows/sleep",
+            title: ".foreach()",
+            href: "/reference/workflows/workflow-methods/foreach",
           },
           {
-            title: "sleepUntil()",
-            href: "/reference/workflows/sleepUntil",
+            title: ".map()",
+            href: "/reference/workflows/workflow-methods/map",
           },
           {
-            title: "waitForEvent()",
-            href: "/reference/workflows/waitForEvent",
+            title: ".sleep()",
+            href: "/reference/workflows/workflow-methods/sleep",
           },
           {
-            title: "sendEvent()",
-            href: "/reference/workflows/sendEvent",
+            title: ".sleepUntil()",
+            href: "/reference/workflows/workflow-methods/sleepUntil",
           },
           {
-            title: "commit()",
-            href: "/reference/workflows/commit",
+            title: ".waitForEvent()",
+            href: "/reference/workflows/workflow-methods/waitForEvent",
           },
           {
-            title: "createRunAsync()",
-            href: "/reference/workflows/create-run",
+            title: ".sendEvent()",
+            href: "/reference/workflows/workflow-methods/sendEvent",
+          },
+          {
+            title: ".createRunAsync()",
+            href: "/reference/workflows/workflow-methods/create-run",
+          },
+          {
+            title: ".start()",
+            href: "/reference/workflows/run-methods/start",
+          },
+          {
+            title: ".resume()",
+            href: "/reference/workflows/run-methods/resume",
+          },
+          {
+            title: ".stream()",
+            href: "/reference/workflows/run-methods/stream",
+          },
+          {
+            title: ".streamVNext() (Experimental)",
+            href: "/reference/workflows/run-methods/streamVNext",
+          },
+          {
+            title: ".watch()",
+            href: "/reference/workflows/run-methods/watch",
+          },
+          {
+            title: ".cancel()",
+            href: "/reference/workflows/run-methods/cancel",
+          },
+        ],
+        "Legacy Workflows": [
+          {
+            title: "Workflow",
+            href: "/reference/legacyWorkflows/workflow",
+          },
+          {
+            title: "Step",
+            href: "/reference/legacyWorkflows/step-class",
+          },
+          {
+            title: "StepOptions",
+            href: "/reference/legacyWorkflows/step-options",
+          },
+          {
+            title: "StepCondition",
+            href: "/reference/legacyWorkflows/step-condition",
+          },
+          {
+            title: ".step()",
+            href: "/reference/legacyWorkflows/step-function",
+          },
+          {
+            title: ".after()",
+            href: "/reference/legacyWorkflows/after",
+          },
+          {
+            title: ".then()",
+            href: "/reference/legacyWorkflows/then",
+          },
+          {
+            title: ".until()",
+            href: "/reference/legacyWorkflows/until",
+          },
+          {
+            title: ".while()",
+            href: "/reference/legacyWorkflows/while",
+          },
+          {
+            title: ".if()",
+            href: "/reference/legacyWorkflows/if",
+          },
+          {
+            title: ".else()",
+            href: "/reference/legacyWorkflows/else",
+          },
+          {
+            title: ".createRun()",
+            href: "/reference/legacyWorkflows/createRun",
+          },
+          {
+            title: ".start()",
+            href: "/reference/legacyWorkflows/start",
+          },
+          {
+            title: ".execute()",
+            href: "/reference/legacyWorkflows/execute",
+          },
+          {
+            title: ".suspend()",
+            href: "/reference/legacyWorkflows/suspend",
           },
           {
             title: "Snapshots",
-            href: "/reference/workflows/snapshots",
+            href: "/reference/legacyWorkflows/snapshots",
           },
           {
-            title: "watch()",
-            href: "/reference/workflows/watch",
+            title: ".resume()",
+            href: "/reference/legacyWorkflows/resume",
           },
           {
-            title: "stream()",
-            href: "/reference/workflows/stream",
+            title: ".commit()",
+            href: "/reference/legacyWorkflows/commit",
           },
           {
-            title: "execute()",
-            href: "/reference/workflows/execute",
+            title: ".watch()",
+            href: "/reference/legacyWorkflows/watch",
           },
           {
-            title: "resume()",
-            href: "/reference/workflows/resume",
+            title: "Event-Driven Workflows",
+            href: "/reference/legacyWorkflows/events",
           },
           {
-            title: "start()",
-            href: "/reference/workflows/start",
+            title: ".afterEvent()",
+            href: "/reference/legacyWorkflows/afterEvent",
+          },
+          {
+            title: ".resumeWithEvent()",
+            href: "/reference/legacyWorkflows/resumeWithEvent",
+          },
+          {
+            title: "Step Retries",
+            href: "/reference/legacyWorkflows/step-retries",
           },
         ],
         Networks: [
@@ -242,6 +478,14 @@ export const ReferenceCards = () => {
             title: ".getThreadsByResourceId()",
             href: "/reference/memory/getThreadsByResourceId",
           },
+          {
+            title: ".getThreadsByResourceIdPaginated()",
+            href: "/reference/memory/getThreadsByResourceIdPaginated",
+          },
+          {
+            title: ".deleteMessages()",
+            href: "/reference/memory/deleteMessages",
+          },
         ],
         Storage: [
           {
@@ -267,6 +511,10 @@ export const ReferenceCards = () => {
           {
             title: "DynamoDB Storage",
             href: "/reference/storage/dynamodb",
+          },
+          {
+            title: "MSSQL Storage",
+            href: "/reference/storage/mssql",
           },
         ],
         RAG: [
@@ -358,8 +606,12 @@ export const ReferenceCards = () => {
             title: "LanceVector",
             href: "/reference/rag/lance",
           },
+          {
+            title: "S3Vectors",
+            href: "/reference/rag/s3vectors",
+          },
         ],
-        "Evals (Legacy)": [
+        Evals: [
           {
             title: "AnswerRelevancy",
             href: "/reference/evals/answer-relevancy",
@@ -427,20 +679,20 @@ export const ReferenceCards = () => {
         ],
         Scorers: [
           {
-            title: "MastraScorer",
+            title: "MastraScorer Class",
             href: "/reference/scorers/mastra-scorer",
           },
           {
             title: "createScorer",
-            href: "/reference/scorers/custom-code-scorer",
+            href: "/reference/scorers/create-scorer",
           },
           {
-            title: "createLLMScorer",
-            href: "/reference/scorers/llm-scorer",
-          },
-          {
-            title: "Answer Relevancy",
+            title: "AnswerRelevancy",
             href: "/reference/scorers/answer-relevancy",
+          },
+          {
+            title: "AnswerSimilarity",
+            href: "/reference/scorers/answer-similarity",
           },
           {
             title: "Bias",
@@ -451,8 +703,16 @@ export const ReferenceCards = () => {
             href: "/reference/scorers/completeness",
           },
           {
-            title: "Content Similarity",
+            title: "ContentSimilarity",
             href: "/reference/scorers/content-similarity",
+          },
+          {
+            title: "ContextRelevance",
+            href: "/reference/scorers/context-relevance",
+          },
+          {
+            title: "ContextPrecision",
+            href: "/reference/scorers/context-precision",
           },
           {
             title: "Faithfulness",
@@ -463,16 +723,28 @@ export const ReferenceCards = () => {
             href: "/reference/scorers/hallucination",
           },
           {
-            title: "Keyword Coverage",
+            title: "KeywordCoverage",
             href: "/reference/scorers/keyword-coverage",
           },
           {
-            title: "Textual Difference",
+            title: "TextualDifference",
             href: "/reference/scorers/textual-difference",
           },
           {
-            title: "Tone Consistency",
+            title: "ToneConsistency",
             href: "/reference/scorers/tone-consistency",
+          },
+          {
+            title: "ToolCallAccuracy",
+            href: "/reference/scorers/tool-call-accuracy",
+          },
+          {
+            title: "PromptAlignment",
+            href: "/reference/scorers/prompt-alignment",
+          },
+          {
+            title: "NoiseSensitivity",
+            href: "/reference/scorers/noise-sensitivity",
           },
           {
             title: "Toxicity",
@@ -501,43 +773,43 @@ export const ReferenceCards = () => {
             href: "/reference/voice/voice.getSpeakers",
           },
           {
-            title: ".connect()",
+            title: ".connect() (realtime)",
             href: "/reference/voice/voice.connect",
           },
           {
-            title: ".send()",
+            title: ".send() (realtime)",
             href: "/reference/voice/voice.send",
           },
           {
-            title: ".answer()",
+            title: ".answer() (realtime)",
             href: "/reference/voice/voice.answer",
           },
           {
-            title: ".on()",
+            title: ".on() (realtime)",
             href: "/reference/voice/voice.on",
           },
           {
-            title: "events",
+            title: "events (realtime)",
             href: "/reference/voice/voice.events",
           },
           {
-            title: ".off()",
+            title: ".off() (realtime)",
             href: "/reference/voice/voice.off",
           },
           {
-            title: ".close()",
+            title: ".close() (realtime)",
             href: "/reference/voice/voice.close",
           },
           {
-            title: ".addInstructions()",
+            title: ".addInstructions() (realtime)",
             href: "/reference/voice/voice.addInstructions",
           },
           {
-            title: ".addTools()",
+            title: ".addTools() (realtime)",
             href: "/reference/voice/voice.addTools",
           },
           {
-            title: ".updateConfig()",
+            title: ".updateConfig() (realtime)",
             href: "/reference/voice/voice.updateConfig",
           },
           {
@@ -551,6 +823,10 @@ export const ReferenceCards = () => {
           {
             title: "Google",
             href: "/reference/voice/google",
+          },
+          {
+            title: "Google Gemini Live",
+            href: "/reference/voice/google-gemini-live",
           },
           {
             title: "Murf",
@@ -591,15 +867,67 @@ export const ReferenceCards = () => {
             href: "/reference/observability/providers",
           },
           {
-            title: "Logger",
+            title: "PinoLogger",
             href: "/reference/observability/logger",
           },
           {
             title: "OTelConfig",
             href: "/reference/observability/otel-config",
           },
+          {
+            title: "Arize AX",
+            href: "/reference/observability/providers/arize-ax",
+          },
+          {
+            title: "Arize Phoenix",
+            href: "/reference/observability/providers/arize-phoenix",
+          },
+          {
+            title: "Dash0",
+            href: "/reference/observability/providers/dash0",
+          },
+          {
+            title: "SigNoz",
+            href: "/reference/observability/providers/signoz",
+          },
+          {
+            title: "Braintrust",
+            href: "/reference/observability/providers/braintrust",
+          },
+          {
+            title: "LangSmith",
+            href: "/reference/observability/providers/langsmith",
+          },
+          {
+            title: "Langfuse",
+            href: "/reference/observability/providers/langfuse",
+          },
+          {
+            title: "LangWatch",
+            href: "/reference/observability/providers/langwatch",
+          },
+          {
+            title: "New Relic",
+            href: "/reference/observability/providers/new-relic",
+          },
+          {
+            title: "Traceloop",
+            href: "/reference/observability/providers/traceloop",
+          },
+          {
+            title: "Laminar",
+            href: "/reference/observability/providers/laminar",
+          },
+          {
+            title: "Keywords AI",
+            href: "/reference/observability/providers/keywordsai",
+          },
         ],
         "Client SDK": [
+          {
+            title: "MastraClient",
+            href: "/reference/client-js/mastra-client",
+          },
           {
             title: "Agents API",
             href: "/reference/client-js/agents",
@@ -617,10 +945,6 @@ export const ReferenceCards = () => {
             href: "/reference/client-js/workflows",
           },
           {
-            title: "Workflows (Legacy) API",
-            href: "/reference/client-js/workflows-legacy",
-          },
-          {
             title: "Vectors API",
             href: "/reference/client-js/vectors",
           },
@@ -635,6 +959,10 @@ export const ReferenceCards = () => {
           {
             title: "Error Handling",
             href: "/reference/client-js/error-handling",
+          },
+          {
+            title: "Workflows (Legacy) API",
+            href: "/reference/client-js/workflows-legacy",
           },
         ],
         Deployer: [
@@ -653,6 +981,30 @@ export const ReferenceCards = () => {
           {
             title: "Vercel",
             href: "/reference/deployer/vercel",
+          },
+        ],
+        Auth: [
+          {
+            title: "JSON Web Token",
+            href: "/reference/auth/jwt",
+          },
+          {
+            title: "Clerk",
+            href: "/reference/auth/clerk",
+          },
+          {
+            title: "Firebase",
+            href: "/reference/auth/firebase",
+          },
+          {
+            title: "Supabase",
+            href: "/reference/auth/supabase",
+          },
+        ],
+        Templates: [
+          {
+            title: "Templates",
+            href: "/reference/templates/overview",
           },
         ],
       }}

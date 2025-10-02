@@ -3,12 +3,13 @@ import { SequenceMatcher } from 'difflib';
 
 export function createTextualDifferenceScorer() {
   return createScorer({
-    name: 'Completeness',
-    description:
-      'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
-    analyze: async run => {
-      const input = run.input?.map(i => i.content).join(', ') || '';
-      const output = run.output.text;
+    name: 'Textual Difference Scorer',
+    description: 'Calculate textual difference between input and output using sequence matching algorithms.',
+    type: 'agent',
+  })
+    .preprocess(async ({ run }) => {
+      const input = run.input?.inputMessages?.map((i: { content: string }) => i.content).join(', ') || '';
+      const output = run.output?.map((i: { content: string }) => i.content).join(', ') || '';
       const matcher = new SequenceMatcher(null, input, output);
       const ratio = matcher.ratio();
 
@@ -22,13 +23,13 @@ export function createTextualDifferenceScorer() {
       const confidence = 1 - lengthDiff;
 
       return {
-        score: ratio,
-        result: {
-          confidence,
-          changes,
-          lengthDiff,
-        },
+        ratio,
+        confidence,
+        changes,
+        lengthDiff,
       };
-    },
-  });
+    })
+    .generateScore(({ results }) => {
+      return results.preprocessStepResult?.ratio;
+    });
 }

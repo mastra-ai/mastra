@@ -3,7 +3,8 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/mastra/*"]
+      "@/*": ["./src/mastra/*"],
+      "@custom-lodash/*": ["../../packages/lodash-test/src/*"]
     }
   }
 }

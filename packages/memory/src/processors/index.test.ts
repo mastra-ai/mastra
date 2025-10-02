@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
-import { createTool } from '@mastra/core';
-import type { MastraMessageV1 } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import type { MastraMessageV1 } from '@mastra/core/memory';
+import { createTool } from '@mastra/core/tools';
 import type { CoreMessage } from 'ai';
 import cl100k_base from 'js-tiktoken/ranks/cl100k_base';
 import { describe, it, expect, vi } from 'vitest';

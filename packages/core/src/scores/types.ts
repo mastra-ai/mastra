@@ -1,10 +1,14 @@
+import type { CoreMessage, CoreSystemMessage } from 'ai';
 import { z } from 'zod';
+import type { UIMessageWithMetadata } from '../agent';
+import { AISpanType } from '../ai-tracing';
+import type { TracingContext } from '../ai-tracing';
 
 export type ScoringSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
 
 export type ScoringSource = 'LIVE' | 'TEST';
 
-export type ScoringEntityType = 'AGENT' | 'WORKFLOW';
+export type ScoringEntityType = 'AGENT' | 'WORKFLOW' | AISpanType;
 
 export type ScoringPrompts = {
   description: string;
@@ -13,25 +17,28 @@ export type ScoringPrompts = {
 
 export type ScoringInput = {
   runId?: string;
-  input?: Record<string, any>[];
-  output: Record<string, any>;
+  input?: any;
+  output: any;
   additionalContext?: Record<string, any>;
   runtimeContext?: Record<string, any>;
+  tracingContext?: TracingContext;
 };
 
 export type ScoringHookInput = {
   runId?: string;
   scorer: Record<string, any>;
-  input: Record<string, any>[];
-  output: Record<string, any>;
+  input: any;
+  output: any;
   metadata?: Record<string, any>;
   additionalContext?: Record<string, any>;
   source: ScoringSource;
   entity: Record<string, any>;
   entityType: ScoringEntityType;
   runtimeContext?: Record<string, any>;
+  tracingContext?: TracingContext;
   structuredOutput?: boolean;
   traceId?: string;
+  spanId?: string;
   resourceId?: string;
   threadId?: string;
 };
@@ -78,6 +85,10 @@ export type ScoreRowData = ScoringInputWithExtractStepResultAndScoreAndReason &
     scorerId: string;
     createdAt: Date;
     updatedAt: Date;
+    preprocessStepResult?: Record<string, any>;
+    preprocessPrompt?: string;
+    generateScorePrompt?: string;
+    generateReasonPrompt?: string;
   };
 
 export type ExtractionStepFn = (input: ScoringInput) => Promise<Record<string, any>>;
@@ -97,3 +108,44 @@ export type ScorerOptions = {
   metadata?: Record<string, any>;
   isLLMScorer?: boolean;
 };
+
+export type ScorerRunInputForAgent = {
+  inputMessages: UIMessageWithMetadata[];
+  rememberedMessages: UIMessageWithMetadata[];
+  systemMessages: CoreMessage[];
+  taggedSystemMessages: Record<string, CoreSystemMessage[]>;
+};
+
+export type ScorerRunOutputForAgent = UIMessageWithMetadata[];
+
+export const saveScorePayloadSchema = z.object({
+  runId: z.string(),
+  scorerId: z.string(),
+  entityId: z.string(),
+  score: z.number(),
+  input: z.any().optional(),
+  output: z.any(),
+  source: z.enum(['LIVE', 'TEST']),
+  entityType: z.enum(['AGENT', 'WORKFLOW', ...Object.values(AISpanType)]).optional(),
+  scorer: z.record(z.string(), z.any()),
+
+  traceId: z.string().optional(),
+  spanId: z.string().optional(),
+  preprocessStepResult: z.record(z.string(), z.any()).optional(),
+  extractStepResult: z.record(z.string(), z.any()).optional(),
+  analyzeStepResult: z.record(z.string(), z.any()).optional(),
+  reason: z.string().optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
+  preprocessPrompt: z.string().optional(),
+  extractPrompt: z.string().optional(),
+  generateScorePrompt: z.string().optional(),
+  generateReasonPrompt: z.string().optional(),
+  analyzePrompt: z.string().optional(),
+  additionalContext: z.record(z.string(), z.any()).optional(),
+  runtimeContext: z.record(z.string(), z.any()).optional(),
+  entity: z.record(z.string(), z.any()).optional(),
+  resourceId: z.string().optional(),
+  threadId: z.string().optional(),
+});
+
+export type ValidatedSaveScorePayload = z.infer<typeof saveScorePayloadSchema>;

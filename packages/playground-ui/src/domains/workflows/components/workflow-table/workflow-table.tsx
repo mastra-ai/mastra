@@ -1,4 +1,4 @@
-import { GetLegacyWorkflowResponse, GetWorkflowResponse } from '@mastra/client-js';
+import { GetWorkflowResponse } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
@@ -16,13 +16,11 @@ import { useLinkComponent } from '@/lib/framework';
 
 export interface WorkflowTableProps {
   workflows?: Record<string, GetWorkflowResponse>;
-  legacyWorkflows?: Record<string, GetLegacyWorkflowResponse>;
   isLoading: boolean;
-  computeLink: (agentId: string) => string;
 }
 
-export function WorkflowTable({ workflows, legacyWorkflows, isLoading, computeLink }: WorkflowTableProps) {
-  const { navigate } = useLinkComponent();
+export function WorkflowTable({ workflows, isLoading }: WorkflowTableProps) {
+  const { navigate, paths } = useLinkComponent();
   const workflowData: WorkflowTableData[] = useMemo(() => {
     const _workflowsData = Object.keys(workflows ?? {}).map(key => {
       const workflow = workflows?.[key];
@@ -31,25 +29,13 @@ export function WorkflowTable({ workflows, legacyWorkflows, isLoading, computeLi
         id: key,
         name: workflow?.name || 'N/A',
         stepsCount: Object.keys(workflow?.steps ?? {})?.length,
-        isLegacy: false,
-        link: computeLink(key),
+
+        link: paths.workflowLink(key),
       };
     });
 
-    const legacyWorkflowsData = Object.keys(legacyWorkflows ?? {}).map(key => {
-      const workflow = legacyWorkflows?.[key];
-
-      return {
-        id: key,
-        name: workflow?.name || 'N/A',
-        stepsCount: Object.keys(workflow?.steps ?? {})?.length,
-        isLegacy: true,
-        link: computeLink(key),
-      };
-    });
-
-    return [..._workflowsData, ...legacyWorkflowsData];
-  }, [workflows, legacyWorkflows]);
+    return _workflowsData;
+  }, [workflows]);
 
   const table = useReactTable({
     data: workflowData,

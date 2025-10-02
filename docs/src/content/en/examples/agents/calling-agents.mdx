@@ -1,0 +1,130 @@
+---
+title: "Calling Agents | Agents | Mastra Docs"
+description: Example for how to call agents.
+---
+
+# Calling Agents
+
+There are multiple ways to interact with agents created using Mastra. Below you will find examples of how to call agents using workflow steps, tools, the [Mastra Client SDK](../../docs/server-db/mastra-client.mdx), and the command line for quick local testing.
+
+This page demonstrates how to call the `harryPotterAgent` described in the [Changing the System Prompt](./system-prompt.mdx) example.
+
+## From a workflow step
+
+The `mastra` instance is passed as an argument to a workflow step’s `execute` function. It provides access to registered agents using `getAgent()`. Use this method to retrieve your agent, then call `generate()` with a prompt.
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  // ...
+  execute: async ({ mastra }) => {
+
+    const agent = mastra.getAgent("harryPotterAgent");
+    const response = await agent.generate("What is your favorite room in Hogwarts?");
+
+    console.log(response.text);
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .then(step1)
+  .commit();
+```
+
+## From a tool
+
+The `mastra` instance is available within a tool’s `execute` function. Use `getAgent()` to retrieve a registered agent and call `generate()` with a prompt.
+
+```typescript filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const testTool = createTool({
+  // ...
+  execute: async ({ mastra }) => {
+
+    const agent = mastra.getAgent("harryPotterAgent");
+    const response = await agent.generate("What is your favorite room in Hogwarts?");
+
+    console.log(response!.text);
+  }
+});
+```
+
+## From Mastra Client
+
+The `mastraClient` instance provides access to registered agents. Use `getAgent()` to retrieve an agent and call `generate()` with an object containing a `messages` array of role/content pairs.
+
+```typescript showLineNumbers copy
+import { mastraClient } from "../lib/mastra-client";
+
+const agent = mastraClient.getAgent("harryPotterAgent");
+const response = await agent.generate({
+  messages: [
+    {
+      role: "user",
+      content: "What is your favorite room in Hogwarts?"
+    }
+  ]
+});
+
+console.log(response.text);
+```
+
+> See [Mastra Client SDK](../../docs/server-db/mastra-client.mdx) for more information.
+
+## From the command line
+
+You can create a simple script to test your agent locally. The `mastra` instance provides access to registered agents using `getAgent()`.
+
+To ensure your model has access to environment variables (like `OPENAI_API_KEY`), install `dotenv` and import it at the top of your script.
+
+```typescript filename="src/test-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("harryPotterAgent");
+const response = await agent.generate("What is your favorite room in Hogwarts?");
+
+console.log(response.text);
+```
+
+### Run the script
+
+Run this script from your command line using:
+
+```bash
+npx tsx src/test-agent.ts
+```
+
+## From curl
+
+You can interact with a registered agent by sending a `POST` request to your Mastra application's `/generate` endpoint. Include a `messages` array of role/content pairs.
+
+```bash
+curl -X POST http://localhost:4111/api/agents/harryPotterAgent/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is your favorite room in Hogwarts?"
+      }
+    ]
+  }'| jq -r '.text'
+```
+
+
+## Example output
+
+```text
+Well, if I had to choose, I'd say the Gryffindor common room.
+It's where I've spent some of my best moments with Ron and Hermione.
+The warm fire, the cozy armchairs, and the sense of camaraderie make it feel like home.
+Plus, it's where we plan all our adventures!
+```

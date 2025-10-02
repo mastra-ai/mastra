@@ -48,12 +48,6 @@ Mastra is organized as a monorepo with the following key directories:
 3. **Install dependencies and build initial packages**:
 
    ```bash
-   pnpm setup
-   ```
-
-   or
-
-   ```bash
    pnpm run setup
    ```
 

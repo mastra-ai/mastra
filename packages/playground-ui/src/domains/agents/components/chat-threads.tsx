@@ -2,44 +2,38 @@ import { ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads } from 
 import { Icon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
 import { Plus } from 'lucide-react';
-import { StorageThreadType } from '@mastra/core';
+import { StorageThreadType } from '@mastra/core/memory';
 import { AlertDialog } from '@/components/ui/alert-dialog';
 import { useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Txt } from '@/ds/components/Txt/Txt';
 
 export interface ChatThreadsProps {
-  computeNewThreadLink: () => string;
-  computeThreadLink: (threadId: string) => string;
   threads: StorageThreadType[];
   isLoading: boolean;
   threadId: string;
   onDelete: (threadId: string) => void;
+  resourceId: string;
+  resourceType: 'agent' | 'network';
 }
 
-export const ChatThreads = ({
-  computeNewThreadLink,
-  computeThreadLink,
-  threads,
-  isLoading,
-  threadId,
-  onDelete,
-}: ChatThreadsProps) => {
-  const { Link } = useLinkComponent();
+export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId, resourceType }: ChatThreadsProps) => {
+  const { Link, paths } = useLinkComponent();
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   if (isLoading) {
     return <ChatThreadSkeleton />;
   }
 
-  const reverseThreads = [...threads].reverse();
+  const newThreadLink =
+    resourceType === 'agent' ? paths.agentNewThreadLink(resourceId) : paths.networkNewThreadLink(resourceId);
 
   return (
     <div className="overflow-y-auto h-full w-full">
       <Threads>
         <ThreadList>
           <ThreadItem>
-            <ThreadLink as={Link} to={computeNewThreadLink()}>
+            <ThreadLink as={Link} to={newThreadLink}>
               <span className="text-accent1 flex items-center gap-4">
                 <Icon className="bg-surface4 rounded-lg" size="lg">
                   <Plus />
@@ -49,18 +43,23 @@ export const ChatThreads = ({
             </ThreadLink>
           </ThreadItem>
 
-          {reverseThreads.length === 0 && (
+          {threads.length === 0 && (
             <Txt as="p" variant="ui-sm" className="text-icon3 py-3 px-5 max-w-[12rem]">
               Your conversations will appear here once you start chatting!
             </Txt>
           )}
 
-          {reverseThreads.map(thread => {
+          {threads.map(thread => {
             const isActive = thread.id === threadId;
+
+            const threadLink =
+              resourceType === 'agent'
+                ? paths.agentThreadLink(resourceId, thread.id)
+                : paths.networkThreadLink(resourceId, thread.id);
 
             return (
               <ThreadItem isActive={isActive} key={thread.id}>
-                <ThreadLink as={Link} to={computeThreadLink(thread.id)}>
+                <ThreadLink as={Link} to={threadLink}>
                   <ThreadTitle title={thread.title} />
                   <span>{formatDay(thread.createdAt)}</span>
                 </ThreadLink>
@@ -136,7 +135,7 @@ function ThreadTitle({ title }: { title?: string }) {
     return <span className="text-muted-foreground">Chat from</span>;
   }
 
-  return <span className="truncate max-w-[14rem]">{title}</span>;
+  return <span className="truncate max-w-[14rem] text-muted-foreground">{title}</span>;
 }
 
 const formatDay = (date: Date) => {

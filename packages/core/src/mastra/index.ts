@@ -1,40 +1,50 @@
+import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
+import { getAllAITracing, setupAITracing, shutdownAITracingRegistry } from '../ai-tracing';
+import type { ObservabilityRegistryConfig } from '../ai-tracing';
 import type { BundlerConfig } from '../bundler/types';
+import { InMemoryServerCache } from '../cache';
+import type { MastraServerCache } from '../cache';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import { EventEmitterPubSub } from '../events/event-emitter';
+import type { PubSub } from '../events/pubsub';
+import type { Event } from '../events/types';
 import { AvailableHooks, registerHook } from '../hooks';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
-import type { AgentNetwork } from '../network';
 import type { NewAgentNetwork } from '../network/vNext';
+import type { MastraScorer } from '../scores';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import { InstrumentClass, Telemetry } from '../telemetry';
 import type { OtelConfig } from '../telemetry';
 import type { MastraTTS } from '../tts';
+import type { MastraIdGenerator } from '../types';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
+import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import type { LegacyWorkflow } from '../workflows/legacy';
 import { createOnScorerHook } from './hooks';
-
-type NonEmpty<T extends string> = T extends '' ? never : T;
 
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
-  TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
+  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any>> = Record<
+    string,
+    Workflow<any, any, any, any, any, any>
+  >,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
-  TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
   TVNextNetworks extends Record<string, NewAgentNetwork> = Record<string, NewAgentNetwork>,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
+  TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
 > {
   agents?: TAgents;
-  networks?: TNetworks;
   vnext_networks?: TVNextNetworks;
   storage?: MastraStorage;
   vectors?: TVectors;
@@ -43,11 +53,14 @@ export interface Config<
   workflows?: TWorkflows;
   tts?: TTTS;
   telemetry?: OtelConfig;
-  idGenerator?: () => NonEmpty<string>;
+  observability?: ObservabilityRegistryConfig;
+  idGenerator?: MastraIdGenerator;
   deployer?: MastraDeployer;
   server?: ServerConfig;
   mcpServers?: TMCPServers;
   bundler?: BundlerConfig;
+  pubsub?: PubSub;
+  scorers?: TScorers;
 
   /**
    * Server middleware functions to be applied to API routes
@@ -61,6 +74,13 @@ export interface Config<
 
   // @deprecated add memory to your Agent directly instead
   memory?: never;
+
+  events?: {
+    [topic: string]: (
+      event: Event,
+      cb?: () => Promise<void>,
+    ) => Promise<void> | ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
+  };
 }
 
 @InstrumentClass({
@@ -70,13 +90,16 @@ export interface Config<
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
-  TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
+  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any>> = Record<
+    string,
+    Workflow<any, any, any, any, any, any>
+  >,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
-  TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
   TVNextNetworks extends Record<string, NewAgentNetwork> = Record<string, NewAgentNetwork>,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
+  TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -92,12 +115,19 @@ export class Mastra<
   #telemetry?: Telemetry;
   #storage?: MastraStorage;
   #memory?: MastraMemory;
-  #networks?: TNetworks;
   #vnext_networks?: TVNextNetworks;
+  #scorers?: TScorers;
   #server?: ServerConfig;
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
-  #idGenerator?: () => NonEmpty<string>;
+  #idGenerator?: MastraIdGenerator;
+  #pubsub: PubSub;
+  #events: {
+    [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
+  } = {};
+  #internalMastraWorkflows: Record<string, Workflow> = {};
+  // This is only used internally for server handlers that require temporary persistence
+  #serverCache: MastraServerCache;
 
   /**
    * @deprecated use getTelemetry() instead
@@ -118,6 +148,10 @@ export class Mastra<
    */
   get memory() {
     return this.#memory;
+  }
+
+  get pubsub() {
+    return this.#pubsub;
   }
 
   public getIdGenerator() {
@@ -143,10 +177,10 @@ export class Mastra<
       }
       return id;
     }
-    return crypto.randomUUID();
+    return randomUUID();
   }
 
-  public setIdGenerator(idGenerator: () => NonEmpty<string>) {
+  public setIdGenerator(idGenerator: MastraIdGenerator) {
     this.#idGenerator = idGenerator;
   }
 
@@ -158,9 +192,9 @@ export class Mastra<
       TVectors,
       TTTS,
       TLogger,
-      TNetworks,
       TVNextNetworks,
-      TMCPServers
+      TMCPServers,
+      TScorers
     >,
   ) {
     // Store server middleware with default path
@@ -169,6 +203,45 @@ export class Mastra<
         handler: m.handler,
         path: m.path || '/api/*',
       }));
+    }
+
+    /*
+    Server Cache
+    */
+
+    // This is only used internally for server handlers that require temporary persistence
+    this.#serverCache = new InMemoryServerCache();
+
+    /*
+    Events
+    */
+    if (config?.pubsub) {
+      this.#pubsub = config.pubsub;
+    } else {
+      this.#pubsub = new EventEmitterPubSub();
+    }
+
+    this.#events = {};
+    for (const topic in config?.events ?? {}) {
+      if (!Array.isArray(config?.events?.[topic])) {
+        this.#events[topic] = [config?.events?.[topic] as any];
+      } else {
+        this.#events[topic] = config?.events?.[topic] ?? [];
+      }
+    }
+
+    const workflowEventProcessor = new WorkflowEventProcessor({ mastra: this });
+    const workflowEventCb = async (event: Event, cb?: () => Promise<void>): Promise<void> => {
+      try {
+        await workflowEventProcessor.process(event, cb);
+      } catch (e) {
+        console.error('Error processing event', e);
+      }
+    };
+    if (this.#events.workflows) {
+      this.#events.workflows.push(workflowEventCb);
+    } else {
+      this.#events.workflows = [workflowEventCb];
     }
 
     /*
@@ -217,6 +290,14 @@ export class Mastra<
     }
 
     /*
+    AI Tracing
+    */
+
+    if (config?.observability) {
+      setupAITracing(config.observability);
+    }
+
+    /*
       Storage
     */
     if (this.#telemetry && storage) {
@@ -245,10 +326,6 @@ export class Mastra<
       });
 
       this.#vectors = vectors as TVectors;
-    }
-
-    if (config?.networks) {
-      this.#networks = config.networks;
     }
 
     if (config?.vnext_networks) {
@@ -344,16 +421,7 @@ do:
     /*
     Networks
     */
-    this.#networks = {} as TNetworks;
     this.#vnext_networks = {} as TVNextNetworks;
-
-    if (config?.networks) {
-      Object.entries(config.networks).forEach(([key, network]) => {
-        network.__registerMastra(this);
-        // @ts-ignore
-        this.#networks[key] = network;
-      });
-    }
 
     if (config?.vnext_networks) {
       Object.entries(config.vnext_networks).forEach(([key, network]) => {
@@ -362,6 +430,18 @@ do:
         this.#vnext_networks[key] = network;
       });
     }
+
+    /**
+     * Scorers
+     */
+
+    const scorers = {} as Record<string, MastraScorer<any, any, any, any>>;
+    if (config?.scorers) {
+      Object.entries(config.scorers).forEach(([key, scorer]) => {
+        scorers[key] = scorer;
+      });
+    }
+    this.#scorers = scorers as TScorers;
 
     /*
     Legacy Workflows
@@ -417,7 +497,56 @@ do:
 
     registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
 
+    /*
+      Register Mastra instance with AI tracing exporters and initialize them
+    */
+    if (config?.observability) {
+      this.registerAITracingExporters();
+      this.initAITracingExporters();
+    }
+
     this.setLogger({ logger });
+  }
+
+  /**
+   * Register this Mastra instance with AI tracing exporters that need it
+   */
+  private registerAITracingExporters(): void {
+    const allTracingInstances = getAllAITracing();
+    allTracingInstances.forEach(tracing => {
+      const exporters = tracing.getExporters();
+      exporters.forEach(exporter => {
+        // Check if exporter has __registerMastra method
+        if ('__registerMastra' in exporter && typeof (exporter as any).__registerMastra === 'function') {
+          (exporter as any).__registerMastra(this);
+        }
+      });
+    });
+  }
+
+  /**
+   * Initialize all AI tracing exporters after registration is complete
+   */
+  private initAITracingExporters(): void {
+    const allTracingInstances = getAllAITracing();
+
+    allTracingInstances.forEach(tracing => {
+      const config = tracing.getConfig();
+      const exporters = tracing.getExporters();
+      exporters.forEach(exporter => {
+        // Initialize exporter if it has an init method
+        if ('init' in exporter && typeof exporter.init === 'function') {
+          try {
+            exporter.init(config);
+          } catch (error) {
+            this.#logger?.warn('Failed to initialize AI tracing exporter', {
+              exporterName: exporter.name,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+      });
+    });
   }
 
   public getAgent<TAgentName extends keyof TAgents>(name: TAgentName): TAgents[TAgentName] {
@@ -558,6 +687,37 @@ do:
     return workflow;
   }
 
+  __registerInternalWorkflow(workflow: Workflow) {
+    workflow.__registerMastra(this);
+    workflow.__registerPrimitives({
+      logger: this.getLogger(),
+      storage: this.storage,
+    });
+    this.#internalMastraWorkflows[workflow.id] = workflow;
+  }
+
+  __hasInternalWorkflow(id: string): boolean {
+    return Object.values(this.#internalMastraWorkflows).some(workflow => workflow.id === id);
+  }
+
+  __getInternalWorkflow(id: string): Workflow {
+    const workflow = Object.values(this.#internalMastraWorkflows).find(a => a.id === id);
+    if (!workflow) {
+      throw new MastraError({
+        id: 'MASTRA_GET_INTERNAL_WORKFLOW_BY_ID_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.SYSTEM,
+        text: `Workflow with id ${String(id)} not found`,
+        details: {
+          status: 404,
+          workflowId: String(id),
+        },
+      });
+    }
+
+    return workflow;
+  }
+
   public getWorkflowById(id: string): Workflow {
     let workflow = Object.values(this.#workflows).find(a => a.id === id);
 
@@ -598,6 +758,42 @@ do:
       }, {});
     }
     return this.#legacy_workflows;
+  }
+
+  public getScorers() {
+    return this.#scorers;
+  }
+
+  public getScorer<TScorerKey extends keyof TScorers>(key: TScorerKey): TScorers[TScorerKey] {
+    const scorer = this.#scorers?.[key];
+    if (!scorer) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_SCORER_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Scorer with ${String(key)} not found`,
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+    return scorer;
+  }
+
+  public getScorerByName(name: string): MastraScorer<any, any, any, any> {
+    for (const [_key, value] of Object.entries(this.#scorers ?? {})) {
+      if (value.name === name) {
+        return value;
+      }
+    }
+
+    const error = new MastraError({
+      id: 'MASTRA_GET_SCORER_BY_NAME_NOT_FOUND',
+      domain: ErrorDomain.MASTRA,
+      category: ErrorCategory.USER,
+      text: `Scorer with name ${String(name)} not found`,
+    });
+    this.#logger?.trackException(error);
+    throw error;
   }
 
   public getWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {
@@ -654,6 +850,12 @@ do:
         this.#mcpServers?.[key]?.__setLogger(this.#logger);
       });
     }
+
+    // Set logger for AI tracing instances
+    const allTracingInstances = getAllAITracing();
+    allTracingInstances.forEach(instance => {
+      instance.__setLogger(this.#logger);
+    });
   }
 
   public setTelemetry(telemetry: OtelConfig) {
@@ -739,6 +941,10 @@ do:
     return this.#serverMiddleware;
   }
 
+  public getServerCache() {
+    return this.#serverCache;
+  }
+
   public setServerMiddleware(serverMiddleware: Middleware | Middleware[]) {
     if (typeof serverMiddleware === 'function') {
       this.#serverMiddleware = [
@@ -775,10 +981,6 @@ do:
     });
   }
 
-  public getNetworks() {
-    return Object.values(this.#networks || {});
-  }
-
   public vnext_getNetworks() {
     return Object.values(this.#vnext_networks || {});
   }
@@ -789,19 +991,6 @@ do:
 
   public getBundlerConfig() {
     return this.#bundler;
-  }
-
-  /**
-   * Get a specific network by ID
-   * @param networkId - The ID of the network to retrieve
-   * @returns The network with the specified ID, or undefined if not found
-   */
-  public getNetwork(networkId: string): AgentNetwork | undefined {
-    const networks = this.getNetworks();
-    return networks.find(network => {
-      const routingAgent = network.getRoutingAgent();
-      return network.formatAgentId(routingAgent.name) === networkId;
-    });
   }
 
   public vnext_getNetwork(networkId: string): NewAgentNetwork | undefined {
@@ -983,5 +1172,57 @@ do:
       );
       return undefined;
     }
+  }
+
+  public async addTopicListener(topic: string, listener: (event: any) => Promise<void>) {
+    await this.#pubsub.subscribe(topic, listener);
+  }
+
+  public async removeTopicListener(topic: string, listener: (event: any) => Promise<void>) {
+    await this.#pubsub.unsubscribe(topic, listener);
+  }
+
+  public async startEventEngine() {
+    for (const topic in this.#events) {
+      if (!this.#events[topic]) {
+        continue;
+      }
+
+      const listeners = Array.isArray(this.#events[topic]) ? this.#events[topic] : [this.#events[topic]];
+      for (const listener of listeners) {
+        await this.#pubsub.subscribe(topic, listener);
+      }
+    }
+  }
+
+  public async stopEventEngine() {
+    for (const topic in this.#events) {
+      if (!this.#events[topic]) {
+        continue;
+      }
+
+      const listeners = Array.isArray(this.#events[topic]) ? this.#events[topic] : [this.#events[topic]];
+      for (const listener of listeners) {
+        await this.#pubsub.unsubscribe(topic, listener);
+      }
+    }
+
+    await this.#pubsub.flush();
+  }
+
+  /**
+   * Shutdown Mastra and clean up all resources
+   */
+  async shutdown(): Promise<void> {
+    // Shutdown AI tracing registry and all instances
+    await shutdownAITracingRegistry();
+    await this.stopEventEngine();
+
+    this.#logger?.info('Mastra shutdown completed');
+  }
+
+  // This method is only used internally for server hnadlers that require temporary persistence
+  public get serverCache() {
+    return this.#serverCache;
   }
 }

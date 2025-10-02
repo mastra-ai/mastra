@@ -54,6 +54,12 @@ export const mastraClient = new MastraClient({
       description: "An object containing custom HTTP headers to include with every request.",
       isOptional: true,
     },
+    {
+      name: "credentials",
+      type: '"omit" | "same-origin" | "include"',
+      description: "Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info.",
+      isOptional: true,
+    },
   ]}
 />
 
@@ -135,6 +141,16 @@ export const mastraClient = new MastraClient({
       name: "getLogTransports()",
       type: "string[]",
       description: "Returns the list of configured log transport types.",
+    },
+    {
+      name: "getAITrace(traceId)",
+      type: "Promise<AITraceRecord>",
+      description: "Retrieves a specific AI trace by ID, including all its spans and details.",
+    },
+    {
+      name: "getAITraces(params)",
+      type: "Promise<GetAITracesResponse>",
+      description: "Retrieves paginated list of AI trace root spans with optional filtering. Use getAITrace() to get complete traces with all spans.",
     },
   ]}
 />

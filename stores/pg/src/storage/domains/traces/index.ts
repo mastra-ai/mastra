@@ -121,13 +121,13 @@ export class TracesPG extends TracesStorage {
         name: row.name,
         scope: row.scope,
         kind: row.kind,
-        status: safelyParseJSON(row.status as string),
-        events: safelyParseJSON(row.events as string),
-        links: safelyParseJSON(row.links as string),
-        attributes: safelyParseJSON(row.attributes as string),
+        status: safelyParseJSON(row.status),
+        events: safelyParseJSON(row.events),
+        links: safelyParseJSON(row.links),
+        attributes: safelyParseJSON(row.attributes),
         startTime: row.startTime,
         endTime: row.endTime,
-        other: safelyParseJSON(row.other as string),
+        other: safelyParseJSON(row.other),
         createdAt: row.createdAtZ || row.createdAt,
       })) as Trace[];
 

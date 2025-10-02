@@ -1,8 +1,7 @@
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
-import { rollup } from 'rollup';
 import { join } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, rm } from 'fs/promises';
+import { mkdtemp, rm, readFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
@@ -32,22 +31,12 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     } catch {}
   });
 
-  describe('tsconfig paths', () => {
+  describe('tsconfig paths', { timeout: 60 * 1000 }, () => {
     it('should resolve paths', async () => {
       const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
-      const bundle = await rollup({
-        logLevel: 'silent',
-        input: inputFile,
-      });
+      const content = await readFile(inputFile, 'utf-8');
 
-      const result = await bundle.generate({
-        format: 'esm',
-      });
-      let hasMappedPkg = false;
-      for (const output of Object.values(result.output)) {
-        // @ts-expect-error - dont want to narrow the type
-        hasMappedPkg = hasMappedPkg || output.imports?.includes('@/agents');
-      }
+      const hasMappedPkg = content.includes('@/agents');
 
       expect(hasMappedPkg).toBeFalsy();
     });
@@ -58,7 +47,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       const res = await fetch(`http://localhost:${port}/test`);
       const body = await res.json();
       expect(res.status).toBe(200);
-      expect(body).toEqual({ message: 'Hello, world!' });
+      expect(body).toEqual({ message: 'Hello, world!', a: 'b' });
     });
     it('should resolve api ALL routes', async () => {
       let res = await fetch(`http://localhost:${port}/all`);

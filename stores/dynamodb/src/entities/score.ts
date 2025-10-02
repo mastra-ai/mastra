@@ -25,6 +25,10 @@ export const scoreEntity = new Entity({
       type: 'string',
       required: false,
     },
+    spanId: {
+      type: 'string',
+      required: false,
+    },
     runId: {
       type: 'string',
       required: true,
@@ -52,6 +56,28 @@ export const scoreEntity = new Entity({
       },
     },
     extractStepResult: {
+      type: 'string',
+      required: false,
+      set: (value?: Record<string, unknown> | string) => {
+        if (value && typeof value !== 'string') {
+          return JSON.stringify(value);
+        }
+        return value;
+      },
+      get: (value?: string) => {
+        if (value && typeof value === 'string') {
+          try {
+            if (value.startsWith('{') || value.startsWith('[')) {
+              return JSON.parse(value);
+            }
+          } catch {
+            return value;
+          }
+        }
+        return value;
+      },
+    },
+    preprocessStepResult: {
       type: 'string',
       required: false,
       set: (value?: Record<string, unknown> | string) => {
@@ -111,7 +137,17 @@ export const scoreEntity = new Entity({
       type: 'string',
       required: false,
     },
+
+    // Deprecated in favor of generateReasonPrompt
     reasonPrompt: {
+      type: 'string',
+      required: false,
+    },
+    generateScorePrompt: {
+      type: 'string',
+      required: false,
+    },
+    generateReasonPrompt: {
       type: 'string',
       required: false,
     },
@@ -280,6 +316,11 @@ export const scoreEntity = new Entity({
       index: 'gsi6',
       pk: { field: 'gsi6pk', composite: ['entity', 'threadId'] },
       sk: { field: 'gsi6sk', composite: ['createdAt'] },
+    },
+    bySpan: {
+      index: 'gsi7',
+      pk: { field: 'gsi7pk', composite: ['entity', 'traceId', 'spanId'] },
+      sk: { field: 'gsi7sk', composite: ['createdAt'] },
     },
   },
 });

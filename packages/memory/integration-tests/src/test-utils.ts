@@ -1,6 +1,7 @@
-import type { CoreMessage, MastraMessageV1 } from '@mastra/core';
-import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2 } from '@mastra/core/agent';
+import { MessageList } from '@mastra/core/agent';
+import type { CoreMessage } from '@mastra/core/llm';
+import type { MastraMessageV1 } from '@mastra/core/memory';
 
 const toolArgs = {
   weather: { location: 'New York' },

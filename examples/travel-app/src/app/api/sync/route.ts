@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import { mastra } from "@/mastra";
 
 export async function POST() {
-  const { start } = mastra.getWorkflow("syncCsvDataWorkflow").createRun();
+  const run = await mastra.getWorkflow("syncCsvDataWorkflow").createRunAsync();
+  const { start } = run;
 
   await start();
   // Your cron logic here

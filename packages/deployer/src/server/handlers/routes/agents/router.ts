@@ -3,16 +3,30 @@ import { bodyLimit } from 'hono/body-limit';
 import { describeRoute } from 'hono-openapi';
 import type { BodyLimitOptions } from '../../../types';
 import { generateSystemPromptHandler } from '../../prompt';
-import { executeAgentToolHandler } from '../tools/handlers';
+import { executeAgentToolHandler, getAgentToolHandler } from '../tools/handlers';
 import {
   generateHandler,
+  generateVNextHandler,
   getAgentByIdHandler,
   getAgentsHandler,
+  getProvidersHandler,
   getEvalsByAgentIdHandler,
   getLiveEvalsByAgentIdHandler,
   setAgentInstructionsHandler,
   streamGenerateHandler,
   streamVNextGenerateHandler,
+  updateAgentModelHandler,
+  vNextBodyOptions,
+  deprecatedStreamVNextHandler,
+  streamVNextUIMessageHandler,
+  streamGenerateLegacyHandler,
+  generateLegacyHandler,
+  reorderAgentModelListHandler,
+  updateAgentModelInModelListHandler,
+  streamNetworkHandler,
+  sharedBodyOptions,
+  approveToolCallHandler,
+  declineToolCallHandler,
 } from './handlers';
 import { getListenerHandler, getSpeakersHandler, speakHandler, listenHandler } from './voice';
 
@@ -31,6 +45,20 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     getAgentsHandler,
+  );
+
+  router.get(
+    '/providers',
+    describeRoute({
+      description: 'Get all available model providers with connection status',
+      tags: ['agents'],
+      responses: {
+        200: {
+          description: 'List of model providers with their connection status',
+        },
+      },
+    }),
+    getProvidersHandler,
   );
 
   router.get(
@@ -103,6 +131,69 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
   );
 
   router.post(
+    '/:agentId/generate-legacy',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Generate a response from an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                messages: {
+                  type: 'array',
+                  items: { type: 'object' },
+                },
+                threadId: { type: 'string' },
+                resourceId: { type: 'string', description: 'The resource ID for the conversation' },
+                resourceid: {
+                  type: 'string',
+                  description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
+                  deprecated: true,
+                },
+                runId: { type: 'string' },
+                output: { type: 'object' },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the agent execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
+              },
+              required: ['messages'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Generated response',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    generateLegacyHandler,
+  );
+
+  router.post(
     '/:agentId/generate',
     bodyLimit(bodyLimitOptions),
     describeRoute({
@@ -136,6 +227,17 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 runId: { type: 'string' },
                 output: { type: 'object' },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the agent execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
               required: ['messages'],
             },
@@ -152,6 +254,175 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     generateHandler,
+  );
+
+  router.post(
+    '/:agentId/network',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Execute an agent as a Network',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: sharedBodyOptions,
+              required: ['messages'],
+            },
+          },
+        },
+      },
+    }),
+    streamNetworkHandler,
+  );
+
+  router.post(
+    '/:agentId/generate/vnext',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Generate a response from an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: vNextBodyOptions,
+              required: ['messages'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Generated response',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    generateVNextHandler,
+  );
+
+  router.post(
+    '/:agentId/stream/vnext',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Generate a response from an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: vNextBodyOptions,
+              required: ['messages'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Generated response',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    streamVNextGenerateHandler,
+  );
+
+  router.post(
+    '/:agentId/stream-legacy',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Stream a response from an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                messages: {
+                  type: 'array',
+                  items: { type: 'object' },
+                },
+                threadId: { type: 'string' },
+                resourceId: { type: 'string', description: 'The resource ID for the conversation' },
+                resourceid: {
+                  type: 'string',
+                  description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
+                  deprecated: true,
+                },
+                runId: { type: 'string' },
+                output: { type: 'object' },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the agent execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
+              },
+              required: ['messages'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Streamed response',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    streamGenerateLegacyHandler,
   );
 
   router.post(
@@ -188,6 +459,17 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 runId: { type: 'string' },
                 output: { type: 'object' },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the agent execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
               required: ['messages'],
             },
@@ -210,8 +492,9 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
     '/:agentId/streamVNext',
     bodyLimit(bodyLimitOptions),
     describeRoute({
-      description: 'Stream a response from an agent using the VNext streaming API',
+      description: '[DEPRECATED] This endpoint is deprecated. Please use /stream instead.',
       tags: ['agents'],
+      deprecated: true,
       parameters: [
         {
           name: 'agentId',
@@ -254,7 +537,66 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                     { type: 'object', properties: { type: { type: 'string' }, toolName: { type: 'string' } } },
                   ],
                 },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the agent execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
+              required: ['messages'],
+            },
+          },
+        },
+      },
+      responses: {
+        410: {
+          description: 'Endpoint deprecated',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  error: { type: 'string' },
+                  message: { type: 'string' },
+                  deprecated_endpoint: { type: 'string' },
+                  replacement_endpoint: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    deprecatedStreamVNextHandler,
+  );
+
+  router.post(
+    '/:agentId/stream/vnext/ui',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Stream a response from an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: vNextBodyOptions,
               required: ['messages'],
             },
           },
@@ -269,7 +611,167 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    streamVNextGenerateHandler,
+    streamVNextUIMessageHandler,
+  );
+
+  router.post(
+    '/:agentId/model',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Update the model for an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                modelId: {
+                  type: 'string',
+                  description: 'The modelId to update the agent to',
+                },
+                provider: {
+                  type: 'string',
+                  enum: ['openai', 'anthropic', 'groq', 'xai', 'google'],
+                  description: 'The provider of the model to update the agent to',
+                },
+              },
+              required: ['modelId', 'provider'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Model updated successfully',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    updateAgentModelHandler,
+  );
+
+  router.post(
+    '/:agentId/models/reorder',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Reorder the models for an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                reorderedModelIds: {
+                  type: 'array',
+                  items: {
+                    type: 'string',
+                  },
+                },
+              },
+              required: ['reorderedModelIds'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Model list reordered successfully',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    reorderAgentModelListHandler,
+  );
+
+  router.post(
+    '/:agentId/models/:modelConfigId',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Update the model for an agent in the model list',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'modelConfigId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                model: {
+                  type: 'object',
+                  properties: {
+                    modelId: {
+                      type: 'string',
+                      description: 'The modelId to update the agent to',
+                    },
+                    provider: {
+                      type: 'string',
+                      enum: ['openai', 'anthropic', 'groq', 'xai', 'google'],
+                      description: 'The provider of the model to update the agent to',
+                    },
+                  },
+                  required: ['modelId', 'provider'],
+                },
+                maxRetries: {
+                  type: 'number',
+                  description: 'The maximum number of retries for the model',
+                },
+                enabled: {
+                  type: 'boolean',
+                  description: 'Whether the model is enabled',
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Model updated successfully',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    updateAgentModelInModelListHandler,
   );
 
   router.get(
@@ -692,6 +1194,37 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
     listenHandler,
   );
 
+  router.get(
+    '/:agentId/tools/:toolId',
+    describeRoute({
+      description: 'Get agent tool by ID',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'toolId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Tool details',
+        },
+        404: {
+          description: 'Tool or agent not found',
+        },
+      },
+    }),
+    getAgentToolHandler,
+  );
+
   router.post(
     '/:agentId/tools/:toolId/execute',
     bodyLimit(bodyLimitOptions),
@@ -737,6 +1270,90 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     executeAgentToolHandler,
+  );
+
+  router.post(
+    '/:agentId/approve-tool-call',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Approve a tool call in human-in-the-loop workflow',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                runId: { type: 'string', description: 'The run ID for the execution' },
+                runtimeContext: { type: 'object', description: 'Runtime context for the execution' },
+                format: { type: 'string', enum: ['aisdk', 'mastra'], description: 'Output format' },
+              },
+              required: ['runId'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Tool call approved and execution resumed',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    approveToolCallHandler,
+  );
+
+  router.post(
+    '/:agentId/decline-tool-call',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Decline a tool call in human-in-the-loop workflow',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                runId: { type: 'string', description: 'The run ID for the execution' },
+                runtimeContext: { type: 'object', description: 'Runtime context for the execution' },
+                format: { type: 'string', enum: ['aisdk', 'mastra'], description: 'Output format' },
+              },
+              required: ['runId'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Tool call declined and execution resumed',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    declineToolCallHandler,
   );
 
   return router;

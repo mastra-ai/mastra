@@ -8,7 +8,9 @@
 [![NPM Downloads](https://img.shields.io/npm/dm/%40mastra%252Fcore)](https://www.npmjs.com/package/@mastra/core)
 [![Static Badge](https://img.shields.io/badge/Y%20Combinator-W25-orange)](https://www.ycombinator.com/companies?batch=W25)
 
-Mastra is an opinionated TypeScript framework that helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, integrations and evals. You can run Mastra on your local machine, or deploy to a serverless cloud.
+Mastra is the Typescript framework for building AI agents and assistants. It’s used by some of the largest companies in the world to build internal AI automation tooling and customer-facing agents.
+
+You can run Mastra on your local machine, bundle it into a Node.js server with Hono, or deploy to a serverless cloud.
 
 The main Mastra features are:
 
@@ -115,6 +117,14 @@ Create or update ~/.codeium/windsurf/mcp_config.json:
 
 For more installation options visit [https://www.npmjs.com/package/@mastra/mcp-docs-server](https://www.npmjs.com/package/@mastra/mcp-docs-server)
 
+### In Claude Code
+
+After installing Claude Code run:
+
+```sh
+claude mcp add mastra-docs -- npx -y @mastra/mcp-docs-server
+```
+
 ## Contributing
 
 Looking to contribute? All types of help are appreciated, from coding to testing and feature specification.
@@ -128,3 +138,9 @@ Information about the project setup can be found in the [development documentati
 We have an [open community Discord](https://discord.gg/BTYqqHKUrf). Come and say hello and let us know if you have any questions or need any help getting things running.
 
 It's also super helpful if you leave the project a star here at the [top of the page](https://github.com/mastra-ai/mastra)
+
+## Security
+
+We are committed to maintaining the security of this repo and of Mastra as a whole. If you discover a security finding
+we ask you to please responsibly disclose this to us at [security@mastra.ai](mailto:security@mastra.ai) and we will get
+back to you.

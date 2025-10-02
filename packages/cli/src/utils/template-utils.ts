@@ -19,7 +19,7 @@ export async function loadTemplates(): Promise<Template[]> {
     if (!response.ok) {
       throw new Error(`Failed to fetch templates: ${response.statusText}`);
     }
-    const templates = await response.json();
+    const templates = (await response.json()) as Template[];
     return templates;
   } catch (error) {
     console.error('Error loading templates:', error);

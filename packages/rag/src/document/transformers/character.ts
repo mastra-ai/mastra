@@ -1,5 +1,5 @@
 import { Language } from '../types';
-import type { ChunkOptions } from '../types';
+import type { BaseChunkOptions, CharacterChunkOptions, RecursiveChunkOptions } from '../types';
 
 import { TextTransformer } from './text';
 
@@ -52,23 +52,8 @@ export class CharacterTransformer extends TextTransformer {
   protected separator: string;
   protected isSeparatorRegex: boolean;
 
-  constructor({
-    separator = '\n\n',
-    isSeparatorRegex = false,
-    options = {},
-  }: {
-    separator?: string;
-    isSeparatorRegex?: boolean;
-    options?: {
-      size?: number;
-      overlap?: number;
-      lengthFunction?: (text: string) => number;
-      keepSeparator?: boolean | 'start' | 'end';
-      addStartIndex?: boolean;
-      stripWhitespace?: boolean;
-    };
-  }) {
-    super(options);
+  constructor({ separator = '\n\n', isSeparatorRegex = false, ...baseOptions }: CharacterChunkOptions = {}) {
+    super(baseOptions);
     this.separator = separator;
     this.isSeparatorRegex = isSeparatorRegex;
   }
@@ -82,7 +67,7 @@ export class CharacterTransformer extends TextTransformer {
     // If length of any split is greater than chunk size, perform additional splitting
     const chunks: string[] = [];
     for (const split of initialSplits) {
-      if (this.lengthFunction(split) <= this.size) {
+      if (this.lengthFunction(split) <= this.maxSize) {
         chunks.push(split);
       } else {
         // If a single split is too large, split it further with overlap
@@ -102,7 +87,7 @@ export class CharacterTransformer extends TextTransformer {
       let chunkEnd = currentPosition;
 
       // Build chunk up to max size
-      while (chunkEnd < text.length && this.lengthFunction(text.slice(currentPosition, chunkEnd + 1)) <= this.size) {
+      while (chunkEnd < text.length && this.lengthFunction(text.slice(currentPosition, chunkEnd + 1)) <= this.maxSize) {
         chunkEnd++;
       }
 
@@ -125,16 +110,8 @@ export class RecursiveCharacterTransformer extends TextTransformer {
   protected separators: string[];
   protected isSeparatorRegex: boolean;
 
-  constructor({
-    separators,
-    isSeparatorRegex = false,
-    options = {},
-  }: {
-    separators?: string[];
-    isSeparatorRegex?: boolean;
-    options?: ChunkOptions;
-  }) {
-    super(options);
+  constructor({ separators, isSeparatorRegex = false, language, ...baseOptions }: RecursiveChunkOptions = {}) {
+    super(baseOptions);
     this.separators = separators || ['\n\n', '\n', ' ', ''];
     this.isSeparatorRegex = isSeparatorRegex;
   }
@@ -169,7 +146,7 @@ export class RecursiveCharacterTransformer extends TextTransformer {
     const mergeSeparator = this.keepSeparator ? '' : separator;
 
     for (const s of splits) {
-      if (this.lengthFunction(s) < this.size) {
+      if (this.lengthFunction(s) < this.maxSize) {
         goodSplits.push(s);
       } else {
         if (goodSplits.length > 0) {
@@ -198,19 +175,14 @@ export class RecursiveCharacterTransformer extends TextTransformer {
     return this._splitText(text, this.separators);
   }
 
-  static fromLanguage(
-    language: Language,
-    options: {
-      size?: number;
-      chunkOverlap?: number;
-      lengthFunction?: (text: string) => number;
-      keepSeparator?: boolean | 'start' | 'end';
-      addStartIndex?: boolean;
-      stripWhitespace?: boolean;
-    } = {},
-  ): RecursiveCharacterTransformer {
+  static fromLanguage(language: Language, options: BaseChunkOptions = {}): RecursiveCharacterTransformer {
     const separators = RecursiveCharacterTransformer.getSeparatorsForLanguage(language);
-    return new RecursiveCharacterTransformer({ separators, isSeparatorRegex: true, options });
+    return new RecursiveCharacterTransformer({
+      ...options,
+      separators,
+      isSeparatorRegex: true,
+      language,
+    });
   }
 
   static getSeparatorsForLanguage(language: Language): string[] {

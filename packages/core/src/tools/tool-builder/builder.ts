@@ -1,3 +1,4 @@
+import type { ToolCallOptions } from '@ai-sdk/provider-utils-v5';
 import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
@@ -10,15 +11,17 @@ import {
 } from '@mastra/schema-compat';
 import type { ToolExecutionOptions } from 'ai';
 import { z } from 'zod';
+import { AISpanType, wrapMastra } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import { RuntimeContext } from '../../runtime-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { ToolStream } from '../stream';
-import type { CoreTool, ToolAction, VercelTool } from '../types';
+import type { CoreTool, ToolAction, ToolInvocationOptions, VercelTool, VercelToolV5 } from '../types';
+import { validateToolInput } from '../validation';
 
-export type ToolToConvert = VercelTool | ToolAction<any, any, any>;
+export type ToolToConvert = VercelTool | ToolAction<any, any, any> | VercelToolV5;
 export type LogType = 'tool' | 'toolset' | 'client-tool';
 
 interface LogOptions {
@@ -117,46 +120,104 @@ export class CoreToolBuilder extends MastraBase {
       type: logType,
     });
 
-    const execFunction = async (args: any, execOptions: ToolExecutionOptions) => {
-      if (isVercelTool(tool)) {
-        return tool?.execute?.(args, execOptions) ?? undefined;
-      }
+    const execFunction = async (args: unknown, execOptions: ToolInvocationOptions) => {
+      // Create tool span if we have an current span available
+      const toolSpan = options.tracingContext?.currentSpan?.createChildSpan({
+        type: AISpanType.TOOL_CALL,
+        name: `tool: '${options.name}'`,
+        input: args,
+        attributes: {
+          toolId: options.name,
+          toolDescription: options.description,
+          toolType: logType || 'tool',
+        },
+        tracingPolicy: options.tracingPolicy,
+      });
 
-      return (
-        tool?.execute?.(
-          {
-            context: args,
-            threadId: options.threadId,
-            resourceId: options.resourceId,
-            mastra: options.mastra,
-            memory: options.memory,
-            runId: options.runId,
-            runtimeContext: options.runtimeContext ?? new RuntimeContext(),
-            writer: new ToolStream(
-              {
-                prefix: 'tool',
-                callId: execOptions.toolCallId,
-                name: options.name,
-                runId: options.runId!,
-              },
-              options.writableStream,
-            ),
-          },
-          execOptions,
-        ) ?? undefined
-      );
+      try {
+        let result;
+
+        if (isVercelTool(tool)) {
+          // Handle Vercel tools (AI SDK tools)
+          result = await tool?.execute?.(args, execOptions as ToolExecutionOptions);
+        } else {
+          // Handle Mastra tools - wrap mastra instance with tracing context for context propagation
+
+          /**
+           * MASTRA INSTANCE TYPES IN TOOL EXECUTION:
+           *
+           * Full Mastra & MastraPrimitives (has getAgent, getWorkflow, etc.):
+           * - Auto-generated workflow tools from agent.getWorkflows()
+           * - These get this.#mastra directly and can be wrapped
+           *
+           * MastraPrimitives only (limited interface):
+           * - Memory tools (from memory.getTools())
+           * - Assigned tools (agent.tools)
+           * - Toolset tools (from toolsets)
+           * - Client tools (passed as tools in generate/stream options)
+           * - These get mastraProxy and have limited functionality
+           *
+           * TODO: Consider providing full Mastra instance to more tool types for enhanced functionality
+           */
+          // Wrap mastra with tracing context - wrapMastra will handle whether it's a full instance or primitives
+          const wrappedMastra = options.mastra ? wrapMastra(options.mastra, { currentSpan: toolSpan }) : options.mastra;
+
+          result = await tool?.execute?.(
+            {
+              context: args,
+              threadId: options.threadId,
+              resourceId: options.resourceId,
+              mastra: wrappedMastra,
+              memory: options.memory,
+              runId: options.runId,
+              runtimeContext: options.runtimeContext ?? new RuntimeContext(),
+              writer: new ToolStream(
+                {
+                  prefix: 'tool',
+                  callId: execOptions.toolCallId,
+                  name: options.name,
+                  runId: options.runId!,
+                },
+                options.writableStream || (execOptions as any).writableStream,
+              ),
+              tracingContext: { currentSpan: toolSpan },
+            },
+            execOptions as ToolExecutionOptions & ToolCallOptions,
+          );
+        }
+
+        toolSpan?.end({ output: result });
+        return result ?? undefined;
+      } catch (error) {
+        toolSpan?.error({ error: error as Error });
+        throw error;
+      }
     };
 
-    return async (args: any, execOptions?: any) => {
+    return async (args: unknown, execOptions?: ToolInvocationOptions) => {
       let logger = options.logger || this.logger;
       try {
         logger.debug(start, { ...rest, args });
+
+        // Validate input parameters if schema exists
+        const parameters = this.getParameters();
+        const { data, error } = validateToolInput(parameters, args, options.name);
+        if (error) {
+          logger.warn(`Tool input validation failed for '${options.name}'`, {
+            toolName: options.name,
+            errors: error.validationErrors,
+            args,
+          });
+          return error;
+        }
+        // Use validated/transformed data
+        args = data;
 
         // there is a small delay in stream output so we add an immediate to ensure the stream is ready
         return await new Promise((resolve, reject) => {
           setImmediate(async () => {
             try {
-              const result = await execFunction(args, execOptions);
+              const result = await execFunction(args, execOptions!);
               resolve(result);
             } catch (err) {
               reject(err);
@@ -170,8 +231,8 @@ export class CoreToolBuilder extends MastraBase {
             domain: ErrorDomain.TOOL,
             category: ErrorCategory.USER,
             details: {
-              error,
-              args,
+              errorMessage: String(error),
+              argsJson: JSON.stringify(args),
               model: rest.model?.modelId ?? '',
             },
           },
@@ -182,6 +243,22 @@ export class CoreToolBuilder extends MastraBase {
         return mastraError;
       }
     };
+  }
+
+  buildV5() {
+    const builtTool = this.build();
+
+    if (!builtTool.parameters) {
+      throw new Error('Tool parameters are required');
+    }
+
+    return {
+      ...builtTool,
+      inputSchema: builtTool.parameters,
+      onInputStart: 'onInputStart' in this.originalTool ? this.originalTool.onInputStart : undefined,
+      onInputDelta: 'onInputDelta' in this.originalTool ? this.originalTool.onInputDelta : undefined,
+      onInputAvailable: 'onInputAvailable' in this.originalTool ? this.originalTool.onInputAvailable : undefined,
+    } as VercelToolV5;
   }
 
   build(): CoreTool {
@@ -195,6 +272,7 @@ export class CoreToolBuilder extends MastraBase {
       description: this.originalTool.description,
       parameters: this.getParameters(),
       outputSchema: this.getOutputSchema(),
+      requireApproval: this.options.requireApproval,
       execute: this.originalTool.execute
         ? this.createExecute(
             this.originalTool,
@@ -209,13 +287,22 @@ export class CoreToolBuilder extends MastraBase {
     const schemaCompatLayers = [];
 
     if (model) {
+      const supportsStructuredOutputs =
+        model.specificationVersion !== 'v2' ? (model.supportsStructuredOutputs ?? false) : false;
+
+      const modelInfo = {
+        modelId: model.modelId,
+        supportsStructuredOutputs,
+        provider: model.provider,
+      };
+
       schemaCompatLayers.push(
-        new OpenAIReasoningSchemaCompatLayer(model),
-        new OpenAISchemaCompatLayer(model),
-        new GoogleSchemaCompatLayer(model),
-        new AnthropicSchemaCompatLayer(model),
-        new DeepSeekSchemaCompatLayer(model),
-        new MetaSchemaCompatLayer(model),
+        new OpenAIReasoningSchemaCompatLayer(modelInfo),
+        new OpenAISchemaCompatLayer(modelInfo),
+        new GoogleSchemaCompatLayer(modelInfo),
+        new AnthropicSchemaCompatLayer(modelInfo),
+        new DeepSeekSchemaCompatLayer(modelInfo),
+        new MetaSchemaCompatLayer(modelInfo),
       );
     }
 
@@ -237,6 +324,7 @@ export class CoreToolBuilder extends MastraBase {
 
     return {
       ...definition,
+      id: 'id' in this.originalTool ? this.originalTool.id : undefined,
       parameters: processedSchema,
       outputSchema: processedOutputSchema,
     };

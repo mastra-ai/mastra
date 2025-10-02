@@ -5,7 +5,7 @@ description: "Deploy your Mastra applications to AWS Lambda using Docker contain
 
 import { Callout, Steps } from "nextra/components";
 
-## AWS Lambda
+# AWS Lambda
 
 Deploy your Mastra applications to AWS Lambda using Docker containers and the AWS Lambda Web Adapter.
 This approach allows you to run your Mastra server as a containerized Lambda function with automatic scaling.
@@ -17,7 +17,7 @@ This approach allows you to run your Mastra server as a containerized Lambda fun
   refer to our [getting started guide](/docs/getting-started/installation)
 </Callout>
 
-### Prerequisites
+## Prerequisites
 
 Before deploying to AWS Lambda, ensure you have:
 
@@ -26,7 +26,7 @@ Before deploying to AWS Lambda, ensure you have:
 - An AWS account with appropriate permissions for Lambda, ECR, and IAM
 - Your Mastra application configured with appropriate memory storage
 
-### Memory Configuration
+## Memory Configuration
 
 <Callout>
   AWS Lambda uses an ephemeral file system,
@@ -37,7 +37,7 @@ Before deploying to AWS Lambda, ensure you have:
 
 Lambda functions have limitations with file system storage. Configure your Mastra application to use either in-memory or external storage providers:
 
-#### Option 1: In-Memory (Simplest)
+### Option 1: In-Memory (Simplest)
 
 ```typescript filename="src/mastra/index.ts" copy showLineNumbers
 import { LibSQLStore } from "@mastra/libsql";
@@ -47,7 +47,7 @@ const storage = new LibSQLStore({
 });
 ```
 
-#### Option 2: External Storage Providers
+### Option 2: External Storage Providers
 
 For persistent memory across Lambda invocations, use external storage providers like `LibSQLStore` with Turso or other storage providers like `PostgreStore`:
 
@@ -62,11 +62,7 @@ const storage = new LibSQLStore({
 
 For more memory configuration options, see the [Memory documentation](/docs/memory/overview).
 
-### Creating a Dockerfile
-
-<Steps>
-
-#### Create a Dockerfile in your project root
+## Creating a Dockerfile
 
 Create a `Dockerfile` in your Mastra project root directory:
 
@@ -96,13 +92,11 @@ EXPOSE 8080
 CMD ["node", "--import=./.mastra/output/instrumentation.mjs", ".mastra/output/index.mjs"]
 ```
 
-</Steps>
-
-### Building and Deploying
+## Building and Deploying
 
 <Steps>
 
-#### Set up environment variables
+### Set up environment variables
 
 Set up your environment variables for the deployment process:
 
@@ -112,7 +106,7 @@ export AWS_REGION="us-east-1"
 export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 ```
 
-#### Build the Docker image
+### Build the Docker image
 
 Build your Docker image locally:
 
@@ -120,7 +114,7 @@ Build your Docker image locally:
 docker build -t "$PROJECT_NAME" .
 ```
 
-#### Create an ECR repository
+### Create an ECR repository
 
 Create an Amazon ECR repository to store your Docker image:
 
@@ -128,7 +122,7 @@ Create an Amazon ECR repository to store your Docker image:
 aws ecr create-repository --repository-name "$PROJECT_NAME" --region "$AWS_REGION"
 ```
 
-#### Authenticate Docker with ECR
+### Authenticate Docker with ECR
 
 Log in to Amazon ECR:
 
@@ -136,7 +130,7 @@ Log in to Amazon ECR:
 aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
 ```
 
-#### Tag and push the image
+### Tag and push the image
 
 Tag your image with the ECR repository URI and push it:
 
@@ -145,7 +139,7 @@ docker tag "$PROJECT_NAME":latest "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws
 docker push "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT_NAME":latest
 ```
 
-#### Create the Lambda function
+### Create the Lambda function
 
 Create a Lambda function using the AWS Console:
 
@@ -157,7 +151,7 @@ Create a Lambda function using the AWS Console:
    - **Container image URI**: Click **Browse images** and select your ECR repository, then choose the `latest` tag
    - **Architecture**: Select the architecture that matches your Docker build (typically `x86_64`)
 
-#### Configure Function URL
+### Configure Function URL
 
 Enable Function URL for external access:
 
@@ -170,7 +164,7 @@ Enable Function URL for external access:
    - **Allow-Methods**: `*` (audit and restrict in production)
 5. Click **Save**
 
-#### Configure environment variables
+### Configure environment variables
 
 Add your environment variables in the Lambda function configuration:
 
@@ -181,7 +175,7 @@ Add your environment variables in the Lambda function configuration:
    - `TURSO_AUTH_TOKEN`: Your Turso auth token (if using LibSQL with Turso)
    - Other provider-specific API keys as needed
 
-#### Adjust function settings
+### Adjust function settings
 
 Configure the function's memory and timeout settings:
 
@@ -193,7 +187,7 @@ Configure the function's memory and timeout settings:
 
 </Steps>
 
-### Testing your deployment
+## Testing your deployment
 
 Once deployed, test your Lambda function:
 
@@ -203,7 +197,7 @@ Once deployed, test your Lambda function:
 
 For more information about available API endpoints, see the [Server documentation](/docs/deployment/server).
 
-### Connecting your client
+## Connecting your client
 
 Update your client application to use the Lambda function URL:
 
@@ -215,9 +209,9 @@ const mastraClient = new MastraClient({
 });
 ```
 
-### Troubleshooting
+## Troubleshooting
 
-#### Function timeout errors
+### Function timeout errors
 
 If your Lambda function times out:
 
@@ -225,7 +219,7 @@ If your Lambda function times out:
 - Optimize your Mastra application for faster cold starts
 - Consider using provisioned concurrency for consistent performance
 
-#### Memory issues
+### Memory issues
 
 If you encounter memory-related errors:
 
@@ -233,7 +227,7 @@ If you encounter memory-related errors:
 - Monitor memory usage in CloudWatch Logs
 - Optimize your application's memory usage
 
-#### CORS issues
+### CORS issues
 
 If you encounter CORS errors when accessing endpoints but not the home page:
 
@@ -241,7 +235,7 @@ If you encounter CORS errors when accessing endpoints but not the home page:
 - Check the Lambda Function URL CORS configuration
 - Ensure your client is making requests to the correct URL
 
-#### Container image issues
+### Container image issues
 
 If the Lambda function fails to start:
 
@@ -250,23 +244,23 @@ If the Lambda function fails to start:
 - Review CloudWatch Logs for container startup errors
 - Ensure the Lambda Web Adapter is properly installed in the container
 
-### Production considerations
+## Production considerations
 
 For production deployments:
 
-#### Security
+### Security
 
 - Restrict CORS origins to your trusted domains
 - Use AWS IAM roles for secure access to other AWS services
 - Store sensitive environment variables in AWS Secrets Manager or Parameter Store
 
-#### Monitoring
+### Monitoring
 
 - Enable CloudWatch monitoring for your Lambda function
 - Set up CloudWatch alarms for errors and performance metrics
 - Use AWS X-Ray for distributed tracing
 
-#### Scaling
+### Scaling
 
 - Configure provisioned concurrency for predictable performance
 - Monitor concurrent executions and adjust limits as needed

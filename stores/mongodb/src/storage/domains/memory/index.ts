@@ -52,6 +52,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     threadId: string;
     selectBy: StorageGetMessagesArg['selectBy'];
   }) {
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
     const include = selectBy?.include;
     if (!include) return null;
 
@@ -100,12 +102,15 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
   public async getMessages({
     threadId,
+    resourceId,
     selectBy,
     format,
   }: StorageGetMessagesArg & {
     format?: 'v1' | 'v2';
   }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     try {
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
       const messages: MastraMessageV2[] = [];
       const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
 
@@ -143,7 +148,52 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           id: 'MONGODB_STORE_GET_MESSAGES_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
+          details: { threadId, resourceId: resourceId ?? '' },
+        },
+        error,
+      );
+    }
+  }
+
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format: 'v1';
+  }): Promise<MastraMessageV1[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v2';
+  }): Promise<MastraMessageV2[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    if (messageIds.length === 0) return [];
+    try {
+      const collection = await this.operations.getCollection(TABLE_MESSAGES);
+      const rawMessages = await collection
+        .find({ id: { $in: messageIds } })
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      const list = new MessageList().add(rawMessages.map(this.parseRow), 'memory');
+      if (format === `v1`) return list.get.all.v1();
+      return list.get.all.v2();
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MONGODB_STORE_GET_MESSAGES_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { messageIds: JSON.stringify(messageIds) },
         },
         error,
       );
@@ -155,7 +205,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       format?: 'v1' | 'v2';
     },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, format, selectBy } = args;
+    const { threadId, resourceId, format, selectBy } = args;
     const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
     const perPage =
       perPageInput !== undefined ? perPageInput : resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
@@ -176,7 +226,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
             id: 'MONGODB_STORE_GET_MESSAGES_PAGINATED_GET_INCLUDE_MESSAGES_FAILED',
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.THIRD_PARTY,
-            details: { threadId },
+            details: { threadId, resourceId: resourceId ?? '' },
           },
           error,
         );
@@ -184,6 +234,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
 
     try {
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
       const currentOffset = page * perPage;
       const collection = await this.operations.getCollection(TABLE_MESSAGES);
 
@@ -240,7 +292,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           id: 'MONGODB_STORE_GET_MESSAGES_PAGINATED_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
+          details: { threadId, resourceId: resourceId ?? '' },
         },
         error,
       );

@@ -189,14 +189,9 @@ export const createReasonPrompt = ({
       - if results is empty, explain why
       - For mixed responses, explain the balance
         Format:
-        {
-            "reason": "The score is {score} because {explanation of overall relevance}"
-        }
+        "The score is {score} because {explanation of overall relevance}"
+
         Example Responses:
-        {
-            "reason": "The score is 7 because while the first statement directly answers the question, the additional context is only partially relevant"
-        }
-        {
-            "reason": "The score is 3 because while the answer discusses the right topic, it doesn't directly address the question"
-        }
+        "The score is 7 because while the first statement directly answers the question, the additional context is only partially relevant"
+        "The score is 3 because while the answer discusses the right topic, it doesn't directly address the question"
 `;

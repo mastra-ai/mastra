@@ -13,10 +13,25 @@ Mastra provides a local development environment where you can test your agents, 
 
 Start the local development server by running:
 
-<Tabs items={["npm", "Mastra CLI"]}>
+<Tabs items={["npm", "yarn", "pnpm", "bun", "Mastra CLI"]}>
   <Tab>
     ```bash copy
     npm run dev
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    yarn run dev
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    pnpm run dev
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    bun run dev
     ```
   </Tab>
   <Tab>
@@ -44,7 +59,7 @@ The Playground lets you interact with your agents, workflows, and tools. It prov
 Quickly test and debug your agents during development using the interactive chat interface in the Agent Playground.
 
 <VideoPlayer
-  src="https://res.cloudinary.com/dygi6femd/video/upload/v1751406022/local-dev-agents-playground_100_m3begx.mp4"
+  src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406022/local-dev-agents-playground_100_m3begx.mp4"
 />
 
 Key features:
@@ -60,7 +75,7 @@ Key features:
 Validate workflows by supplying defined inputs and visualizing each step within the Workflow Playground.
 
 <VideoPlayer
-  src="https://res.cloudinary.com/dygi6femd/video/upload/v1751406027/local-dev-workflows-playground_100_rbc466.mp4"
+  src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406027/local-dev-workflows-playground_100_rbc466.mp4"
 />
 
 Key features:
@@ -76,7 +91,7 @@ Key features:
 Quickly test and debug custom tools in isolation using the Tools Playground, without running a full agent or workflow.
 
 <VideoPlayer
-  src="https://res.cloudinary.com/dygi6femd/video/upload/v1751406316/local-dev-agents-tools_100_fe1jdt.mp4"
+  src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406316/local-dev-agents-tools_100_fe1jdt.mp4"
 />
 
 Key features:
@@ -101,7 +116,7 @@ Key features:
 
 ## REST API Endpoints
 
-The local development server exposes a set of REST API routes via the [Mastra Server](/docs/deployment/server), allowing you to test and interact with your agents and workflows before deployment.
+The local development server exposes a set of REST API routes via the [Mastra Server](/docs/deployment/server-deployment), allowing you to test and interact with your agents and workflows before deployment.
 
 For a full overview of available API routes, including agents, tools, and workflows, see the [Routes reference](/reference/cli/dev#routes).
 
@@ -111,11 +126,10 @@ The local development server includes an OpenAPI specification available at: [ht
 
 To include OpenAPI documentation in your production server, enable it in the Mastra instance:
 
-```typescript {7} filename="src/mastra/index.ts" showLineNumbers copy
+```typescript {6} filename="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core/mastra";
 
 export const mastra = new Mastra({
-  // ...
   server: {
     build: {
       openAPIDocs: true
@@ -130,11 +144,10 @@ The local development server includes an interactive Swagger UI - API explorer a
 
 To include Swagger UI in your production server, enable it in the Mastra instance:
 
-```typescript {7} filename="src/mastra/index.ts" showLineNumbers copy
+```typescript {6} filename="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core/mastra";
 
 export const mastra = new Mastra({
-  // ...
   server: {
     build: {
       swaggerUI: true
@@ -155,19 +168,62 @@ This setup lets you start developing immediately with production-like behavior, 
 
 ## Configuration
 
-By default, the server runs on port `4111`. You can customize the host and port through the Mastra server configuration.
+By default, the server runs on port `4111`. You can customize the `host` and `port` through the Mastra server configuration.
 
-```typescript {6,7} filename="src/mastra/index.ts" showLineNumbers copy
+```typescript {5,6} filename="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core/mastra";
 
 export const mastra = new Mastra({
-  // ...
   server: {
     port: 8080,
     host: "0.0.0.0",
   },
 });
 ```
+
+### Local HTTPS
+
+Mastra provides a way to use a local HTTPS server for `mastra dev` (through [expo/devcert](https://github.com/expo/devcert)). When you use the `--https` flag, a private key and certificate will be created and used for your project. By default, certificates are issued for `localhost` unless you defined another `host` value.
+
+```bash
+mastra dev --https
+```
+
+You can provide your own key and cert file by specifying the `server.https` option in the Mastra server configuration.
+
+```typescript {2,6-9} filename="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core/mastra";
+import fs from 'node:fs'
+
+export const mastra = new Mastra({
+  server: {
+    https: {
+      key: fs.readFileSync('path/to/key.pem'),
+      cert: fs.readFileSync('path/to/cert.pem')
+    }
+  },
+});
+```
+
+When you provide both `--https` and `server.https` the latter will take precedence.
+
+## Bundler options
+
+Use `transpilePackages` to compile TypeScript packages or libraries. Use `externals` to exclude dependencies resolved at runtime, and `sourcemap` to emit readable stack traces.
+
+```typescript filename="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core/mastra";
+
+export const mastra = new Mastra({
+  bundler: {
+    transpilePackages: ["utils"],
+    externals: ["ui"],
+    sourcemap: true
+  }
+});
+```
+
+> See [Mastra Class](../../reference/core/mastra-class.mdx) for more configuration options.
 
 
 ## Next steps

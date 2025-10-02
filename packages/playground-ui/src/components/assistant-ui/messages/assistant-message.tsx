@@ -1,35 +1,50 @@
-import { ActionBarPrimitive, MessagePrimitive, ToolCallContentPartComponent, useMessage } from '@assistant-ui/react';
-import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
+import { ActionBarPrimitive, MessagePrimitive, ToolCallMessagePartComponent, useMessage } from '@assistant-ui/react';
+import { AudioLinesIcon, BrainIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
 
 import { MarkdownText } from './markdown-text';
+import { ErrorAwareText } from './error-aware-text';
 import { TooltipIconButton } from '../tooltip-icon-button';
 import { ToolFallback } from '@/components/assistant-ui/tools/tool-fallback';
 import { Reasoning } from './reasoning';
+import { cn } from '@/lib/utils';
+import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provider-logo';
 
 export interface AssistantMessageProps {
-  ToolFallback?: ToolCallContentPartComponent;
+  ToolFallback?: ToolCallMessagePartComponent;
+  hasModelList?: boolean;
 }
 
-export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom }: AssistantMessageProps) => {
+export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom, hasModelList }: AssistantMessageProps) => {
   const data = useMessage();
   const messageId = data.id;
 
   const isToolCallAndOrReasoning = data.content.every(({ type }) => type === 'tool-call' || type === 'reasoning');
 
+  const modelMetadata = data.metadata?.custom?.modelMetadata as { modelId: string; modelProvider: string } | undefined;
+
+  const showModelUsed = hasModelList && modelMetadata;
+
   return (
     <MessagePrimitive.Root className="max-w-full" data-message-id={messageId}>
       <div className="text-icon6 text-ui-lg leading-ui-lg">
-        <MessagePrimitive.Content
+        <MessagePrimitive.Parts
           components={{
-            Text: MarkdownText,
+            Text: ErrorAwareText,
             tools: { Fallback: ToolFallbackCustom || ToolFallback },
             Reasoning: Reasoning,
           }}
         />
       </div>
-
       {!isToolCallAndOrReasoning && (
-        <div className="h-6 pt-1">
+        <div className={cn('h-6 pt-4 flex gap-2 items-center', { 'pb-1': showModelUsed })}>
+          {showModelUsed && (
+            <div className="flex items-center gap-1.5">
+              <ProviderLogo providerId={modelMetadata.modelProvider} size={14} />
+              <span className="text-ui-xs leading-ui-xs">
+                {modelMetadata.modelProvider}/{modelMetadata.modelId}
+              </span>
+            </div>
+          )}
           <AssistantActionBar />
         </div>
       )}

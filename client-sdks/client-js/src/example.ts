@@ -1,5 +1,5 @@
-import { MastraClient } from './client';
 import z from 'zod';
+import { MastraClient } from './client';
 // import type { WorkflowRunResult } from './types';
 
 // Agent
@@ -73,21 +73,19 @@ import z from 'zod';
 //   });
 
 //   try {
-//     const workflowId = 'myWorkflow';
+//     const workflowId = 'weatherWorkflow';
 //     const workflow = client.getWorkflow(workflowId);
 
-//     const { runId } = await workflow.createRun();
+//     const run = await workflow.createRunAsync();
 
-//     workflow.watch({ runId }, record => {
-//       console.log(new Date().toTimeString(), record);
-//     });
-
-//     await workflow.start({
-//       runId,
-//       triggerData: {
+//     const stream = await run.stream({
+//       inputData: {
 //         city: 'New York',
 //       },
 //     });
+//     for await (const chunk of stream) {
+//       console.log(JSON.stringify(chunk, null, 2));
+//     }
 
 //   } catch (e) {
 //     console.error('Workflow error:', e);

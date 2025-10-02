@@ -1,8 +1,9 @@
 import type { Mastra, SerializedStepFlowEntry } from '..';
+import type { AISpan, AISpanType, TracingPolicy } from '../ai-tracing';
 import { MastraBase } from '../base';
 import type { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
-import type { ChunkType } from '../stream/MastraWorkflowStream';
+import type { ChunkType } from '../stream/types';
 import type { Emitter, StepResult } from './types';
 import type { StepFlowEntry } from '.';
 
@@ -14,15 +15,22 @@ export interface ExecutionGraph<TEngineType = any> {
   steps: StepFlowEntry<TEngineType>[];
   // Additional properties will be added in future implementations
 }
+
+export interface ExecutionEngineOptions {
+  tracingPolicy?: TracingPolicy;
+  validateInputs?: boolean;
+}
 /**
  * Execution engine abstract class for building and executing workflow graphs
  * Providers will implement this class to provide their own execution logic
  */
 export abstract class ExecutionEngine extends MastraBase {
   protected mastra?: Mastra;
-  constructor({ mastra }: { mastra?: Mastra }) {
+  public options?: ExecutionEngineOptions;
+  constructor({ mastra, options }: { mastra?: Mastra; options?: ExecutionEngineOptions }) {
     super({ name: 'ExecutionEngine', component: RegisteredLogger.WORKFLOW });
     this.mastra = mastra;
+    this.options = options;
   }
 
   __registerMastra(mastra: Mastra) {
@@ -38,6 +46,8 @@ export abstract class ExecutionEngine extends MastraBase {
   abstract execute<TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
+    resourceId?: string;
+    disableScorers?: boolean;
     graph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
@@ -49,11 +59,13 @@ export abstract class ExecutionEngine extends MastraBase {
     };
     emitter: Emitter;
     runtimeContext: RuntimeContext;
+    workflowAISpan?: AISpan<AISpanType.WORKFLOW_RUN>;
     retryConfig?: {
       attempts?: number;
       delay?: number;
     };
     abortController: AbortController;
     writableStream?: WritableStream<ChunkType>;
+    format?: 'aisdk' | 'mastra' | undefined;
   }): Promise<TOutput>;
 }

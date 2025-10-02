@@ -1,0 +1,98 @@
+---
+title: "Mastra サーバーをデプロイする"
+description: "ビルド設定とデプロイ方法を含む、Mastra サーバーのデプロイ手順を学びましょう。"
+---
+
+import { FileTree } from "nextra/components";
+
+
+
+# Mastra サーバーをデプロイする
+
+Mastra は標準的な Node.js サーバーとして動作し、さまざまな環境にデプロイできます。
+
+
+
+## デフォルトのプロジェクト構成
+
+[クイックスタートガイド](/docs/getting-started/installation)では、すぐに始められるよう実用的なデフォルトを備えたプロジェクトをスキャフォールドします。既定では、CLI はアプリケーションのファイルを `src/mastra/` ディレクトリ配下に整理し、次のような構成になります。
+
+<FileTree>
+  <FileTree.Folder name="src" defaultOpen>
+    <FileTree.Folder name="mastra" defaultOpen>
+      <FileTree.Folder name="agents" />
+      <FileTree.Folder name="tools" />
+      <FileTree.Folder name="workflows" />
+      <FileTree.File name="index.ts" />
+    </FileTree.Folder>
+  </FileTree.Folder>
+  <FileTree.File name="package.json" />
+  <FileTree.File name="tsconfig.json" />
+</FileTree>
+
+
+
+## ビルド
+
+`mastra build` コマンドでビルド処理を開始します。
+
+```bash copy
+mastra build
+```
+
+### 入力ディレクトリのカスタマイズ
+
+Mastra のファイルが別の場所にある場合は、`--dir` フラグでカスタムの場所を指定します。`--dir` フラグは、エントリーポイントのファイル（`index.ts` または `index.js`）と関連ディレクトリの所在を Mastra に指示します。
+
+```bash copy
+mastra build --dir ./my-project/mastra
+```
+
+
+
+## ビルドプロセス
+
+ビルドプロセスは以下の手順で行われます:
+
+1. **エントリーファイルの特定**: 指定したディレクトリ（デフォルト: `src/mastra/`）内の `index.ts` または `index.js` を検出します。
+2. **ビルドディレクトリの作成**: 次を含む `.mastra/` ディレクトリを生成します:
+    - **`.build`**: 依存関係の分析、バンドル済みの依存関係、ビルド設定ファイルを含みます。
+    - **`output`**: `index.mjs`、`instrumentation.mjs`、およびプロジェクト固有のファイルを含む、本番環境向けのアプリケーションバンドルを格納します。
+3. **静的アセットのコピー**: 静的ファイル配信のために、`public/` フォルダの内容を `output` ディレクトリにコピーします。
+4. **コードのバンドル**: 最適化のために、ツリーシェイキングとソースマップを有効にした Rollup を使用します。
+5. **サーバーの生成**: デプロイ可能な [Hono](https://hono.dev) 製の HTTP サーバーを作成します。
+
+### ビルド出力の構造
+
+ビルド後、Mastra は次の構成の `.mastra/` ディレクトリを作成します:
+
+<FileTree>
+  <FileTree.Folder name=".mastra" defaultOpen>
+    <FileTree.Folder name=".build" />
+    <FileTree.Folder name="output" />
+  </FileTree.Folder>
+</FileTree>
+
+### `public` フォルダ
+
+`src/mastra` に `public` フォルダが存在する場合、その内容はビルド中に `.build/output` ディレクトリへコピーされます。
+
+
+
+## サーバーの起動
+
+HTTP サーバーを起動します:
+
+```bash copy
+node .mastra/output/index.mjs
+```
+
+
+
+## テレメトリーを有効にする
+
+テレメトリーとオブザーバビリティを有効にするには、instrumentation ファイルを読み込みます:
+
+```bash copy
+node --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs
+```

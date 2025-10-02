@@ -1,18 +1,20 @@
 ---
-title: "MastraJwtAuth"
+title: "MastraJwtAuth Class"
 description: "Documentation for the MastraJwtAuth class, which authenticates Mastra applications using JSON Web Tokens."
 ---
 
 import { Tabs, Tab } from "@/components/tabs";
 
-# MastraJwtAuth
+# MastraJwtAuth Class
 
 The `MastraJwtAuth` class provides a lightweight authentication mechanism for Mastra using JSON Web Tokens (JWTs). It verifies incoming requests based on a shared secret and integrates with the Mastra server using the `experimental_auth` option.
 
 ## Installation
 
+Before you can use the `MastraJwtAuth` class you have to install the `@mastra/auth` package.
+
 ```bash copy
-npm install @mastra/auth
+npm install @mastra/auth@latest
 ```
 
 ## Usage example

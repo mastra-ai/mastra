@@ -4,7 +4,7 @@ import * as p from '@clack/prompts';
 import color from 'picocolors';
 
 import { DepsService } from '../../services/service.deps';
-import { getPackageManagerInstallCommand } from '../utils';
+import { getPackageManagerAddCommand } from '../../utils/package-manager';
 
 import { installMastraDocsMCPServer } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
@@ -12,6 +12,7 @@ import {
   createComponentsDir,
   createMastraDir,
   getAISDKPackage,
+  getAISDKPackageVersion,
   getAPIKey,
   writeAPIKey,
   writeCodeSample,
@@ -88,10 +89,11 @@ export const init = async ({
     const key = await getAPIKey(llmProvider || 'openai');
 
     const aiSdkPackage = getAISDKPackage(llmProvider);
+    const aiSdkPackageVersion = getAISDKPackageVersion(llmProvider);
     const depsService = new DepsService();
     const pm = depsService.packageManager;
-    const installCommand = getPackageManagerInstallCommand(pm);
-    await exec(`${pm} ${installCommand} ${aiSdkPackage}`);
+    const installCommand = getPackageManagerAddCommand(pm);
+    await exec(`${pm} ${installCommand} ${aiSdkPackage}@${aiSdkPackageVersion}`);
 
     if (configureEditorWithDocsMCP) {
       await installMastraDocsMCPServer({

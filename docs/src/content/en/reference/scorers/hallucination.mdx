@@ -43,14 +43,14 @@ This function returns an instance of the MastraScorer class. The `.run()` method
       description: "The id of the run (optional).",
     },
     {
-      name: "extractStepResult",
+      name: "preprocessStepResult",
       type: "object",
       description: "Object with extracted claims: { claims: string[] }",
     },
     {
-      name: "extractPrompt",
+      name: "preprocessPrompt",
       type: "string",
-      description: "The prompt sent to the LLM for the extract step (optional).",
+      description: "The prompt sent to the LLM for the preprocess step (optional).",
     },
     {
       name: "analyzeStepResult",
@@ -73,9 +73,9 @@ This function returns an instance of the MastraScorer class. The `.run()` method
       description: "Detailed explanation of the score and identified contradictions.",
     },
     {
-      name: "reasonPrompt",
+      name: "generateReasonPrompt",
       type: "string",
-      description: "The prompt sent to the LLM for the reason step (optional).",
+      description: "The prompt sent to the LLM for the generateReason step (optional).",
     },
   ]}
 />

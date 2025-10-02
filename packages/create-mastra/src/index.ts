@@ -25,7 +25,7 @@ program
       analytics.trackCommand({
         command: 'version',
       });
-      console.log(`create-mastra ${version}`);
+      console.info(`create-mastra ${version}`);
     } catch {
       // ignore
     }
@@ -67,6 +67,7 @@ program
         mcpServer: args.mcp,
         directory: 'src/',
         template: args.template,
+        analytics,
       });
       return;
     }
@@ -82,6 +83,7 @@ program
       directory: args.dir,
       mcpServer: args.mcp,
       template: args.template,
+      analytics,
     });
   });
 

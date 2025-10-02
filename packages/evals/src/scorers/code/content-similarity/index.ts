@@ -10,12 +10,13 @@ export function createContentSimilarityScorer(
   { ignoreCase, ignoreWhitespace }: ContentSimilarityOptions = { ignoreCase: true, ignoreWhitespace: true },
 ) {
   return createScorer({
-    name: 'Completeness',
-    description:
-      'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
-    extract: async run => {
-      let processedInput = run.input?.map(i => i.content).join(', ') || '';
-      let processedOutput = run.output.text;
+    name: 'Content Similarity Scorer',
+    description: 'Calculates content similarity between input and output messages using string comparison algorithms.',
+    type: 'agent',
+  })
+    .preprocess(async ({ run }) => {
+      let processedInput = run.input?.inputMessages.map((i: { content: string }) => i.content).join(', ') || '';
+      let processedOutput = run.output.map((i: { content: string }) => i.content).join(', ') || '';
 
       if (ignoreCase) {
         processedInput = processedInput.toLowerCase();
@@ -28,24 +29,16 @@ export function createContentSimilarityScorer(
       }
 
       return {
-        result: {
-          processedInput,
-          processedOutput,
-        },
+        processedInput,
+        processedOutput,
       };
-    },
-    analyze: async run => {
+    })
+    .generateScore(({ results }) => {
       const similarity = stringSimilarity.compareTwoStrings(
-        run.extractStepResult?.processedInput,
-        run.extractStepResult?.processedOutput,
+        results.preprocessStepResult?.processedInput,
+        results.preprocessStepResult?.processedOutput,
       );
 
-      return {
-        score: similarity,
-        result: {
-          similarity,
-        },
-      };
-    },
-  });
+      return similarity;
+    });
 }

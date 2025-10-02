@@ -1,65 +1,106 @@
 import type { Mastra } from '..';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
-import type { ScoringHookInput } from '../scores';
+import { saveScorePayloadSchema } from '../scores';
+import type { ScoringHookInput } from '../scores/types';
+import type { MastraStorage } from '../storage';
 
 export function createOnScorerHook(mastra: Mastra) {
   return async (hookData: ScoringHookInput) => {
-    if (!mastra.getStorage()) {
+    const storage = mastra.getStorage();
+
+    if (!storage) {
+      mastra.getLogger()?.warn('Storage not found, skipping score validation and saving');
       return;
     }
 
-    const storage = mastra.getStorage();
     const entityId = hookData.entity.id;
     const entityType = hookData.entityType;
     const scorer = hookData.scorer;
+    try {
+      const scorerToUse = await findScorer(mastra, entityId, entityType, scorer.name);
 
-    let scorerToUse;
+      if (!scorerToUse) {
+        throw new MastraError({
+          id: 'MASTRA_SCORER_NOT_FOUND',
+          domain: ErrorDomain.MASTRA,
+          category: ErrorCategory.USER,
+          text: `Scorer with ID ${hookData.scorer.id} not found`,
+        });
+      }
 
-    if (entityType === 'AGENT') {
-      const agent = mastra.getAgentById(entityId);
-      const scorers = await agent.getScorers();
-      scorerToUse = scorers[scorer.id];
-    } else if (entityType === 'WORKFLOW') {
-      const workflow = mastra.getWorkflowById(entityId);
-      const scorers = await workflow.getScorers();
-      scorerToUse = scorers[scorer.id];
-    } else {
-      return;
-    }
+      let input = hookData.input;
+      let output = hookData.output;
 
-    if (!scorerToUse) {
-      throw new MastraError({
-        id: 'MASTRA_SCORER_NOT_FOUND',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: `Scorer with ID ${hookData.scorer.id} not found`,
+      const { structuredOutput, ...rest } = hookData;
+
+      const runResult = await scorerToUse.scorer.run({
+        ...rest,
+        input,
+        output,
       });
+
+      const payload = {
+        ...rest,
+        ...runResult,
+        entityId,
+        scorerId: hookData.scorer.name,
+        metadata: {
+          structuredOutput: !!structuredOutput,
+        },
+      };
+
+      await validateAndSaveScore(storage, payload);
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_SCORER_FAILED_TO_RUN_HOOK',
+          domain: ErrorDomain.SCORER,
+          category: ErrorCategory.USER,
+          details: {
+            scorerId: scorer.id,
+            entityId,
+            entityType,
+          },
+        },
+        error,
+      );
+
+      mastra.getLogger()?.trackException(mastraError);
+      mastra.getLogger()?.error(mastraError.toString());
     }
-
-    let input = hookData.input;
-    let output = hookData.output;
-
-    if (entityType === 'AGENT') {
-      input = hookData.input.filter(m => m.role === 'user');
-    } else {
-      output = { object: hookData.output };
-    }
-
-    const score = await scorerToUse.scorer.run({
-      ...hookData,
-      input,
-      output,
-    });
-
-    const { structuredOutput, ...rest } = hookData;
-    await storage?.saveScore({
-      ...rest,
-      ...score,
-      entityId,
-      scorerId: hookData.scorer.id,
-      metadata: {
-        structuredOutput: !!structuredOutput,
-      },
-    });
   };
+}
+
+export async function validateAndSaveScore(storage: MastraStorage, payload: unknown) {
+  const payloadToSave = saveScorePayloadSchema.parse(payload);
+  await storage?.saveScore(payloadToSave);
+}
+
+async function findScorer(mastra: Mastra, entityId: string, entityType: string, scorerName: string) {
+  let scorerToUse;
+  if (entityType === 'AGENT') {
+    const scorers = await mastra.getAgentById(entityId).getScorers();
+    for (const [_, scorer] of Object.entries(scorers)) {
+      if (scorer.scorer.name === scorerName) {
+        scorerToUse = scorer;
+        break;
+      }
+    }
+  } else if (entityType === 'WORKFLOW') {
+    const scorers = await mastra.getWorkflowById(entityId).getScorers();
+    for (const [_, scorer] of Object.entries(scorers)) {
+      if (scorer.scorer.name === scorerName) {
+        scorerToUse = scorer;
+        break;
+      }
+    }
+  }
+
+  // Fallback to mastra-registered scorer
+  if (!scorerToUse) {
+    const mastraRegisteredScorer = mastra.getScorerByName(scorerName);
+    scorerToUse = mastraRegisteredScorer ? { scorer: mastraRegisteredScorer } : undefined;
+  }
+
+  return scorerToUse;
 }

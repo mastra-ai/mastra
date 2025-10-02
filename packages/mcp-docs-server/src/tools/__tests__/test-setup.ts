@@ -62,11 +62,16 @@ export const mcp = new MCPClient({
 });
 
 export async function callTool(tool: any, args: any) {
-  const response = await tool.execute({ context: args });
+  const response = await tool.execute({ context: args }, { suspend: async () => {} });
 
   // Handle string responses
   if (typeof response === 'string') {
     return response;
+  }
+
+  // Handle validation error responses
+  if (response?.error === true && response?.message) {
+    return response.message;
   }
 
   // Handle content array responses

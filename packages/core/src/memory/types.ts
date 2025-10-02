@@ -1,9 +1,10 @@
+import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
 import type { AssistantContent, CoreMessage, EmbeddingModel, ToolContent, UserContent } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 
 export type { MastraMessageV2 } from '../agent';
 import type { ZodObject } from 'zod';
-import type { MastraLanguageModel } from '../agent/types';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { MastraStorage } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraVector } from '../vector';
@@ -70,15 +71,43 @@ type WorkingMemoryNone = BaseWorkingMemory & {
 
 export type WorkingMemory = TemplateWorkingMemory | SchemaWorkingMemory | WorkingMemoryNone;
 
+/**
+ * Vector index configuration (PostgreSQL-specific)
+ *
+ * Note: These configuration options are currently only supported when using
+ * PostgreSQL with pgvector as the vector store. Other vector stores (Pinecone,
+ * Qdrant, Chroma, etc.) will ignore these settings.
+ */
+export type VectorIndexConfig = {
+  /** Index type - only supported by PostgreSQL/pgvector */
+  type?: 'ivfflat' | 'hnsw' | 'flat';
+  /** Distance metric - supported by all vector stores */
+  metric?: 'cosine' | 'euclidean' | 'dotproduct';
+  /** IVFFlat configuration (PostgreSQL only) */
+  ivf?: {
+    lists?: number;
+  };
+  /** HNSW configuration (PostgreSQL only) */
+  hnsw?: {
+    m?: number;
+    efConstruction?: number;
+  };
+};
+
+export type SemanticRecall = {
+  topK: number;
+  messageRange: number | { before: number; after: number };
+  scope?: 'thread' | 'resource';
+  /**
+   * Vector index configuration (PostgreSQL/pgvector specific).
+   * Other vector stores will use their default index configurations.
+   */
+  indexConfig?: VectorIndexConfig;
+};
+
 export type MemoryConfig = {
   lastMessages?: number | false;
-  semanticRecall?:
-    | boolean
-    | {
-        topK: number;
-        messageRange: number | { before: number; after: number };
-        scope?: 'thread' | 'resource';
-      };
+  semanticRecall?: boolean | SemanticRecall;
   workingMemory?: WorkingMemory;
   threads?: {
     generateTitle?:
@@ -97,7 +126,7 @@ export type SharedMemoryConfig = {
   options?: MemoryConfig;
 
   vector?: MastraVector | false;
-  embedder?: EmbeddingModel<string>;
+  embedder?: EmbeddingModel<string> | EmbeddingModelV2<string>;
 
   processors?: MemoryProcessor[];
 };

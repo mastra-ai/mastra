@@ -165,22 +165,26 @@ const response = await agent.generate("Remember my favorite color is blue.", {
 
 ## Using Memory in Agent Calls
 
-To utilize memory during interactions, you **must** provide `resourceId` and `threadId` when calling the agent's `stream()` or `generate()` methods.
+To utilize memory during interactions, you **must** provide a `memory` object with `resource` and `thread` properties when calling the agent's `stream()` or `generate()` methods.
 
-- `resourceId`: Typically identifies the user or entity (e.g., `user_123`).
-- `threadId`: Identifies a specific conversation thread (e.g., `support_chat_456`).
+- `resource`: Typically identifies the user or entity (e.g., `user_123`).
+- `thread`: Identifies a specific conversation thread (e.g., `support_chat_456`).
 
 ```typescript
 // Example agent call using memory
 await agent.stream("Remember my favorite color is blue.", {
-  resourceId: "user_alice",
-  threadId: "preferences_thread",
+  memory: {
+    resource: "user_alice",
+    thread: "preferences_thread",
+  },
 });
 
 // Later in the same thread...
 const response = await agent.stream("What's my favorite color?", {
-  resourceId: "user_alice",
-  threadId: "preferences_thread",
+  memory: {
+    resource: "user_alice",
+    thread: "preferences_thread",
+  },
 });
 // Agent will use memory to recall the favorite color.
 ```

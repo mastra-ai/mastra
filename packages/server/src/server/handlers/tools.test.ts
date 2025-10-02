@@ -6,13 +6,20 @@ import type { ToolAction, VercelTool } from '@mastra/core/tools';
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
-import { getToolsHandler, getToolByIdHandler, executeToolHandler, executeAgentToolHandler } from './tools';
+import {
+  getToolsHandler,
+  getToolByIdHandler,
+  executeToolHandler,
+  executeAgentToolHandler,
+  getAgentToolHandler,
+} from './tools';
 
 describe('Tools Handlers', () => {
+  const mockExecute = vi.fn();
   const mockTool: ToolAction = createTool({
     id: 'test-tool',
     description: 'A test tool',
-    execute: vi.fn(),
+    execute: mockExecute,
   });
 
   const mockVercelTool: VercelTool = {
@@ -111,7 +118,7 @@ describe('Tools Handlers', () => {
       const mockResult = { success: true };
       const mockMastra = new Mastra();
       const executeTool = executeToolHandler(mockTools);
-      (mockTool.execute as Mock<() => any>).mockResolvedValue(mockResult);
+      mockExecute.mockResolvedValue(mockResult);
       const context = { test: 'data' };
 
       const runtimeContext = new RuntimeContext();
@@ -124,12 +131,18 @@ describe('Tools Handlers', () => {
       });
 
       expect(result).toEqual(mockResult);
-      expect(mockTool.execute).toHaveBeenCalledWith({
-        context,
-        mastra: mockMastra,
-        runId: 'test-run',
-        runtimeContext: runtimeContext,
-      });
+      expect(mockExecute).toHaveBeenCalledWith(
+        {
+          context,
+          mastra: mockMastra,
+          runId: 'test-run',
+          runtimeContext: runtimeContext,
+          tracingContext: {
+            currentSpan: undefined,
+          },
+        },
+        undefined,
+      );
     });
 
     it.skip('should execute Vercel tool successfully', async () => {
@@ -215,7 +228,7 @@ describe('Tools Handlers', () => {
           'test-agent': mockAgent as any,
         },
       });
-      (mockTool?.execute as Mock<() => any>).mockResolvedValue(mockResult);
+      mockExecute.mockResolvedValue(mockResult);
 
       const context = {
         test: 'data',
@@ -230,12 +243,18 @@ describe('Tools Handlers', () => {
       });
 
       expect(result).toEqual(mockResult);
-      expect(mockTool.execute).toHaveBeenCalledWith({
-        context,
-        mastra: mockMastra,
-        runId: 'test-agent',
-        runtimeContext: runtimeContext,
-      });
+      expect(mockExecute).toHaveBeenCalledWith(
+        {
+          context,
+          mastra: mockMastra,
+          runId: 'test-agent',
+          runtimeContext: runtimeContext,
+          tracingContext: {
+            currentSpan: undefined,
+          },
+        },
+        undefined,
+      );
     });
 
     it.skip('should execute Vercel tool successfully', async () => {
@@ -258,6 +277,62 @@ describe('Tools Handlers', () => {
 
       expect(result).toEqual(mockResult);
       expect(mockVercelTool.execute).toHaveBeenCalledWith(undefined);
+    });
+  });
+
+  describe('getAgentToolHandler', () => {
+    const mockAgent = new Agent({
+      name: 'test-agent',
+      instructions: 'You are a helpful assistant',
+      tools: mockTools,
+      model: 'gpt-4o' as any,
+    });
+
+    it('should throw 404 when agent is not found', async () => {
+      await expect(
+        getAgentToolHandler({
+          mastra: new Mastra({ logger: false }),
+          agentId: 'non-existent',
+          toolId: mockTool.id,
+          runtimeContext: new RuntimeContext(),
+        }),
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Agent with name non-existent not found',
+        }),
+      );
+    });
+
+    it('should throw 404 when tool is not found in agent', async () => {
+      await expect(
+        getAgentToolHandler({
+          mastra: new Mastra({
+            logger: false,
+            agents: { 'test-agent': mockAgent as any },
+          }),
+          agentId: 'test-agent',
+          toolId: 'non-existent',
+          runtimeContext: new RuntimeContext(),
+        }),
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Tool not found',
+        }),
+      );
+    });
+
+    it('should return serialized tool when found', async () => {
+      const result = await getAgentToolHandler({
+        mastra: new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent as any },
+        }),
+        agentId: 'test-agent',
+        toolId: mockTool.id,
+        runtimeContext: new RuntimeContext(),
+      });
+      expect(result).toHaveProperty('id', mockTool.id);
+      expect(result).toHaveProperty('description', mockTool.description);
     });
   });
 });

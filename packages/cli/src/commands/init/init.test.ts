@@ -12,10 +12,12 @@ vi.mock('./utils', () => ({
   writeIndexFile: vi.fn(),
   createComponentsDir: vi.fn(),
   writeAPIKey: vi.fn(),
-  getAPIKey: vi.fn(),
+  getAPIKey: vi.fn(() => 'OPENAI_API_KEY'),
   createMastraDir: vi.fn(),
   writeCodeSample: vi.fn(),
   checkDependencies: vi.fn(),
+  getAISDKPackage: vi.fn(() => '@ai-sdk/openai'),
+  getAISDKPackageVersion: vi.fn(() => '^1.0.0'),
 }));
 
 vi.mock('../../utils/logger', () => ({
@@ -29,6 +31,28 @@ vi.mock('../../utils/logger', () => ({
   },
 }));
 
+vi.mock('../utils', () => ({
+  getPackageManagerInstallCommand: vi.fn(() => 'add'),
+}));
+
+vi.mock('./mcp-docs-server-install', () => ({
+  installMastraDocsMCPServer: vi.fn(),
+}));
+
+vi.mock('node:child_process', () => ({
+  default: {
+    exec: vi.fn((cmd, callback) => callback(null, { stdout: '', stderr: '' })),
+  },
+  exec: vi.fn((cmd, callback) => callback(null, { stdout: '', stderr: '' })),
+}));
+
+vi.mock('node:util', () => ({
+  default: {
+    promisify: vi.fn(() => vi.fn(() => Promise.resolve({ stdout: '', stderr: '' }))),
+  },
+  promisify: vi.fn(() => vi.fn(() => Promise.resolve({ stdout: '', stderr: '' }))),
+}));
+
 const utils = await import('./utils');
 const { init } = await import('./init');
 
@@ -37,6 +61,8 @@ vi.mock('../../services/service.deps', () => {
     DepsService: vi.fn().mockImplementation(() => {
       return {
         checkDependencies: vi.fn(() => Promise.resolve('ok')),
+        installPackages: vi.fn(() => Promise.resolve()),
+        packageManager: 'pnpm',
       };
     }),
   };

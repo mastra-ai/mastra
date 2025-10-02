@@ -1,3 +1,8 @@
+---
+title: "Memory Processors | Memory | Mastra Docs"
+description: "Learn how to use memory processors in Mastra to filter, trim, and transform messages before they're sent to the language model to manage context window limits."
+---
+
 # Memory Processors
 
 Memory Processors allow you to modify the list of messages retrieved from memory _before_ they are added to the agent's context window and sent to the LLM. This is useful for managing context size, filtering content, and optimizing performance.
@@ -97,9 +102,10 @@ const memoryWithMultipleProcessors = new Memory({
 
 You can create custom logic by extending the base `MemoryProcessor` class.
 
-```typescript copy showLineNumbers {4-19,23-26}
-import { Memory, CoreMessage } from "@mastra/memory";
-import { MemoryProcessor, MemoryProcessorOpts } from "@mastra/core/memory";
+```typescript copy showLineNumbers {5-20,24-27}
+import { Memory } from "@mastra/memory";
+import { CoreMessage, MemoryProcessorOpts } from "@mastra/core";
+import { MemoryProcessor } from "@mastra/core/memory";
 
 class ConversationOnlyFilter extends MemoryProcessor {
   constructor() {

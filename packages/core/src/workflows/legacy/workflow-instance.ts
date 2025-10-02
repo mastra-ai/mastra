@@ -2,9 +2,10 @@ import type { Span } from '@opentelemetry/api';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Snapshot } from 'xstate';
 import type { z } from 'zod';
-import type { Mastra, WorkflowRunState as NewWorkflowRunState } from '../..';
 import type { IMastraLogger } from '../../logger';
+import type { Mastra } from '../../mastra';
 import { RuntimeContext } from '../../runtime-context';
+import type { WorkflowRunState as NewWorkflowRunState } from '../../workflows';
 import { Machine } from './machine';
 import type { LegacyStep as Step } from './step';
 import type {

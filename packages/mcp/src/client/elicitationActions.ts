@@ -1,6 +1,6 @@
-import type { IMastraLogger } from "@mastra/core/logger";
-import type { ElicitRequest, ElicitResult } from "@modelcontextprotocol/sdk/types.js";
-import type { InternalMastraMCPClient } from "./client";
+import type { IMastraLogger } from '@mastra/core/logger';
+import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/types.js';
+import type { InternalMastraMCPClient } from './client';
 
 interface ElicitationClientActionsConfig {
   client: InternalMastraMCPClient;

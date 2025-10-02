@@ -71,18 +71,14 @@ describe('Scores Handlers', () => {
         pagination,
       });
 
-      if ('scores' in result) {
-        expect(result.scores).toHaveLength(1);
-      }
+      expect(result.scores).toHaveLength(1);
 
-      if ('pagination' in result) {
-        expect(result.pagination).toEqual({
-          total: 1,
-          page: 0,
-          perPage: 10,
-          hasMore: false,
-        });
-      }
+      expect(result.pagination).toEqual({
+        total: 1,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      });
     });
 
     it('should return empty array when storage method is not available', async () => {
@@ -99,7 +95,15 @@ describe('Scores Handlers', () => {
         pagination,
       });
 
-      expect(result).toEqual([]);
+      expect(result).toEqual({
+        pagination: {
+          hasMore: false,
+          page: 0,
+          perPage: 0,
+          total: 0,
+        },
+        scores: [],
+      });
     });
 
     it('should handle storage errors gracefully', async () => {
@@ -150,18 +154,14 @@ describe('Scores Handlers', () => {
         pagination,
       });
 
-      if ('scores' in result) {
-        expect(result.scores).toHaveLength(1);
-      }
+      expect(result.scores).toHaveLength(1);
 
-      if ('pagination' in result) {
-        expect(result.pagination).toEqual({
-          total: 1,
-          page: 0,
-          perPage: 10,
-          hasMore: false,
-        });
-      }
+      expect(result.pagination).toEqual({
+        total: 1,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      });
     });
 
     it('should return empty array when storage method is not available', async () => {
@@ -179,7 +179,15 @@ describe('Scores Handlers', () => {
         pagination,
       });
 
-      expect(result).toEqual([]);
+      expect(result).toEqual({
+        pagination: {
+          hasMore: false,
+          page: 0,
+          perPage: 0,
+          total: 0,
+        },
+        scores: [],
+      });
     });
 
     it('should handle storage errors gracefully', async () => {
@@ -232,24 +240,19 @@ describe('Scores Handlers', () => {
         pagination,
       });
 
-      if ('scores' in result) {
-        expect(result.scores).toHaveLength(1);
-      }
-
-      if ('pagination' in result) {
-        expect(result.pagination).toEqual({
-          total: 1,
-          page: 0,
-          perPage: 10,
-          hasMore: false,
-        });
-      }
+      expect(result.scores).toHaveLength(1);
+      expect(result.pagination).toEqual({
+        total: 1,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      });
     });
   });
 
   describe('saveScoreHandler', () => {
     it('should save score successfully', async () => {
-      const score = createSampleScore({ id: 'new-score-1' });
+      const score = createSampleScore({ scorerId: 'new-score-1' });
       const savedScore = { score };
 
       const result = await saveScoreHandler({
@@ -261,7 +264,7 @@ describe('Scores Handlers', () => {
     });
 
     it('should return empty array when storage method is not available', async () => {
-      const score = createSampleScore({ id: 'new-score-1' });
+      const score = createSampleScore({ scorerId: 'new-score-1' });
 
       // Create mastra instance without storage
       const mastraWithoutStorage = new Mastra({
@@ -277,7 +280,7 @@ describe('Scores Handlers', () => {
     });
 
     it('should handle storage errors gracefully', async () => {
-      const score = createSampleScore({ id: 'new-score-1' });
+      const score = createSampleScore({ scorerId: 'new-score-1' });
       const error = new Error('Storage error');
 
       mockStorage.saveScore = vi.fn().mockRejectedValue(error);

@@ -11,29 +11,37 @@ import { Tabs } from "nextra/components";
 The Examples section is a short list of example projects demonstrating basic AI engineering with Mastra, including text generation, structured output, streaming responses, retrieval‐augmented generation (RAG), and voice.
 
 <CardItems
-  titles={["Agent", "Workflow", "legacyWorkflow", "Memory", "RAG", "Evals (Legacy)", "Scorers", "Voice"]}
+  titles={["Agent", "Workflow", "Tool", "legacyWorkflow", "Memory", "RAG", "Evals", "Scorers (Experimental)", "Voice"]}
   items={{
     Agent: [
-      { title: "Giving a System Prompt", href: "/examples/agents/system-prompt" },
-      { title: "Workflow as Tools", href: "/examples/agents/workflow-as-tools" },
-      { title: "Using a Tool", href: "/examples/agents/using-a-tool" },
-      { title: "Hierarchical Multi-Agent System", href: "/examples/agents/hierarchical-multi-agent" },
-      { title: "Multi-Agent Workflow", href: "/examples/agents/multi-agent-workflow" },
-      { title: "Bird Checker", href: "/examples/agents/bird-checker" },
-      { title: "Give your Agent a voice", href: "/examples/agents/adding-voice-capabilities" },
-      { title: "Deploying an MCPServer", href: "/examples/agents/deploying-mcp-server" },
+      { title: "Calling Agents", href: "/examples/agents/calling-agents" },
+      { title: "Agent System Prompt", href: "/examples/agents/system-prompt" },
+      { title: "Agents with Tools", href: "/examples/agents/using-a-tool" },
+      { title: "Supervisor Agent", href: "/examples/agents/supervisor-agent" },
+      { title: "Image Analysis Agent", href: "/examples/agents/image-analysis" },
+      { title: "Voice Agents", href: "/examples/agents/adding-voice-capabilities" },
       { title: "Dynamic Agents", href: "/examples/agents/dynamic-agents" },
-      { title: "AI SDK v5 Integration", href: "/examples/agents/ai-sdk-v5-integration" }
+      { title: "Deploying an MCPServer", href: "/examples/agents/deploying-mcp-server" },
+      { title: "AI SDK v5 Integration", href: "/examples/agents/ai-sdk-v5-integration" },
+      { title: "WhatsApp Chat Bot", href: "/examples/agents/whatsapp-chat-bot" }
     ],
     Workflow: [
-      { title: "Conditional Branching", href: "/examples/workflows/conditional-branching" },
+      { title: "Running Workflows", href: "/examples/workflows/running-workflows" },
+      { title: "Sequential Steps", href: "/examples/workflows/sequential-steps" },
       { title: "Parallel Steps", href: "/examples/workflows/parallel-steps" },
-      { title: "Calling an Agent", href: "/examples/workflows/calling-agent" },
-      { title: "Tool & Agent as a Step", href: "/examples/workflows/agent-and-tool-interop" },
-      { title: "Human in the Loop", href: "/examples/workflows/human-in-the-loop" },
-      { title: "Control Flow", href: "/examples/workflows/control-flow" },
+      { title: "Conditional Branching", href: "/examples/workflows/conditional-branching" },
       { title: "Array as Input", href: "/examples/workflows/array-as-input" },
+      { title: "Calling an Agent", href: "/examples/workflows/calling-agent" },
+      { title: "Agent as Step", href: "/examples/workflows/agent-as-step" },
+      { title: "Tool as Step", href: "/examples/workflows/tool-as-step" },
+      { title: "Human in the Loop", href: "/examples/workflows/human-in-the-loop" },
+      { title: "Multi-Turn Human in the Loop", href: "/examples/workflows/human-in-the-loop-multi-turn" },
       { title: "Inngest Workflow", href: "/examples/workflows/inngest-workflow" }
+    ],
+    Tool: [
+      { title: "Calling Tools", href: "/examples/tools/calling-tools" },
+      { title: "Dynamic Tools", href: "/examples/tools/dynamic-tools" },
+      { title: "Tools with Workflows", href: "/examples/tools/workflow-as-tools" }
     ],
     legacyWorkflow: [
       { title: "Creating a Workflow", href: "/examples/workflows_legacy/creating-a-workflow" },
@@ -47,15 +55,14 @@ The Examples section is a short list of example projects demonstrating basic AI 
       { title: "Workflow Variables", href: "/examples/workflows_legacy/workflow-variables" }
     ],
     Memory: [
+      { title: "Basic Working Memory", href: "/examples/memory/working-memory-basic" },
+      { title: "Memory with Template", href: "/examples/memory/working-memory-template" },
+      { title: "Memory with Schema", href: "/examples/memory/working-memory-schema" },
       { title: "Memory with LibSQL", href: "/examples/memory/memory-with-libsql" },
       { title: "Memory with PostgreSQL", href: "/examples/memory/memory-with-pg" },
       { title: "Memory with Upstash", href: "/examples/memory/memory-with-upstash" },
       { title: "Memory with Mem0", href: "/examples/memory/memory-with-mem0" },
-      { title: "Streaming Working Memory", href: "/examples/memory/streaming-working-memory" },
-      { title: "Streaming Working Memory (Advanced)", href: "/examples/memory/streaming-working-memory-advanced" },
-      { title: "Streaming Structured Working Memory", href: "/examples/memory/streaming-working-memory-structured" },
-      { title: "Memory Processors", href: "/examples/memory/memory-processors" },
-      { title: "AI SDK useChat Hook", href: "/examples/memory/use-chat" }
+      { title: "Memory Processors", href: "/examples/memory/memory-processors" }
     ],
     RAG: [
       { title: "Chunk Text", href: "/examples/rag/chunking/chunk-text" },
@@ -76,7 +83,7 @@ The Examples section is a short list of example projects demonstrating basic AI 
       { title: "Structured Reasoning with Workflows", href: "/examples/rag/usage/cot-workflow-rag" },
       { title: "Graph RAG", href: "/examples/rag/usage/graph-rag" }
     ],
-    "Evals (Legacy)": [
+    Evals: [
       { title: "Answer Relevancy", href: "/examples/evals/answer-relevancy" },
       { title: "Bias", href: "/examples/evals/bias" },
       { title: "Completeness", href: "/examples/evals/completeness" },
@@ -96,8 +103,10 @@ The Examples section is a short list of example projects demonstrating basic AI 
       { title: "LLM as a Judge", href: "/examples/evals/custom-llm-judge-eval" },
       { title: "Native JavaScript", href: "/examples/evals/custom-native-javascript-eval" }
     ],
-    Scorers: [
+    "Scorers (Experimental)": [
+      { title: "Custom Scorer", href: "/examples/scorers/custom-scorer" },
       { title: "Answer Relevancy", href: "/examples/scorers/answer-relevancy" },
+      { title: "Answer Similarity", href: "/examples/scorers/answer-similarity" },
       { title: "Bias", href: "/examples/scorers/bias" },
       { title: "Completeness", href: "/examples/scorers/completeness" },
       { title: "Content Similarity", href: "/examples/scorers/content-similarity" },
@@ -107,22 +116,11 @@ The Examples section is a short list of example projects demonstrating basic AI 
       { title: "Textual Difference", href: "/examples/scorers/textual-difference" },
       { title: "Tone Consistency", href: "/examples/scorers/tone-consistency" },
       { title: "Toxicity", href: "/examples/scorers/toxicity" },
-      { title: "LLM as a Judge", href: "/examples/scorers/custom-llm-judge-eval" },
-      { title: "Native JavaScript", href: "/examples/scorers/custom-native-javascript-eval" }
-    ],
-    Scorers: [
-      { title: "Answer Relevancy", href: "/examples/scorers/answer-relevancy" },
-      { title: "Bias", href: "/examples/scorers/bias" },
-      { title: "Completeness", href: "/examples/scorers/completeness" },
-      { title: "Content Similarity", href: "/examples/scorers/content-similarity" },
-      { title: "Faithfulness", href: "/examples/scorers/faithfulness" },
-      { title: "Hallucination", href: "/examples/scorers/hallucination" },
-      { title: "Keyword Coverage", href: "/examples/scorers/keyword-coverage" },
-      { title: "Textual Difference", href: "/examples/scorers/textual-difference" },
-      { title: "Tone Consistency", href: "/examples/scorers/tone-consistency" },
-      { title: "Toxicity", href: "/examples/scorers/toxicity" },
-      { title: "LLM as a Judge", href: "/examples/scorers/custom-llm-judge-eval" },
-      { title: "Native JavaScript", href: "/examples/scorers/custom-native-javascript-eval" }
+      { title: "Noise Sensitivity", href: "/examples/scorers/noise-sensitivity" },
+      { title: "Prompt Alignment", href: "/examples/scorers/prompt-alignment" },
+      { title: "Tool Call Accuracy", href: "/examples/scorers/tool-call-accuracy" },
+      { title: "Context Relevance", href: "/examples/scorers/context-relevance" },
+      { title: "Context Precision", href: "/examples/scorers/context-precision" },
     ],
     Voice: [
       { title: "Text to Speech", href: "/examples/voice/text-to-speech" },

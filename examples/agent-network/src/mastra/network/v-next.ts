@@ -21,7 +21,7 @@ const agent1 = new Agent({
     'This agent is used to do research, but not create full responses. Answer in bullet points only and be concise.',
   description:
     'This agent is used to do research, but not create full responses. Answer in bullet points only and be concise.',
-  model: anthropic('claude-3-5-sonnet-20240620'),
+  model: openai('gpt-4o'),
 });
 
 const agent2 = new Agent({
@@ -29,7 +29,7 @@ const agent2 = new Agent({
   description: 'This agent is used to do text synthesis on researched material. It writes articles in full paragraphs.',
   instructions:
     'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Do not use bullet points. Write full paragraphs. There should not be a single bullet point in the final report. You write articles.',
-  model: anthropic('claude-3-5-sonnet-20240620'),
+  model: openai('gpt-4o'),
 });
 
 const agentStep1 = createStep({
@@ -91,7 +91,7 @@ export const v_nextNetwork = new NewAgentNetwork({
   name: 'Test Network',
   instructions:
     'You can research cities. You can also synthesize research material. You can also write a full report based on the researched material. You can also get weather information. workflow1 is the best primitive for researching an *individual* city and it should always be used when running multiple primitives to accomplish a task.',
-  model: anthropic('claude-3-5-sonnet-20240620'),
+  model: openai('gpt-4o'),
   agents: {
     agent1,
     agent2,

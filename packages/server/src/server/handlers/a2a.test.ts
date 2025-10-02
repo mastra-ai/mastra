@@ -1,19 +1,18 @@
 import { openai } from '@ai-sdk/openai';
-import type { Message, Task, TaskSendParams } from '@mastra/core/a2a';
-import { A2AError } from '@mastra/core/a2a';
+import type { Task, MessageSendParams } from '@mastra/core/a2a';
+import { MastraA2AError } from '@mastra/core/a2a';
 import type { AgentConfig } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import type { MastraStorage } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { convertToCoreMessage } from '../a2a/protocol';
 import { InMemoryTaskStore } from '../a2a/store';
 import {
   getAgentCardByIdHandler,
   handleTaskGet,
-  handleTaskSend,
-  handleTaskSendSubscribe,
+  handleMessageSend,
+  handleMessageStream,
   handleTaskCancel,
 } from './a2a';
 
@@ -142,7 +141,7 @@ describe('A2A Handler', () => {
     });
   });
 
-  describe('handleTaskSend', () => {
+  describe('handleMessageSend', () => {
     let mockMastra: Mastra;
     let mockTaskStore: InMemoryTaskStore;
 
@@ -167,15 +166,13 @@ describe('A2A Handler', () => {
 
     it('should successfully process a task and save it', async () => {
       const requestId = 'test-request-id';
-      const taskId = 'test-task-id';
+      const messageId = 'test-message-id';
       const agentId = 'test-agent';
       const userMessage = 'Hello, agent!';
       const agentResponseText = 'Hello, user!';
 
-      const params: TaskSendParams = {
-        id: taskId,
-        message: { role: 'user', parts: [{ type: 'text', text: userMessage }] },
-        sessionId: 'test-session-id',
+      const params: MessageSendParams = {
+        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
       };
 
       const mockAgent = mockMastra.getAgent(agentId);
@@ -184,56 +181,65 @@ describe('A2A Handler', () => {
 
       vi.setSystemTime(new Date('2025-05-08T11:47:38.458Z'));
       const runtimeContext = new RuntimeContext();
-      const result = await handleTaskSend({
+      const result = await handleMessageSend({
         requestId,
         params,
         taskStore: mockTaskStore,
         agent: mockAgent,
+        agentId,
         runtimeContext,
       });
 
-      expect(mockAgent.generate).toHaveBeenCalledWith([convertToCoreMessage(params.message)], {
-        runId: taskId,
-        runtimeContext,
-      });
-      expect(result).toMatchInlineSnapshot(`
-        {
-          "id": "test-request-id",
-          "jsonrpc": "2.0",
-          "result": {
-            "artifacts": [],
-            "id": "test-task-id",
-            "metadata": undefined,
-            "sessionId": "test-session-id",
-            "status": {
-              "message": {
-                "parts": [
-                  {
-                    "text": "Hello, user!",
-                    "type": "text",
-                  },
-                ],
-                "role": "agent",
-              },
-              "state": "completed",
-              "timestamp": "2025-05-08T11:47:38.458Z",
+      expect(result).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
+          artifacts: [],
+          id: expect.any(String),
+          contextId: expect.any(String),
+          metadata: undefined,
+          status: {
+            message: {
+              messageId: expect.any(String),
+              parts: [
+                {
+                  text: 'Hello, user!',
+                  kind: 'text',
+                },
+              ],
+              role: 'agent',
+              kind: 'message',
             },
+            state: 'completed',
+            timestamp: '2025-05-08T11:47:38.458Z',
           },
-        }
-      `);
+          history: [
+            {
+              kind: 'message',
+              messageId: 'test-message-id',
+              parts: [
+                {
+                  text: 'Hello, agent!',
+                  kind: 'text',
+                },
+              ],
+              role: 'user',
+            },
+          ],
+          kind: 'task',
+        },
+      });
     });
 
     it('should handle errors from agent.generate and save failed state', async () => {
       const requestId = 'test-request-id';
-      const taskId = 'test-task-id';
+      const messageId = 'test-message-id';
       const agentId = 'test-agent';
       const userMessage = 'Hello, agent!';
       const errorMessage = 'Agent failed!';
 
-      const params: TaskSendParams = {
-        id: taskId,
-        message: { role: 'user', parts: [{ type: 'text', text: userMessage }] },
-        sessionId: 'test-session-id',
+      const params: MessageSendParams = {
+        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
       };
 
       const mockAgent = mockMastra.getAgent(agentId);
@@ -241,7 +247,7 @@ describe('A2A Handler', () => {
       mockAgent.generate.mockRejectedValue(new Error(errorMessage));
       vi.setSystemTime(new Date('2025-05-08T11:47:38.458Z'));
 
-      const result = await handleTaskSend({
+      const result = await handleMessageSend({
         requestId,
         params,
         taskStore: mockTaskStore,
@@ -250,9 +256,13 @@ describe('A2A Handler', () => {
         runtimeContext: new RuntimeContext(),
       });
 
-      // Should save failed state
-      const task = await mockTaskStore.load({ agentId, taskId });
-      expect(task?.task.status.state).toBe('failed');
+      // Because the a2a spec requires the server to create the the taskId, we don't know the id
+      // to query the store with, so we just check the internal store directly
+      const store = Array.from((mockTaskStore as any).store.values());
+      expect(store.length).toBe(1);
+
+      const task = store[0] as Task;
+      expect(task?.status.state).toBe('failed');
       // @ts-expect-error - error is not always available but we know it is
       result.error.data.stack = result.error?.data.stack.split('\n')[0];
       expect(result).toMatchInlineSnapshot(`
@@ -273,81 +283,110 @@ describe('A2A Handler', () => {
     it('should update an existing task and append new message/history', async () => {
       const requestId = 'test-request-id';
       const taskId = 'test-task-id';
+      const messageId = 'test-message-id';
       const agentId = 'test-agent';
       const userMessage = 'Follow-up message!';
       const agentResponseText = 'Follow-up response!';
-      const params: TaskSendParams = {
-        id: taskId,
-        message: { role: 'user', parts: [{ type: 'text', text: userMessage }] },
-        sessionId: 'test-session-id',
+      const params: MessageSendParams = {
+        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
       };
       // Existing task/history
 
       const existingTask: Task = {
         id: taskId,
-        sessionId: 'test-session-id',
+        contextId: 'test-session-id',
         status: {
           state: 'completed' as const,
-          message: { role: 'agent', parts: [{ type: 'text', text: 'Old response' }] },
+          message: {
+            messageId,
+            kind: 'message',
+            role: 'agent',
+            parts: [{ kind: 'text', text: 'Old response' }],
+          },
           timestamp: new Date('2025-05-07T12:00:00.000Z').toISOString(),
         },
         artifacts: [],
+        history: [
+          {
+            kind: 'message',
+            messageId: 'test-history-message',
+            role: 'user',
+            parts: [{ kind: 'text', text: 'Old message' }],
+          },
+          {
+            kind: 'message',
+            messageId: 'test-history-response',
+            role: 'agent',
+            parts: [{ kind: 'text', text: 'Old response' }],
+          },
+        ],
         metadata: undefined,
+        kind: 'task',
       };
 
-      const existingHistory: Message[] = [
-        { role: 'user', parts: [{ type: 'text', text: 'Old message' }] },
-        { role: 'agent', parts: [{ type: 'text', text: 'Old response' }] },
-      ];
-
       // Use real InMemoryTaskStore
-      await mockTaskStore.save({ agentId, data: { task: existingTask, history: existingHistory } });
+      await mockTaskStore.save({ agentId, data: existingTask });
 
       const mockAgent = mockMastra.getAgent(agentId);
       // @ts-expect-error - mockResolvedValue is not available on the Agent class
       mockAgent.generate.mockResolvedValue({ text: agentResponseText });
       vi.setSystemTime(new Date('2025-05-08T12:00:00.000Z'));
 
-      const result = await handleTaskSend({
+      const result = await handleMessageSend({
         requestId,
         params,
         taskStore: mockTaskStore,
+        agentId,
         agent: mockAgent,
         runtimeContext: new RuntimeContext(),
       });
 
       const task = await mockTaskStore.load({ agentId, taskId });
-      expect(task?.task.status.state).toBe('completed');
+      expect(task?.status.state).toBe('completed');
       expect(result?.result?.status.timestamp).not.toBe(existingTask.status.timestamp);
-      expect(result).toMatchInlineSnapshot(`
-        {
-          "id": "test-request-id",
-          "jsonrpc": "2.0",
-          "result": {
-            "artifacts": [],
-            "id": "test-task-id",
-            "metadata": undefined,
-            "sessionId": "test-session-id",
-            "status": {
-              "message": {
-                "parts": [
-                  {
-                    "text": "Follow-up response!",
-                    "type": "text",
-                  },
-                ],
-                "role": "agent",
-              },
-              "state": "completed",
-              "timestamp": "2025-05-08T12:00:00.000Z",
+      expect(result).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
+          artifacts: [],
+          id: expect.any(String),
+          contextId: expect.any(String),
+          history: [
+            {
+              kind: 'message',
+              messageId: 'test-message-id',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Follow-up message!',
+                },
+              ],
+              role: 'user',
             },
+          ],
+          metadata: undefined,
+          status: {
+            message: {
+              messageId: expect.any(String),
+              parts: [
+                {
+                  text: 'Follow-up response!',
+                  kind: 'text',
+                },
+              ],
+              role: 'agent',
+              kind: 'message',
+            },
+            state: 'completed',
+            timestamp: '2025-05-08T12:00:00.000Z',
           },
-        }
-      `);
+          kind: 'task',
+        },
+      });
     });
   });
 
-  describe('handleTaskSendSubscribe', () => {
+  describe('handleMessageStream', () => {
     let mockMastra: Mastra;
     let mockTaskStore: InMemoryTaskStore;
 
@@ -368,15 +407,13 @@ describe('A2A Handler', () => {
 
     it('should yield working state and then completed result', async () => {
       const requestId = 'test-request-id';
-      const taskId = 'test-task-id';
+      const messageId = 'test-message-id';
       const agentId = 'test-agent';
       const userMessage = 'Hello, agent!';
       const agentResponseText = 'Hello, user!';
 
-      const params: TaskSendParams = {
-        id: taskId,
-        message: { role: 'user', parts: [{ type: 'text', text: userMessage }] },
-        sessionId: 'test-session-id',
+      const params: MessageSendParams = {
+        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
       };
 
       const mockAgent = mockMastra.getAgent(agentId);
@@ -385,60 +422,70 @@ describe('A2A Handler', () => {
 
       vi.setSystemTime(new Date('2025-05-08T11:47:38.458Z'));
 
-      const gen = handleTaskSendSubscribe({
+      const gen = handleMessageStream({
         requestId,
         params,
         taskStore: mockTaskStore,
+        agentId,
         agent: mockAgent,
         runtimeContext: new RuntimeContext(),
       });
 
       const first = await gen.next();
-      expect(first.value).toMatchInlineSnapshot(`
-        {
-          "id": "test-request-id",
-          "jsonrpc": "2.0",
-          "result": {
-            "message": {
-              "parts": [
-                {
-                  "text": "Generating response...",
-                  "type": "text",
-                },
-              ],
-              "role": "agent",
-            },
-            "state": "working",
+      expect(first.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
+          message: {
+            messageId: expect.any(String),
+            kind: 'message',
+            role: 'agent',
+            parts: [{ kind: 'text', text: 'Generating response...' }],
           },
-        }
-      `);
+          state: 'working',
+        },
+      });
 
       const second = await gen.next();
-      expect(second.value).toMatchInlineSnapshot(`
-        {
-          "id": "test-request-id",
-          "jsonrpc": "2.0",
-          "result": {
-            "artifacts": [],
-            "id": "test-task-id",
-            "metadata": undefined,
-            "sessionId": "test-session-id",
-            "status": {
-              "message": {
-                "parts": [
-                  {
-                    "text": "Hello, user!",
-                    "type": "text",
-                  },
-                ],
-                "role": "agent",
-              },
-              "state": "completed",
-              "timestamp": "2025-05-08T11:47:38.458Z",
+      expect(second.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
+          artifacts: [],
+          id: expect.any(String),
+          contextId: expect.any(String),
+          metadata: undefined,
+          status: {
+            message: {
+              messageId: expect.any(String),
+              parts: [
+                {
+                  text: 'Hello, user!',
+                  kind: 'text',
+                },
+              ],
+              role: 'agent',
+              kind: 'message',
             },
+            state: 'completed',
+            timestamp: '2025-05-08T11:47:38.458Z',
           },
-        }
-      `);
+          history: [
+            {
+              kind: 'message',
+              messageId: 'test-message-id',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Hello, agent!',
+                },
+              ],
+              role: 'user',
+            },
+          ],
+          kind: 'task',
+        },
+      });
       expect(second.done).toBe(false);
 
       // The generator should be done after two yields
@@ -448,15 +495,13 @@ describe('A2A Handler', () => {
 
     it('should yield working state and then error if agent fails', async () => {
       const requestId = 'test-request-id';
-      const taskId = 'test-task-id';
+      const messageId = 'test-message-id';
       const agentId = 'test-agent';
       const userMessage = 'Hello, agent!';
       const errorMessage = 'Agent failed!';
 
-      const params: TaskSendParams = {
-        id: taskId,
-        message: { role: 'user', parts: [{ type: 'text', text: userMessage }] },
-        sessionId: 'test-session-id',
+      const params: MessageSendParams = {
+        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
       };
 
       const mockAgent = mockMastra.getAgent(agentId);
@@ -465,10 +510,11 @@ describe('A2A Handler', () => {
 
       vi.setSystemTime(new Date('2025-05-08T11:47:38.458Z'));
 
-      const gen = handleTaskSendSubscribe({
+      const gen = handleMessageStream({
         requestId,
         params,
         taskStore: mockTaskStore,
+        agentId,
         agent: mockAgent,
         runtimeContext: new RuntimeContext(),
       });
@@ -481,7 +527,7 @@ describe('A2A Handler', () => {
           state: 'working',
           message: {
             role: 'agent',
-            parts: [{ type: 'text', text: 'Generating response...' }],
+            parts: [{ kind: 'text', text: 'Generating response...' }],
           },
         },
       });
@@ -505,21 +551,28 @@ describe('A2A Handler', () => {
     it('should return the task', async () => {
       const requestId = 'test-request-id';
       const taskId = 'test-task-id';
+      const messageId = 'test-message-id';
       const agentId = 'test-agent';
 
       const mockTaskStore = new InMemoryTaskStore();
       const task: Task = {
         id: taskId,
-        sessionId: 'test-session-id',
+        contextId: 'test-session-id',
         status: {
           state: 'completed',
-          message: { role: 'agent', parts: [{ type: 'text', text: 'Hello, user!' }] },
+          message: {
+            messageId,
+            kind: 'message',
+            role: 'agent',
+            parts: [{ kind: 'text', text: 'Hello, user!' }],
+          },
           timestamp: new Date('2025-05-08T11:47:38.458Z').toISOString(),
         },
         artifacts: [],
         metadata: undefined,
+        kind: 'task',
       };
-      await mockTaskStore.save({ agentId, data: { history: [], task } });
+      await mockTaskStore.save({ agentId, data: task });
 
       const result = await handleTaskGet({
         requestId,
@@ -528,35 +581,33 @@ describe('A2A Handler', () => {
         taskId,
       });
 
-      expect(result!.result!.task).toEqual(task);
-      expect(result).toMatchInlineSnapshot(`
-        {
-          "id": "test-request-id",
-          "jsonrpc": "2.0",
-          "result": {
-            "history": [],
-            "task": {
-              "artifacts": [],
-              "id": "test-task-id",
-              "metadata": undefined,
-              "sessionId": "test-session-id",
-              "status": {
-                "message": {
-                  "parts": [
-                    {
-                      "text": "Hello, user!",
-                      "type": "text",
-                    },
-                  ],
-                  "role": "agent",
+      expect(result!.result).toEqual(task);
+      expect(result).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
+          artifacts: [],
+          id: 'test-task-id',
+          contextId: expect.any(String),
+          metadata: undefined,
+          status: {
+            message: {
+              messageId: expect.any(String),
+              parts: [
+                {
+                  text: 'Hello, user!',
+                  kind: 'text',
                 },
-                "state": "completed",
-                "timestamp": "2025-05-08T11:47:38.458Z",
-              },
+              ],
+              role: 'agent',
+              kind: 'message',
             },
+            state: 'completed',
+            timestamp: '2025-05-08T11:47:38.458Z',
           },
-        }
-      `);
+          kind: 'task',
+        },
+      });
     });
 
     it('should return an error when task cannot be found', async () => {
@@ -572,7 +623,7 @@ describe('A2A Handler', () => {
           agentId,
           taskId: nonExistentTaskId,
         }),
-      ).rejects.toThrow(A2AError.taskNotFound(nonExistentTaskId));
+      ).rejects.toThrow(MastraA2AError.taskNotFound(nonExistentTaskId));
     });
   });
 
@@ -591,21 +642,23 @@ describe('A2A Handler', () => {
     it('should successfully cancel a task in a non-final state', async () => {
       const requestId = 'test-request-id';
       const taskId = 'test-task-id';
+      const messageId = 'test-message-id';
       const agentId = 'test-agent';
 
       const task: Task = {
         id: taskId,
-        sessionId: 'test-session-id',
+        contextId: 'test-session-id',
         status: {
           state: 'working',
-          message: { role: 'agent', parts: [{ type: 'text', text: 'Working...' }] },
+          message: { messageId, kind: 'message', role: 'agent', parts: [{ kind: 'text', text: 'Working...' }] },
           timestamp: new Date('2025-05-08T11:47:38.458Z').toISOString(),
         },
         artifacts: [],
         metadata: undefined,
+        kind: 'task',
       };
 
-      await mockTaskStore.save({ agentId, data: { history: [], task } });
+      await mockTaskStore.save({ agentId, data: task });
       vi.setSystemTime(new Date('2025-05-08T11:47:38.458Z'));
 
       const result = await handleTaskCancel({
@@ -617,52 +670,55 @@ describe('A2A Handler', () => {
 
       // Verify task was updated to canceled state
       const updatedData = await mockTaskStore.load({ agentId, taskId });
-      expect(updatedData?.task.status.state).toBe('canceled');
-      expect(result).toMatchInlineSnapshot(`
-        {
-          "id": "test-request-id",
-          "jsonrpc": "2.0",
-          "result": {
-            "artifacts": [],
-            "id": "test-task-id",
-            "metadata": undefined,
-            "sessionId": "test-session-id",
-            "status": {
-              "message": {
-                "parts": [
-                  {
-                    "text": "Task cancelled by request.",
-                    "type": "text",
-                  },
-                ],
-                "role": "agent",
-              },
-              "state": "canceled",
-              "timestamp": "2025-05-08T11:47:38.458Z",
+      expect(updatedData?.status.state).toBe('canceled');
+      expect(result).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
+          artifacts: [],
+          id: expect.any(String),
+          contextId: expect.any(String),
+          metadata: undefined,
+          status: {
+            message: {
+              messageId: expect.any(String),
+              parts: [
+                {
+                  text: 'Task cancelled by request.',
+                  kind: 'text',
+                },
+              ],
+              role: 'agent',
+              kind: 'message',
             },
+            state: 'canceled',
+            timestamp: '2025-05-08T11:47:38.458Z',
           },
-        }
-      `);
+          kind: 'task',
+        },
+      });
     });
 
     it('should not cancel a task in a final state', async () => {
       const requestId = 'test-request-id';
       const taskId = 'test-task-id';
+      const messageId = 'test-message-id';
       const agentId = 'test-agent';
 
       const task: Task = {
         id: taskId,
-        sessionId: 'test-session-id',
+        contextId: 'test-session-id',
         status: {
           state: 'completed',
-          message: { role: 'agent', parts: [{ type: 'text', text: 'Done!' }] },
+          message: { messageId, kind: 'message', role: 'agent', parts: [{ kind: 'text', text: 'Done!' }] },
           timestamp: new Date('2025-05-08T11:47:38.458Z').toISOString(),
         },
         artifacts: [],
         metadata: undefined,
+        kind: 'task',
       };
 
-      await mockTaskStore.save({ agentId, data: { history: [], task } });
+      await mockTaskStore.save({ agentId, data: task });
 
       const result = await handleTaskCancel({
         requestId,
@@ -673,32 +729,33 @@ describe('A2A Handler', () => {
 
       // Verify task remained in completed state
       const updatedData = await mockTaskStore.load({ agentId, taskId });
-      expect(updatedData?.task.status.state).toBe('completed');
-      expect(result).toMatchInlineSnapshot(`
-        {
-          "id": "test-request-id",
-          "jsonrpc": "2.0",
-          "result": {
-            "artifacts": [],
-            "id": "test-task-id",
-            "metadata": undefined,
-            "sessionId": "test-session-id",
-            "status": {
-              "message": {
-                "parts": [
-                  {
-                    "text": "Done!",
-                    "type": "text",
-                  },
-                ],
-                "role": "agent",
-              },
-              "state": "completed",
-              "timestamp": "2025-05-08T11:47:38.458Z",
+      expect(updatedData?.status.state).toBe('completed');
+      expect(result).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
+          artifacts: [],
+          id: expect.any(String),
+          contextId: expect.any(String),
+          metadata: undefined,
+          status: {
+            message: {
+              messageId: expect.any(String),
+              parts: [
+                {
+                  text: 'Done!',
+                  kind: 'text',
+                },
+              ],
+              role: 'agent',
+              kind: 'message',
             },
+            state: 'completed',
+            timestamp: '2025-05-08T11:47:38.458Z',
           },
-        }
-      `);
+          kind: 'task',
+        },
+      });
     });
 
     it('should throw error when canceling non-existent task', async () => {
@@ -713,7 +770,7 @@ describe('A2A Handler', () => {
           agentId,
           taskId: nonExistentTaskId,
         }),
-      ).rejects.toThrow(A2AError.taskNotFound(nonExistentTaskId));
+      ).rejects.toThrow(MastraA2AError.taskNotFound(nonExistentTaskId));
     });
   });
 });

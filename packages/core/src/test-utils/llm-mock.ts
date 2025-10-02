@@ -1,7 +1,7 @@
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 
-import { MastraLLM } from '../llm/model/model';
+import { MastraLLMV1 } from '../llm/model/model';
 
 export function createMockModel({
   objectGenerationMode,
@@ -69,7 +69,7 @@ export function createMockModel({
   return mockModel;
 }
 
-export class MockProvider extends MastraLLM {
+export class MockProvider extends MastraLLMV1 {
   constructor({
     spyGenerate,
     spyStream,

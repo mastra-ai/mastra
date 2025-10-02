@@ -1,4 +1,4 @@
-import type { ScoreRowData } from '../../../scores/types';
+import type { ScoreRowData, ScoringSource } from '../../../scores/types';
 import type { PaginationInfo, StoragePagination } from '../../types';
 import { ScoresStorage } from './base';
 
@@ -27,11 +27,13 @@ export class ScoresInMemory extends ScoresStorage {
     pagination,
     entityId,
     entityType,
+    source,
   }: {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: string;
+    source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     const scores = Array.from(this.scores.values()).filter(score => {
       let baseFilter = score.scorerId === scorerId;
@@ -42,6 +44,10 @@ export class ScoresInMemory extends ScoresStorage {
 
       if (entityType) {
         baseFilter = baseFilter && score.entityType === entityType;
+      }
+
+      if (source) {
+        baseFilter = baseFilter && score.source === source;
       }
 
       return baseFilter;
@@ -92,6 +98,30 @@ export class ScoresInMemory extends ScoresStorage {
       return baseFilter;
     });
 
+    return {
+      scores: scores.slice(pagination.page * pagination.perPage, (pagination.page + 1) * pagination.perPage),
+      pagination: {
+        total: scores.length,
+        page: pagination.page,
+        perPage: pagination.perPage,
+        hasMore: scores.length > (pagination.page + 1) * pagination.perPage,
+      },
+    };
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    const scores = Array.from(this.scores.values()).filter(
+      score => score.traceId === traceId && score.spanId === spanId,
+    );
+    scores.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return {
       scores: scores.slice(pagination.page * pagination.perPage, (pagination.page + 1) * pagination.perPage),
       pagination: {

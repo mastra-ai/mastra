@@ -58,3 +58,48 @@ await agent.voice.send(micStream);
 ```
 
 For integrating Speech-to-Speech capabilities with agents, refer to the [Adding Voice to Agents](../agents/adding-voice.mdx) documentation.
+
+## Google Gemini Live (Realtime)
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+
+const agent = new Agent({
+  name: 'Agent',
+  instructions: 'You are a helpful assistant with real-time voice capabilities.',
+  // Model used for text generation; voice provider handles realtime audio
+  model: openai("gpt-4o"),
+  voice: new GeminiLiveVoice({
+    apiKey: process.env.GOOGLE_API_KEY,
+    model: 'gemini-2.0-flash-exp',
+    speaker: 'Puck',
+    debug: true,
+    // Vertex AI option:
+    // vertexAI: true, 
+    // project: 'your-gcp-project', 
+    // location: 'us-central1',
+    // serviceAccountKeyFile: '/path/to/service-account.json',
+  }),
+});
+
+await agent.voice.connect();
+
+agent.voice.on('speaker', ({ audio }) => {
+  playAudio(audio);
+});
+
+agent.voice.on('writing', ({ role, text }) => {
+  console.log(`${role}: ${text}`);
+});
+
+await agent.voice.speak('How can I help you today?');
+
+const micStream = getMicrophoneStream();
+await agent.voice.send(micStream);
+```
+
+Note:
+- Live API requires `GOOGLE_API_KEY`. Vertex AI requires project/location and service account credentials.
+- Events: `speaker` (audio stream), `writing` (text), `turnComplete`, `usage`, and `error`.

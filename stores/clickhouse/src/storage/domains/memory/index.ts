@@ -32,6 +32,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     try {
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
       const messages: any[] = [];
       const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
       const include = selectBy?.include || [];
@@ -163,6 +165,86 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId, resourceId: resourceId ?? '' },
+        },
+        error,
+      );
+    }
+  }
+
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format: 'v1';
+  }): Promise<MastraMessageV1[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v2';
+  }): Promise<MastraMessageV2[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    if (messageIds.length === 0) return [];
+
+    try {
+      const result = await this.client.query({
+        query: `
+        SELECT 
+          id, 
+          content, 
+          role, 
+          type,
+          toDateTime64(createdAt, 3) as createdAt,
+          thread_id AS "threadId",
+          "resourceId"
+        FROM "${TABLE_MESSAGES}"
+        WHERE id IN {messageIds:Array(String)}
+        ORDER BY "createdAt" DESC
+        `,
+        query_params: {
+          messageIds,
+        },
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+
+      const rows = await result.json();
+      const messages: any[] = transformRows(rows.data);
+
+      // Parse message content
+      messages.forEach(message => {
+        if (typeof message.content === 'string') {
+          try {
+            message.content = JSON.parse(message.content);
+          } catch {
+            // If parsing fails, leave as string
+          }
+        }
+      });
+
+      const list = new MessageList().add(messages, 'memory');
+      if (format === `v1`) return list.get.all.v1();
+      return list.get.all.v2();
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_GET_MESSAGES_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { messageIds: JSON.stringify(messageIds) },
         },
         error,
       );
@@ -666,12 +748,14 @@ export class MemoryStorageClickhouse extends MemoryStorage {
   async getMessagesPaginated(
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    const { threadId, resourceId, selectBy, format = 'v1' } = args;
+    const page = selectBy?.pagination?.page || 0;
+    const perPageInput = selectBy?.pagination?.perPage;
+    const perPage =
+      perPageInput !== undefined ? perPageInput : resolveMessageLimit({ last: selectBy?.last, defaultLimit: 20 });
+
     try {
-      const { threadId, selectBy, format = 'v1' } = args;
-      const page = selectBy?.pagination?.page || 0;
-      const perPageInput = selectBy?.pagination?.perPage;
-      const perPage =
-        perPageInput !== undefined ? perPageInput : resolveMessageLimit({ last: selectBy?.last, defaultLimit: 20 });
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
       const offset = page * perPage;
       const dateRange = selectBy?.pagination?.dateRange;
       const fromDate = dateRange?.start;
@@ -859,14 +943,21 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         hasMore: offset + perPage < total,
       };
     } catch (error: any) {
-      throw new MastraError(
+      const mastraError = new MastraError(
         {
           id: 'CLICKHOUSE_STORAGE_GET_MESSAGES_PAGINATED_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+            resourceId: resourceId ?? '',
+          },
         },
         error,
       );
+      this.logger?.trackException?.(mastraError);
+      this.logger?.error?.(mastraError.toString());
+      return { messages: [], total: 0, page, perPage: perPageInput || 40, hasMore: false };
     }
   }
 
@@ -982,7 +1073,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                 WHERE id = {var_id_${paramIdx}:String}
               `;
 
-          console.log('Updating message:', id, 'with query:', updateQuery, 'values:', values);
+          console.info('Updating message:', id, 'with query:', updateQuery, 'values:', values);
 
           updatePromises.push(
             this.client.command({
@@ -1059,7 +1150,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             }
 
             if (needsRetry) {
-              console.log('Update not applied correctly, retrying with DELETE + INSERT for message:', id);
+              console.info('Update not applied correctly, retrying with DELETE + INSERT for message:', id);
 
               // Use DELETE + INSERT as fallback
               await this.client.command({

@@ -1,7 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
-import type { WorkflowRunState } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
 
 // Define the structure for workflow snapshot items retrieved from DynamoDB
@@ -34,20 +34,58 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     this.service = service;
   }
 
+  updateWorkflowResults(
+    {
+      // workflowName,
+      // runId,
+      // stepId,
+      // result,
+      // runtimeContext,
+    }: {
+      workflowName: string;
+      runId: string;
+      stepId: string;
+      result: StepResult<any, any, any, any>;
+      runtimeContext: Record<string, any>;
+    },
+  ): Promise<Record<string, StepResult<any, any, any, any>>> {
+    throw new Error('Method not implemented.');
+  }
+  updateWorkflowState(
+    {
+      // workflowName,
+      // runId,
+      // opts,
+    }: {
+      workflowName: string;
+      runId: string;
+      opts: {
+        status: string;
+        result?: StepResult<any, any, any, any>;
+        error?: string;
+        suspendedPaths?: Record<string, number[]>;
+        waitingPaths?: Record<string, number[]>;
+      };
+    },
+  ): Promise<WorkflowRunState | undefined> {
+    throw new Error('Method not implemented.');
+  }
+
   // Workflow operations
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
     this.logger.debug('Persisting workflow snapshot', { workflowName, runId });
 
     try {
-      const resourceId = 'resourceId' in snapshot ? snapshot.resourceId : undefined;
       const now = new Date().toISOString();
       // Prepare data including the 'entity' type
       const data = {
@@ -215,9 +253,6 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     const { runId, workflowName } = args;
     this.logger.debug('Getting workflow run by ID', { runId, workflowName });
 
-    console.log('workflowName', workflowName);
-    console.log('runId', runId);
-
     try {
       // If we have a workflowName, we can do a direct get using the primary key
       if (workflowName) {
@@ -229,8 +264,6 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
             run_id: runId,
           })
           .go();
-
-        console.log('result', result);
 
         if (!result.data) {
           return null;

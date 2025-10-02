@@ -3,9 +3,12 @@ title: "Reference: Summarization | Metrics | Evals | Mastra Docs"
 description: Documentation for the Summarization Metric in Mastra, which evaluates the quality of LLM-generated summaries for content and factual accuracy.
 ---
 
+import { ScorerCallout } from '@/components/scorer-callout'
+
 # SummarizationMetric
 
-,
+<ScorerCallout />
+
 The `SummarizationMetric` evaluates how well an LLM's summary captures the original text's content while maintaining factual accuracy. It combines two aspects: alignment (factual correctness) and coverage (inclusion of key information), using the minimum scores to ensure both qualities are necessary for a good summary.
 
 ## Basic Usage

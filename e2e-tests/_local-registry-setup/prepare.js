@@ -62,14 +62,18 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
       encoding: 'utf8',
     });
 
-    if (gitStatus.length > 0) {
+    if (gitStatus.stdout.length > 0) {
       await execAsync('git add -A', {
         cwd: monorepoDir,
         stdio: ['inherit', 'inherit', 'inherit'],
       });
-      await execAsync('git commit -m "SAVEPOINT"', {
+      await execAsync('git commit -m "SAVEPOINT" --no-verify', {
         cwd: monorepoDir,
         stdio: ['inherit', 'inherit', 'inherit'],
+        env: {
+          ...process.env,
+          HUSKY: '0',
+        },
       });
       shelvedChanges = true;
     }
@@ -90,8 +94,30 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
           parsed.peerDependencies['@mastra/core'] = 'workspace:*';
         }
 
+        // convert all workspace dependencies to *
+        for (const dependency of Object.keys(parsed.dependencies || {})) {
+          if (parsed.dependencies[dependency]?.startsWith('workspace:')) {
+            parsed.dependencies[dependency] = 'workspace:*';
+          }
+        }
+        // convert all workspace devDependencies to *
+        for (const dependency of Object.keys(parsed.devDependencies || {})) {
+          if (parsed.devDependencies[dependency]?.startsWith('workspace:')) {
+            parsed.devDependencies[dependency] = 'workspace:*';
+          }
+        }
+
         writeFileSync(join(monorepoDir, file), JSON.stringify(parsed, null, 2));
       }
+    })();
+
+    // Because it requires a GITHUB_TOKEN
+    console.log('Updating .changeset/config.json to not use @changesets/changelog-github');
+    await (async function updateChangesetConfig() {
+      const content = readFileSync(join(monorepoDir, '.changeset/config.json'), 'utf8');
+      const parsed = JSON.parse(content);
+      parsed.changelog = '@changesets/cli/changelog';
+      writeFileSync(join(monorepoDir, '.changeset/config.json'), JSON.stringify(parsed, null, 2));
     })();
 
     console.log('Running pnpm changeset pre exit');

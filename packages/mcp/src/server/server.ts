@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import type * as http from 'node:http';
-import type { InternalCoreTool } from '@mastra/core';
-import { createTool, makeCoreTool } from '@mastra/core';
 import type { ToolsInput, Agent } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { MCPServerBase } from '@mastra/core/mcp';
@@ -15,6 +13,9 @@ import type {
   MCPToolType,
 } from '@mastra/core/mcp';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { createTool } from '@mastra/core/tools';
+import type { InternalCoreTool } from '@mastra/core/tools';
+import { makeCoreTool } from '@mastra/core/utils';
 import type { Workflow } from '@mastra/core/workflows';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
@@ -31,6 +32,7 @@ import {
   UnsubscribeRequestSchema,
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
+  SetLevelRequestSchema,
   PromptSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type {
@@ -42,6 +44,7 @@ import type {
   CallToolResult,
   ElicitResult,
   ElicitRequest,
+  LoggingLevel,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
@@ -65,6 +68,7 @@ export class MCPServer extends MCPServerBase {
   private definedPrompts?: Prompt[];
   private promptOptions?: MCPServerPrompts;
   private subscriptions: Set<string> = new Set();
+  private currentLoggingLevel: LoggingLevel | undefined;
   public readonly resources: ServerResourceActions;
   public readonly prompts: ServerPromptActions;
   public readonly elicitation: ElicitationActions;
@@ -248,9 +252,25 @@ export class MCPServer extends MCPServerBase {
           this.logger.warn(`CallTool: Invalid tool arguments for '${request.params.name}'`, {
             errors: validation.error,
           });
+
+          // Format validation errors for agent understanding
+          let errorMessages = 'Validation failed';
+          if ('errors' in validation.error && Array.isArray(validation.error.errors)) {
+            errorMessages = validation.error.errors
+              .map((e: any) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+              .join('\n');
+          } else if (validation.error instanceof Error) {
+            errorMessages = validation.error.message;
+          }
+
           return {
-            content: [{ type: 'text', text: `Invalid tool arguments: ${JSON.stringify(validation.error)}` }],
-            isError: true,
+            content: [
+              {
+                type: 'text',
+                text: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(request.params.arguments, null, 2)}`,
+              },
+            ],
+            isError: true, // Set to true so the LLM sees the error and can self-correct
           };
         }
         if (!tool.execute) {
@@ -268,7 +288,7 @@ export class MCPServer extends MCPServerBase {
           },
         };
 
-        const result = await tool.execute(validation?.value, {
+        const result = await tool.execute(validation?.value ?? request.params.arguments ?? {}, {
           messages: [],
           toolCallId: '',
           elicitation: sessionElicitation,
@@ -340,6 +360,13 @@ export class MCPServer extends MCPServerBase {
           isError: true,
         };
       }
+    });
+
+    // Set logging level handler
+    serverInstance.setRequestHandler(SetLevelRequestSchema, async request => {
+      this.currentLoggingLevel = request.params.level;
+      this.logger.debug(`Logging level set to: ${request.params.level}`);
+      return {};
     });
 
     // Register resource handlers if resources are configured
@@ -592,12 +619,12 @@ export class MCPServer extends MCPServerBase {
         inputSchema: z.object({
           message: z.string().describe('The question or input for the agent.'),
         }),
-        execute: async ({ context, runtimeContext }) => {
+        execute: async ({ context, runtimeContext, tracingContext }) => {
           this.logger.debug(
             `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${context.message}"`,
           );
           try {
-            const response = await agent.generate(context.message, { runtimeContext });
+            const response = await agent.generate(context.message, { runtimeContext, tracingContext });
             return response;
           } catch (error) {
             this.logger.error(`Error executing agent tool '${agentToolName}' for agent '${agent.name}':`, error);
@@ -611,6 +638,7 @@ export class MCPServer extends MCPServerBase {
         logger: this.logger,
         mastra: this.mastra,
         runtimeContext: new RuntimeContext(),
+        tracingContext: {},
         description: agentToolDefinition.description,
       };
       const coreTool = makeCoreTool(agentToolDefinition, options) as InternalCoreTool;
@@ -664,15 +692,15 @@ export class MCPServer extends MCPServerBase {
         id: workflowToolName,
         description: `Run workflow '${workflowKey}'. Workflow description: ${workflowDescription}`,
         inputSchema: workflow.inputSchema,
-        execute: async ({ context, runtimeContext }) => {
+        execute: async ({ context, runtimeContext, tracingContext }) => {
           this.logger.debug(
             `Executing workflow tool '${workflowToolName}' for workflow '${workflow.id}' with input:`,
             context,
           );
           try {
-            const run = workflow.createRun({ runId: runtimeContext?.get('runId') });
+            const run = await workflow.createRunAsync({ runId: runtimeContext?.get('runId') });
 
-            const response = await run.start({ inputData: context, runtimeContext });
+            const response = await run.start({ inputData: context, runtimeContext, tracingContext });
 
             return response;
           } catch (error) {
@@ -690,6 +718,7 @@ export class MCPServer extends MCPServerBase {
         logger: this.logger,
         mastra: this.mastra,
         runtimeContext: new RuntimeContext(),
+        tracingContext: {},
         description: workflowToolDefinition.description,
       };
 
@@ -738,6 +767,7 @@ export class MCPServer extends MCPServerBase {
       const options = {
         name: toolName,
         runtimeContext: new RuntimeContext(),
+        tracingContext: {},
         mastra: this.mastra,
         logger: this.logger,
         description: toolInstance?.description,
@@ -1181,10 +1211,10 @@ export class MCPServer extends MCPServerBase {
       while (true) {
         // This will keep the connection alive
         // You can also await for a promise that never resolves
+        await stream.sleep(60_000);
         const sessionIds = Array.from(this.sseHonoTransports.keys() || []);
         this.logger.debug('Active Hono SSE sessions:', { sessionIds });
         await stream.write(':keep-alive\n\n');
-        await stream.sleep(60_000);
       }
     } catch (e) {
       const mastraError = new MastraError(
@@ -1356,12 +1386,17 @@ export class MCPServer extends MCPServerBase {
         const validation = tool.parameters.safeParse(args ?? {});
         if (!validation.success) {
           const errorMessages = validation.error.errors
-            .map((e: z.ZodIssue) => `${e.path.join('.')}: ${e.message}`)
-            .join(', ');
+            .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+            .join('\n');
           this.logger.warn(`ExecuteTool: Invalid tool arguments for '${toolId}': ${errorMessages}`, {
             errors: validation.error.format(),
           });
-          throw new z.ZodError(validation.error.issues);
+          // Return validation error as a result instead of throwing
+          return {
+            error: true,
+            message: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(args, null, 2)}`,
+            validationErrors: validation.error.format(),
+          };
         }
         validatedArgs = validation.data;
       } else {

@@ -36,12 +36,6 @@ mastra build [options]
       isOptional: true,
     },
     {
-      name: "--env",
-      type: "string", 
-      description: "Path to custom environment file",
-      isOptional: true,
-    },
-    {
       name: "--help",
       type: "boolean",
       description: "display help for command",
@@ -85,6 +79,7 @@ any workflows or tools that call the providers.
    - Tree shaking for optimal bundle size
    - Node.js environment targeting
    - Source map generation for debugging
+   - Excluding test files (named `.test.`, `.spec.` or inside `__tests__` directory)
 
 ## Example
 

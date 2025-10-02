@@ -1,5 +1,5 @@
 import { rollup } from 'rollup';
-import esbuild from 'rollup-plugin-esbuild';
+import { esbuild } from './plugins/esbuild';
 import commonjs from '@rollup/plugin-commonjs';
 
 export function getCustomInstrumentationBundler(
@@ -16,11 +16,7 @@ export function getCustomInstrumentationBundler(
     treeshake: false,
     plugins: [
       // transpile typescript to something we understand
-      esbuild({
-        target: 'node20',
-        platform: 'node',
-        minify: false,
-      }),
+      esbuild(),
       commonjs({
         extensions: ['.js', '.ts'],
         strictRequires: 'strict',

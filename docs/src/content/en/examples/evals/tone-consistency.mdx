@@ -4,8 +4,11 @@ description: Example of using the Tone Consistency metric to evaluate emotional 
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
 
 # Tone Consistency Evaluation
+
+<ScorerCallout />
 
 Use `ToneConsistencyMetric` to evaluate emotional tone patterns and sentiment consistency in text. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing sentiment scores and their difference.
 
@@ -155,6 +158,7 @@ An explanation for the score, with details including:
 - Degree of sentiment difference or variance.
 
 <GithubLink
+  outdated={true}
   marginTop='mt-16'
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/tone-consistency"
 />

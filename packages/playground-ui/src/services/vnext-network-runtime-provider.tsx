@@ -10,7 +10,7 @@ import {
 import { useState, ReactNode, useEffect, useRef, useContext } from 'react';
 
 import { AssistantMessage, ChatProps, Message } from '@/types';
-import { useMastraClient } from '@/contexts/mastra-client-context';
+import { useMastraClient } from '@mastra/react';
 import { useVNextNetworkChat } from '@/services/vnext-network-chat-provider';
 import { useMessages } from './vnext-message-provider';
 import { formatJSON } from '@/lib/formatting';
@@ -190,9 +190,9 @@ export function VNextMastraNetworkRuntimeProvider({
             userMessage = message.content;
             setMessages(currentConversation => {
               if (currentConversation.some(m => m.id === message.id)) {
-                return currentConversation;
+                return currentConversation as ThreadMessageLike[];
               }
-              return [...currentConversation, message];
+              return [...currentConversation, message] as ThreadMessageLike[];
             });
           }
           if (role === 'assistant') {

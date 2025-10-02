@@ -1,8 +1,7 @@
-import { generateEmptyFromSchema } from '@mastra/core';
-import type { StorageGetMessagesArg } from '@mastra/core';
 import type { RuntimeContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
-import type { ThreadSortOptions } from '@mastra/core/storage';
+import type { StorageGetMessagesArg, ThreadSortOptions } from '@mastra/core/storage';
+import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 
@@ -115,6 +114,42 @@ export async function getThreadsHandler({
     return threads;
   } catch (error) {
     return handleError(error, 'Error getting threads');
+  }
+}
+
+export async function getThreadsPaginatedHandler({
+  mastra,
+  agentId,
+  resourceId,
+  networkId,
+  runtimeContext,
+  page,
+  perPage,
+  orderBy,
+  sortDirection,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'networkId' | 'runtimeContext'> & {
+  page: number;
+  perPage: number;
+} & ThreadSortOptions) {
+  try {
+    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+
+    if (!memory) {
+      throw new HTTPException(400, { message: 'Memory is not initialized' });
+    }
+
+    validateBody({ resourceId });
+
+    const result = await memory.getThreadsByResourceIdPaginated({
+      resourceId: resourceId!,
+      page,
+      perPage,
+      orderBy,
+      sortDirection,
+    });
+    return result;
+  } catch (error) {
+    return handleError(error, 'Error getting paginated threads');
   }
 }
 

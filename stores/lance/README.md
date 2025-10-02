@@ -124,7 +124,7 @@ const messages = await storage.getMessages({
 ### Creating Threads
 
 ```typescript
-import type { StorageThreadType } from '@mastra/core';
+import type { StorageThreadType } from '@mastra/core/storage';
 
 // Create a new thread
 const thread: StorageThreadType = {
@@ -142,7 +142,7 @@ const savedThread = await storage.saveThread({ thread });
 ### Working with Messages
 
 ```typescript
-import type { MessageType } from '@mastra/core';
+import type { MessageType } from '@mastra/core/memory';
 
 // Create messages
 const messages: MessageType[] = [
@@ -193,7 +193,7 @@ const retrievedMessages = await storage.getMessages({
 Mastra's workflow system uses LanceDB to persist workflow state for continuity across runs:
 
 ```typescript
-import type { WorkflowRunState } from '@mastra/core';
+import type { WorkflowRunState } from '@mastra/core/storage';
 
 // Persist a workflow snapshot
 await storage.persistWorkflowSnapshot({

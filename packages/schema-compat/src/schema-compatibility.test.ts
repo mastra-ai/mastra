@@ -1,11 +1,11 @@
-import type { LanguageModelV1 } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { z } from 'zod';
-import { isArr, isObj, isOptional, isString, isUnion, SchemaCompatLayer } from './schema-compatibility';
+import { z } from 'zod/v3';
+import { SchemaCompatLayer } from './schema-compatibility';
+import type { ModelInformation } from './types';
 
 class MockSchemaCompatibility extends SchemaCompatLayer {
-  constructor(model: LanguageModelV1) {
+  constructor(model: ModelInformation) {
     super(model);
   }
 
@@ -18,16 +18,16 @@ class MockSchemaCompatibility extends SchemaCompatLayer {
   }
 
   processZodType(value: z.ZodTypeAny): z.ZodTypeAny {
-    if (isObj(value)) {
+    if (this.isObj(value)) {
       return this.defaultZodObjectHandler(value);
-    } else if (isArr(value)) {
+    } else if (this.isArr(value)) {
       // For these tests, we will handle all checks by converting them to descriptions.
       return this.defaultZodArrayHandler(value, ['min', 'max', 'length']);
-    } else if (isOptional(value)) {
+    } else if (this.isOptional(value)) {
       return this.defaultZodOptionalHandler(value);
-    } else if (isUnion(value)) {
+    } else if (this.isUnion(value)) {
       return this.defaultZodUnionHandler(value);
-    } else if (isString(value)) {
+    } else if (this.isString(value)) {
       // Add a marker to confirm it was processed
       return z.string().describe(`${value.description || 'string'}:processed`);
     } else {

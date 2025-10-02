@@ -7,6 +7,7 @@ export const TABLE_THREADS = 'mastra_threads';
 export const TABLE_TRACES = 'mastra_traces';
 export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
+export const TABLE_AI_SPANS = 'mastra_ai_spans';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -15,100 +16,66 @@ export type TABLE_NAMES =
   | typeof TABLE_THREADS
   | typeof TABLE_TRACES
   | typeof TABLE_RESOURCES
-  | typeof TABLE_SCORERS;
+  | typeof TABLE_SCORERS
+  | typeof TABLE_AI_SPANS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
-  scorerId: {
-    type: 'text',
-  },
-  traceId: {
-    type: 'text',
-    nullable: true,
-  },
-  runId: {
-    type: 'text',
-  },
-  scorer: {
-    type: 'jsonb',
-  },
-  extractStepResult: {
-    type: 'jsonb',
-    nullable: true,
-  },
-  analyzeStepResult: {
-    type: 'jsonb',
-    nullable: true,
-  },
-  score: {
-    type: 'float',
-  },
-  reason: {
-    type: 'text',
-    nullable: true,
-  },
-  metadata: {
-    type: 'jsonb',
-    nullable: true,
-  },
-  extractPrompt: {
-    type: 'text',
-    nullable: true,
-  },
-  analyzePrompt: {
-    type: 'text',
-    nullable: true,
-  },
-  reasonPrompt: {
-    type: 'text',
-    nullable: true,
-  },
-  input: {
-    type: 'jsonb', // MESSAGE INPUT
-  },
-  output: {
-    type: 'jsonb', // MESSAGE OUTPUT
-  },
-  additionalContext: {
-    type: 'jsonb', // DATA FROM THE CONTEXT PARAM ON AN AGENT
-    nullable: true,
-  },
-  runtimeContext: {
-    type: 'jsonb', // THE EVALUATE RUNTIME CONTEXT FOR THE RUN
-    nullable: true,
-  },
+  scorerId: { type: 'text' },
+  traceId: { type: 'text', nullable: true },
+  spanId: { type: 'text', nullable: true },
+  runId: { type: 'text' },
+  scorer: { type: 'jsonb' },
+  preprocessStepResult: { type: 'jsonb', nullable: true },
+  extractStepResult: { type: 'jsonb', nullable: true },
+  analyzeStepResult: { type: 'jsonb', nullable: true },
+  score: { type: 'float' },
+  reason: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  preprocessPrompt: { type: 'text', nullable: true },
+  extractPrompt: { type: 'text', nullable: true },
+  generateScorePrompt: { type: 'text', nullable: true },
+  generateReasonPrompt: { type: 'text', nullable: true },
+  analyzePrompt: { type: 'text', nullable: true },
+
+  // Deprecated
+  reasonPrompt: { type: 'text', nullable: true },
+  input: { type: 'jsonb' },
+  output: { type: 'jsonb' }, // MESSAGE OUTPUT
+  additionalContext: { type: 'jsonb', nullable: true }, // DATA FROM THE CONTEXT PARAM ON AN AGENT
+  runtimeContext: { type: 'jsonb', nullable: true }, // THE EVALUATE RUNTIME CONTEXT FOR THE RUN
   /**
    * Things you can evaluate
    */
-  entityType: {
-    type: 'text', // WORKFLOW, AGENT, TOOL, STEP, NETWORK
-    nullable: true,
-  },
-  entity: {
-    type: 'jsonb', // MINIMAL JSON DATA ABOUT WORKFLOW, AGENT, TOOL, STEP, NETWORK
-    nullable: true,
-  },
-  entityId: {
-    type: 'text',
-    nullable: true,
-  },
-  source: {
-    type: 'text',
-  },
-  resourceId: {
-    type: 'text',
-    nullable: true,
-  },
-  threadId: {
-    type: 'text',
-    nullable: true,
-  },
-  createdAt: {
-    type: 'timestamp',
-  },
-  updatedAt: {
-    type: 'timestamp',
-  },
+  entityType: { type: 'text', nullable: true }, // WORKFLOW, AGENT, TOOL, STEP, NETWORK
+  entity: { type: 'jsonb', nullable: true }, // MINIMAL JSON DATA ABOUT WORKFLOW, AGENT, TOOL, STEP, NETWORK
+  entityId: { type: 'text', nullable: true },
+  source: { type: 'text' },
+  resourceId: { type: 'text', nullable: true },
+  threadId: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp' },
+  updatedAt: { type: 'timestamp' },
+};
+
+export const AI_SPAN_SCHEMA: Record<string, StorageColumn> = {
+  // Composite primary key of traceId and spanId
+  traceId: { type: 'text', nullable: false },
+  spanId: { type: 'text', nullable: false },
+  parentSpanId: { type: 'text', nullable: true },
+  name: { type: 'text', nullable: false },
+  scope: { type: 'jsonb', nullable: true }, // Mastra package info {"core-version": "0.1.0"}
+  spanType: { type: 'text', nullable: false }, // WORKFLOW_RUN, WORKFLOW_STEP, AGENT_RUN, AGENT_STEP, TOOL_RUN, TOOL_STEP, etc.
+  attributes: { type: 'jsonb', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  links: { type: 'jsonb', nullable: true },
+  input: { type: 'jsonb', nullable: true },
+  output: { type: 'jsonb', nullable: true },
+  error: { type: 'jsonb', nullable: true },
+  startedAt: { type: 'timestamp', nullable: false }, // When the span started
+  endedAt: { type: 'timestamp', nullable: true }, // When the span ended
+  createdAt: { type: 'timestamp', nullable: false }, // The time the database record was created
+  updatedAt: { type: 'timestamp', nullable: true }, // The time the database record was last updated
+  isEvent: { type: 'boolean', nullable: false },
 };
 
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
@@ -185,6 +152,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     createdAt: { type: 'timestamp', nullable: false },
     resourceId: { type: 'text', nullable: true },
   },
+  [TABLE_AI_SPANS]: AI_SPAN_SCHEMA,
   [TABLE_TRACES]: {
     id: { type: 'text', nullable: false, primaryKey: true },
     parentSpanId: { type: 'text', nullable: true },

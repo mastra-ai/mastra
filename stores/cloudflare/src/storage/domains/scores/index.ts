@@ -1,23 +1,24 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
-import type { ScoreRowData } from '@mastra/core/scores';
-import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
+import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
 import type { StoreOperationsCloudflare } from '../operations';
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  let input = undefined;
+  const deserialized: Record<string, any> = { ...row };
 
-  if (row.input) {
-    try {
-      input = JSON.parse(row.input);
-    } catch {
-      input = row.input;
-    }
-  }
-  return {
-    ...row,
-    input,
-  } as ScoreRowData;
+  deserialized.input = safelyParseJSON(row.input);
+  deserialized.output = safelyParseJSON(row.output);
+  deserialized.scorer = safelyParseJSON(row.scorer);
+  deserialized.preprocessStepResult = safelyParseJSON(row.preprocessStepResult);
+  deserialized.analyzeStepResult = safelyParseJSON(row.analyzeStepResult);
+  deserialized.metadata = safelyParseJSON(row.metadata);
+  deserialized.additionalContext = safelyParseJSON(row.additionalContext);
+  deserialized.runtimeContext = safelyParseJSON(row.runtimeContext);
+  deserialized.entity = safelyParseJSON(row.entity);
+
+  return deserialized as ScoreRowData;
 }
 
 export class ScoresStorageCloudflare extends ScoresStorage {
@@ -52,12 +53,27 @@ export class ScoresStorageCloudflare extends ScoresStorage {
   }
 
   async saveScore(score: Omit<ScoreRowData, 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    let parsedScore: ValidatedSaveScorePayload;
     try {
-      const { input, ...rest } = score;
+      parsedScore = saveScorePayloadSchema.parse(score);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_SAVE_SCORE_FAILED_INVALID_SCORE_PAYLOAD',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { scoreId: score.id },
+        },
+        error,
+      );
+    }
+
+    try {
+      const id = crypto.randomUUID();
 
       // Serialize all object values to JSON strings
       const serializedRecord: Record<string, any> = {};
-      for (const [key, value] of Object.entries(rest)) {
+      for (const [key, value] of Object.entries(parsedScore)) {
         if (value !== null && value !== undefined) {
           if (typeof value === 'object') {
             serializedRecord[key] = JSON.stringify(value);
@@ -69,13 +85,13 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         }
       }
 
-      serializedRecord.input = JSON.stringify(input);
+      serializedRecord.id = id;
       serializedRecord.createdAt = new Date().toISOString();
       serializedRecord.updatedAt = new Date().toISOString();
 
       await this.operations.putKV({
         tableName: TABLE_SCORERS,
-        key: score.id,
+        key: id,
         value: serializedRecord,
       });
 
@@ -99,9 +115,15 @@ export class ScoresStorageCloudflare extends ScoresStorage {
 
   async getScoresByScorerId({
     scorerId,
+    entityId,
+    entityType,
+    source,
     pagination,
   }: {
     scorerId: string;
+    entityId?: string;
+    entityType?: string;
+    source?: ScoringSource;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
@@ -110,6 +132,17 @@ export class ScoresStorageCloudflare extends ScoresStorage {
 
       for (const { name: key } of keys) {
         const score = await this.operations.getKV(TABLE_SCORERS, key);
+
+        if (entityId && score.entityId !== entityId) {
+          continue;
+        }
+        if (entityType && score.entityType !== entityType) {
+          continue;
+        }
+        if (source && score.source !== source) {
+          continue;
+        }
+
         if (score && score.scorerId === scorerId) {
           scores.push(transformScoreRow(score));
         }
@@ -261,6 +294,60 @@ export class ScoresStorageCloudflare extends ScoresStorage {
       this.logger.trackException(mastraError);
       this.logger.error(mastraError.toString());
       return { pagination: { total: 0, page: 0, perPage: 100, hasMore: false }, scores: [] };
+    }
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    try {
+      const keys = await this.operations.listKV(TABLE_SCORERS);
+      const scores: ScoreRowData[] = [];
+
+      for (const { name: key } of keys) {
+        const score = await this.operations.getKV(TABLE_SCORERS, key);
+        if (score && score.traceId === traceId && score.spanId === spanId) {
+          scores.push(transformScoreRow(score));
+        }
+      }
+
+      // Sort by createdAt desc
+      scores.sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateB - dateA;
+      });
+
+      const total = scores.length;
+      const start = pagination.page * pagination.perPage;
+      const end = start + pagination.perPage;
+      const pagedScores = scores.slice(start, end);
+
+      return {
+        pagination: {
+          total,
+          page: pagination.page,
+          perPage: pagination.perPage,
+          hasMore: end < total,
+        },
+        scores: pagedScores,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_SCORES_GET_SCORES_BY_SPAN_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to get scores by span: traceId=${traceId}, spanId=${spanId}`,
+        },
+        error,
+      );
     }
   }
 }

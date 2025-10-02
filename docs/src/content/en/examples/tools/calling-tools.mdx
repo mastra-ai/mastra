@@ -1,0 +1,83 @@
+---
+title: "Calling Tools | Tools | Mastra Docs"
+description: Example for how to tools agents.
+---
+
+# Calling Tools
+
+There are multiple ways to interact with tools created using Mastra. Below you will find examples of how to call tools using workflow steps, agents, and the command line for quick local testing.
+
+## From a workflow step
+
+Import the tool and call `execute()` with the required `context` and `runtimeContext` parameters. The `runtimeContext` is available as an argument to the step's `execute` function.
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+import { testTool } from "../tools/test-tool";
+
+const step1 = createStep({
+  // ...
+  execute: async ({ inputData, runtimeContext }) => {
+    const { value } = inputData
+
+    const response = await testTool.execute({
+      context: {
+        value
+      },
+      runtimeContext
+    })
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .then(step1)
+  .commit();
+```
+
+## From an agent
+
+Tools are registered with an agent during configuration. The agent can then call these tools automatically based on user requests, or you can access them directly through the agent's tools property. Tools are executed with the required context and runtime context.
+
+```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+import { testTool } from "../tools/test-tool";
+
+export const testAgent = new Agent({
+  // ...
+  tools: {
+    testTool,
+  },
+});
+```
+
+## From the command line
+
+You can create a simple script to test your tool locally. Import the tool directly and create a runtime context. Call `execute()` with the required `context` and `runtimeContext` for testing the tools functionality.
+
+```typescript filename="src/test-tool.ts" showLineNumbers copy
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import { testTool } from "../src/mastra/tools/test-tool";
+
+const runtimeContext = new RuntimeContext();
+
+const result = await testTool.execute({
+  context: {
+    value: 'foo'
+  },
+  runtimeContext
+});
+
+console.log(result);
+```
+
+Run this script from your command line using:
+
+```bash
+npx tsx src/test-tool.ts
+```
