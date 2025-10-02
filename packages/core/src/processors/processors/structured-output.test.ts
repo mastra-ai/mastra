@@ -550,7 +550,7 @@ describe('Structured Output with Tool Execution', () => {
     });
 
     // Stream the response
-    const stream = await agent.streamVNext('Calculate 5 + 3 and return structured output', {
+    const stream = await agent.stream('Calculate 5 + 3 and return structured output', {
       format: 'aisdk',
       maxSteps: 5,
       structuredOutput: {
@@ -658,7 +658,7 @@ describe('Structured Output with Tool Execution', () => {
       },
     });
 
-    const stream = await agent.streamVNext('What is the weather in Toronto?', {
+    const stream = await agent.stream('What is the weather in Toronto?', {
       format: 'aisdk',
       maxSteps: 10,
       structuredOutput: {
