@@ -11,8 +11,6 @@ import type {
   AITracingEvent,
   AnyExportedAISpan,
   LLMGenerationAttributes,
-  AISpan,
-  ExportedAISpan,
 } from '@mastra/core/ai-tracing';
 import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
 import { ConsoleLogger } from '@mastra/core/logger';
@@ -102,28 +100,42 @@ export class LangfuseExporter implements AITracingExporter {
     }
   }
 
-  async addScore({
+  async addScoreToTrace({
     traceId,
-    scorer,
-    spanMetadata,
+    spanId,
+    score,
+    reason,
+    scorerName,
     metadata,
   }: {
     traceId: string;
-    scorer: string;
+    spanId?: string;
+    score: number;
+    reason?: string;
+    scorerName: string;
     metadata: Record<string, any>;
-    spanMetadata: Record<string, any>;
   }): Promise<void> {
     if (!this.client) return;
-    await this.client.score({
-      id: `${traceId}-${scorer}`,
-      traceId,
-      observationId: metadata.spanId,
-      name: scorer,
-      value: metadata.score,
-      ...(spanMetadata?.sessionId ? { sessionId: spanMetadata.sessionId } : {}),
-      metadata: { reason: metadata.reason },
-      dataType: 'NUMERIC',
-    });
+
+    try {
+      await this.client.score({
+        id: `${traceId}-${scorerName}`,
+        traceId,
+        observationId: spanId,
+        name: scorerName,
+        value: score,
+        ...(metadata?.sessionId ? { sessionId: metadata.sessionId } : {}),
+        metadata: { reason },
+        dataType: 'NUMERIC',
+      });
+    } catch (error) {
+      this.logger.error('Langfuse exporter: Error adding score to trace', {
+        error,
+        traceId,
+        spanId,
+        scorerName,
+      });
+    }
   }
 
   private async handleSpanStarted(span: AnyExportedAISpan): Promise<void> {
