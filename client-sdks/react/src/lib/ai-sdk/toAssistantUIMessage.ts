@@ -9,6 +9,7 @@ import {
   ToolCallMessagePart,
 } from '@assistant-ui/react';
 import { MastraUIMessage } from './toUIMessage';
+import { ReadonlyJSONObject } from '@mastra/core/stream';
 
 /**
  * Extended type for MastraUIMessage that may include additional properties
@@ -88,11 +89,12 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
     // Handle dynamic-tool parts (tool calls)
     if (part.type === 'dynamic-tool') {
       // Build the tool call matching the inline type from ThreadMessageLike
-      const baseToolCall = {
+      const baseToolCall: ContentPart = {
         type: 'tool-call' as const,
         toolCallId: part.toolCallId,
         toolName: part.toolName,
         argsText: JSON.stringify(part.input),
+        args: part.input as ReadonlyJSONObject,
       };
 
       // Only add result and isError if the tool has completed
@@ -109,11 +111,12 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
     if (part.type.startsWith('tool-')) {
       const toolName = 'toolName' in part && typeof part.toolName === 'string' ? part.toolName : part.type.substring(5);
 
-      const baseToolCall = {
+      const baseToolCall: ContentPart = {
         type: 'tool-call' as const,
         toolCallId: 'toolCallId' in part && typeof part.toolCallId === 'string' ? part.toolCallId : '',
         toolName,
         argsText: 'input' in part ? JSON.stringify(part.input) : '{}',
+        args: 'input' in part ? part.input : {},
       };
 
       // Add result if available
