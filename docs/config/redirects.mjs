@@ -933,4 +933,9 @@ export const redirectList = [
     destination: "/:locale/reference/observability/otel-tracing/providers",
     permanent: true,
   },
+  {
+    source: "/:locale/docs/agents/input-processors",
+    destination: "/:locale/docs/agents/sanitizing-input",
+    permanent: true,
+  },
 ];
