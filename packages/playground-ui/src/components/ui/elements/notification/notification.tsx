@@ -4,7 +4,7 @@ import { Button } from '../buttons/button';
 import { XIcon } from 'lucide-react';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
-type MessageProps = {
+type Notification = {
   children: React.ReactNode;
   className?: string;
   isVisible?: boolean;
@@ -12,7 +12,7 @@ type MessageProps = {
   dismissTime?: number;
 };
 
-export function Message({ children, className, isVisible, autoDismiss = true, dismissTime = 5000 }: MessageProps) {
+export function Notification({ children, className, isVisible, autoDismiss = true, dismissTime = 5000 }: Notification) {
   const [localIsVisible, setLocalIsVisible] = useState(isVisible);
 
   useEffect(() => {

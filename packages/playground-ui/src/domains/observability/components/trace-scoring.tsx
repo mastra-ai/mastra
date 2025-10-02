@@ -3,8 +3,8 @@ import { Button } from '@/components/ui/elements/buttons';
 import { InfoIcon } from 'lucide-react';
 import { useTriggerScorer } from '@/domains/scores/hooks/use-trigger-scorer';
 import { AISpanRecord } from '@mastra/core';
-import { Message, SelectField, TextAndIcon } from '@/components/ui/elements';
-import { useState } from 'react';
+import { Notification, SelectField, TextAndIcon } from '@/components/ui/elements';
+import { useEffect, useState } from 'react';
 
 export interface TraceScoringProps {
   trace: AISpanRecord;
@@ -17,7 +17,13 @@ export const TraceScoring = ({ trace, spanId, onScorerTriggered, entityType }: T
   const { data: scorers = {}, isLoading } = useScorers();
   const [selectedScorer, setSelectedScorer] = useState<string | null>(null);
   const { mutate: triggerScorer, isPending, isSuccess } = useTriggerScorer(onScorerTriggered);
-  const [showMsg, setShowMsg] = useState(false);
+  const [notificationIsVisible, setNotificationIsVisible] = useState(false);
+
+  useEffect(() => {
+    if (isSuccess) {
+      setNotificationIsVisible(true);
+    }
+  }, [isSuccess]);
 
   let scorerList = Object.entries(scorers)
     .map(([key, scorer]) => ({
@@ -45,7 +51,7 @@ export const TraceScoring = ({ trace, spanId, onScorerTriggered, entityType }: T
 
   const handleScorerChange = (val: string) => {
     setSelectedScorer(val);
-    setShowMsg(false);
+    setNotificationIsVisible(false);
   };
 
   const selectedScorerDescription = scorerList.find(s => s.name === selectedScorer)?.description || '';
@@ -75,10 +81,10 @@ export const TraceScoring = ({ trace, spanId, onScorerTriggered, entityType }: T
         </Button>
       </div>
 
-      <Message isVisible={showMsg} className="mt-[1rem]">
+      <Notification isVisible={notificationIsVisible} className="mt-[1rem]">
         <InfoIcon /> Scorer triggered! When finished successfully, it will appear in the list below. It could take a
         moment.
-      </Message>
+      </Notification>
     </div>
   );
 };

@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/elements/buttons';
 import { InfoIcon } from 'lucide-react';
 import { useTriggerScorer } from '../hooks/use-trigger-scorer';
 import { AISpanRecord } from '@mastra/core';
-import { Message, SelectField, TextAndIcon } from '@/components/ui/elements';
+import { Notification, SelectField, TextAndIcon } from '@/components/ui/elements';
 import { useState } from 'react';
 
 export interface ScorersDropdownProps {
@@ -73,10 +73,10 @@ export const ScorersDropdown = ({ trace, spanId, onScorerTriggered, entityType }
         </Button>
       </div>
 
-      <Message isVisible={isSuccess} className="mt-[1rem]">
+      <Notification isVisible={isSuccess} className="mt-[1rem]">
         <InfoIcon /> Scorer triggered! When finished successfully, it will appear in the list below. It could take a
         moment.
-      </Message>
+      </Notification>
     </div>
   );
 };
