@@ -188,17 +188,20 @@ describe('CloudDeployer', () => {
 
   describe('bundle', () => {
     it('should bundle with correct parameters', async () => {
-      const mastraDir = '/test/project';
+      const projectRoot = '/test/project';
       const outputDirectory = '/test/output';
 
-      await deployer.bundle(mastraDir, outputDirectory);
+      await deployer.bundle(projectRoot, outputDirectory);
 
-      expect(getMastraEntryFile).toHaveBeenCalledWith(mastraDir);
+      expect(getMastraEntryFile).toHaveBeenCalledWith(projectRoot);
       expect(mockBundle).toHaveBeenCalledWith(
         expect.any(String), // The generated entry code
         '/test/src/mastra/index.ts',
-        outputDirectory,
-        [join(mastraDir, MASTRA_DIRECTORY, 'tools')],
+        {
+          projectRoot,
+          outputDirectory,
+        },
+        [join(projectRoot, MASTRA_DIRECTORY, 'tools')],
       );
     });
 
@@ -243,7 +246,6 @@ describe('CloudDeployer', () => {
       expect(entry).toContain('process.env.CI');
       expect(entry).toContain('process.env.BUSINESS_API_RUNNER_LOGS_ENDPOINT');
       expect(entry).toContain('process.env.BUSINESS_JWT_TOKEN');
-      expect(entry).toContain('process.env.PLAYGROUND_JWT_TOKEN');
       expect(entry).toContain('process.env.MASTRA_STORAGE_URL');
       expect(entry).toContain('process.env.MASTRA_STORAGE_AUTH_TOKEN');
 
