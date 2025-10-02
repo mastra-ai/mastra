@@ -1297,7 +1297,6 @@ export class Agent extends BaseResource {
 
     return streamResponse;
   }
-
   async stream<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
     options?: Omit<StreamParams<OUTPUT>, 'messages'>,
@@ -1620,5 +1619,64 @@ export class Agent extends BaseResource {
       method: 'POST',
       body: params,
     });
+  }
+
+  /**
+   * @deprecated generateVNext has been renamed to generate. Please use generate instead.
+   */
+  async generateVNext<OUTPUT extends OutputSchema = undefined>(
+    messages: MessageListInput,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
+  async generateVNext<OUTPUT extends OutputSchema = undefined>(
+    params: StreamParams<OUTPUT>,
+  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
+  async generateVNext<OUTPUT extends OutputSchema = undefined>(
+    _messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
+    _options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
+    throw new Error('generateVNext has been renamed to generate. Please use generate instead.');
+  }
+
+  /**
+   * @deprecated streamVNext has been renamed to stream. Please use stream instead.
+   */
+  async streamVNext<OUTPUT extends OutputSchema = undefined>(
+    messages: MessageListInput,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  >;
+  // Backward compatibility overload
+  async streamVNext<OUTPUT extends OutputSchema = undefined>(
+    params: StreamParams<OUTPUT>,
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  >;
+  async streamVNext<OUTPUT extends OutputSchema = undefined>(
+    _messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
+    _options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    throw new Error('streamVNext has been renamed to stream. Please use stream instead.');
   }
 }

@@ -3285,6 +3285,25 @@ export class Agent<
     });
   }
 
+  /**
+   * @deprecated generateVNext has been renamed to generate. Please use generate instead.
+   */
+  async generateVNext<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' = 'mastra'>(
+    _messages: MessageListInput,
+    _options?: AgentExecutionOptions<OUTPUT, FORMAT>,
+  ): Promise<
+    FORMAT extends 'aisdk'
+      ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
+      : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
+  > {
+    throw new MastraError({
+      id: 'AGENT_GENERATE_VNEXT_DEPRECATED',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text: 'generateVNext has been renamed to generate. Please use generate instead.',
+    });
+  }
+
   async generate<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' = 'mastra'>(
     messages: MessageListInput,
     options?: AgentExecutionOptions<OUTPUT, FORMAT>,
@@ -3305,6 +3324,21 @@ export class Agent<
     return fullOutput as FORMAT extends 'aisdk'
       ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
+  }
+
+  /**
+   * @deprecated streamVNext has been renamed to stream. Please use stream instead.
+   */
+  async streamVNext<OUTPUT extends OutputSchema = undefined, FORMAT extends 'mastra' | 'aisdk' | undefined = undefined>(
+    _messages: MessageListInput,
+    _streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
+  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
+    throw new MastraError({
+      id: 'AGENT_STREAM_VNEXT_DEPRECATED',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text: 'streamVNext has been renamed to stream. Please use stream instead.',
+    });
   }
 
   async stream<OUTPUT extends OutputSchema = undefined, FORMAT extends 'mastra' | 'aisdk' | undefined = undefined>(
