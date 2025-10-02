@@ -742,35 +742,7 @@ export function createStep<
           args: inputData,
         };
 
-        if ((await params.getLLM()).getModel().specificationVersion === `v1`) {
-          const { fullStream } = await params.streamLegacy(inputData.prompt, {
-            runtimeContext,
-            tracingContext,
-            onFinish: result => {
-              streamPromise.resolve(result.text);
-            },
-            abortSignal,
-          });
-
-          if (abortSignal.aborted) {
-            return abort();
-          }
-
-          await emitter.emit('watch-v2', {
-            type: 'tool-call-streaming-start',
-            ...(toolData ?? {}),
-          });
-
-          for await (const chunk of fullStream) {
-            if (chunk.type === 'text-delta') {
-              await emitter.emit('watch-v2', {
-                type: 'tool-call-delta',
-                ...(toolData ?? {}),
-                argsTextDelta: chunk.textDelta,
-              });
-            }
-          }
-        } else {
+        if ((await params.getLLM()).getModel().specificationVersion === `v2`) {
           const { fullStream } = await params.stream(inputData.prompt, {
             runtimeContext,
             tracingContext,
@@ -795,6 +767,34 @@ export function createStep<
                 type: 'tool-call-delta',
                 ...(toolData ?? {}),
                 argsTextDelta: chunk.payload.text,
+              });
+            }
+          }
+        } else {
+          const { fullStream } = await params.streamLegacy(inputData.prompt, {
+            runtimeContext,
+            tracingContext,
+            onFinish: result => {
+              streamPromise.resolve(result.text);
+            },
+            abortSignal,
+          });
+
+          if (abortSignal.aborted) {
+            return abort();
+          }
+
+          await emitter.emit('watch-v2', {
+            type: 'tool-call-streaming-start',
+            ...(toolData ?? {}),
+          });
+
+          for await (const chunk of fullStream) {
+            if (chunk.type === 'text-delta') {
+              await emitter.emit('watch-v2', {
+                type: 'tool-call-delta',
+                ...(toolData ?? {}),
+                argsTextDelta: chunk.textDelta,
               });
             }
           }
