@@ -1785,10 +1785,6 @@ do:
   /**
    * Gets all registered Model Context Protocol (MCP) server instances.
    *
-   * MCP servers extend agent capabilities by providing additional tools, resources,
-   * and context that agents can use. They follow the Model Context Protocol standard
-   * for interoperability between AI systems and external services.
-   *
    * @example
    * ```typescript
    * const mastra = new Mastra({
