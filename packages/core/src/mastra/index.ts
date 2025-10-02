@@ -134,7 +134,7 @@ export interface Config<
 
   /**
    * Custom ID generator function for creating unique identifiers.
-   * @default crypto.randomUUID()
+   * @default `crypto.randomUUID()`
    */
   idGenerator?: MastraIdGenerator;
 
