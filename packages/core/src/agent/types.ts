@@ -95,8 +95,8 @@ export interface AgentConfig<
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > {
   /**
-   * Optional unique identifier for the agent.
-   * @defaultValue `name` if not provided
+   * Identifier for the agent.
+   * @defaultValue Uses `name` if not provided.
    */
   id?: TAgentId;
   /**
@@ -104,7 +104,7 @@ export interface AgentConfig<
    */
   name: TAgentId;
   /**
-   * Optional description of the agent's purpose and capabilities.
+   * Description of the agent's purpose and capabilities.
    */
   description?: string;
   /**
@@ -166,11 +166,11 @@ export interface AgentConfig<
    */
   voice?: CompositeVoice;
   /**
-   * Input processors that can modify or validate messages before they are processed by the agent. Must implement the `processInput` function.
+   * Input processors that can modify or validate messages before they are processed by the agent. These processors need to implement the `processInput` function.
    */
   inputProcessors?: DynamicArgument<InputProcessor[]>;
   /**
-   * Output processors that can modify or validate messages from the agent, before it is sent to the client. Must implement either (or both) of the `processOutputResult` and `processOutputStream` functions.
+   * Output processors that can modify or validate messages from the agent, before it is sent to the client. These processors need to implement either (or both) of the `processOutputResult` and `processOutputStream` functions.
    */
   outputProcessors?: DynamicArgument<OutputProcessor[]>;
   /**
