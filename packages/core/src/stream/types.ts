@@ -568,6 +568,7 @@ export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = 
   isLLMExecutionStep?: boolean;
   returnScorerData?: boolean;
   tracingContext?: TracingContext;
+  processorStates?: Map<string, any>;
 };
 
 export type LLMStepResult = {
