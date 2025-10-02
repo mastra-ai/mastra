@@ -121,7 +121,28 @@ function resolveThreadIdFromArgs(args: {
 }
 
 /**
+<<<<<<< Updated upstream
  * The `Agent` class is the foundation for creating AI agents in Mastra. It provides methods for generating responses, streaming interactions, and handling voice capabilities.
+=======
+ * The Agent class is the foundation for creating AI agents in Mastra. It provides methods for generating responses,
+ * streaming interactions, managing memory, and handling voice capabilities.
+ *
+ * @example
+ * ```typescript
+ * import { Agent } from '@mastra/core/agent';
+ * import { openai } from '@ai-sdk/openai';
+ *
+ * const agent = new Agent({
+ *   name: 'my-agent',
+ *   instructions: 'You are a helpful assistant',
+ *   model: openai('gpt-4'),
+ *   tools: {
+ *     calculator: calculatorTool,
+ *   },
+ *   memory: mastraMemory,
+ * });
+ * ```
+>>>>>>> Stashed changes
  */
 @InstrumentClass({
   prefix: 'agent',
@@ -181,6 +202,24 @@ export class Agent<
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
 
+  /**
+   * Creates a new Agent instance with the specified configuration.
+   *
+   * @example
+   * ```typescript
+   * import { Agent } from '@mastra/core/agent';
+   * import { openai } from '@ai-sdk/openai';
+   *
+   * const agent = new Agent({
+   *   name: 'weatherAgent',
+   *   instructions: 'You help users with weather information',
+   *   model: openai('gpt-4'),
+   *   tools: { getWeather },
+   *   memory: mastraMemory,
+   *   maxRetries: 2,
+   * });
+   * ```
+   */
   constructor(config: AgentConfig<TAgentId, TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
 
@@ -293,6 +332,16 @@ export class Agent<
     return this.#mastra;
   }
 
+  /**
+   * Returns the agents configured for this agent, resolving function-based agents if necessary.
+   * Used in multi-agent collaboration scenarios where this agent can delegate to other agents.
+   *
+   * @example
+   * ```typescript
+   * const agents = await agent.listAgents();
+   * console.log(Object.keys(agents)); // ['agent1', 'agent2']
+   * ```
+   */
   public listAgents({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}) {
     const agentsToUse = this.#agents
       ? typeof this.#agents === 'function'
@@ -368,10 +417,32 @@ export class Agent<
     return this.#outputProcessors;
   }
 
+  /**
+   * Returns whether this agent has its own memory configured.
+   *
+   * @example
+   * ```typescript
+   * if (agent.hasOwnMemory()) {
+   *   const memory = await agent.getMemory();
+   * }
+   * ```
+   */
   public hasOwnMemory(): boolean {
     return Boolean(this.#memory);
   }
 
+  /**
+   * Gets the memory instance for this agent, resolving function-based memory if necessary.
+   * The memory system enables conversation persistence, semantic recall, and working memory.
+   *
+   * @example
+   * ```typescript
+   * const memory = await agent.getMemory();
+   * if (memory) {
+   *   // Memory is configured
+   * }
+   * ```
+   */
   public async getMemory({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}): Promise<
     MastraMemory | undefined
   > {
@@ -436,6 +507,16 @@ export class Agent<
     return this.#voice;
   }
 
+  /**
+   * Gets the workflows configured for this agent, resolving function-based workflows if necessary.
+   * Workflows are step-based execution flows that can be triggered by the agent.
+   *
+   * @example
+   * ```typescript
+   * const workflows = await agent.getWorkflows();
+   * const workflow = workflows['myWorkflow'];
+   * ```
+   */
   public async getWorkflows({
     runtimeContext = new RuntimeContext(),
   }: { runtimeContext?: RuntimeContext } = {}): Promise<Record<string, Workflow<any, any, any, any, any, any>>> {
@@ -483,6 +564,16 @@ export class Agent<
     });
   }
 
+  /**
+   * Gets the voice instance for this agent with tools and instructions configured.
+   * The voice instance enables text-to-speech and speech-to-text capabilities.
+   *
+   * @example
+   * ```typescript
+   * const voice = await agent.getVoice();
+   * const audioStream = await voice.speak('Hello world');
+   * ```
+   */
   public async getVoice({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}) {
     if (this.#voice) {
       const voice = this.#voice;
@@ -533,6 +624,16 @@ export class Agent<
     return this.#instructions;
   }
 
+  /**
+   * Gets the instructions for this agent, resolving function-based instructions if necessary.
+   * Instructions define the agent's behavior and capabilities.
+   *
+   * @example
+   * ```typescript
+   * const instructions = await agent.getInstructions();
+   * console.log(instructions); // 'You are a helpful assistant'
+   * ```
+   */
   public getInstructions({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
     | AgentInstructions
     | Promise<AgentInstructions> {
@@ -588,10 +689,29 @@ export class Agent<
     return typeof instructions.content === 'string' ? instructions.content : '';
   }
 
+  /**
+   * Returns the description of the agent.
+   *
+   * @example
+   * ```typescript
+   * const description = agent.getDescription();
+   * console.log(description); // 'A helpful weather assistant'
+   * ```
+   */
   public getDescription(): string {
     return this.#description ?? '';
   }
 
+  /**
+   * Gets the default generate options for this agent, resolving function-based options if necessary.
+   * These options are used as defaults when calling generate() without explicit options.
+   *
+   * @example
+   * ```typescript
+   * const options = await agent.getDefaultGenerateOptions();
+   * console.log(options.maxSteps); // 5
+   * ```
+   */
   public getDefaultGenerateOptions({
     runtimeContext = new RuntimeContext(),
   }: { runtimeContext?: RuntimeContext } = {}): AgentGenerateOptions | Promise<AgentGenerateOptions> {
@@ -620,6 +740,16 @@ export class Agent<
     });
   }
 
+  /**
+   * Gets the default stream options for this agent, resolving function-based options if necessary.
+   * These options are used as defaults when calling stream() without explicit options.
+   *
+   * @example
+   * ```typescript
+   * const options = await agent.getDefaultStreamOptions();
+   * console.log(options.temperature); // 0.7
+   * ```
+   */
   public getDefaultStreamOptions({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
     | AgentStreamOptions
     | Promise<AgentStreamOptions> {
@@ -648,6 +778,16 @@ export class Agent<
     });
   }
 
+  /**
+   * Gets the default VNext stream options for this agent, resolving function-based options if necessary.
+   * These options are used as defaults when calling streamVNext() or generateVNext() without explicit options.
+   *
+   * @example
+   * ```typescript
+   * const options = await agent.getDefaultVNextStreamOptions();
+   * console.log(options.maxSteps); // 5
+   * ```
+   */
   public getDefaultVNextStreamOptions<OUTPUT extends OutputSchema = undefined>({
     runtimeContext = new RuntimeContext(),
   }: { runtimeContext?: RuntimeContext } = {}): AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>> {
@@ -700,6 +840,16 @@ export class Agent<
     return ensureToolProperties(this.#tools) as TTools;
   }
 
+  /**
+   * Gets the tools configured for this agent, resolving function-based tools if necessary.
+   * Tools extend the agent's capabilities, allowing it to perform specific actions or access external systems.
+   *
+   * @example
+   * ```typescript
+   * const tools = await agent.getTools();
+   * console.log(Object.keys(tools)); // ['calculator', 'weather']
+   * ```
+   */
   public getTools({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
     | TTools
     | Promise<TTools> {
@@ -751,9 +901,15 @@ export class Agent<
   }
 
   /**
-   * Gets or creates an LLM instance based on the current model
-   * @param options Options for getting the LLM
-   * @returns A promise that resolves to the LLM instance
+   * Gets or creates an LLM instance based on the provided or configured model.
+   * The LLM wraps the language model with additional capabilities like telemetry and error handling.
+   *
+   * @example
+   * ```typescript
+   * const llm = await agent.getLLM();
+   * // Use with custom model
+   * const customLlm = await agent.getLLM({ model: openai('gpt-4') });
+   * ```
    */
   public getLLM({
     runtimeContext = new RuntimeContext(),
@@ -857,9 +1013,17 @@ export class Agent<
   }
 
   /**
-   * Gets the model, resolving it if it's a function
-   * @param options Options for getting the model
-   * @returns A promise that resolves to the model
+   * Gets the model instance, resolving it if it's a function or model configuration.
+   * When the agent has multiple models configured, returns the first enabled model.
+   *
+   * @example
+   * ```typescript
+   * const model = await agent.getModel();
+   * // Get with custom model config
+   * const customModel = await agent.getModel({
+   *   modelConfig: openai('gpt-4')
+   * });
+   * ```
    */
   public getModel({
     runtimeContext = new RuntimeContext(),
@@ -886,6 +1050,18 @@ export class Agent<
     return this.resolveModelConfig(modelConfig[0].model, runtimeContext);
   }
 
+  /**
+   * Gets the list of configured models if the agent has multiple models, otherwise returns null.
+   * Used for model fallback and load balancing scenarios.
+   *
+   * @example
+   * ```typescript
+   * const models = await agent.getModelList();
+   * if (models) {
+   *   console.log(models.map(m => m.id));
+   * }
+   * ```
+   */
   public async getModelList(
     runtimeContext: RuntimeContext = new RuntimeContext(),
   ): Promise<Array<AgentModelManagerConfig> | null> {
@@ -3271,6 +3447,27 @@ export class Agent<
     });
   }
 
+  /**
+   * Executes a network loop where multiple agents can collaborate to handle messages.
+   * The routing agent delegates tasks to appropriate sub-agents based on the conversation.
+   *
+   * @experimental
+   *
+   * @example
+   * ```typescript
+   * const result = await agent.network('Find the weather in Tokyo and plan an activity', {
+   *   memory: {
+   *     thread: 'user-123',
+   *     resource: 'my-app'
+   *   },
+   *   maxSteps: 10
+   * });
+   *
+   * for await (const chunk of result.stream) {
+   *   console.log(chunk);
+   * }
+   * ```
+   */
   async network(messages: MessageListInput, options?: MultiPrimitiveExecutionOptions) {
     const runId = options?.runId || this.#mastra?.generateId() || randomUUID();
     const runtimeContextToUse = options?.runtimeContext || new RuntimeContext();
@@ -3292,6 +3489,32 @@ export class Agent<
     });
   }
 
+  /**
+   * Generates a complete response using the VNext execution model (waits for stream to complete).
+   * This is the recommended method for non-streaming generation with support for multi-step reasoning,
+   * structured output, and enhanced capabilities.
+   *
+   * @example
+   * ```typescript
+   * // Simple text generation
+   * const result = await agent.generateVNext('What is the weather?');
+   * console.log(result.text);
+   *
+   * // With structured output
+   * const result = await agent.generateVNext('Analyze this sentiment', {
+   *   structuredOutput: {
+   *     schema: z.object({
+   *       sentiment: z.enum(['positive', 'negative', 'neutral']),
+   *       confidence: z.number()
+   *     })
+   *   }
+   * });
+   * console.log(result.object);
+   *
+   * // AI SDK v5 compatibility
+   * const result = await agent.generateVNext('Hello', { format: 'aisdk' });
+   * ```
+   */
   async generateVNext<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' = 'mastra'>(
     messages: MessageListInput,
     options?: AgentExecutionOptions<OUTPUT, FORMAT>,
@@ -3314,6 +3537,34 @@ export class Agent<
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
   }
 
+  /**
+   * Streams responses using the VNext execution model with support for structured output and multi-step reasoning.
+   * This is the recommended method for streaming with enhanced capabilities.
+   *
+   * @example
+   * ```typescript
+   * // Stream text responses
+   * const stream = await agent.streamVNext('Tell me a story');
+   * for await (const chunk of stream) {
+   *   if (chunk.type === 'text-delta') {
+   *     process.stdout.write(chunk.textDelta);
+   *   }
+   * }
+   *
+   * // With memory
+   * const stream = await agent.streamVNext('What did we discuss?', {
+   *   memory: {
+   *     thread: 'user-123',
+   *     resource: 'my-app'
+   *   }
+   * });
+   *
+   * // With tool approval
+   * const stream = await agent.streamVNext('Book a flight', {
+   *   requireToolApproval: true
+   * });
+   * ```
+   */
   async streamVNext<OUTPUT extends OutputSchema = undefined, FORMAT extends 'mastra' | 'aisdk' | undefined = undefined>(
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
@@ -3421,6 +3672,19 @@ export class Agent<
     return result.result as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
   }
 
+  /**
+   * Resumes a previously suspended VNext stream execution.
+   * Used to continue execution after a suspension point (e.g., tool approval, workflow suspend).
+   *
+   * @example
+   * ```typescript
+   * // Resume after suspension
+   * const stream = await agent.resumeStreamVNext(
+   *   { approved: true },
+   *   { runId: 'previous-run-id' }
+   * );
+   * ```
+   */
   async resumeStreamVNext<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
@@ -3499,6 +3763,21 @@ export class Agent<
     return result.result as unknown as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
   }
 
+  /**
+   * Approves a pending tool call and resumes execution.
+   * Used when `requireToolApproval` is enabled to allow the agent to proceed with a tool call.
+   *
+   * @example
+   * ```typescript
+   * const stream = await agent.approveToolCall({
+   *   runId: 'pending-run-id'
+   * });
+   *
+   * for await (const chunk of stream) {
+   *   console.log(chunk);
+   * }
+   * ```
+   */
   async approveToolCall<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
@@ -3508,6 +3787,21 @@ export class Agent<
     return this.resumeStreamVNext({ approved: true }, options);
   }
 
+  /**
+   * Declines a pending tool call and resumes execution.
+   * Used when `requireToolApproval` is enabled to prevent the agent from executing a tool call.
+   *
+   * @example
+   * ```typescript
+   * const stream = await agent.declineToolCall({
+   *   runId: 'pending-run-id'
+   * });
+   *
+   * for await (const chunk of stream) {
+   *   console.log(chunk);
+   * }
+   * ```
+   */
   async declineToolCall<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
@@ -3517,6 +3811,35 @@ export class Agent<
     return this.resumeStreamVNext({ approved: false }, options);
   }
 
+  /**
+   * Generates responses from the agent using AI SDK v4 models.
+   * Currently calls generateLegacy. Will switch to generateVNext implementation in September 2025.
+   *
+   * @deprecated This method will switch to generateVNext in September 2025. For AI SDK v4 models, use generateLegacy. For new code, use generateVNext.
+   *
+   * @example
+   * ```typescript
+   * // Text generation
+   * const result = await agent.generate('What is 2+2?');
+   * console.log(result.text); // '4'
+   *
+   * // With memory
+   * const result = await agent.generate('What did we discuss?', {
+   *   memory: {
+   *     thread: 'user-123',
+   *     resource: 'my-app'
+   *   }
+   * });
+   *
+   * // Object generation
+   * const result = await agent.generate('Analyze sentiment', {
+   *   output: z.object({
+   *     sentiment: z.enum(['positive', 'negative', 'neutral'])
+   *   })
+   * });
+   * console.log(result.object);
+   * ```
+   */
   async generate(
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
@@ -3549,6 +3872,16 @@ export class Agent<
     return this.generateLegacy(messages, generateOptions);
   }
 
+  /**
+   * Legacy implementation of generate method using AI SDK v4 models.
+   * Use this method if you need to continue using AI SDK v4 models after generate() switches to VNext.
+   *
+   * @example
+   * ```typescript
+   * const result = await agent.generateLegacy('What is 2+2?');
+   * console.log(result.text);
+   * ```
+   */
   async generateLegacy(
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
@@ -3865,6 +4198,29 @@ export class Agent<
       : GenerateObjectResult<OUTPUT>;
   }
 
+  /**
+   * Streams responses from the agent using AI SDK v4 models.
+   * Currently calls streamLegacy. Will switch to streamVNext implementation in September 2025.
+   *
+   * @deprecated This method will switch to streamVNext in September 2025. For AI SDK v4 models, use streamLegacy. For new code, use streamVNext.
+   *
+   * @example
+   * ```typescript
+   * // Stream text
+   * const result = await agent.stream('Tell me a story');
+   * for await (const chunk of result.textStream) {
+   *   process.stdout.write(chunk);
+   * }
+   *
+   * // Stream with memory
+   * const result = await agent.stream('Continue the story', {
+   *   memory: {
+   *     thread: 'user-123',
+   *     resource: 'my-app'
+   *   }
+   * });
+   * ```
+   */
   async stream<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
@@ -3920,6 +4276,18 @@ export class Agent<
     return this.streamLegacy(messages, streamOptions);
   }
 
+  /**
+   * Legacy implementation of stream method using AI SDK v4 models.
+   * Use this method if you need to continue using AI SDK v4 models after stream() switches to VNext.
+   *
+   * @example
+   * ```typescript
+   * const result = await agent.streamLegacy('Tell me a story');
+   * for await (const chunk of result.textStream) {
+   *   process.stdout.write(chunk);
+   * }
+   * ```
+   */
   async streamLegacy<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
@@ -4296,6 +4664,22 @@ export class Agent<
     }
   }
 
+  /**
+   * Converts the agent to a workflow step for use in legacy workflows.
+   * The step accepts a prompt and returns text output.
+   *
+   * @deprecated Use agent directly in workflows instead
+   *
+   * @example
+   * ```typescript
+   * const agentStep = agent.toStep();
+   * const workflow = new Workflow({
+   *   steps: {
+   *     analyze: agentStep
+   *   }
+   * });
+   * ```
+   */
   toStep(): Step<TAgentId, z.ZodObject<{ prompt: z.ZodString }>, z.ZodObject<{ text: z.ZodString }>, any> {
     const x = agentToStep(this);
     return new Step(x);
