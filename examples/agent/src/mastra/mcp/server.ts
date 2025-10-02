@@ -223,7 +223,7 @@ export const myMcpServerTwo = new MCPServer({
       description: 'Simulates a long running task.',
       inputSchema: z.object({
         interval: z.number().describe('Interval in milliseconds between notifications').default(1000),
-        count: z.number().describe('Number of notifications to send (0 for 100)').default(10),
+        count: z.number().describe('Number of notifications to send').default(10),
       }),
       execute: async ({ context }, options) => {
         const { interval, count } = context;
