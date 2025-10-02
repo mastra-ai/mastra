@@ -1,6 +1,6 @@
 import { createSampleThread } from '@internal/storage-test-utils';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
-import type { WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PostgresStore } from '.';
@@ -103,11 +103,46 @@ export function pgTests() {
           expect(loadedSnapshot?.result?.largeData).toEqual(largeString);
         }, 120_000);
 
-        it('should fail when string payload exceeds 512MB limit', async () => {
-          // Create 3x200MB strings = 600MB total
-          const largeString1 = 'A'.repeat(200 * 1024 * 1024);
-          const largeString2 = 'B'.repeat(200 * 1024 * 1024);
-          const largeString3 = 'C'.repeat(200 * 1024 * 1024);
+        it('should fail with pg-promise formatting error for 300MB string payload', async () => {
+          // 300MB: Within JSON.stringify limit (~500MB) but exceeds pg-promise formatting limit (~255MB)
+          const hugeString = 'A'.repeat(300 * 1024 * 1024);
+
+          const snapshot = {
+            runId: 'run_' + Date.now(),
+            status: 'running',
+            value: {},
+            context: { input: {} } as any,
+            result: { largeData: hugeString },
+            serializedStepGraph: [],
+            activePaths: [],
+            suspendedPaths: {},
+            waitingPaths: {},
+            timestamp: Date.now(),
+          } as WorkflowRunState;
+
+          // Verify JSON.stringify works
+          expect(() => JSON.stringify(snapshot)).not.toThrow();
+
+          // But database insert should fail with pg-promise formatting error
+          try {
+            await store.persistWorkflowSnapshot({
+              workflowName: 'string_insert_fail',
+              runId: snapshot.runId,
+              snapshot,
+            });
+            expect.fail('Should have thrown an error');
+          } catch (error: any) {
+            expect(error.message).toContain('Database query formatting failed');
+            expect(error.message).toContain('pg-promise limit');
+            expect(error.id).toBe('MASTRA_STORAGE_PG_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED');
+          }
+        }, 120_000);
+
+        it('should fail with JSON.stringify error for 600MB string payload', async () => {
+          // 600MB: Exceeds JSON.stringify limit (~500MB)
+          const massiveString1 = 'A'.repeat(200 * 1024 * 1024);
+          const massiveString2 = 'B'.repeat(200 * 1024 * 1024);
+          const massiveString3 = 'C'.repeat(200 * 1024 * 1024);
 
           const snapshot = {
             runId: 'run_' + Date.now(),
@@ -115,9 +150,9 @@ export function pgTests() {
             value: {},
             context: { input: {} } as any,
             result: {
-              data1: largeString1,
-              data2: largeString2,
-              data3: largeString3,
+              data1: massiveString1,
+              data2: massiveString2,
+              data3: massiveString3,
             },
             serializedStepGraph: [],
             activePaths: [],
@@ -126,12 +161,22 @@ export function pgTests() {
             timestamp: Date.now(),
           } as WorkflowRunState;
 
-          const workflowName = 'large_string_fail';
+          const workflowName = 'string_stringify_fail';
           const runId = snapshot.runId;
 
-          await expect(store.persistWorkflowSnapshot({ workflowName, runId, snapshot })).rejects.toThrow(
-            /Invalid string length/i,
-          );
+          // This should fail at JSON.stringify (exceeds ~500MB limit)
+          try {
+            await store.persistWorkflowSnapshot({
+              workflowName,
+              runId,
+              snapshot,
+            });
+            expect.fail('Should have thrown an error');
+          } catch (error: any) {
+            expect(error.message).toContain('JSON.stringify failed');
+            expect(error.message).toContain('V8 string limit');
+            expect(error.id).toBe('MASTRA_STORAGE_JSON_STRINGIFY_FAILED');
+          }
         }, 120_000);
       });
 
@@ -168,8 +213,49 @@ export function pgTests() {
           expect(loadedSnapshot?.result?.dataArray).toEqual(largeArray);
         }, 120_000);
 
-        it('should fail when object array exceeds 512MB limit', async () => {
+        it('should fail with pg-promise formatting error for 300MB object array', async () => {
+          // Array of 75,000 objects, each ~4KB = ~300MB
+          // Within JSON.stringify limit but exceeds pg-promise formatting limit
+          const hugeArray = Array.from({ length: 75000 }, (_, i) => ({
+            idx: i,
+            data: 'A'.repeat(4000), // ~4KB per entry
+            meta: { timestamp: Date.now(), value: Math.random() },
+          }));
+
+          const snapshot = {
+            runId: 'run_' + Date.now(),
+            status: 'running',
+            value: {},
+            context: { input: {} } as any,
+            result: { dataArray: hugeArray },
+            serializedStepGraph: [],
+            activePaths: [],
+            suspendedPaths: {},
+            waitingPaths: {},
+            timestamp: Date.now(),
+          } as WorkflowRunState;
+
+          // Verify JSON.stringify works
+          expect(() => JSON.stringify(snapshot)).not.toThrow();
+
+          // But database insert should fail with pg-promise formatting error
+          try {
+            await store.persistWorkflowSnapshot({
+              workflowName: 'array_insert_fail',
+              runId: snapshot.runId,
+              snapshot,
+            });
+            expect.fail('Should have thrown an error');
+          } catch (error: any) {
+            expect(error.message).toContain('Database query formatting failed');
+            expect(error.message).toContain('pg-promise limit');
+            expect(error.id).toBe('MASTRA_STORAGE_PG_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED');
+          }
+        }, 120_000);
+
+        it('should fail with JSON.stringify error for 600MB object array', async () => {
           // Array of 150,000 objects, each ~4KB = ~600MB
+          // Exceeds JSON.stringify limit (~500MB)
           const massiveArray = Array.from({ length: 150000 }, (_, i) => ({
             idx: i,
             data: 'A'.repeat(4000), // ~4KB per entry
@@ -189,12 +275,21 @@ export function pgTests() {
             timestamp: Date.now(),
           } as WorkflowRunState;
 
-          const workflowName = 'array_fail';
+          const workflowName = 'array_stringify_fail';
           const runId = snapshot.runId;
 
-          await expect(store.persistWorkflowSnapshot({ workflowName, runId, snapshot })).rejects.toThrow(
-            /Invalid string length/i,
-          );
+          try {
+            await store.persistWorkflowSnapshot({
+              workflowName,
+              runId,
+              snapshot,
+            });
+            expect.fail('Should have thrown an error');
+          } catch (error: any) {
+            expect(error.message).toContain('JSON.stringify failed');
+            expect(error.message).toContain('V8 string limit');
+            expect(error.id).toBe('MASTRA_STORAGE_JSON_STRINGIFY_FAILED');
+          }
         }, 120_000);
       });
 
@@ -235,7 +330,48 @@ export function pgTests() {
           expect(loadedSnapshot?.runtimeContext?.someData?.length).toBe(50 * 1024 * 1024);
         }, 120_000);
 
-        it('should fail when multiple fields exceed 512MB limit', async () => {
+        it('should fail with pg-promise formatting error for 300MB across multiple fields', async () => {
+          const string100MB = 'A'.repeat(100 * 1024 * 1024);
+          const array100MB = Array.from({ length: 25000 }, (_, i) => ({
+            idx: i,
+            data: 'B'.repeat(4000), // ~4KB per entry = ~100MB total
+          }));
+
+          const snapshot = {
+            runId: 'run_' + Date.now(),
+            status: 'running',
+            value: {},
+            context: {
+              input: { largeInput: array100MB },
+            } as any,
+            result: { largeResult: string100MB },
+            runtimeContext: { someData: 'C'.repeat(100 * 1024 * 1024) }, // 100MB
+            serializedStepGraph: [],
+            activePaths: [],
+            suspendedPaths: {},
+            waitingPaths: {},
+            timestamp: Date.now(),
+          } as WorkflowRunState;
+
+          // Verify JSON.stringify works
+          expect(() => JSON.stringify(snapshot)).not.toThrow();
+
+          // But database insert should fail with pg-promise formatting error
+          try {
+            await store.persistWorkflowSnapshot({
+              workflowName: 'multi_field_insert_fail',
+              runId: snapshot.runId,
+              snapshot,
+            });
+            expect.fail('Should have thrown an error');
+          } catch (error: any) {
+            expect(error.message).toContain('Database query formatting failed');
+            expect(error.message).toContain('pg-promise limit');
+            expect(error.id).toBe('MASTRA_STORAGE_PG_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED');
+          }
+        }, 120_000);
+
+        it('should fail with JSON.stringify error for 600MB across multiple fields', async () => {
           const string200MB = 'A'.repeat(200 * 1024 * 1024);
           const array200MB = Array.from({ length: 50000 }, (_, i) => ({
             idx: i,
@@ -258,12 +394,21 @@ export function pgTests() {
             timestamp: Date.now(),
           } as WorkflowRunState;
 
-          const workflowName = 'multi_field_fail';
+          const workflowName = 'multi_field_stringify_fail';
           const runId = snapshot.runId;
 
-          await expect(store.persistWorkflowSnapshot({ workflowName, runId, snapshot })).rejects.toThrow(
-            /Invalid string length/i,
-          );
+          try {
+            await store.persistWorkflowSnapshot({
+              workflowName,
+              runId,
+              snapshot,
+            });
+            expect.fail('Should have thrown an error');
+          } catch (error: any) {
+            expect(error.message).toContain('JSON.stringify failed');
+            expect(error.message).toContain('V8 string limit');
+            expect(error.id).toBe('MASTRA_STORAGE_JSON_STRINGIFY_FAILED');
+          }
         }, 120_000);
       });
 
@@ -308,7 +453,55 @@ export function pgTests() {
           expect(loadedSnapshot?.result?.nested).toEqual(nestedData);
         }, 120_000);
 
-        it('should fail when deeply nested structure exceeds 512MB limit', async () => {
+        it('should fail with pg-promise formatting error for 300MB deeply nested structure', async () => {
+          // Create a deeply nested structure around 300MB
+          const createMediumNestedStructure = (depth: number, leafSize: number): any => {
+            if (depth === 0) {
+              return 'X'.repeat(leafSize);
+            }
+            return {
+              level: depth,
+              data: createMediumNestedStructure(depth - 1, leafSize),
+              sibling1: 'Y'.repeat(leafSize / 2),
+              sibling2: depth > 3 ? 'Z'.repeat(leafSize / 2) : null,
+            };
+          };
+
+          // This creates ~300MB nested structure
+          const hugeNestedData = createMediumNestedStructure(6, 50 * 1024 * 1024);
+
+          const snapshot = {
+            runId: 'run_' + Date.now(),
+            status: 'running',
+            value: {},
+            context: { input: {} } as any,
+            result: { nested: hugeNestedData },
+            serializedStepGraph: [],
+            activePaths: [],
+            suspendedPaths: {},
+            waitingPaths: {},
+            timestamp: Date.now(),
+          } as WorkflowRunState;
+
+          // Verify JSON.stringify works
+          expect(() => JSON.stringify(snapshot)).not.toThrow();
+
+          // But database insert should fail with pg-promise formatting error
+          try {
+            await store.persistWorkflowSnapshot({
+              workflowName: 'nested_insert_fail',
+              runId: snapshot.runId,
+              snapshot,
+            });
+            expect.fail('Should have thrown an error');
+          } catch (error: any) {
+            expect(error.message).toContain('Database query formatting failed');
+            expect(error.message).toContain('pg-promise limit');
+            expect(error.id).toBe('MASTRA_STORAGE_PG_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED');
+          }
+        }, 120_000);
+
+        it('should fail with JSON.stringify error for 600MB deeply nested structure', async () => {
           // Create a deeply nested structure that exceeds limits
           const createLargeNestedStructure = (depth: number, leafSize: number): any => {
             if (depth === 0) {
@@ -322,7 +515,7 @@ export function pgTests() {
             };
           };
 
-          // This will create exponential growth exceeding 512MB
+          // This will create exponential growth exceeding 600MB
           const massiveNestedData = createLargeNestedStructure(5, 30 * 1024 * 1024);
 
           const snapshot = {
@@ -338,124 +531,22 @@ export function pgTests() {
             timestamp: Date.now(),
           } as WorkflowRunState;
 
-          const workflowName = 'nested_fail';
+          const workflowName = 'nested_stringify_fail';
           const runId = snapshot.runId;
 
-          await expect(store.persistWorkflowSnapshot({ workflowName, runId, snapshot })).rejects.toThrow(
-            /Invalid string length/i,
-          );
+          try {
+            await store.persistWorkflowSnapshot({
+              workflowName,
+              runId,
+              snapshot,
+            });
+            expect.fail('Should have thrown an error');
+          } catch (error: any) {
+            expect(error.message).toContain('JSON.stringify failed');
+            expect(error.message).toContain('V8 string limit');
+            expect(error.id).toBe('MASTRA_STORAGE_JSON_STRINGIFY_FAILED');
+          }
         }, 120_000);
-      });
-
-      // Edge Case: Just Under Limit
-      describe('Edge Cases', () => {
-        it('should find the boundary between JSON.stringify success and database failure', async () => {
-          // Test to identify if there's a gap between JSON.stringify working and DB insert failing
-          const testSizes = [240, 250, 260, 270, 280];
-          const results: { size: number; stringifyWorks: boolean; insertWorks: boolean }[] = [];
-
-          for (const sizeMB of testSizes) {
-            const payload = 'X'.repeat(sizeMB * 1024 * 1024);
-            const snapshot = {
-              runId: `boundary_test_${sizeMB}`,
-              status: 'running',
-              value: {},
-              context: { input: {} } as any,
-              result: { testData: payload },
-              serializedStepGraph: [],
-              activePaths: [],
-              suspendedPaths: {},
-              waitingPaths: {},
-              timestamp: Date.now(),
-            } as WorkflowRunState;
-
-            let stringifyWorks = false;
-            let insertWorks = false;
-
-            try {
-              const jsonString = JSON.stringify(snapshot);
-              stringifyWorks = true;
-              console.log(
-                `${sizeMB}MB: JSON.stringify succeeded, output size: ${(jsonString.length / 1024 / 1024).toFixed(1)}MB`,
-              );
-
-              try {
-                await store.persistWorkflowSnapshot({
-                  workflowName: `boundary_test_${sizeMB}`,
-                  runId: snapshot.runId,
-                  snapshot,
-                });
-                insertWorks = true;
-
-                // Clean up successful inserts
-                await store.db.none('DELETE FROM mastra_workflow_snapshot WHERE workflow_name = $1', [
-                  `boundary_test_${sizeMB}`,
-                ]);
-              } catch (insertError: any) {
-                console.log(`${sizeMB}MB: Insert failed with:`, insertError.message?.substring(0, 100));
-              }
-            } catch (stringifyError: any) {
-              console.log(`${sizeMB}MB: JSON.stringify failed with:`, stringifyError.message);
-            }
-
-            results.push({ size: sizeMB, stringifyWorks, insertWorks });
-          }
-
-          // Log summary
-          console.log('\n=== Boundary Test Results ===');
-          results.forEach(r => {
-            console.log(`${r.size}MB: stringify=${r.stringifyWorks}, insert=${r.insertWorks}`);
-          });
-
-          // Check if we found a scenario where stringify works but insert fails
-          const gapFound = results.some(r => r.stringifyWorks && !r.insertWorks);
-          if (gapFound) {
-            console.log('Found gap where JSON.stringify works but insert fails!');
-          } else {
-            console.log('No gap found - failures align with JSON.stringify limits');
-          }
-
-          // The test passes as long as we can identify the behavior
-          expect(results.length).toBeGreaterThan(0);
-        }, 180_000);
-
-        it('should store payload approaching practical limit successfully (~250MB)', async () => {
-          // Create a payload that's substantial but safely under the observed limit
-          const string80MB = 'A'.repeat(80 * 1024 * 1024);
-          const array80MB = Array.from({ length: 20000 }, (_, i) => ({
-            idx: i,
-            data: 'B'.repeat(4000), // ~4KB per entry = ~80MB total
-          }));
-          const string80MB_2 = 'C'.repeat(80 * 1024 * 1024);
-
-          const snapshot = {
-            runId: 'run_' + Date.now(),
-            status: 'running',
-            value: {},
-            context: {
-              input: { data: array80MB },
-            } as any,
-            result: { data: string80MB },
-            runtimeContext: { data: string80MB_2 },
-            serializedStepGraph: [],
-            activePaths: [],
-            suspendedPaths: {},
-            waitingPaths: {},
-            timestamp: Date.now(),
-          } as WorkflowRunState;
-
-          const workflowName = 'edge_case_under_limit';
-          const runId = snapshot.runId;
-
-          // This should succeed as it's under the practical limit
-          await store.persistWorkflowSnapshot({ workflowName, runId, snapshot });
-
-          const loadedSnapshot = await store.loadWorkflowSnapshot({ workflowName, runId });
-          expect(loadedSnapshot).toBeDefined();
-          expect(loadedSnapshot?.result?.data?.length).toBe(80 * 1024 * 1024);
-          expect(loadedSnapshot?.context?.input?.data?.length).toBe(20000);
-          expect(loadedSnapshot?.runtimeContext?.data?.length).toBe(80 * 1024 * 1024);
-        }, 180_000); // Longer timeout for edge case
       });
     });
 

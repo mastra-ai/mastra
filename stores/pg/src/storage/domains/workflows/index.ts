@@ -93,6 +93,25 @@ export class WorkflowsPG extends WorkflowsStorage {
     resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
+    let snapshotString: string;
+
+    try {
+      snapshotString = JSON.stringify(snapshot);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_JSON_STRINGIFY_FAILED',
+          text: 'JSON.stringify failed - payload exceeds V8 string limit (~500MB)',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+          },
+        },
+        error,
+      );
+    }
     try {
       const now = new Date().toISOString();
       await this.client.none(
@@ -100,14 +119,30 @@ export class WorkflowsPG extends WorkflowsStorage {
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
                  SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
-        [workflowName, runId, resourceId, JSON.stringify(snapshot), now, now],
+        [workflowName, runId, resourceId, snapshotString, now, now],
       );
     } catch (error) {
+      let isPgPromiseFormattingError = false;
+      if (error instanceof Error) {
+        // Check if it's the pg-promise formatting error (happens around 255MB)
+        isPgPromiseFormattingError = !!(
+          error.message?.includes('Invalid string length') &&
+          (error.stack?.includes('pg-promise') || error.stack?.includes('formatting.js'))
+        );
+      }
       throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          text: isPgPromiseFormattingError
+            ? 'Database query formatting failed - payload exceeds pg-promise limit (~255MB)'
+            : 'Database insert failed',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+            payloadSizeMB: Math.round(snapshotString.length / 1024 / 1024),
+          },
         },
         error,
       );
