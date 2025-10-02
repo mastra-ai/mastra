@@ -5,7 +5,7 @@ import { MongoDBStore, MongoDBVector } from '@mastra/mongodb';
 
 // This URI must be an Atlas MongoDB deployment in order to work with vector search
 // in the format mongodb+srv://<username>:<password>@<cluster>.mongodb.net
-const uri = process.env.MONGODB_URI
+const uri = process.env.MONGODB_URI;
 const dbName = process.env.MONGODB_DB_NAME || 'mastra_memory';
 
 export const memory = new Memory({
