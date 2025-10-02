@@ -21,7 +21,7 @@ import { PlaygroundQueryClient, ReadonlyJSONObject, ToolFallback } from '@mastra
 
 function HomeInner() {
   const [input, setInput] = useState('');
-  const { messages, setMessages, streamVNext, isRunning } = useChat<MastraUIMessage>({
+  const { messages, setMessages, stream, isRunning } = useChat({
     agentId: 'chefModelV2Agent',
   });
 
@@ -36,16 +36,13 @@ function HomeInner() {
         },
       ]);
 
-      streamVNext({
+      stream({
         coreUserMessages: [
           {
             role: 'user',
             content: input,
           },
         ],
-        onChunk: (chunk, conversation) => {
-          return toUIMessage({ chunk, conversation });
-        },
       });
 
       setInput('');
