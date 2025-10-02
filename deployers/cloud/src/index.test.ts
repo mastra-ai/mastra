@@ -31,6 +31,7 @@ vi.mock('./utils/constants.js', () => ({
   LOCAL: false,
   BUILD_URL: '',
   BUSINESS_JWT_TOKEN: '',
+  PLAYGROUND_JWT_TOKEN: '',
   USER_IP_ADDRESS: '',
   PROJECT_ENV_VARS: {},
   PROJECT_ROOT: '/project',
@@ -187,17 +188,20 @@ describe('CloudDeployer', () => {
 
   describe('bundle', () => {
     it('should bundle with correct parameters', async () => {
-      const mastraDir = '/test/project';
+      const projectRoot = '/test/project';
       const outputDirectory = '/test/output';
 
-      await deployer.bundle(mastraDir, outputDirectory);
+      await deployer.bundle(projectRoot, outputDirectory);
 
-      expect(getMastraEntryFile).toHaveBeenCalledWith(mastraDir);
+      expect(getMastraEntryFile).toHaveBeenCalledWith(projectRoot);
       expect(mockBundle).toHaveBeenCalledWith(
         expect.any(String), // The generated entry code
         '/test/src/mastra/index.ts',
-        outputDirectory,
-        [join(mastraDir, MASTRA_DIRECTORY, 'tools')],
+        {
+          projectRoot,
+          outputDirectory,
+        },
+        [join(projectRoot, MASTRA_DIRECTORY, 'tools')],
       );
     });
 

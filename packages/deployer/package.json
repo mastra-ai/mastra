@@ -116,6 +116,7 @@
     "hono": "^4.9.7",
     "local-pkg": "^1.1.2",
     "resolve-from": "^5.0.0",
+    "resolve.exports": "^2.0.3",
     "rollup": "~4.50.2",
     "rollup-plugin-esbuild": "^6.2.1",
     "rollup-plugin-node-externals": "^8.0.1",
@@ -146,7 +147,7 @@
     "zod": "^3.25.76"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.19.1-0 <0.20.0-0",
+    "@mastra/core": ">=0.19.2-0 <0.20.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",
