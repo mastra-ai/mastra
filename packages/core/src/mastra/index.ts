@@ -1261,7 +1261,7 @@ do:
    *       criteria: 'Rate how helpful this response is'
    *     }),
    *     accuracy: new AccuracyScorer({
-   *       model: openai('gpt-4o')
+   *       model: 'openai/gpt-5'
    *     })
    *   }
    * });
