@@ -14,6 +14,7 @@ import { GaugeIcon } from 'lucide-react';
 import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './agent-metadata-model-switcher';
 import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
 import { LoadingBadge } from '@/components/assistant-ui/tools/badges/loading-badge';
+import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
 
 export interface AgentMetadataProps {
   agentId: string;
@@ -100,9 +101,27 @@ export const AgentMetadata = ({
           title: 'Agent Memory documentation',
         }}
       >
-        <Badge icon={<MemoryIcon />} variant={hasMemoryEnabled ? 'success' : 'error'} className="font-medium">
-          {hasMemoryEnabled ? 'On' : 'Off'}
-        </Badge>
+        {hasMemoryEnabled ? (
+          <Badge icon={<MemoryIcon />} variant="success" className="font-medium">
+            On
+          </Badge>
+        ) : (
+          <Alert variant="warning">
+            <AlertTitle as="h5">Memory not enabled</AlertTitle>
+            <AlertDescription as="p">
+              Thread messages will not be stored. To activate memory, see the{' '}
+              <a
+                href="https://mastra.ai/en/docs/agents/agent-memory"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                documentation
+              </a>
+              .
+            </AlertDescription>
+          </Alert>
+        )}
       </AgentMetadataSection>
 
       {networkAgents.length > 0 && (
