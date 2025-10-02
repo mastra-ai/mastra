@@ -1035,10 +1035,6 @@ do:
   /**
    * Retrieves a registered workflow by its ID.
    *
-   * Workflows are type-safe, composable sequences of operations that can handle
-   * complex business logic with built-in error handling, branching, and parallel execution.
-   * They provide a deterministic way to orchestrate multiple steps with clear data flow.
-   *
    * @template TWorkflowId - The specific workflow ID type from the registered workflows
    * @throws {MastraError} When the workflow with the specified ID is not found
    *
