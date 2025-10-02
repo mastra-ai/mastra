@@ -894,7 +894,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             stepId: step.id,
             runtimeContext,
             disableScorers,
-            tracingContext: { currentSpan: tracingContext.currentSpan },
+            tracingContext: { currentSpan: stepAISpan },
           });
         }
 

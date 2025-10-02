@@ -1,3 +1,4 @@
+import pMap from 'p-map';
 import type { Mastra } from '..';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { saveScorePayloadSchema } from '../scores';
@@ -50,6 +51,28 @@ export function createOnScorerHook(mastra: Mastra) {
       };
 
       await validateAndSaveScore(storage, payload);
+
+      const currentSpan = hookData.tracingContext?.currentSpan;
+      if (currentSpan && currentSpan.isValid) {
+        await pMap(
+          currentSpan.aiTracing.getExporters(),
+          async exporter => {
+            if (exporter.addScoreToTrace) {
+              await exporter.addScoreToTrace({
+                traceId: currentSpan.traceId,
+                spanId: currentSpan.id,
+                score: runResult.score,
+                reason: runResult.reason,
+                scorerName: scorerToUse.scorer.name,
+                metadata: {
+                  ...(currentSpan.metadata ?? {}),
+                },
+              });
+            }
+          },
+          { concurrency: 3 },
+        );
+      }
     } catch (error) {
       const mastraError = new MastraError(
         {
