@@ -57,15 +57,15 @@ export function createOnScorerHook(mastra: Mastra) {
         await pMap(
           currentSpan.aiTracing.getExporters(),
           async exporter => {
-            if (exporter.addScore) {
-              await exporter.addScore({
-                traceId: currentSpan.traceId!,
-                scorer: scorerToUse.scorer.name,
-                spanMetadata: currentSpan.metadata ?? {},
+            if (exporter.addScoreToTrace) {
+              await exporter.addScoreToTrace({
+                traceId: currentSpan.traceId,
+                spanId: currentSpan.id,
+                score: runResult.score,
+                reason: runResult.reason,
+                scorerName: scorerToUse.scorer.name,
                 metadata: {
-                  score: runResult.score,
-                  reason: runResult.reason ?? '',
-                  spanId: currentSpan.id,
+                  ...(currentSpan.metadata ?? {}),
                 },
               });
             }
