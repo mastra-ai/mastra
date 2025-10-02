@@ -642,7 +642,7 @@ describe('MastraMCPClient - Progress Tests', () => {
       },
     });
 
-    await client.progress.onUpdate(mockHandler);
+    client.progress.onUpdate(mockHandler);
     await client.connect();
 
     const tools = await client.tools();
@@ -672,7 +672,7 @@ describe('MastraMCPClient - Progress Tests', () => {
       },
     });
 
-    await client.progress.onUpdate(mockHandler);
+    client.progress.onUpdate(mockHandler);
     await client.connect();
 
     const tools = await client.tools();
