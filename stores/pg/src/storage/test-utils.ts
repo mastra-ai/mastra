@@ -76,72 +76,317 @@ export function pgTests() {
     });
 
     describe('Large Payload Handling', () => {
-      it('should handle or fail gracefully when inserting a very large workflow snapshot payload', async () => {
-        // 100MB string payload embedded in result
-        const hugeString = 'A'.repeat(100 * 1024 * 1024);
-        const hugeSnapshot = {
-          runId: 'run_' + Date.now(),
-          status: 'running',
-          value: {},
-          context: { input: {} } as any, // Cast to any to bypass strict typing for test
-          result: { largeData: hugeString }, // Store large data in result instead
-          serializedStepGraph: [],
-          activePaths: [],
-          suspendedPaths: {},
-          waitingPaths: {},
-          timestamp: Date.now(),
-        } as WorkflowRunState;
-        const workflowName = 'large_payload_test';
-        const runId = hugeSnapshot.runId;
-        let error: any = null;
-        try {
-          await store.persistWorkflowSnapshot({ workflowName, runId, snapshot: hugeSnapshot });
-        } catch (e) {
-          error = e;
-        }
-        expect(error).toBeNull();
-        const loadedSnapshot = await store.loadWorkflowSnapshot({ workflowName, runId });
-        expect(loadedSnapshot).toBeDefined();
-        expect(loadedSnapshot?.result).toBeDefined();
-        expect(loadedSnapshot?.result?.largeData).toEqual(hugeString);
-        expect(loadedSnapshot?.timestamp).toBeDefined();
-      }, 120_000);
+      // Pattern 1: Single Large String
+      describe('Single Large String Payloads', () => {
+        it('should store 100MB string payload successfully', async () => {
+          const largeString = 'A'.repeat(100 * 1024 * 1024); // 100MB
+          const snapshot = {
+            runId: 'run_' + Date.now(),
+            status: 'running',
+            value: {},
+            context: { input: {} } as any,
+            result: { largeData: largeString },
+            serializedStepGraph: [],
+            activePaths: [],
+            suspendedPaths: {},
+            waitingPaths: {},
+            timestamp: Date.now(),
+          } as WorkflowRunState;
 
-      it('should handle or fail gracefully when inserting a very large workflow snapshot with a huge object payload', async () => {
-        // ~100MB object payload: Array of 25,000 objects, each ~4KB
-        const hugeObjectArray = Array.from({ length: 25000 }, (_, i) => ({
-          idx: i,
-          data: 'A'.repeat(4096), // 4KB per entry
-          meta: { nested: { timestamp: Date.now(), rand: Math.random() } },
-        }));
-        const hugeSnapshot = {
-          runId: 'run_' + Date.now(),
-          status: 'running',
-          value: {},
-          context: { input: {} } as any, // Cast to any to bypass strict typing for test
-          result: { largeDataArray: hugeObjectArray }, // Store large array in result
-          serializedStepGraph: [],
-          activePaths: [],
-          suspendedPaths: {},
-          waitingPaths: {},
-          timestamp: Date.now(),
-        } as WorkflowRunState;
-        const workflowName = 'large_object_payload_test';
-        const runId = hugeSnapshot.runId;
-        let error: any = null;
-        try {
-          await store.persistWorkflowSnapshot({ workflowName, runId, snapshot: hugeSnapshot });
-        } catch (e) {
-          error = e;
-        }
-        expect(error).toBeNull();
+          const workflowName = 'large_string_success';
+          const runId = snapshot.runId;
 
-        const loadedSnapshot = await store.loadWorkflowSnapshot({ workflowName, runId });
-        expect(loadedSnapshot).toBeDefined();
-        expect(loadedSnapshot?.result).toBeDefined();
-        expect(loadedSnapshot?.result?.largeDataArray).toEqual(hugeObjectArray);
-        expect(loadedSnapshot?.timestamp).toBeDefined();
-      }, 120_000);
+          await store.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+
+          const loadedSnapshot = await store.loadWorkflowSnapshot({ workflowName, runId });
+          expect(loadedSnapshot).toBeDefined();
+          expect(loadedSnapshot?.result?.largeData).toEqual(largeString);
+        }, 120_000);
+
+        it('should fail when string payload exceeds 512MB limit', async () => {
+          // Create 3x200MB strings = 600MB total
+          const largeString1 = 'A'.repeat(200 * 1024 * 1024);
+          const largeString2 = 'B'.repeat(200 * 1024 * 1024);
+          const largeString3 = 'C'.repeat(200 * 1024 * 1024);
+
+          const snapshot = {
+            runId: 'run_' + Date.now(),
+            status: 'running',
+            value: {},
+            context: { input: {} } as any,
+            result: {
+              data1: largeString1,
+              data2: largeString2,
+              data3: largeString3,
+            },
+            serializedStepGraph: [],
+            activePaths: [],
+            suspendedPaths: {},
+            waitingPaths: {},
+            timestamp: Date.now(),
+          } as WorkflowRunState;
+
+          const workflowName = 'large_string_fail';
+          const runId = snapshot.runId;
+
+          await expect(store.persistWorkflowSnapshot({ workflowName, runId, snapshot })).rejects.toThrow(
+            /Invalid string length/i,
+          );
+        }, 120_000);
+      });
+
+      // Pattern 2: Object Arrays
+      describe('Object Array Payloads', () => {
+        it('should store 100MB object array successfully', async () => {
+          // Array of 25,000 objects, each ~4KB = ~100MB
+          const largeArray = Array.from({ length: 25000 }, (_, i) => ({
+            idx: i,
+            data: 'A'.repeat(4000), // ~4KB per entry
+            meta: { timestamp: Date.now(), value: Math.random() },
+          }));
+
+          const snapshot = {
+            runId: 'run_' + Date.now(),
+            status: 'running',
+            value: {},
+            context: { input: {} } as any,
+            result: { dataArray: largeArray },
+            serializedStepGraph: [],
+            activePaths: [],
+            suspendedPaths: {},
+            waitingPaths: {},
+            timestamp: Date.now(),
+          } as WorkflowRunState;
+
+          const workflowName = 'array_success';
+          const runId = snapshot.runId;
+
+          await store.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+
+          const loadedSnapshot = await store.loadWorkflowSnapshot({ workflowName, runId });
+          expect(loadedSnapshot).toBeDefined();
+          expect(loadedSnapshot?.result?.dataArray).toEqual(largeArray);
+        }, 120_000);
+
+        it('should fail when object array exceeds 512MB limit', async () => {
+          // Array of 150,000 objects, each ~4KB = ~600MB
+          const massiveArray = Array.from({ length: 150000 }, (_, i) => ({
+            idx: i,
+            data: 'A'.repeat(4000), // ~4KB per entry
+            meta: { timestamp: Date.now(), value: Math.random() },
+          }));
+
+          const snapshot = {
+            runId: 'run_' + Date.now(),
+            status: 'running',
+            value: {},
+            context: { input: {} } as any,
+            result: { dataArray: massiveArray },
+            serializedStepGraph: [],
+            activePaths: [],
+            suspendedPaths: {},
+            waitingPaths: {},
+            timestamp: Date.now(),
+          } as WorkflowRunState;
+
+          const workflowName = 'array_fail';
+          const runId = snapshot.runId;
+
+          await expect(store.persistWorkflowSnapshot({ workflowName, runId, snapshot })).rejects.toThrow(
+            /Invalid string length/i,
+          );
+        }, 120_000);
+      });
+
+      // Pattern 3: Multiple Fields
+      describe('Multiple Field Payloads', () => {
+        it('should store 200MB across multiple fields successfully', async () => {
+          const string100MB = 'A'.repeat(100 * 1024 * 1024);
+          const array50MB = Array.from({ length: 12500 }, (_, i) => ({
+            idx: i,
+            data: 'B'.repeat(4000), // ~4KB per entry
+          }));
+
+          const snapshot = {
+            runId: 'run_' + Date.now(),
+            status: 'running',
+            value: {},
+            context: {
+              input: { largeInput: array50MB },
+            } as any,
+            result: { largeResult: string100MB },
+            runtimeContext: { someData: 'C'.repeat(50 * 1024 * 1024) }, // 50MB
+            serializedStepGraph: [],
+            activePaths: [],
+            suspendedPaths: {},
+            waitingPaths: {},
+            timestamp: Date.now(),
+          } as WorkflowRunState;
+
+          const workflowName = 'multi_field_success';
+          const runId = snapshot.runId;
+
+          await store.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+
+          const loadedSnapshot = await store.loadWorkflowSnapshot({ workflowName, runId });
+          expect(loadedSnapshot).toBeDefined();
+          expect(loadedSnapshot?.result?.largeResult).toEqual(string100MB);
+          expect(loadedSnapshot?.context?.input?.largeInput).toEqual(array50MB);
+          expect(loadedSnapshot?.runtimeContext?.someData?.length).toBe(50 * 1024 * 1024);
+        }, 120_000);
+
+        it('should fail when multiple fields exceed 512MB limit', async () => {
+          const string200MB = 'A'.repeat(200 * 1024 * 1024);
+          const array200MB = Array.from({ length: 50000 }, (_, i) => ({
+            idx: i,
+            data: 'B'.repeat(4000), // ~4KB per entry = ~200MB total
+          }));
+
+          const snapshot = {
+            runId: 'run_' + Date.now(),
+            status: 'running',
+            value: {},
+            context: {
+              input: { largeInput: array200MB },
+            } as any,
+            result: { largeResult: string200MB },
+            runtimeContext: { someData: 'C'.repeat(200 * 1024 * 1024) }, // 200MB
+            serializedStepGraph: [],
+            activePaths: [],
+            suspendedPaths: {},
+            waitingPaths: {},
+            timestamp: Date.now(),
+          } as WorkflowRunState;
+
+          const workflowName = 'multi_field_fail';
+          const runId = snapshot.runId;
+
+          await expect(store.persistWorkflowSnapshot({ workflowName, runId, snapshot })).rejects.toThrow(
+            /Invalid string length/i,
+          );
+        }, 120_000);
+      });
+
+      // Pattern 4: Deep Nesting
+      describe('Deeply Nested Structure Payloads', () => {
+        it('should store 100MB deeply nested structure successfully', async () => {
+          // Create a deeply nested structure with large leaf values
+          const createNestedStructure = (depth: number, leafSize: number): any => {
+            if (depth === 0) {
+              return 'X'.repeat(leafSize);
+            }
+            return {
+              level: depth,
+              data: createNestedStructure(depth - 1, leafSize),
+              sibling: depth > 5 ? 'Y'.repeat(leafSize / 2) : null,
+            };
+          };
+
+          // 10 levels deep with ~10MB at each significant level
+          const nestedData = createNestedStructure(10, 10 * 1024 * 1024);
+
+          const snapshot = {
+            runId: 'run_' + Date.now(),
+            status: 'running',
+            value: {},
+            context: { input: {} } as any,
+            result: { nested: nestedData },
+            serializedStepGraph: [],
+            activePaths: [],
+            suspendedPaths: {},
+            waitingPaths: {},
+            timestamp: Date.now(),
+          } as WorkflowRunState;
+
+          const workflowName = 'nested_success';
+          const runId = snapshot.runId;
+
+          await store.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+
+          const loadedSnapshot = await store.loadWorkflowSnapshot({ workflowName, runId });
+          expect(loadedSnapshot).toBeDefined();
+          expect(loadedSnapshot?.result?.nested).toEqual(nestedData);
+        }, 120_000);
+
+        it('should fail when deeply nested structure exceeds 512MB limit', async () => {
+          // Create a deeply nested structure that exceeds limits
+          const createLargeNestedStructure = (depth: number, leafSize: number): any => {
+            if (depth === 0) {
+              return 'X'.repeat(leafSize);
+            }
+            return {
+              level: depth,
+              data1: createLargeNestedStructure(depth - 1, leafSize),
+              data2: createLargeNestedStructure(depth - 1, leafSize),
+              sibling: 'Y'.repeat(leafSize),
+            };
+          };
+
+          // This will create exponential growth exceeding 512MB
+          const massiveNestedData = createLargeNestedStructure(5, 30 * 1024 * 1024);
+
+          const snapshot = {
+            runId: 'run_' + Date.now(),
+            status: 'running',
+            value: {},
+            context: { input: {} } as any,
+            result: { nested: massiveNestedData },
+            serializedStepGraph: [],
+            activePaths: [],
+            suspendedPaths: {},
+            waitingPaths: {},
+            timestamp: Date.now(),
+          } as WorkflowRunState;
+
+          const workflowName = 'nested_fail';
+          const runId = snapshot.runId;
+
+          await expect(store.persistWorkflowSnapshot({ workflowName, runId, snapshot })).rejects.toThrow(
+            /Invalid string length/i,
+          );
+        }, 120_000);
+      });
+
+      // Edge Case: Just Under Limit
+      describe('Edge Cases', () => {
+        it('should store payload approaching practical limit successfully (~250MB)', async () => {
+          // Create a payload that's substantial but safely under the observed limit
+          const string80MB = 'A'.repeat(80 * 1024 * 1024);
+          const array80MB = Array.from({ length: 20000 }, (_, i) => ({
+            idx: i,
+            data: 'B'.repeat(4000), // ~4KB per entry = ~80MB total
+          }));
+          const string80MB_2 = 'C'.repeat(80 * 1024 * 1024);
+
+          const snapshot = {
+            runId: 'run_' + Date.now(),
+            status: 'running',
+            value: {},
+            context: {
+              input: { data: array80MB },
+            } as any,
+            result: { data: string80MB },
+            runtimeContext: { data: string80MB_2 },
+            serializedStepGraph: [],
+            activePaths: [],
+            suspendedPaths: {},
+            waitingPaths: {},
+            timestamp: Date.now(),
+          } as WorkflowRunState;
+
+          const workflowName = 'edge_case_under_limit';
+          const runId = snapshot.runId;
+
+          // This should succeed as it's under the practical limit
+          await store.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+
+          const loadedSnapshot = await store.loadWorkflowSnapshot({ workflowName, runId });
+          expect(loadedSnapshot).toBeDefined();
+          expect(loadedSnapshot?.result?.data?.length).toBe(80 * 1024 * 1024);
+          expect(loadedSnapshot?.context?.input?.data?.length).toBe(20000);
+          expect(loadedSnapshot?.runtimeContext?.data?.length).toBe(80 * 1024 * 1024);
+        }, 180_000); // Longer timeout for edge case
+      });
     });
 
     describe('PgStorage Table Name Quoting', () => {
