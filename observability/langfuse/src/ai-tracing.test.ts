@@ -228,8 +228,8 @@ describe('LangfuseExporter', () => {
           model: 'gpt-4',
           provider: 'openai',
           usage: {
-            promptTokens: 10,
-            completionTokens: 5,
+            inputTokens: 10,
+            outputTokens: 5,
             totalTokens: 15,
           },
           parameters: {
@@ -263,8 +263,11 @@ describe('LangfuseExporter', () => {
         input: { messages: [{ role: 'user', content: 'Hello' }] },
         output: { content: 'Hi there!' },
         usage: {
-          promptTokens: 10,
-          completionTokens: 5,
+          input: 10,
+          output: 5,
+          total: 15,
+          inputTokens: 10,
+          outputTokens: 5,
           totalTokens: 15,
         },
         metadata: {
@@ -480,6 +483,9 @@ describe('LangfuseExporter', () => {
         model: 'gpt-4',
         output: { content: 'Updated response' },
         usage: {
+          input: undefined,
+          output: undefined,
+          total: 150,
           totalTokens: 150,
         },
       });
