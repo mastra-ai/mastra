@@ -20,4 +20,9 @@ export const mastra = new Mastra({
     webSummarizationAgent,
   },
   workflows: { generateReportWorkflow, researchWorkflow },
+  observability: {
+    default: {
+      enabled: true,
+    },
+  },
 });
