@@ -28,4 +28,9 @@ export const mastra = new Mastra({
     name: 'Mastra Ad Copy Template',
     level: 'info',
   }),
+  observability: {
+    default: {
+      enabled: true,
+    },
+  },
 });

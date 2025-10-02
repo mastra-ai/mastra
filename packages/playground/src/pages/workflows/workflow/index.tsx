@@ -11,7 +11,7 @@ export const Workflow = () => {
   return (
     <WorkflowGraph
       workflowId={workflowId!}
-      workflow={workflow}
+      workflow={workflow ?? undefined}
       isLoading={isLoading}
       onShowTrace={({ runId, stepName }) => {
         navigate(`/workflows/${workflowId}/traces?runId=${runId}&stepName=${stepName}`);

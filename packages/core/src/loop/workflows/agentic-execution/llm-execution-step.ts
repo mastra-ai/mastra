@@ -440,6 +440,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   headers,
   downloadRetries,
   downloadConcurrency,
+  processorStates,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'llm-execution',
@@ -587,6 +588,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
             outputProcessors,
             isLLMExecutionStep: true,
             tracingContext,
+            processorStates,
           },
         });
 

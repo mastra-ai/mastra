@@ -1564,6 +1564,9 @@ importers:
       resolve-from:
         specifier: ^5.0.0
         version: 5.0.0
+      resolve.exports:
+        specifier: ^2.0.3
+        version: 2.0.3
       rollup:
         specifier: ~4.50.2
         version: 4.50.2
@@ -3019,8 +3022,8 @@ importers:
         specifier: ^3.859.0
         version: 3.859.0(@aws-sdk/client-dynamodb@3.859.0)
       electrodb:
-        specifier: ^3.4.5
-        version: 3.4.5(@aws-sdk/client-dynamodb@3.859.0)
+        specifier: ^3.4.6
+        version: 3.4.6(@aws-sdk/client-dynamodb@3.859.0)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -11788,8 +11791,8 @@ packages:
     resolution: {integrity: sha512-/RInbCy1d4P6Zdfa+TMVsf/ufZVotat5hCw3QXmWtjU+3pFEOvOQ7ibo3aIxyCJw2leIeAMjmPj+1SLJiCpdrQ==}
     engines: {node: '>=12.0.0'}
 
-  electrodb@3.4.5:
-    resolution: {integrity: sha512-VkYGnvq7N7fVxA9BFlgyLrIfTXO1aLOXNdVAW35zJyd9scKu6P/yk4iIDyiGTH7u6pCNvMIQ21Plm09ftmodag==}
+  electrodb@3.4.6:
+    resolution: {integrity: sha512-U1YqevycELiAHjzawQIgKtguSqW0VJS1dk0518ErUL3NfJuGtcRw++2aMNjv5Q6sFEwLZpyXLwRzmvA9zKXtyA==}
 
   electron-to-chromium@1.5.171:
     resolution: {integrity: sha512-scWpzXEJEMrGJa4Y6m/tVotb0WuvNmasv3wWVzUAeCgKU0ToFOhUW6Z+xWnRQANMYGxN4ngJXIThgBJOqzVPCQ==}
@@ -15359,6 +15362,10 @@ packages:
 
   resolve-pkg-maps@1.0.0:
     resolution: {integrity: sha512-seS2Tj26TBVOC2NIc2rOe2y2ZO7efxITtLZcGSOnHHNOQ7CkiUBfw0Iw2ck6xkIhPwLhKNLS8BO+hEpngQlqzw==}
+
+  resolve.exports@2.0.3:
+    resolution: {integrity: sha512-OcXjMsGdhL4XnbShKpAcSqPMzQoYkYyhbEaeSko47MjRP9NfEQMhZkXL1DoFlt9LWQn4YttrdnV6X2OiyzBi+A==}
+    engines: {node: '>=10'}
 
   resolve@1.22.10:
     resolution: {integrity: sha512-NPRy+/ncIMeDlTAsuqwKIiferiawhefFJtkNSW0qZJEqMEb+qBt/77B/jGeeek+F0uOeN05CDa6HXbbIgtVX4w==}
@@ -26794,7 +26801,7 @@ snapshots:
 
   efrt@2.7.0: {}
 
-  electrodb@3.4.5(@aws-sdk/client-dynamodb@3.859.0):
+  electrodb@3.4.6(@aws-sdk/client-dynamodb@3.859.0):
     dependencies:
       '@aws-sdk/lib-dynamodb': 3.859.0(@aws-sdk/client-dynamodb@3.859.0)
       '@aws-sdk/util-dynamodb': 3.859.0(@aws-sdk/client-dynamodb@3.859.0)
@@ -30974,6 +30981,8 @@ snapshots:
   resolve-from@5.0.0: {}
 
   resolve-pkg-maps@1.0.0: {}
+
+  resolve.exports@2.0.3: {}
 
   resolve@1.22.10:
     dependencies:

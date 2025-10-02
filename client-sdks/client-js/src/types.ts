@@ -577,3 +577,10 @@ export interface GetAITracesResponse {
   spans: AISpanRecord[];
   pagination: PaginationInfo;
 }
+
+export interface StreamVNextChunkType {
+  type: string;
+  payload: any;
+  runId: string;
+  from: 'AGENT' | 'WORKFLOW';
+}

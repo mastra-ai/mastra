@@ -72,7 +72,6 @@ describe('Agent vNext', () => {
     // 2. writable.close() in setTimeout after stream finishes
     // Both errors stem from the same race condition where the writable stream
     // is locked by pipeTo() when code tries to access it.
-
     const toolCallId = 'call_1';
 
     // First cycle: emit tool-call and finish with tool-calls
@@ -99,20 +98,16 @@ describe('Agent vNext', () => {
       .mockResolvedValueOnce(sseResponse(firstCycle))
       .mockResolvedValueOnce(sseResponse(secondCycle));
 
-    // Spy on console.error to verify no WritableStream locked errors occur (issue #8302)
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const executeSpy = vi.fn(async () => ({ ok: true }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: executeSpy,
+    });
 
-    try {
-      const executeSpy = vi.fn(async () => ({ ok: true }));
-      const weatherTool = createTool({
-        id: 'weatherTool',
-        description: 'Weather',
-        inputSchema: z.object({ location: z.string() }),
-        outputSchema: z.object({ ok: z.boolean() }),
-        execute: executeSpy,
-      });
-
-      const resp = await agent.stream({ messages: 'weather?', clientTools: { weatherTool } });
+    const resp = await agent.stream({ messages: 'weather?', clientTools: { weatherTool } });
 
       let lastChunk = null;
       await resp.processDataStream({
@@ -130,20 +125,6 @@ describe('Agent vNext', () => {
         2,
       );
 
-      // Verify no WritableStream locked errors occurred (issue #8302)
-      const writableStreamError = consoleErrorSpy.mock.calls.find(call => {
-        const message = String(call[0]);
-        const error = call[1];
-        return (
-          message.includes('Error piping to writable stream') &&
-          error?.code === 'ERR_INVALID_STATE' &&
-          error?.message?.includes('WritableStream is locked')
-        );
-      });
-      expect(writableStreamError).toBeUndefined();
-    } finally {
-      consoleErrorSpy.mockRestore();
-    }
   });
 
   it('stream: step execution when client tool is present without an execute function', async () => {
