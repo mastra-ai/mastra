@@ -36,7 +36,7 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
 
-  const generateVNext = async ({
+  const generate = async ({
     coreUserMessages,
     runtimeContext,
     threadId,
@@ -92,7 +92,7 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
     }
   };
 
-  const streamVNext = async ({
+  const stream = async ({
     coreUserMessages,
     runtimeContext,
     threadId,
@@ -214,8 +214,8 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
 
   return {
     network,
-    streamVNext,
-    generateVNext,
+    stream,
+    generate,
     isRunning,
     messages,
     setMessages,
