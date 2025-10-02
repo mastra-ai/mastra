@@ -352,7 +352,7 @@ export class LangfuseExporter implements AITracingExporter {
     score: number;
     reason?: string;
     scorerName: string;
-    metadata: Record<string, any>;
+    metadata?: Record<string, any>;
   }): Promise<void> {
     if (!this.client) return;
 
@@ -364,7 +364,7 @@ export class LangfuseExporter implements AITracingExporter {
         name: scorerName,
         value: score,
         ...(metadata?.sessionId ? { sessionId: metadata.sessionId } : {}),
-        metadata: { reason },
+        metadata: { ...(reason ? { reason } : {}) },
         dataType: 'NUMERIC',
       });
     } catch (error) {
