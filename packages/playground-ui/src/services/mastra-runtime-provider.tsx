@@ -172,7 +172,7 @@ export function MastraRuntimeProvider({
   const [isLegacyRunning, setIsLegacyRunning] = useState(false);
   const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>([]);
 
-const {
+  const {
     setMessages,
     messages,
     generate,
@@ -524,7 +524,7 @@ const {
           }
 
           setIsLegacyRunning(false);
-} else {
+        } else {
           setIsLegacyRunning(true);
           const response = await agent.streamLegacy({
             messages: [
@@ -785,7 +785,7 @@ const {
 
   const { adapters, isReady } = useAdapters(agentId);
 
-const runtime = useExternalStoreRuntime({
+  const runtime = useExternalStoreRuntime({
     isRunning: isLegacyRunning || isRunningStream,
     messages: isVNext ? messages : legacyMessages,
     convertMessage: x => x,

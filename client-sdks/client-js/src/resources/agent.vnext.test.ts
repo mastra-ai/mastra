@@ -109,22 +109,21 @@ describe('Agent vNext', () => {
 
     const resp = await agent.stream({ messages: 'weather?', clientTools: { weatherTool } });
 
-      let lastChunk = null;
-      await resp.processDataStream({
-        onChunk: async chunk => {
-          lastChunk = chunk;
-        },
-      });
+    let lastChunk = null;
+    await resp.processDataStream({
+      onChunk: async chunk => {
+        lastChunk = chunk;
+      },
+    });
 
-      expect(lastChunk?.type).toBe('finish');
-      expect(lastChunk?.payload?.stepResult?.reason).toBe('stop');
-      // Client tool executed
-      expect(executeSpy).toHaveBeenCalledTimes(1);
-      // Recursive request made
-      expect((global.fetch as any).mock.calls.filter((c: any[]) => (c?.[0] as string).includes('/stream')).length).toBe(
-        2,
-      );
-
+    expect(lastChunk?.type).toBe('finish');
+    expect(lastChunk?.payload?.stepResult?.reason).toBe('stop');
+    // Client tool executed
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+    // Recursive request made
+    expect((global.fetch as any).mock.calls.filter((c: any[]) => (c?.[0] as string).includes('/stream')).length).toBe(
+      2,
+    );
   });
 
   it('stream: step execution when client tool is present without an execute function', async () => {
