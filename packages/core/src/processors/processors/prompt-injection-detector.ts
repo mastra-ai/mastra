@@ -193,7 +193,7 @@ export class PromptInjectionDetector implements Processor {
       });
 
       if (model.specificationVersion === 'v2') {
-        response = await this.detectionAgent.generateVNext(prompt, {
+        response = await this.detectionAgent.generate(prompt, {
           output: schema,
           modelSettings: {
             temperature: 0,
@@ -201,7 +201,7 @@ export class PromptInjectionDetector implements Processor {
           tracingContext,
         });
       } else {
-        response = await this.detectionAgent.generate(prompt, {
+        response = await this.detectionAgent.generateLegacy(prompt, {
           output: schema,
           temperature: 0,
           tracingContext,
