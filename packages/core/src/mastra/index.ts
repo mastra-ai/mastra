@@ -82,7 +82,8 @@ export interface Config<
 
   /**
    * Next-generation agent networks for complex multi-agent interactions.
-   * @experimental This feature is in development and may change
+   * This feature is in development and may change.
+   * @experimental 
    */
   vnext_networks?: TVNextNetworks;
 
