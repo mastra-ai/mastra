@@ -121,9 +121,6 @@ function resolveThreadIdFromArgs(args: {
 }
 
 /**
-<<<<<<< Updated upstream
- * The `Agent` class is the foundation for creating AI agents in Mastra. It provides methods for generating responses, streaming interactions, and handling voice capabilities.
-=======
  * The Agent class is the foundation for creating AI agents in Mastra. It provides methods for generating responses,
  * streaming interactions, managing memory, and handling voice capabilities.
  *
@@ -142,7 +139,6 @@ function resolveThreadIdFromArgs(args: {
  *   memory: mastraMemory,
  * });
  * ```
->>>>>>> Stashed changes
  */
 @InstrumentClass({
   prefix: 'agent',
