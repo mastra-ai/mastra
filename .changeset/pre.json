@@ -77,5 +77,37 @@
     "@mastra/voice-speechify": "0.11.7",
     "@mastra/inngest": "0.14.2"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_dynamodb-8374-dependencies",
+    "@mastra_dynamodb-8383-dependencies",
+    "@mastra_google-cloud-pubsub-8424-dependencies",
+    "@mastra_playground-ui-8298-dependencies",
+    "@mastra_playground-ui-8333-dependencies",
+    "@mastra_s3vectors-8383-dependencies",
+    "@mastra_voice-google-8425-dependencies",
+    "dirty-meals-beam",
+    "dry-grapes-crash",
+    "eleven-hairs-take",
+    "famous-parents-rush",
+    "few-tips-film",
+    "funny-gifts-listen",
+    "good-vans-clean",
+    "itchy-geckos-report",
+    "lazy-hoops-dig",
+    "lucky-bats-pay",
+    "moody-knives-say",
+    "neat-files-call",
+    "odd-sides-build",
+    "plenty-rocks-brake",
+    "real-cooks-tickle",
+    "ripe-papers-share",
+    "salty-jars-push",
+    "shaggy-planets-cheat",
+    "shiny-fans-find",
+    "slick-walls-listen",
+    "small-results-retire",
+    "upset-carpets-live",
+    "whole-bags-remain",
+    "young-beds-return"
+  ]
 }
