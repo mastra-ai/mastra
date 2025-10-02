@@ -38,25 +38,10 @@ As of `v 0.20.00`, the `streamVNext()` and `generateVNext()` methods in Mastra a
 - **Legacy `streamLegacy()`**: Returns streaming response with callbacks
 - **Current `stream()`**: Returns `MastraModelOutput` or `AISDKV5OutputStream`
 
-## Migration Examples
+## `output` is deprecated
 
-### Migrating from Legacy to Standard APIs
+The `output` property is deprecated in favour of `structuredOutput`. `structuredOutput` uses a dedicated model of your choice to return JSON.
 
-#### Before (using legacy API):
-```typescript
-const result = await agent.generateLegacy(messages, {
-  structuredOutput: {
-    schema: z.object({
-      name: z.string(),
-      age: z.number()
-    })
-  },
-  temperature: 0.7,
-  maxSteps: 5
-});
-```
-
-#### After (using standard API):
 ```typescript
 const result = await agent.generate(messages, {
   structuredOutput: {
@@ -64,53 +49,23 @@ const result = await agent.generate(messages, {
       name: z.string(),
       age: z.number()
     })
+    model: openai(gpt-4o-mini),
+    errorStrategy: 'fallback'
+    fallbackValue: { name: 'unknown', age: 0 }
+    instructions: 'Do something' // override the default instructions for the structuring LLM
   },
+});
+```
+
+## `temperature` settings has moved
+
+```typescript
+const result = await agent.generate(messages, {
   modelSettings: {
     temperature: 0.7
-  },
-  maxSteps: 5
+  }
 });
 ```
-
-#### Before (using legacy API):
-```typescript
-const streamResult = await agent.streamLegacy(messages, {
-  onFinish: (result) => {
-    console.log('Finished:', result);
-  },
-  temperature: 0.7,
-  maxSteps: 5
-});
-```
-
-#### After (using standard API):
-```typescript
-const streamResult = await agent.stream(messages, {
-  callbacks: {
-    onFinish: (result) => {
-      console.log('Finished:', result);
-    }
-  },
-  modelSettings: {
-    temperature: 0.7
-  },
-  maxSteps: 5
-});
-```
-
-## Parameter Mapping
-
-| Legacy Parameter | Standard Equivalent | Notes |
-|------------------|------------------|-------|
-| `temperature` | `modelSettings.temperature` | Moved to nested settings object |
-| `maxSteps` | `maxSteps` | Same location |
-| `onFinish` | `callbacks.onFinish` | Moved to callbacks object |
-| `onStepFinish` | `callbacks.onStepFinish` | Moved to callbacks object |
-| `structuredOutput` | `structuredOutput` | Same location but enhanced |
-| `memory` | `memory` | Same location |
-| `toolChoice` | `toolChoice` | Same location |
-| `providerOptions` | `providerOptions` | Same location |
-
 
 ## Format Options
 The current APIs support a `format` option that allows you to choose between Mastra's native format, AI SDK v5, and other frontends like `copilotkit` and `assistant-ui`:
