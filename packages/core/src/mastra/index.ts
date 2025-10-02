@@ -1309,7 +1309,7 @@ do:
    *   scorers: {
    *     myHelpfulnessScorer: new HelpfulnessScorer({
    *       name: 'helpfulness-evaluator',
-   *       model: openai('gpt-4o')
+   *       model: 'openai/gpt-5'
    *     })
    *   }
    * });
