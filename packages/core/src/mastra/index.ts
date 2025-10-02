@@ -53,7 +53,7 @@ import { createOnScorerHook } from './hooks';
  *     weatherAgent: new Agent({
  *       name: 'weather-agent',
  *       instructions: 'You help with weather information',
- *       model: openai('gpt-4o')
+ *       model: 'openai/gpt-5'
  *     })
  *   },
  *   storage: new LibSQLStore({ url: ':memory:' }),
