@@ -35,7 +35,7 @@ export const chefModelV2Agent = new Agent({
       ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
       You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
       `,
-  model: openai_v5('gpt-4o-mini'),
+  model: 'netlify/openai/gpt-4.1',
   tools: {
     cookingTool,
     weatherInfo,
@@ -61,8 +61,8 @@ const weatherAgent = new Agent({
   instructions: `You are a weather agent that can help you get weather information for a given city`,
   description: `An agent that can help you get weather information for a given city`,
   model: openai_v5('gpt-4o-mini'),
-  workflows: {
-    myWorkflow,
+  tools: {
+    weatherInfo,
   },
 });
 

@@ -291,7 +291,7 @@ export interface GetMemoryConfigParams {
   agentId: string;
 }
 
-export type GetMemoryConfigResponse = MemoryConfig;
+export type GetMemoryConfigResponse = { config: MemoryConfig };
 
 export interface GetNetworkMemoryThreadParams {
   resourceId: string;
@@ -576,4 +576,11 @@ export interface GetAITraceResponse {
 export interface GetAITracesResponse {
   spans: AISpanRecord[];
   pagination: PaginationInfo;
+}
+
+export interface StreamVNextChunkType {
+  type: string;
+  payload: any;
+  runId: string;
+  from: 'AGENT' | 'WORKFLOW';
 }

@@ -1,5 +1,6 @@
-import type { Mastra } from '@mastra/core';
+import type { Mastra, ProviderConfig } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { getProviderConfig, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import {
   getAgentsHandler as getOriginalAgentsHandler,
@@ -17,6 +18,8 @@ import {
   reorderAgentModelListHandler as getOriginalReorderAgentModelListHandler,
   updateAgentModelInModelListHandler as getOriginalUpdateAgentModelInModelListHandler,
   streamNetworkHandler as getOriginalStreamNetworkHandler,
+  approveToolCallHandler as getOriginalApproveToolCallHandler,
+  declineToolCallHandler as getOriginalDeclineToolCallHandler,
 } from '@mastra/server/handlers/agents';
 import type { Context } from 'hono';
 
@@ -99,6 +102,36 @@ export async function getAgentsHandler(c: Context) {
   });
 
   return c.json(serializedAgents);
+}
+
+export async function getProvidersHandler(c: Context) {
+  try {
+    const providers = [];
+
+    // Check each provider in the registry
+    for (const [providerId, config] of Object.entries(PROVIDER_REGISTRY as Record<string, ProviderConfig>)) {
+      const hasApiKey = !!(typeof config.apiKeyEnvVar === `string`
+        ? process.env[config.apiKeyEnvVar]
+        : Array.isArray(config.apiKeyEnvVar)
+          ? config.apiKeyEnvVar.every((k: string) => !!process.env[k])
+          : false);
+
+      const providerConfig = getProviderConfig(providerId);
+
+      providers.push({
+        id: providerId,
+        name: config.name,
+        envVar: config.apiKeyEnvVar,
+        connected: hasApiKey,
+        models: [...config.models], // Convert readonly array to mutable
+        docUrl: providerConfig?.docUrl || null,
+      });
+    }
+
+    return c.json({ providers });
+  } catch (error) {
+    return handleError(error, 'Error getting providers');
+  }
 }
 
 export async function getAgentByIdHandler(c: Context) {
@@ -299,6 +332,106 @@ export async function streamVNextGenerateHandler(c: Context): Promise<Response |
   }
 }
 
+export async function approveToolCallHandler(c: Context): Promise<Response | undefined> {
+  try {
+    const mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const body = await c.req.json();
+    const logger = mastra.getLogger();
+
+    c.header('Transfer-Encoding', 'chunked');
+
+    c.header('Transfer-Encoding', 'chunked');
+
+    return stream(
+      c,
+      async stream => {
+        try {
+          const streamResponse = await getOriginalApproveToolCallHandler({
+            mastra,
+            runtimeContext,
+            agentId,
+            body,
+            abortSignal: c.req.raw.signal,
+          });
+
+          const reader = streamResponse.fullStream.getReader();
+
+          stream.onAbort(() => {
+            void reader.cancel('request aborted');
+          });
+
+          let chunkResult;
+          while ((chunkResult = await reader.read()) && !chunkResult.done) {
+            await stream.write(`data: ${JSON.stringify(chunkResult.value)}\n\n`);
+          }
+
+          await stream.write('data: [DONE]\n\n');
+        } catch (err) {
+          logger.error('Error in approve tool call: ' + ((err as Error)?.message ?? 'Unknown error'));
+        }
+
+        await stream.close();
+      },
+      async err => {
+        logger.error('Error in watch stream: ' + err?.message);
+      },
+    );
+  } catch (error) {
+    return handleError(error, 'Error approving tool call');
+  }
+}
+
+export async function declineToolCallHandler(c: Context): Promise<Response | undefined> {
+  try {
+    const mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const body = await c.req.json();
+    const logger = mastra.getLogger();
+
+    c.header('Transfer-Encoding', 'chunked');
+
+    return stream(
+      c,
+      async stream => {
+        try {
+          const streamResponse = await getOriginalDeclineToolCallHandler({
+            mastra,
+            runtimeContext,
+            agentId,
+            body,
+            abortSignal: c.req.raw.signal,
+          });
+
+          const reader = streamResponse.fullStream.getReader();
+
+          stream.onAbort(() => {
+            void reader.cancel('request aborted');
+          });
+
+          let chunkResult;
+          while ((chunkResult = await reader.read()) && !chunkResult.done) {
+            await stream.write(`data: ${JSON.stringify(chunkResult.value)}\n\n`);
+          }
+
+          await stream.write('data: [DONE]\n\n');
+        } catch (err) {
+          logger.error('Error in decline tool call: ' + ((err as Error)?.message ?? 'Unknown error'));
+        }
+
+        await stream.close();
+      },
+      async err => {
+        logger.error('Error in watch stream: ' + err?.message);
+      },
+    );
+  } catch (error) {
+    return handleError(error, 'Error declining tool call');
+  }
+}
+
 export async function streamNetworkHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
@@ -468,8 +601,20 @@ export async function getModelProvidersHandler(c: Context) {
   const providers = Object.entries(AllowedProviderKeys);
   const envKeys = Object.keys(envVars);
   const availableProviders = providers.filter(([_, value]) => envKeys.includes(value) && !!envVars[value]);
-  const availableProvidersNames = availableProviders.map(([key]) => key);
-  return c.json(availableProvidersNames);
+
+  const providerInfo = availableProviders.map(([key, envVar]) => {
+    const providerConfig = getProviderConfig(key);
+    return {
+      id: key,
+      name: key.charAt(0).toUpperCase() + key.slice(1).replace(/-/g, ' '),
+      envVar,
+      hasApiKey: !!envVars[envVar],
+      docUrl: providerConfig?.docUrl || null,
+      models: providerConfig?.models || [],
+    };
+  });
+
+  return c.json(providerInfo);
 }
 
 export async function updateAgentModelInModelListHandler(c: Context) {
