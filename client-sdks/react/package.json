@@ -43,7 +43,7 @@
     "eslint": "^9.35.0",
     "rollup-plugin-node-externals": "^8.0.1",
     "typescript": "^5.8.3",
-    "vite": "^7.1.7",
+    "vite": "^7.0.7",
     "vite-plugin-dts": "^4.5.4",
     "vitest": "^3.2.4"
   }
