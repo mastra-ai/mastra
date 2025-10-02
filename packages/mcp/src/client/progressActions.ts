@@ -24,7 +24,7 @@ export class ProgressClientActions {
    * Set a notification handler for progress updates.
    * @param handler The callback function to handle progress notifications.
    */
-  public async onUpdate(handler: (params: z.infer<typeof ProgressNotificationSchema>['params']) => void): Promise<void> {
+  public onUpdate(handler: (params: z.infer<typeof ProgressNotificationSchema>['params']) => void): void {
     this.client.setProgressNotificationHandler(handler);
   }
 }
