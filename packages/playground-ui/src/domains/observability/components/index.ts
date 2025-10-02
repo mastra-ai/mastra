@@ -4,3 +4,4 @@ export * from './trace-timeline-span';
 export * from './shared';
 export * from './trace-dialog';
 export * from './traces-tools';
+export * from './traces-list';
