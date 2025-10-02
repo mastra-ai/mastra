@@ -365,6 +365,10 @@ export class Agent<
     });
   }
 
+  /**
+   * Creates and returns a ProcessorRunner with resolved input/output processors.
+   * @internal
+   */
   private async getProcessorRunner({
     runtimeContext,
     inputProcessorOverrides,
@@ -401,6 +405,10 @@ export class Agent<
     });
   }
 
+  /**
+   * Resolves and returns output processors from agent configuration.
+   * @internal
+   */
   private async getResolvedOutputProcessors(runtimeContext?: RuntimeContext): Promise<OutputProcessor[]> {
     if (!this.#outputProcessors) {
       return [];
@@ -661,6 +669,7 @@ export class Agent<
   /**
    * Helper function to convert agent instructions to string for backward compatibility
    * Used for legacy methods that expect string instructions (e.g., voice, telemetry)
+   * @internal
    */
   #convertInstructionsToString(instructions: AgentInstructions): string {
     if (typeof instructions === 'string') {
@@ -700,7 +709,7 @@ export class Agent<
 
   /**
    * Gets the default generate options for this agent, resolving function-based options if necessary.
-   * These options are used as defaults when calling generate() without explicit options.
+   * These options are used as defaults when calling `generate()` without explicit options.
    *
    * @example
    * ```typescript
@@ -738,7 +747,7 @@ export class Agent<
 
   /**
    * Gets the default stream options for this agent, resolving function-based options if necessary.
-   * These options are used as defaults when calling stream() without explicit options.
+   * These options are used as defaults when calling `stream()` without explicit options.
    *
    * @example
    * ```typescript
@@ -776,7 +785,7 @@ export class Agent<
 
   /**
    * Gets the default VNext stream options for this agent, resolving function-based options if necessary.
-   * These options are used as defaults when calling streamVNext() or generateVNext() without explicit options.
+   * These options are used as defaults when calling `streamVNext()` or `generateVNext()` without explicit options.
    *
    * @example
    * ```typescript
@@ -954,7 +963,10 @@ export class Agent<
     });
   }
 
-  // Returns true for model router config object
+  /**
+   * Returns true for model router config object
+   * @internal
+   */
   private isOpenaiCompatibleObjectConfig(
     modelConfig: DynamicArgument<MastraModelConfig>,
   ): modelConfig is OpenAICompatibleConfig {
@@ -971,6 +983,7 @@ export class Agent<
    * Resolves a model configuration to a LanguageModel instance
    * @param modelConfig The model configuration (magic string, config object, or LanguageModel)
    * @returns A LanguageModel instance
+   * @internal
    */
   private async resolveModelConfig(
     modelConfig: DynamicArgument<MastraModelConfig>,
@@ -1067,11 +1080,19 @@ export class Agent<
     return this.prepareModels(runtimeContext);
   }
 
+  /**
+   * Updates the agent's instructions.
+   * @internal
+   */
   __updateInstructions(newInstructions: string) {
     this.#instructions = newInstructions;
     this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
   }
 
+  /**
+   * Updates the agent's model configuration.
+   * @internal
+   */
   __updateModel({ model }: { model: DynamicArgument<MastraModelConfig> }) {
     this.model = model;
     this.logger.debug(`[Agents:${this.name}] Model updated.`, { model: this.model, name: this.name });
@@ -1129,6 +1150,10 @@ export class Agent<
 
   #primitives?: MastraPrimitives;
 
+  /**
+   * Registers telemetry and logger primitives with the agent.
+   * @internal
+   */
   __registerPrimitives(p: MastraPrimitives) {
     if (p.telemetry) {
       this.__setTelemetry(p.telemetry);
@@ -1144,6 +1169,10 @@ export class Agent<
     this.logger.debug(`[Agents:${this.name}] initialized.`, { model: this.model, name: this.name });
   }
 
+  /**
+   * Registers the Mastra instance with the agent.
+   * @internal
+   */
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
     // Mastra will be passed to the LLM when it's created in getLLM()
@@ -1152,6 +1181,7 @@ export class Agent<
   /**
    * Set the concrete tools for the agent
    * @param tools
+   * @internal
    */
   __setTools(tools: TTools) {
     this.#tools = tools;
@@ -1385,6 +1415,10 @@ export class Agent<
     return { threadId: threadId || '', messages: userMessages || [] };
   }
 
+  /**
+   * Retrieves and converts memory tools to CoreTool format.
+   * @internal
+   */
   private async getMemoryTools({
     runId,
     resourceId,
@@ -1435,6 +1469,10 @@ export class Agent<
     return convertedMemoryTools;
   }
 
+  /**
+   * Executes input processors on the message list before LLM processing.
+   * @internal
+   */
   private async __runInputProcessors({
     runtimeContext,
     tracingContext,
@@ -1507,6 +1545,10 @@ export class Agent<
     };
   }
 
+  /**
+   * Executes output processors on the message list after LLM processing.
+   * @internal
+   */
   private async __runOutputProcessors({
     runtimeContext,
     tracingContext,
@@ -1573,6 +1615,10 @@ export class Agent<
     };
   }
 
+  /**
+   * Fetches remembered messages from memory for the current thread.
+   * @internal
+   */
   private async getMemoryMessages({
     resourceId,
     threadId,
@@ -1601,6 +1647,10 @@ export class Agent<
       .then(r => r.messagesV2);
   }
 
+  /**
+   * Retrieves and converts assigned tools to CoreTool format.
+   * @internal
+   */
   private async getAssignedTools({
     runId,
     resourceId,
@@ -1667,6 +1717,10 @@ export class Agent<
     return toolsForRequest;
   }
 
+  /**
+   * Retrieves and converts toolset tools to CoreTool format.
+   * @internal
+   */
   private async getToolsets({
     runId,
     threadId,
@@ -1719,6 +1773,10 @@ export class Agent<
     return toolsForRequest;
   }
 
+  /**
+   * Retrieves and converts client-side tools to CoreTool format.
+   * @internal
+   */
   private async getClientTools({
     runId,
     threadId,
@@ -1768,6 +1826,10 @@ export class Agent<
     return toolsForRequest;
   }
 
+  /**
+   * Retrieves and converts workflow tools to CoreTool format.
+   * @internal
+   */
   private async getWorkflowTools({
     runId,
     threadId,
@@ -1895,6 +1957,10 @@ export class Agent<
     return convertedWorkflowTools;
   }
 
+  /**
+   * Assembles all tools from various sources into a unified CoreTool dictionary.
+   * @internal
+   */
   private async convertTools({
     toolsets,
     clientTools,
@@ -1983,6 +2049,10 @@ export class Agent<
     });
   }
 
+  /**
+   * Formats and validates tool names to comply with naming restrictions.
+   * @internal
+   */
   private formatTools(tools: Record<string, CoreTool>): Record<string, CoreTool> {
     const INVALID_CHAR_REGEX = /[^a-zA-Z0-9_\-]/g;
     const STARTING_CHAR_REGEX = /[a-zA-Z_]/;
@@ -2029,6 +2099,7 @@ export class Agent<
    * @param threadId - The thread ID.
    * @param memoryConfig - The memory configuration for saving.
    * @param runId - (Optional) The run ID for logging.
+   * @internal
    */
   private async saveStepMessages({
     saveQueueManager,
@@ -2058,6 +2129,10 @@ export class Agent<
     }
   }
 
+  /**
+   * Prepares message list and tools before LLM execution and handles memory persistence after.
+   * @internal
+   */
   __primitive({
     instructions,
     messages,
@@ -2676,6 +2751,10 @@ export class Agent<
     }
   }
 
+  /**
+   * Resolves scorer name references to actual scorer instances from Mastra.
+   * @internal
+   */
   private resolveOverrideScorerReferences(
     overrideScorers: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>,
   ) {
@@ -2715,6 +2794,10 @@ export class Agent<
     return result;
   }
 
+  /**
+   * Prepares options and handlers for LLM text/object generation or streaming.
+   * @internal
+   */
   private prepareLLMOptions<
     Tools extends ToolSet,
     Output extends ZodSchema | JSONSchema7 | undefined = undefined,
@@ -2751,6 +2834,9 @@ export class Agent<
     }>;
     llm: MastraLLM;
   }>;
+  /**
+   * @internal
+   */
   private prepareLLMOptions<
     Tools extends ToolSet,
     Output extends ZodSchema | JSONSchema7 | undefined = undefined,
@@ -2787,6 +2873,9 @@ export class Agent<
     }>;
     llm: MastraLLMV1;
   }>;
+  /**
+   * @internal
+   */
   private async prepareLLMOptions<
     Tools extends ToolSet,
     Output extends ZodSchema | JSONSchema7 | undefined = undefined,
@@ -3030,6 +3119,10 @@ export class Agent<
     };
   }
 
+  /**
+   * Resolves and prepares model configurations for the LLM.
+   * @internal
+   */
   private async prepareModels(
     runtimeContext: RuntimeContext,
     model?: DynamicArgument<MastraLanguageModel> | ModelFallbacks,
@@ -3111,6 +3204,7 @@ export class Agent<
   }
   /**
    * Merges telemetry wrapper with default onFinish callback when needed
+   * @internal
    */
   #mergeOnFinishWithTelemetry(streamOptions: any, defaultStreamOptions: any) {
     let finalOnFinish = streamOptions?.onFinish || defaultStreamOptions.onFinish;
@@ -3135,6 +3229,10 @@ export class Agent<
     return finalOnFinish;
   }
 
+  /**
+   * Executes the agent with VNext execution model, handling tools, memory, and streaming.
+   * @internal
+   */
   async #execute<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
@@ -3258,6 +3356,10 @@ export class Agent<
     return result;
   }
 
+  /**
+   * Handles post-execution tasks including memory persistence and title generation.
+   * @internal
+   */
   async #executeOnFinish({
     result,
     instructions,
@@ -3808,9 +3910,9 @@ export class Agent<
 
   /**
    * Generates responses from the agent using AI SDK v4 models.
-   * Currently calls generateLegacy. Will switch to generateVNext implementation in September 2025.
+   * Currently calls `generateLegacy()`. Will switch to `generateVNext()` implementation in September 2025.
    *
-   * @deprecated This method will switch to generateVNext in September 2025. For AI SDK v4 models, use generateLegacy. For new code, use generateVNext.
+   * @deprecated This method will switch to `generateVNext()` in September 2025. For AI SDK v4 models, use `generateLegacy()`. For new code, use `generateVNext()`.
    *
    * @example
    * ```typescript
@@ -3869,7 +3971,7 @@ export class Agent<
 
   /**
    * Legacy implementation of generate method using AI SDK v4 models.
-   * Use this method if you need to continue using AI SDK v4 models after generate() switches to VNext.
+   * Use this method if you need to continue using AI SDK v4 models after `generate()` switches to VNext.
    *
    * @example
    * ```typescript
@@ -4195,9 +4297,9 @@ export class Agent<
 
   /**
    * Streams responses from the agent using AI SDK v4 models.
-   * Currently calls streamLegacy. Will switch to streamVNext implementation in September 2025.
+   * Currently calls `streamLegacy()`. Will switch to `streamVNext()` implementation in September 2025.
    *
-   * @deprecated This method will switch to streamVNext in September 2025. For AI SDK v4 models, use streamLegacy. For new code, use streamVNext.
+   * @deprecated This method will switch to `streamVNext()` in September 2025. For AI SDK v4 models, use `streamLegacy()`. For new code, use `streamVNext()`.
    *
    * @example
    * ```typescript
@@ -4273,7 +4375,7 @@ export class Agent<
 
   /**
    * Legacy implementation of stream method using AI SDK v4 models.
-   * Use this method if you need to continue using AI SDK v4 models after stream() switches to VNext.
+   * Use this method if you need to continue using AI SDK v4 models after `stream()` switches to VNext.
    *
    * @example
    * ```typescript
@@ -4683,6 +4785,7 @@ export class Agent<
   /**
    * Resolves the configuration for title generation.
    * @private
+   * @internal
    */
   private resolveTitleGenerationConfig(
     generateTitleConfig:
@@ -4712,6 +4815,7 @@ export class Agent<
   /**
    * Resolves title generation instructions, handling both static strings and dynamic functions
    * @private
+   * @internal
    */
   private async resolveTitleInstructions(
     runtimeContext: RuntimeContext,
