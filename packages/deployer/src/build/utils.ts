@@ -48,7 +48,10 @@ export async function getPackageInfo(packageName: string, parentPath?: string): 
   // Get package info
   pkg = (await getPackageInfoLocal(packageName, options)) as PackageInfo | undefined;
 
-  //Extra logic for packageInfo resolution
+  /**
+   * Extra logic for packageInfo resolution. For scenarios where default rootPath is resolved to
+   * treeshaken cjs,esm output and rootPath !== real rootPath of the package
+   */
   if (pkg && pkg.rootPath && !pkg?.version) {
     const realRootPath = pkg.rootPath.includes(pkg.name)
       ? pkg.rootPath.slice(0, pkg.rootPath.lastIndexOf(pkg.name) + pkg.name.length)
