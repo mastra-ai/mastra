@@ -120,6 +120,9 @@ function resolveThreadIdFromArgs(args: {
   return undefined;
 }
 
+/**
+ * The `Agent` class is the foundation for creating AI agents in Mastra. It provides methods for generating responses, streaming interactions, and handling voice capabilities.
+ */
 @InstrumentClass({
   prefix: 'agent',
   excludeMethods: [
