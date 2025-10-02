@@ -127,16 +127,16 @@ function resolveThreadIdFromArgs(args: {
  * @example
  * ```typescript
  * import { Agent } from '@mastra/core/agent';
- * import { openai } from '@ai-sdk/openai';
+ * import { Memory } from '@mastra/memory';
  *
  * const agent = new Agent({
  *   name: 'my-agent',
  *   instructions: 'You are a helpful assistant',
- *   model: openai('gpt-4'),
+ *   model: 'openai/gpt-5',
  *   tools: {
  *     calculator: calculatorTool,
  *   },
- *   memory: mastraMemory,
+ *   memory: new Memory(),
  * });
  * ```
  */
@@ -204,14 +204,14 @@ export class Agent<
    * @example
    * ```typescript
    * import { Agent } from '@mastra/core/agent';
-   * import { openai } from '@ai-sdk/openai';
+   * import { Memory } from '@mastra/memory';
    *
    * const agent = new Agent({
    *   name: 'weatherAgent',
    *   instructions: 'You help users with weather information',
-   *   model: openai('gpt-4'),
+   *   model: 'openai/gpt-5',
    *   tools: { getWeather },
-   *   memory: mastraMemory,
+   *   memory: new Memory(),
    *   maxRetries: 2,
    * });
    * ```
@@ -904,7 +904,7 @@ export class Agent<
    * ```typescript
    * const llm = await agent.getLLM();
    * // Use with custom model
-   * const customLlm = await agent.getLLM({ model: openai('gpt-4') });
+   * const customLlm = await agent.getLLM({ model: 'openai/gpt-5' });
    * ```
    */
   public getLLM({
@@ -1017,7 +1017,7 @@ export class Agent<
    * const model = await agent.getModel();
    * // Get with custom model config
    * const customModel = await agent.getModel({
-   *   modelConfig: openai('gpt-4')
+   *   modelConfig: 'openai/gpt-5'
    * });
    * ```
    */
@@ -3487,8 +3487,7 @@ export class Agent<
 
   /**
    * Generates a complete response using the VNext execution model (waits for stream to complete).
-   * This is the recommended method for non-streaming generation with support for multi-step reasoning,
-   * structured output, and enhanced capabilities.
+   * This is the recommended method for non-streaming generation with support for multi-step reasoning, structured output, and enhanced capabilities.
    *
    * @example
    * ```typescript
