@@ -738,7 +738,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
           controller.enqueue(chunk);
         },
         flush: () => {
-          if (!self.#options.output && self.#delayedPromises.object.status.type !== 'resolved') {
+          if (self.#delayedPromises.object.status.type !== 'resolved') {
             // always resolve object promise as undefined if still hanging in flush and no output schema provided
             self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
           }
