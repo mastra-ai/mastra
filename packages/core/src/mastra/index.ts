@@ -1218,10 +1218,6 @@ do:
   /**
    * Returns all registered scorers as a record keyed by their IDs.
    *
-   * Scorers are evaluation tools that measure and assess the quality of AI system outputs,
-   * such as agent responses, workflow results, or model predictions. They help improve
-   * AI performance through systematic evaluation and feedback.
-   *
    * @example Listing all scorers
    * ```typescript
    * import { HelpfulnessScorer, AccuracyScorer, RelevanceScorer } from '@mastra/scorers';
@@ -1249,9 +1245,6 @@ do:
 
   /**
    * Retrieves a registered scorer by its key.
-   *
-   * Scorers evaluate the quality and performance of AI system outputs. Each scorer
-   * is registered with a unique key that serves as its identifier within the Mastra instance.
    *
    * @template TScorerKey - The specific scorer key type from the registered scorers
    * @throws {MastraError} When the scorer with the specified key is not found
@@ -1348,10 +1341,6 @@ do:
   /**
    * Returns all registered workflows as a record keyed by their IDs.
    *
-   * Workflows are type-safe, composable sequences of operations that provide
-   * deterministic execution with built-in error handling, branching, and parallel processing.
-   * This method provides access to all configured workflows for bulk operations or discovery.
-   *
    * @example Listing all workflows
    * ```typescript
    * const mastra = new Mastra({
@@ -1386,10 +1375,6 @@ do:
 
   /**
    * Sets the storage provider for the Mastra instance.
-   *
-   * Storage is essential for persisting data across sessions, including conversation history,
-   * workflow state, agent memory, and application data. The storage provider is automatically
-   * augmented with initialization capabilities.
    *
    * @example
    * ```typescript
@@ -1519,10 +1504,6 @@ do:
   /**
    * Gets all registered text-to-speech (TTS) providers.
    *
-   * TTS providers enable voice synthesis capabilities, allowing agents and workflows
-   * to convert text into spoken audio. This method returns all configured TTS providers
-   * as a record keyed by their names.
-   *
    * @example
    * ```typescript
    * const mastra = new Mastra({
@@ -1548,10 +1529,6 @@ do:
   /**
    * Gets the currently configured logger instance.
    *
-   * The logger is used throughout the Mastra system for debugging, monitoring, and
-   * tracking application behavior. It provides structured logging capabilities with
-   * different log levels and can be configured to output to various destinations.
-   *
    * @example
    * ```typescript
    * const mastra = new Mastra({
@@ -1572,10 +1549,6 @@ do:
 
   /**
    * Gets the currently configured telemetry instance.
-   *
-   * Telemetry provides distributed tracing, metrics collection, and observability
-   * for Mastra applications. It helps monitor performance, track operations across
-   * services, and debug issues in production environments.
    *
    * @example
    * ```typescript
@@ -1626,10 +1599,6 @@ do:
 
   /**
    * Gets the currently configured storage provider.
-   *
-   * Storage is used for persisting data across sessions, including conversation history,
-   * workflow state, agent memory, and application data. This method returns the storage
-   * instance that was configured during Mastra initialization or set via `setStorage()`.
    *
    * @example
    * ```typescript
