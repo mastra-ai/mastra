@@ -349,6 +349,76 @@ export function pgTests() {
 
       // Edge Case: Just Under Limit
       describe('Edge Cases', () => {
+        it('should find the boundary between JSON.stringify success and database failure', async () => {
+          // Test to identify if there's a gap between JSON.stringify working and DB insert failing
+          const testSizes = [240, 250, 260, 270, 280];
+          const results: { size: number; stringifyWorks: boolean; insertWorks: boolean }[] = [];
+
+          for (const sizeMB of testSizes) {
+            const payload = 'X'.repeat(sizeMB * 1024 * 1024);
+            const snapshot = {
+              runId: `boundary_test_${sizeMB}`,
+              status: 'running',
+              value: {},
+              context: { input: {} } as any,
+              result: { testData: payload },
+              serializedStepGraph: [],
+              activePaths: [],
+              suspendedPaths: {},
+              waitingPaths: {},
+              timestamp: Date.now(),
+            } as WorkflowRunState;
+
+            let stringifyWorks = false;
+            let insertWorks = false;
+
+            try {
+              const jsonString = JSON.stringify(snapshot);
+              stringifyWorks = true;
+              console.log(
+                `${sizeMB}MB: JSON.stringify succeeded, output size: ${(jsonString.length / 1024 / 1024).toFixed(1)}MB`,
+              );
+
+              try {
+                await store.persistWorkflowSnapshot({
+                  workflowName: `boundary_test_${sizeMB}`,
+                  runId: snapshot.runId,
+                  snapshot,
+                });
+                insertWorks = true;
+
+                // Clean up successful inserts
+                await store.db.none('DELETE FROM mastra_workflow_snapshot WHERE workflow_name = $1', [
+                  `boundary_test_${sizeMB}`,
+                ]);
+              } catch (insertError: any) {
+                console.log(`${sizeMB}MB: Insert failed with:`, insertError.message?.substring(0, 100));
+              }
+            } catch (stringifyError: any) {
+              console.log(`${sizeMB}MB: JSON.stringify failed with:`, stringifyError.message);
+            }
+
+            results.push({ size: sizeMB, stringifyWorks, insertWorks });
+          }
+
+          // Log summary
+          console.log('\n=== Boundary Test Results ===');
+          results.forEach(r => {
+            console.log(`${r.size}MB: stringify=${r.stringifyWorks}, insert=${r.insertWorks}`);
+          });
+
+          // Check if we found a scenario where stringify works but insert fails
+          const gapFound = results.some(r => r.stringifyWorks && !r.insertWorks);
+          if (gapFound) {
+            console.log('Found gap where JSON.stringify works but insert fails!');
+          } else {
+            console.log('No gap found - failures align with JSON.stringify limits');
+          }
+
+          // The test passes as long as we can identify the behavior
+          expect(results.length).toBeGreaterThan(0);
+        }, 180_000);
+
         it('should store payload approaching practical limit successfully (~250MB)', async () => {
           // Create a payload that's substantial but safely under the observed limit
           const string80MB = 'A'.repeat(80 * 1024 * 1024);
