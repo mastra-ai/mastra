@@ -112,7 +112,7 @@ describe('StructuredOutputProcessor', () => {
         ]),
       };
 
-      vi.spyOn(processor['structuringAgent'], 'streamVNext').mockResolvedValue(mockStream as any);
+      vi.spyOn(processor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
 
       await expect(
         processor.processOutputStream({
@@ -158,7 +158,7 @@ describe('StructuredOutputProcessor', () => {
         ]),
       };
 
-      vi.spyOn(fallbackProcessor['structuringAgent'], 'streamVNext').mockResolvedValue(mockStream as any);
+      vi.spyOn(fallbackProcessor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
 
       await fallbackProcessor.processOutputStream({
         part: finishChunk,
@@ -207,7 +207,7 @@ describe('StructuredOutputProcessor', () => {
         ]),
       };
 
-      vi.spyOn(warnProcessor['structuringAgent'], 'streamVNext').mockResolvedValue(mockStream as any);
+      vi.spyOn(warnProcessor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
 
       await warnProcessor.processOutputStream({
         part: finishChunk,
@@ -247,9 +247,7 @@ describe('StructuredOutputProcessor', () => {
         ]),
       };
 
-      const streamVNextSpy = vi
-        .spyOn(processor['structuringAgent'], 'streamVNext')
-        .mockResolvedValue(mockStream as any);
+      const streamSpy = vi.spyOn(processor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
 
       // Call processOutputStream twice with finish chunks
       await processor.processOutputStream({
@@ -266,8 +264,8 @@ describe('StructuredOutputProcessor', () => {
         abort,
       });
 
-      // Should only call streamVNext once (guarded by isStructuringAgentStreamStarted)
-      expect(streamVNextSpy).toHaveBeenCalledTimes(1);
+      // Should only call stream once (guarded by isStructuringAgentStreamStarted)
+      expect(streamSpy).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -340,7 +338,7 @@ describe('StructuredOutputProcessor', () => {
         ]),
       };
 
-      vi.spyOn(processor['structuringAgent'], 'streamVNext').mockResolvedValue(mockStream as any);
+      vi.spyOn(processor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
 
       await processor.processOutputStream({
         part: finishChunk,
@@ -350,7 +348,7 @@ describe('StructuredOutputProcessor', () => {
       });
 
       // Check that the prompt was built correctly with all the different sections
-      const call = (processor['structuringAgent'].streamVNext as any).mock.calls[0];
+      const call = (processor['structuringAgent'].stream as any).mock.calls[0];
       const prompt = call[0];
 
       expect(prompt).toContain('# Assistant Response');
@@ -431,7 +429,7 @@ describe('StructuredOutputProcessor', () => {
         ]),
       };
 
-      vi.spyOn(processor['structuringAgent'], 'streamVNext').mockResolvedValue(mockStream as any);
+      vi.spyOn(processor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
 
       await processor.processOutputStream({
         part: finishChunk,
@@ -441,7 +439,7 @@ describe('StructuredOutputProcessor', () => {
       });
 
       // Check that the prompt includes reasoning
-      const call = (processor['structuringAgent'].streamVNext as any).mock.calls[0];
+      const call = (processor['structuringAgent'].stream as any).mock.calls[0];
       const prompt = call[0];
 
       expect(prompt).toContain('# Assistant Reasoning');
@@ -552,7 +550,7 @@ describe('Structured Output with Tool Execution', () => {
     });
 
     // Stream the response
-    const stream = await agent.streamVNext('Calculate 5 + 3 and return structured output', {
+    const stream = await agent.stream('Calculate 5 + 3 and return structured output', {
       format: 'aisdk',
       maxSteps: 5,
       structuredOutput: {
@@ -660,7 +658,7 @@ describe('Structured Output with Tool Execution', () => {
       },
     });
 
-    const stream = await agent.streamVNext('What is the weather in Toronto?', {
+    const stream = await agent.stream('What is the weather in Toronto?', {
       format: 'aisdk',
       maxSteps: 10,
       structuredOutput: {
