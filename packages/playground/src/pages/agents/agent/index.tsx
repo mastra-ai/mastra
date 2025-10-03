@@ -13,7 +13,6 @@ import { AgentInformation } from '@/domains/agents/agent-information';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { useAgent } from '@/hooks/use-agents';
 import { useMemory, useMessages, useThreads } from '@/hooks/use-memory';
-import { MastraUIMessage } from '@mastra/react';
 
 function Agent() {
   const { agentId, threadId } = useParams();
@@ -85,8 +84,7 @@ function Agent() {
                   agentName={agent?.name}
                   modelVersion={agent?.modelVersion}
                   threadId={threadId!}
-                  initialMessages={(messages?.uiMessages || []) as MastraUIMessage[]}
-                  legacyUIMessages={messages?.legacyUIMessages || []}
+                  initialMessages={messages?.uiMessages || []}
                   memory={memory?.result}
                   refreshThreadList={refreshThreads}
                   modelList={agent?.modelList}

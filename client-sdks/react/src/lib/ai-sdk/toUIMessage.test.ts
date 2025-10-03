@@ -1,829 +1,873 @@
 import { describe, it, expect } from 'vitest';
-import { toUIMessage, type MastraUIMessage } from './toUIMessage';
-import { ChunkType, ChunkFrom } from '@mastra/core/stream';
+import { toUIMessage } from './toUIMessage';
+import { ChunkFrom, type ChunkType } from '@mastra/core/stream';
+import type { UIMessage } from '@ai-sdk/react';
 
 describe('toUIMessage', () => {
-  it('should handle start chunk by creating new assistant message', () => {
-    const chunk: ChunkType = {
-      type: 'start',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {},
-    };
-
-    const conversation: MastraUIMessage[] = [];
-    const result = toUIMessage({ chunk, conversation });
-
-    expect(result).toHaveLength(1);
-    expect(result[0]).toEqual({
-      id: 'run-123',
-      role: 'assistant',
-      parts: [],
-    });
-    expect(result).not.toBe(conversation); // Different reference
-  });
-
-  it('should handle text-start by adding empty text part', () => {
-    const startChunk: ChunkType = {
-      type: 'start',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {},
-    };
-
-    const textStartChunk: ChunkType = {
-      type: 'text-start',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {
-        id: 'text-1',
-        providerMetadata: { test: 'metadata' } as any,
-      },
-    };
-
-    let conversation: MastraUIMessage[] = [];
-    conversation = toUIMessage({ chunk: startChunk, conversation });
-    conversation = toUIMessage({ chunk: textStartChunk, conversation });
-
-    expect(conversation).toHaveLength(1);
-    expect(conversation[0].parts).toHaveLength(1);
-    expect(conversation[0].parts[0]).toEqual({
-      type: 'text',
-      text: '',
-      state: 'streaming',
-      providerMetadata: { test: 'metadata' },
-    });
-  });
-
-  it('should handle text-delta by appending to existing text part', () => {
-    const startChunk: ChunkType = {
-      type: 'start',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {},
-    };
-
-    const textDelta1: ChunkType = {
-      type: 'text-delta',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {
-        id: 'text-1',
-        text: 'Hello',
-        providerMetadata: { test: 'metadata' } as any,
-      },
-    };
-
-    const textDelta2: ChunkType = {
-      type: 'text-delta',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {
-        id: 'text-1',
-        text: ' world',
-        providerMetadata: { test: 'metadata' } as any,
-      },
-    };
-
-    let conversation: MastraUIMessage[] = [];
-    conversation = toUIMessage({ chunk: startChunk, conversation });
-    conversation = toUIMessage({ chunk: textDelta1, conversation });
-    conversation = toUIMessage({ chunk: textDelta2, conversation });
-
-    expect(conversation).toHaveLength(1);
-    expect(conversation[0].parts).toHaveLength(1);
-    expect(conversation[0].parts[0]).toEqual({
-      type: 'text',
-      text: 'Hello world',
-      state: 'streaming',
-      providerMetadata: { test: 'metadata' },
-    });
-  });
-
-  it('should handle reasoning-delta by creating and updating reasoning part', () => {
-    const startChunk: ChunkType = {
-      type: 'start',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {},
-    };
-
-    const reasoningDelta1: ChunkType = {
-      type: 'reasoning-delta',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {
-        id: 'reason-1',
-        text: 'Let me think...',
-        providerMetadata: { test: 'metadata' } as any,
-      },
-    };
-
-    const reasoningDelta2: ChunkType = {
-      type: 'reasoning-delta',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {
-        id: 'reason-1',
-        text: ' about this problem.',
-        providerMetadata: { test: 'metadata' } as any,
-      },
-    };
-
-    let conversation: MastraUIMessage[] = [];
-    conversation = toUIMessage({ chunk: startChunk, conversation });
-    conversation = toUIMessage({ chunk: reasoningDelta1, conversation });
-    conversation = toUIMessage({ chunk: reasoningDelta2, conversation });
-
-    expect(conversation).toHaveLength(1);
-    expect(conversation[0].parts).toHaveLength(1);
-    expect(conversation[0].parts[0]).toEqual({
-      type: 'reasoning',
-      text: 'Let me think... about this problem.',
-      state: 'streaming',
-      providerMetadata: { test: 'metadata' },
-    });
-  });
-
-  it('should handle tool-call by creating dynamic-tool part', () => {
-    const startChunk: ChunkType = {
-      type: 'start',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {},
-    };
-
-    const toolCallChunk: ChunkType = {
-      type: 'tool-call',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {
-        toolCallId: 'tool-call-123',
-        toolName: 'calculator',
-        args: { x: 5, y: 3, operation: 'add' } as any,
-        providerMetadata: { test: 'metadata' } as any,
-      },
-    };
-
-    let conversation: MastraUIMessage[] = [];
-    conversation = toUIMessage({ chunk: startChunk, conversation });
-    conversation = toUIMessage({ chunk: toolCallChunk, conversation });
-
-    expect(conversation).toHaveLength(1);
-    expect(conversation[0].parts).toHaveLength(1);
-    expect(conversation[0].parts[0]).toEqual({
-      type: 'dynamic-tool',
-      toolName: 'calculator',
-      toolCallId: 'tool-call-123',
-      state: 'input-available',
-      input: { x: 5, y: 3, operation: 'add' },
-      callProviderMetadata: { test: 'metadata' },
-    });
-  });
-
-  it('should handle tool-result by updating corresponding tool part', () => {
-    const startChunk: ChunkType = {
-      type: 'start',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {},
-    };
-
-    const toolCallChunk: ChunkType = {
-      type: 'tool-call',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {
-        toolCallId: 'tool-call-123',
-        toolName: 'calculator',
-        args: { x: 5, y: 3, operation: 'add' } as any,
-      },
-    };
-
-    const toolOutputChunk: ChunkType = {
-      type: 'tool-output',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {
-        toolCallId: 'tool-call-123',
-        output: { intermediate: 'data' },
-      },
-    };
-
-    const toolResultChunk: ChunkType = {
-      type: 'tool-result',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {
-        toolCallId: 'tool-call-123',
-        toolName: 'calculator',
-        result: 8,
-        isError: false,
-        providerMetadata: { test: 'result-metadata' } as any,
-      },
-    };
-
-    let conversation: MastraUIMessage[] = [];
-    conversation = toUIMessage({ chunk: startChunk, conversation });
-    conversation = toUIMessage({ chunk: toolCallChunk, conversation });
-    conversation = toUIMessage({ chunk: toolOutputChunk, conversation });
-    conversation = toUIMessage({ chunk: toolResultChunk, conversation });
-
-    expect(conversation).toHaveLength(1);
-    expect(conversation[0].parts).toHaveLength(1);
-    const toolPart = conversation[0].parts[0];
-    expect(toolPart).toEqual({
-      type: 'dynamic-tool',
-      toolName: 'calculator',
-      toolCallId: 'tool-call-123',
-      state: 'output-available',
-      input: { x: 5, y: 3, operation: 'add' },
-      output: [{ intermediate: 'data' }],
-      callProviderMetadata: { test: 'result-metadata' },
-    });
-  });
-
-  it('should handle tool-result with error', () => {
-    const startChunk: ChunkType = {
-      type: 'start',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {},
-    };
-
-    const toolCallChunk: ChunkType = {
-      type: 'tool-call',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {
-        toolCallId: 'tool-call-123',
-        toolName: 'calculator',
-        args: { x: 5, y: 0, operation: 'divide' } as any,
-      },
-    };
-
-    const toolResultChunk: ChunkType = {
-      type: 'tool-result',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {
-        toolCallId: 'tool-call-123',
-        toolName: 'calculator',
-        result: 'Division by zero error',
-        isError: true,
-      },
-    };
-
-    let conversation: MastraUIMessage[] = [];
-    conversation = toUIMessage({ chunk: startChunk, conversation });
-    conversation = toUIMessage({ chunk: toolCallChunk, conversation });
-    conversation = toUIMessage({ chunk: toolResultChunk, conversation });
-
-    expect(conversation).toHaveLength(1);
-    const toolPart = conversation[0].parts[0];
-    expect(toolPart).toEqual({
-      type: 'dynamic-tool',
-      toolName: 'calculator',
-      toolCallId: 'tool-call-123',
-      state: 'output-error',
-      input: { x: 5, y: 0, operation: 'divide' },
-      errorText: 'Division by zero error',
-      callProviderMetadata: undefined,
-    });
-  });
-
-  it('should handle tool-output by storing output in output field', () => {
-    const startChunk: ChunkType = {
-      type: 'start',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {},
-    };
-
-    const toolCallChunk: ChunkType = {
-      type: 'tool-call',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {
-        toolCallId: 'tool-call-123',
-        toolName: 'workflow',
-        args: { task: 'process' } as any,
-      },
-    };
-
-    const toolOutputChunk: ChunkType = {
-      type: 'tool-output',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {
-        toolCallId: 'tool-call-123',
-        output: { step: 1, status: 'complete' },
-      },
-    };
-
-    let conversation: MastraUIMessage[] = [];
-    conversation = toUIMessage({ chunk: startChunk, conversation });
-    conversation = toUIMessage({ chunk: toolCallChunk, conversation });
-    conversation = toUIMessage({ chunk: toolOutputChunk, conversation });
-
-    expect(conversation).toHaveLength(1);
-    const toolPart = conversation[0].parts[0];
-    expect(toolPart).toEqual({
-      type: 'dynamic-tool',
-      toolName: 'workflow',
-      toolCallId: 'tool-call-123',
-      state: 'input-available',
-      input: { task: 'process' },
-      output: [{ step: 1, status: 'complete' }],
-      callProviderMetadata: undefined,
-    });
-  });
-
-  it('should handle source chunk with URL source', () => {
-    const startChunk: ChunkType = {
-      type: 'start',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {},
-    };
-
-    const sourceChunk: ChunkType = {
-      type: 'source',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {
-        id: 'source-1',
-        sourceType: 'url',
-        title: 'Example Website',
-        url: 'https://example.com',
-        providerMetadata: { test: 'metadata' } as any,
-      },
-    };
-
-    let conversation: MastraUIMessage[] = [];
-    conversation = toUIMessage({ chunk: startChunk, conversation });
-    conversation = toUIMessage({ chunk: sourceChunk, conversation });
-
-    expect(conversation).toHaveLength(1);
-    expect(conversation[0].parts).toHaveLength(1);
-    expect(conversation[0].parts[0]).toEqual({
-      type: 'source-url',
-      sourceId: 'source-1',
-      url: 'https://example.com',
-      title: 'Example Website',
-      providerMetadata: { test: 'metadata' },
-    });
-  });
-
-  it('should handle source chunk with document source', () => {
-    const startChunk: ChunkType = {
-      type: 'start',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {},
-    };
-
-    const sourceChunk: ChunkType = {
-      type: 'source',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {
-        id: 'source-2',
-        sourceType: 'document',
-        title: 'Document Title',
-        mimeType: 'application/pdf',
-        filename: 'document.pdf',
-        providerMetadata: { test: 'metadata' } as any,
-      },
-    };
-
-    let conversation: MastraUIMessage[] = [];
-    conversation = toUIMessage({ chunk: startChunk, conversation });
-    conversation = toUIMessage({ chunk: sourceChunk, conversation });
-
-    expect(conversation).toHaveLength(1);
-    expect(conversation[0].parts).toHaveLength(1);
-    expect(conversation[0].parts[0]).toEqual({
-      type: 'source-document',
-      sourceId: 'source-2',
-      mediaType: 'application/pdf',
-      title: 'Document Title',
-      filename: 'document.pdf',
-      providerMetadata: { test: 'metadata' },
-    });
-  });
-
-  it('should handle file chunk with string data', () => {
-    const startChunk: ChunkType = {
-      type: 'start',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {},
-    };
-
-    const fileChunk: ChunkType = {
-      type: 'file',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {
-        data: 'Hello, World!',
-        mimeType: 'text/plain',
-        providerMetadata: { test: 'metadata' } as any,
-      },
-    };
-
-    let conversation: MastraUIMessage[] = [];
-    conversation = toUIMessage({ chunk: startChunk, conversation });
-    conversation = toUIMessage({ chunk: fileChunk, conversation });
-
-    expect(conversation).toHaveLength(1);
-    expect(conversation[0].parts).toHaveLength(1);
-    expect(conversation[0].parts[0]).toEqual({
-      type: 'file',
-      mediaType: 'text/plain',
-      url: 'data:text/plain,Hello%2C%20World!',
-      providerMetadata: { test: 'metadata' },
-    });
-  });
-
-  it('should handle file chunk with base64 data', () => {
-    const startChunk: ChunkType = {
-      type: 'start',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {},
-    };
-
-    const fileChunk: ChunkType = {
-      type: 'file',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {
-        data: 'SGVsbG8sIFdvcmxkIQ==',
-        base64: 'SGVsbG8sIFdvcmxkIQ==',
-        mimeType: 'text/plain',
-      },
-    };
-
-    let conversation: MastraUIMessage[] = [];
-    conversation = toUIMessage({ chunk: startChunk, conversation });
-    conversation = toUIMessage({ chunk: fileChunk, conversation });
-
-    expect(conversation).toHaveLength(1);
-    expect(conversation[0].parts).toHaveLength(1);
-    expect(conversation[0].parts[0]).toEqual({
-      type: 'file',
-      mediaType: 'text/plain',
-      url: 'data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==',
-      providerMetadata: undefined,
-    });
-  });
-
-  it('should handle finish chunk by marking parts as done', () => {
-    let conversation: MastraUIMessage[] = [];
-
-    // Create message with streaming text and reasoning
-    conversation = toUIMessage({
-      chunk: { type: 'start', runId: 'run-123', from: ChunkFrom.AGENT, payload: {} },
-      conversation,
-    });
-
-    conversation = toUIMessage({
-      chunk: {
-        type: 'text-delta',
-        runId: 'run-123',
-        from: ChunkFrom.AGENT,
-        payload: { id: 'text-1', text: 'Hello' },
-      },
-      conversation,
-    });
-
-    conversation = toUIMessage({
-      chunk: {
-        type: 'reasoning-delta',
-        runId: 'run-123',
-        from: ChunkFrom.AGENT,
-        payload: { id: 'reason-1', text: 'Thinking...' },
-      },
-      conversation,
-    });
-
-    // Verify parts are streaming
-    expect(conversation[0].parts[0]).toEqual({
-      type: 'text',
-      text: 'Hello',
-      state: 'streaming',
-      providerMetadata: undefined,
-    });
-    expect(conversation[0].parts[1]).toEqual({
-      type: 'reasoning',
-      text: 'Thinking...',
-      state: 'streaming',
-      providerMetadata: undefined,
-    });
-
-    // Apply finish chunk
-    const finishChunk: ChunkType = {
-      type: 'finish',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {
-        stepResult: { reason: 'stop' },
-        output: { usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
-        metadata: {},
-        messages: { all: [], user: [], nonUser: [] },
-      },
-    };
-
-    conversation = toUIMessage({ chunk: finishChunk, conversation });
-
-    // Verify parts are marked as done
-    expect(conversation[0].parts[0]).toEqual({
-      type: 'text',
-      text: 'Hello',
-      state: 'done',
-      providerMetadata: undefined,
-    });
-    expect(conversation[0].parts[1]).toEqual({
-      type: 'reasoning',
-      text: 'Thinking...',
-      state: 'done',
-      providerMetadata: undefined,
-    });
-  });
-
-  it('should handle error chunk by returning conversation unchanged', () => {
-    const initialConversation: MastraUIMessage[] = [
-      { id: 'msg-1', role: 'user', parts: [{ type: 'text', text: 'Hello' }] },
-    ];
-
-    const errorChunk: ChunkType = {
-      type: 'error',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: { error: 'Something went wrong' },
-    };
-
-    const result = toUIMessage({ chunk: errorChunk, conversation: initialConversation });
-
-    expect(result).toEqual(initialConversation);
-    expect(result).not.toBe(initialConversation); // Different reference
-  });
-
-  it('should handle unknown chunk types by returning conversation unchanged', () => {
-    const initialConversation: MastraUIMessage[] = [
-      { id: 'msg-1', role: 'user', parts: [{ type: 'text', text: 'Hello' }] },
-    ];
-
-    const unknownChunk = {
-      type: 'unknown-chunk-type',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: { data: 'test' },
-    } as any;
-
-    const result = toUIMessage({ chunk: unknownChunk, conversation: initialConversation });
-
-    expect(result).toEqual(initialConversation);
-    expect(result).not.toBe(initialConversation); // Different reference
-  });
-
-  it('should always return a new array reference for React', () => {
-    const initialConversation: MastraUIMessage[] = [];
-
-    const chunk: ChunkType = {
-      type: 'start',
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {},
-    };
-
-    const result = toUIMessage({ chunk, conversation: initialConversation });
-
-    expect(result).not.toBe(initialConversation);
-  });
-
-  it('should handle multiple tool outputs for the same tool call', () => {
-    let conversation: MastraUIMessage[] = [];
-
-    // Start message and tool call
-    conversation = toUIMessage({
-      chunk: { type: 'start', runId: 'run-123', from: ChunkFrom.AGENT, payload: {} },
-      conversation,
-    });
-
-    conversation = toUIMessage({
-      chunk: {
-        type: 'tool-call',
-        runId: 'run-123',
+  describe('workflow tool handling', () => {
+    it('should handle server-side workflow tool-result with result property', () => {
+      const conversation: UIMessage[] = [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'myWorkflow',
+              toolCallId: 'call_123',
+              state: 'input-available',
+              input: { ingredient: 'tomato' },
+            },
+          ],
+        },
+      ];
+
+      const chunk: ChunkType = {
+        type: 'tool-result',
+        runId: 'run-1',
         from: ChunkFrom.AGENT,
         payload: {
-          toolCallId: 'tool-call-123',
-          toolName: 'workflow',
-          args: { task: 'multi-step' } as any,
+          toolCallId: 'call_123',
+          toolName: 'myWorkflow',
+          result: {
+            result: {
+              status: 'success',
+              steps: {
+                'my-step': {
+                  payload: { ingredient: 'tomato' },
+                  startedAt: 1759474769330,
+                  status: 'success',
+                  output: { result: 'tomato' },
+                  endedAt: 1759474772332,
+                },
+                'my-step-2': {
+                  payload: { result: 'tomato' },
+                  startedAt: 1759474772334,
+                  status: 'success',
+                  output: { result: 'suh' },
+                  endedAt: 1759474775336,
+                },
+              },
+              input: { ingredient: 'tomato' },
+              result: { result: 'suh' },
+              traceId: 'f9505589a3da95db1bd666c509585585',
+            },
+            runId: 'beca48ae-92eb-44e2-ab10-3cfd84f4ad0d',
+          },
+          isError: false,
         },
-      },
-      conversation,
+      };
+
+      const result = toUIMessage({ chunk, conversation });
+
+      expect(result).toHaveLength(1);
+      expect(result[0].parts).toHaveLength(1);
+      const part = result[0].parts[0];
+      expect(part.type).toBe('dynamic-tool');
+      if (part.type === 'dynamic-tool' && 'output' in part) {
+        // Server response should have the nested result structure
+        expect(part.output).toEqual({
+          result: {
+            status: 'success',
+            steps: {
+              'my-step': {
+                payload: { ingredient: 'tomato' },
+                startedAt: 1759474769330,
+                status: 'success',
+                output: { result: 'tomato' },
+                endedAt: 1759474772332,
+              },
+              'my-step-2': {
+                payload: { result: 'tomato' },
+                startedAt: 1759474772334,
+                status: 'success',
+                output: { result: 'suh' },
+                endedAt: 1759474775336,
+              },
+            },
+            input: { ingredient: 'tomato' },
+            result: { result: 'suh' },
+            traceId: 'f9505589a3da95db1bd666c509585585',
+          },
+          runId: 'beca48ae-92eb-44e2-ab10-3cfd84f4ad0d',
+        });
+      }
     });
 
-    // First tool output
-    conversation = toUIMessage({
-      chunk: {
+    it('should handle client-side streaming workflow tool-output chunks', () => {
+      const conversation: UIMessage[] = [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'myWorkflow',
+              toolCallId: 'call_456',
+              state: 'input-available',
+              input: { ingredient: 'tomato' },
+            },
+          ],
+        },
+      ];
+
+      // First chunk: workflow-start
+      const chunk1: ChunkType = {
         type: 'tool-output',
-        runId: 'run-123',
-        from: ChunkFrom.AGENT,
+        runId: 'run-1',
+        from: ChunkFrom.WORKFLOW,
         payload: {
-          toolCallId: 'tool-call-123',
-          output: { step: 1, status: 'complete' },
-        },
-      },
-      conversation,
-    });
-
-    // Second tool output
-    conversation = toUIMessage({
-      chunk: {
-        type: 'tool-output',
-        runId: 'run-123',
-        from: ChunkFrom.AGENT,
-        payload: {
-          toolCallId: 'tool-call-123',
-          output: { step: 2, status: 'complete' },
-        },
-      },
-      conversation,
-    });
-
-    const toolPart = conversation[0].parts[0];
-    expect(toolPart).toEqual({
-      type: 'dynamic-tool',
-      toolName: 'workflow',
-      toolCallId: 'tool-call-123',
-      state: 'input-available',
-      input: { task: 'multi-step' },
-      output: [
-        { step: 1, status: 'complete' },
-        { step: 2, status: 'complete' },
-      ],
-      callProviderMetadata: undefined,
-    });
-  });
-
-  it('should handle workflow-related tool output chunks with accumulation', () => {
-    let conversation: MastraUIMessage[] = [];
-
-    // Start message and workflow tool call
-    conversation = toUIMessage({
-      chunk: { type: 'start', runId: 'run-123', from: ChunkFrom.AGENT, payload: {} },
-      conversation,
-    });
-
-    conversation = toUIMessage({
-      chunk: {
-        type: 'tool-call',
-        runId: 'run-123',
-        from: ChunkFrom.AGENT,
-        payload: {
-          toolCallId: 'workflow-call-123',
-          toolName: 'workflow-executor',
-          args: { workflowId: 'wf-456', input: 'test data' } as any,
-        },
-      },
-      conversation,
-    });
-
-    // First workflow chunk - workflow start
-    conversation = toUIMessage({
-      chunk: {
-        type: 'tool-output',
-        runId: 'run-123',
-        from: ChunkFrom.AGENT,
-        payload: {
-          toolCallId: 'workflow-call-123',
+          toolCallId: 'call_456',
           output: {
             type: 'workflow-start',
-            runId: 'wf-run-789',
-            payload: { workflowId: 'wf-456' },
+            runId: 'eccd0266-b432-4ac6-9e93-877559890e96',
+            payload: {},
           },
         },
-      },
-      conversation,
-    });
+      };
 
-    // Second workflow chunk - step start
-    conversation = toUIMessage({
-      chunk: {
+      let result = toUIMessage({ chunk: chunk1, conversation });
+      expect(result).toHaveLength(1);
+      let part = result[0].parts[0];
+      expect(part.type).toBe('dynamic-tool');
+      if (part.type === 'dynamic-tool' && 'output' in part) {
+        // Client streaming builds WorkflowWatchResult with payload.workflowState
+        expect(part.output).toHaveProperty('payload.workflowState.status', 'running');
+        expect(part.output).toHaveProperty('payload.workflowState.steps', {});
+      }
+
+      // Second chunk: workflow-step-start
+      const chunk2: ChunkType = {
         type: 'tool-output',
-        runId: 'run-123',
-        from: ChunkFrom.AGENT,
+        runId: 'run-1',
+        from: ChunkFrom.WORKFLOW,
         payload: {
-          toolCallId: 'workflow-call-123',
+          toolCallId: 'call_456',
           output: {
             type: 'workflow-step-start',
-            payload: { id: 'step-1', name: 'process-data', status: 'running' },
+            runId: 'eccd0266-b432-4ac6-9e93-877559890e96',
+            payload: {
+              id: 'my-step',
+              stepName: 'my-step',
+              stepCallId: '71bc4047-0ffd-410e-9512-67fdcde2eb3b',
+              payload: { ingredient: 'tomato' },
+              startedAt: 1759474941811,
+              status: 'running',
+              currentStep: {
+                stepName: 'my-step',
+                id: 'my-step',
+                stepCallId: '71bc4047-0ffd-410e-9512-67fdcde2eb3b',
+                payload: { ingredient: 'tomato' },
+                startedAt: 1759474941811,
+                status: 'running',
+              },
+            },
           },
         },
-      },
-      conversation,
-    });
+      };
 
-    // Third workflow chunk - step result
-    conversation = toUIMessage({
-      chunk: {
+      result = toUIMessage({ chunk: chunk2, conversation: result });
+      expect(result).toHaveLength(1);
+      part = result[0].parts[0];
+      if (part.type === 'dynamic-tool' && 'output' in part) {
+        expect(part.output).toHaveProperty('payload.workflowState.status', 'running');
+        expect(part.output).toHaveProperty('payload.workflowState.steps.my-step');
+        const step = (part.output as any).payload.workflowState.steps['my-step'];
+        expect(step).toMatchObject({
+          id: 'my-step',
+          stepName: 'my-step',
+          payload: { ingredient: 'tomato' },
+          startedAt: 1759474941811,
+          status: 'running',
+        });
+      }
+
+      // Third chunk: workflow-step-result
+      const chunk3: ChunkType = {
         type: 'tool-output',
-        runId: 'run-123',
-        from: ChunkFrom.AGENT,
+        runId: 'run-1',
+        from: ChunkFrom.WORKFLOW,
         payload: {
-          toolCallId: 'workflow-call-123',
+          toolCallId: 'call_456',
           output: {
             type: 'workflow-step-result',
-            payload: { id: 'step-1', status: 'success', output: 'processed data' },
+            runId: 'eccd0266-b432-4ac6-9e93-877559890e96',
+            payload: {
+              id: 'my-step',
+              output: { result: 'tomato' },
+              status: 'success',
+              endedAt: 1759474945000,
+            },
           },
         },
-      },
-      conversation,
+      };
+
+      result = toUIMessage({ chunk: chunk3, conversation: result });
+      part = result[0].parts[0];
+      if (part.type === 'dynamic-tool' && 'output' in part) {
+        const step = (part.output as any).payload.workflowState.steps['my-step'];
+        expect(step).toMatchObject({
+          id: 'my-step',
+          output: { result: 'tomato' },
+          status: 'success',
+          endedAt: 1759474945000,
+        });
+      }
+
+      // Fourth chunk: workflow-finish
+      const chunk4: ChunkType = {
+        type: 'tool-output',
+        runId: 'run-1',
+        from: ChunkFrom.WORKFLOW,
+        payload: {
+          toolCallId: 'call_456',
+          output: {
+            type: 'workflow-finish',
+            runId: 'eccd0266-b432-4ac6-9e93-877559890e96',
+            payload: {
+              workflowStatus: 'success',
+              result: { result: 'suh' },
+              input: { ingredient: 'tomato' },
+              traceId: 'trace-123',
+            },
+          },
+        },
+      };
+
+      result = toUIMessage({ chunk: chunk4, conversation: result });
+      part = result[0].parts[0];
+      if (part.type === 'dynamic-tool' && 'output' in part) {
+        expect(part.output).toHaveProperty('payload.workflowState.status', 'success');
+        expect(part.output).toHaveProperty('payload.workflowState.result', { result: 'suh' });
+        expect(part.output).toHaveProperty('payload.workflowState.input', { ingredient: 'tomato' });
+        expect(part.output).toHaveProperty('payload.workflowState.traceId', 'trace-123');
+      }
     });
 
-    const toolPart = conversation[0].parts[0] as any;
-    expect(toolPart.type).toBe('dynamic-tool');
-    expect(toolPart.toolName).toBe('workflow-executor');
-    expect(toolPart.toolCallId).toBe('workflow-call-123');
-    expect(toolPart.input).toEqual({ workflowId: 'wf-456', input: 'test data' });
+    it('should handle regular non-workflow tools', () => {
+      const conversation: UIMessage[] = [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'calculator',
+              toolCallId: 'call_789',
+              state: 'input-available',
+              input: { a: 2, b: 3 },
+            },
+          ],
+        },
+      ];
 
-    // Check that output contains workflowFullState with accumulated workflow state
-    const output = (toolPart as any).output;
-    expect(output).toBeDefined();
+      const chunk: ChunkType = {
+        type: 'tool-result',
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+        payload: {
+          toolCallId: 'call_789',
+          toolName: 'calculator',
+          result: { sum: 5 },
+          isError: false,
+        },
+      };
 
-    expect(output.runId).toBe('wf-run-789');
-    expect(output.payload.workflowState.steps['step-1']).toEqual({
-      id: 'step-1',
-      name: 'process-data',
-      status: 'success',
-      output: 'processed data',
+      const result = toUIMessage({ chunk, conversation });
+      const part = result[0].parts[0];
+      if (part.type === 'dynamic-tool' && 'output' in part) {
+        // Regular tool should have direct output
+        expect(part.output).toEqual({ sum: 5 });
+      }
+    });
+
+    it('should handle tool errors', () => {
+      const conversation: UIMessage[] = [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'myWorkflow',
+              toolCallId: 'call_error',
+              state: 'input-available',
+              input: { ingredient: 'bad' },
+            },
+          ],
+        },
+      ];
+
+      const chunk: ChunkType = {
+        type: 'tool-result',
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+        payload: {
+          toolCallId: 'call_error',
+          toolName: 'myWorkflow',
+          result: 'Workflow failed: Invalid ingredient',
+          isError: true,
+        },
+      };
+
+      const result = toUIMessage({ chunk, conversation });
+      const part = result[0].parts[0];
+      expect(part.type).toBe('dynamic-tool');
+      if (part.type === 'dynamic-tool' && 'state' in part) {
+        expect(part.state).toBe('output-error');
+        if ('errorText' in part) {
+          expect(part.errorText).toBe('Workflow failed: Invalid ingredient');
+        }
+      }
+    });
+
+    it('should handle workflow suspension', () => {
+      const conversation: UIMessage[] = [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'myWorkflow',
+              toolCallId: 'call_suspend',
+              state: 'input-available',
+              input: { ingredient: 'tomato' },
+            },
+          ],
+        },
+      ];
+
+      const chunk: ChunkType = {
+        type: 'tool-output',
+        runId: 'run-1',
+        from: ChunkFrom.WORKFLOW,
+        payload: {
+          toolCallId: 'call_suspend',
+          output: {
+            type: 'workflow-step-suspended',
+            runId: 'run-suspend',
+            payload: {
+              id: 'approval-step',
+              status: 'suspended',
+              suspendedAt: 1759474950000,
+            },
+          },
+        },
+      };
+
+      const result = toUIMessage({ chunk, conversation });
+      const part = result[0].parts[0];
+      if (part.type === 'dynamic-tool' && 'output' in part) {
+        expect(part.output).toHaveProperty('payload.workflowState.status', 'suspended');
+        expect(part.output).toHaveProperty('payload.workflowState.steps.approval-step');
+        const step = (part.output as any).payload.workflowState.steps['approval-step'];
+        expect(step).toMatchObject({
+          id: 'approval-step',
+          status: 'suspended',
+          suspendedAt: 1759474950000,
+        });
+      }
+    });
+
+    it('should handle workflow cancellation', () => {
+      const conversation: UIMessage[] = [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'myWorkflow',
+              toolCallId: 'call_cancel',
+              state: 'input-available',
+              input: { ingredient: 'tomato' },
+            },
+          ],
+        },
+      ];
+
+      const chunk: ChunkType = {
+        type: 'tool-output',
+        runId: 'run-1',
+        from: ChunkFrom.WORKFLOW,
+        payload: {
+          toolCallId: 'call_cancel',
+          output: {
+            type: 'workflow-canceled',
+            runId: 'run-cancel',
+            payload: {},
+          },
+        },
+      };
+
+      const result = toUIMessage({ chunk, conversation });
+      const part = result[0].parts[0];
+      if (part.type === 'dynamic-tool' && 'output' in part) {
+        expect(part.output).toHaveProperty('payload.workflowState.status', 'canceled');
+      }
+    });
+
+    it('should handle workflow waiting status', () => {
+      const conversation: UIMessage[] = [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'myWorkflow',
+              toolCallId: 'call_wait',
+              state: 'input-available',
+              input: { ingredient: 'tomato' },
+            },
+          ],
+        },
+      ];
+
+      const chunk: ChunkType = {
+        type: 'tool-output',
+        runId: 'run-1',
+        from: ChunkFrom.WORKFLOW,
+        payload: {
+          toolCallId: 'call_wait',
+          output: {
+            type: 'workflow-step-waiting',
+            runId: 'run-wait',
+            payload: {
+              id: 'wait-step',
+              status: 'waiting',
+              waitingFor: 'external-api',
+            },
+          },
+        },
+      };
+
+      const result = toUIMessage({ chunk, conversation });
+      const part = result[0].parts[0];
+      if (part.type === 'dynamic-tool' && 'output' in part) {
+        expect(part.output).toHaveProperty('payload.workflowState.status', 'waiting');
+        expect(part.output).toHaveProperty('payload.workflowState.steps.wait-step');
+        const step = (part.output as any).payload.workflowState.steps['wait-step'];
+        expect(step).toMatchObject({
+          id: 'wait-step',
+          status: 'waiting',
+          waitingFor: 'external-api',
+        });
+      }
     });
   });
 
-  it('should handle workflow finish chunk', () => {
-    let conversation: MastraUIMessage[] = [];
+  describe('text handling', () => {
+    it('should handle text-start and text-delta chunks', () => {
+      const conversation: UIMessage[] = [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [],
+        },
+      ];
 
-    // Setup workflow tool call
-    conversation = toUIMessage({
-      chunk: { type: 'start', runId: 'run-123', from: ChunkFrom.AGENT, payload: {} },
-      conversation,
+      // text-start
+      const chunk1: ChunkType = {
+        type: 'text-start',
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: 'text-1',
+          providerMetadata: { model: 'gpt-4' } as any,
+        },
+      };
+
+      let result = toUIMessage({ chunk: chunk1, conversation });
+      expect(result[0].parts).toHaveLength(1);
+      expect(result[0].parts[0]).toMatchObject({
+        type: 'text',
+        text: '',
+        state: 'streaming',
+      });
+
+      // text-delta
+      const chunk2: ChunkType = {
+        type: 'text-delta',
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: 'text-1',
+          text: 'Hello, world!',
+          providerMetadata: { model: 'gpt-4' } as any,
+        },
+      };
+
+      result = toUIMessage({ chunk: chunk2, conversation: result });
+      expect(result[0].parts[0]).toMatchObject({
+        type: 'text',
+        text: 'Hello, world!',
+        state: 'streaming',
+      });
     });
 
-    conversation = toUIMessage({
-      chunk: {
+    it('should handle reasoning-delta chunks', () => {
+      const conversation: UIMessage[] = [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [],
+        },
+      ];
+
+      const chunk: ChunkType = {
+        type: 'reasoning-delta',
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: 'reason-1',
+          text: 'Thinking about the problem...',
+          providerMetadata: { model: 'o1' } as any,
+        },
+      };
+
+      const result = toUIMessage({ chunk, conversation });
+      expect(result[0].parts).toHaveLength(1);
+      expect(result[0].parts[0]).toMatchObject({
+        type: 'reasoning',
+        text: 'Thinking about the problem...',
+        state: 'streaming',
+      });
+    });
+  });
+
+  describe('message lifecycle', () => {
+    it('should handle start chunk', () => {
+      const conversation: UIMessage[] = [];
+
+      const chunk: ChunkType = {
+        type: 'start',
+        runId: 'new-run',
+        from: ChunkFrom.AGENT,
+        payload: {},
+      };
+
+      const result = toUIMessage({ chunk, conversation });
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        id: 'new-run',
+        role: 'assistant',
+        parts: [],
+      });
+    });
+
+    it('should handle finish chunk', () => {
+      const conversation: UIMessage[] = [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'text',
+              text: 'Hello',
+              state: 'streaming',
+            },
+            {
+              type: 'reasoning',
+              text: 'Thinking...',
+              state: 'streaming',
+            },
+          ],
+        },
+      ];
+
+      const chunk: ChunkType = {
+        type: 'finish',
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+        payload: {
+          stepResult: { reason: 'stop' },
+          output: { usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+          metadata: {} as any,
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+
+      const result = toUIMessage({ chunk, conversation });
+      expect(result[0].parts[0]).toMatchObject({
+        type: 'text',
+        text: 'Hello',
+        state: 'done',
+      });
+      expect(result[0].parts[1]).toMatchObject({
+        type: 'reasoning',
+        text: 'Thinking...',
+        state: 'done',
+      });
+    });
+
+    it('should handle error chunk', () => {
+      const conversation: UIMessage[] = [];
+
+      const chunk: ChunkType = {
+        type: 'error',
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+        payload: {
+          error: 'Something went wrong',
+        },
+      };
+
+      const result = toUIMessage({ chunk, conversation });
+      // Error doesn't modify conversation
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('source and file handling', () => {
+    it('should handle source-url chunks', () => {
+      const conversation: UIMessage[] = [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [],
+        },
+      ];
+
+      const chunk: ChunkType = {
+        type: 'source',
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+        payload: {
+          sourceType: 'url',
+          id: 'source-1',
+          url: 'https://example.com',
+          title: 'Example',
+          providerMetadata: {} as any,
+        },
+      };
+
+      const result = toUIMessage({ chunk, conversation });
+      expect(result[0].parts).toHaveLength(1);
+      expect(result[0].parts[0]).toMatchObject({
+        type: 'source-url',
+        sourceId: 'source-1',
+        url: 'https://example.com',
+        title: 'Example',
+      });
+    });
+
+    it('should handle source-document chunks', () => {
+      const conversation: UIMessage[] = [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [],
+        },
+      ];
+
+      const chunk: ChunkType = {
+        type: 'source',
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+        payload: {
+          sourceType: 'document',
+          id: 'doc-1',
+          mimeType: 'application/pdf',
+          title: 'Document',
+          filename: 'doc.pdf',
+          providerMetadata: {} as any,
+        },
+      };
+
+      const result = toUIMessage({ chunk, conversation });
+      expect(result[0].parts).toHaveLength(1);
+      expect(result[0].parts[0]).toMatchObject({
+        type: 'source-document',
+        sourceId: 'doc-1',
+        mediaType: 'application/pdf',
+        title: 'Document',
+        filename: 'doc.pdf',
+      });
+    });
+
+    it('should handle file chunks with base64 data', () => {
+      const conversation: UIMessage[] = [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [],
+        },
+      ];
+
+      const chunk: ChunkType = {
+        type: 'file',
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+        payload: {
+          mimeType: 'image/png',
+          data: 'iVBORw0KGgo=',
+          base64: 'iVBORw0KGgo=',
+          providerMetadata: {} as any,
+        },
+      };
+
+      const result = toUIMessage({ chunk, conversation });
+      expect(result[0].parts).toHaveLength(1);
+      expect(result[0].parts[0]).toMatchObject({
+        type: 'file',
+        mediaType: 'image/png',
+        url: 'data:image/png;base64,iVBORw0KGgo=',
+      });
+    });
+
+    it('should handle file chunks with Uint8Array data', () => {
+      const conversation: UIMessage[] = [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [],
+        },
+      ];
+
+      const chunk: ChunkType = {
+        type: 'file',
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+        payload: {
+          mimeType: 'text/plain',
+          data: new Uint8Array([72, 101, 108, 108, 111]), // "Hello"
+          providerMetadata: {} as any,
+        },
+      };
+
+      const result = toUIMessage({ chunk, conversation });
+      expect(result[0].parts).toHaveLength(1);
+      expect(result[0].parts[0].type).toBe('file');
+      if ('url' in result[0].parts[0]) {
+        expect(result[0].parts[0].url).toContain('data:text/plain;base64,');
+      }
+    });
+  });
+
+  describe('edge cases', () => {
+    it('should return conversation unchanged for unknown chunk types', () => {
+      const conversation: UIMessage[] = [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [],
+        },
+      ];
+
+      const chunk: any = {
+        type: 'unknown-type',
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+        payload: {},
+      };
+
+      const result = toUIMessage({ chunk, conversation });
+      expect(result).toEqual(conversation);
+    });
+
+    it('should handle empty conversation', () => {
+      const conversation: UIMessage[] = [];
+
+      const chunk: ChunkType = {
+        type: 'text-delta',
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: 'text-1',
+          text: 'Hello',
+        },
+      };
+
+      const result = toUIMessage({ chunk, conversation });
+      // Should return empty since no assistant message exists
+      expect(result).toEqual([]);
+    });
+
+    it('should handle non-assistant last message', () => {
+      const conversation: UIMessage[] = [
+        {
+          id: 'user-1',
+          role: 'user',
+          parts: [{ type: 'text', text: 'Hello' }],
+        },
+      ];
+
+      const chunk: ChunkType = {
+        type: 'text-delta',
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: 'text-1',
+          text: 'Hi',
+        },
+      };
+
+      const result = toUIMessage({ chunk, conversation });
+      // Should return conversation unchanged since last message isn't assistant
+      expect(result).toEqual(conversation);
+    });
+
+    it('should create assistant message for reasoning-delta with no existing message', () => {
+      const conversation: UIMessage[] = [];
+
+      const chunk: ChunkType = {
+        type: 'reasoning-delta',
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: 'reason-1',
+          text: 'Thinking...',
+          providerMetadata: {} as any,
+        },
+      };
+
+      const result = toUIMessage({ chunk, conversation });
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        id: 'run-1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'reasoning',
+            text: 'Thinking...',
+            state: 'streaming',
+          },
+        ],
+      });
+    });
+
+    it('should create assistant message for tool-call with no existing message', () => {
+      const conversation: UIMessage[] = [];
+
+      const chunk: ChunkType = {
         type: 'tool-call',
-        runId: 'run-123',
+        runId: 'run-1',
         from: ChunkFrom.AGENT,
         payload: {
-          toolCallId: 'workflow-call-123',
-          toolName: 'workflow-executor',
-          args: { workflowId: 'wf-456' } as any,
+          toolName: 'calculator',
+          toolCallId: 'call-1',
+          args: { value1: 1, value2: 2 } as any,
+          providerMetadata: {} as any,
         },
-      },
-      conversation,
-    });
+      };
 
-    // Start workflow
-    conversation = toUIMessage({
-      chunk: {
-        type: 'tool-output',
-        runId: 'run-123',
-        from: ChunkFrom.AGENT,
-        payload: {
-          toolCallId: 'workflow-call-123',
-          output: {
-            type: 'workflow-start',
-            runId: 'wf-run-789',
-            payload: { workflowId: 'wf-456' },
+      const result = toUIMessage({ chunk, conversation });
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        id: 'run-1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'dynamic-tool',
+            toolName: 'calculator',
+            toolCallId: 'call-1',
+            state: 'input-available',
+            input: { value1: 1, value2: 2 },
           },
-        },
-      },
-      conversation,
+        ],
+      });
     });
-
-    // Finish workflow
-    conversation = toUIMessage({
-      chunk: {
-        type: 'tool-output',
-        runId: 'run-123',
-        from: ChunkFrom.AGENT,
-        payload: {
-          toolCallId: 'workflow-call-123',
-          output: {
-            type: 'workflow-finish',
-            payload: { workflowStatus: 'success' },
-          },
-        },
-      },
-      conversation,
-    });
-
-    const toolPart = conversation[0].parts[0] as any;
-    const output = toolPart.output;
-    expect(output.payload.workflowState.status).toBe('success');
-    expect(output.payload.currentStep).toBeUndefined();
   });
 });

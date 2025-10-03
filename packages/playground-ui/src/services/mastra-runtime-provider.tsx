@@ -11,14 +11,20 @@ import { RuntimeContext } from '@mastra/core/di';
 import { ChatProps, Message } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@/lib/file/toBase64';
-
+import { toAssistantUIMessage, useMastraClient } from '@mastra/react';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
+import { ReadonlyJSONObject } from '@mastra/core/stream';
 
 import { handleNetworkMessageFromMemory } from './agent-network-message';
-
-import { ModelSettings, useChat, toAssistantUIMessage, useMastraClient } from '@mastra/react';
+import {
+  createRootToolAssistantMessage,
+  handleAgentChunk,
+  handleStreamChunk,
+  handleWorkflowChunk,
+} from './stream-chunk-message';
+import { ModelSettings, useChat } from '@mastra/react';
 
 const handleFinishReason = (finishReason: string) => {
   switch (finishReason) {
@@ -153,7 +159,6 @@ export function MastraRuntimeProvider({
   children,
   agentId,
   initialMessages,
-  legacyUIMessages,
   memory,
   threadId,
   refreshThreadList,
@@ -164,10 +169,9 @@ export function MastraRuntimeProvider({
   children: ReactNode;
 }> &
   ChatProps) {
+  const initializeMessages = () => (memory ? initializeMessageState(initialMessages || []) : []);
   const [isLegacyRunning, setIsLegacyRunning] = useState(false);
-  const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>(() =>
-    memory ? initializeMessageState(legacyUIMessages || []) : [],
-  );
+  const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>(initializeMessages());
 
   const {
     setMessages,
@@ -176,10 +180,10 @@ export function MastraRuntimeProvider({
     stream,
     network,
     cancelRun,
-    isRunning: isRunningStreamVNext,
-  } = useChat({
+    isRunning: isRunningStream,
+  } = useChat<ThreadMessageLike>({
     agentId,
-    initializeMessages: () => initialMessages || [],
+    initializeMessages,
   });
 
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
@@ -230,15 +234,7 @@ export function MastraRuntimeProvider({
 
     const input = message.content[0].text;
     if (isVNext) {
-      setMessages(s => [
-        ...s,
-        {
-          id: Math.random().toString(),
-          role: 'user',
-          parts: [{ type: 'text', text: input }],
-          attachments,
-        },
-      ]);
+      setMessages(s => [...s, { role: 'user', content: input, attachments: message.attachments }]);
     } else {
       setLegacyMessages(s => [...s, { role: 'user', content: input, attachments: message.attachments }]);
     }
@@ -272,6 +268,91 @@ export function MastraRuntimeProvider({
             threadId,
             modelSettings: modelSettingsArgs,
             signal: controller.signal,
+            onNetworkChunk: (chunk, conversation) => {
+              if (chunk.type.startsWith('agent-execution-event-')) {
+                const agentChunk = chunk.payload;
+
+                if (!currentEntityId) return conversation;
+
+                return handleAgentChunk({ agentChunk, conversation, entityName: currentEntityId });
+              } else if (chunk.type === 'tool-execution-start') {
+                const { args: argsData } = chunk.payload;
+
+                const nestedArgs = argsData.args || {};
+                const mastraMetadata = argsData.__mastraMetadata || {};
+                const selectionReason = argsData.selectionReason || '';
+
+                return handleStreamChunk({
+                  chunk: {
+                    ...chunk,
+                    type: 'tool-call',
+                    payload: {
+                      ...chunk.payload,
+                      toolCallId: argsData.toolCallId || 'unknown',
+                      toolName: argsData.toolName || 'unknown',
+                      args: {
+                        ...nestedArgs,
+                        __mastraMetadata: {
+                          ...mastraMetadata,
+                          networkMetadata: {
+                            selectionReason,
+                            input: nestedArgs as ReadonlyJSONObject,
+                          },
+                        },
+                      },
+                    },
+                  },
+                  conversation,
+                });
+              } else if (chunk.type === 'tool-execution-end') {
+                const next = handleStreamChunk({
+                  chunk: { ...chunk, type: 'tool-result' },
+                  conversation,
+                });
+
+                if (
+                  chunk.payload?.toolName === 'updateWorkingMemory' &&
+                  typeof chunk.payload.result === 'object' &&
+                  'success' in chunk.payload.result! &&
+                  chunk.payload.result?.success
+                ) {
+                  refreshWorkingMemory?.();
+                }
+
+                return next;
+              } else if (chunk.type.startsWith('workflow-execution-event-')) {
+                const workflowChunk = chunk.payload as object;
+
+                if (!currentEntityId) return conversation;
+
+                return handleWorkflowChunk({ workflowChunk, conversation, entityName: currentEntityId });
+              } else if (chunk.type === 'workflow-execution-start' || chunk.type === 'agent-execution-start') {
+                currentEntityId = chunk.payload?.args?.primitiveId;
+
+                const runId = chunk.payload.runId;
+
+                if (!currentEntityId || !runId) return conversation;
+
+                return createRootToolAssistantMessage({
+                  entityName: currentEntityId,
+                  conversation,
+                  runId,
+                  chunk,
+                  from: chunk.type === 'agent-execution-start' ? 'AGENT' : 'WORKFLOW',
+                  networkMetadata: {
+                    selectionReason: chunk?.payload?.args?.selectionReason || '',
+                    input: chunk?.payload?.args?.prompt,
+                  },
+                });
+              } else if (chunk.type === 'network-execution-event-step-finish') {
+                return [
+                  ...conversation,
+                  { role: 'assistant', content: [{ type: 'text', text: chunk?.payload?.result || '' }] },
+                ];
+              } else {
+                return handleStreamChunk({ chunk, conversation });
+              }
+            },
           });
         } else {
           if (chatWithGenerate) {
@@ -287,6 +368,9 @@ export function MastraRuntimeProvider({
               threadId,
               modelSettings: modelSettingsArgs,
               signal: controller.signal,
+              onFinish: messages => {
+                return messages.map(message => toAssistantUIMessage(message));
+              },
             });
 
             return;
@@ -302,7 +386,9 @@ export function MastraRuntimeProvider({
               runtimeContext: runtimeContextInstance,
               threadId,
               modelSettings: modelSettingsArgs,
-              onChunk: async chunk => {
+              onChunk: (chunk, conversation) => {
+                const next = handleStreamChunk({ chunk, conversation });
+
                 if (
                   chunk.type === 'tool-result' &&
                   chunk.payload?.toolName === 'updateWorkingMemory' &&
@@ -312,6 +398,8 @@ export function MastraRuntimeProvider({
                 ) {
                   refreshWorkingMemory?.();
                 }
+
+                return next;
               },
               signal: controller.signal,
             });
@@ -673,11 +761,7 @@ export function MastraRuntimeProvider({
       if (isVNext) {
         setMessages(currentConversation => [
           ...currentConversation,
-          {
-            role: 'assistant',
-            id: Math.random().toString(),
-            parts: [{ type: 'text', text: `${error}` }],
-          },
+          { role: 'assistant', content: [{ type: 'text', text: `${error}` }] },
         ]);
       } else {
         setLegacyMessages(currentConversation => [
@@ -703,8 +787,8 @@ export function MastraRuntimeProvider({
   const { adapters, isReady } = useAdapters(agentId);
 
   const runtime = useExternalStoreRuntime({
-    isRunning: isLegacyRunning || isRunningStreamVNext,
-    messages: isVNext ? messages.map(toAssistantUIMessage) : legacyMessages,
+    isRunning: isLegacyRunning || isRunningStream,
+    messages: isVNext ? messages : legacyMessages,
     convertMessage: x => x,
     onNew,
     onCancel,
