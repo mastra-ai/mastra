@@ -88,7 +88,7 @@ export type AgentExecutionOptions<
   onFinish?: FORMAT extends 'aisdk' ? StreamTextOnFinishCallback<any> : LoopConfig['onFinish'];
 
   /** Callback fired for each streaming chunk received */
-  onChunk?: LoopConfig['onChunk'];
+  onChunk?: LoopConfig<OUTPUT>['onChunk'];
   /** Callback fired when an error occurs during streaming */
   onError?: LoopConfig['onError'];
   /** Callback fired when streaming is aborted */
@@ -124,6 +124,9 @@ export type AgentExecutionOptions<
 
   /** Callback function called before each step of multi-step execution */
   prepareStep?: PrepareStepFunction<any>;
+
+  /** Require approval for all tool calls */
+  requireToolApproval?: boolean;
 } & OutputOptions<OUTPUT>;
 
 type OutputOptions<OUTPUT extends OutputSchema = undefined> =
@@ -147,7 +150,9 @@ export type InnerAgentExecutionOptions<
 > = AgentExecutionOptions<OUTPUT, FORMAT> & {
   writableStream?: WritableStream<ChunkType>;
   messages: MessageListInput;
-  methodType: 'generate' | 'stream' | 'streamVNext';
+  methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
   model?: MastraLanguageModel;
+  /** Internal: Whether the execution is a resume */
+  resumeContext?: any;
 };

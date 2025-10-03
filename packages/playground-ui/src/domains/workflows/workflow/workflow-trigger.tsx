@@ -22,6 +22,7 @@ import { SyntaxHighlighter } from '@/components/ui/syntax-highlighter';
 import { Dialog, DialogPortal, DialogTitle, DialogContent } from '@/components/ui/dialog';
 import { WorkflowStatus } from './workflow-status';
 import { WorkflowInputData } from './workflow-input-data';
+import { isObjectEmpty } from '@/lib/object';
 
 interface SuspendedStep {
   stepId: string;
@@ -31,8 +32,9 @@ interface SuspendedStep {
   isLoading: boolean;
 }
 
-interface WorkflowTriggerProps {
+export interface WorkflowTriggerProps {
   workflowId: string;
+  paramsRunId?: string;
   setRunId?: (runId: string) => void;
   workflow?: GetWorkflowResponse;
   isLoading?: boolean;
@@ -51,6 +53,7 @@ interface WorkflowTriggerProps {
     inputData: Record<string, unknown>;
     runtimeContext: Record<string, unknown>;
   }) => Promise<void>;
+  observeWorkflowStream?: ({ workflowId, runId }: { workflowId: string; runId: string }) => void;
   resumeWorkflow: ({
     workflowId,
     step,
@@ -63,11 +66,8 @@ interface WorkflowTriggerProps {
     runId: string;
     resumeData: Record<string, unknown>;
     runtimeContext: Record<string, unknown>;
-  }) => Promise<{
-    message: string;
-  }>;
+  }) => Promise<void>;
   streamResult: WorkflowWatchResult | null;
-  isResumingWorkflow: boolean;
   isCancellingWorkflowRun: boolean;
   cancelWorkflowRun: ({ workflowId, runId }: { workflowId: string; runId: string }) => Promise<{
     message: string;
@@ -76,22 +76,22 @@ interface WorkflowTriggerProps {
 
 export function WorkflowTrigger({
   workflowId,
+  paramsRunId,
   setRunId,
   workflow,
   isLoading,
   createWorkflowRun,
   resumeWorkflow,
   streamWorkflow,
+  observeWorkflowStream,
   isStreamingWorkflow,
   streamResult,
-  isResumingWorkflow,
   isCancellingWorkflowRun,
   cancelWorkflowRun,
 }: WorkflowTriggerProps) {
   const { runtimeContext } = usePlaygroundStore();
   const { result, setResult, payload, setPayload } = useContext(WorkflowRunContext);
 
-  const [suspendedSteps, setSuspendedSteps] = useState<SuspendedStep[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [innerRunId, setInnerRunId] = useState<string>('');
   const [cancelResponse, setCancelResponse] = useState<{ message: string } | null>(null);
@@ -144,23 +144,25 @@ export function WorkflowTrigger({
 
   const streamResultToUse = result ?? streamResult;
 
+  const suspendedSteps = Object.entries(streamResultToUse?.payload?.workflowState?.steps || {})
+    .filter(([_, { status }]) => status === 'suspended')
+    .map(([stepId, { payload }]) => ({
+      stepId,
+      runId: streamResultToUse?.runId ?? '',
+      suspendPayload: payload,
+      isLoading: false,
+    }));
+
+  useEffect(() => {
+    if (paramsRunId && observeWorkflowStream) {
+      observeWorkflowStream({ workflowId, runId: paramsRunId });
+      setInnerRunId(paramsRunId);
+    }
+  }, [paramsRunId]);
+
   useEffect(() => {
     setIsRunning(isStreamingWorkflow);
   }, [isStreamingWorkflow]);
-
-  useEffect(() => {
-    if (!streamResultToUse?.payload?.workflowState?.steps || !result?.runId) return;
-
-    const suspended = Object.entries(streamResultToUse?.payload?.workflowState?.steps || {})
-      .filter(([_, { status }]) => status === 'suspended')
-      .map(([stepId, { payload }]) => ({
-        stepId,
-        runId: result.runId,
-        suspendPayload: payload,
-        isLoading: false,
-      }));
-    setSuspendedSteps(suspended);
-  }, [streamResultToUse, result]);
 
   useEffect(() => {
     if (streamResult) {
@@ -193,7 +195,7 @@ export function WorkflowTrigger({
   return (
     <div className="h-full pt-3 pb-12">
       <div className="space-y-4 px-5 pb-5 border-b-sm border-border1">
-        {(isResumingWorkflow || (isSuspendedSteps && isStreamingWorkflow)) && (
+        {isSuspendedSteps && isStreamingWorkflow && (
           <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mx-5 -mt-5 border-b-sm border-border1">
             <Icon>
               <Loader2 className="animate-spin text-icon6" />
@@ -214,8 +216,9 @@ export function WorkflowTrigger({
                   setPayload(data);
                   handleExecuteWorkflow(data);
                 }}
+                withoutSubmit={!!paramsRunId}
               />
-            ) : (
+            ) : !!paramsRunId ? null : (
               <Button
                 className="w-full"
                 variant="light"
@@ -259,7 +262,7 @@ export function WorkflowTrigger({
                 )}
                 <WorkflowInputData
                   schema={stepSchema}
-                  isSubmitLoading={isResumingWorkflow}
+                  isSubmitLoading={isStreamingWorkflow}
                   submitButtonLabel="Resume"
                   onSubmit={data => {
                     const stepIds = step.stepId?.split('.');
@@ -320,7 +323,7 @@ export function WorkflowTrigger({
         )}
       </div>
 
-      {result && (
+      {result && !isObjectEmpty(result) && (
         <div className="p-5 border-b-sm border-border1">
           <WorkflowJsonDialog result={result} />
         </div>

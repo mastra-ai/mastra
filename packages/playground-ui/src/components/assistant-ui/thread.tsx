@@ -15,8 +15,7 @@ import { AssistantMessage } from './messages/assistant-message';
 import { UserMessage } from './messages/user-messages';
 import { useEffect, useRef, useState } from 'react';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
-import { Txt } from '@/ds/components/Txt';
-import { Icon, InfoIcon } from '@/ds/icons';
+
 import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
 import { ComposerAttachments } from './attachments/attachment';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
@@ -27,14 +26,15 @@ export interface ThreadProps {
   agentName?: string;
   agentId?: string;
   hasMemory?: boolean;
+  hasModelList?: boolean;
 }
 
-export const Thread = ({ ToolFallback, agentName, agentId, hasMemory }: ThreadProps) => {
+export const Thread = ({ ToolFallback, agentName, agentId, hasMemory, hasModelList }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
   const WrappedAssistantMessage = (props: MessagePrimitive.Root.Props) => {
-    return <AssistantMessage {...props} ToolFallback={ToolFallback} />;
+    return <AssistantMessage {...props} ToolFallback={ToolFallback} hasModelList={hasModelList} />;
   };
 
   return (
@@ -116,7 +116,7 @@ const Composer = ({ hasMemory, agentId }: ComposerProps) => {
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
               className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent focus:outline-none resize-none outline-none"
-              autoFocus
+              autoFocus={document.activeElement === document.body}
               placeholder="Enter your message..."
               name=""
               id=""
@@ -129,15 +129,6 @@ const Composer = ({ hasMemory, agentId }: ComposerProps) => {
           </div>
         </div>
       </ComposerPrimitive.Root>
-
-      {!hasMemory && (
-        <Txt variant="ui-sm" className="text-icon3 flex gap-2 pt-1 max-w-[568px] w-full mx-auto border-t items-start">
-          <Icon className="transform translate-y-[0.1rem]">
-            <InfoIcon />
-          </Icon>
-          Memory is not enabled. The conversation will not be persisted.
-        </Txt>
-      )}
     </div>
   );
 };

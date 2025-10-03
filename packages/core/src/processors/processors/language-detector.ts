@@ -2,6 +2,7 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import { InternalSpans } from '../../ai-tracing';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { Processor } from '../index';
 
@@ -172,6 +173,7 @@ export class LanguageDetector implements Processor {
       name: 'language-detector',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
+      options: { tracingPolicy: { internal: InternalSpans.ALL } },
     });
   }
 
@@ -259,14 +261,14 @@ export class LanguageDetector implements Processor {
       });
 
       if (model.specificationVersion === 'v2') {
-        response = await this.detectionAgent.generateVNext(prompt, {
+        response = await this.detectionAgent.generate(prompt, {
           output: schema,
           modelSettings: {
             temperature: 0,
           },
         });
       } else {
-        response = await this.detectionAgent.generate(prompt, {
+        response = await this.detectionAgent.generateLegacy(prompt, {
           output: schema,
           temperature: 0,
         });

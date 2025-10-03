@@ -653,8 +653,8 @@ export interface AITracingExporter {
   /** Exporter name */
   name: string;
 
-  /** Initialize exporter (called after all dependencies are ready) */
-  init?(): void;
+  /** Initialize exporter with tracing configuration */
+  init?(config: TracingConfig): void;
 
   /** Export tracing events */
   exportEvent(event: AITracingEvent): Promise<void>;

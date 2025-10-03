@@ -11,6 +11,11 @@ const docsTabs = [
     href: "docs",
   },
   {
+    id: "Models",
+    label: "Models",
+    href: "models",
+  },
+  {
     id: "Examples",
     label: "Examples",
     href: "examples",
@@ -57,7 +62,7 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
             return (
               <Link
                 key={tab.id}
-                href={`/${tab.href}`}
+                href={`/${locale}/${tab.href}`}
                 className={cn(
                   "flex min-w-fit relative x:focus-visible:nextra-focus gap-1.5 items-center px-0 py-1 text-sm font-medium transition-colors",
                   isActive

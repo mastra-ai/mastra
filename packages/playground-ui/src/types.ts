@@ -1,4 +1,6 @@
+import { GetAgentResponse } from '@mastra/client-js';
 import type { AiMessageType } from '@mastra/core/memory';
+import type { LLMStepResult } from '@mastra/core/agent';
 
 export type Message = AiMessageType;
 
@@ -20,6 +22,14 @@ export interface AssistantMessage {
   };
 }
 
+export type ReadonlyJSONValue = null | string | number | boolean | ReadonlyJSONObject | ReadonlyJSONArray;
+
+export type ReadonlyJSONObject = {
+  readonly [key: string]: ReadonlyJSONValue;
+};
+
+export type ReadonlyJSONArray = readonly ReadonlyJSONValue[];
+
 export interface ModelSettings {
   frequencyPenalty?: number;
   presencePenalty?: number;
@@ -30,10 +40,9 @@ export interface ModelSettings {
   topK?: number;
   topP?: number;
   instructions?: string;
-  providerOptions?: Record<string, unknown>;
+  providerOptions?: LLMStepResult['providerMetadata'];
+  chatWithGenerateLegacy?: boolean;
   chatWithGenerate?: boolean;
-  chatWithGenerateVNext?: boolean;
-  chatWithStreamVNext?: boolean;
   chatWithNetwork?: boolean;
 }
 
@@ -52,6 +61,7 @@ export interface ChatProps {
   settings?: AgentSettingsType;
   runtimeContext?: Record<string, any>;
   onInputChange?: (value: string) => void;
+  modelList?: GetAgentResponse['modelList'];
 }
 
 export type SpanStatus = {

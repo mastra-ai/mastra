@@ -27,13 +27,15 @@ interface CreatePrepareStreamWorkflowOptions<
   runId: string;
   runtimeContext: RuntimeContext;
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
-  methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
+  methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   format?: FORMAT;
   instructions: SystemMessage;
   memoryConfig?: MemoryConfig;
   memory?: MastraMemory;
   saveQueueManager: SaveQueueManager;
   returnScorerData?: boolean;
+  requireToolApproval?: boolean;
+  resumeContext?: any;
 }
 
 export function createPrepareStreamWorkflow<
@@ -54,6 +56,8 @@ export function createPrepareStreamWorkflow<
   memory,
   saveQueueManager,
   returnScorerData,
+  requireToolApproval,
+  resumeContext,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -88,6 +92,8 @@ export function createPrepareStreamWorkflow<
     runId,
     returnScorerData,
     format,
+    requireToolApproval,
+    resumeContext,
   });
 
   const mapResultsStep = createMapResultsStep({

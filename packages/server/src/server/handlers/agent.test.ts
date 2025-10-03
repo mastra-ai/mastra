@@ -1,9 +1,11 @@
 import { openai } from '@ai-sdk/openai';
+import { openai as openaiV5 } from '@ai-sdk/openai-v5';
 import type { AgentConfig } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
 import type { EvalRow, MastraStorage } from '@mastra/core/storage';
+import type { AISDKV5OutputStream } from '@mastra/core/stream';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
@@ -14,8 +16,11 @@ import {
   getEvalsByAgentIdHandler,
   getLiveEvalsByAgentIdHandler,
   generateHandler,
-  streamGenerateHandler,
   updateAgentModelHandler,
+  reorderAgentModelListHandler,
+  updateAgentModelInModelListHandler,
+  streamGenerateLegacyHandler,
+  streamGenerateHandler,
 } from './agents';
 
 const mockEvals = [
@@ -84,15 +89,21 @@ const makeMastraMock = ({ agents }: { agents: Record<string, ReturnType<typeof m
 describe('Agent Handlers', () => {
   let mockMastra: Mastra;
   let mockAgent: Agent;
-
+  let mockMultiModelAgent: Agent;
   const runtimeContext = new RuntimeContext();
 
   beforeEach(() => {
     mockAgent = makeMockAgent();
 
+    mockMultiModelAgent = makeMockAgent({
+      name: 'test-multi-model-agent',
+      model: [{ model: openaiV5('gpt-4o-mini') }, { model: openaiV5('gpt-4o') }, { model: openaiV5('gpt-4.1') }],
+    });
+
     mockMastra = makeMastraMock({
       agents: {
         'test-agent': mockAgent,
+        'test-multi-model-agent': mockMultiModelAgent,
       },
     });
   });
@@ -113,6 +124,39 @@ describe('Agent Handlers', () => {
           modelVersion: 'v1',
           defaultGenerateOptions: {},
           defaultStreamOptions: {},
+          modelList: undefined,
+        },
+        'test-multi-model-agent': {
+          name: 'test-multi-model-agent',
+          instructions: 'test instructions',
+          tools: {},
+          agents: {},
+          workflows: {},
+          provider: 'openai.responses',
+          modelId: 'gpt-4o-mini',
+          modelVersion: 'v2',
+          defaultGenerateOptions: {},
+          defaultStreamOptions: {},
+          modelList: [
+            {
+              id: expect.any(String),
+              enabled: true,
+              maxRetries: 0,
+              model: { modelId: 'gpt-4o-mini', provider: 'openai.responses', modelVersion: 'v2' },
+            },
+            {
+              id: expect.any(String),
+              enabled: true,
+              maxRetries: 0,
+              model: { modelId: 'gpt-4o', provider: 'openai.responses', modelVersion: 'v2' },
+            },
+            {
+              id: expect.any(String),
+              enabled: true,
+              maxRetries: 0,
+              model: { modelId: 'gpt-4.1', provider: 'openai.responses', modelVersion: 'v2' },
+            },
+          ],
         },
       });
     });
@@ -177,7 +221,39 @@ describe('Agent Handlers', () => {
         modelVersion: 'v1',
         defaultGenerateOptions: {},
         defaultStreamOptions: {},
+        modelList: undefined,
       });
+    });
+
+    it('should return serialized agent with model list', async () => {
+      const result = await getAgentByIdHandler({
+        mastra: mockMastra,
+        agentId: 'test-multi-model-agent',
+        runtimeContext,
+      });
+      if (!result) {
+        expect.fail('Result should be defined');
+      }
+      expect(result.modelList).toMatchObject([
+        {
+          id: expect.any(String),
+          enabled: true,
+          maxRetries: 0,
+          model: { modelId: 'gpt-4o-mini', provider: 'openai.responses', modelVersion: 'v2' },
+        },
+        {
+          id: expect.any(String),
+          enabled: true,
+          maxRetries: 0,
+          model: { modelId: 'gpt-4o', provider: 'openai.responses', modelVersion: 'v2' },
+        },
+        {
+          id: expect.any(String),
+          enabled: true,
+          maxRetries: 0,
+          model: { modelId: 'gpt-4.1', provider: 'openai.responses', modelVersion: 'v2' },
+        },
+      ]);
     });
 
     it('should throw 404 when agent not found', async () => {
@@ -279,7 +355,7 @@ describe('Agent Handlers', () => {
       };
       (mockAgent.stream as any).mockResolvedValue(mockStreamResult);
 
-      const result = await streamGenerateHandler({
+      const result = await streamGenerateLegacyHandler({
         mastra: mockMastra,
         agentId: 'test-agent',
         body: {
@@ -302,7 +378,7 @@ describe('Agent Handlers', () => {
 
     it('should throw 404 when agent not found', async () => {
       await expect(
-        streamGenerateHandler({
+        streamGenerateLegacyHandler({
           mastra: mockMastra,
           agentId: 'non-existing',
           body: {
@@ -364,7 +440,61 @@ describe('Agent Handlers', () => {
         runtimeContext: new RuntimeContext(),
       });
 
-      expect(result).toBeInstanceOf(Response);
+      expect((result as AISDKV5OutputStream<any>).toTextStreamResponse()).toBeInstanceOf(Response);
+    });
+  });
+
+  describe('reorderAgentModelListHandler', () => {
+    it('should reorder list of models for agent', async () => {
+      const agent = mockMastra.getAgent('test-multi-model-agent');
+      const modelList = await agent.getModelList();
+
+      if (!modelList) {
+        expect.fail('Model list should be defined');
+      }
+
+      const modelListIds = modelList.map(m => m.id);
+      const reversedModelListIds = modelListIds.reverse();
+
+      await reorderAgentModelListHandler({
+        mastra: mockMastra,
+        agentId: 'test-multi-model-agent',
+        body: {
+          reorderedModelIds: reversedModelListIds,
+        },
+      });
+
+      const reorderedModelList = await agent.getModelList();
+      expect(reorderedModelList?.length).toBe(3);
+      expect(reorderedModelList?.[0].model.modelId).toBe('gpt-4.1');
+      expect(reorderedModelList?.[1].model.modelId).toBe('gpt-4o');
+      expect(reorderedModelList?.[2].model.modelId).toBe('gpt-4o-mini');
+    });
+  });
+
+  describe('updateAgentModelInModelListHandler', () => {
+    it('should update a model in the model list', async () => {
+      const agent = mockMastra.getAgent('test-multi-model-agent');
+      const modelList = await agent.getModelList();
+      expect(modelList?.length).toBe(3);
+      const model1Id = modelList?.[1].id!;
+      await updateAgentModelInModelListHandler({
+        mastra: mockMastra,
+        agentId: 'test-multi-model-agent',
+        modelConfigId: model1Id,
+        body: {
+          model: {
+            modelId: 'gpt-5',
+            provider: 'openai',
+          },
+          maxRetries: 4,
+        },
+      });
+      const updatedModelList = await agent.getModelList();
+      expect(updatedModelList?.[0].model.modelId).toBe('gpt-4o-mini');
+      expect(updatedModelList?.[1].model.modelId).toBe('gpt-5');
+      expect(updatedModelList?.[1].maxRetries).toBe(4);
+      expect(updatedModelList?.[2].model.modelId).toBe('gpt-4.1');
     });
   });
 });

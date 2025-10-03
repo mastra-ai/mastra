@@ -23,7 +23,6 @@ import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
 import type {
   AITraceRecord,
   AISpanRecord,
-  LegacyWorkflowRuns,
   StorageGetMessagesArg,
   PaginationInfo,
   WorkflowRun,
@@ -32,11 +31,7 @@ import type {
 import type { OutputSchema } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
 import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
-import type {
-  StepAction,
-  StepGraph,
-  LegacyWorkflowRunResult as CoreLegacyWorkflowRunResult,
-} from '@mastra/core/workflows/legacy';
+
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
@@ -90,6 +85,18 @@ export interface GetAgentResponse {
   modelVersion: string;
   defaultGenerateOptions: WithoutMethods<AgentGenerateOptions>;
   defaultStreamOptions: WithoutMethods<AgentStreamOptions>;
+  modelList:
+    | Array<{
+        id: string;
+        enabled: boolean;
+        maxRetries: number;
+        model: {
+          modelId: string;
+          provider: string;
+          modelVersion: string;
+        };
+      }>
+    | undefined;
 }
 
 export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -102,7 +109,7 @@ export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undef
   Omit<AgentGenerateOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
 >;
 
-export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
+export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   output?: T;
   experimental_output?: T;
@@ -112,7 +119,7 @@ export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefin
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
 >;
 
-export type StreamVNextParams<OUTPUT extends OutputSchema = undefined> = {
+export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
   messages: MessageListInput;
   output?: OUTPUT;
   runtimeContext?: RuntimeContext | Record<string, any>;
@@ -141,6 +148,20 @@ export type UpdateModelParams = {
   provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
 };
 
+export type UpdateModelInModelListParams = {
+  modelConfigId: string;
+  model?: {
+    modelId: string;
+    provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+  };
+  maxRetries?: number;
+  enabled?: boolean;
+};
+
+export type ReorderModelListParams = {
+  reorderedModelIds: string[];
+};
+
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];
   instructions: string;
@@ -155,15 +176,6 @@ export interface GetToolResponse {
   outputSchema: string;
 }
 
-export interface GetLegacyWorkflowResponse {
-  name: string;
-  triggerSchema: string;
-  steps: Record<string, StepAction<any, any, any, any>>;
-  stepGraph: StepGraph;
-  stepSubscriberGraph: Record<string, StepGraph>;
-  workflowId?: string;
-}
-
 export interface GetWorkflowRunsParams {
   fromDate?: Date;
   toDate?: Date;
@@ -172,20 +184,11 @@ export interface GetWorkflowRunsParams {
   resourceId?: string;
 }
 
-export type GetLegacyWorkflowRunsResponse = LegacyWorkflowRuns;
-
 export type GetWorkflowRunsResponse = WorkflowRuns;
 
 export type GetWorkflowRunByIdResponse = WorkflowRun;
 
 export type GetWorkflowRunExecutionResultResponse = WatchEvent['payload']['workflowState'];
-
-export type LegacyWorkflowRunResult = {
-  activePaths: Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>;
-  results: CoreLegacyWorkflowRunResult<any, any, any>['results'];
-  timestamp: number;
-  runId: string;
-};
 
 export interface GetWorkflowResponse {
   name: string;
@@ -288,7 +291,7 @@ export interface GetMemoryConfigParams {
   agentId: string;
 }
 
-export type GetMemoryConfigResponse = MemoryConfig;
+export type GetMemoryConfigResponse = { config: MemoryConfig };
 
 export interface GetNetworkMemoryThreadParams {
   resourceId: string;
@@ -492,7 +495,7 @@ export interface McpServerToolListResponse {
 export type ClientScoreRowData = Omit<ScoreRowData, 'createdAt' | 'updatedAt'> & {
   createdAt: string;
   updatedAt: string;
-};
+} & { spanId?: string };
 
 // Scores-related types
 export interface GetScoresByRunIdParams {
@@ -512,6 +515,13 @@ export interface GetScoresByScorerIdParams {
 export interface GetScoresByEntityIdParams {
   entityId: string;
   entityType: string;
+  page?: number;
+  perPage?: number;
+}
+
+export interface GetScoresBySpanParams {
+  traceId: string;
+  spanId: string;
   page?: number;
   perPage?: number;
 }
@@ -536,7 +546,9 @@ export interface SaveScoreResponse {
 
 export type GetScorerResponse = MastraScorerEntry & {
   agentIds: string[];
+  agentNames: string[];
   workflowIds: string[];
+  isRegistered: boolean;
 };
 
 export interface GetScorersResponse {
@@ -564,4 +576,11 @@ export interface GetAITraceResponse {
 export interface GetAITracesResponse {
   spans: AISpanRecord[];
   pagination: PaginationInfo;
+}
+
+export interface StreamVNextChunkType {
+  type: string;
+  payload: any;
+  runId: string;
+  from: 'AGENT' | 'WORKFLOW';
 }

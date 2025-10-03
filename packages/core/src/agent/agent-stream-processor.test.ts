@@ -100,7 +100,7 @@ describe('Stream vs Non-Stream Output Processor Consistency (Issue #7087)', () =
     });
 
     // Stream the response
-    const stream = await agent.streamVNext('test message', {
+    const stream = await agent.stream('test message', {
       format: 'aisdk',
     });
 
@@ -131,7 +131,7 @@ describe('Stream vs Non-Stream Output Processor Consistency (Issue #7087)', () =
     });
 
     // Stream the response with memory enabled
-    const stream = await agent.streamVNext('test message', {
+    const stream = await agent.stream('test message', {
       format: 'aisdk',
       memory: {
         thread: 'test-thread-123',

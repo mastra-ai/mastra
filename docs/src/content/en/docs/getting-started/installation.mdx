@@ -8,7 +8,7 @@ import { Tabs, Tab } from "@/components/tabs";
 
 # Install Mastra
 
-To get started with Mastra, you’ll need access to a large language model (LLM). By default, Mastra is set up to work with [OpenAI](https://platform.openai.com/), so you’ll need an API key to begin.
+To get started with Mastra, you&apos;ll need access to a large language model (LLM). By default, Mastra is set up to work with [OpenAI](https://platform.openai.com/), so you&apos;ll need an API key to begin.
 
 Mastra also supports other LLM providers. For a full list of supported models and setup instructions, see [Model Providers](/docs/getting-started/model-providers).
 
@@ -405,10 +405,9 @@ Install the latest version to the `@ai-sdk/openai` package:
   </Tab>
 </Tabs>
 
-Update the `planActivities` step in `src/mastra/workflows/weather-workflow.ts` as follow:
+Update the `planActivities` step in `src/mastra/workflows/weather-workflow.ts` as follows:
 ```ts filename="src/mastra/workflows/weather-workflow.ts" showLineNumbers{150} copy
-const response = await agent.stream([ // [!code --]
-const response = await agent.streamVNext([ // [!code ++]
+const response = await agent.stream([
   {
     role: 'user',
     content: prompt,

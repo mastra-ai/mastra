@@ -1,3 +1,4 @@
+import type { ReadableStream } from 'stream/web';
 import { parsePartialJson, processDataStream } from '@ai-sdk/ui-utils';
 import type {
   JSONValue,
@@ -16,7 +17,6 @@ import type { OutputSchema, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodType } from 'zod';
-
 import type {
   GenerateParams,
   GetAgentResponse,
@@ -24,8 +24,10 @@ import type {
   GetToolResponse,
   ClientOptions,
   StreamParams,
+  StreamLegacyParams,
   UpdateModelParams,
-  StreamVNextParams,
+  UpdateModelInModelListParams,
+  ReorderModelListParams,
   NetworkStreamParams,
 } from '../types';
 
@@ -44,13 +46,13 @@ async function executeToolCallAndRespond({
   runtimeContext,
   respondFn,
 }: {
-  params: StreamVNextParams<any>;
+  params: StreamParams<any>;
   response: Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
   runId?: string;
   resourceId?: string;
   threadId?: string;
   runtimeContext?: RuntimeContext<any>;
-  respondFn: Agent['generateVNext'];
+  respondFn: Agent['generate'];
 }) {
   if (response.finishReason === 'tool-calls') {
     const toolCalls = (
@@ -76,6 +78,7 @@ async function executeToolCallAndRespond({
             threadId,
             runtimeContext: runtimeContext as RuntimeContext,
             tracingContext: { currentSpan: undefined },
+            suspend: async () => {},
           },
           {
             messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -83,12 +86,10 @@ async function executeToolCallAndRespond({
           },
         );
 
+        // Build updated messages from the response, adding the tool result
+        // Do NOT re-include the original user message to avoid storage duplicates
         const updatedMessages = [
-          {
-            role: 'user',
-            content: params.messages,
-          },
-          ...(response.response as unknown as { messages: CoreMessage[] }).messages,
+          ...(response.response.messages || []),
           {
             role: 'tool',
             content: [
@@ -206,31 +207,6 @@ export class Agent extends BaseResource {
    * @param params - Generation parameters including prompt
    * @returns Promise containing the generated response
    */
-  async generate(
-    params: GenerateParams<undefined> & { output?: never; experimental_output?: never },
-  ): Promise<GenerateReturn<any, undefined, undefined>>;
-  async generate<Output extends JSONSchema7 | ZodType>(
-    params: GenerateParams<Output> & { output: Output; experimental_output?: never },
-  ): Promise<GenerateReturn<any, Output, undefined>>;
-  async generate<StructuredOutput extends JSONSchema7 | ZodType>(
-    params: GenerateParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
-  ): Promise<GenerateReturn<any, undefined, StructuredOutput>>;
-  async generate<
-    Output extends JSONSchema7 | ZodType | undefined = undefined,
-    StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
-  >(params: GenerateParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
-    console.warn(
-      "Deprecation NOTICE:\Generate method will switch to use generateVNext implementation September 23rd, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
-    );
-    // @ts-expect-error - generic type issues
-    return this.generateLegacy(params);
-  }
-
-  /**
-   * Generates a response from the agent
-   * @param params - Generation parameters including prompt
-   * @returns Promise containing the generated response
-   */
   async generateLegacy(
     params: GenerateParams<undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateReturn<any, undefined, undefined>>;
@@ -286,6 +262,7 @@ export class Agent extends BaseResource {
               threadId,
               runtimeContext: runtimeContext as RuntimeContext,
               tracingContext: { currentSpan: undefined },
+              suspend: async () => {},
             },
             {
               messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -293,11 +270,9 @@ export class Agent extends BaseResource {
             },
           );
 
+          // Build updated messages from the response, adding the tool result
+          // Do NOT re-include the original user message to avoid storage duplicates
           const updatedMessages = [
-            {
-              role: 'user',
-              content: params.messages,
-            },
             ...(response.response as unknown as { messages: CoreMessage[] }).messages,
             {
               role: 'tool',
@@ -323,20 +298,20 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async generateVNext<OUTPUT extends OutputSchema = undefined>(
+  async generate<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
-    options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
   // Backward compatibility overload
-  async generateVNext<OUTPUT extends OutputSchema = undefined>(
-    params: StreamVNextParams<OUTPUT>,
+  async generate<OUTPUT extends OutputSchema = undefined>(
+    params: StreamParams<OUTPUT>,
   ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
-  async generateVNext<OUTPUT extends OutputSchema = undefined>(
-    messagesOrParams: MessageListInput | StreamVNextParams<OUTPUT>,
-    options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>,
+  async generate<OUTPUT extends OutputSchema = undefined>(
+    messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
     // Handle both new signature (messages, options) and old signature (single param object)
-    let params: StreamVNextParams<OUTPUT>;
+    let params: StreamParams<OUTPUT>;
     if (typeof messagesOrParams === 'object' && 'messages' in messagesOrParams) {
       // Old signature: single parameter object
       params = messagesOrParams;
@@ -345,7 +320,7 @@ export class Agent extends BaseResource {
       params = {
         messages: messagesOrParams as MessageListInput,
         ...options,
-      } as StreamVNextParams<OUTPUT>;
+      } as StreamParams<OUTPUT>;
     }
     const processedParams = {
       ...params,
@@ -360,10 +335,10 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    const { runId, resourceId, threadId, runtimeContext } = processedParams as StreamVNextParams;
+    const { runId, resourceId, threadId, runtimeContext } = processedParams as StreamParams;
 
     const response = await this.request<ReturnType<MastraModelOutput['getFullOutput']>>(
-      `/api/agents/${this.agentId}/generate/vnext`,
+      `/api/agents/${this.agentId}/generate`,
       {
         method: 'POST',
         body: processedParams,
@@ -378,7 +353,7 @@ export class Agent extends BaseResource {
         resourceId,
         threadId,
         runtimeContext: runtimeContext as RuntimeContext<any>,
-        respondFn: this.generateVNext.bind(this),
+        respondFn: this.generate.bind(this),
       }) as unknown as Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
     }
 
@@ -484,7 +459,7 @@ export class Agent extends BaseResource {
     }
 
     await processDataStream({
-      stream,
+      stream: stream as ReadableStream<Uint8Array>,
       onTextPart(value) {
         if (currentTextPart == null) {
           currentTextPart = {
@@ -735,26 +710,8 @@ export class Agent extends BaseResource {
    * @param params - Stream parameters including prompt
    * @returns Promise containing the enhanced Response object with processDataStream method
    */
-  async stream<T extends JSONSchema7 | ZodType | undefined = undefined>(
-    params: StreamParams<T>,
-  ): Promise<
-    Response & {
-      processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
-    }
-  > {
-    console.warn(
-      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 23rd, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
-    );
-    return this.streamLegacy(params);
-  }
-
-  /**
-   * Streams a response from the agent
-   * @param params - Stream parameters including prompt
-   * @returns Promise containing the enhanced Response object with processDataStream method
-   */
   async streamLegacy<T extends JSONSchema7 | ZodType | undefined = undefined>(
-    params: StreamParams<T>,
+    params: StreamLegacyParams<T>,
   ): Promise<
     Response & {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
@@ -786,7 +743,7 @@ export class Agent extends BaseResource {
     // Add the processDataStream method to the response
     streamResponse.processDataStream = async (options = {}) => {
       await processDataStream({
-        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        stream: streamResponse.body as unknown as globalThis.ReadableStream<Uint8Array>,
         ...options,
       });
     };
@@ -1139,7 +1096,7 @@ export class Agent extends BaseResource {
   }
 
   async processStreamResponse_vNext(processedParams: any, writable: any) {
-    const response: Response = await this.request(`/api/agents/${this.agentId}/stream/vnext`, {
+    const response: Response = await this.request(`/api/agents/${this.agentId}/stream`, {
       method: 'POST',
       body: processedParams,
       stream: true,
@@ -1188,7 +1145,7 @@ export class Agent extends BaseResource {
 
       // Process the other branch for chat response handling
       this.processChatResponse_vNext({
-        stream: streamForProcessing,
+        stream: streamForProcessing as unknown as ReadableStream<Uint8Array>,
         update: ({ message }) => {
           const existingIndex = messages.findIndex(m => m.id === message.id);
 
@@ -1207,10 +1164,12 @@ export class Agent extends BaseResource {
               toolCalls.push(toolCall);
             }
 
+            let shouldExecuteClientTool = false;
             // Handle tool calls if needed
             for (const toolCall of toolCalls) {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
+                shouldExecuteClientTool = true;
                 const result = await clientTool.execute(
                   {
                     context: toolCall?.args,
@@ -1220,6 +1179,7 @@ export class Agent extends BaseResource {
                     runtimeContext: processedParams.runtimeContext as RuntimeContext,
                     // TODO: Pass proper tracing context when client-js supports tracing
                     tracingContext: { currentSpan: undefined },
+                    suspend: async () => {},
                   },
                   {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -1253,13 +1213,10 @@ export class Agent extends BaseResource {
                   toolInvocation.result = result;
                 }
 
-                // Convert messages to the correct format for the recursive call
-                const originalMessages = processedParams.messages;
-                const messageArray = Array.isArray(originalMessages) ? originalMessages : [originalMessages];
+                // Build updated messages for the recursive call
+                // Do NOT re-include the original messages to avoid storage duplicates
                 const updatedMessages =
-                  lastMessage != null
-                    ? [...messageArray, ...messages.filter(m => m.id !== lastMessage.id), lastMessage]
-                    : [...messageArray, ...messages];
+                  lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
 
                 // Recursively call stream with updated messages
                 this.processStreamResponse_vNext(
@@ -1272,6 +1229,12 @@ export class Agent extends BaseResource {
                   console.error('Error processing stream response:', error);
                 });
               }
+            }
+
+            if (!shouldExecuteClientTool) {
+              setTimeout(() => {
+                writable.close();
+              }, 0);
             }
           } else {
             setTimeout(() => {
@@ -1334,10 +1297,9 @@ export class Agent extends BaseResource {
 
     return streamResponse;
   }
-
-  async streamVNext<OUTPUT extends OutputSchema = undefined>(
+  async stream<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
-    options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1348,8 +1310,8 @@ export class Agent extends BaseResource {
     }
   >;
   // Backward compatibility overload
-  async streamVNext<OUTPUT extends OutputSchema = undefined>(
-    params: StreamVNextParams<OUTPUT>,
+  async stream<OUTPUT extends OutputSchema = undefined>(
+    params: StreamParams<OUTPUT>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1359,9 +1321,9 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   >;
-  async streamVNext<OUTPUT extends OutputSchema = undefined>(
-    messagesOrParams: MessageListInput | StreamVNextParams<OUTPUT>,
-    options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>,
+  async stream<OUTPUT extends OutputSchema = undefined>(
+    messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1372,7 +1334,7 @@ export class Agent extends BaseResource {
     }
   > {
     // Handle both new signature (messages, options) and old signature (single param object)
-    let params: StreamVNextParams<OUTPUT>;
+    let params: StreamParams<OUTPUT>;
     if (typeof messagesOrParams === 'object' && 'messages' in messagesOrParams) {
       // Old signature: single parameter object
       params = messagesOrParams;
@@ -1381,7 +1343,7 @@ export class Agent extends BaseResource {
       params = {
         messages: messagesOrParams as MessageListInput,
         ...options,
-      } as StreamVNextParams<OUTPUT>;
+      } as StreamParams<OUTPUT>;
     }
     const processedParams = {
       ...params,
@@ -1464,7 +1426,7 @@ export class Agent extends BaseResource {
 
       // Process the other branch for chat response handling
       this.processChatResponse({
-        stream: streamForProcessing,
+        stream: streamForProcessing as unknown as ReadableStream<Uint8Array>,
         update: ({ message }) => {
           const existingIndex = messages.findIndex(m => m.id === message.id);
 
@@ -1496,6 +1458,7 @@ export class Agent extends BaseResource {
                     runtimeContext: processedParams.runtimeContext as RuntimeContext,
                     // TODO: Pass proper tracing context when client-js supports tracing
                     tracingContext: { currentSpan: undefined },
+                    suspend: async () => {},
                   },
                   {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -1545,15 +1508,11 @@ export class Agent extends BaseResource {
                   writer.releaseLock();
                 }
 
-                // Convert messages to the correct format for the recursive call
-                const originalMessages = processedParams.messages;
-                const messageArray = Array.isArray(originalMessages) ? originalMessages : [originalMessages];
-
                 // Recursively call stream with updated messages
                 this.processStreamResponse(
                   {
                     ...processedParams,
-                    messages: [...messageArray, ...messages.filter(m => m.id !== lastMessage.id), lastMessage],
+                    messages: [...messages.filter(m => m.id !== lastMessage.id), lastMessage],
                   },
                   writable,
                 ).catch(error => {
@@ -1636,5 +1595,88 @@ export class Agent extends BaseResource {
       method: 'POST',
       body: params,
     });
+  }
+
+  /**
+   * Updates the model for the agent in the model list
+   * @param params - Parameters for updating the model
+   * @returns Promise containing the updated model
+   */
+  updateModelInModelList({ modelConfigId, ...params }: UpdateModelInModelListParams): Promise<{ message: string }> {
+    return this.request(`/api/agents/${this.agentId}/models/${modelConfigId}`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Reorders the models for the agent
+   * @param params - Parameters for reordering the model list
+   * @returns Promise containing the updated model list
+   */
+  reorderModelList(params: ReorderModelListParams): Promise<{ message: string }> {
+    return this.request(`/api/agents/${this.agentId}/models/reorder`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * @deprecated generateVNext has been renamed to generate. Please use generate instead.
+   */
+  async generateVNext<OUTPUT extends OutputSchema = undefined>(
+    messages: MessageListInput,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
+  async generateVNext<OUTPUT extends OutputSchema = undefined>(
+    params: StreamParams<OUTPUT>,
+  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
+  async generateVNext<OUTPUT extends OutputSchema = undefined>(
+    _messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
+    _options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
+    throw new Error('generateVNext has been renamed to generate. Please use generate instead.');
+  }
+
+  /**
+   * @deprecated streamVNext has been renamed to stream. Please use stream instead.
+   */
+  async streamVNext<OUTPUT extends OutputSchema = undefined>(
+    messages: MessageListInput,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  >;
+  // Backward compatibility overload
+  async streamVNext<OUTPUT extends OutputSchema = undefined>(
+    params: StreamParams<OUTPUT>,
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  >;
+  async streamVNext<OUTPUT extends OutputSchema = undefined>(
+    _messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
+    _options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    throw new Error('streamVNext has been renamed to stream. Please use stream instead.');
   }
 }

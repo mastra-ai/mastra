@@ -75,6 +75,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           toolCallId: 'call-1',
           messages: expect.any(Array),
           writableStream: expect.any(Object),
+          resumeData: undefined,
+          suspend: expect.any(Function),
         },
       );
     });
@@ -551,6 +553,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 },
                 "id": "id-0",
                 "modelId": "mock-model-id",
+                "modelMetadata": {
+                  "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
+                },
                 "timestamp": 1970-01-01T00:00:00.000Z,
               },
               "type": "finish-step",
@@ -596,6 +603,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 },
                 "id": "id-1",
                 "modelId": "mock-model-id",
+                "modelMetadata": {
+                  "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
+                },
                 "timestamp": 1970-01-01T00:00:01.000Z,
               },
               "type": "finish-step",
@@ -4105,9 +4117,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             "type": "tool-input-delta",
           },
           {
-            "filename": undefined,
             "id": "123",
-            "mediaType": undefined,
             "providerMetadata": {
               "provider": {
                 "custom": "value",
@@ -6435,6 +6445,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "headers": undefined,
                 "id": "id-1",
                 "modelId": "mock-model-id",
+                "modelMetadata": {
+                  "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
+                },
                 "modelProvider": "mock-provider",
                 "modelVersion": "v2",
                 "timestamp": 1970-01-01T00:00:02.000Z,
@@ -6951,6 +6966,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "headers": undefined,
                 "id": "id-0",
                 "modelId": "mock-model-id",
+                "modelMetadata": {
+                  "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
+                },
                 "modelProvider": "mock-provider",
                 "modelVersion": "v2",
                 "timestamp": 1970-01-01T00:00:00.000Z,

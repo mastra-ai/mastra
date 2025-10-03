@@ -1,18 +1,13 @@
-import { anthropic } from '@ai-sdk/anthropic';
-import { anthropic as anthropicV5 } from '@ai-sdk/anthropic-v5';
-import { google } from '@ai-sdk/google';
-import { google as googleV5 } from '@ai-sdk/google-v5';
-import { groq } from '@ai-sdk/groq';
-import { groq as groqV5 } from '@ai-sdk/groq-v5';
-import { openai } from '@ai-sdk/openai';
-import { openai as openaiV5 } from '@ai-sdk/openai-v5';
-import { xai } from '@ai-sdk/xai';
-import { xai as xaiV5 } from '@ai-sdk/xai-v5';
 import type { Agent } from '@mastra/core/agent';
+import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
 
+import type {
+  StreamTextOnFinishCallback,
+  StreamTextOnStepFinishCallback,
+} from '../../../../core/dist/llm/model/base.types';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 
@@ -24,6 +19,10 @@ type GetBody<
 > = {
   messages: Parameters<Agent[T]>[0];
 } & Parameters<Agent[T]>[1];
+
+type GetHITLBody<
+  T extends keyof Agent & { [K in keyof Agent]: Agent[K] extends (...args: any) => any ? K : never }[keyof Agent],
+> = Parameters<Agent[T]>[0];
 
 export async function getSerializedAgentTools(tools: Record<string, any>) {
   return Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
@@ -122,6 +121,15 @@ async function formatAgentList({
   const serializedAgentAgents = await getSerializedAgentDefinition({ agent, runtimeContext });
 
   const model = llm?.getModel();
+  const models = await agent.getModelList(runtimeContext);
+  const modelList = models?.map(md => ({
+    ...md,
+    model: {
+      modelId: md.model.modelId,
+      provider: md.model.provider,
+      modelVersion: md.model.specificationVersion,
+    },
+  }));
 
   return {
     id,
@@ -135,6 +143,7 @@ async function formatAgentList({
     modelVersion: model?.specificationVersion,
     defaultGenerateOptions: defaultGenerateOptions as any,
     defaultStreamOptions: defaultStreamOptions as any,
+    modelList,
   };
 }
 
@@ -226,6 +235,15 @@ async function formatAgent({
     const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext: proxyRuntimeContext });
 
     const model = llm?.getModel();
+    const models = await agent.getModelList(runtimeContext);
+    const modelList = models?.map(md => ({
+      ...md,
+      model: {
+        modelId: md.model.modelId,
+        provider: md.model.provider,
+        modelVersion: md.model.specificationVersion,
+      },
+    }));
 
     const serializedAgentAgents = await getSerializedAgentDefinition({ agent, runtimeContext: proxyRuntimeContext });
 
@@ -238,6 +256,7 @@ async function formatAgent({
       provider: llm?.getProvider(),
       modelId: llm?.getModelId(),
       modelVersion: model?.specificationVersion,
+      modelList,
       defaultGenerateOptions: defaultGenerateOptions as any,
       defaultStreamOptions: defaultStreamOptions as any,
     };
@@ -302,26 +321,6 @@ export async function getLiveEvalsByAgentIdHandler({
   }
 }
 
-export function generateHandler({
-  mastra,
-  ...args
-}: Context & {
-  runtimeContext: RuntimeContext;
-  agentId: string;
-  body: GetBody<'generate'> & {
-    // @deprecated use resourceId
-    resourceid?: string;
-    runtimeContext?: Record<string, unknown>;
-  };
-  abortSignal?: AbortSignal;
-}) {
-  const logger = mastra.getLogger();
-  logger?.warn(
-    "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 23rd, 2025. Please use generateLegacyHandler if you don't want to upgrade just yet.",
-  );
-  return generateLegacyHandler({ mastra, ...args });
-}
-
 export async function generateLegacyHandler({
   mastra,
   runtimeContext,
@@ -360,7 +359,7 @@ export async function generateLegacyHandler({
 
     validateBody({ messages });
 
-    const result = await agent.generate(messages, {
+    const result = await agent.generateLegacy(messages, {
       ...rest,
       abortSignal,
       // @ts-expect-error TODO fix types
@@ -374,7 +373,7 @@ export async function generateLegacyHandler({
   }
 }
 
-export async function generateVNextHandler({
+export async function generateHandler({
   mastra,
   runtimeContext,
   agentId,
@@ -383,12 +382,12 @@ export async function generateVNextHandler({
 }: Context & {
   runtimeContext: RuntimeContext;
   agentId: string;
-  body: GetBody<'generateVNext'> & {
+  body: GetBody<'generate'> & {
     runtimeContext?: Record<string, unknown>;
     format?: 'mastra' | 'aisdk';
   };
   abortSignal?: AbortSignal;
-}): Promise<ReturnType<Agent['generateVNext']>> {
+}): Promise<ReturnType<Agent['generate']>> {
   try {
     const agent = mastra.getAgent(agentId);
 
@@ -409,7 +408,7 @@ export async function generateVNextHandler({
 
     validateBody({ messages });
 
-    const result = await agent.generateVNext(messages, {
+    const result = await agent.generate(messages, {
       ...rest,
       runtimeContext: finalRuntimeContext,
       format: rest.format || 'mastra',
@@ -422,26 +421,6 @@ export async function generateVNextHandler({
   }
 }
 
-export async function streamGenerateHandler({
-  mastra,
-  ...args
-}: Context & {
-  runtimeContext: RuntimeContext;
-  agentId: string;
-  body: GetBody<'stream'> & {
-    // @deprecated use resourceId
-    resourceid?: string;
-    runtimeContext?: string;
-  };
-  abortSignal?: AbortSignal;
-}) {
-  const logger = mastra.getLogger();
-  logger?.warn(
-    "Deprecation NOTICE:\n Stream method will switch to use streamVNext implementation September 23rd, 2025. Please use streamGenerateLegacyHandler if you don't want to upgrade just yet.",
-  );
-
-  return streamGenerateLegacyHandler({ mastra, ...args });
-}
 export async function streamGenerateLegacyHandler({
   mastra,
   runtimeContext,
@@ -476,7 +455,7 @@ export async function streamGenerateLegacyHandler({
 
     validateBody({ messages });
 
-    const streamResult = await agent.stream(messages, {
+    const streamResult = await agent.streamLegacy(messages, {
       ...rest,
       abortSignal,
       // @ts-expect-error TODO fix types
@@ -507,7 +486,7 @@ export async function streamGenerateLegacyHandler({
   }
 }
 
-export function streamVNextGenerateHandler({
+export function streamGenerateHandler({
   mastra,
   runtimeContext,
   agentId,
@@ -516,12 +495,12 @@ export function streamVNextGenerateHandler({
 }: Context & {
   runtimeContext: RuntimeContext;
   agentId: string;
-  body: GetBody<'streamVNext'> & {
+  body: GetBody<'stream'> & {
     runtimeContext?: string;
     format?: 'aisdk' | 'mastra';
   };
   abortSignal?: AbortSignal;
-}): ReturnType<Agent['streamVNext']> {
+}): ReturnType<Agent['stream']> {
   try {
     const agent = mastra.getAgent(agentId);
 
@@ -541,8 +520,102 @@ export function streamVNextGenerateHandler({
 
     validateBody({ messages });
 
-    const streamResult = agent.streamVNext(messages, {
+    const streamResult = agent.stream(messages, {
       ...rest,
+      runtimeContext: finalRuntimeContext,
+      abortSignal,
+      format: body.format ?? 'mastra',
+    });
+
+    return streamResult;
+  } catch (error) {
+    return handleError(error, 'error streaming agent response');
+  }
+}
+
+export function approveToolCallHandler({
+  mastra,
+  runtimeContext,
+  agentId,
+  body,
+  abortSignal,
+}: Context & {
+  runtimeContext: RuntimeContext;
+  agentId: string;
+  body: GetHITLBody<'approveToolCall'> & {
+    runtimeContext?: string;
+    format?: 'aisdk' | 'mastra';
+  };
+  abortSignal?: AbortSignal;
+}): ReturnType<Agent['approveToolCall']> {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    // UI Frameworks may send "client tools" in the body,
+    // but it interferes with llm providers tool handling, so we remove them
+    sanitizeBody(body, ['tools']);
+
+    const { runId, runtimeContext: agentRuntimeContext, ...rest } = body;
+
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(Object.entries(agentRuntimeContext ?? {})),
+    ]);
+
+    const streamResult = agent.approveToolCall({
+      ...rest,
+      runId,
+      runtimeContext: finalRuntimeContext,
+      abortSignal,
+      format: body.format ?? 'mastra',
+    });
+
+    return streamResult;
+  } catch (error) {
+    return handleError(error, 'error streaming agent response');
+  }
+}
+
+export function declineToolCallHandler({
+  mastra,
+  runtimeContext,
+  agentId,
+  body,
+  abortSignal,
+}: Context & {
+  runtimeContext: RuntimeContext;
+  agentId: string;
+  body: GetHITLBody<'declineToolCall'> & {
+    runtimeContext?: string;
+    format?: 'aisdk' | 'mastra';
+  };
+  abortSignal?: AbortSignal;
+}): ReturnType<Agent['declineToolCall']> {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    // UI Frameworks may send "client tools" in the body,
+    // but it interferes with llm providers tool handling, so we remove them
+    sanitizeBody(body, ['tools']);
+
+    const { runId, runtimeContext: agentRuntimeContext, ...rest } = body;
+
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(Object.entries(agentRuntimeContext ?? {})),
+    ]);
+
+    const streamResult = agent.declineToolCall({
+      ...rest,
+      runId,
       runtimeContext: finalRuntimeContext,
       abortSignal,
       format: body.format ?? 'mastra',
@@ -603,7 +676,7 @@ export function streamNetworkHandler({
   }
 }
 
-export async function streamVNextUIMessageHandler({
+export async function streamUIMessageHandler({
   mastra,
   runtimeContext,
   agentId,
@@ -612,8 +685,11 @@ export async function streamVNextUIMessageHandler({
 }: Context & {
   runtimeContext: RuntimeContext;
   agentId: string;
-  body: GetBody<'streamVNext'> & {
+  body: GetBody<'stream'> & {
     runtimeContext?: string;
+    onStepFinish?: StreamTextOnStepFinishCallback<any>;
+    onFinish?: StreamTextOnFinishCallback<any>;
+    output?: undefined;
   };
   abortSignal?: AbortSignal;
 }): Promise<Response | undefined> {
@@ -636,7 +712,7 @@ export async function streamVNextUIMessageHandler({
 
     validateBody({ messages });
 
-    const streamResult = await agent.streamVNext(messages, {
+    const streamResult = await agent.stream(messages, {
       ...rest,
       runtimeContext: finalRuntimeContext,
       abortSignal,
@@ -657,7 +733,7 @@ export async function updateAgentModelHandler({
   agentId: string;
   body: {
     modelId: string;
-    provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+    provider: string;
   };
 }): Promise<{ message: string }> {
   try {
@@ -667,36 +743,122 @@ export async function updateAgentModelHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const agentModel = await agent.getModel();
-    const modelVersion = agentModel.specificationVersion;
-
     const { modelId, provider } = body;
 
-    const providerMap = {
-      v1: {
-        openai: openai(modelId),
-        anthropic: anthropic(modelId),
-        groq: groq(modelId),
-        xai: xai(modelId),
-        google: google(modelId),
-      },
-      v2: {
-        openai: openaiV5(modelId),
-        anthropic: anthropicV5(modelId),
-        groq: groqV5(modelId),
-        xai: xaiV5(modelId),
-        google: googleV5(modelId),
-      },
-    };
+    // Use the universal Mastra router format: provider/model
+    const newModel = `${provider}/${modelId}`;
 
-    const modelVersionKey = modelVersion === 'v2' ? 'v2' : 'v1';
-
-    let model = providerMap[modelVersionKey][provider];
-
-    agent.__updateModel({ model });
+    agent.__updateModel({ model: newModel });
 
     return { message: 'Agent model updated' };
   } catch (error) {
     return handleError(error, 'error updating agent model');
+  }
+}
+
+export async function reorderAgentModelListHandler({
+  mastra,
+  agentId,
+  body,
+}: Context & {
+  agentId: string;
+  body: {
+    reorderedModelIds: Array<string>;
+  };
+}): Promise<{ message: string }> {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    const modelList = await agent.getModelList();
+    if (!modelList || modelList.length === 0) {
+      throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
+    }
+
+    agent.reorderModels(body.reorderedModelIds);
+
+    return { message: 'Model list reordered' };
+  } catch (error) {
+    return handleError(error, 'error reordering model list');
+  }
+}
+
+export async function updateAgentModelInModelListHandler({
+  mastra,
+  agentId,
+  modelConfigId,
+  body,
+}: Context & {
+  agentId: string;
+  modelConfigId: string;
+  body: {
+    model?: {
+      modelId: string;
+      provider: string;
+    };
+    maxRetries?: number;
+    enabled?: boolean;
+  };
+}): Promise<{ message: string }> {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+    const { model: bodyModel, maxRetries, enabled } = body;
+
+    if (!modelConfigId) {
+      throw new HTTPException(400, { message: 'Model id is required' });
+    }
+
+    const modelList = await agent.getModelList();
+    if (!modelList || modelList.length === 0) {
+      throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
+    }
+
+    const modelToUpdate = modelList.find(m => m.id === modelConfigId);
+    if (!modelToUpdate) {
+      throw new HTTPException(400, { message: 'Model to update is not found in agent model list' });
+    }
+
+    let model: string | undefined;
+    if (bodyModel) {
+      const { modelId, provider } = bodyModel;
+      // Use the universal Mastra router format: provider/model
+      model = `${provider}/${modelId}`;
+    }
+
+    agent.updateModelInModelList({ id: modelConfigId, model, maxRetries, enabled });
+
+    return { message: 'Model list updated' };
+  } catch (error) {
+    return handleError(error, 'error updating model list');
+  }
+}
+
+export async function getProvidersHandler() {
+  try {
+    const providers = Object.entries(PROVIDER_REGISTRY).map(([id, provider]) => {
+      // Check if the provider is connected by checking for its API key env var(s)
+      const envVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
+      const connected = envVars.every(envVar => !!process.env[envVar]);
+
+      return {
+        id,
+        name: provider.name,
+        envVar: provider.apiKeyEnvVar,
+        connected,
+        docUrl: provider.docUrl,
+        models: [...provider.models], // Convert readonly array to regular array
+      };
+    });
+
+    return { providers };
+  } catch (error) {
+    return handleError(error, 'error fetching providers');
   }
 }

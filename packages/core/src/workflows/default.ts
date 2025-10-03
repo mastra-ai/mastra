@@ -6,6 +6,7 @@ import { AISpanType, wrapMastra, selectFields } from '../ai-tracing';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { IErrorDefinition } from '../error';
+import { safeParseErrorObject } from '../error/utils.js';
 import type { MastraScorers } from '../scores';
 import { runScorer } from '../scores/hooks';
 import type { ChunkType } from '../stream/types';
@@ -15,6 +16,7 @@ import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
+import { getStepResult } from './step';
 import type {
   DefaultEngineType,
   Emitter,
@@ -24,6 +26,7 @@ import type {
   StepResult,
   StepSuccess,
 } from './types';
+import { validateStepInput } from './utils';
 
 export type ExecutionContext = {
   workflowId: string;
@@ -138,13 +141,18 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         eventTimestamp: Date.now(),
       });
 
-      base.error =
-        error instanceof Error
-          ? (error?.stack ?? error)
-          : (lastOutput.error ??
-            (typeof error === 'string'
-              ? error
-              : (new Error('Unknown error: ' + error)?.stack ?? new Error('Unknown error: ' + error))));
+      if (error instanceof Error) {
+        base.error = error?.stack ?? error;
+      } else if (lastOutput.error) {
+        base.error = lastOutput.error;
+      } else if (typeof error === 'string') {
+        base.error = error;
+      } else {
+        // For non-string, non-Error values, create a descriptive error
+        const errorMessage = safeParseErrorObject(error);
+        const errorObj = new Error('Unknown error: ' + errorMessage);
+        base.error = errorObj?.stack ?? errorObj;
+      }
     } else if (lastOutput.status === 'suspended') {
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {
@@ -476,19 +484,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           currentSpan: sleepSpan,
         },
         getInitData: () => stepResults?.input as any,
-        getStepResult: (step: any) => {
-          if (!step?.id) {
-            return null;
-          }
-
-          const result = stepResults[step.id];
-          if (result?.status === 'success') {
-            return result.output;
-          }
-
-          return null;
-        },
-
+        getStepResult: getStepResult.bind(this, stepResults),
         // TODO: this function shouldn't have suspend probably?
         suspend: async (_suspendPayload: any): Promise<any> => {},
         bail: () => {},
@@ -590,19 +586,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           currentSpan: sleepUntilSpan,
         },
         getInitData: () => stepResults?.input as any,
-        getStepResult: (step: any) => {
-          if (!step?.id) {
-            return null;
-          }
-
-          const result = stepResults[step.id];
-          if (result?.status === 'success') {
-            return result.output;
-          }
-
-          return null;
-        },
-
+        getStepResult: getStepResult.bind(this, stepResults),
         // TODO: this function shouldn't have suspend probably?
         suspend: async (_suspendPayload: any): Promise<any> => {},
         bail: () => {},
@@ -738,9 +722,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const resumeTime = resume?.steps[0] === step.id ? Date.now() : undefined;
     const stepCallId = randomUUID();
 
+    const { inputData, validationError } = await validateStepInput({
+      prevOutput,
+      step,
+      validateInputs: this.options?.validateInputs ?? false,
+    });
+
     const stepInfo = {
       ...stepResults[step.id],
-      ...(resume?.steps[0] === step.id ? { resumePayload: resume?.resumePayload } : { payload: prevOutput }),
+      ...(resume?.steps[0] === step.id ? { resumePayload: resume?.resumePayload } : { payload: inputData }),
       ...(startTime ? { startedAt: startTime } : {}),
       ...(resumeTime ? { resumedAt: resumeTime } : {}),
       status: 'running',
@@ -749,7 +739,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const stepAISpan = tracingContext.currentSpan?.createChildSpan({
       name: `workflow step: '${step.id}'`,
       type: AISpanType.WORKFLOW_STEP,
-      input: prevOutput,
+      input: inputData,
       attributes: {
         stepId: step.id,
       },
@@ -839,29 +829,22 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         let suspended: { payload: any } | undefined;
         let bailed: { payload: any } | undefined;
 
+        if (validationError) {
+          throw validationError;
+        }
+
         const result = await runStep({
           runId,
           resourceId,
           workflowId,
           mastra: this.mastra ? wrapMastra(this.mastra, { currentSpan: stepAISpan }) : undefined,
           runtimeContext,
-          inputData: prevOutput,
+          inputData,
           runCount: this.getOrGenerateRunCount(step.id),
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           tracingContext: { currentSpan: stepAISpan },
           getInitData: () => stepResults?.input as any,
-          getStepResult: (step: any) => {
-            if (!step?.id) {
-              return null;
-            }
-
-            const result = stepResults[step.id];
-            if (result?.status === 'success') {
-              return result.output;
-            }
-
-            return null;
-          },
+          getStepResult: getStepResult.bind(this, stepResults),
           suspend: async (suspendPayload: any): Promise<any> => {
             executionContext.suspendedPaths[step.id] = executionContext.executionPath;
             suspended = { payload: suspendPayload };
@@ -898,13 +881,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           ),
           // Disable scorers must be explicitly set to false they are on by default
           scorers: disableScorers === false ? undefined : step.scorers,
+          validateInputs: this.options?.validateInputs,
         });
 
         if (step.scorers) {
           await this.runScorers({
             scorers: step.scorers,
             runId,
-            input: prevOutput,
+            input: inputData,
             output: result,
             workflowId,
             stepId: step.id,
@@ -1064,12 +1048,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     if (!disableScorers && scorersToUse && Object.keys(scorersToUse || {}).length > 0) {
-      for (const [id, scorerObject] of Object.entries(scorersToUse || {})) {
+      for (const [_id, scorerObject] of Object.entries(scorersToUse || {})) {
         runScorer({
-          scorerId: id,
+          scorerId: scorerObject.name,
           scorerObject: scorerObject,
           runId: runId,
-          input: [input],
+          input: input,
           output: output,
           runtimeContext,
           entity: {
@@ -1282,19 +1266,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 currentSpan: evalSpan,
               },
               getInitData: () => stepResults?.input as any,
-              getStepResult: (step: any) => {
-                if (!step?.id) {
-                  return null;
-                }
-
-                const result = stepResults[step.id];
-                if (result?.status === 'success') {
-                  return result.output;
-                }
-
-                return null;
-              },
-
+              getStepResult: getStepResult.bind(this, stepResults),
               // TODO: this function shouldn't have suspend probably?
               suspend: async (_suspendPayload: any): Promise<any> => {},
               bail: () => {},
@@ -1578,14 +1550,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           currentSpan: evalSpan,
         },
         getInitData: () => stepResults?.input as any,
-        getStepResult: (step: any) => {
-          if (!step?.id) {
-            return null;
-          }
-
-          const result = stepResults[step.id];
-          return result?.status === 'success' ? result.output : null;
-        },
+        getStepResult: getStepResult.bind(this, stepResults),
         suspend: async (_suspendPayload: any): Promise<any> => {},
         bail: () => {},
         abort: () => {
@@ -1723,10 +1688,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       },
     });
 
-    for (let i = 0; i < prevOutput.length; i += concurrency) {
+    const prevPayload = stepResults[step.id];
+    const resumeIndex =
+      prevPayload?.status === 'suspended' ? prevPayload?.suspendPayload?.__workflow_meta?.foreachIndex || 0 : 0;
+
+    for (let i = resumeIndex; i < prevOutput.length; i += concurrency) {
       const items = prevOutput.slice(i, i + concurrency);
       const itemsResults = await Promise.all(
-        items.map((item: any) => {
+        items.map((item: any, j: number) => {
           return this.executeStep({
             workflowId,
             runId,
@@ -1734,7 +1703,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             step,
             stepResults,
             executionContext,
-            resume,
+            resume: resumeIndex === i + j ? resume : undefined,
             prevOutput: item,
             tracingContext: { currentSpan: loopSpan },
             emitter,
@@ -1786,6 +1755,20 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 ...execResults,
               },
             });
+
+            return {
+              ...stepInfo,
+              status: 'suspended',
+              suspendPayload: {
+                ...execResults.suspendPayload,
+                __workflow_meta: {
+                  ...execResults.suspendPayload?.__workflow_meta,
+                  foreachIndex: i,
+                },
+              },
+              //@ts-ignore
+              endedAt: Date.now(),
+            };
           } else {
             await emitter.emit('watch-v2', {
               type: 'workflow-step-result',
@@ -1802,8 +1785,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 metadata: {},
               },
             });
+
+            return result;
           }
-          return result;
         }
 
         results.push(result?.output);

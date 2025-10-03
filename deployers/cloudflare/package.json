@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "0.14.2-alpha.0",
+  "version": "0.14.5",
   "description": "",
   "type": "module",
   "files": [
@@ -46,7 +46,8 @@
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "^3.0.2",
     "cloudflare": "^4.5.0",
-    "rollup": "~4.50.2"
+    "rollup": "~4.50.2",
+    "rollup-plugin-esbuild": "^6.2.1"
   },
   "devDependencies": {
     "@babel/types": "^7.28.4",
@@ -72,7 +73,7 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.17.0-0 <0.19.0-0",
+    "@mastra/core": ">=0.18.1-0 <0.21.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   }
 }

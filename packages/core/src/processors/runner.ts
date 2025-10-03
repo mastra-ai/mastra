@@ -2,22 +2,22 @@ import type { MastraMessageV2, MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import type { TracingContext } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
-import type { ChunkType } from '../stream';
+import type { ChunkType, OutputSchema } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Processor } from './index';
 
 /**
  * Implementation of processor state management
  */
-export class ProcessorState {
+export class ProcessorState<OUTPUT extends OutputSchema = undefined> {
   private accumulatedText = '';
   public customState: Record<string, any> = {};
-  public streamParts: ChunkType[] = [];
+  public streamParts: ChunkType<OUTPUT>[] = [];
 
   constructor(_processorName: string) {}
 
   // Internal methods for the runner
-  addPart(part: ChunkType): void {
+  addPart(part: ChunkType<OUTPUT>): void {
     // Extract text from text-delta chunks for accumulated text
     if (part.type === 'text-delta') {
       this.accumulatedText += part.payload.text;
@@ -25,8 +25,6 @@ export class ProcessorState {
     this.streamParts.push(part);
   }
 }
-
-export type ProcessorRunnerMode = 'stream' | 'result' | false;
 
 export class ProcessorRunner {
   public readonly inputProcessors: Processor[];
@@ -116,12 +114,12 @@ export class ProcessorRunner {
   /**
    * Process a stream part through all output processors with state management
    */
-  async processPart(
-    part: ChunkType,
-    processorStates: Map<string, ProcessorState>,
+  async processPart<OUTPUT extends OutputSchema>(
+    part: ChunkType<OUTPUT>,
+    processorStates: Map<string, ProcessorState<OUTPUT>>,
     tracingContext?: TracingContext,
   ): Promise<{
-    part: ChunkType | null | undefined;
+    part: ChunkType<OUTPUT> | null | undefined;
     blocked: boolean;
     reason?: string;
   }> {
@@ -130,7 +128,7 @@ export class ProcessorRunner {
     }
 
     try {
-      let processedPart: ChunkType | null | undefined = part;
+      let processedPart: ChunkType<OUTPUT> | null | undefined = part;
 
       for (const processor of this.outputProcessors) {
         try {
@@ -138,7 +136,7 @@ export class ProcessorRunner {
             // Get or create state for this processor
             let state = processorStates.get(processor.name);
             if (!state) {
-              state = new ProcessorState(processor.name);
+              state = new ProcessorState<OUTPUT>(processor.name);
               processorStates.set(processor.name, state);
             }
 
@@ -146,8 +144,8 @@ export class ProcessorRunner {
             state.addPart(processedPart);
 
             const result = await processor.processOutputStream({
-              part: processedPart,
-              streamParts: state.streamParts,
+              part: processedPart as ChunkType,
+              streamParts: state.streamParts as ChunkType[],
               state: state.customState,
               abort: (reason?: string) => {
                 throw new TripWire(reason || `Stream part blocked by ${processor.name}`);
@@ -156,7 +154,7 @@ export class ProcessorRunner {
             });
 
             // If result is null, or undefined, don't emit
-            processedPart = result;
+            processedPart = result as ChunkType<OUTPUT> | null | undefined;
           }
         } catch (error) {
           if (error instanceof TripWire) {
@@ -174,14 +172,14 @@ export class ProcessorRunner {
     }
   }
 
-  async runOutputProcessorsForStream(
-    streamResult: MastraModelOutput,
+  async runOutputProcessorsForStream<OUTPUT extends OutputSchema = undefined>(
+    streamResult: MastraModelOutput<OUTPUT>,
     tracingContext?: TracingContext,
   ): Promise<ReadableStream<any>> {
     return new ReadableStream({
       start: async controller => {
         const reader = streamResult.fullStream.getReader();
-        const processorStates = new Map<string, ProcessorState>();
+        const processorStates = new Map<string, ProcessorState<OUTPUT>>();
 
         try {
           while (true) {

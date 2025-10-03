@@ -78,15 +78,18 @@ function Agent() {
             )}
 
             <div className="grid overflow-y-auto relative bg-surface1 py-4">
-              <AgentChat
-                agentId={agentId!}
-                agentName={agent?.name}
-                modelVersion={agent?.modelVersion}
-                threadId={threadId!}
-                initialMessages={isMessagesLoading ? undefined : messages?.uiMessages || []}
-                memory={memory?.result}
-                refreshThreadList={refreshThreads}
-              />
+              {isMessagesLoading ? null : (
+                <AgentChat
+                  agentId={agentId!}
+                  agentName={agent?.name}
+                  modelVersion={agent?.modelVersion}
+                  threadId={threadId!}
+                  initialMessages={messages?.uiMessages || []}
+                  memory={memory?.result}
+                  refreshThreadList={refreshThreads}
+                  modelList={agent?.modelList}
+                />
+              )}
             </div>
 
             <AgentInformation agentId={agentId!} />
