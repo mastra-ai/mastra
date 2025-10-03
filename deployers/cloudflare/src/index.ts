@@ -105,7 +105,7 @@ export class CloudflareDeployer extends Deployer {
     export default {
       fetch: async (request, env, context) => {
         const { mastra } = await import('#mastra');
-        const {tools} = await import('#tools');
+        const { tools } = await import('#tools');
         const {createHonoServer, getToolExports} = await import('#server');
         const _mastra = mastra();
 
