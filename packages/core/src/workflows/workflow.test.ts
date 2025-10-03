@@ -3065,7 +3065,7 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should execute a single step workflow successfully with state', async () => {
+    it('should execute a single step workflow successfully with state', async () => {
       let calls = 0;
       const step1 = createStep({
         id: 'step1',
@@ -3077,6 +3077,7 @@ describe('Workflow', () => {
         outputSchema: z.object({ result: z.string(), value: z.string() }),
         stateSchema: z.object({
           value: z.string(),
+          // someOtherValue: z.string(),
         }),
       });
 

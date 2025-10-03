@@ -473,14 +473,12 @@ export type WorkflowConfig<
 export type SubsetOf<TStepState extends z.ZodObject<any>, TState extends z.ZodObject<any>> =
   TStepState extends z.ZodObject<infer TStepShape>
     ? TState extends z.ZodObject<infer TStateShape>
-      ? {
-          [K in keyof TStepShape]: K extends keyof TStateShape
-            ? TStepShape[K] extends TStateShape[K]
-              ? TStepShape[K]
-              : never
-            : never;
-        } extends TStepShape
-        ? TStepState
+      ? keyof TStepShape extends keyof TStateShape
+        ? {
+            [K in keyof TStepShape]: TStepShape[K] extends TStateShape[K] ? TStepShape[K] : never;
+          } extends TStepShape
+          ? TStepState
+          : never
         : never
       : never
     : never;

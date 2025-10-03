@@ -481,11 +481,9 @@ export class Workflow<
    * @param step The step to add to the workflow
    * @returns The workflow instance for chaining
    */
-  then<
-    TStepId extends string,
-    TStepState extends SubsetOf<z.ZodObject<any>, TState>,
-    TSchemaOut extends z.ZodType<any>,
-  >(step: Step<TStepId, TStepState, TPrevSchema, TSchemaOut, any, any, TEngineType>) {
+  then<TStepId extends string, TStepState extends z.ZodObject<any>, TSchemaOut extends z.ZodType<any>>(
+    step: Step<TStepId, SubsetOf<TStepState, TState>, TPrevSchema, TSchemaOut, any, any, TEngineType>,
+  ) {
     this.stepFlow.push({ type: 'step', step: step as any });
     this.serializedStepFlow.push({
       type: 'step',
@@ -559,10 +557,14 @@ export class Workflow<
     return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema>;
   }
 
-  waitForEvent<TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodType<any>>(
+  waitForEvent<
+    TStepState extends z.ZodObject<any>,
+    TStepInputSchema extends TPrevSchema,
+    TStepId extends string,
+    TSchemaOut extends z.ZodType<any>,
+  >(
     event: string,
-    // TODO: better type check for state schema
-    step: Step<TStepId, any, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
+    step: Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
     opts?: {
       timeout?: number;
     },
@@ -715,7 +717,6 @@ export class Workflow<
     return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, MappedOutputSchema>;
   }
 
-  // TODO: better type check for state schema
   // TODO: make typing better here
   parallel<TParallelSteps extends Step<string, any, TPrevSchema, any, any, any, TEngineType>[]>(steps: TParallelSteps) {
     this.stepFlow.push({ type: 'parallel', steps: steps.map(step => ({ type: 'step', step: step as any })) });
@@ -756,7 +757,6 @@ export class Workflow<
     TBranchSteps extends Array<
       [
         ExecuteFunction<z.infer<TState>, z.infer<TPrevSchema>, any, any, any, TEngineType>,
-        // TODO: better type check for state schema
         Step<string, any, TPrevSchema, any, any, any, TEngineType>,
       ]
     >,
@@ -809,9 +809,13 @@ export class Workflow<
     >;
   }
 
-  dowhile<TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodType<any>>(
-    // TODO: better type check for state schema
-    step: Step<TStepId, any, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
+  dowhile<
+    TStepState extends z.ZodObject<any>,
+    TStepInputSchema extends TPrevSchema,
+    TStepId extends string,
+    TSchemaOut extends z.ZodType<any>,
+  >(
+    step: Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
     condition: ExecuteFunction<z.infer<TState>, z.infer<TSchemaOut>, any, any, any, TEngineType>,
   ) {
     this.stepFlow.push({
@@ -837,9 +841,13 @@ export class Workflow<
     return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut>;
   }
 
-  dountil<TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodType<any>>(
-    // TODO: better type check for state schema
-    step: Step<TStepId, any, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
+  dountil<
+    TStepState extends z.ZodObject<any>,
+    TStepInputSchema extends TPrevSchema,
+    TStepId extends string,
+    TSchemaOut extends z.ZodType<any>,
+  >(
+    step: Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
     condition: ExecuteFunction<z.infer<TState>, z.infer<TSchemaOut>, any, any, any, TEngineType>,
   ) {
     this.stepFlow.push({
@@ -867,13 +875,13 @@ export class Workflow<
 
   foreach<
     TPrevIsArray extends TPrevSchema extends z.ZodArray<any> ? true : false,
+    TStepState extends z.ZodObject<any>,
     TStepInputSchema extends TPrevSchema extends z.ZodArray<infer TElement> ? TElement : never,
     TStepId extends string,
     TSchemaOut extends z.ZodType<any>,
   >(
     step: TPrevIsArray extends true
-      ? // TODO: better type check for state schema
-        Step<TStepId, any, TStepInputSchema, TSchemaOut, any, any, TEngineType>
+      ? Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>
       : 'Previous step must return an array type',
     opts?: {
       concurrency: number;
