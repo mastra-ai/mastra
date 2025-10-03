@@ -3891,6 +3891,131 @@ describe('PgVector', () => {
           client.release();
         }
       });
+
+      it('should fail with database error when required column value is missing', async () => {
+        const vectors = [[0.1, 0.2, 0.3, ...Array(1533).fill(0)]];
+
+        // Try to insert without required 'content' field
+        const metadata = [
+          {
+            url: 'https://example.com',
+            title: 'Test Title',
+            // Missing required 'content' field
+          },
+        ];
+
+        await expect(
+          vectorDB.upsert({
+            indexName: customTableName,
+            vectors,
+            metadata,
+            ids: ['test-missing-required'],
+          }),
+        ).rejects.toThrow(/null value in column "content"/);
+      });
+
+      it('should handle SQL injection attempts in column names', async () => {
+        const vectors = [[0.1, 0.2, 0.3, ...Array(1533).fill(0)]];
+
+        // Attempt SQL injection via columnMapping
+        const metadata = [
+          {
+            content: 'Required content',
+            malicious: 'DROP TABLE users;',
+          },
+        ];
+
+        // This should either sanitize or reject the malicious column name
+        const columnMapping = {
+          malicious: 'url; DROP TABLE users; --',
+        };
+
+        // Should either throw error or sanitize the column name
+        try {
+          await vectorDB.upsert({
+            indexName: customTableName,
+            vectors,
+            metadata,
+            ids: ['test-sql-injection'],
+            columnMapping,
+          });
+          // If it doesn't throw, verify the table still exists
+          const client = await vectorDB.pool.connect();
+          const result = await client.query(
+            `SELECT EXISTS (
+              SELECT FROM information_schema.tables 
+              WHERE table_name = $1
+            )`,
+            [customTableName],
+          );
+          client.release();
+          expect(result.rows[0].exists).toBe(true);
+        } catch (error) {
+          // Expected to throw due to invalid column name
+          expect(error).toBeDefined();
+        }
+      });
+
+      it('should handle type mismatches in column values', async () => {
+        const vectors = [[0.1, 0.2, 0.3, ...Array(1533).fill(0)]];
+
+        // Provide string value for integer column
+        const metadata = [
+          {
+            content: 'Required content',
+            word_count: 'not-a-number', // Should be integer
+          },
+        ];
+
+        await expect(
+          vectorDB.upsert({
+            indexName: customTableName,
+            vectors,
+            metadata,
+            ids: ['test-type-mismatch'],
+          }),
+        ).rejects.toThrow(/invalid input syntax/);
+      });
+
+      it('should gracefully handle non-existent column in mapping', async () => {
+        const vectors = [[0.1, 0.2, 0.3, ...Array(1533).fill(0)]];
+
+        const metadata = [
+          {
+            content: 'Required content',
+            custom_field: 'value',
+          },
+        ];
+
+        const columnMapping = {
+          custom_field: 'non_existent_column',
+        };
+
+        // Should succeed by ignoring invalid mapping
+        const result = await vectorDB.upsert({
+          indexName: customTableName,
+          vectors,
+          metadata,
+          ids: ['test-invalid-mapping'],
+          columnMapping,
+        });
+
+        expect(result).toEqual(['test-invalid-mapping']);
+
+        // Verify data was inserted correctly
+        const client = await vectorDB.pool.connect();
+        try {
+          const queryResult = await client.query(
+            `SELECT content, metadata FROM ${customTableName} WHERE vector_id = $1`,
+            ['test-invalid-mapping'],
+          );
+          expect(queryResult.rows[0].content).toBe('Required content');
+          // custom_field should be in metadata since mapping was invalid
+          expect(queryResult.rows[0].metadata).toEqual({ custom_field: 'value' });
+        } finally {
+          client.release();
+        }
+      });
     });
   });
 

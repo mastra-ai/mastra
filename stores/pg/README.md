@@ -58,6 +58,62 @@ const results = await vectorStore.query({
 await vectorStore.disconnect();
 ```
 
+### Custom Schema Support
+
+Tables with columns beyond the standard PgVector schema are supported through field mapping:
+
+```typescript
+// Table with custom columns
+// CREATE TABLE documents (
+//   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+//   vector_id TEXT NOT NULL UNIQUE,
+//   content TEXT NOT NULL,          -- custom required column
+//   embedding VECTOR(1536),
+//   metadata JSONB DEFAULT '{}',
+//   url TEXT,                       -- custom optional column
+//   title TEXT,                     -- custom optional column
+//   category TEXT                   -- custom optional column
+// )
+
+// Name-based column mapping - metadata fields matching column names are mapped
+await vectorStore.upsert({
+  indexName: 'documents',
+  vectors: [[0.1, 0.2, ...]],
+  metadata: [{
+    content: 'Document text',       // Maps to content column
+    url: 'https://example.com',     // Maps to url column
+    title: 'My Document',           // Maps to title column
+    category: 'tech',               // Maps to category column
+    other_field: 'value'            // Goes to metadata JSONB
+  }],
+  ids: ['doc-1']
+});
+
+// Explicit column mapping when field names don't match
+await vectorStore.upsert({
+  indexName: 'documents',
+  vectors: [[0.1, 0.2, ...]],
+  metadata: [{
+    text: 'Document text',
+    link: 'https://example.com',
+    heading: 'My Document',
+    type: 'tech'
+  }],
+  ids: ['doc-2'],
+  columnMapping: {
+    text: 'content',        // Map 'text' field to 'content' column
+    link: 'url',            // Map 'link' field to 'url' column
+    heading: 'title',       // Map 'heading' field to 'title' column
+    type: 'category'        // Map 'type' field to 'category' column
+  }
+});
+```
+
+- Metadata fields matching column names are mapped to those columns
+- Use `columnMapping` for explicit field-to-column mapping
+- Non-mapped fields are stored in the JSONB metadata column
+- Falls back to standard behavior if schema detection fails
+
 ### Storage
 
 ```typescript
@@ -249,7 +305,7 @@ The system automatically detects configuration changes and only rebuilds indexes
 
 - `createIndex({indexName, dimension, metric?, indexConfig?, buildIndex?})`: Create a new table with vector support
 - `buildIndex({indexName, metric?, indexConfig?})`: Build or rebuild vector index
-- `upsert({indexName, vectors, metadata?, ids?})`: Add or update vectors
+- `upsert({indexName, vectors, metadata?, ids?, columnMapping?})`: Add or update vectors with custom column mapping support
 - `query({indexName, queryVector, topK?, filter?, includeVector?, minScore?})`: Search for similar vectors
 - `listIndexes()`: List all vector-enabled tables
 - `describeIndex(indexName)`: Get table statistics and index configuration
