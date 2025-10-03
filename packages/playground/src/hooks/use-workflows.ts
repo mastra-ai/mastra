@@ -493,13 +493,6 @@ export const useResumeWorkflow = () => {
 };
 
 export const useCancelWorkflowRun = () => {
-  useEffect(() => {
-    console.log('mounting cancel workflow run');
-    return () => {
-      console.log('unmounting cancel workflow run');
-    };
-  }, []);
-
   const cancelWorkflowRun = useMutation({
     mutationFn: async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
       try {
