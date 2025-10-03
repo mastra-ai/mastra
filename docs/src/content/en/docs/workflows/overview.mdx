@@ -7,19 +7,21 @@ import { Steps } from "nextra/components";
 
 # Workflows overview
 
-Workflows let you define and orchestrate complex sequences of tasks as **typed steps** connected by data flows. While a single agent may be suitable for simple tasks, real-world applications often involve multiple steps with different logic, tools, external services, or context requirements.
+Workflows allow you to define and manage complex sequences of tasks by connecting them with clear, structured processes. Unlike a single agent, which operates independently, workflows enable you to orchestrate multiple steps with specific logic, tools, and external services. This approach provides more control and predictability, ensuring consistent results by allowing you to determine what tasks are performed and when they are completed.
 
 ![Workflows overview](/image/workflows/workflows-overview.jpg)
 
-## Real-world example
+## When to use a workflow
 
-For example, you might want to:
+For example, you might want to perform a sequence of tasks:
 
-- Handle a user question like “Can I return my last order?”
-- Fetch user-specific data from a database using their `user_id`.
-- Check return eligibility via an external API or business logic.
-- Make a conditional decision (e.g. approve, deny, escalate) based on the data.
-- Generate a tailored response based on the outcome.
+1. Handle a user question like “Can I return my last order?”
+2. Fetch user-specific data from a database using their `user_id`.
+3. Check return eligibility via an external API or business logic.
+4. Make a conditional decision (e.g. approve, deny, escalate) based on the data.
+5. Generate a tailored response based on the outcome.
+
+Each of these tasks is created as a **step** in a workflow, giving you fine-grained control over data flow, execution order, and side effects.
 
 > **📹 Watch**:  → An introduction to workflows, and how they compare to agents [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
 
