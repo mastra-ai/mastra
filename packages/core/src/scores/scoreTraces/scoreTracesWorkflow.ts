@@ -6,7 +6,6 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { AISpanRecord, AITraceRecord, MastraStorage } from '../../storage';
 import { createStep, createWorkflow } from '../../workflows/evented';
 import type { MastraScorer, ScorerRun } from '../base';
-import type { ScoreRowData } from '../types';
 import { saveScorePayloadSchema } from '../types';
 import { transformTraceToScorerInputAndOutput } from './utils';
 
@@ -134,7 +133,6 @@ export async function runScorerOnTarget({
   });
 
   const result = await scorer.run(scorerRun);
-  const traceId = `${target.traceId}${target.spanId ? `-${target.spanId}` : ''}`;
   const scorerResult = {
     ...result,
     scorer: {
@@ -142,7 +140,8 @@ export async function runScorerOnTarget({
       name: scorer.name,
       description: scorer.description,
     },
-    traceId,
+    traceId: target.traceId,
+    spanId: target.spanId,
     entityId: span.name,
     entityType: span.spanType,
     entity: { traceId: span.traceId, spanId: span.spanId },
@@ -150,8 +149,7 @@ export async function runScorerOnTarget({
     scorerId: scorer.name,
   };
 
-  const savedScoreRecord = await validateAndSaveScore({ storage, scorerResult });
-  await attachScoreToSpan({ storage, span, scoreRecord: savedScoreRecord });
+  await validateAndSaveScore({ storage, scorerResult });
 }
 
 async function validateAndSaveScore({ storage, scorerResult }: { storage: MastraStorage; scorerResult: ScorerRun }) {
@@ -184,30 +182,6 @@ function buildScorerRun({
 
   runPayload.tracingContext = tracingContext;
   return runPayload;
-}
-
-async function attachScoreToSpan({
-  storage,
-  span,
-  scoreRecord,
-}: {
-  storage: MastraStorage;
-  span: AISpanRecord;
-  scoreRecord: ScoreRowData;
-}) {
-  const existingLinks = span.links || [];
-  const link = {
-    type: 'score',
-    scoreId: scoreRecord.id,
-    scorerName: scoreRecord.scorer.name,
-    score: scoreRecord.score,
-    createdAt: scoreRecord.createdAt,
-  };
-  await storage.updateAISpan({
-    spanId: span.spanId,
-    traceId: span.traceId,
-    updates: { links: [...existingLinks, link] },
-  });
 }
 
 export const scoreTracesWorkflow = createWorkflow({
