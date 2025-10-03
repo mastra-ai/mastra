@@ -46,7 +46,7 @@ export const testWeatherAgent = new Agent({
 
 ### Example tool
 
-This tool exports a `WeatherRuntimeContext` type, enabling type-safe access to runtime config wherever `RuntimeContext` is used. It extracts `city` from `context` derived from the user message passed to `.generate()`, and uses it to query a weather service API.
+This tool exports a `WeatherRuntimeContext` type, enabling type-safe access to runtime configuration wherever the tool’s `runtimeContext` is used. It extracts `city` from `context`, which is derived from the user message passed to `.generate()`, and uses it to query a weather service API.
 
 ```typescript {4-6, 15} filename="src/mastra/tools/test-weather-tool.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
