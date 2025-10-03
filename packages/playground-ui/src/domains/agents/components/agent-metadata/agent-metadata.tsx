@@ -92,7 +92,7 @@ export const AgentMetadata = ({
             modelVersion === 'v2'
               ? undefined
               : {
-                  link: 'https://mastra.ai/en/docs/agents/model-legacy',
+                  link: 'https://mastra.ai/en/reference/agents/migration-guide',
                   title: 'You are using a legacy v1 model',
                   icon: <AlertTriangleIcon fontSize={14} className="mb-0.5" />,
                 }
