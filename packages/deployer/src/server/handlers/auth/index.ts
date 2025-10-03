@@ -1,7 +1,7 @@
 import type { ContextWithMastra } from '@mastra/core/server';
 import type { Next } from 'hono';
 import { defaultAuthConfig } from './defaults';
-import { canAccessPublicly, checkRules, isProtectedPath, isDevPlaygroundRequest, isCustomRoutePublic } from './helpers';
+import { canAccessPublicly, checkRules, isProtectedPath, isDevPlaygroundRequest } from './helpers';
 
 export const authenticationMiddleware = async (c: ContextWithMastra, next: Next) => {
   const mastra = c.get('mastra');
@@ -18,12 +18,7 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
     return next();
   }
 
-  // Check if this is a custom route that doesn't require auth
-  if (isCustomRoutePublic(c.req.path, c.req.method, customRouteAuthConfig)) {
-    return next();
-  }
-
-  if (!isProtectedPath(c.req.path, c.req.method, authConfig)) {
+  if (!isProtectedPath(c.req.path, c.req.method, authConfig, customRouteAuthConfig)) {
     return next();
   }
 
@@ -88,12 +83,7 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
     return next();
   }
 
-  // Check if this is a custom route that doesn't require auth
-  if (isCustomRoutePublic(path, method, customRouteAuthConfig)) {
-    return next();
-  }
-
-  if (!isProtectedPath(c.req.path, c.req.method, authConfig)) {
+  if (!isProtectedPath(c.req.path, c.req.method, authConfig, customRouteAuthConfig)) {
     return next();
   }
 
