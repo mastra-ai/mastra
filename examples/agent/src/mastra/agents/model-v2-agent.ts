@@ -32,7 +32,16 @@ const workingMemoryProcessor = new WorkingMemoryProcessor({
   storage: new LibSQLStore({
     url: 'file:./mastra.db',
   }),
+  template: {
+    format: 'schema',
+    content: z.object({
+      name: z.string(),
+      location: z.string(),
+      preferences: z.array(z.string()),
+    }),
+  },
   model: openai_v5('gpt-4o-mini'),
+  extractFromUserMessages: true,
 });
 
 export const chefModelV2Agent = new Agent({

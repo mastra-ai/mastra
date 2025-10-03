@@ -1,4 +1,6 @@
-import z from 'zod';
+import { z, ZodObject } from 'zod';
+import type { JSONSchema7 } from 'json-schema';
+import { zodToJsonSchema } from '../../zod-to-json';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
@@ -15,13 +17,27 @@ export type WorkingMemoryScope = 'thread' | 'resource';
 
 /**
  * Working memory template definition
+ * Can be either a markdown template (string) or a structured schema (Zod or JSONSchema7)
  */
-export interface WorkingMemoryTemplate {
-  /** Format of the working memory */
-  format: 'markdown' | 'json';
-  /** Template content */
-  content: string;
-}
+export type WorkingMemoryTemplate =
+  | {
+      /** Format of the working memory */
+      format: 'markdown';
+      /** Markdown template content */
+      content: string;
+    }
+  | {
+      /** Format of the working memory */
+      format: 'json';
+      /** JSON string template */
+      content: string;
+    }
+  | {
+      /** Format of the working memory */
+      format: 'schema';
+      /** Structured schema (Zod or JSONSchema7) */
+      content: ZodObject<any> | JSONSchema7;
+    };
 
 /**
  * Context relevance result from context selection agent
@@ -165,7 +181,7 @@ export class WorkingMemoryProcessor implements Processor {
   private injectionStrategy: 'system' | 'user-prefix' | 'context';
   private maxInjectionSize: number;
   private injectionThreshold: number;
-  private contextSelectionAgent: Agent;
+  private contextSelectionAgent?: Agent; // Optional - context selection optimization
 
   // Output processing
   private extractionStrategy: 'aggressive' | 'conservative' | 'balanced';
@@ -219,13 +235,14 @@ export class WorkingMemoryProcessor implements Processor {
       }
     }
 
+    // CONTEXT SELECTION OPTIMIZATION - Commented out for now
     // Create context selection agent for input processing
-    this.contextSelectionAgent = new Agent({
-      name: 'working-memory-context-selector',
-      instructions: options.contextSelectionInstructions || this.createContextSelectionInstructions(),
-      model: options.model,
-      options: { tracingPolicy: { internal: InternalSpans.ALL } },
-    });
+    // this.contextSelectionAgent = new Agent({
+    //   name: 'working-memory-context-selector',
+    //   instructions: options.contextSelectionInstructions || this.createContextSelectionInstructions(),
+    //   model: options.model,
+    //   options: { tracingPolicy: { internal: InternalSpans.ALL } },
+    // });
 
     // Create extraction agent for output processing
     this.extractionAgent = new Agent({
@@ -237,7 +254,9 @@ export class WorkingMemoryProcessor implements Processor {
   }
 
   /**
-   * Process input messages by injecting relevant working memory context
+   * Process input messages by:
+   * 1. Extracting and storing important information from user messages
+   * 2. Injecting relevant working memory context
    */
   async processInput({
     messages,
@@ -252,66 +271,132 @@ export class WorkingMemoryProcessor implements Processor {
     threadId?: string;
     resourceId?: string;
   }): Promise<MastraMessageV2[]> {
-    console.log('processInput', this.scope, resourceId, threadId);
     try {
+      // First, extract and store any important information from new user messages
+      // We do this BEFORE injecting context to capture information from the current turn
+      const newUserMessages = messages.filter(
+        msg => msg.role === 'user' && !this.extractTextContent(msg).includes(this.injectedContextMarker),
+      );
+
+      if (newUserMessages.length > 0 && this.extractFromUserMessages) {
+        // Build context for extraction agent from user messages only
+        const userContext = newUserMessages.map(msg => this.extractTextContent(msg)).join('\n\n');
+
+        // Use extraction agent to analyze and extract information from user input
+        let extractionResult;
+        try {
+          extractionResult = await this.extractInformation({
+            conversationContext: `[USER]: ${userContext}`,
+            tracingContext,
+          });
+        } catch (extractError) {
+          console.error('[WorkingMemoryProcessor] Failed to extract from user message:', extractError);
+          console.error(
+            '[WorkingMemoryProcessor] Error details:',
+            extractError instanceof Error ? extractError.stack : 'No stack',
+          );
+          extractionResult = { has_memorable_info: false, confidence: 0, reason: 'Extraction error' };
+        }
+
+        // Update working memory if there's valuable information
+        if (
+          extractionResult?.has_memorable_info &&
+          (extractionResult?.confidence ?? 0) >= this.confidenceThreshold &&
+          extractionResult?.extracted_info
+        ) {
+          // Convert extracted_info to string if it's an object
+          const extractedInfoStr =
+            typeof extractionResult.extracted_info === 'string'
+              ? extractionResult.extracted_info
+              : JSON.stringify(extractionResult.extracted_info, null, 2);
+
+          const updateResult = await this.updateWorkingMemory(extractedInfoStr, threadId, resourceId);
+
+          if (this.includeReasoning) {
+            console.info(`[WorkingMemoryProcessor] Extracted from user input: ${updateResult.reason}`);
+          }
+        }
+      }
+
       // Check if we already injected context (avoid feedback loop)
       const hasInjectedContext = messages.some(msg =>
         this.extractTextContent(msg).includes(this.injectedContextMarker),
       );
 
-      console.log('hasInjectedContext', hasInjectedContext);
-
       if (hasInjectedContext) {
         return messages;
       }
 
-      // Get current working memory
+      // Get updated working memory (including what we just extracted)
       const workingMemory = await this.getWorkingMemory(threadId, resourceId);
 
-      console.log('workingMemory', workingMemory);
-
+      if (!workingMemory) {
+        return messages;
+      }
 
       // Truncate if too long
       const truncatedMemory =
-        workingMemory?.length && workingMemory?.length > this.maxInjectionSize
+        workingMemory.length > this.maxInjectionSize
           ? workingMemory.substring(0, this.maxInjectionSize) + '\n...(truncated)'
           : workingMemory;
 
-      // Get the user's query from the last user message
+      // CONTEXT SELECTION OPTIMIZATION - Commented out for now
+      // Always inject context for now, can re-enable optimization later
+      //
+      // // Get the user's query from the last user message for relevance check
       // const lastUserMessage = [...messages].reverse().find(msg => msg.role === 'user');
-      
-      // let userQuery = '';
+
       // if (lastUserMessage) {
-      //   userQuery = this.extractTextContent(lastUserMessage);
-      // }
+      //   const userQuery = this.extractTextContent(lastUserMessage);
 
+      //   // Use context selection agent to determine relevance
+      //   let relevanceResult;
+      //   try {
+      //     relevanceResult = await this.selectRelevantContext({
+      //       workingMemory: truncatedMemory,
+      //       userQuery,
+      //       tracingContext,
+      //     });
+      //   } catch (contextError) {
+      //     console.warn('[WorkingMemoryProcessor] Context selection failed, defaulting to inject:', contextError);
+      //     relevanceResult = { relevance_score: 1.0 };
+      //   }
 
-      // // Use context selection agent to determine relevance
-      // const relevanceResult = await this.selectRelevantContext({
-      //   workingMemory: truncatedMemory || '',
-      //   userQuery,
-      //   tracingContext,
-      // });
-
-      // Check if context is relevant enough to inject
-      // if ((relevanceResult.relevance_score ?? 0) < this.injectionThreshold) {
-      //   return messages;
+      //   // Check if context is relevant enough to inject
+      //   if ((relevanceResult.relevance_score ?? 0) < this.injectionThreshold) {
+      //     return messages;
+      //   }
       // }
 
       // Inject context according to strategy
-      return this.injectContext(messages, truncatedMemory || '');
-    } catch (error) {
-      if (error instanceof TripWire) {
-        throw error;
+      const injectedMessages = this.injectContext(messages, truncatedMemory);
+
+      // Validate injected messages have required fields
+      for (const msg of injectedMessages) {
+        if (!msg.id) {
+          console.error('[WorkingMemoryProcessor] Message missing id:', msg);
+        }
+        if (!msg.createdAt) {
+          console.error('[WorkingMemoryProcessor] Message missing createdAt:', msg);
+        }
       }
-      // Warn but don't fail - allow conversation to continue
-      console.warn('[WorkingMemoryProcessor] Input processing failed:', error);
+
+      return injectedMessages;
+    } catch (error) {
+      // Don't throw TripWire for now, just log and continue
+      console.error('[WorkingMemoryProcessor] Input processing error:', error);
+      console.error('[WorkingMemoryProcessor] Error type:', error?.constructor?.name);
+      console.error('[WorkingMemoryProcessor] Stack trace:', error instanceof Error ? error.stack : 'No stack');
+
+      // Return original messages unchanged to allow conversation to continue
+      // This prevents the agent from failing completely
       return messages;
     }
   }
 
   /**
-   * Process output messages by extracting and storing important information
+   * Process output messages by extracting and storing important information from assistant responses
+   * Note: User messages are already processed in processInput to capture initial context
    */
   async processOutputResult({
     messages,
@@ -327,66 +412,72 @@ export class WorkingMemoryProcessor implements Processor {
     resourceId?: string;
   }): Promise<MastraMessageV2[]> {
     try {
-      // Collect messages to analyze
-      const messagesToAnalyze: MastraMessageV2[] = [];
+      // Focus on assistant messages since user messages are processed in processInput
+      const assistantMessages = messages.filter(msg => msg.role === 'assistant');
 
-      for (const message of messages) {
-        // Always include assistant messages
-        if (message.role === 'assistant') {
-          messagesToAnalyze.push(message);
-        }
-        // Include user messages if enabled
-        else if (message.role === 'user' && this.extractFromUserMessages) {
-          messagesToAnalyze.push(message);
-        }
-      }
-
-      if (messagesToAnalyze.length === 0) {
+      if (assistantMessages.length === 0) {
         return messages;
       }
 
-      // Build context for extraction agent
-      const conversationContext = messagesToAnalyze
+      // Get the most recent user message for context
+      const userMessages = messages.filter(msg => msg.role === 'user');
+      const lastUserMessage = userMessages[userMessages.length - 1];
+
+      // Build conversation context with user question and assistant response
+      let conversationContext = '';
+
+      if (lastUserMessage) {
+        const userText = this.extractTextContent(lastUserMessage);
+        conversationContext += `[USER]: ${userText}\n\n`;
+      }
+
+      // Add assistant responses
+      conversationContext += assistantMessages
         .map(msg => {
           const text = this.extractTextContent(msg);
-          return `[${msg.role.toUpperCase()}]: ${text}`;
+          return `[ASSISTANT]: ${text}`;
         })
         .join('\n\n');
 
       // Use extraction agent to analyze and extract information
       const extractionResult = await this.extractInformation({
         conversationContext,
-        templateFormat: this.template.format,
         tracingContext,
       });
 
       // Check if there's information to store
       if (
-        !extractionResult.has_memorable_info ||
-        (extractionResult.confidence ?? 0) < this.confidenceThreshold ||
-        !extractionResult.extracted_info
+        !extractionResult?.has_memorable_info ||
+        (extractionResult?.confidence ?? 0) < this.confidenceThreshold ||
+        !extractionResult?.extracted_info
       ) {
-        if (this.includeReasoning && extractionResult.reason) {
-          console.info(`[WorkingMemoryProcessor] No extraction: ${extractionResult.reason}`);
+        if (this.includeReasoning && extractionResult?.reason) {
+          console.info(`[WorkingMemoryProcessor] No extraction from assistant: ${extractionResult?.reason}`);
         }
         return messages;
       }
 
       // Update working memory with extracted information
-      const updateResult = await this.updateWorkingMemory(extractionResult.extracted_info, threadId, resourceId);
+      // Convert extracted_info to string if it's an object
+      const extractedInfoStr =
+        typeof extractionResult.extracted_info === 'string'
+          ? extractionResult.extracted_info
+          : JSON.stringify(extractionResult.extracted_info, null, 2);
+      const updateResult = await this.updateWorkingMemory(extractedInfoStr, threadId, resourceId);
 
       if (this.includeReasoning) {
-        console.info(`[WorkingMemoryProcessor] Updated working memory: ${updateResult.reason}`);
+        console.info(`[WorkingMemoryProcessor] Extracted from assistant: ${updateResult.reason}`);
       }
 
       // Return messages unchanged
       return messages;
     } catch (error) {
-      if (error instanceof TripWire) {
-        throw error;
-      }
-      // Warn but don't fail - allow conversation to continue
-      console.warn('[WorkingMemoryProcessor] Output processing failed:', error);
+      // Don't throw TripWire for now, just log and continue
+      console.warn('[WorkingMemoryProcessor] Output processing error:', error);
+      console.warn('[WorkingMemoryProcessor] Error type:', error?.constructor?.name);
+      console.warn('[WorkingMemoryProcessor] Stack trace:', error instanceof Error ? error.stack : 'No stack');
+
+      // Return original messages unchanged to allow conversation to continue
       return messages;
     }
   }
@@ -394,24 +485,37 @@ export class WorkingMemoryProcessor implements Processor {
   // ============= Working Memory Storage Methods =============
 
   /**
+   * Public method to manually update working memory (for testing and direct updates)
+   */
+  async manualUpdateWorkingMemory(content: string, threadId?: string, resourceId?: string): Promise<void> {
+    await this.updateWorkingMemory(content, threadId, resourceId);
+  }
+
+  /**
    * Get working memory from storage
    */
   private async getWorkingMemory(threadId?: string, resourceId?: string): Promise<string | null> {
-    if (!this.storage.stores?.memory) {
-      throw new Error('Memory storage not available on storage adapter');
-    }
+    try {
+      if (!this.storage.stores?.memory) {
+        console.warn('[WorkingMemoryProcessor] Memory storage not available on storage adapter');
+        return null;
+      }
 
-    if (this.scope === 'resource' && resourceId) {
-      // Get working memory from resource
-      const resource = await this.storage.stores.memory.getResourceById({ resourceId });
-      return resource?.workingMemory || null;
-    } else if (threadId) {
-      // Get working memory from thread metadata
-      const thread = await this.storage.stores.memory.getThreadById({ threadId });
-      return (thread?.metadata?.workingMemory as string) || null;
-    }
+      if (this.scope === 'resource' && resourceId) {
+        // Get working memory from resource
+        const resource = await this.storage.stores.memory.getResourceById({ resourceId });
+        return resource?.workingMemory || null;
+      } else if (threadId) {
+        // Get working memory from thread metadata
+        const thread = await this.storage.stores.memory.getThreadById({ threadId });
+        return (thread?.metadata?.workingMemory as string) || null;
+      }
 
-    return null;
+      return null;
+    } catch (error) {
+      console.error('[WorkingMemoryProcessor] Failed to get working memory:', error);
+      return null;
+    }
   }
 
   /**
@@ -422,146 +526,206 @@ export class WorkingMemoryProcessor implements Processor {
     threadId?: string,
     resourceId?: string,
   ): Promise<{ success: boolean; reason: string }> {
-    const existingWorkingMemory = (await this.getWorkingMemory(threadId, resourceId)) || '';
+    try {
+      const existingWorkingMemory = (await this.getWorkingMemory(threadId, resourceId)) || '';
 
-    let reason = '';
-    let workingMemory = newInfo;
+      let reason = '';
+      let workingMemory = newInfo;
 
-    if (existingWorkingMemory) {
-      console.log('existingWorkingMemory', existingWorkingMemory);
-      console.log('newInfo', newInfo);
-      console.log('this.template.content', this.template.content);
-      // Check for duplicates
-      if (existingWorkingMemory.includes(newInfo) || this.template.content.trim() === newInfo.trim()) {
+      // Check if trying to save the template itself (only for string templates)
+      if (typeof this.template.content === 'string' && this.template.content.trim() === newInfo.trim()) {
         return {
           success: false,
-          reason: 'attempted to insert duplicate data into working memory. this entry was skipped',
+          reason: 'attempted to insert template as data into working memory. this entry was skipped',
         };
       }
 
-      // Merge with existing memory
-      workingMemory = existingWorkingMemory + '\n' + newInfo;
-      reason = 'merged new information with existing working memory';
-    } else {
-      reason = 'initialized working memory with new information';
-    }
+      if (existingWorkingMemory) {
+        // Check for duplicates
+        if (existingWorkingMemory.includes(newInfo)) {
+          return {
+            success: false,
+            reason: 'attempted to insert duplicate data into working memory. this entry was skipped',
+          };
+        }
 
-    if (!this.storage.stores?.memory) {
-      throw new Error('Memory storage not available on storage adapter');
-    }
-
-    console.log('this.scope', this.scope, resourceId, threadId);
-    // Save to storage based on scope
-    if (this.scope === 'resource' && resourceId) {
-      await this.storage.stores.memory.updateResource({
-        resourceId,
-        workingMemory,
-      });
-    } else if (threadId) {
-      const thread = await this.storage.stores.memory.getThreadById({ threadId });
-      if (!thread) {
-        throw new Error(`Thread ${threadId} not found`);
+        // Merge with existing memory
+        workingMemory = existingWorkingMemory + '\n' + newInfo;
+        reason = 'merged new information with existing working memory';
+      } else {
+        reason = 'initialized working memory with new information';
       }
 
-      await this.storage.stores.memory.updateThread({
-        id: threadId,
-        title: thread.title || 'Untitled Thread',
-        metadata: {
-          ...thread.metadata,
-          workingMemory,
-        },
-      });
-    }
+      if (!this.storage.stores?.memory) {
+        throw new Error('Memory storage not available on storage adapter');
+      }
 
-    return { success: true, reason };
+      // Save to storage based on scope
+      if (this.scope === 'resource' && resourceId) {
+        await this.storage.stores.memory.updateResource({
+          resourceId,
+          workingMemory,
+        });
+      } else if (threadId) {
+        const thread = await this.storage.stores.memory.getThreadById({ threadId });
+
+        if (!thread) {
+          throw new Error(`Thread ${threadId} not found`);
+        }
+
+        await this.storage.stores.memory.updateThread({
+          id: threadId,
+          title: thread?.title || 'Untitled Thread',
+          metadata: {
+            ...(thread?.metadata || {}),
+            workingMemory,
+          },
+        });
+      }
+
+      return { success: true, reason };
+    } catch (error) {
+      console.error('[WorkingMemoryProcessor] Failed to update working memory:', error);
+      return {
+        success: false,
+        reason: `Failed to update working memory: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
   }
 
   // ============= Agent Helper Methods =============
 
-  /**
-   * Use context selection agent to determine if working memory is relevant
-   */
-  private async selectRelevantContext({
-    workingMemory,
-    userQuery,
-    tracingContext,
-  }: {
-    workingMemory: string;
-    userQuery: string;
-    tracingContext?: TracingContext;
-  }): Promise<ContextRelevanceResult> {
-    const prompt = `
-Analyze if the working memory is relevant to the user's query.
+  // CONTEXT SELECTION OPTIMIZATION - Commented out for now
+  // /**
+  //  * Use context selection agent to determine if working memory is relevant
+  //  */
+  // private async selectRelevantContext({
+  //   workingMemory,
+  //   userQuery,
+  //   tracingContext,
+  // }: {
+  //   workingMemory: string;
+  //   userQuery: string;
+  //   tracingContext?: TracingContext;
+  // }): Promise<ContextRelevanceResult> {
+  //   const prompt = `
+  // Analyze if the working memory is relevant to the user's query.
 
-Working Memory:
-${workingMemory}
+  // Working Memory:
+  // ${workingMemory}
 
-User Query:
-${userQuery}
-`;
+  // User Query:
+  // ${userQuery}
+  // `;
 
-    const schema = z.object({
-      relevant_sections: z.array(z.string()).optional(),
-      relevance_score: z.number().min(0).max(1).optional(),
-      reason: z.string().optional(),
-    });
+  //   const schema = z.object({
+  //     relevant_sections: z.array(z.string()).optional(),
+  //     relevance_score: z.number().min(0).max(1).optional(),
+  //     reason: z.string().optional(),
+  //   });
 
-    try {
-      const model = await this.contextSelectionAgent.getModel();
-      let response;
+  //   try {
+  //     const model = await this.contextSelectionAgent!.getModel();
+  //     let response;
 
-      if (model.specificationVersion === 'v2') {
-        response = await this.contextSelectionAgent.generate(prompt, {
-          structuredOutput: {
-            schema,
-          },
-          modelSettings: {
-            temperature: 0,
-          },
-          tracingContext,
-        });
-      } else {
-        response = await this.contextSelectionAgent.generateLegacy(prompt, {
-          output: schema,
-          temperature: 0,
-          tracingContext,
-        });
-      }
-
-      return response.object as ContextRelevanceResult;
-    } catch (error) {
-      console.warn('[WorkingMemoryProcessor] Context selection failed, defaulting to relevant:', error);
-      return { relevance_score: 1.0 };
-    }
-  }
+  //     if (model.specificationVersion === 'v2') {
+  //       response = await this.contextSelectionAgent!.generate(prompt, {
+  //         output: schema,
+  //         modelSettings: {
+  //           temperature: 0,
+  //         },
+  //         maxSteps: 1,
+  //         tracingContext,
+  //       });
+  //       // With output option in v5, the result is in the object property
+  //       return (response as any).object as ContextRelevanceResult;
+  //     } else {
+  //       response = await this.contextSelectionAgent!.generateLegacy(prompt, {
+  //         output: schema,
+  //         temperature: 0,
+  //         tracingContext,
+  //       });
+  //       return response.object as ContextRelevanceResult;
+  //     }
+  //   } catch (error) {
+  //     console.warn('[WorkingMemoryProcessor] Context selection failed, defaulting to relevant:', error);
+  //     return { relevance_score: 1.0 };
+  //   }
+  // }
 
   /**
    * Use extraction agent to analyze conversation and extract information
    */
   private async extractInformation({
     conversationContext,
-    templateFormat,
     tracingContext,
   }: {
     conversationContext: string;
-    templateFormat: 'markdown' | 'json';
     tracingContext?: TracingContext;
   }): Promise<ExtractionResult> {
-    const prompt = `
+    // Prepare template content and format based on template type
+    let templateContent: string;
+    let formatDescription: string;
+    let extractionSchema: z.ZodSchema;
+
+    if (this.template.format === 'schema') {
+      // Convert schema to JSONSchema if it's a Zod schema
+      const jsonSchema =
+        this.template.content instanceof ZodObject ? zodToJsonSchema(this.template.content) : this.template.content;
+
+      templateContent = JSON.stringify(jsonSchema, null, 2);
+      formatDescription =
+        'Extract information and return it as a JSON object that matches the schema structure exactly. Use the exact field names from the schema.';
+
+      // Create extraction schema that matches the structure
+      extractionSchema = z.object({
+        has_memorable_info: z.boolean().optional(),
+        confidence: z.number().min(0).max(1).optional(),
+        extracted_info: this.template.content instanceof ZodObject ? this.template.content : z.record(z.any()),
+        reason: z.string().optional(),
+      });
+    } else {
+      // Markdown or JSON string template
+      templateContent = this.template.content as string;
+      formatDescription =
+        this.template.format === 'markdown'
+          ? 'Fill in the Markdown template with extracted information. Return the complete filled template as a single text string.'
+          : 'Fill in the JSON template with extracted information. Return the complete filled JSON as a single text string.';
+
+      extractionSchema = z.object({
+        has_memorable_info: z.boolean().optional(),
+        confidence: z.number().min(0).max(1).optional(),
+        extracted_info: z.string(),
+        reason: z.string().optional(),
+      });
+    }
+
+    const prompt =
+      this.template.format === 'schema'
+        ? `
 Analyze the conversation and extract important information worth storing in working memory.
+
+Working Memory Schema:
+${templateContent}
 
 Conversation:
 ${conversationContext}
 
-Working memory format: ${templateFormat}
-`;
+${formatDescription}
+Extract information that fits the schema structure above. Return a JSON object with the exact field names from the schema.
+`
+        : `
+Analyze the conversation and extract important information worth storing in working memory.
 
-    const schema = z.object({
-      has_memorable_info: z.boolean().optional(),
-      confidence: z.number().min(0).max(1).optional(),
-      extracted_info: z.string().optional(),
-      reason: z.string().optional(),
-    });
+Working Memory Template:
+${templateContent}
+
+Conversation:
+${conversationContext}
+
+${formatDescription}
+Return the filled-in template as a single string, not as an object. The extracted_info field should contain the complete filled template as text.
+`;
 
     try {
       const model = await this.extractionAgent.getModel();
@@ -569,26 +733,27 @@ Working memory format: ${templateFormat}
 
       if (model.specificationVersion === 'v2') {
         response = await this.extractionAgent.generate(prompt, {
-          structuredOutput: {
-            schema,
-          },
+          output: extractionSchema,
           modelSettings: {
             temperature: 0,
           },
+          maxSteps: 1,
           tracingContext,
         });
+        // With output option in v5, the result is in the object property
+        return (response as any).object as ExtractionResult;
       } else {
         response = await this.extractionAgent.generateLegacy(prompt, {
-          output: schema,
+          output: extractionSchema,
           temperature: 0,
           tracingContext,
         });
+        return response.object as ExtractionResult;
       }
-
-      return response.object as ExtractionResult;
     } catch (error) {
-      console.warn('[WorkingMemoryProcessor] Information extraction failed:', error);
-      return { has_memorable_info: false, reason: 'Extraction failed' };
+      console.error('[WorkingMemoryProcessor] Information extraction failed:', error);
+      console.error('[WorkingMemoryProcessor] Stack trace:', error instanceof Error ? error.stack : 'No stack');
+      return { has_memorable_info: false, reason: 'Extraction failed', confidence: 0 };
     }
   }
 
@@ -598,7 +763,20 @@ Working memory format: ${templateFormat}
    * Inject working memory context into messages according to strategy
    */
   private injectContext(messages: MastraMessageV2[], context: string): MastraMessageV2[] {
-    const contextWithMarker = `${this.injectedContextMarker}\n\n${context}`;
+    // Format context based on template type
+    let formattedContext: string;
+    if (this.template.format === 'schema') {
+      // For schema-based memory, format as readable JSON
+      try {
+        const parsed = JSON.parse(context);
+        formattedContext = `${this.injectedContextMarker}\n\nUser Information:\n${JSON.stringify(parsed, null, 2)}`;
+      } catch {
+        formattedContext = `${this.injectedContextMarker}\n\n${context}`;
+      }
+    } else {
+      formattedContext = `${this.injectedContextMarker}\n\n${context}`;
+    }
+    const contextWithMarker = formattedContext;
 
     switch (this.injectionStrategy) {
       case 'system': {
@@ -610,8 +788,8 @@ Working memory format: ${templateFormat}
             parts: [],
             format: 2,
           },
+          id: `working-memory-${Date.now()}`,
           createdAt: new Date(),
-          id: 'working-memory-context',
         };
         return [systemMessage, ...messages];
       }
@@ -630,11 +808,9 @@ Working memory format: ${templateFormat}
           ...lastUserMessage,
           content: {
             content: `Context from working memory:\n${contextWithMarker}\n\n${existingText}`,
-            parts: [],
-            format: 2,
+            parts: lastUserMessage.content.parts || [],
+            format: lastUserMessage.content.format || 2,
           },
-          createdAt: new Date(),
-          id: 'working-memory-context',
         };
 
         return modifiedMessages;
@@ -652,8 +828,8 @@ Working memory format: ${templateFormat}
             parts: [],
             format: 2,
           },
+          id: `working-memory-${Date.now()}`,
           createdAt: new Date(),
-          id: 'working-memory-context',
         };
 
         const modifiedMessages = [...messages];
@@ -743,19 +919,23 @@ Strategy: BALANCED - Moderate approach to extraction
 
 ${strategyGuidance}
 
-Information to extract:
+Information to ALWAYS extract:
+- User's name (critical personal information)
 - User preferences and personal details
 - Important facts and data points
 - Task-related context and state
 - Decisions and conclusions
 - Action items and future references
 - Goals and objectives
+- Location, contact information, or other identifying details
 
 Information to skip:
-- Greetings and pleasantries
+- Greetings without information (e.g., "hello" alone)
 - Already-stored information (unless updating)
 - Purely procedural conversation
 - Temporary/ephemeral details (unless aggressive mode)
+
+IMPORTANT: User names are NOT trivial details - they are critical personal information that should ALWAYS be extracted
 
 Output guidelines:
 - Set has_memorable_info to true only if there's information worth storing

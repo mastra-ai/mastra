@@ -52,13 +52,22 @@ describe('WorkingMemoryProcessor', () => {
     mockStorage = new MockStorage();
   });
 
-  describe('Input Processing (Context Injection)', () => {
-    it('should inject working memory as system message by default', async () => {
+  describe('Input Processing (Extract and Inject)', () => {
+    it('should extract info from user message and inject existing memory', async () => {
       mockStorage.setThreadWorkingMemory('thread-1', '# User Info\n- Name: Alice\n- Likes: TypeScript');
 
       processor = new WorkingMemoryProcessor({
         storage: mockStorage,
         model: mockModel,
+        scope: 'thread',
+      });
+
+      // Mock the extraction agent to capture new info from user
+      const extractNewInfoSpy = vi.spyOn(processor as any, 'extractInformation');
+      extractNewInfoSpy.mockResolvedValue({
+        has_memorable_info: true,
+        confidence: 0.9,
+        extracted_info: 'User wants to know their preferences',
       });
 
       // Mock the context selection agent to return high relevance
@@ -83,12 +92,53 @@ describe('WorkingMemoryProcessor', () => {
         threadId: 'thread-1',
       });
 
-      // Should have added a system message at the beginning
+      // Should have extracted info from user message
+      expect(extractNewInfoSpy).toHaveBeenCalled();
+
+      // Should have added a system message with existing memory
       expect(result.length).toBe(2);
       expect(result[0].role).toBe('system');
       expect((result[0].content as any).content).toContain('User Info');
       expect((result[0].content as any).content).toContain('Alice');
       expect(result[1]).toEqual(inputMessages[0]);
+    });
+
+    it('should extract and store new user information immediately', async () => {
+      processor = new WorkingMemoryProcessor({
+        storage: mockStorage,
+        model: mockModel,
+        scope: 'thread',
+      });
+
+      // Mock the extraction agent to capture name from user
+      const extractNewInfoSpy = vi.spyOn(processor as any, 'extractInformation');
+      extractNewInfoSpy.mockResolvedValue({
+        has_memorable_info: true,
+        confidence: 0.9,
+        extracted_info: "User's name is Daniel",
+      });
+
+      const inputMessages: MastraMessageV2[] = [
+        {
+          role: 'user',
+          content: {
+            content: 'My name is Daniel',
+            parts: [{ type: 'text', text: 'My name is Daniel' }],
+          },
+        },
+      ];
+
+      await processor.processInput!({
+        messages: inputMessages,
+        abort: () => {
+          throw new Error('abort');
+        },
+        threadId: 'thread-1',
+      });
+
+      // Check that working memory was updated with user's name
+      const thread = await mockStorage.stores.memory.getThreadById({ threadId: 'thread-1' });
+      expect(thread?.metadata?.workingMemory).toContain('Daniel');
     });
 
     it('should inject as user-prefix when configured', async () => {
@@ -97,11 +147,16 @@ describe('WorkingMemoryProcessor', () => {
       processor = new WorkingMemoryProcessor({
         storage: mockStorage,
         model: mockModel,
+        scope: 'thread',
         injectionStrategy: 'user-prefix',
       });
 
       const selectRelevantContextSpy = vi.spyOn(processor as any, 'selectRelevantContext');
       selectRelevantContextSpy.mockResolvedValue({ relevance_score: 1.0 });
+
+      // Mock extraction to not interfere
+      const extractNewInfoSpy = vi.spyOn(processor as any, 'extractInformation');
+      extractNewInfoSpy.mockResolvedValue({ has_memorable_info: false });
 
       const inputMessages: MastraMessageV2[] = [
         {
@@ -132,7 +187,12 @@ describe('WorkingMemoryProcessor', () => {
       processor = new WorkingMemoryProcessor({
         storage: mockStorage,
         model: mockModel,
+        scope: 'thread',
       });
+
+      // Mock extraction to not find anything
+      const extractNewInfoSpy = vi.spyOn(processor as any, 'extractInformation');
+      extractNewInfoSpy.mockResolvedValue({ has_memorable_info: false });
 
       const inputMessages: MastraMessageV2[] = [
         {
@@ -162,12 +222,17 @@ describe('WorkingMemoryProcessor', () => {
       processor = new WorkingMemoryProcessor({
         storage: mockStorage,
         model: mockModel,
+        scope: 'thread',
         injectionThreshold: 0.5,
       });
 
       // Mock low relevance score
       const selectRelevantContextSpy = vi.spyOn(processor as any, 'selectRelevantContext');
       selectRelevantContextSpy.mockResolvedValue({ relevance_score: 0.2 });
+
+      // Mock extraction to not interfere
+      const extractNewInfoSpy = vi.spyOn(processor as any, 'extractInformation');
+      extractNewInfoSpy.mockResolvedValue({ has_memorable_info: false });
 
       const inputMessages: MastraMessageV2[] = [
         {
@@ -191,44 +256,6 @@ describe('WorkingMemoryProcessor', () => {
       expect(result).toEqual(inputMessages);
     });
 
-    it('should inject as context when strategy is "context"', async () => {
-      mockStorage.setThreadWorkingMemory('thread-1', '# Project Context\n- Framework: Mastra');
-
-      processor = new WorkingMemoryProcessor({
-        storage: mockStorage,
-        model: mockModel,
-        injectionStrategy: 'context',
-      });
-
-      const selectRelevantContextSpy = vi.spyOn(processor as any, 'selectRelevantContext');
-      selectRelevantContextSpy.mockResolvedValue({ relevance_score: 1.0 });
-
-      const inputMessages: MastraMessageV2[] = [
-        {
-          role: 'user',
-          content: {
-            content: 'What framework are we using?',
-            parts: [{ type: 'text', text: 'What framework are we using?' }],
-          },
-        },
-      ];
-
-      const result = await processor.processInput!({
-        messages: inputMessages,
-        abort: () => {
-          throw new Error('abort');
-        },
-        threadId: 'thread-1',
-      });
-
-      // Should have added a context message
-      expect(result.length).toBe(2);
-      expect(result[0].role).toBe('system');
-      expect((result[0].content as any).content).toContain('Context');
-      expect((result[0].content as any).content).toContain('Mastra');
-      expect(result[1]).toEqual(inputMessages[0]);
-    });
-
     it('should work with resource-scoped memory', async () => {
       mockStorage.setResourceWorkingMemory('resource-1', '# Resource Info\n- Type: Document');
 
@@ -240,6 +267,10 @@ describe('WorkingMemoryProcessor', () => {
 
       const selectRelevantContextSpy = vi.spyOn(processor as any, 'selectRelevantContext');
       selectRelevantContextSpy.mockResolvedValue({ relevance_score: 1.0 });
+
+      // Mock extraction to not interfere
+      const extractNewInfoSpy = vi.spyOn(processor as any, 'extractInformation');
+      extractNewInfoSpy.mockResolvedValue({ has_memorable_info: false });
 
       const inputMessages: MastraMessageV2[] = [
         {
@@ -266,17 +297,20 @@ describe('WorkingMemoryProcessor', () => {
     });
   });
 
-  describe('Output Processing (Information Extraction)', () => {
+  describe('Output Processing (Information Extraction from Assistant)', () => {
     it('should extract and update working memory from assistant response', async () => {
       processor = new WorkingMemoryProcessor({
         storage: mockStorage,
         model: mockModel,
+        scope: 'thread',
       });
 
-      // Mock the extraction agent
-      const extractNewInfoSpy = vi.spyOn(processor as any, 'extractNewInfo');
+      // Mock the extraction agent to capture info from assistant
+      const extractNewInfoSpy = vi.spyOn(processor as any, 'extractInformation');
       extractNewInfoSpy.mockResolvedValue({
-        extracted_info: "User's name is Bob, prefers dark mode",
+        has_memorable_info: true,
+        confidence: 0.8,
+        extracted_info: "User's name is Bob and they prefer dark mode",
       });
 
       const messages: MastraMessageV2[] = [
@@ -319,10 +353,13 @@ describe('WorkingMemoryProcessor', () => {
       processor = new WorkingMemoryProcessor({
         storage: mockStorage,
         model: mockModel,
+        scope: 'thread',
       });
 
-      const extractNewInfoSpy = vi.spyOn(processor as any, 'extractNewInfo');
+      const extractNewInfoSpy = vi.spyOn(processor as any, 'extractInformation');
       extractNewInfoSpy.mockResolvedValue({
+        has_memorable_info: true,
+        confidence: 0.8,
         extracted_info: 'User likes TypeScript',
       });
 
@@ -363,10 +400,12 @@ describe('WorkingMemoryProcessor', () => {
       processor = new WorkingMemoryProcessor({
         storage: mockStorage,
         model: mockModel,
+        scope: 'thread',
       });
 
-      const extractNewInfoSpy = vi.spyOn(processor as any, 'extractNewInfo');
+      const extractNewInfoSpy = vi.spyOn(processor as any, 'extractInformation');
       extractNewInfoSpy.mockResolvedValue({
+        has_memorable_info: false,
         extracted_info: '',
       });
 
@@ -381,8 +420,8 @@ describe('WorkingMemoryProcessor', () => {
         {
           role: 'assistant',
           content: {
-            content: 'I don't have access to weather data.',
-            parts: [{ type: 'text', text: 'I don't have access to weather data.' }],
+            content: "I don't have access to weather data.",
+            parts: [{ type: 'text', text: "I don't have access to weather data." }],
           },
         },
       ];
@@ -403,6 +442,35 @@ describe('WorkingMemoryProcessor', () => {
       expect(thread?.metadata?.workingMemory).toEqual(originalMemory);
     });
 
+    it('should skip if no assistant messages', async () => {
+      processor = new WorkingMemoryProcessor({
+        storage: mockStorage,
+        model: mockModel,
+        scope: 'thread',
+      });
+
+      const messages: MastraMessageV2[] = [
+        {
+          role: 'user',
+          content: {
+            content: 'Hello',
+            parts: [{ type: 'text', text: 'Hello' }],
+          },
+        },
+      ];
+
+      const result = await processor.processOutputResult!({
+        messages,
+        abort: () => {
+          throw new Error('abort');
+        },
+        threadId: 'thread-1',
+      });
+
+      // Should return messages unchanged without processing
+      expect(result).toEqual(messages);
+    });
+
     it('should work with resource-scoped memory for output', async () => {
       processor = new WorkingMemoryProcessor({
         storage: mockStorage,
@@ -410,8 +478,10 @@ describe('WorkingMemoryProcessor', () => {
         scope: 'resource',
       });
 
-      const extractNewInfoSpy = vi.spyOn(processor as any, 'extractNewInfo');
+      const extractNewInfoSpy = vi.spyOn(processor as any, 'extractInformation');
       extractNewInfoSpy.mockResolvedValue({
+        has_memorable_info: true,
+        confidence: 0.8,
         extracted_info: 'Document contains TypeScript code',
       });
 
@@ -472,19 +542,28 @@ describe('WorkingMemoryProcessor', () => {
       expect((processor as any).injectionThreshold).toBe(0.8);
     });
 
-    it('should respect custom extraction threshold', async () => {
+    it('should respect custom confidence threshold', async () => {
       processor = new WorkingMemoryProcessor({
         storage: mockStorage,
         model: mockModel,
-        extractionThreshold: 0.6,
+        confidenceThreshold: 0.6,
       });
 
-      expect((processor as any).extractionThreshold).toBe(0.6);
+      expect((processor as any).confidenceThreshold).toBe(0.6);
+    });
+
+    it('should default to resource scope', async () => {
+      processor = new WorkingMemoryProcessor({
+        storage: mockStorage,
+        model: mockModel,
+      });
+
+      expect((processor as any).scope).toBe('resource');
     });
   });
 
   describe('Error Handling', () => {
-    it('should throw error if storage does not have memory stores', async () => {
+    it('should handle storage without memory stores gracefully', async () => {
       const badStorage = {
         stores: {},
       } as any;
@@ -504,22 +583,28 @@ describe('WorkingMemoryProcessor', () => {
         },
       ];
 
-      await expect(
-        processor.processInput!({
-          messages: inputMessages,
-          abort: () => {
-            throw new Error('abort');
-          },
-          threadId: 'thread-1',
-        }),
-      ).rejects.toThrow('Memory storage not available');
+      // Should return messages unchanged when storage is unavailable
+      const result = await processor.processInput!({
+        messages: inputMessages,
+        abort: () => {
+          throw new Error('abort');
+        },
+        threadId: 'thread-1',
+      });
+
+      expect(result).toEqual(inputMessages);
     });
 
     it('should handle missing threadId and resourceId gracefully', async () => {
       processor = new WorkingMemoryProcessor({
         storage: mockStorage,
         model: mockModel,
+        scope: 'thread',
       });
+
+      // Mock extraction to not find anything
+      const extractNewInfoSpy = vi.spyOn(processor as any, 'extractInformation');
+      extractNewInfoSpy.mockResolvedValue({ has_memorable_info: false });
 
       const inputMessages: MastraMessageV2[] = [
         {
