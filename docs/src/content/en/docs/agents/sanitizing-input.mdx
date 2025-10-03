@@ -253,6 +253,8 @@ When creating custom processors:
 
 ### Example usage
 
+Input processors work with the `.generate()` and `.stream()` methods. The entire processor pipeline completes before the agent begins generating or streaming a response.
+
 ```typescript {6} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { MessageLengthLimiter } from "../processors/message-length-limiter";
 
@@ -262,8 +264,14 @@ export const testAgent = new Agent({
     new MessageLengthLimiter(2000)
   ]
 });
-```
 
+// Processors also run before stream()
+const stream = await testAgent.stream('Hello');
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
 
 ## Integration with agent methods
 
