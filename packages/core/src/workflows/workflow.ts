@@ -583,7 +583,7 @@ export class Workflow<
     if (typeof mappingConfig === 'function') {
       // @ts-ignore
       const mappingStep: any = createStep({
-        id: stepOptions?.id || `mapping_${this.#mastra?.generateId()}`,
+        id: stepOptions?.id || `mapping_${this.#mastra?.generateId() || randomUUID()}`,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         execute: mappingConfig as any,
@@ -622,9 +622,8 @@ export class Workflow<
       },
       {} as Record<string, any>,
     );
-
     const mappingStep: any = createStep({
-      id: stepOptions?.id || `mapping_${this.#mastra?.generateId()}`,
+      id: stepOptions?.id || `mapping_${this.#mastra?.generateId() || randomUUID()}`,
       inputSchema: z.any(),
       outputSchema: z.any(),
       execute: async ctx => {
