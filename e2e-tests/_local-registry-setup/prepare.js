@@ -120,6 +120,20 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
       writeFileSync(join(monorepoDir, '.changeset/config.json'), JSON.stringify(parsed, null, 2));
     })();
 
+    // update all packages so they are on the snapshot version
+    const allPackages = await execAsync('pnpm ls -r --depth -1 --json', {
+      cwd: monorepoDir,
+    });
+    const packages = JSON.parse(allPackages.stdout);
+    let changeset = `---\n`;
+    for (const pkg of packages) {
+      if (pkg.name && !pkg.private) {
+        changeset += `"${pkg.name}": patch\n`;
+      }
+    }
+    changeset += `---`;
+    writeFileSync(join(monorepoDir, `.changeset/test-${new Date().toISOString()}.md`), changeset);
+    process.exit(0);
     console.log('Running pnpm changeset pre exit');
     await retryWithTimeout(
       async () => {
