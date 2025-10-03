@@ -1,5 +1,19 @@
 # mastra
 
+## 0.14.2-alpha.0
+
+### Patch Changes
+
+- streamLegacy/generateLegacy clarification in playground ([#8468](https://github.com/mastra-ai/mastra/pull/8468))
+
+- Fix useStreamWorkflow unmounting breaking stream call ([#8449](https://github.com/mastra-ai/mastra/pull/8449))
+
+- Remove shell from dev ([#8466](https://github.com/mastra-ai/mastra/pull/8466))
+
+- Updated dependencies [[`10e633a`](https://github.com/mastra-ai/mastra/commit/10e633a07d333466d9734c97acfc3dbf757ad2d0)]:
+  - @mastra/core@0.20.1-alpha.0
+  - @mastra/deployer@0.20.1-alpha.0
+
 ## 0.14.1
 
 ### Patch Changes

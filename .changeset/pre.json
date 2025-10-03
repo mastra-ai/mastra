@@ -77,5 +77,11 @@
     "@mastra/voice-speechify": "0.11.8",
     "@mastra/inngest": "0.15.0"
   },
-  "changesets": []
+  "changesets": [
+    "dirty-monkeys-repair",
+    "forty-cameras-enjoy",
+    "spicy-icons-clean",
+    "tricky-coats-design",
+    "two-swans-pull"
+  ]
 }
