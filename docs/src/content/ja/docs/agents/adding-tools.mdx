@@ -187,7 +187,7 @@ import { tool } from "ai";
 import { z } from "zod";
 
 export const weatherInfo = tool({
-  description: "Fetches the current weather information for a given city",
+  description: "Fetches the current weather for a given city",
   parameters: z.object({
     city: z.string().describe("The city to get weather for"),
   }),

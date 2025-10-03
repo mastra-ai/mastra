@@ -22,7 +22,7 @@ import { z } from "zod";
 
 export const weatherTool = createTool({
   id: "weather-tool",
-  description: "Fetches the current weather information for a given city",
+  description: "Fetches the current weather for a given city",
   inputSchema: z.object({
     city: z.string(),
   }),
