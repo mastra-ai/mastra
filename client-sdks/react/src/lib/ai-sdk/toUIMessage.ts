@@ -16,158 +16,196 @@ type StreamChunk = {
 // Based on the pattern from packages/playground-ui/src/domains/workflows/utils.ts
 
 export const mapWorkflowStreamChunkToWatchResult = (
-  prev: WorkflowWatchResult,
+  prev: WorkflowWatchResult | undefined,
   chunk: StreamChunk,
 ): WorkflowWatchResult => {
   if (chunk.type === 'workflow-start') {
     return {
-      ...prev,
       runId: chunk.runId,
       eventTimestamp: new Date(),
+      type: 'watch',
       payload: {
-        ...(prev?.payload || {}),
         workflowState: {
-          ...prev?.payload?.workflowState,
           status: 'running',
-          steps: prev?.payload?.workflowState?.steps || {},
+          steps: {},
         },
       },
     };
   }
 
   if (chunk.type === 'workflow-step-start') {
+    const workflowState = prev?.payload?.workflowState || { status: 'running', steps: {} };
+    const existingStep = workflowState.steps?.[chunk.payload.id] || {};
+
     return {
-      ...prev,
+      runId: prev?.runId || '',
+      eventTimestamp: new Date(),
+      type: 'watch',
       payload: {
-        ...prev?.payload,
         currentStep: {
-          ...prev?.payload?.currentStep,
-          ...chunk.payload,
+          id: chunk.payload.id,
+          status: chunk.payload.status,
+          output: chunk.payload.output,
+          payload: chunk.payload.payload,
         },
         workflowState: {
-          ...prev?.payload?.workflowState,
+          ...workflowState,
           steps: {
-            ...prev?.payload?.workflowState?.steps,
+            ...workflowState.steps,
             [chunk.payload.id]: {
-              ...prev?.payload?.workflowState?.steps?.[chunk.payload.id],
-              ...chunk.payload,
+              ...existingStep,
+              status: chunk.payload.status,
+              output: chunk.payload.output,
+              payload: chunk.payload.payload,
             },
           },
         },
       },
-      eventTimestamp: new Date(),
     };
   }
 
   if (chunk.type === 'workflow-step-suspended') {
-    const current = prev?.payload?.workflowState?.steps?.[chunk.payload.id] || {};
+    const workflowState = prev?.payload?.workflowState || { status: 'running', steps: {} };
+    const existingStep = workflowState.steps?.[chunk.payload.id] || {};
 
     return {
-      ...prev,
+      runId: prev?.runId || '',
+      eventTimestamp: new Date(),
+      type: 'watch',
       payload: {
-        ...prev?.payload,
         currentStep: {
           id: chunk.payload.id,
-          ...prev?.payload?.currentStep,
-          ...chunk.payload,
+          status: chunk.payload.status,
+          output: chunk.payload.output,
+          payload: chunk.payload.payload,
         },
         workflowState: {
-          ...prev?.payload?.workflowState,
+          ...workflowState,
           status: 'suspended',
           steps: {
-            ...prev?.payload?.workflowState?.steps,
+            ...workflowState.steps,
             [chunk.payload.id]: {
-              ...(current || {}),
-              ...chunk.payload,
+              ...existingStep,
+              status: chunk.payload.status,
+              output: chunk.payload.output,
+              payload: chunk.payload.payload,
+              suspendPayload: chunk.payload.suspendPayload,
             },
           },
         },
       },
-      eventTimestamp: new Date(),
     };
   }
 
   if (chunk.type === 'workflow-step-waiting') {
+    const workflowState = prev?.payload?.workflowState || { status: 'running', steps: {} };
+    const existingStep = workflowState.steps?.[chunk.payload.id] || {};
+
     return {
-      ...prev,
+      runId: prev?.runId || '',
+      eventTimestamp: new Date(),
+      type: 'watch',
       payload: {
-        ...prev?.payload,
         currentStep: {
-          ...prev?.payload?.currentStep,
-          ...chunk.payload,
+          id: chunk.payload.id,
+          status: chunk.payload.status,
+          payload: chunk.payload.payload,
         },
         workflowState: {
-          ...prev?.payload?.workflowState,
+          ...workflowState,
           status: 'waiting',
           steps: {
-            ...prev?.payload?.workflowState?.steps,
+            ...workflowState.steps,
             [chunk.payload.id]: {
-              ...prev?.payload?.workflowState?.steps?.[chunk.payload.id],
-              ...chunk.payload,
+              ...existingStep,
+              status: chunk.payload.status,
+              payload: chunk.payload.payload,
+              startedAt: chunk.payload.startedAt,
             },
           },
         },
       },
-      eventTimestamp: new Date(),
     };
   }
 
   if (chunk.type === 'workflow-step-result') {
-    const next = {
-      ...prev,
+    const workflowState = prev?.payload?.workflowState || { status: 'running', steps: {} };
+    const existingStep = workflowState.steps?.[chunk.payload.id] || {};
+
+    return {
+      runId: prev?.runId || '',
+      eventTimestamp: new Date(),
+      type: 'watch',
       payload: {
-        ...(prev?.payload || {}),
         currentStep: {
-          ...prev?.payload?.currentStep,
-          ...chunk.payload,
+          id: chunk.payload.id,
+          status: chunk.payload.status,
+          output: chunk.payload.output,
+          payload: chunk.payload.payload ?? existingStep.payload,
         },
         workflowState: {
-          ...prev?.payload?.workflowState,
+          ...workflowState,
           steps: {
-            ...prev?.payload?.workflowState?.steps,
+            ...workflowState.steps,
             [chunk.payload.id]: {
-              ...prev?.payload?.workflowState?.steps?.[chunk.payload.id],
-              ...chunk.payload,
+              ...existingStep,
+              status: chunk.payload.status,
+              output: chunk.payload.output,
+              payload: chunk.payload.payload ?? existingStep.payload,
             },
           },
         },
       },
-      eventTimestamp: new Date(),
     };
-
-    return next;
   }
 
   if (chunk.type === 'workflow-canceled') {
+    const workflowState = prev?.payload?.workflowState || { status: 'running', steps: {} };
+
     return {
-      ...prev,
+      runId: prev?.runId || '',
+      eventTimestamp: new Date(),
+      type: 'watch',
       payload: {
         ...prev?.payload,
         workflowState: {
-          ...prev?.payload?.workflowState,
+          ...workflowState,
           status: 'canceled',
         },
       },
-      eventTimestamp: new Date(),
     };
   }
 
   if (chunk.type === 'workflow-finish') {
+    const workflowState = prev?.payload?.workflowState || { status: 'running', steps: {} };
+
     return {
-      ...prev,
+      runId: prev?.runId || '',
+      eventTimestamp: new Date(),
+      type: 'watch',
       payload: {
-        ...prev?.payload,
         currentStep: undefined,
         workflowState: {
-          ...prev?.payload?.workflowState,
+          ...workflowState,
           status: chunk.payload.workflowStatus,
         },
       },
-      eventTimestamp: new Date(),
     };
   }
 
-  return prev;
+  return (
+    prev || {
+      runId: '',
+      eventTimestamp: new Date(),
+      type: 'watch',
+      payload: {
+        workflowState: {
+          status: 'pending',
+          steps: {},
+        },
+      },
+    }
+  );
 };
 
 export const toUIMessage = ({
@@ -356,15 +394,42 @@ export const toUIMessage = ({
               callProviderMetadata: chunk.payload.providerMetadata,
             };
           } else {
-            parts[toolPartIndex] = {
-              type: 'dynamic-tool',
-              toolName: toolPart.toolName,
-              toolCallId: toolPart.toolCallId,
-              state: 'output-available',
-              input: toolPart.input,
-              output: toolPart.output,
-              callProviderMetadata: chunk.payload.providerMetadata,
-            };
+            // Check if this is a workflow tool by checking if output is a WorkflowWatchResult
+            const isWorkflowTool =
+              toolPart.output &&
+              typeof toolPart.output === 'object' &&
+              'type' in toolPart.output &&
+              toolPart.output.type === 'watch';
+
+            if (isWorkflowTool) {
+              // Transform WorkflowWatchResult to match server format
+              const watchResult = toolPart.output as WorkflowWatchResult;
+              const transformedOutput = {
+                result: watchResult.payload.workflowState,
+                runId: watchResult.runId,
+              };
+
+              parts[toolPartIndex] = {
+                type: 'dynamic-tool',
+                toolName: toolPart.toolName,
+                toolCallId: toolPart.toolCallId,
+                state: 'output-available',
+                input: toolPart.input,
+                output: transformedOutput as any,
+                callProviderMetadata: chunk.payload.providerMetadata,
+              };
+            } else {
+              // Regular tool output
+              parts[toolPartIndex] = {
+                type: 'dynamic-tool',
+                toolName: toolPart.toolName,
+                toolCallId: toolPart.toolCallId,
+                state: 'output-available',
+                input: toolPart.input,
+                output: toolPart.output,
+                callProviderMetadata: chunk.payload.providerMetadata,
+              };
+            }
           }
         }
       }
@@ -394,7 +459,7 @@ export const toUIMessage = ({
           // Handle workflow-related output chunks
           if (chunk.payload.output?.type?.startsWith('workflow-')) {
             // Get existing workflow state from the output field
-            const existingWorkflowState = (toolPart.output as WorkflowWatchResult) || ({} as WorkflowWatchResult);
+            const existingWorkflowState = (toolPart.output as WorkflowWatchResult) || undefined;
 
             // Use the mapWorkflowStreamChunkToWatchResult pattern for accumulation
             const updatedWorkflowState = mapWorkflowStreamChunkToWatchResult(
