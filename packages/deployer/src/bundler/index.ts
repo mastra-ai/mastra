@@ -6,7 +6,7 @@ import { MastraBundler } from '@mastra/core/bundler';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import virtual from '@rollup/plugin-virtual';
 import * as pkg from 'empathic/package';
-import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
+import fsExtra, { copy, ensureDir, emptyDir } from 'fs-extra/esm';
 import type { InputOptions, OutputOptions } from 'rollup';
 import { glob } from 'tinyglobby';
 import { analyzeBundle } from '../build/analyze';
@@ -14,7 +14,7 @@ import { createBundler as createBundlerUtil, getInputOptions } from '../build/bu
 import { getBundlerOptions } from '../build/bundlerOptions';
 import { writeCustomInstrumentation } from '../build/customInstrumentation';
 import { writeTelemetryConfig } from '../build/telemetry';
-import { getPackageRootPath } from '../build/utils';
+import { getPackageInfo } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
 import {
@@ -364,10 +364,8 @@ export abstract class Bundler extends MastraBundler {
           continue;
         }
 
-        const rootPath = await getPackageRootPath(dep);
-        const pkg = await readJSON(`${rootPath}/package.json`);
-
-        dependenciesToInstall.set(dep, pkg.version || 'latest');
+        const pkg = await getPackageInfo(dep, projectRoot);
+        dependenciesToInstall.set(dep, pkg?.version ?? 'latest');
       } catch {
         dependenciesToInstall.set(dep, 'latest');
       }
