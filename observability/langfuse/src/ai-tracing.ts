@@ -317,9 +317,9 @@ export class LangfuseExporter implements AITracingExporter {
       if (llmAttr.usage !== undefined) {
         const usage = llmAttr.usage;
         payload.usage = {
-          input: usage.inputTokens,
-          output: usage.outputTokens,
-          total: usage.totalTokens,
+          input: usage.inputTokens ?? usage.promptTokens,
+          output: usage.outputTokens ?? usage.completionTokens,
+          total: usage.totalTokens ?? usage.totalTokens,
         };
         attributesToOmit.push('usage');
       }

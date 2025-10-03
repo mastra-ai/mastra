@@ -216,7 +216,7 @@ describe('LangfuseExporter', () => {
   });
 
   describe('LLM Generation Mapping', () => {
-    it('should create Langfuse generation for LLM_GENERATION spans', async () => {
+    it('should create Langfuse generation for LLM_GENERATION spans with AI SDK token format', async () => {
       const llmSpan = createMockSpan({
         id: 'llm-span-id',
         name: 'gpt-4-call',
@@ -272,6 +272,128 @@ describe('LangfuseExporter', () => {
           resultType: 'response_generation',
           spanType: 'llm_generation',
           streaming: false,
+        },
+      });
+    });
+
+    it('should handle backward compatibility with legacy token format (promptTokens/completionTokens)', async () => {
+      const legacyLlmSpan = createMockSpan({
+        id: 'legacy-llm',
+        name: 'legacy-llm-call',
+        type: AISpanType.LLM_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'gpt-3.5-turbo',
+          usage: {
+            promptTokens: 20,
+            completionTokens: 30,
+            totalTokens: 50,
+          },
+        },
+      });
+
+      const event: AITracingEvent = {
+        type: AITracingEventType.SPAN_STARTED,
+        exportedSpan: legacyLlmSpan,
+      };
+
+      await exporter.exportEvent(event);
+
+      expect(mockTrace.generation).toHaveBeenCalledWith({
+        id: 'legacy-llm',
+        name: 'legacy-llm-call',
+        startTime: legacyLlmSpan.startTime,
+        model: 'gpt-3.5-turbo',
+        usage: {
+          input: 20,
+          output: 30,
+          total: 50,
+        },
+        metadata: {
+          spanType: 'llm_generation',
+        },
+      });
+    });
+
+    it('should prefer AI SDK token format when both formats are present', async () => {
+      const mixedFormatSpan = createMockSpan({
+        id: 'mixed-llm',
+        name: 'mixed-format-call',
+        type: AISpanType.LLM_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'gpt-4',
+          usage: {
+            inputTokens: 10,
+            outputTokens: 5,
+            totalTokens: 15,
+            // Legacy fields should be ignored when new fields are present
+            promptTokens: 999,
+            completionTokens: 999,
+          },
+        },
+      });
+
+      const event: AITracingEvent = {
+        type: AITracingEventType.SPAN_STARTED,
+        exportedSpan: mixedFormatSpan,
+      };
+
+      await exporter.exportEvent(event);
+
+      expect(mockTrace.generation).toHaveBeenCalledWith({
+        id: 'mixed-llm',
+        name: 'mixed-format-call',
+        startTime: mixedFormatSpan.startTime,
+        model: 'gpt-4',
+        usage: {
+          input: 10,
+          output: 5,
+          total: 15,
+        },
+        metadata: {
+          spanType: 'llm_generation',
+        },
+      });
+    });
+
+    it('should handle partial token data with fallback to legacy fields', async () => {
+      const partialTokenSpan = createMockSpan({
+        id: 'partial-llm',
+        name: 'partial-token-call',
+        type: AISpanType.LLM_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'gpt-4',
+          usage: {
+            // Only totalTokens from new format
+            totalTokens: 100,
+            // Fallback to legacy fields for input/output
+            promptTokens: 60,
+            completionTokens: 40,
+          },
+        },
+      });
+
+      const event: AITracingEvent = {
+        type: AITracingEventType.SPAN_STARTED,
+        exportedSpan: partialTokenSpan,
+      };
+
+      await exporter.exportEvent(event);
+
+      expect(mockTrace.generation).toHaveBeenCalledWith({
+        id: 'partial-llm',
+        name: 'partial-token-call',
+        startTime: partialTokenSpan.startTime,
+        model: 'gpt-4',
+        usage: {
+          input: 60,
+          output: 40,
+          total: 100,
+        },
+        metadata: {
+          spanType: 'llm_generation',
         },
       });
     });
