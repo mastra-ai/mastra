@@ -26,11 +26,12 @@ export type Components = 'agents' | 'workflows' | 'tools';
 export const getAISDKPackageVersion = (llmProvider: LLMProvider) => {
   switch (llmProvider) {
     case 'cerebras':
-      return '^0.2.14';
+      return 'latest';
     default:
-      return '^1.0.0';
+      return 'latest';
   }
 };
+
 export const getAISDKPackage = (llmProvider: LLMProvider) => {
   switch (llmProvider) {
     case 'openai':
