@@ -12,7 +12,7 @@ import { MastraUIMessage } from './toUIMessage';
 
 /**
  * Extended type for MastraUIMessage that may include additional properties
- * from different sources (generateVNext, toUIMessage, toNetworkUIMessage)
+ * from different sources (generate, toUIMessage, toNetworkUIMessage)
  */
 type ExtendedMastraUIMessage = MastraUIMessage & {
   createdAt?: Date;
@@ -24,7 +24,7 @@ type ExtendedMastraUIMessage = MastraUIMessage & {
  * Converts a Mastra UIMessage (from AI SDK) to a ThreadMessageLike format compatible with @assistant-ui/react.
  *
  * This function handles UIMessages from three sources:
- * - agent.generateVNext: Full output with all message parts
+ * - agent.generate: Full output with all message parts
  * - toUIMessage: Streaming chunks accumulated into UIMessages
  * - toNetworkUIMessage: Network execution events accumulated into UIMessages
  *

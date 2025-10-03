@@ -86,12 +86,11 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
   ): Promise<void> {
     if (this.isStructuringAgentStreamStarted) return;
     this.isStructuringAgentStreamStarted = true;
-
     try {
       const structuringPrompt = this.buildStructuringPrompt(streamParts);
       const prompt = `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n${structuringPrompt}`;
 
-      const structuringAgentStream = await this.structuringAgent.streamVNext(prompt, {
+      const structuringAgentStream = await this.structuringAgent.stream(prompt, {
         output: this.schema,
       });
 

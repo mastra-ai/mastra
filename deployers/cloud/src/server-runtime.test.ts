@@ -24,6 +24,7 @@ vi.mock('./utils/constants.js', () => ({
   LOCAL: false,
   BUILD_URL: '',
   BUSINESS_JWT_TOKEN: '',
+  PLAYGROUND_JWT_TOKEN: '',
   USER_IP_ADDRESS: '',
   PROJECT_ENV_VARS: {},
   PROJECT_ROOT: '/project',

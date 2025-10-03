@@ -936,7 +936,7 @@ describe('MessageList V5 Support', () => {
       const messageList = new MessageList();
       const imageUrl = 'https://httpbin.org/image/png';
 
-      // This mimics what happens when the user passes messages to streamVNext
+      // This mimics what happens when the user passes messages to stream
       // with format: 'aisdk' containing file parts with URLs
       const v2Message: MastraMessageV2 = {
         id: 'test-msg-1',
