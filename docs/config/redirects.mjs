@@ -947,6 +947,7 @@ export const redirectList = [
   {
     source: "/:locale/docs/agents/input-processors",
     destination: "/:locale/docs/agents/sanitizing-input",
+    permanent: true,
   },
   // Vector store reference redirects (moved from RAG to Vectors)
   {
