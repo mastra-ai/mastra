@@ -1015,4 +1015,9 @@ export const redirectList = [
     destination: "/:locale/reference/vectors/upstash",
     permanent: true,
   },
+  {
+    source: "/:locale/docs/agents/dynamic-agents",
+    destination: "/:locale/examples/agents/dynamic-agents",
+    permanent: true,
+  },
 ];

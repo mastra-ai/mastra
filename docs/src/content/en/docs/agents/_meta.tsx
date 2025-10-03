@@ -5,7 +5,6 @@ const meta = {
   "input-processors": "Input Processors",
   "adding-voice": "Adding Voice",
   "runtime-context": "Runtime Context",
-  "dynamic-agents": "Dynamic Agents",
 };
 
 export default meta;
