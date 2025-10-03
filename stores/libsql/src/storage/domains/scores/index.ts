@@ -256,11 +256,15 @@ export class ScoresLibSQL extends ScoresStorage {
     spanId: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    console.warn({ traceId, spanId });
+
     try {
       const countSQLResult = await this.client.execute({
         sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE traceId = ? AND spanId = ?`,
         args: [traceId, spanId],
       });
+
+      console.dir(countSQLResult, { depth: null });
 
       const total = Number(countSQLResult.rows?.[0]?.count ?? 0);
 

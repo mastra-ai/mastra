@@ -1,5 +1,5 @@
 import { SideDialog, TextAndIcon, KeyValueList, type SideDialogRootProps } from '@/components/ui/elements';
-import { HashIcon, GaugeIcon } from 'lucide-react';
+import { HashIcon, GaugeIcon, FileInputIcon, FileOutputIcon, ReceiptText } from 'lucide-react';
 
 import { ClientScoreRowData } from '@mastra/client-js';
 import { useLinkComponent } from '@/lib/framework';
@@ -75,30 +75,47 @@ export function ScoreDialog({
 
           <SideDialog.CodeSection
             title={`Score: ${Number.isNaN(score?.score) ? 'n/a' : score?.score}`}
+            icon={<GaugeIcon />}
             codeStr={score?.reason || 'null'}
             simplified={true}
           />
 
-          <SideDialog.CodeSection title="Input" codeStr={JSON.stringify(score?.input || null, null, 2)} />
+          <SideDialog.CodeSection
+            title="Input"
+            icon={<FileInputIcon />}
+            codeStr={JSON.stringify(score?.input || null, null, 2)}
+          />
 
-          <SideDialog.CodeSection title="Output" codeStr={JSON.stringify(score?.output || null, null, 2)} />
+          <SideDialog.CodeSection
+            title="Output"
+            icon={<FileOutputIcon />}
+            codeStr={JSON.stringify(score?.output || null, null, 2)}
+          />
 
           <SideDialog.CodeSection
             title="Preprocess Prompt"
+            icon={<ReceiptText />}
             codeStr={score?.preprocessPrompt || 'null'}
             simplified={true}
           />
 
-          <SideDialog.CodeSection title="Analyze Prompt" codeStr={score?.analyzePrompt || 'null'} simplified={true} />
+          <SideDialog.CodeSection
+            title="Analyze Prompt"
+            icon={<ReceiptText />}
+            codeStr={score?.analyzePrompt || 'null'}
+            simplified={true}
+          />
 
           <SideDialog.CodeSection
             title="Generate Score Prompt"
+            icon={<ReceiptText />}
             codeStr={score?.generateScorePrompt || 'null'}
             simplified={true}
           />
 
           <SideDialog.CodeSection
             title="Generate Reason Prompt"
+            icon={<ReceiptText />}
             codeStr={score?.generateReasonPrompt || 'null'}
             simplified={true}
           />

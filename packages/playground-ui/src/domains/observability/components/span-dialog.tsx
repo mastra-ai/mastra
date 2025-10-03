@@ -59,8 +59,6 @@ export function SpanDialog({
     entityType = 'Workflow';
   }
 
-  console.log({ span });
-
   return (
     <SideDialog
       dialogTitle="Observability Span"

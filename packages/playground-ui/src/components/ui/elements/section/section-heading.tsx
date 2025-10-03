@@ -13,8 +13,8 @@ export function SectionHeading({ headingLevel = 'h2', children, className }: Sec
   return (
     <HeadingTag
       className={cn(
-        'flex items-center gap-[0.75em] text-[0.9375] font-normal text-icon4',
-        '[&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:opacity-50',
+        'flex items-center gap-[0.5em] text-[0.9375] font-bold text-icon4',
+        '[&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:opacity-50',
         className,
       )}
     >

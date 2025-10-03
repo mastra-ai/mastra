@@ -30,10 +30,13 @@ import { ScorersDropdown } from '@/domains/scores/components/scorers-dropdown';
 import { ScoreTable } from '@/domains/scores/components/score-table';
 import { TraceScoreList } from './trace-score-list';
 import { Tabs } from '@/components/ui/elements/tabs/tabs';
-import { ScoreDialog, Tab, TraceTimelineLegend } from '@/index';
+import { ScoreDialog } from '@/domains/scores/components/score-dialog';
+import { TraceTimelineLegend } from './trace-timeline-legend';
+import { useTraceSpanScores2 } from '@/domains/scores/hooks/use-trace-span-scores';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/elements/buttons';
 import { set } from 'zod';
+import { trace } from 'console';
 
 type TraceDialogProps = {
   traceSpans?: AISpanRecord[];
@@ -77,8 +80,6 @@ export function TraceDialog({
   const selectedSpan = traceSpans.find(span => span.spanId === selectedSpanId);
   const traceInfo = useTraceInfo(traceDetails);
 
-  console.log({ traceDetails });
-
   useEffect(() => {
     if (initialSpanId) {
       setSelectedSpanId(initialSpanId);
@@ -107,6 +108,12 @@ export function TraceDialog({
 
     return flattenSpans(hierarchicalSpans);
   }, [hierarchicalSpans]);
+
+  const { scores, isLoading: isLoadingScores } = useTraceSpanScores2({
+    traceId: traceId, // '92fb1d572e888f3e62648e57131b5c28', // span?.traceId || '',
+    spanId: selectedSpanId, //'a80ec0f410b6680e', // span?.spanId || '',
+    page: 0,
+  });
 
   const handleSpanClick = (id: string) => {
     setSelectedSpanId(id);

@@ -22,7 +22,6 @@ import { useAITrace } from '@/domains/observability/hooks/use-ai-trace';
 
 import { useWorkflows } from '@/hooks/use-workflows';
 import { useNavigate, useSearchParams } from 'react-router';
-import { useAITraceScores } from '@/domains/observability/hooks/use-ai-trace-scores';
 
 export default function Observability() {
   const navigate = useNavigate();
@@ -69,17 +68,6 @@ export default function Observability() {
             start: selectedDateFrom,
           }
         : undefined,
-  });
-
-  const {
-    data: aiTraceScores = [],
-    isLoading: isTraceScoresLoading,
-
-    error: aiTraceScoresError,
-    isError: isAiTraceScoresError,
-  } = useAITraceScores({
-    traceId: '1f5cedb1ee7693de9e815fe0f496f43a',
-    spanId: '663d1ec243406b79',
   });
 
   useEffect(() => {

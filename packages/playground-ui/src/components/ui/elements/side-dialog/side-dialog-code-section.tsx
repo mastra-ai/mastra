@@ -6,8 +6,8 @@ import { draculaInit } from '@uiw/codemirror-theme-dracula';
 import { tags as t } from '@lezer/highlight';
 import { Button } from '@/components/ui/elements/buttons';
 import { AlignJustifyIcon, AlignLeftIcon } from 'lucide-react';
-import { CodeSection } from '@/components/ui/elements/code-section';
 import { Buttons } from '@/components/ui/containers';
+import { Section } from '../section';
 
 const useCodemirrorTheme = () => {
   return useMemo(
@@ -29,11 +29,12 @@ const useCodemirrorTheme = () => {
 
 export type SideDialogCodeSectionProps = {
   title: string;
+  icon?: React.ReactNode;
   codeStr?: string;
   simplified?: boolean;
 };
 
-export function SideDialogCodeSection({ codeStr = '', title, simplified = false }: SideDialogCodeSectionProps) {
+export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = false }: SideDialogCodeSectionProps) {
   const theme = useCodemirrorTheme();
   const [showAsMultilineText, setShowAsMultilineText] = useState(false);
   const hasMultilineText = useMemo(() => {
@@ -48,8 +49,12 @@ export function SideDialogCodeSection({ codeStr = '', title, simplified = false 
   const finalCodeStr = showAsMultilineText ? codeStr?.replace(/\\n/g, '\n') : codeStr;
 
   return (
-    <CodeSection>
-      <CodeSection.Header title={title}>
+    <Section>
+      <Section.Header>
+        <Section.Heading>
+          {icon}
+          {title}
+        </Section.Heading>
         <Buttons>
           <CopyButton content={codeStr || 'No content'} />
           {hasMultilineText && (
@@ -58,21 +63,19 @@ export function SideDialogCodeSection({ codeStr = '', title, simplified = false 
             </Button>
           )}
         </Buttons>
-      </CodeSection.Header>
-      <CodeSection.Code>
-        {codeStr && (
-          <>
-            {simplified ? (
-              <div className="text-icon4 text-[0.875rem] py-[1rem] font-mono break-all mx-[1.5rem]">
-                <pre className="text-wrap">{codeStr}</pre>
-              </div>
-            ) : (
-              <ReactCodeMirror extensions={[json(), EditorView.lineWrapping]} theme={theme} value={finalCodeStr} />
-            )}
-          </>
-        )}
-      </CodeSection.Code>
-    </CodeSection>
+      </Section.Header>
+      {codeStr && (
+        <div className="bg-black/50 p-[1rem] overflow-hidden rounded-xl border border-border1 text-icon4 text-[0.875rem]  break-all">
+          {simplified ? (
+            <div className="text-icon4 font-mono break-all px-[0.5rem]">
+              <pre className="text-wrap">{codeStr}</pre>
+            </div>
+          ) : (
+            <ReactCodeMirror extensions={[json(), EditorView.lineWrapping]} theme={theme} value={finalCodeStr} />
+          )}
+        </div>
+      )}
+    </Section>
   );
 }
 

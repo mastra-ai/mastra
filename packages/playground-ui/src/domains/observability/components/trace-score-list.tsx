@@ -26,11 +26,13 @@ type TraceScoreListProps = {
   initialScoreId?: string;
   traceId?: string;
   spanId?: string;
+
+  setEndOfListElement?: (node: HTMLElement | null) => void;
 };
 
 type SelectedScore = (ScoreLink & Partial<ClientScoreRowData>) | undefined;
 
-export function TraceScoreList({ traceId, spanId, scores, initialScoreId }: TraceScoreListProps) {
+export function TraceScoreList({ traceId, spanId, scores, initialScoreId, setEndOfListElement }: TraceScoreListProps) {
   const { navigate } = useLinkComponent();
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
   const [selectedScore, setSelectedScore] = useState<SelectedScore | undefined>();
@@ -114,6 +116,7 @@ export function TraceScoreList({ traceId, spanId, scores, initialScoreId }: Trac
             <EntryList.Message message="No scores found" type="info" />
           )}
         </EntryList.Trim>
+        <EntryList.NextPageLoading setEndOfListElement={setEndOfListElement} />
       </EntryList>
       <ScoreDialog
         scorerName={selectedScore?.scorerName || ''}
