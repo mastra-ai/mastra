@@ -3,6 +3,7 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import { InternalSpans } from '../../ai-tracing';
 import type { TracingContext } from '../../ai-tracing';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { ChunkType } from '../../stream';
@@ -173,6 +174,7 @@ export class PIIDetector implements Processor {
       name: 'pii-detector',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
+      options: { tracingPolicy: { internal: InternalSpans.ALL } },
     });
   }
 
@@ -266,7 +268,7 @@ export class PIIDetector implements Processor {
       const model = await this.detectionAgent.getModel();
       let response;
       if (model.specificationVersion === 'v2') {
-        response = await this.detectionAgent.generateVNext(prompt, {
+        response = await this.detectionAgent.generate(prompt, {
           output: schema,
           modelSettings: {
             temperature: 0,
@@ -274,7 +276,7 @@ export class PIIDetector implements Processor {
           tracingContext,
         });
       } else {
-        response = await this.detectionAgent.generate(prompt, {
+        response = await this.detectionAgent.generateLegacy(prompt, {
           output: schema,
           temperature: 0,
           tracingContext,

@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "0.0.4",
+  "version": "0.0.5",
   "type": "module",
   "homepage": "https://mastra.ai",
   "repository": {
@@ -26,7 +26,7 @@
     "@lukeed/uuid": "^2.0.1",
     "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@mastra/react-hooks": "workspace:*",
+    "@mastra/react": "workspace:*",
     "@mastra/playground-ui": "workspace:^",
     "@radix-ui/react-checkbox": "^1.3.2",
     "@radix-ui/react-dialog": "^1.1.14",
@@ -45,7 +45,7 @@
     "@tanstack/react-virtual": "^3.13.12",
     "@uiw/codemirror-theme-dracula": "^4.23.14",
     "@uiw/react-codemirror": "^4.23.14",
-    "@xyflow/react": "^12.8.5",
+    "@xyflow/react": "^12.8.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -73,7 +73,7 @@
     "zod": "^4.1.9"
   },
   "devDependencies": {
-    "@eslint/js": "^9.35.0",
+    "@eslint/js": "^9.36.0",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",

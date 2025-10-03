@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import {
   Badge,
@@ -12,8 +12,7 @@ import {
   useWorkflow,
 } from '@mastra/playground-ui';
 
-import { WorkflowLogs } from './workflow-logs';
-import { useExecuteWorkflow, useResumeWorkflow, useStreamWorkflow, useCancelWorkflowRun } from '@/hooks/use-workflows';
+import { useExecuteWorkflow, useStreamWorkflow, useCancelWorkflowRun } from '@/hooks/use-workflows';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { CopyIcon } from 'lucide-react';
@@ -27,14 +26,26 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
   const { data: workflow, isLoading } = useWorkflow(workflowId);
 
   const { createWorkflowRun } = useExecuteWorkflow();
-  const { resumeWorkflow } = useResumeWorkflow();
-  const { streamWorkflow, streamResult, isStreaming } = useStreamWorkflow();
+  const {
+    streamWorkflow,
+    streamResult,
+    isStreaming,
+    observeWorkflowStream,
+    closeStreamsAndReset,
+    resumeWorkflowStream,
+  } = useStreamWorkflow();
   const { mutateAsync: cancelWorkflowRun, isPending: isCancellingWorkflowRun } = useCancelWorkflowRun();
 
   const [runId, setRunId] = useState<string>('');
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
 
   const stepsCount = Object.keys(workflow?.steps ?? {}).length;
+
+  useEffect(() => {
+    if (!runId && !params?.runId) {
+      closeStreamsAndReset();
+    }
+  }, [runId, params]);
 
   return (
     <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto">
@@ -64,7 +75,6 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
               Run
             </Tab>
             <Tab value="runs">Runs</Tab>
-            <Tab value="logs">Log Drains</Tab>
           </TabList>
 
           <TabContent value="run">
@@ -76,10 +86,9 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
                 isLoading={isLoading}
                 createWorkflowRun={createWorkflowRun.mutateAsync}
                 streamWorkflow={streamWorkflow.mutateAsync}
-                resumeWorkflow={resumeWorkflow.mutateAsync}
+                resumeWorkflow={resumeWorkflowStream.mutateAsync}
                 streamResult={streamResult}
                 isStreamingWorkflow={isStreaming}
-                isResumingWorkflow={resumeWorkflow.isPending}
                 isCancellingWorkflowRun={isCancellingWorkflowRun}
                 cancelWorkflowRun={cancelWorkflowRun}
               />
@@ -90,11 +99,19 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
               workflowId={workflowId}
               runId={params?.runId}
               onPressRun={({ workflowId, runId }) => navigate(`/workflows/${workflowId}/graph/${runId}`)}
+              onPressBackToRuns={() => navigate(`/workflows/${workflowId}/graph`)}
+              setRunId={setRunId}
+              workflow={workflow ?? undefined}
+              isLoading={isLoading}
+              createWorkflowRun={createWorkflowRun.mutateAsync}
+              streamWorkflow={streamWorkflow.mutateAsync}
+              resumeWorkflow={resumeWorkflowStream.mutateAsync}
+              streamResult={streamResult}
+              isStreamingWorkflow={isStreaming}
+              isCancellingWorkflowRun={isCancellingWorkflowRun}
+              cancelWorkflowRun={cancelWorkflowRun}
+              observeWorkflowStream={observeWorkflowStream.mutate}
             />
-          </TabContent>
-
-          <TabContent value="logs">
-            <WorkflowLogs runId={runId} />
           </TabContent>
         </PlaygroundTabs>
       </div>

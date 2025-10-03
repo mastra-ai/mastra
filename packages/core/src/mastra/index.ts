@@ -15,7 +15,6 @@ import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
-import type { NewAgentNetwork } from '../network/vNext';
 import type { MastraScorer } from '../scores';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
@@ -40,12 +39,10 @@ export interface Config<
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
-  TVNextNetworks extends Record<string, NewAgentNetwork> = Record<string, NewAgentNetwork>,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
   TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
 > {
   agents?: TAgents;
-  vnext_networks?: TVNextNetworks;
   storage?: MastraStorage;
   vectors?: TVectors;
   logger?: TLogger | false;
@@ -97,7 +94,6 @@ export class Mastra<
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
-  TVNextNetworks extends Record<string, NewAgentNetwork> = Record<string, NewAgentNetwork>,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
   TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
 > {
@@ -115,7 +111,6 @@ export class Mastra<
   #telemetry?: Telemetry;
   #storage?: MastraStorage;
   #memory?: MastraMemory;
-  #vnext_networks?: TVNextNetworks;
   #scorers?: TScorers;
   #server?: ServerConfig;
   #mcpServers?: TMCPServers;
@@ -184,19 +179,7 @@ export class Mastra<
     this.#idGenerator = idGenerator;
   }
 
-  constructor(
-    config?: Config<
-      TAgents,
-      TLegacyWorkflows,
-      TWorkflows,
-      TVectors,
-      TTTS,
-      TLogger,
-      TVNextNetworks,
-      TMCPServers,
-      TScorers
-    >,
-  ) {
+  constructor(config?: Config<TAgents, TLegacyWorkflows, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers>) {
     // Store server middleware with default path
     if (config?.serverMiddleware) {
       this.#serverMiddleware = config.serverMiddleware.map(m => ({
@@ -328,10 +311,6 @@ export class Mastra<
       this.#vectors = vectors as TVectors;
     }
 
-    if (config?.vnext_networks) {
-      this.#vnext_networks = config.vnext_networks;
-    }
-
     if (config?.mcpServers) {
       this.#mcpServers = config.mcpServers;
 
@@ -417,19 +396,6 @@ do:
     }
 
     this.#agents = agents as TAgents;
-
-    /*
-    Networks
-    */
-    this.#vnext_networks = {} as TVNextNetworks;
-
-    if (config?.vnext_networks) {
-      Object.entries(config.vnext_networks).forEach(([key, network]) => {
-        network.__registerMastra(this);
-        // @ts-ignore
-        this.#vnext_networks[key] = network;
-      });
-    }
 
     /**
      * Scorers
@@ -531,12 +497,13 @@ do:
     const allTracingInstances = getAllAITracing();
 
     allTracingInstances.forEach(tracing => {
+      const config = tracing.getConfig();
       const exporters = tracing.getExporters();
       exporters.forEach(exporter => {
         // Initialize exporter if it has an init method
         if ('init' in exporter && typeof exporter.init === 'function') {
           try {
-            exporter.init();
+            exporter.init(config);
           } catch (error) {
             this.#logger?.warn('Failed to initialize AI tracing exporter', {
               exporterName: exporter.name,
@@ -980,21 +947,12 @@ do:
     });
   }
 
-  public vnext_getNetworks() {
-    return Object.values(this.#vnext_networks || {});
-  }
-
   public getServer() {
     return this.#server;
   }
 
   public getBundlerConfig() {
     return this.#bundler;
-  }
-
-  public vnext_getNetwork(networkId: string): NewAgentNetwork | undefined {
-    const networks = this.vnext_getNetworks();
-    return networks.find(network => network.id === networkId);
   }
 
   public async getLogsByRunId({

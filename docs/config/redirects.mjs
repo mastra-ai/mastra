@@ -1,5 +1,10 @@
 export const redirectList = [
   {
+    source: "/:locale/docs/getting-started/model-capability",
+    destination: "/:locale/models",
+    permanent: true,
+  },
+  {
     source: "/:locale/docs/agents/runtime-variables",
     destination: "/:locale/docs/agents/runtime-context",
     permanent: true,
@@ -818,6 +823,17 @@ export const redirectList = [
     destination: "/:locale/reference/agents/network",
     permanent: true,
   },
+  // VNext to new standard methods redirects
+  {
+    source: "/:locale/reference/agents/generateVNext",
+    destination: "/:locale/reference/agents/generate",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/streaming/agents/streamVNext",
+    destination: "/:locale/reference/streaming/agents/stream",
+    permanent: true,
+  },
   {
     source: "/:locale/docs/observability/tracing",
     destination: "/:locale/docs/observability/otel-tracing",
@@ -926,6 +942,77 @@ export const redirectList = [
   {
     source: "/:locale/reference/observability/providers/index",
     destination: "/:locale/reference/observability/otel-tracing/providers",
+    permanent: true,
+  },
+  // Vector store reference redirects (moved from RAG to Vectors)
+  {
+    source: "/:locale/reference/rag/astra",
+    destination: "/:locale/reference/vectors/astra",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/rag/chroma",
+    destination: "/:locale/reference/vectors/chroma",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/rag/vectorize",
+    destination: "/:locale/reference/vectors/vectorize",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/rag/couchbase",
+    destination: "/:locale/reference/vectors/couchbase",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/rag/lance",
+    destination: "/:locale/reference/vectors/lance",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/rag/libsql",
+    destination: "/:locale/reference/vectors/libsql",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/rag/mongodb",
+    destination: "/:locale/reference/vectors/mongodb",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/rag/opensearch",
+    destination: "/:locale/reference/vectors/opensearch",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/rag/pg",
+    destination: "/:locale/reference/vectors/pg",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/rag/pinecone",
+    destination: "/:locale/reference/vectors/pinecone",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/rag/qdrant",
+    destination: "/:locale/reference/vectors/qdrant",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/rag/s3vectors",
+    destination: "/:locale/reference/vectors/s3vectors",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/rag/turbopuffer",
+    destination: "/:locale/reference/vectors/turbopuffer",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/rag/upstash",
+    destination: "/:locale/reference/vectors/upstash",
     permanent: true,
   },
 ];

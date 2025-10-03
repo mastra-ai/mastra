@@ -109,7 +109,7 @@ export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undef
   Omit<AgentGenerateOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
 >;
 
-export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
+export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   output?: T;
   experimental_output?: T;
@@ -119,7 +119,7 @@ export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefin
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
 >;
 
-export type StreamVNextParams<OUTPUT extends OutputSchema = undefined> = {
+export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
   messages: MessageListInput;
   output?: OUTPUT;
   runtimeContext?: RuntimeContext | Record<string, any>;
@@ -291,7 +291,7 @@ export interface GetMemoryConfigParams {
   agentId: string;
 }
 
-export type GetMemoryConfigResponse = MemoryConfig;
+export type GetMemoryConfigResponse = { config: MemoryConfig };
 
 export interface GetNetworkMemoryThreadParams {
   resourceId: string;
@@ -519,6 +519,13 @@ export interface GetScoresByEntityIdParams {
   perPage?: number;
 }
 
+export interface GetScoresBySpanParams {
+  traceId: string;
+  spanId: string;
+  page?: number;
+  perPage?: number;
+}
+
 export interface SaveScoreParams {
   score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>;
 }
@@ -569,4 +576,11 @@ export interface GetAITraceResponse {
 export interface GetAITracesResponse {
   spans: AISpanRecord[];
   pagination: PaginationInfo;
+}
+
+export interface StreamVNextChunkType {
+  type: string;
+  payload: any;
+  runId: string;
+  from: 'AGENT' | 'WORKFLOW';
 }

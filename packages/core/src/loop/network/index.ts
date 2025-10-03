@@ -239,7 +239,7 @@ export async function createNetworkLoop({
                           }
                       `;
 
-        completionResult = await routingAgent.generateVNext([{ role: 'assistant', content: completionPrompt }], {
+        completionResult = await routingAgent.generate([{ role: 'assistant', content: completionPrompt }], {
           structuredOutput: {
             schema: completionSchema,
           },
@@ -308,21 +308,20 @@ export async function createNetworkLoop({
                     ${inputData.task}
                     ${completionResult ? `\n\n${completionResult?.object?.finalResult}` : ''}
 
-                    DO NOT CALL THE PRIMITIVE YOURSELF
-  
-                    Please select the most appropriate primitive to handle this task and the prompt to be sent to the primitive.
-                    
-                    #Rules:
-                    ##Agent:
+                    # Rules:
+
+                    ## Agent:
                     - prompt should be a text value, like you would call an LLM in a chat interface.
                     - If you are calling the same agent again, make sure to adjust the prompt to be more specific.
 
-                    ##Workflow/Tool:
+                    ## Workflow/Tool:
                     - prompt should be a JSON value that corresponds to the input schema of the workflow or tool. The JSON value is stringified.
                     - Make sure to use inputs corresponding to the input schema when calling a workflow or tool.
 
-                    Make sure to not call the same primitive twice, unless you call it with different arguments and believe it adds something to the task completion criteria. Take into account previous decision making history and results in your decision making and final result. These are messages whose text is a JSON structure with "isNetwork" true.
+                    DO NOT CALL THE PRIMITIVE YOURSELF. Make sure to not call the same primitive twice, unless you call it with different arguments and believe it adds something to the task completion criteria. Take into account previous decision making history and results in your decision making and final result. These are messages whose text is a JSON structure with "isNetwork" true.
   
+                    Please select the most appropriate primitive to handle this task and the prompt to be sent to the primitive. If no primitive is appropriate, return "none" for the primitiveId and "none" for the primitiveType.
+                    
                     {
                         "primitiveId": string,
                         "primitiveType": "agent" | "workflow" | "tool",
@@ -354,7 +353,7 @@ export async function createNetworkLoop({
         ...routingAgentOptions,
       };
 
-      const result = await routingAgent.generateVNext(prompt, options);
+      const result = await routingAgent.generate(prompt, options);
 
       const object = result.object;
 
@@ -429,7 +428,7 @@ export async function createNetworkLoop({
         },
       });
 
-      const result = await agentForStep.streamVNext(inputData.prompt, {
+      const result = await agentForStep.stream(inputData.prompt, {
         // resourceId: inputData.resourceId,
         // threadId: inputData.threadId,
         runtimeContext: runtimeContext,
@@ -824,9 +823,15 @@ export async function createNetworkLoop({
       iteration: z.number(),
     }),
     execute: async ({ inputData, writer }) => {
+      let endResult = inputData.result;
+
+      if (inputData.primitiveId === 'none' && inputData.primitiveType === 'none' && !inputData.result) {
+        endResult = inputData.selectionReason;
+      }
+
       const endPayload = {
         task: inputData.task,
-        result: inputData.result,
+        result: endResult,
         isComplete: !!inputData.isComplete,
         iteration: inputData.iteration,
       };
@@ -949,6 +954,21 @@ export async function networkLoop<
   resourceId?: string;
   messages: MessageListInput;
 }) {
+  // Validate that memory is available before starting the network
+  const memoryToUse = await routingAgent.getMemory({ runtimeContext });
+
+  if (!memoryToUse) {
+    throw new MastraError({
+      id: 'AGENT_NETWORK_MEMORY_REQUIRED',
+      domain: ErrorDomain.AGENT_NETWORK,
+      category: ErrorCategory.USER,
+      text: 'Memory is required for the agent network to function properly. Please configure memory for the agent.',
+      details: {
+        status: 400,
+      },
+    });
+  }
+
   const { networkWorkflow } = await createNetworkLoop({
     networkName,
     runtimeContext,

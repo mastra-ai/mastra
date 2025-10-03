@@ -7,7 +7,8 @@ permissions:
 jobs:
   link-checker-docs:
     name: Run link checker
-    if: ${{ github.event.deployment_status.state == 'success' && github.event.deployment_status.environment == 'Preview – mastra-docs' }}
+    if: false # disable this for now, model router added like 1000 links and its making this take forever and hogging up CI runners. most people also ignore failures in this anyway
+    # if: ${{ github.event.deployment_status.state == 'success' && github.event.deployment_status.environment == 'Preview – mastra-docs' }}
     runs-on: ubuntu-latest
 
     steps:

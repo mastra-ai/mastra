@@ -1,5 +1,137 @@
 # create-mastra
 
+## 0.14.1
+
+### Patch Changes
+
+- Make init versions latest pkgs ([#8434](https://github.com/mastra-ai/mastra/pull/8434))
+
+## 0.14.1-alpha.0
+
+### Patch Changes
+
+- Make init versions latest pkgs ([#8434](https://github.com/mastra-ai/mastra/pull/8434))
+
+## 0.14.0
+
+### Minor Changes
+
+- Breaking change to move the agent.streamVNext/generateVNext implementation to the default stream/generate. The old stream/generate have now been moved to streamLegacy and generateLegacy ([#8097](https://github.com/mastra-ai/mastra/pull/8097))
+
+### Patch Changes
+
+- Remove log drains UI from the playground ([#8379](https://github.com/mastra-ai/mastra/pull/8379))
+
+- add refetch interval to traces to make it feel "instant" ([#8386](https://github.com/mastra-ai/mastra/pull/8386))
+
+- better memory message ([#8382](https://github.com/mastra-ai/mastra/pull/8382))
+
+- fix codeblock line number color contrast for legacy traces ([#8385](https://github.com/mastra-ai/mastra/pull/8385))
+
+- Model router documentation and playground UI improvements ([#8372](https://github.com/mastra-ai/mastra/pull/8372))
+
+  **Documentation generation (`@mastra/core`):**
+  - Fixed inverted dynamic model selection logic in provider examples
+  - Improved copy: replaced marketing language with action-oriented descriptions
+  - Added generated file comments with timestamps to all MDX outputs so maintainers know not to directly edit generated files
+
+  **Playground UI model picker (`@mastra/playground-ui`):**
+  - Fixed provider field clearing when typing in model input
+  - Added responsive layout (stacks on mobile, side-by-side on desktop)
+  - Improved general styling of provider/model pickers
+
+  **Environment variables (`@mastra/deployer`):**
+  - Properly handle array of env vars (e.g., NETLIFY_TOKEN, NETLIFY_SITE_ID)
+  - Added correct singular/plural handling for "environment variable(s)"
+
+- show thread list in desc order ([#8381](https://github.com/mastra-ai/mastra/pull/8381))
+
+- Fix an issue preventing showing working memory and semantic recall in the playground ([#8358](https://github.com/mastra-ai/mastra/pull/8358))
+
+- Add observe strean to get streans after workflow has been interrupted ([#8318](https://github.com/mastra-ai/mastra/pull/8318))
+
+## 0.14.0-alpha.0
+
+### Minor Changes
+
+- Breaking change to move the agent.streamVNext/generateVNext implementation to the default stream/generate. The old stream/generate have now been moved to streamLegacy and generateLegacy ([#8097](https://github.com/mastra-ai/mastra/pull/8097))
+
+### Patch Changes
+
+- Remove log drains UI from the playground ([#8379](https://github.com/mastra-ai/mastra/pull/8379))
+
+- add refetch interval to traces to make it feel "instant" ([#8386](https://github.com/mastra-ai/mastra/pull/8386))
+
+- better memory message ([#8382](https://github.com/mastra-ai/mastra/pull/8382))
+
+- fix codeblock line number color contrast for legacy traces ([#8385](https://github.com/mastra-ai/mastra/pull/8385))
+
+- Model router documentation and playground UI improvements ([#8372](https://github.com/mastra-ai/mastra/pull/8372))
+
+  **Documentation generation (`@mastra/core`):**
+  - Fixed inverted dynamic model selection logic in provider examples
+  - Improved copy: replaced marketing language with action-oriented descriptions
+  - Added generated file comments with timestamps to all MDX outputs so maintainers know not to directly edit generated files
+
+  **Playground UI model picker (`@mastra/playground-ui`):**
+  - Fixed provider field clearing when typing in model input
+  - Added responsive layout (stacks on mobile, side-by-side on desktop)
+  - Improved general styling of provider/model pickers
+
+  **Environment variables (`@mastra/deployer`):**
+  - Properly handle array of env vars (e.g., NETLIFY_TOKEN, NETLIFY_SITE_ID)
+  - Added correct singular/plural handling for "environment variable(s)"
+
+- show thread list in desc order ([#8381](https://github.com/mastra-ai/mastra/pull/8381))
+
+- Fix an issue preventing showing working memory and semantic recall in the playground ([#8358](https://github.com/mastra-ai/mastra/pull/8358))
+
+- Add observe strean to get streans after workflow has been interrupted ([#8318](https://github.com/mastra-ai/mastra/pull/8318))
+
+## 0.13.4
+
+### Patch Changes
+
+- disable network label when memory is not enabled OR the agent has no subagents ([#8341](https://github.com/mastra-ai/mastra/pull/8341))
+
+- Added Mastra model router to Playground UI ([#8332](https://github.com/mastra-ai/mastra/pull/8332))
+
+## 0.13.4-alpha.1
+
+### Patch Changes
+
+- disable network label when memory is not enabled OR the agent has no subagents ([#8341](https://github.com/mastra-ai/mastra/pull/8341))
+
+## 0.13.4-alpha.0
+
+### Patch Changes
+
+- Added Mastra model router to Playground UI ([#8332](https://github.com/mastra-ai/mastra/pull/8332))
+
+## 0.13.3
+
+### Patch Changes
+
+- Fixed an issue in playground where text-start/end parts were ignored in handleStreamChunk and tool ordering vs text wasn't retained ([#8234](https://github.com/mastra-ai/mastra/pull/8234))
+
+- Add conditional chaining to scorer.agentNames return ([#8199](https://github.com/mastra-ai/mastra/pull/8199))
+
+- Show model that worked when there are model fallbacks ([#8167](https://github.com/mastra-ai/mastra/pull/8167))
+
+- Add types in the streamVNext codepath, fixes for various issues across multiple packages surfaced from type issues, align return types. ([#8010](https://github.com/mastra-ai/mastra/pull/8010))
+
+- Add model fallbacks to playground ([#7427](https://github.com/mastra-ai/mastra/pull/7427))
+
+## 0.13.3-alpha.1
+
+### Patch Changes
+
+- Fixed an issue in playground where text-start/end parts were ignored in handleStreamChunk and tool ordering vs text wasn't retained ([#8234](https://github.com/mastra-ai/mastra/pull/8234))
+
+- Add conditional chaining to scorer.agentNames return ([#8199](https://github.com/mastra-ai/mastra/pull/8199))
+
+- Show model that worked when there are model fallbacks ([#8167](https://github.com/mastra-ai/mastra/pull/8167))
+
 ## 0.13.3-alpha.0
 
 ### Patch Changes

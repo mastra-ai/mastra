@@ -8,6 +8,7 @@ import { CohereIcon } from '@/ds/icons/CohereIcon';
 import { GroqIcon } from '@/ds/icons/GroqIcon';
 import { XGroqIcon } from '@/ds/icons/XGroqIcon';
 import { MistralIcon } from '@/ds/icons/MistralIcon';
+import { NetlifyIcon } from '@/ds/icons/NetlifyIcon';
 
 export const providerMapToIcon = {
   'openai.chat': <OpenaiChatIcon />,
@@ -21,4 +22,5 @@ export const providerMapToIcon = {
   GROQ: <GroqIcon />,
   X_GROK: <XGroqIcon />,
   MISTRAL: <MistralIcon />,
+  netlify: <NetlifyIcon fill="white" />,
 };

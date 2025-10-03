@@ -1,3 +1,4 @@
+import { GetAgentResponse } from '@mastra/client-js';
 import type { AiMessageType } from '@mastra/core/memory';
 import type { LLMStepResult } from '@mastra/core/agent';
 
@@ -40,9 +41,8 @@ export interface ModelSettings {
   topP?: number;
   instructions?: string;
   providerOptions?: LLMStepResult['providerMetadata'];
+  chatWithGenerateLegacy?: boolean;
   chatWithGenerate?: boolean;
-  chatWithGenerateVNext?: boolean;
-  chatWithStreamVNext?: boolean;
   chatWithNetwork?: boolean;
 }
 
@@ -61,6 +61,7 @@ export interface ChatProps {
   settings?: AgentSettingsType;
   runtimeContext?: Record<string, any>;
   onInputChange?: (value: string) => void;
+  modelList?: GetAgentResponse['modelList'];
 }
 
 export type SpanStatus = {
