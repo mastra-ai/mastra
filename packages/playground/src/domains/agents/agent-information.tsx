@@ -85,6 +85,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
                 modelProviders={modelProviders || []}
                 hasMemoryEnabled={Boolean(memory?.result)}
                 promptSlot={<AgentPromptEnhancer agentId={agentId} />}
+                modelVersion={agent.modelVersion}
               />
             )}
           </TabContent>

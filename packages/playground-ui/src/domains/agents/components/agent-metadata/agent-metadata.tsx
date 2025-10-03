@@ -10,7 +10,7 @@ import { ReactNode } from 'react';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { useScorers } from '@/domains/scores';
 import { AgentIcon } from '@/ds/icons';
-import { GaugeIcon } from 'lucide-react';
+import { AlertTriangleIcon, GaugeIcon } from 'lucide-react';
 import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './agent-metadata-model-switcher';
 import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
 import { LoadingBadge } from '@/components/assistant-ui/tools/badges/loading-badge';
@@ -22,6 +22,7 @@ export interface AgentMetadataProps {
   promptSlot: ReactNode;
   hasMemoryEnabled: boolean;
   modelProviders: string[];
+  modelVersion: string;
   updateModel: AgentMetadataModelSwitcherProps['updateModel'];
   updateModelInModelList: AgentMetadataModelListProps['updateModelInModelList'];
   reorderModelList: AgentMetadataModelListProps['reorderModelList'];
@@ -62,6 +63,7 @@ export const AgentMetadata = ({
   modelProviders,
   updateModelInModelList,
   reorderModelList,
+  modelVersion,
 }: AgentMetadataProps) => {
   const networkAgentsMap = agent.agents ?? {};
   const networkAgents = Object.values(networkAgentsMap);
@@ -84,7 +86,18 @@ export const AgentMetadata = ({
           />
         </AgentMetadataSection>
       ) : (
-        <AgentMetadataSection title="Model">
+        <AgentMetadataSection
+          title={'Model'}
+          hint={
+            modelVersion === 'v2'
+              ? undefined
+              : {
+                  link: 'https://mastra.ai/en/docs/agents/model-legacy',
+                  title: 'You are using a legacy v1 model',
+                  icon: <AlertTriangleIcon fontSize={14} className="mb-0.5" />,
+                }
+          }
+        >
           <AgentMetadataModelSwitcher
             defaultProvider={agent.provider}
             defaultModel={agent.modelId}

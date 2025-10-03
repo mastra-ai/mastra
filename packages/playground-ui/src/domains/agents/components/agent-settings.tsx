@@ -98,7 +98,7 @@ export const AgentSettings = ({ modelVersion, hasMemory = false, hasSubAgents = 
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="generateLegacy" id="generateLegacy" className="text-icon6" />
                 <Label className="text-icon6 text-ui-md" htmlFor="generateLegacy">
-                  Generate
+                  Generate (Legacy)
                 </Label>
               </div>
             )}
@@ -114,7 +114,7 @@ export const AgentSettings = ({ modelVersion, hasMemory = false, hasSubAgents = 
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="streamLegacy" id="streamLegacy" className="text-icon6" />
                 <Label className="text-icon6 text-ui-md" htmlFor="streamLegacy">
-                  Stream
+                  Stream (Legacy)
                 </Label>
               </div>
             )}
