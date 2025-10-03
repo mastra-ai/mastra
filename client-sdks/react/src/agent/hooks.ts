@@ -1,16 +1,18 @@
 import { ModelSettings } from './types';
 import { useMastraClient } from '@/mastra-client-context';
 import { UIMessage } from '@ai-sdk/react';
+import { MastraUIMessage } from '../lib/ai-sdk/toUIMessage';
 import { MastraClient } from '@mastra/client-js';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useState } from 'react';
 import { flushSync } from 'react-dom';
+import { toNetworkUIMessage, toUIMessage } from '@/lib/ai-sdk';
 
-export interface MastraChatProps<TMessage> {
+export interface MastraChatProps {
   agentId: string;
-  initializeMessages?: () => TMessage[];
+  initializeMessages?: () => MastraUIMessage[];
 }
 
 interface SharedArgs {
@@ -21,18 +23,18 @@ interface SharedArgs {
   signal?: AbortSignal;
 }
 
-export type GenerateArgs<TMessage> = SharedArgs & { onFinish: (messages: UIMessage[]) => TMessage[] };
+export type GenerateArgs = SharedArgs & { onFinish?: (messages: UIMessage[]) => Promise<void> };
 
-export type StreamArgs<TMessage> = SharedArgs & {
-  onChunk: (chunk: ChunkType, conversation: TMessage[]) => TMessage[];
+export type StreamArgs = SharedArgs & {
+  onChunk?: (chunk: ChunkType) => Promise<void>;
 };
 
-export type NetworkArgs<TMessage> = SharedArgs & {
-  onNetworkChunk: (chunk: NetworkChunkType, conversation: TMessage[]) => TMessage[];
+export type NetworkArgs = SharedArgs & {
+  onNetworkChunk?: (chunk: NetworkChunkType) => Promise<void>;
 };
 
-export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatProps<TMessage>) => {
-  const [messages, setMessages] = useState<TMessage[]>(initializeMessages || []);
+export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
+  const [messages, setMessages] = useState<MastraUIMessage[]>(initializeMessages || []);
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
 
@@ -43,7 +45,7 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
     modelSettings,
     signal,
     onFinish,
-  }: GenerateArgs<TMessage>) => {
+  }: GenerateArgs) => {
     const {
       frequencyPenalty,
       presencePenalty,
@@ -87,19 +89,12 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
     setIsRunning(false);
 
     if (response && 'uiMessages' in response.response && response.response.uiMessages) {
-      const formatted = onFinish(response.response.uiMessages);
-      setMessages(prev => [...prev, ...formatted]);
+      onFinish?.(response.response.uiMessages);
+      setMessages(prev => [...prev, ...(response.response.uiMessages || [])]);
     }
   };
 
-  const stream = async ({
-    coreUserMessages,
-    runtimeContext,
-    threadId,
-    onChunk,
-    modelSettings,
-    signal,
-  }: StreamArgs<TMessage>) => {
+  const stream = async ({ coreUserMessages, runtimeContext, threadId, onChunk, modelSettings, signal }: StreamArgs) => {
     const {
       frequencyPenalty,
       presencePenalty,
@@ -147,13 +142,13 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
     }
 
     await response.processDataStream({
-      onChunk: (chunk: ChunkType) => {
+      onChunk: async (chunk: ChunkType) => {
         // Without this, React might batch intermediate chunks which would break the message reconstruction over time
         flushSync(() => {
-          setMessages(prev => onChunk(chunk, prev));
+          setMessages(prev => toUIMessage({ chunk, conversation: prev }));
         });
 
-        return Promise.resolve();
+        onChunk?.(chunk);
       },
     });
 
@@ -167,7 +162,7 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
     onNetworkChunk,
     modelSettings,
     signal,
-  }: NetworkArgs<TMessage>) => {
+  }: NetworkArgs) => {
     const { frequencyPenalty, presencePenalty, maxRetries, maxTokens, temperature, topK, topP, maxSteps } =
       modelSettings || {};
 
@@ -200,12 +195,12 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
     });
 
     await response.processDataStream({
-      onChunk: (chunk: NetworkChunkType) => {
+      onChunk: async (chunk: NetworkChunkType) => {
         flushSync(() => {
-          setMessages(prev => onNetworkChunk(chunk, prev));
+          setMessages(prev => toNetworkUIMessage({ chunk, conversation: prev }));
         });
 
-        return Promise.resolve();
+        onNetworkChunk?.(chunk);
       },
     });
 
