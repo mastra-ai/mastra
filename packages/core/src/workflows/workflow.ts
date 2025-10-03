@@ -612,23 +612,34 @@ export class Workflow<
     this.#runs = new Map();
   }
 
+  /*
+   * Returns the map of runs for this workflow
+   */
   get runs() {
     return this.#runs;
   }
 
+  /**
+   * Returns the mastra instance for this workflow
+   */
   get mastra() {
     return this.#mastra;
   }
 
+  /**
+   * Returns the options for this workflow. These are the options that were passed to the workflow constructor. Contains the validateInputs and tracingPolicy options.
+   */
   get options() {
     return this.#options;
   }
 
+  /*@internal*/
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
     this.executionEngine.__registerMastra(mastra);
   }
 
+  /*@internal*/
   __registerPrimitives(p: MastraPrimitives) {
     if (p.telemetry) {
       this.__setTelemetry(p.telemetry);
@@ -639,14 +650,24 @@ export class Workflow<
     }
   }
 
+  /*@internal*/
   setStepFlow(stepFlow: StepFlowEntry<TEngineType>[]) {
     this.stepFlow = stepFlow;
   }
 
   /**
    * Adds a step to the workflow
-   * @param step The step to add to the workflow
+   * @param step The step or workflow to add to the workflow
    * @returns The workflow instance for chaining
+   *
+   * The input schema for the next step should match the output schema of the previous step.
+   * For cases where the schemas don't match, use the `map` function to transform the output to the expected schema.
+   * Steps added with `.then` run one after another in sequence.
+   *
+   * @example
+   * ```typescript
+   * workflow.then(step1).then(step2).then(myWorkflow).commit();
+   * ```
    */
   then<TStepId extends string, TSchemaOut extends z.ZodType<any>>(
     step: Step<TStepId, TPrevSchema, TSchemaOut, any, any, TEngineType>,
@@ -669,6 +690,23 @@ export class Workflow<
    * Adds a sleep step to the workflow
    * @param duration The duration to sleep for
    * @returns The workflow instance for chaining
+   *
+   * Duration can either be a number of milliseconds or a callback function that returns the number of milliseconds to sleep.
+   * The callback function function is similar to the execute function for steps, and receives the ouput from the previous step as inputData.
+   *
+   * Steps added with `.sleep` run one after another in sequence, but are paused for the specified duration.
+   *
+   * @example
+   * ```typescript
+   * workflow.then(step1).sleep(1000).then(step2).commit();
+   * ```
+   *
+   * @example
+   * ```typescript
+   * workflow.then(step1).sleep(async ({ inputData }) => {
+   *   return inputData.value * 1000;
+   * }).then(step2).commit();
+   * ```
    */
   sleep(duration: number | ExecuteFunction<z.infer<TPrevSchema>, number, any, any, TEngineType>) {
     const id = `sleep_${this.#mastra?.generateId() || randomUUID()}`;
@@ -699,6 +737,23 @@ export class Workflow<
    * Adds a sleep until step to the workflow
    * @param date The date to sleep until
    * @returns The workflow instance for chaining
+   *
+   * Date can either be a Date object or a callback function that returns a Date object.
+   * The callback function function is similar to the execute function for steps, and receives the ouput from the previous step as inputData.
+   *
+   * Steps added with `.sleepUntil` run one after another in sequence.
+   *
+   * @example
+   * ```typescript
+   * workflow.then(step1).sleepUntil(new Date(Date.now() + 5000)).then(step2).commit();
+   * ```
+   *
+   * @example
+   * ```typescript
+   * workflow.then(step1).sleepUntil(async ({ inputData }) => {
+   *   return new Date(Date.now() + inputData.value);
+   * }).then(step2).commit();
+   * ```
    */
   sleepUntil(date: Date | ExecuteFunction<z.infer<TPrevSchema>, Date, any, any, TEngineType>) {
     const id = `sleep_${this.#mastra?.generateId() || randomUUID()}`;
@@ -724,6 +779,22 @@ export class Workflow<
     return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema>;
   }
 
+  /**
+   * Adds a wait for event step to the workflow
+   * @param event The event to wait for
+   * @param step The step or workflow to resume when the event is received
+   * @returns The workflow instance for chaining
+   *
+   * Events can be sent to the workflow using `run.sendEvent()` method on the run. The workflow execution is halted until the event is received. The step passed to it is executed after the event is received.
+   * The behavior is similar to `sleepUntil` but for events instead of dates.
+   *
+   * Steps added with `.waitForEvent` run one after another in sequence.
+   *
+   * @example
+   * ```typescript
+   * workflow.then(step1).waitForEvent('my-event', step2).then(step3).commit();
+   * ```
+   */
   waitForEvent<TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodType<any>>(
     event: string,
     step: Step<TStepId, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
@@ -747,6 +818,53 @@ export class Workflow<
     return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
   }
 
+  /**
+   * Adds a mapping step to the workflow
+   * @param mappingConfig The mapping configuration
+   * @param stepOptions The options for the mapping step. Takes an optional `id` parameter to set the id of the mapping step.
+   * @returns The workflow instance for chaining
+   *
+   * The mappingConfig can be an object where the key is what you want to call the value, and the value is the definition of the mapping or where the value comes from.
+   *
+   * Mapping can be done using a step, a value, an initData, a runtimeContextPath, or a callback function.
+   *
+   * @example
+   * ```typescript
+   * workflow.then(step1).map({
+   *   result: {
+   *     step: step2,
+   *     path: 'result',
+   *   },
+   *   initData: {
+   *     initData: workflow,
+   *     path: 'result',
+   *   },
+   *   runtimeContextPath: {
+   *     runtimeContextPath: 'result',
+   *     schema: z.number(),
+   *   },
+   *   value: {
+   *     value: 42,
+   *     schema: z.number(),
+   *   },
+   *   callback: {
+   *     fn: async ({ inputData }) => {
+   *       return inputData.result;
+   *     },
+   *     schema: z.number(),
+   *   },
+   * }).then(step2).commit();
+   * ```
+   *
+   * The mappingConfig can also be a callback function that returns the object to use as input to the next step.
+   *
+   * @example
+   * ```typescript
+   * workflow.then(step1).map(async ({ inputData }) => {
+   *   return { input: inputData.result };
+   * }).then(step2).commit();
+   * ```
+   */
   map(
     mappingConfig:
       | {
@@ -877,6 +995,28 @@ export class Workflow<
     return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, MappedOutputSchema>;
   }
 
+  /**
+   * Adds a list of steps to run in parallel to the workflow
+   * @param steps The steps or workflows to run in parallel
+   * @returns The workflow instance for chaining
+   *
+   * Steps added with `.parallel` run in parallel.
+   *
+   * The inputSchema of all the steps in the parallel array should match the output schema of the previous step or the inputSchema of the workflow if there is no previous step.
+   *
+   * The next step receives the output of the parallel steps as an object where the key is the step id and the value is the step output.
+   *
+   * If there is a step after the parallel steps, it only runs after all the parallel steps have completed.
+   *
+   * If you want to change the shape of the output, you can use the `map` function to transform the output to the expected schema of the next step.
+   *
+   * @example
+   * ```typescript
+   * workflow.parallel([step1, step2, myWorkflow]).then(step3).commit();
+   * ```
+   *
+   */
+
   // TODO: make typing better here
   parallel<TParallelSteps extends Step<string, TPrevSchema, any, any, any, TEngineType>[]>(steps: TParallelSteps) {
     this.stepFlow.push({ type: 'parallel', steps: steps.map(step => ({ type: 'step', step: step as any })) });
@@ -911,6 +1051,32 @@ export class Workflow<
     >;
   }
 
+  /**
+   * Adds a list of steps to run in conditional branches to the workflow
+   * @param steps The steps or workflows to run in conditional branches
+   * @returns The workflow instance for chaining
+   *
+   * This is similar to `.parallel` but for conditional branches instead of parallel execution. Each item in the array is a tuple containing a condition function and a step to execute if the condition is true.
+   *
+   * Only the steps with truthy conditions are executed in parallel.
+   *
+   * The inputSchema of all the steps in the branch array should match the output schema of the previous step or the inputSchema of the workflow if there is no previous step.
+   *
+   * The output of the steps with truthy conditions is passed to the next step as an object where the key is the step id and the value is the step output.
+   *
+   * If there is a step after the branch steps, it only runs after all the branch steps have completed.
+   *
+   * If you want to change the shape of the output, you can use the `map` function to transform the output to the expected schema of the next step.
+   *
+   * @example
+   * ```typescript
+   * workflow.branch([
+   *   [async ({ inputData }) => inputData.value > 50, highValueStep],
+   *   [async ({ inputData }) => inputData.value <= 50, lowValueWorkflow],
+   * ]).then(finalStep).commit();
+   * ```
+   *
+   */
   // TODO: make typing better here
   branch<
     TBranchSteps extends Array<
@@ -967,6 +1133,25 @@ export class Workflow<
     >;
   }
 
+  /**
+   * Adds a loop to the workflow
+   * @param step The step or workflow to loop
+   * @param condition The condition that determines when to stop the loop
+   * @returns The workflow instance for chaining
+   *
+   * The inputSchema of the step should match the output schema of the previous step or the inputSchema of the workflow if there is no previous step.
+   *
+   * The inputSchema and outputSchema of the looped step has to be the same.
+   *
+   * The step will be executed repeatedly while the condition is true.
+   *
+   * The next step receives the last output from the looped step as its input.
+   *
+   * @example
+   * ```typescript
+   * workflow.dowhile(step1, async ({ inputData }) => inputData.value < 10).then(step2).commit();
+   * ```
+   */
   dowhile<TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodType<any>>(
     step: Step<TStepId, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
     condition: ExecuteFunction<z.infer<TSchemaOut>, any, any, any, TEngineType>,
@@ -994,6 +1179,25 @@ export class Workflow<
     return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
   }
 
+  /**
+   * Adds a loop to the workflow
+   * @param step The step or workflow to loop
+   * @param condition The condition that determines when to stop the loop
+   * @returns The workflow instance for chaining
+   *
+   * The inputSchema of the step should match the output schema of the previous step or the inputSchema of the workflow if there is no previous step.
+   *
+   * The inputSchema and outputSchema of the looped step has to be the same.
+   *
+   * The step will be executed repeatedly until the condition is true.
+   *
+   * The next step receives the last output from the looped step as its input.
+   *
+   * @example
+   * ```typescript
+   * workflow.dountil(step1, async ({ inputData }) => inputData.value >= 10).then(step2).commit();
+   * ```
+   */
   dountil<TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodType<any>>(
     step: Step<TStepId, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
     condition: ExecuteFunction<z.infer<TSchemaOut>, any, any, any, TEngineType>,
@@ -1021,6 +1225,28 @@ export class Workflow<
     return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
   }
 
+  /**
+   * Adds a foreach loop to the workflow
+   * @param step The step or workflow to loop
+   * @param opts Optional configuration for the loop
+   * @returns The workflow instance for chaining
+   *
+   * The output of the previous step must be an array with items that match the inputSchema of the step in the `foreach` method.
+   *
+   * If the inputSchema of the step is `z.object({ value: z.number() })`, then `foreach` will expect `z.array(z.object({ value: z.number() }))`.
+   *
+   * The step is executed for each item in the array in sequence one at a time.
+   *
+   * The next step receives an array of all the outputs from the looped step.
+   *
+   * For example, if the outputSchema of the step is `z.object({ result: z.number() })`, then the result of the `foreach` loop will be `z.array(z.object({ result: z.number() }))`.
+   *
+   * @example
+   * ```typescript
+   * workflow.then(step1).foreach(step2).then(step3).commit();
+   * ```
+   *
+   */
   foreach<
     TPrevIsArray extends TPrevSchema extends z.ZodArray<any> ? true : false,
     TStepInputSchema extends TPrevSchema extends z.ZodArray<infer TElement> ? TElement : never,
@@ -1050,6 +1276,7 @@ export class Workflow<
   }
 
   /**
+   * @internal
    * Builds the execution graph for this workflow
    * @returns The execution graph that can be used to execute the workflow
    */
@@ -1064,16 +1291,33 @@ export class Workflow<
    * Finalizes the workflow definition and prepares it for execution
    * This method should be called after all steps have been added to the workflow
    * @returns A built workflow instance ready for execution
+   *
+   * This method must be called after all steps have been added to the workflow.
+   *
+   * @example
+   * ```typescript
+   * workflow.then(step1).then(step2).then(step3).commit();
+   * ```
    */
   commit() {
     this.executionGraph = this.buildExecutionGraph();
     return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TOutput>;
   }
 
+  /**
+   * @internal
+   * Returns the step graph for this workflow
+   * @returns The step graph
+   */
   get stepGraph() {
     return this.stepFlow;
   }
 
+  /**
+   * @internal
+   * Returns the serialized step graph for this workflow
+   * @returns The serialized step graph
+   */
   get serializedStepGraph() {
     return this.serializedStepFlow;
   }
@@ -1104,6 +1348,15 @@ export class Workflow<
    * @param options.resourceId Optional resource ID to associate with this run
    * @param options.disableScorers Optional flag to disable scorers for this run
    * @returns A Run instance that can be used to execute the workflow
+   *
+   * @example
+   * ```typescript
+   * const run = await workflow.createRunAsync({
+   *   runId: '123',
+   *   resourceId: '456',
+   *   disableScorers: false,
+   * });
+   * ```
    */
   async createRunAsync(options?: {
     runId?: string;
@@ -1168,6 +1421,18 @@ export class Workflow<
     return run;
   }
 
+  /**
+   * Returns the scorers running in this workflow
+   * @param options Optional configuration for the scorers
+   * @param options.runtimeContext Optional runtime context for the scorers
+   * @returns The scorers running in this workflow
+   *
+   * @example
+   * ```typescript
+   * const scorers = await workflow.getScorers();
+   * console.log(scorers);
+   * ```
+   */
   async getScorers({
     runtimeContext = new RuntimeContext(),
   }: { runtimeContext?: RuntimeContext } = {}): Promise<MastraScorers> {
@@ -1196,8 +1461,14 @@ export class Workflow<
     return scorers;
   }
 
-  // This method should only be called internally for nested workflow execution, as well as from mastra server handlers
-  // To run a workflow use `.createRunAsync` and then `.start` or `.resume`
+  /**
+   * @internal
+   * Executes a workflow
+   * @returns The result of the workflow
+   *
+   * This method should only be called internally for nested workflow execution, as well as from mastra server handlers
+   * To run a workflow use `.createRunAsync` and then `.start` or `.resume`
+   */
   async execute({
     runId,
     inputData,
@@ -1302,6 +1573,29 @@ export class Workflow<
     return res.status === 'success' ? res.result : undefined;
   }
 
+  /**
+   * Returns the workflow runs for this workflow
+   * @param args Optional arguments for the workflow runs
+   * @param args.fromDate Optional date to filter the workflow runs from
+   * @param args.toDate Optional date to filter the workflow runs to
+   * @param args.limit Optional limit for the number of workflow runs
+   * @param args.offset Optional offset for the workflow runs
+   * @param args.resourceId Optional resource ID to filter the workflow runs by
+   * @returns The workflow runs for this workflow
+   *
+   * @example
+   * ```typescript
+   * const runs = await workflow.getWorkflowRuns({
+   *   fromDate: new Date('2021-01-01'),
+   *   toDate: new Date('2021-01-02'),
+   *   limit: 10,
+   *   offset: 0,
+   *   resourceId: '123',
+   * });
+   * console.log(runs);
+   * ```
+   */
+
   async getWorkflowRuns(args?: {
     fromDate?: Date;
     toDate?: Date;
@@ -1318,6 +1612,17 @@ export class Workflow<
     return storage.getWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
   }
 
+  /**
+   * Returns the workflow run by its ID
+   * @param runId The ID of the workflow run
+   * @returns The workflow run
+   *
+   * @example
+   * ```typescript
+   * const run = await workflow.getWorkflowRunById('123');
+   * console.log(run);
+   * ```
+   */
   async getWorkflowRunById(runId: string) {
     const storage = this.#mastra?.getStorage();
     if (!storage) {
@@ -1385,6 +1690,19 @@ export class Workflow<
 
     return finalSteps;
   }
+
+  /**
+   * Returns the execution result of a workflow run
+   * @param runId The ID of the workflow run
+   * @param withNestedWorkflows Whether to include the execution result of nested workflows. Default is true.
+   * @returns The execution result of the workflow run
+   *
+   * @example
+   * ```typescript
+   * const result = await workflow.getWorkflowRunExecutionResult('123', true);
+   * console.log(result);
+   * ```
+   */
 
   async getWorkflowRunExecutionResult(
     runId: string,
