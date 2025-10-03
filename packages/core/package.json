@@ -213,7 +213,7 @@
     "ai-v5": "npm:ai@5.0.44",
     "date-fns": "^3.6.0",
     "dotenv": "^16.6.1",
-    "hono": "^4.9.7",
+    "hono": "^4.9.9",
     "hono-openapi": "^0.4.8",
     "js-tiktoken": "^1.0.20",
     "json-schema": "^0.4.0",
