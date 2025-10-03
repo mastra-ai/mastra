@@ -66,8 +66,8 @@ export const testWeatherTool = createTool({
     const { city } = context;
     const unit = runtimeContext.get("temperature-unit") as WeatherRuntimeContext["temperature-unit"];
 
-    const { city } = context;
     const response = await fetch(`https://weather.service?city=${city}`);
+    const { temperature, conditions } = await response.json();
 
     return {
       metric: unit === "celsius" ? "°C" : "°F",
