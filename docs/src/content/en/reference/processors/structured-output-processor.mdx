@@ -1,0 +1,139 @@
+---
+title: "Reference: Structured Output Processor | Processors | Mastra Docs"
+description: "Documentation for the StructuredOutputProcessor in Mastra, which ensures AI responses follow a specific structured format."
+---
+
+# StructuredOutputProcessor
+
+The `StructuredOutputProcessor` is an **output processor** that transforms unstructured agent output into structured JSON using an internal structuring agent and provides real-time streaming support. This processor helps ensure consistent data formats by validating output against Zod schemas, providing configurable error handling strategies, and enabling real-time partial JSON parsing during streaming.
+
+## Usage example
+
+```typescript copy
+import { StructuredOutputProcessor } from "@mastra/core/processors";
+import { z } from "zod";
+
+const processor = new StructuredOutputProcessor({
+  schema: z.object({
+    sentiment: z.enum(["positive", "negative", "neutral"]),
+    confidence: z.number()
+  }),
+  model: openai("gpt-4.1-nano"),
+  errorStrategy: "warn"
+});
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Options",
+      description: "Configuration options for structured output processing",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "schema",
+      type: "OUTPUT",
+      description: "Zod schema to validate the output against",
+      isOptional: false,
+    },
+    {
+      name: "model",
+      type: "MastraLanguageModel",
+      description: "Model to use for the internal structuring agent. If not provided, falls back to the agent's model",
+      isOptional: true,
+      default: "undefined",
+    },
+    {
+      name: "instructions",
+      type: "string",
+      description: "Custom instructions for the structuring agent. If not provided, will generate instructions based on the schema",
+      isOptional: true,
+      default: "undefined",
+    },
+    {
+      name: "errorStrategy",
+      type: "'strict' | 'warn' | 'fallback'",
+      description: "Strategy when schema validation fails: 'strict' throws errors, 'warn' logs warnings but allows through, 'fallback' uses fallback value",
+      isOptional: true,
+      default: "'strict'",
+    },
+    {
+      name: "fallbackValue",
+      type: "InferSchemaOutput<OUTPUT>",
+      description: "Fallback value to use when errorStrategy is 'fallback' and schema validation fails",
+      isOptional: true,
+      default: "undefined (required when errorStrategy is 'fallback')",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "Processor name set to 'structured-output'",
+      isOptional: false,
+    },
+    {
+      name: "schema",
+      type: "OUTPUT",
+      description: "The Zod schema used for validation",
+      isOptional: false,
+    },
+    {
+      name: "processOutputStream",
+      type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: { controller: TransformStreamDefaultController<ChunkType<OUTPUT>> }; abort: (reason?: string) => never }) => Promise<ChunkType | null | undefined>",
+      description: "Processes streaming output parts to transform unstructured content into structured JSON",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Extended usage example
+
+```typescript filename="src/mastra/agents/structured-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { StructuredOutputProcessor } from "@mastra/core/processors";
+import { z } from "zod";
+
+export const agent = new Agent({
+  name: "structured-agent",
+  instructions: "You are a helpful assistant",
+  model: openai("gpt-4o-mini"),
+  outputProcessors: [
+    new StructuredOutputProcessor({
+      schema: z.object({
+        sentiment: z.enum(["positive", "negative", "neutral"]),
+        confidence: z.number().min(0).max(1),
+        reasoning: z.string()
+      }),
+      model: openai("gpt-4.1-nano"),
+      instructions: "Analyze the sentiment of the input text and provide reasoning for your classification",
+      errorStrategy: "fallback",
+      fallbackValue: {
+        sentiment: "neutral",
+        confidence: 0.5,
+        reasoning: "Unable to determine sentiment"
+      }
+    })
+  ]
+});
+```
+
+## Related
+
+- [Output Processors](/docs/agents/output-processors)
