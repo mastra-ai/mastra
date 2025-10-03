@@ -1,66 +1,32 @@
 ---
-title: "Reference: Turbopuffer Vector Store | Vector Databases | RAG | Mastra Docs"
-description: Documentation for integrating Turbopuffer with Mastra, a high-performance vector database for efficient similarity search.
+title: "Reference: Astra Vector Store | Vector Databases | Mastra Docs"
+description: Documentation for the AstraVector class in Mastra, which provides vector search using DataStax Astra DB.
 ---
 
-# Turbopuffer Vector Store
+# Astra Vector Store
 
-The TurbopufferVector class provides vector search using [Turbopuffer](https://turbopuffer.com/), a high-performance vector database optimized for RAG applications. Turbopuffer offers fast vector similarity search with advanced filtering capabilities and efficient storage management.
+The AstraVector class provides vector search using [DataStax Astra DB](https://www.datastax.com/products/datastax-astra), a cloud-native, serverless database built on Apache Cassandra.
+It provides vector search capabilities with enterprise-grade scalability and high availability.
 
 ## Constructor Options
 
 <PropertiesTable
   content={[
     {
-      name: "apiKey",
+      name: "token",
       type: "string",
-      description: "The API key to authenticate with Turbopuffer",
+      description: "Astra DB API token",
     },
     {
-      name: "baseUrl",
+      name: "endpoint",
+      type: "string",
+      description: "Astra DB API endpoint",
+    },
+    {
+      name: "keyspace",
       type: "string",
       isOptional: true,
-      defaultValue: "https://api.turbopuffer.com",
-      description: "The base URL for the Turbopuffer API",
-    },
-    {
-      name: "connectTimeout",
-      type: "number",
-      isOptional: true,
-      defaultValue: "10000",
-      description:
-        "The timeout to establish a connection, in ms. Only applicable in Node and Deno.",
-    },
-    {
-      name: "connectionIdleTimeout",
-      type: "number",
-      isOptional: true,
-      defaultValue: "60000",
-      description:
-        "The socket idle timeout, in ms. Only applicable in Node and Deno.",
-    },
-    {
-      name: "warmConnections",
-      type: "number",
-      isOptional: true,
-      defaultValue: "0",
-      description:
-        "The number of connections to open initially when creating a new client.",
-    },
-    {
-      name: "compression",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "true",
-      description:
-        "Whether to compress requests and accept compressed responses.",
-    },
-    {
-      name: "schemaConfigForIndex",
-      type: "function",
-      isOptional: true,
-      description:
-        "A callback function that takes an index name and returns a config object for that index. This allows you to define explicit schemas per index.",
+      description: "Optional keyspace name",
     },
   ]}
 />
@@ -86,7 +52,8 @@ The TurbopufferVector class provides vector search using [Turbopuffer](https://t
       type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
       defaultValue: "cosine",
-      description: "Distance metric for similarity search",
+      description:
+        "Distance metric for similarity search (maps to dot_product for dotproduct)",
     },
   ]}
 />
@@ -95,6 +62,11 @@ The TurbopufferVector class provides vector search using [Turbopuffer](https://t
 
 <PropertiesTable
   content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to upsert into",
+    },
     {
       name: "vectors",
       type: "number[][]",
@@ -190,6 +162,59 @@ interface IndexStats {
   ]}
 />
 
+### updateVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector to update",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "Update object containing vector and/or metadata changes",
+      properties: [
+        {
+          name: "vector",
+          type: "number[]",
+          isOptional: true,
+          description: "New vector values",
+        },
+        {
+          name: "metadata",
+          type: "Record<string, any>",
+          isOptional: true,
+          description: "New metadata values",
+        },
+      ],
+    },
+  ]}
+/>
+
+### deleteVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector to delete",
+    },
+  ]}
+/>
+
 ## Response Types
 
 Query results are returned in this format:
@@ -201,29 +226,6 @@ interface QueryResult {
   metadata: Record<string, any>;
   vector?: number[]; // Only included if includeVector is true
 }
-```
-
-## Schema Configuration
-
-The `schemaConfigForIndex` option allows you to define explicit schemas for different indexes:
-
-```typescript copy
-schemaConfigForIndex: (indexName: string) => {
-  // Mastra's default embedding model and index for memory messages:
-  if (indexName === "memory_messages_384") {
-    return {
-      dimensions: 384,
-      schema: {
-        thread_id: {
-          type: "string",
-          filterable: true,
-        },
-      },
-    };
-  } else {
-    throw new Error(`TODO: add schema for index: ${indexName}`);
-  }
-};
 ```
 
 ## Error Handling
@@ -244,6 +246,13 @@ try {
 }
 ```
 
+## Environment Variables
+
+Required environment variables:
+
+- `ASTRA_DB_TOKEN`: Your Astra DB API token
+- `ASTRA_DB_ENDPOINT`: Your Astra DB API endpoint
+
 ## Related
 
-- [Metadata Filters](./metadata-filters)
+- [Metadata Filters](../rag/metadata-filters)

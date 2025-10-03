@@ -1,25 +1,33 @@
 ---
-title: "Reference: Cloudflare Vector Store | Vector Databases | RAG | Mastra Docs"
-description: Documentation for the CloudflareVector class in Mastra, which provides vector search using Cloudflare Vectorize.
+title: "Reference: Qdrant Vector Store | Vector Databases | Mastra Docs"
+description: Documentation for integrating Qdrant with Mastra, a vector similarity search engine for managing vectors and payloads.
 ---
 
-# Cloudflare Vector Store
+# Qdrant Vector Store
 
-The CloudflareVector class provides vector search using [Cloudflare Vectorize](https://developers.cloudflare.com/vectorize/), a vector database service integrated with Cloudflare's edge network.
+The QdrantVector class provides vector search using [Qdrant](https://qdrant.tech/), a vector similarity search engine.
+It provides a production-ready service with a convenient API to store, search, and manage vectors with additional payload and extended filtering support.
 
 ## Constructor Options
 
 <PropertiesTable
   content={[
     {
-      name: "accountId",
+      name: "url",
       type: "string",
-      description: "Cloudflare account ID",
+      description:
+        "REST URL of the Qdrant instance. Eg. https://xyz-example.eu-central.aws.cloud.qdrant.io:6333",
     },
     {
-      name: "apiToken",
+      name: "apiKey",
       type: "string",
-      description: "Cloudflare API token with Vectorize permissions",
+      description: "Optional Qdrant API key",
+    },
+    {
+      name: "https",
+      type: "boolean",
+      description:
+        "Whether to use TLS when setting up the connection. Recommended.",
     },
   ]}
 />
@@ -45,8 +53,7 @@ The CloudflareVector class provides vector search using [Cloudflare Vectorize](h
       type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
       defaultValue: "cosine",
-      description:
-        "Distance metric for similarity search (dotproduct maps to dot-product)",
+      description: "Distance metric for similarity search",
     },
   ]}
 />
@@ -55,11 +62,6 @@ The CloudflareVector class provides vector search using [Cloudflare Vectorize](h
 
 <PropertiesTable
   content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to upsert into",
-    },
     {
       name: "vectors",
       type: "number[][]",
@@ -155,78 +157,19 @@ interface IndexStats {
   ]}
 />
 
-### createMetadataIndex()
-
-Creates an index on a metadata field to enable filtering.
-
-<PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the metadata field",
-    },
-    {
-      name: "propertyName",
-      type: "string",
-      description: "Name of the metadata field to index",
-    },
-    {
-      name: "indexType",
-      type: "'string' | 'number' | 'boolean'",
-      description: "Type of the metadata field",
-    },
-  ]}
-/>
-
-### deleteMetadataIndex()
-
-Removes an index from a metadata field.
-
-<PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the metadata field",
-    },
-    {
-      name: "propertyName",
-      type: "string",
-      description: "Name of the metadata field to remove indexing from",
-    },
-  ]}
-/>
-
-### listMetadataIndexes()
-
-Lists all metadata field indexes for an index.
-
-<PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to list metadata indexes for",
-    },
-  ]}
-/>
-
 ### updateVector()
 
-Updates a vector or metadata for a specific ID within an index.
-
 <PropertiesTable
   content={[
     {
       name: "indexName",
       type: "string",
-      description: "Name of the index containing the ID to update",
+      description: "Name of the index to update",
     },
     {
       name: "id",
       type: "string",
-      description: "Unique identifier of the vector or metadata to update",
+      description: "ID of the vector to update",
     },
     {
       name: "update",
@@ -236,24 +179,26 @@ Updates a vector or metadata for a specific ID within an index.
   ]}
 />
 
-### deleteVector()
+Updates a vector and/or its metadata in the specified index. If both vector and metadata are provided, both will be updated. If only one is provided, only that will be updated.
 
-Deletes a vector and its associated metadata for a specific ID within an index.
+### deleteVector()
 
 <PropertiesTable
   content={[
     {
       name: "indexName",
       type: "string",
-      description: "Name of the index containing the ID to delete",
+      description: "Name of the index from which to delete the vector",
     },
     {
       name: "id",
       type: "string",
-      description: "Unique identifier of the vector and metadata to delete",
+      description: "ID of the vector to delete",
     },
   ]}
 />
+
+Deletes a vector from the specified index by its ID.
 
 ## Response Types
 
@@ -264,7 +209,7 @@ interface QueryResult {
   id: string;
   score: number;
   metadata: Record<string, any>;
-  vector?: number[];
+  vector?: number[]; // Only included if includeVector is true
 }
 ```
 
@@ -286,13 +231,6 @@ try {
 }
 ```
 
-## Environment Variables
-
-Required environment variables:
-
-- `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare account ID
-- `CLOUDFLARE_API_TOKEN`: Your Cloudflare API token with Vectorize permissions
-
 ## Related
 
-- [Metadata Filters](./metadata-filters)
+- [Metadata Filters](../rag/metadata-filters)

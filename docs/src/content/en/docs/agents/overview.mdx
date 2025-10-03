@@ -192,7 +192,7 @@ console.log(response.object);
 
 #### Agents with tools
 
-To generate structured output with agents that use tools, use the `experimental_output` property:
+To generate structured output with agents that use tools, use the `output` property:
 
 ```typescript {6} showLineNumbers copy
 import { z } from "zod";
@@ -200,7 +200,7 @@ import { z } from "zod";
 const response = await testAgent.generate(
   // ...
   {
-    experimental_output: z.object({
+    output: z.object({
       summary: z.string(),
       keywords: z.array(z.string())
     })

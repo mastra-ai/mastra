@@ -1,33 +1,66 @@
 ---
-title: "Reference: Qdrant Vector Store | Vector Databases | RAG | Mastra Docs"
-description: Documentation for integrating Qdrant with Mastra, a vector similarity search engine for managing vectors and payloads.
+title: "Reference: Turbopuffer Vector Store | Vector Databases | Mastra Docs"
+description: Documentation for integrating Turbopuffer with Mastra, a high-performance vector database for efficient similarity search.
 ---
 
-# Qdrant Vector Store
+# Turbopuffer Vector Store
 
-The QdrantVector class provides vector search using [Qdrant](https://qdrant.tech/), a vector similarity search engine.
-It provides a production-ready service with a convenient API to store, search, and manage vectors with additional payload and extended filtering support.
+The TurbopufferVector class provides vector search using [Turbopuffer](https://turbopuffer.com/), a high-performance vector database optimized for RAG applications. Turbopuffer offers fast vector similarity search with advanced filtering capabilities and efficient storage management.
 
 ## Constructor Options
 
 <PropertiesTable
   content={[
     {
-      name: "url",
-      type: "string",
-      description:
-        "REST URL of the Qdrant instance. Eg. https://xyz-example.eu-central.aws.cloud.qdrant.io:6333",
-    },
-    {
       name: "apiKey",
       type: "string",
-      description: "Optional Qdrant API key",
+      description: "The API key to authenticate with Turbopuffer",
     },
     {
-      name: "https",
-      type: "boolean",
+      name: "baseUrl",
+      type: "string",
+      isOptional: true,
+      defaultValue: "https://api.turbopuffer.com",
+      description: "The base URL for the Turbopuffer API",
+    },
+    {
+      name: "connectTimeout",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10000",
       description:
-        "Whether to use TLS when setting up the connection. Recommended.",
+        "The timeout to establish a connection, in ms. Only applicable in Node and Deno.",
+    },
+    {
+      name: "connectionIdleTimeout",
+      type: "number",
+      isOptional: true,
+      defaultValue: "60000",
+      description:
+        "The socket idle timeout, in ms. Only applicable in Node and Deno.",
+    },
+    {
+      name: "warmConnections",
+      type: "number",
+      isOptional: true,
+      defaultValue: "0",
+      description:
+        "The number of connections to open initially when creating a new client.",
+    },
+    {
+      name: "compression",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description:
+        "Whether to compress requests and accept compressed responses.",
+    },
+    {
+      name: "schemaConfigForIndex",
+      type: "function",
+      isOptional: true,
+      description:
+        "A callback function that takes an index name and returns a config object for that index. This allows you to define explicit schemas per index.",
     },
   ]}
 />
@@ -157,49 +190,6 @@ interface IndexStats {
   ]}
 />
 
-### updateVector()
-
-<PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to update",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "ID of the vector to update",
-    },
-    {
-      name: "update",
-      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
-      description: "Object containing the vector and/or metadata to update",
-    },
-  ]}
-/>
-
-Updates a vector and/or its metadata in the specified index. If both vector and metadata are provided, both will be updated. If only one is provided, only that will be updated.
-
-### deleteVector()
-
-<PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index from which to delete the vector",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "ID of the vector to delete",
-    },
-  ]}
-/>
-
-Deletes a vector from the specified index by its ID.
-
 ## Response Types
 
 Query results are returned in this format:
@@ -211,6 +201,29 @@ interface QueryResult {
   metadata: Record<string, any>;
   vector?: number[]; // Only included if includeVector is true
 }
+```
+
+## Schema Configuration
+
+The `schemaConfigForIndex` option allows you to define explicit schemas for different indexes:
+
+```typescript copy
+schemaConfigForIndex: (indexName: string) => {
+  // Mastra's default embedding model and index for memory messages:
+  if (indexName === "memory_messages_384") {
+    return {
+      dimensions: 384,
+      schema: {
+        thread_id: {
+          type: "string",
+          filterable: true,
+        },
+      },
+    };
+  } else {
+    throw new Error(`TODO: add schema for index: ${indexName}`);
+  }
+};
 ```
 
 ## Error Handling
@@ -233,4 +246,4 @@ try {
 
 ## Related
 
-- [Metadata Filters](./metadata-filters)
+- [Metadata Filters](../rag/metadata-filters)

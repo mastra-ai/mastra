@@ -1,32 +1,25 @@
 ---
-title: "Reference: Astra Vector Store | Vector Databases | RAG | Mastra Docs"
-description: Documentation for the AstraVector class in Mastra, which provides vector search using DataStax Astra DB.
+title: "Reference: Cloudflare Vector Store | Vector Databases | Mastra Docs"
+description: Documentation for the CloudflareVector class in Mastra, which provides vector search using Cloudflare Vectorize.
 ---
 
-# Astra Vector Store
+# Cloudflare Vector Store
 
-The AstraVector class provides vector search using [DataStax Astra DB](https://www.datastax.com/products/datastax-astra), a cloud-native, serverless database built on Apache Cassandra.
-It provides vector search capabilities with enterprise-grade scalability and high availability.
+The CloudflareVector class provides vector search using [Cloudflare Vectorize](https://developers.cloudflare.com/vectorize/), a vector database service integrated with Cloudflare's edge network.
 
 ## Constructor Options
 
 <PropertiesTable
   content={[
     {
-      name: "token",
+      name: "accountId",
       type: "string",
-      description: "Astra DB API token",
+      description: "Cloudflare account ID",
     },
     {
-      name: "endpoint",
+      name: "apiToken",
       type: "string",
-      description: "Astra DB API endpoint",
-    },
-    {
-      name: "keyspace",
-      type: "string",
-      isOptional: true,
-      description: "Optional keyspace name",
+      description: "Cloudflare API token with Vectorize permissions",
     },
   ]}
 />
@@ -53,7 +46,7 @@ It provides vector search capabilities with enterprise-grade scalability and hig
       isOptional: true,
       defaultValue: "cosine",
       description:
-        "Distance metric for similarity search (maps to dot_product for dotproduct)",
+        "Distance metric for similarity search (dotproduct maps to dot-product)",
     },
   ]}
 />
@@ -162,55 +155,102 @@ interface IndexStats {
   ]}
 />
 
-### updateVector()
+### createMetadataIndex()
+
+Creates an index on a metadata field to enable filtering.
 
 <PropertiesTable
   content={[
     {
       name: "indexName",
       type: "string",
-      description: "Name of the index containing the vector",
+      description: "Name of the index containing the metadata field",
+    },
+    {
+      name: "propertyName",
+      type: "string",
+      description: "Name of the metadata field to index",
+    },
+    {
+      name: "indexType",
+      type: "'string' | 'number' | 'boolean'",
+      description: "Type of the metadata field",
+    },
+  ]}
+/>
+
+### deleteMetadataIndex()
+
+Removes an index from a metadata field.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the metadata field",
+    },
+    {
+      name: "propertyName",
+      type: "string",
+      description: "Name of the metadata field to remove indexing from",
+    },
+  ]}
+/>
+
+### listMetadataIndexes()
+
+Lists all metadata field indexes for an index.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to list metadata indexes for",
+    },
+  ]}
+/>
+
+### updateVector()
+
+Updates a vector or metadata for a specific ID within an index.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the ID to update",
     },
     {
       name: "id",
       type: "string",
-      description: "ID of the vector to update",
+      description: "Unique identifier of the vector or metadata to update",
     },
     {
       name: "update",
-      type: "object",
-      description: "Update object containing vector and/or metadata changes",
-      properties: [
-        {
-          name: "vector",
-          type: "number[]",
-          isOptional: true,
-          description: "New vector values",
-        },
-        {
-          name: "metadata",
-          type: "Record<string, any>",
-          isOptional: true,
-          description: "New metadata values",
-        },
-      ],
+      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
+      description: "Object containing the vector and/or metadata to update",
     },
   ]}
 />
 
 ### deleteVector()
 
+Deletes a vector and its associated metadata for a specific ID within an index.
+
 <PropertiesTable
   content={[
     {
       name: "indexName",
       type: "string",
-      description: "Name of the index containing the vector",
+      description: "Name of the index containing the ID to delete",
     },
     {
       name: "id",
       type: "string",
-      description: "ID of the vector to delete",
+      description: "Unique identifier of the vector and metadata to delete",
     },
   ]}
 />
@@ -224,7 +264,7 @@ interface QueryResult {
   id: string;
   score: number;
   metadata: Record<string, any>;
-  vector?: number[]; // Only included if includeVector is true
+  vector?: number[];
 }
 ```
 
@@ -250,9 +290,9 @@ try {
 
 Required environment variables:
 
-- `ASTRA_DB_TOKEN`: Your Astra DB API token
-- `ASTRA_DB_ENDPOINT`: Your Astra DB API endpoint
+- `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare account ID
+- `CLOUDFLARE_API_TOKEN`: Your Cloudflare API token with Vectorize permissions
 
 ## Related
 
-- [Metadata Filters](./metadata-filters)
+- [Metadata Filters](../rag/metadata-filters)
