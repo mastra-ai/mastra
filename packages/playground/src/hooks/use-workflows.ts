@@ -185,6 +185,7 @@ export const useStreamWorkflow = () => {
 
   // Cleanup on unmount
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       if (readerRef.current) {
