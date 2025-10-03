@@ -455,6 +455,7 @@ export type WorkflowConfig<
   description?: string | undefined;
   inputSchema: TInput;
   outputSchema: TOutput;
+  /** @internal */
   executionEngine?: ExecutionEngine;
   steps?: TSteps;
   retryConfig?: {
