@@ -465,3 +465,22 @@ export type WorkflowConfig<
   };
   options?: WorkflowOptions;
 };
+
+/**
+ * Utility type to ensure that TStepState is a subset of TState.
+ * This means that all properties in TStepState must exist in TState with compatible types.
+ */
+export type SubsetOf<TStepState extends z.ZodObject<any>, TState extends z.ZodObject<any>> =
+  TStepState extends z.ZodObject<infer TStepShape>
+    ? TState extends z.ZodObject<infer TStateShape>
+      ? {
+          [K in keyof TStepShape]: K extends keyof TStateShape
+            ? TStepShape[K] extends TStateShape[K]
+              ? TStepShape[K]
+              : never
+            : never;
+        } extends TStepShape
+        ? TStepState
+        : never
+      : never
+    : never;

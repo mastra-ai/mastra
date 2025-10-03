@@ -35,6 +35,7 @@ import type {
   StepsRecord,
   StepWithComponent,
   StreamEvent,
+  SubsetOf,
   WatchEvent,
   WorkflowConfig,
   WorkflowOptions,
@@ -80,6 +81,7 @@ type StepParams<
   outputSchema: TStepOutput;
   resumeSchema?: TResumeSchema;
   suspendSchema?: TSuspendSchema;
+  stateSchema?: TState;
   retries?: number;
   scorers?: DynamicArgument<MastraScorers>;
   execute: ExecuteFunction<
@@ -127,21 +129,20 @@ export function createStep<
 
 export function createStep<
   TStepId extends string,
-  TState extends z.ZodObject<any>,
   TStepInput extends z.ZodObject<{ prompt: z.ZodString }>,
   TStepOutput extends z.ZodObject<{ text: z.ZodString }>,
   TResumeSchema extends z.ZodType<any>,
   TSuspendSchema extends z.ZodType<any>,
 >(
   agent: Agent<TStepId, any, any>,
-): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType>;
+): Step<TStepId, any, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType>;
 
 export function createStep<
   TSchemaIn extends z.ZodType<any>,
   TSuspendSchema extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
   TSchemaOut extends z.ZodType<any>,
-  TContext extends ToolExecutionContext<TSchemaIn>,
+  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema>,
 >(
   tool: ToolStep<TSchemaIn, TSuspendSchema, TResumeSchema, TSchemaOut, TContext>,
 ): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, DefaultEngineType>;
@@ -288,6 +289,7 @@ export function createStep<
     id: params.id,
     description: params.description,
     inputSchema: params.inputSchema,
+    stateSchema: params.stateSchema,
     outputSchema: params.outputSchema,
     resumeSchema: params.resumeSchema,
     suspendSchema: params.suspendSchema,
@@ -479,10 +481,11 @@ export class Workflow<
    * @param step The step to add to the workflow
    * @returns The workflow instance for chaining
    */
-  then<TStepId extends string, TSchemaOut extends z.ZodType<any>>(
-    // TODO: better type check for state schema
-    step: Step<TStepId, any, TPrevSchema, TSchemaOut, any, any, TEngineType>,
-  ) {
+  then<
+    TStepId extends string,
+    TStepState extends SubsetOf<z.ZodObject<any>, TState>,
+    TSchemaOut extends z.ZodType<any>,
+  >(step: Step<TStepId, TStepState, TPrevSchema, TSchemaOut, any, any, TEngineType>) {
     this.stepFlow.push({ type: 'step', step: step as any });
     this.serializedStepFlow.push({
       type: 'step',
