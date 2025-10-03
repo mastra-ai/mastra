@@ -194,7 +194,7 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
         </div>
       </MainContentLayout>
       <ScoreDialog
-        scorer={scorer?.scorer}
+        scorerName={scorer?.scorer?.config?.name}
         score={scores.find(s => s.id === selectedScoreId)!}
         isOpen={dialogIsOpen}
         onClose={() => setDialogIsOpen(false)}

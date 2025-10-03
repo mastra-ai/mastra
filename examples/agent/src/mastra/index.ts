@@ -13,11 +13,18 @@ const storage = new LibSQLStore({
   url: 'file:./mastra.db',
 });
 
-const testScorer = createScorer({
-  name: 'scorer1',
-  description: 'Scorer 1',
+const myFirstTestScorer = createScorer({
+  name: 'My First Test Scorer',
+  description: 'This is my first test scorer, it always returns 1, not very useful.',
 }).generateScore(() => {
   return 1;
+});
+
+const mySecondTestScorer = createScorer({
+  name: 'My Second Scorer',
+  description: 'This is my second test scorer, it always returns 0.5, no matter what.',
+}).generateScore(() => {
+  return 0.5;
 });
 
 export const mastra = new Mastra({
@@ -49,7 +56,8 @@ export const mastra = new Mastra({
     },
   ],
   scorers: {
-    testScorer,
+    myFirstTestScorer: myFirstTestScorer,
+    mySecondTestScorer: mySecondTestScorer,
   },
   telemetry: {
     enabled: false,

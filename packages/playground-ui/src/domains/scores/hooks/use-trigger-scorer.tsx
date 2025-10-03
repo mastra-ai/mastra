@@ -20,12 +20,12 @@ export const useTriggerScorer = (onScorerTriggered: (scorerName: string, traceId
 
       return response;
     },
-    onSuccess: (_, variables) => {
-      toast.success('Scorer triggered successfully');
-      onScorerTriggered(variables.scorerName, variables.traceId, variables.spanId);
-    },
-    onError: () => {
-      toast.error('Error triggering scorer');
-    },
+    // onSuccess: (_, variables) => {
+    //   toast.success('Scorer triggered successfully');
+    //   onScorerTriggered(variables.scorerName, variables.traceId, variables.spanId);
+    // },
+    // onError: () => {
+    //   toast.error('Error triggering scorer');
+    // },
   });
 };

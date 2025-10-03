@@ -1,11 +1,11 @@
 import { Dropdown } from '@/components/ui/dropdown-menu';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons';
-import { ChevronDown, GaugeIcon } from 'lucide-react';
+import { Button } from '@/components/ui/elements/buttons';
+import { InfoIcon } from 'lucide-react';
 import { useTriggerScorer } from '../hooks/use-trigger-scorer';
-import Spinner from '@/components/ui/spinner';
 import { AISpanRecord } from '@mastra/core';
+import { Notification, SelectField, TextAndIcon } from '@/components/ui/elements';
+import { useState } from 'react';
 
 export interface ScorersDropdownProps {
   trace: AISpanRecord;
@@ -16,7 +16,8 @@ export interface ScorersDropdownProps {
 
 export const ScorersDropdown = ({ trace, spanId, onScorerTriggered, entityType }: ScorersDropdownProps) => {
   const { data: scorers = {}, isLoading } = useScorers();
-  const { mutate: triggerScorer, isPending } = useTriggerScorer(onScorerTriggered);
+  const [selectedScorer, setSelectedScorer] = useState<string | null>(null);
+  const { mutate: triggerScorer, isPending, isSuccess, isError, error } = useTriggerScorer(onScorerTriggered);
 
   let scorerList = Object.entries(scorers)
     .map(([key, scorer]) => ({
@@ -35,35 +36,46 @@ export const ScorersDropdown = ({ trace, spanId, onScorerTriggered, entityType }
 
   const isWaiting = isPending || isLoading;
 
+  const handleStartScoring = () => {
+    if (selectedScorer) {
+      triggerScorer({ scorerName: selectedScorer, traceId: trace.traceId, spanId });
+      //  setSelectedScorer(null);
+    }
+  };
+
+  const selectedScorerDescription = scorerList.find(s => s.name === selectedScorer)?.description || '';
+
   return (
-    <Dropdown>
-      <Dropdown.Trigger asChild>
-        <Button variant="light" disabled={isWaiting}>
-          {isWaiting ? (
-            <Icon>
-              <Spinner />
-            </Icon>
-          ) : (
-            <Icon>
-              <GaugeIcon />
-            </Icon>
+    <div>
+      <div className="grid grid-cols-[3fr_1fr] gap-[1rem] items-start">
+        <div className="grid gap-[0.5rem]">
+          <SelectField
+            name={'select-scorer'}
+            placeholder="Select a scorer..."
+            options={scorerList.map(scorer => ({ label: scorer.name, value: scorer.name }))}
+            onValueChange={val => {
+              setSelectedScorer(val);
+            }}
+            value={selectedScorer || ''}
+            className="min-w-[20rem]"
+            disabled={isWaiting}
+          />
+          {selectedScorerDescription && (
+            <TextAndIcon className="text-icon3">
+              <InfoIcon /> {selectedScorerDescription}
+            </TextAndIcon>
           )}
-          Run scorer
-          <Icon>
-            <ChevronDown />
-          </Icon>
+        </div>
+
+        <Button disabled={!selectedScorer || isWaiting} onClick={handleStartScoring}>
+          {isPending ? 'Starting...' : 'Start Scoring'}
         </Button>
-      </Dropdown.Trigger>
-      <Dropdown.Content>
-        {scorerList.map(scorer => (
-          <Dropdown.Item
-            key={scorer.id}
-            onClick={() => triggerScorer({ scorerName: scorer.name, traceId: trace.traceId, spanId })}
-          >
-            <span>{scorer.name}</span>
-          </Dropdown.Item>
-        ))}
-      </Dropdown.Content>
-    </Dropdown>
+      </div>
+
+      <Notification isVisible={isSuccess} className="mt-[1rem]">
+        <InfoIcon /> Scorer triggered! When finished successfully, it will appear in the list below. It could take a
+        moment.
+      </Notification>
+    </div>
   );
 };

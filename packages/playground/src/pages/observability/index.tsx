@@ -46,6 +46,8 @@ export default function Observability() {
 
   const traceId = searchParams.get('traceId');
   const spanId = searchParams.get('spanId');
+  const spanTab = searchParams.get('tab');
+  const scoreId = searchParams.get('scoreId');
 
   const {
     data: aiTraces = [],
@@ -211,9 +213,14 @@ export default function Observability() {
         traceSpans={aiTrace?.spans}
         traceId={selectedTraceId}
         initialSpanId={spanId || undefined}
+        initialSpanTab={spanTab === 'scores' ? 'scores' : 'details'}
+        initialScoreId={scoreId || undefined}
         traceDetails={aiTraces.find(t => t.traceId === selectedTraceId)}
         isOpen={dialogIsOpen}
-        onClose={() => setDialogIsOpen(false)}
+        onClose={() => {
+          navigate(`/observability`);
+          setDialogIsOpen(false);
+        }}
         onNext={toNextTrace}
         onPrevious={toPreviousTrace}
         isLoadingSpans={isLoadingAiTrace}
