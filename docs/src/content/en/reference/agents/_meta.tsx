@@ -3,7 +3,8 @@ import { Tag } from "@/components/tag";
 const meta = {
   agent: "Agent",
   generate: ".generate()",
-  generateVNext: <Tag text="experimental">.generateVNext()</Tag>,
+  generateLegacy: ".generateLegacy() (Legacy)",
+  "migration-guide": "Migration Guide",
   network: <Tag text="experimental">.network()</Tag>,
   listAgents: ".listAgents()",
   getWorkflows: ".getWorkflows()",
@@ -17,7 +18,6 @@ const meta = {
   getLLM: ".getLLM()",
   getDefaultGenerateOptions: ".getDefaultGenerateOptions()",
   getDefaultStreamOptions: ".getDefaultStreamOptions()",
-  getDefaultVNextStreamOptions: ".getDefaultVNextStreamOptions()",
 };
 
 export default meta;

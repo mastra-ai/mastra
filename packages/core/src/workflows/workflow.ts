@@ -303,7 +303,7 @@ export function createStep<
         let stream: ReadableStream<any>;
 
         if ((await params.getModel()).specificationVersion === 'v1') {
-          const { fullStream } = await params.stream(inputData.prompt, {
+          const { fullStream } = await params.streamLegacy(inputData.prompt, {
             // resourceId: inputData.resourceId,
             // threadId: inputData.threadId,
             runtimeContext,
@@ -314,7 +314,7 @@ export function createStep<
           });
           stream = fullStream as any;
         } else {
-          const modelOutput = await params.streamVNext(inputData.prompt, {
+          const modelOutput = await params.stream(inputData.prompt, {
             runtimeContext,
             onFinish: result => {
               streamPromise.resolve(result.text);
@@ -1853,36 +1853,67 @@ export class Run<
   }
 
   /**
-   * Observe the workflow stream
+   * Observe the workflow stream vnext
    * @returns A readable stream of the workflow events
    */
-  observeStreamVNext(): {
-    stream: ReadableStream<StreamEvent>;
-  } {
-    const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
+  observeStreamVNext(): ReadableStream<ChunkType> {
+    const { readable, writable } = new TransformStream<ChunkType, ChunkType>({
+      transform(chunk, controller) {
+        controller.enqueue(chunk);
+      },
+    });
 
-    const writer = writable.getWriter();
-    const unwatch = this.watch(async event => {
+    let buffer: ChunkType[] = [];
+    let isWriting = false;
+    const tryWrite = async () => {
+      const chunkToWrite = buffer;
+      buffer = [];
+
+      if (chunkToWrite.length === 0 || isWriting) {
+        return;
+      }
+      isWriting = true;
+
+      let watchWriter = writable.getWriter();
+
       try {
-        // watch-v2 events are data stream events, so we need to cast them to the correct type
-        await writer.write(event as any);
-      } catch {}
+        for (const chunk of chunkToWrite) {
+          await watchWriter.write(chunk);
+        }
+      } finally {
+        watchWriter.releaseLock();
+      }
+      isWriting = false;
+
+      setImmediate(tryWrite);
+    };
+
+    // TODO: fix this, watch-v2 doesn't have a type
+    // @ts-ignore
+    const unwatch = this.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
+      buffer.push({
+        type,
+        runId: this.runId,
+        from,
+        payload: {
+          stepName: (payload as unknown as { id: string }).id,
+          ...payload,
+        },
+      });
+
+      await tryWrite();
     }, 'watch-v2');
 
     this.#observerHandlers.push(async () => {
       unwatch();
       try {
-        await writer.close();
+        await writable.close();
       } catch (err) {
         console.error('Error closing stream:', err);
-      } finally {
-        writer.releaseLock();
       }
     });
 
-    return {
-      stream: readable,
-    };
+    return readable;
   }
 
   async streamAsync({
@@ -1907,6 +1938,7 @@ export class Run<
     tracingOptions,
     format,
     closeOnSuspend = true,
+    onChunk,
   }: {
     inputData?: z.input<TInput>;
     runtimeContext?: RuntimeContext;
@@ -1914,6 +1946,7 @@ export class Run<
     tracingOptions?: TracingOptions;
     format?: 'aisdk' | 'mastra' | undefined;
     closeOnSuspend?: boolean;
+    onChunk?: (chunk: ChunkType) => Promise<unknown>;
   } = {}): MastraWorkflowStream<TInput, TOutput, TSteps> {
     if (this.closeStreamAction && this.activeStream) {
       return this.activeStream;
@@ -1946,6 +1979,9 @@ export class Run<
           try {
             for (const chunk of chunkToWrite) {
               await watchWriter.write(chunk);
+              if (onChunk) {
+                await onChunk(chunk);
+              }
             }
           } finally {
             watchWriter.releaseLock();
@@ -1973,6 +2009,8 @@ export class Run<
 
         this.closeStreamAction = async () => {
           unwatch();
+          await Promise.all(this.#observerHandlers.map(handler => handler()));
+          this.#observerHandlers = [];
 
           try {
             await writable.close();
@@ -2020,6 +2058,7 @@ export class Run<
     tracingContext,
     tracingOptions,
     format,
+    onChunk,
   }: {
     resumeData?: z.input<TInput>;
     step?:
@@ -2031,6 +2070,7 @@ export class Run<
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     format?: 'aisdk' | 'mastra' | undefined;
+    onChunk?: (chunk: ChunkType) => Promise<unknown>;
   } = {}) {
     this.closeStreamAction = async () => {};
 
@@ -2059,6 +2099,9 @@ export class Run<
           try {
             for (const chunk of chunkToWrite) {
               await watchWriter.write(chunk);
+              if (onChunk) {
+                await onChunk(chunk);
+              }
             }
           } finally {
             watchWriter.releaseLock();
@@ -2086,6 +2129,8 @@ export class Run<
 
         this.closeStreamAction = async () => {
           unwatch();
+          await Promise.all(this.#observerHandlers.map(handler => handler()));
+          this.#observerHandlers = [];
 
           try {
             await writable.close();

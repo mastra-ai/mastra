@@ -1,9 +1,13 @@
 import type { TransformStreamDefaultController } from 'stream/web';
+import { openai } from '@ai-sdk/openai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import z from 'zod';
+import { Agent } from '../../agent';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
+import { createTool } from '../../tools';
+import type { Processor } from '../index';
 import { StructuredOutputProcessor } from './structured-output';
 
 describe('StructuredOutputProcessor', () => {
@@ -108,7 +112,7 @@ describe('StructuredOutputProcessor', () => {
         ]),
       };
 
-      vi.spyOn(processor['structuringAgent'], 'streamVNext').mockResolvedValue(mockStream as any);
+      vi.spyOn(processor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
 
       await expect(
         processor.processOutputStream({
@@ -154,7 +158,7 @@ describe('StructuredOutputProcessor', () => {
         ]),
       };
 
-      vi.spyOn(fallbackProcessor['structuringAgent'], 'streamVNext').mockResolvedValue(mockStream as any);
+      vi.spyOn(fallbackProcessor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
 
       await fallbackProcessor.processOutputStream({
         part: finishChunk,
@@ -203,7 +207,7 @@ describe('StructuredOutputProcessor', () => {
         ]),
       };
 
-      vi.spyOn(warnProcessor['structuringAgent'], 'streamVNext').mockResolvedValue(mockStream as any);
+      vi.spyOn(warnProcessor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
 
       await warnProcessor.processOutputStream({
         part: finishChunk,
@@ -243,9 +247,7 @@ describe('StructuredOutputProcessor', () => {
         ]),
       };
 
-      const streamVNextSpy = vi
-        .spyOn(processor['structuringAgent'], 'streamVNext')
-        .mockResolvedValue(mockStream as any);
+      const streamSpy = vi.spyOn(processor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
 
       // Call processOutputStream twice with finish chunks
       await processor.processOutputStream({
@@ -262,8 +264,8 @@ describe('StructuredOutputProcessor', () => {
         abort,
       });
 
-      // Should only call streamVNext once (guarded by isStructuringAgentStreamStarted)
-      expect(streamVNextSpy).toHaveBeenCalledTimes(1);
+      // Should only call stream once (guarded by isStructuringAgentStreamStarted)
+      expect(streamSpy).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -336,7 +338,7 @@ describe('StructuredOutputProcessor', () => {
         ]),
       };
 
-      vi.spyOn(processor['structuringAgent'], 'streamVNext').mockResolvedValue(mockStream as any);
+      vi.spyOn(processor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
 
       await processor.processOutputStream({
         part: finishChunk,
@@ -346,7 +348,7 @@ describe('StructuredOutputProcessor', () => {
       });
 
       // Check that the prompt was built correctly with all the different sections
-      const call = (processor['structuringAgent'].streamVNext as any).mock.calls[0];
+      const call = (processor['structuringAgent'].stream as any).mock.calls[0];
       const prompt = call[0];
 
       expect(prompt).toContain('# Assistant Response');
@@ -427,7 +429,7 @@ describe('StructuredOutputProcessor', () => {
         ]),
       };
 
-      vi.spyOn(processor['structuringAgent'], 'streamVNext').mockResolvedValue(mockStream as any);
+      vi.spyOn(processor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
 
       await processor.processOutputStream({
         part: finishChunk,
@@ -437,7 +439,7 @@ describe('StructuredOutputProcessor', () => {
       });
 
       // Check that the prompt includes reasoning
-      const call = (processor['structuringAgent'].streamVNext as any).mock.calls[0];
+      const call = (processor['structuringAgent'].stream as any).mock.calls[0];
       const prompt = call[0];
 
       expect(prompt).toContain('# Assistant Reasoning');
@@ -446,4 +448,237 @@ describe('StructuredOutputProcessor', () => {
       expect(prompt).toContain('The answer is blue and bright');
     });
   });
+});
+
+describe('Structured Output with Tool Execution', () => {
+  it('should generate structured output when tools are involved', async () => {
+    // Test processor to track streamParts state
+    const streamPartsLog: { type: string; streamPartsLength: number }[] = [];
+    class StateTrackingProcessor implements Processor {
+      name = 'state-tracking';
+      async processOutputStream({ part, streamParts }: any) {
+        streamPartsLog.push({ type: part.type, streamPartsLength: streamParts.length });
+        console.log(`Processor saw ${part.type}, streamParts.length: ${streamParts.length}`);
+        return part;
+      }
+    }
+
+    // Define the structured output schema
+    const responseSchema = z.object({
+      toolUsed: z.string(),
+      result: z.string(),
+      confidence: z.number(),
+    });
+
+    // Mock tool that returns a result
+    const mockTool = {
+      description: 'A calculator tool',
+      parameters: {
+        type: 'object' as const,
+        properties: {
+          a: { type: 'number' as const },
+          b: { type: 'number' as const },
+        },
+        required: ['a', 'b'] as const,
+      },
+      execute: vi.fn(async ({ a, b }: { a: number; b: number }) => {
+        return { sum: a + b };
+      }),
+    };
+
+    // Create mock model that calls a tool and returns structured output
+    const mockModel = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        // Check if this is the first call or after tool execution
+        const hasToolResults = prompt.some(
+          (msg: any) =>
+            msg.role === 'tool' ||
+            (Array.isArray(msg.content) && msg.content.some((c: any) => c.type === 'tool-result')),
+        );
+
+        if (!hasToolResults) {
+          // First LLM call - request tool execution
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-123',
+                toolName: 'calculator',
+                input: JSON.stringify({ a: 5, b: 3 }),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          };
+        } else {
+          // Second LLM call - after tool execution, return structured output
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: '{"toolUsed":"calculator","result":"8","confidence":0.95}' },
+              { type: 'text-end', id: '1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
+              },
+            ]),
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          };
+        }
+      },
+    });
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'Test agent with structured output and tools',
+      model: mockModel as any,
+      tools: {
+        calculator: mockTool,
+      },
+      outputProcessors: [new StateTrackingProcessor()],
+    });
+
+    // Stream the response
+    const stream = await agent.stream('Calculate 5 + 3 and return structured output', {
+      format: 'aisdk',
+      maxSteps: 5,
+      structuredOutput: {
+        schema: responseSchema,
+        model: openai('gpt-4o-mini'), // Use real model for structured output processor
+      },
+    });
+
+    console.log('Stream properties:', Object.keys(stream));
+    console.log('Has partialObjectStream?', 'partialObjectStream' in stream);
+    console.log('Has object?', 'object' in stream);
+
+    // Don't consume fullStream first - get the object while consuming
+    const fullStreamChunks: any[] = [];
+
+    // Consume full stream and wait for object in parallel
+    const [chunks, finalObject] = await Promise.all([
+      (async () => {
+        const collected: any[] = [];
+        for await (const chunk of stream.fullStream) {
+          collected.push(chunk);
+          console.log('Chunk:', chunk.type, chunk.type === 'finish' ? chunk : '');
+        }
+        return collected;
+      })(),
+      stream.object,
+    ]);
+
+    fullStreamChunks.push(...chunks);
+
+    console.log(
+      'Full stream chunk types:',
+      fullStreamChunks.map(c => c.type),
+    );
+    console.log(
+      'Finish chunks:',
+      fullStreamChunks.filter(c => c.type === 'finish'),
+    );
+    console.log(
+      'Tool result chunk:',
+      fullStreamChunks.find(c => c.type === 'tool-result'),
+    );
+    console.log('Mock tool execute called times:', mockTool.execute.mock.calls.length);
+    console.log('Final object:', finalObject);
+
+    // ISSUE: Before the fix, no structured output would be generated when tools are involved
+    // The structured output processor would lose state between LLM calls or not trigger at all
+
+    // Verify the final object matches the schema
+    expect(finalObject).toBeDefined();
+    expect(finalObject.toolUsed).toBe('calculator');
+    expect(finalObject.result).toBe('8');
+    expect(typeof finalObject.confidence).toBe('number');
+
+    // Verify the tool was actually executed
+    expect(fullStreamChunks.find(c => c.type === 'tool-result')).toBeDefined();
+  });
+
+  it('should handle structured output with multiple tool calls', async () => {
+    const responseSchema = z.object({
+      activities: z.array(z.string()),
+      toolsCalled: z.array(z.string()),
+      location: z.string(),
+    });
+
+    const weatherTool = createTool({
+      id: 'weather-tool',
+      description: 'Get weather for a location',
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      execute: async context => {
+        const { location } = context.context;
+        return {
+          temperature: 70,
+          feelsLike: 65,
+          humidity: 50,
+          windSpeed: 10,
+          windGust: 15,
+          conditions: 'sunny',
+          location,
+        };
+      },
+    });
+
+    const planActivities = createTool({
+      id: 'plan-activities',
+      description: 'Plan activities based on the weather',
+      inputSchema: z.object({
+        temperature: z.string(),
+      }),
+      execute: async () => {
+        return { activities: 'Plan activities based on the weather' };
+      },
+    });
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions:
+        'You are a helpful assistant. Figure out the weather and then using that weather plan some activities. Always use the weather tool first, and then the plan activities tool with the result of the weather tool. Every tool call you make IMMEDIATELY explain the tool results after executing the tool, before moving on to other steps or tool calls',
+      model: openai('gpt-4o-mini'),
+      tools: {
+        weatherTool,
+        planActivities,
+      },
+    });
+
+    const stream = await agent.stream('What is the weather in Toronto?', {
+      format: 'aisdk',
+      maxSteps: 10,
+      structuredOutput: {
+        schema: responseSchema,
+      },
+    });
+
+    // Consume the stream
+    for await (const chunk of stream.fullStream) {
+      console.log('Chunk:', chunk.type);
+      // Just consume
+    }
+
+    const finalObject = await stream.object;
+    console.log('Final object with multiple tools:', finalObject);
+
+    // Verify the structured output was generated correctly
+    expect(finalObject).toBeDefined();
+    expect(finalObject.activities.length).toBeGreaterThanOrEqual(1);
+    expect(finalObject.toolsCalled).toHaveLength(2);
+    expect(finalObject.location).toBe('Toronto');
+  }, 15000);
 });

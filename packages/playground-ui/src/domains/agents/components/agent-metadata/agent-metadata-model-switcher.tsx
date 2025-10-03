@@ -5,10 +5,11 @@ import { Loader2 } from 'lucide-react';
 import { ProviderLogo } from './provider-logo';
 import { UpdateModelParams } from '@mastra/client-js';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { AlertCircle, Info } from 'lucide-react';
+import { Info } from 'lucide-react';
 import { useModelReset } from '../../context/model-reset-context';
 import { cn } from '@/lib/utils';
 import { cleanProviderId } from './utils';
+import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
@@ -35,15 +36,14 @@ export const AgentMetadataModelSwitcher = ({
   defaultModel,
   updateModel,
   apiUrl = '/api/agents/providers',
-  autoSave = false,
-  selectProviderPlaceholder = 'Select provider',
 }: AgentMetadataModelSwitcherProps) => {
   const [selectedModel, setSelectedModel] = useState(defaultModel);
   const [showModelSuggestions, setShowModelSuggestions] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState(defaultProvider || '');
   const [providerSearch, setProviderSearch] = useState('');
   const [modelSearch, setModelSearch] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
+  const [isSearchingProvider, setIsSearchingProvider] = useState(false);
+  const [isSearchingModel, setIsSearchingModel] = useState(false);
   const [showProviderSuggestions, setShowProviderSuggestions] = useState(false);
   const [loading, setLoading] = useState(false);
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -99,7 +99,7 @@ export const AgentMetadataModelSwitcher = ({
 
   // Filter and sort providers based on search and connection status
   const filteredProviders = useMemo(() => {
-    const searchTerm = isSearching ? providerSearch : '';
+    const searchTerm = isSearchingProvider ? providerSearch : '';
 
     let filtered = providers;
     if (searchTerm) {
@@ -135,19 +135,19 @@ export const AgentMetadataModelSwitcher = ({
       // Finally, alphabetically by name
       return a.name.localeCompare(b.name);
     });
-  }, [providers, providerSearch, isSearching]);
+  }, [providers, providerSearch, isSearchingProvider]);
 
   // Filter models - this is computed inline in the original, but we'll keep it as a useMemo
   const filteredModels = useMemo(() => {
     let filtered = allModels;
 
-    // Filter by selected provider first
+    // Always filter by selected provider if one is selected
     if (currentModelProvider) {
       filtered = filtered.filter(m => m.provider === currentModelProvider);
     }
 
     // Then filter by search term when searching
-    if (isSearching && modelSearch) {
+    if (isSearchingModel && modelSearch) {
       filtered = filtered.filter(m => m.model.toLowerCase().includes(modelSearch.toLowerCase()));
     }
 
@@ -155,7 +155,7 @@ export const AgentMetadataModelSwitcher = ({
     filtered.sort((a, b) => a.model.localeCompare(b.model));
 
     return filtered;
-  }, [allModels, modelSearch, currentModelProvider, isSearching]);
+  }, [allModels, modelSearch, currentModelProvider, isSearchingModel]);
 
   const [infoMsg, setInfoMsg] = useState('');
 
@@ -193,7 +193,7 @@ export const AgentMetadataModelSwitcher = ({
   const handleProviderSelect = async (provider: Provider) => {
     setSelectedProvider(provider.id);
     setProviderSearch('');
-    setIsSearching(false);
+    setIsSearchingProvider(false);
     setShowProviderSuggestions(false);
     setHighlightedProviderIndex(-1);
 
@@ -218,13 +218,21 @@ export const AgentMetadataModelSwitcher = ({
   // Register reset callback with context
   useEffect(() => {
     const resetIfIncomplete = () => {
+      // Don't reset if either picker is currently focused or their popovers are open
+      if (
+        modelInputRef.current === document.activeElement ||
+        providerInputRef.current === document.activeElement ||
+        showProviderSuggestions ||
+        showModelSuggestions
+      ) {
+        return;
+      }
+
       // Check if provider changed but no model selected
       const providerChanged = currentModelProvider && currentModelProvider !== defaultProvider;
       const modelEmpty = !selectedModel || selectedModel === '';
 
       if (providerChanged && modelEmpty) {
-        console.log('Incomplete model selection detected, reverting to defaults');
-
         // Reset to defaults
         setSelectedProvider(defaultProvider);
         setSelectedModel(defaultModel);
@@ -247,7 +255,16 @@ export const AgentMetadataModelSwitcher = ({
     return () => {
       registerResetFn(null);
     };
-  }, [registerResetFn, currentModelProvider, selectedModel, defaultProvider, defaultModel, updateModel]);
+  }, [
+    registerResetFn,
+    currentModelProvider,
+    selectedModel,
+    defaultProvider,
+    defaultModel,
+    updateModel,
+    showProviderSuggestions,
+    showModelSuggestions,
+  ]);
 
   if (providersLoading) {
     return (
@@ -260,20 +277,20 @@ export const AgentMetadataModelSwitcher = ({
 
   return (
     <>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-col xl:flex-row items-stretch xl:items-center gap-2 w-full">
         <Popover
           open={showProviderSuggestions}
           onOpenChange={open => {
             setShowProviderSuggestions(open);
             if (!open) {
               setProviderSearch('');
-              setIsSearching(false);
+              setIsSearchingProvider(false);
             }
           }}
         >
           <PopoverTrigger asChild>
-            <div className="relative w-[180px]">
-              {!isSearching && currentModelProvider && (
+            <div className="relative w-full xl:w-2/5">
+              {!isSearchingProvider && currentModelProvider && (
                 <>
                   <div className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none z-10">
                     <div className="relative">
@@ -316,10 +333,10 @@ export const AgentMetadataModelSwitcher = ({
               <Input
                 spellCheck="false"
                 ref={providerInputRef}
-                className={`w-full ${!isSearching && currentModelProvider ? 'pl-8 pr-8' : ''}`}
+                className={`w-full ${!isSearchingProvider && currentModelProvider ? 'pl-8 pr-8' : ''}`}
                 type="text"
                 value={
-                  isSearching
+                  isSearchingProvider
                     ? providerSearch
                     : providers.find(p => p.id === cleanProviderId(currentModelProvider))?.name ||
                       currentModelProvider ||
@@ -332,9 +349,9 @@ export const AgentMetadataModelSwitcher = ({
                       provider.id.toLowerCase().includes(providerSearch.toLowerCase()),
                   );
 
-                  if (!isSearching && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                  if (!isSearchingProvider && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
                     // Only clear search when actually typing, not when tabbing
-                    setIsSearching(true);
+                    setIsSearchingProvider(true);
                     setProviderSearch('');
                     setHighlightedProviderIndex(0);
                   } else if (showProviderSuggestions) {
@@ -374,7 +391,7 @@ export const AgentMetadataModelSwitcher = ({
                           } else {
                             // If no provider is highlighted, just close dropdown and let tab proceed
                             setShowProviderSuggestions(false);
-                            setIsSearching(false);
+                            setIsSearchingProvider(false);
                             setProviderSearch('');
                             setHighlightedProviderIndex(-1);
                           }
@@ -383,7 +400,7 @@ export const AgentMetadataModelSwitcher = ({
                         break;
                       case 'Escape':
                         e.preventDefault();
-                        setIsSearching(false);
+                        setIsSearchingProvider(false);
                         setProviderSearch('');
                         setHighlightedProviderIndex(-1);
                         setShowProviderSuggestions(false);
@@ -410,7 +427,7 @@ export const AgentMetadataModelSwitcher = ({
                   }
                 }}
                 onChange={e => {
-                  setIsSearching(true);
+                  setIsSearchingProvider(true);
                   setProviderSearch(e.target.value);
                   setHighlightedProviderIndex(0);
                 }}
@@ -430,7 +447,7 @@ export const AgentMetadataModelSwitcher = ({
           </PopoverTrigger>
           <PopoverContent
             onOpenAutoFocus={e => e.preventDefault()}
-            className="flex flex-col gap-1 w-[var(--radix-popover-trigger-width)] max-h-[300px] overflow-y-auto p-1"
+            className="flex flex-col gap-0.5 w-[var(--radix-popover-trigger-width)] max-h-[300px] overflow-y-auto p-2"
           >
             {filteredProviders.length === 0 ? (
               <div className="text-sm text-gray-500 p-2">No providers found</div>
@@ -443,7 +460,7 @@ export const AgentMetadataModelSwitcher = ({
                   <div
                     key={provider.id}
                     data-provider-highlighted={isHighlighted}
-                    className={`flex items-center gap-2 cursor-pointer hover:bg-surface5 p-2 rounded ${
+                    className={`flex items-center gap-2 cursor-pointer hover:bg-surface5 px-3 py-4 rounded ${
                       isHighlighted ? 'outline outline-2 outline-blue-500' : ''
                     } ${isSelected ? 'bg-surface5' : ''}`}
                     onClick={() => handleProviderSelect(provider)}
@@ -459,7 +476,6 @@ export const AgentMetadataModelSwitcher = ({
                     </div>
                     <div className="flex-1">
                       <div className="text-sm font-medium">{provider.name}</div>
-                      <div className="text-xs text-gray-500">{provider.id}</div>
                     </div>
                     <Info
                       className="w-4 h-4 text-gray-500 hover:text-gray-700 cursor-pointer"
@@ -481,7 +497,7 @@ export const AgentMetadataModelSwitcher = ({
             setShowModelSuggestions(open);
             if (!open) {
               setModelSearch('');
-              setIsSearching(false);
+              setIsSearchingModel(false);
             }
           }}
         >
@@ -489,13 +505,13 @@ export const AgentMetadataModelSwitcher = ({
             <Input
               spellCheck="false"
               ref={modelInputRef}
-              className="flex-1"
+              className="w-full xl:w-3/5"
               type="text"
               value={modelSearch || selectedModel}
               onChange={e => {
                 setSelectedModel(e.target.value);
                 setModelSearch(e.target.value);
-                setIsSearching(true);
+                setIsSearchingModel(true);
                 setHighlightedModelIndex(0);
               }}
               onClick={e => {
@@ -554,7 +570,7 @@ export const AgentMetadataModelSwitcher = ({
                       // User selected a model from the list
                       const model = filteredModels[highlightedModelIndex];
                       setModelSearch('');
-                      setIsSearching(false);
+                      setIsSearchingModel(false);
                       setShowModelSuggestions(false);
                       handleModelSelect(model.model);
                       // After selecting a model, focus the chat input
@@ -571,7 +587,7 @@ export const AgentMetadataModelSwitcher = ({
                     } else if (selectedModel && selectedModel.trim()) {
                       // User entered a custom model ID - use it as-is with the current provider
                       setModelSearch('');
-                      setIsSearching(false);
+                      setIsSearchingModel(false);
                       setShowModelSuggestions(false);
                       handleModelSelect(selectedModel.trim());
                       // After selecting a model, focus the chat input
@@ -597,17 +613,13 @@ export const AgentMetadataModelSwitcher = ({
                     break;
                 }
               }}
-              // onClick={() => {
-              //   // Only open if not already open (prevents flashing)
-              //   setShowModelSuggestions(true);
-              // }}
               placeholder="Enter model name or select from suggestions..."
             />
           </PopoverTrigger>
 
           {allModels.length > 0 && (
             <PopoverContent
-              className="flex flex-col gap-2 w-[var(--radix-popover-trigger-width)] max-h-[calc(var(--radix-popover-content-available-height)-50px)] overflow-y-auto"
+              className="flex flex-col gap-0 w-[var(--radix-popover-trigger-width)] max-h-[calc(var(--radix-popover-content-available-height)-50px)] overflow-y-auto p-2"
               onOpenAutoFocus={e => e.preventDefault()}
             >
               {loading ? (
@@ -624,13 +636,13 @@ export const AgentMetadataModelSwitcher = ({
                     <div
                       key={`${model.provider}-${model.model}`}
                       data-model-highlighted={isHighlighted}
-                      className={`flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-surface5 rounded ${
+                      className={`flex items-center gap-2 px-4 py-3 cursor-pointer rounded hover:bg-surface5 ${
                         isHighlighted ? 'outline outline-2 outline-blue-500' : ''
                       } ${isSelected ? 'bg-surface5' : ''}`}
                       onMouseDown={e => {
                         e.preventDefault();
                         setModelSearch('');
-                        setIsSearching(false);
+                        setIsSearchingModel(false);
                         handleModelSelect(model.model);
                         modelInputRef.current?.blur();
 
@@ -664,20 +676,21 @@ export const AgentMetadataModelSwitcher = ({
         const currentProvider = providers.find(p => p.id === currentModelProvider);
         if (currentProvider && !currentProvider.connected) {
           return (
-            <div className="mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 mt-0.5" />
-                <div className="text-sm text-yellow-800 dark:text-yellow-200">
-                  <div className="font-medium">Provider not connected</div>
-                  <div className="text-xs mt-1">
-                    Set the{' '}
-                    <code className="px-1 py-0.5 bg-yellow-100 dark:bg-yellow-900/50 rounded">
-                      {currentProvider.envVar}
-                    </code>{' '}
-                    environment variable to use this provider.
-                  </div>
-                </div>
-              </div>
+            <div className="pt-2 p-2">
+              <Alert variant="warning">
+                <AlertTitle as="h5">Provider not connected</AlertTitle>
+                <AlertDescription as="p">
+                  Set the{' '}
+                  <code className="px-1 py-0.5 bg-yellow-100 dark:bg-yellow-900/50 rounded">
+                    {Array.isArray(currentProvider.envVar) ? currentProvider.envVar.join(', ') : currentProvider.envVar}
+                  </code>{' '}
+                  environment{' '}
+                  {Array.isArray(currentProvider.envVar) && currentProvider.envVar.length > 1
+                    ? 'variables'
+                    : 'variable'}{' '}
+                  to use this provider.
+                </AlertDescription>
+              </Alert>
             </div>
           );
         }

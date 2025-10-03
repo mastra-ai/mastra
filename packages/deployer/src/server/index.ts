@@ -27,7 +27,6 @@ import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
 import { logsRouter } from './handlers/routes/logs/router';
 import { mcpRouter } from './handlers/routes/mcp/router';
 import { memoryRoutes } from './handlers/routes/memory/router';
-import { vNextNetworksRouter } from './handlers/routes/networks/router';
 import { observabilityRouter } from './handlers/routes/observability/router';
 import { scoresRouter } from './handlers/routes/scores/router';
 import { telemetryRouter } from './handlers/routes/telemetry/router';
@@ -441,8 +440,6 @@ export async function createHonoServer(
 
   // Agents routes
   app.route('/api/agents', agentsRouter(bodyLimitOptions));
-  // Networks routes
-  app.route('/api/networks', vNextNetworksRouter(bodyLimitOptions));
 
   if (options.isDev) {
     app.route('/api/agents', agentsRouterDev(bodyLimitOptions));
