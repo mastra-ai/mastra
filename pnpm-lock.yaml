@@ -3016,10 +3016,10 @@ importers:
   stores/dynamodb:
     dependencies:
       '@aws-sdk/client-dynamodb':
-        specifier: ^3.896.0
+        specifier: ^3.899.0
         version: 3.901.0
       '@aws-sdk/lib-dynamodb':
-        specifier: ^3.896.0
+        specifier: ^3.899.0
         version: 3.901.0(@aws-sdk/client-dynamodb@3.901.0)
       electrodb:
         specifier: ^3.4.6
@@ -3388,7 +3388,7 @@ importers:
   stores/s3vectors:
     dependencies:
       '@aws-sdk/client-s3vectors':
-        specifier: ^3.896.0
+        specifier: ^3.899.0
         version: 3.901.0
       uuid:
         specifier: ^11.1.0
