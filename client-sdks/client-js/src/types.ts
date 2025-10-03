@@ -525,6 +525,9 @@ export interface GetScoresBySpanParams {
   page?: number;
   perPage?: number;
 }
+export interface GetScoreByIdParams {
+  id: string;
+}
 
 export interface SaveScoreParams {
   score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>;

@@ -8,6 +8,7 @@ import {
   getScoresByRunIdHandler,
   getScoresByScorerIdHandler,
   getScoresByEntityIdHandler,
+  getScoreByIdHandler,
   saveScoreHandler,
 } from './handlers';
 
@@ -157,6 +158,32 @@ export function scoresRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     getScoresByEntityIdHandler,
+  );
+
+  router.get(
+    '/:id',
+    describeRoute({
+      description: 'Get a single score by ID',
+      tags: ['scores'],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          description: 'ID of the score',
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Score data',
+        },
+        404: {
+          description: 'Score not found',
+        },
+      },
+    }),
+    getScoreByIdHandler,
   );
 
   router.post(

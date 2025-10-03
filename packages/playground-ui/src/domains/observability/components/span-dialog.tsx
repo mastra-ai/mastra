@@ -1,20 +1,27 @@
-import { cn } from '@/lib/utils';
 import {
   SideDialog,
-  SideDialogTop,
   KeyValueList,
   type KeyValueListItemData,
   TextAndIcon,
-  SideDialogHeader,
-  SideDialogHeading,
   getShortId,
+  Section,
 } from '@/components/ui/elements';
-import { PanelTopIcon, ChevronsLeftRightEllipsisIcon, HashIcon, EyeIcon } from 'lucide-react';
-import { TraceSpanUsage } from './trace-span-usage';
+import {
+  PanelTopIcon,
+  ChevronsLeftRightEllipsisIcon,
+  HashIcon,
+  EyeIcon,
+  CircleGaugeIcon,
+  GaugeIcon,
+} from 'lucide-react';
 import { SpanDetails } from './span-details';
 import { AISpanRecord } from '@mastra/core';
 import { useLinkComponent } from '@/lib/framework';
-import { ScorersDropdown } from '@/domains/scores/components/scorers-dropdown';
+import { Tabs } from '@/components/ui/elements/tabs/tabs';
+import { Sections } from '@/components/ui/containers';
+import { TraceScoreList } from './trace-score-list';
+import { SpanScoring } from './span-scoring';
+import { TraceSpanUsage } from './trace-span-usage';
 
 type SpanDialogProps = {
   trace: AISpanRecord;
@@ -26,6 +33,8 @@ type SpanDialogProps = {
   onPrevious?: () => void;
   onViewToggle?: () => void;
   onScorerTriggered: (scorerName: string, traceId: string, spanId?: string) => void;
+  defaultActiveTab?: string;
+  initialScoreId?: string;
 };
 
 export function SpanDialog({
@@ -38,8 +47,19 @@ export function SpanDialog({
   onViewToggle,
   spanInfo = [],
   onScorerTriggered,
+  defaultActiveTab = 'details',
+  initialScoreId,
 }: SpanDialogProps) {
   const { Link } = useLinkComponent();
+
+  let entityType;
+  if (trace?.attributes?.agentId) {
+    entityType = 'Agent';
+  } else if (trace?.attributes?.workflowId) {
+    entityType = 'Workflow';
+  }
+
+  console.log({ span });
 
   return (
     <SideDialog
@@ -47,49 +67,78 @@ export function SpanDialog({
       dialogDescription="View and analyze span details"
       isOpen={isOpen}
       onClose={onClose}
-      hasCloseButton={true}
-      className={cn('w-[calc(100vw-25rem)] max-w-[65%]', '3xl:max-w-[50%]', '4xl:max-w-[40%]')}
+      level={2}
     >
-      <div className="flex items-center justify-between pr-[1.5rem]">
-        <SideDialogTop onNext={onNext} onPrevious={onPrevious} showInnerNav={true}>
-          <div className="flex items-center gap-[1rem] text-icon4 text-[0.875rem]">
-            <TextAndIcon>
-              <EyeIcon /> {getShortId(span?.traceId)}
-            </TextAndIcon>
-            ›
-            <TextAndIcon>
-              <ChevronsLeftRightEllipsisIcon />
-              {getShortId(span?.spanId)}
-            </TextAndIcon>
-          </div>
-        </SideDialogTop>
+      <SideDialog.Top onNext={onNext} onPrevious={onPrevious} showInnerNav={true}>
+        <TextAndIcon>
+          <EyeIcon /> {getShortId(span?.traceId)}
+        </TextAndIcon>
+        ›
+        <TextAndIcon>
+          <ChevronsLeftRightEllipsisIcon />
+          {getShortId(span?.spanId)}
+        </TextAndIcon>
         <button className="flex items-center gap-1" onClick={onViewToggle}>
           <PanelTopIcon />
         </button>
-      </div>
+      </SideDialog.Top>
 
-      <div className="p-[1.5rem] px-[2.5rem] overflow-y-auto grid gap-[1.5rem] content-start">
-        <div>
-          <SideDialogHeader className="flex gap-[1rem] items-baseline pr-[2.5rem]">
-            <SideDialogHeading>
-              <ChevronsLeftRightEllipsisIcon /> {span?.name}
-            </SideDialogHeading>
-            <TextAndIcon>
-              <HashIcon /> {span?.spanId}
-            </TextAndIcon>
-          </SideDialogHeader>
+      <SideDialog.Content>
+        <SideDialog.Header className="flex gap-[1rem] items-baseline pr-[2.5rem]">
+          <SideDialog.Heading>
+            <ChevronsLeftRightEllipsisIcon /> {span?.name}
+          </SideDialog.Heading>
+          <TextAndIcon>
+            <HashIcon /> {span?.spanId}
+          </TextAndIcon>
+        </SideDialog.Header>
 
-          {span?.traceId && span?.spanId && (
-            <div>
-              <ScorersDropdown trace={trace} spanId={span?.spanId} onScorerTriggered={onScorerTriggered} />
-            </div>
-          )}
-        </div>
+        <Tabs defaultTab={defaultActiveTab}>
+          <Tabs.List>
+            <Tabs.Tab value="details">Details</Tabs.Tab>
+            <Tabs.Tab value="scores">Scoring</Tabs.Tab>
+          </Tabs.List>
+          <Tabs.Content value="details">
+            <Sections>
+              {span?.attributes?.usage && <TraceSpanUsage spanUsage={span.attributes.usage} />}
+              <KeyValueList data={spanInfo} LinkComponent={Link} />
+              <SpanDetails span={span} onScorerTriggered={onScorerTriggered} />
+            </Sections>
+          </Tabs.Content>
+          <Tabs.Content value="scores">
+            <Sections>
+              <Section>
+                <Section.Header>
+                  <Section.Heading>
+                    <CircleGaugeIcon /> Scoring{' '}
+                  </Section.Heading>
+                </Section.Header>
 
-        {span?.attributes?.usage && <TraceSpanUsage spanUsage={span.attributes.usage} className="mt-[1.5rem]" />}
-        <KeyValueList data={spanInfo} LinkComponent={Link} className="mt-[1.5rem]" />
-        <SpanDetails span={span} onScorerTriggered={onScorerTriggered} />
-      </div>
+                <SpanScoring
+                  traceId={trace.traceId}
+                  spanId={span?.spanId}
+                  onScorerTriggered={onScorerTriggered}
+                  entityType={entityType}
+                />
+              </Section>
+
+              <Section>
+                <Section.Header>
+                  <Section.Heading>
+                    <GaugeIcon /> Scores
+                  </Section.Heading>
+                </Section.Header>
+                <TraceScoreList
+                  scores={span?.links}
+                  initialScoreId={initialScoreId}
+                  traceId={trace.traceId}
+                  spanId={span?.spanId}
+                />
+              </Section>
+            </Sections>
+          </Tabs.Content>
+        </Tabs>
+      </SideDialog.Content>
     </SideDialog>
   );
 }

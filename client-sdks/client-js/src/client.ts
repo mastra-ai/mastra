@@ -47,6 +47,8 @@ import type {
   GetMemoryConfigParams,
   GetMemoryConfigResponse,
   GetMemoryThreadMessagesResponse,
+  GetScoreByIdParams,
+  ClientScoreRowData,
 } from './types';
 import { base64RuntimeContext, parseClientRuntimeContext } from './utils';
 
@@ -627,6 +629,16 @@ export class MastraClient extends BaseResource {
     return this.request(
       `/api/scores/entity/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}${queryString ? `?${queryString}` : ''}`,
     );
+  }
+
+  /**
+   * Retrieves a single score by ID
+   * @param params - Parameters containing the score ID
+   * @returns Promise containing the score data
+   */
+  public getScoreById(params: GetScoreByIdParams): Promise<ClientScoreRowData> {
+    const { id } = params;
+    return this.request(`/api/scores/${id}`);
   }
 
   /**

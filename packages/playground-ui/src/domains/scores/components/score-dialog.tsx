@@ -1,29 +1,30 @@
-import { cn } from '@/lib/utils';
-import { SideDialog, SideDialogTop, TextAndIcon, SideDialogCodeSection, KeyValueList } from '@/components/ui/elements';
+import { SideDialog, TextAndIcon, KeyValueList, type SideDialogRootProps } from '@/components/ui/elements';
 import { HashIcon, GaugeIcon } from 'lucide-react';
 
-import { MastraScorer } from '@mastra/core/scores';
 import { ClientScoreRowData } from '@mastra/client-js';
 import { useLinkComponent } from '@/lib/framework';
+import { Sections } from '@/index';
 
 type ScoreDialogProps = {
   score?: ClientScoreRowData;
-  scorer?: MastraScorer;
+  scorerName?: string;
   isOpen: boolean;
   onClose: () => void;
   onNext?: () => void;
   onPrevious?: () => void;
   computeTraceLink: (traceId: string, spanId?: string) => string;
+  dialogLevel?: SideDialogRootProps['level'];
 };
 
 export function ScoreDialog({
-  scorer,
   score,
+  scorerName,
   isOpen,
   onClose,
   onNext,
   onPrevious,
   computeTraceLink,
+  dialogLevel = 1,
 }: ScoreDialogProps) {
   const { Link } = useLinkComponent();
 
@@ -33,12 +34,12 @@ export function ScoreDialog({
       dialogDescription="View and analyze score details"
       isOpen={isOpen}
       onClose={onClose}
-      className={cn('w-[calc(100vw-20rem)] max-w-[80%]', '3xl:max-w-[65%]', '4xl:max-w-[55%]')}
+      level={dialogLevel}
     >
-      <SideDialogTop onNext={onNext} onPrevious={onPrevious} showInnerNav={true}>
+      <SideDialog.Top onNext={onNext} onPrevious={onPrevious} showInnerNav={true}>
         <div className="flex items-center gap-[1rem] text-icon4 text-[0.875rem]">
           <TextAndIcon>
-            <GaugeIcon /> {scorer?.config?.name}
+            <GaugeIcon /> {scorerName}
           </TextAndIcon>
           ›
           <TextAndIcon>
@@ -46,10 +47,10 @@ export function ScoreDialog({
             {score?.id}
           </TextAndIcon>
         </div>
-      </SideDialogTop>
+      </SideDialog.Top>
 
-      <div className="p-[1.5rem] px-[2.5rem] overflow-y-auto grid gap-[1.5rem] content-start">
-        <div className="grid gap-[1.5rem] mb-[2rem]">
+      <SideDialog.Content>
+        <Sections>
           {score?.traceId && (
             <KeyValueList
               data={[
@@ -72,31 +73,37 @@ export function ScoreDialog({
             />
           )}
 
-          <SideDialogCodeSection
+          <SideDialog.CodeSection
             title={`Score: ${Number.isNaN(score?.score) ? 'n/a' : score?.score}`}
-            codeStr={score?.reason}
+            codeStr={score?.reason || 'null'}
             simplified={true}
           />
-          <SideDialogCodeSection title="Input" codeStr={JSON.stringify(score?.input || null, null, 2)} />
-          <SideDialogCodeSection title="Output" codeStr={JSON.stringify(score?.output || null, null, 2)} />
-          <SideDialogCodeSection
+
+          <SideDialog.CodeSection title="Input" codeStr={JSON.stringify(score?.input || null, null, 2)} />
+
+          <SideDialog.CodeSection title="Output" codeStr={JSON.stringify(score?.output || null, null, 2)} />
+
+          <SideDialog.CodeSection
             title="Preprocess Prompt"
             codeStr={score?.preprocessPrompt || 'null'}
             simplified={true}
           />
-          <SideDialogCodeSection title="Analyze Prompt" codeStr={score?.analyzePrompt || 'null'} simplified={true} />
-          <SideDialogCodeSection
+
+          <SideDialog.CodeSection title="Analyze Prompt" codeStr={score?.analyzePrompt || 'null'} simplified={true} />
+
+          <SideDialog.CodeSection
             title="Generate Score Prompt"
             codeStr={score?.generateScorePrompt || 'null'}
             simplified={true}
           />
-          <SideDialogCodeSection
+
+          <SideDialog.CodeSection
             title="Generate Reason Prompt"
             codeStr={score?.generateReasonPrompt || 'null'}
             simplified={true}
           />
-        </div>
-      </div>
+        </Sections>
+      </SideDialog.Content>
     </SideDialog>
   );
 }

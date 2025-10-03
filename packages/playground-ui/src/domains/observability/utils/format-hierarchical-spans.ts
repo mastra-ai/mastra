@@ -31,6 +31,10 @@ export const formatHierarchicalSpans = (spans: AISpanRecord[]): UISpan[] => {
       startTime: startDate.toISOString(),
       endTime: endDate ? endDate.toISOString() : undefined,
       spans: [],
+      recentScore:
+        spanRecord.links && spanRecord.links.length > 0
+          ? { id: spanRecord.links[0].scoreId, score: spanRecord.links[0].score }
+          : undefined,
     };
 
     spanMap.set(spanRecord.spanId, uiSpan);

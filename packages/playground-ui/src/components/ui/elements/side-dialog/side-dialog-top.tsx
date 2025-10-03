@@ -22,7 +22,11 @@ export function SideDialogTop({ children, onNext, onPrevious, showInnerNav, clas
 
   return (
     <div
-      className={cn(`flex justify-between h-[3.5rem] items-center  text-icon5 text-[.875rem] pl-[1.5rem]`, className)}
+      className={cn(
+        `flex justify-between h-[3.5rem] items-center  text-icon5 text-[.875rem] pl-[1.5rem] relative`,
+        '[&::after]:content-[""] [&::after]:absolute [&::after]:left-[2rem] [&::after]:right-[2rem] [&::after]:bottom-0 [&::after]:border-b [&::after]:border-border1',
+        className,
+      )}
     >
       <div className={cn('flex items-center gap-[2rem]', '[&_svg]:w-[1.1em] [&_svg]:h-[1.1em] [&_svg]:text-icon3')}>
         {children}

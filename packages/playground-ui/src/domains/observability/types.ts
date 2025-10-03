@@ -6,4 +6,5 @@ export type UISpan = {
   startTime: string;
   endTime?: string;
   spans?: UISpan[];
+  recentScore?: { id: string; score: number };
 };
