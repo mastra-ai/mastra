@@ -650,6 +650,7 @@ export function approveToolCallHandler({
   body: GetHITLBody<'approveToolCall'> & {
     runtimeContext?: string;
     format?: 'aisdk' | 'mastra';
+    runId: string;
   };
   abortSignal?: AbortSignal;
 }): ReturnType<Agent['approveToolCall']> {

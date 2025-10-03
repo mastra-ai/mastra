@@ -6,7 +6,7 @@ import { MastraClient } from '@mastra/client-js';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { ChunkType, NetworkChunkType } from '@mastra/core/stream';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { toUIMessage } from '@/lib/ai-sdk';
 import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
@@ -36,6 +36,8 @@ export type NetworkArgs = SharedArgs & {
 };
 
 export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
+  const _currentRunId = useRef<string | undefined>(undefined);
+  const _onChunk = useRef<((chunk: ChunkType) => Promise<void>) | undefined>(undefined);
   const [messages, setMessages] = useState<MastraUIMessage[]>(() =>
     resolveInitialMessages(initializeMessages?.() || []),
   );
@@ -108,6 +110,34 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
     }
   };
 
+  const handleStreamResponse = async (
+    response: Response & {
+      processDataStream: (options: { onChunk: (chunk: ChunkType) => Promise<void> }) => Promise<void>;
+    },
+    onChunk?: (chunk: ChunkType) => Promise<void>,
+  ) => {
+    if (!response.body) {
+      setIsRunning(false);
+      throw new Error('[Stream] No response body');
+    }
+
+    await response.processDataStream({
+      onChunk: async (chunk: ChunkType) => {
+        // Without this, React might batch intermediate chunks which would break the message reconstruction over time
+        flushSync(() => {
+          setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
+        });
+
+        if (chunk.type === 'finish') {
+          _currentRunId.current = undefined;
+          _onChunk.current = undefined;
+        }
+
+        onChunk?.(chunk);
+      },
+    });
+  };
+
   const stream = async ({ coreUserMessages, runtimeContext, threadId, onChunk, modelSettings, signal }: StreamArgs) => {
     const {
       frequencyPenalty,
@@ -133,9 +163,11 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
 
     const agent = clientWithAbort.getAgent(agentId);
 
+    const runId = agentId;
+
     const response = await agent.stream({
       messages: coreUserMessages,
-      runId: agentId,
+      runId,
       maxSteps,
       modelSettings: {
         frequencyPenalty,
@@ -152,21 +184,10 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
       providerOptions: providerOptions as any,
     });
 
-    if (!response.body) {
-      setIsRunning(false);
-      throw new Error('[Stream] No response body');
-    }
+    _onChunk.current = onChunk;
+    _currentRunId.current = runId;
 
-    await response.processDataStream({
-      onChunk: async (chunk: ChunkType) => {
-        // Without this, React might batch intermediate chunks which would break the message reconstruction over time
-        flushSync(() => {
-          setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
-        });
-
-        onChunk?.(chunk);
-      },
-    });
+    await handleStreamResponse(response, onChunk);
 
     setIsRunning(false);
   };
@@ -225,6 +246,25 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
     setIsRunning(false);
   };
 
+  const handleCancelRun = () => {
+    setIsRunning(false);
+    _currentRunId.current = undefined;
+    _onChunk.current = undefined;
+  };
+
+  const approveToolCall = async () => {
+    const onChunk = _onChunk.current;
+    const currentRunId = _currentRunId.current;
+
+    if (!currentRunId)
+      return console.info('[approveToolCall] approveToolCall can only be called after a stream has started');
+
+    const agent = baseClient.getAgent(agentId);
+    const response = await agent.approveToolCall({ runId: currentRunId });
+
+    await handleStreamResponse(response, onChunk);
+  };
+
   return {
     network,
     stream,
@@ -232,6 +272,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
     isRunning,
     messages,
     setMessages,
-    cancelRun: () => setIsRunning(false),
+    approveToolCall,
+    cancelRun: handleCancelRun,
   };
 };

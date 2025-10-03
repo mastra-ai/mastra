@@ -7,6 +7,7 @@ import { WorkflowRunProvider } from '@/domains/workflows';
 import { LoadingBadge } from './badges/loading-badge';
 import { AgentBadge } from './badges/agent-badge';
 import { MastraUIMessage } from '@mastra/react';
+import { ToolApproval } from './tool-approval';
 
 export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
   metadata?: MastraUIMessage['metadata'];
@@ -28,6 +29,14 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, ...props }: ToolF
   useWorkflowStream(result);
   const { data: workflow, isLoading } = useWorkflow(toolName);
 
+  const handleApprove = () => {
+    console.log('approve');
+  };
+
+  const handleDecline = () => {
+    console.log('decline');
+  };
+
   const isAgent = metadata?.mode === 'network' && metadata.from === 'AGENT';
 
   if (isAgent) {
@@ -37,6 +46,20 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, ...props }: ToolF
   }
 
   if (isLoading) return <LoadingBadge />;
+
+  const requireApprovalMetadata = metadata?.mode === 'stream' && metadata?.requireApprovalMetadata;
+
+  if (requireApprovalMetadata) {
+    return (
+      <ToolApproval
+        toolName={requireApprovalMetadata.toolName}
+        args={requireApprovalMetadata.args}
+        onApprove={handleApprove}
+        onDecline={handleDecline}
+        toolCallId={requireApprovalMetadata.toolCallId}
+      />
+    );
+  }
 
   if (workflow) {
     const isStreaming = metadata?.mode === 'stream' || metadata?.mode === 'network';
