@@ -47,10 +47,11 @@ export type InngestFlowControlConfig = Pick<
 // Union type for Inngest workflows with flow control
 export type InngestWorkflowConfig<
   TWorkflowId extends string = string,
+  TState extends z.ZodObject<any> = z.ZodObject<any>,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
   TSteps extends Step<string, any, any, any, any, any>[] = Step<string, any, any, any, any, any>[],
-> = WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps> & InngestFlowControlConfig;
+> = WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps> & InngestFlowControlConfig;
 
 // Compile-time compatibility assertion
 type _AssertInngestCompatibility =
@@ -100,9 +101,10 @@ export function serve({
 export class InngestRun<
   TEngineType = InngestEngineType,
   TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
+  TState extends z.ZodObject<any> = z.ZodObject<any>,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
-> extends Run<TEngineType, TSteps, TInput, TOutput> {
+> extends Run<TEngineType, TSteps, TState, TInput, TOutput> {
   private inngest: Inngest;
   serializedStepGraph: SerializedStepFlowEntry[];
   #mastra: Mastra;
@@ -194,9 +196,11 @@ export class InngestRun<
 
   async start({
     inputData,
+    initialState,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
+    initialState?: z.infer<TState>;
   }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     await this.#mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -216,11 +220,13 @@ export class InngestRun<
     });
 
     const inputDataToUse = await this._validateInput(inputData);
+    const initialStateToUse = await this._validateInitialState(initialState ?? {});
 
     const eventOutput = await this.inngest.send({
       name: `workflow.${this.workflowId}`,
       data: {
         inputData: inputDataToUse,
+        initialState: initialStateToUse,
         runId: this.runId,
         resourceId: this.resourceId,
       },
@@ -389,20 +395,21 @@ export class InngestWorkflow<
   TEngineType = InngestEngineType,
   TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
   TWorkflowId extends string = string,
+  TState extends z.ZodObject<any> = z.ZodObject<any>,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
   TPrevSchema extends z.ZodType<any> = TInput,
-> extends Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema> {
+> extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
   #mastra: Mastra;
   public inngest: Inngest;
 
   private function: ReturnType<Inngest['createFunction']> | undefined;
   private readonly flowControlConfig?: InngestFlowControlConfig;
 
-  constructor(params: InngestWorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>, inngest: Inngest) {
+  constructor(params: InngestWorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>, inngest: Inngest) {
     const { concurrency, rateLimit, throttle, debounce, priority, ...workflowParams } = params;
 
-    super(workflowParams as WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>);
+    super(workflowParams as WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>);
 
     const flowControlEntries = Object.entries({ concurrency, rateLimit, throttle, debounce, priority }).filter(
       ([_, value]) => value !== undefined,
@@ -474,7 +481,7 @@ export class InngestWorkflow<
    * @deprecated Use createRunAsync() instead.
    * @throws {Error} Always throws an error directing users to use createRunAsync()
    */
-  createRun(_options?: { runId?: string }): Run<TEngineType, TSteps, TInput, TOutput> {
+  createRun(_options?: { runId?: string }): Run<TEngineType, TSteps, TState, TInput, TOutput> {
     throw new Error(
       'createRun() has been deprecated. ' +
         'Please use createRunAsync() instead.\n\n' +
@@ -488,11 +495,11 @@ export class InngestWorkflow<
   async createRunAsync(options?: {
     runId?: string;
     resourceId?: string;
-  }): Promise<Run<TEngineType, TSteps, TInput, TOutput>> {
+  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
-    const run: Run<TEngineType, TSteps, TInput, TOutput> =
+    const run: Run<TEngineType, TSteps, TState, TInput, TOutput> =
       this.runs.get(runIdToUse) ??
       new InngestRun(
         {
@@ -554,7 +561,7 @@ export class InngestWorkflow<
       },
       { event: `workflow.${this.id}` },
       async ({ event, step, attempt, publish }) => {
-        let { inputData, runId, resourceId, resume } = event.data;
+        let { inputData, initialState, runId, resourceId, resume } = event.data;
 
         if (!runId) {
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
@@ -590,13 +597,14 @@ export class InngestWorkflow<
         };
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt);
-        const result = await engine.execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
+        const result = await engine.execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
           workflowId: this.id,
           runId,
           resourceId,
           graph: this.executionGraph,
           serializedStepGraph: this.serializedStepGraph,
           input: inputData,
+          initialState,
           emitter,
           retryConfig: this.retryConfig,
           runtimeContext: new RuntimeContext(), // TODO
@@ -641,6 +649,7 @@ function isTool(params: any): params is Tool<any, any, any> {
 
 export function createStep<
   TStepId extends string,
+  TState extends z.ZodObject<any>,
   TStepInput extends z.ZodType<any>,
   TStepOutput extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
@@ -653,13 +662,14 @@ export function createStep<
   resumeSchema?: TResumeSchema;
   suspendSchema?: TSuspendSchema;
   execute: ExecuteFunction<
+    z.infer<TState>,
     z.infer<TStepInput>,
     z.infer<TStepOutput>,
     z.infer<TResumeSchema>,
     z.infer<TSuspendSchema>,
     InngestEngineType
   >;
-}): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>;
+}): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>;
 
 export function createStep<
   TStepId extends string,
@@ -669,7 +679,7 @@ export function createStep<
   TSuspendSchema extends z.ZodType<any>,
 >(
   agent: Agent<TStepId, any, any>,
-): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>;
+): Step<TStepId, any, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>;
 
 export function createStep<
   TSchemaIn extends z.ZodType<any>,
@@ -683,9 +693,10 @@ export function createStep<
     outputSchema: TSchemaOut;
     execute: (context: TContext) => Promise<any>;
   },
-): Step<string, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, InngestEngineType>;
+): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, InngestEngineType>;
 export function createStep<
   TStepId extends string,
+  TState extends z.ZodObject<any>,
   TStepInput extends z.ZodType<any>,
   TStepOutput extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
@@ -700,6 +711,7 @@ export function createStep<
         resumeSchema?: TResumeSchema;
         suspendSchema?: TSuspendSchema;
         execute: ExecuteFunction<
+          z.infer<TState>,
           z.infer<TStepInput>,
           z.infer<TStepOutput>,
           z.infer<TResumeSchema>,
@@ -713,7 +725,7 @@ export function createStep<
         outputSchema: TStepOutput;
         execute: (context: ToolExecutionContext<TStepInput>) => Promise<any>;
       }),
-): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType> {
+): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType> {
   if (isAgent(params)) {
     return {
       id: params.name,
@@ -854,24 +866,29 @@ export function init(inngest: Inngest) {
   return {
     createWorkflow<
       TWorkflowId extends string = string,
+      TState extends z.ZodObject<any> = z.ZodObject<any>,
       TInput extends z.ZodType<any> = z.ZodType<any>,
       TOutput extends z.ZodType<any> = z.ZodType<any>,
-      TSteps extends Step<string, any, any, any, any, InngestEngineType>[] = Step<
+      TSteps extends Step<string, any, any, any, any, any, InngestEngineType>[] = Step<
         string,
+        any,
         any,
         any,
         any,
         any,
         InngestEngineType
       >[],
-    >(params: InngestWorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
-      return new InngestWorkflow<InngestEngineType, TSteps, TWorkflowId, TInput, TOutput, TInput>(params, inngest);
+    >(params: InngestWorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
+      return new InngestWorkflow<InngestEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput>(
+        params,
+        inngest,
+      );
     },
     createStep,
     cloneStep<TStepId extends string>(
-      step: Step<string, any, any, any, any, InngestEngineType>,
+      step: Step<string, any, any, any, any, any, InngestEngineType>,
       opts: { id: TStepId },
-    ): Step<TStepId, any, any, any, any, InngestEngineType> {
+    ): Step<TStepId, any, any, any, any, any, InngestEngineType> {
       return {
         id: opts.id,
         description: step.description,
@@ -883,10 +900,12 @@ export function init(inngest: Inngest) {
     },
     cloneWorkflow<
       TWorkflowId extends string = string,
+      TState extends z.ZodObject<any> = z.ZodObject<any>,
       TInput extends z.ZodType<any> = z.ZodType<any>,
       TOutput extends z.ZodType<any> = z.ZodType<any>,
-      TSteps extends Step<string, any, any, any, any, InngestEngineType>[] = Step<
+      TSteps extends Step<string, any, any, any, any, any, InngestEngineType>[] = Step<
         string,
+        any,
         any,
         any,
         any,
@@ -895,10 +914,10 @@ export function init(inngest: Inngest) {
       >[],
       TPrevSchema extends z.ZodType<any> = TInput,
     >(
-      workflow: Workflow<InngestEngineType, TSteps, string, TInput, TOutput, TPrevSchema>,
+      workflow: Workflow<InngestEngineType, TSteps, string, TState, TInput, TOutput, TPrevSchema>,
       opts: { id: TWorkflowId },
-    ): Workflow<InngestEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema> {
-      const wf: Workflow<InngestEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema> = new Workflow({
+    ): Workflow<InngestEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
+      const wf: Workflow<InngestEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> = new Workflow({
         id: opts.id,
         inputSchema: workflow.inputSchema,
         outputSchema: workflow.outputSchema,
@@ -928,13 +947,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     this.inngestAttempts = inngestAttempts;
   }
 
-  async execute<TInput, TOutput>(params: {
+  async execute<TState, TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
     resourceId?: string;
     graph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
+    initialState?: TState;
     resume?: {
       // TODO: add execute path
       steps: string[];
@@ -956,7 +976,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       payload: { runId: params.runId },
     });
 
-    const result = await super.execute<TInput, TOutput>(params);
+    const result = await super.execute<TState, TInput, TOutput>(params);
 
     await params.emitter.emit('watch-v2', {
       type: 'workflow-finish',
@@ -1050,6 +1070,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     entry,
     prevOutput,
     stepResults,
+    state,
     emitter,
     abortController,
     runtimeContext,
@@ -1064,11 +1085,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       type: 'sleep';
       id: string;
       duration?: number;
-      fn?: ExecuteFunction<any, any, any, any, InngestEngineType>;
+      fn?: ExecuteFunction<any, any, any, any, any, InngestEngineType>;
     };
     prevStep: StepFlowEntry;
     prevOutput: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    state: Record<string, any>;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -1103,6 +1125,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           mastra: this.mastra!,
           runtimeContext,
           inputData: prevOutput,
+          state,
           runCount: -1,
           tracingContext: {
             currentSpan: sleepSpan,
@@ -1155,6 +1178,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     entry,
     prevOutput,
     stepResults,
+    state,
     emitter,
     abortController,
     runtimeContext,
@@ -1169,11 +1193,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       type: 'sleepUntil';
       id: string;
       date?: Date;
-      fn?: ExecuteFunction<any, any, any, any, InngestEngineType>;
+      fn?: ExecuteFunction<any, any, any, any, any, InngestEngineType>;
     };
     prevStep: StepFlowEntry;
     prevOutput: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    state: Record<string, any>;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -1209,6 +1234,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           mastra: this.mastra!,
           runtimeContext,
           inputData: prevOutput,
+          state,
           runCount: -1,
           tracingContext: {
             currentSpan: sleepUntilSpan,
@@ -1730,6 +1756,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     workflowId,
     runId,
     stepResults,
+    state,
     resourceId,
     executionContext,
     serializedStepGraph,
@@ -1740,6 +1767,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     workflowId: string;
     runId: string;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    state: Record<string, any>;
     serializedStepGraph: SerializedStepFlowEntry[];
     resourceId?: string;
     executionContext: ExecutionContext;
@@ -1757,7 +1785,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           resourceId,
           snapshot: {
             runId,
-            value: {},
+            value: state,
             context: stepResults as any,
             activePaths: [],
             suspendedPaths: executionContext.suspendedPaths,
@@ -1781,6 +1809,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     prevOutput,
     prevStep,
     stepResults,
+    state,
     serializedStepGraph,
     resume,
     executionContext,
@@ -1796,12 +1825,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     entry: {
       type: 'conditional';
       steps: StepFlowEntry[];
-      conditions: ExecuteFunction<any, any, any, any, InngestEngineType>[];
+      conditions: ExecuteFunction<any, any, any, any, any, InngestEngineType>[];
     };
     prevStep: StepFlowEntry;
     serializedStepGraph: SerializedStepFlowEntry[];
     prevOutput: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    state: Record<string, any>;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -1849,6 +1879,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 runtimeContext,
                 runCount: -1,
                 inputData: prevOutput,
+                state,
                 tracingContext: {
                   currentSpan: evalSpan,
                 },
@@ -1919,6 +1950,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           serializedStepGraph,
           prevStep,
           stepResults,
+          state,
           resume,
           executionContext: {
             workflowId,
