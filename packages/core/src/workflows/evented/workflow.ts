@@ -307,11 +307,11 @@ export class EventedWorkflow<
     this.executionEngine.__registerMastra(mastra);
   }
 
-  async createRunAsync(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TInput, TOutput>> {
+  async createRunAsync(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
-    const run: Run<TEngineType, TSteps, TInput, TOutput> =
+    const run: Run<TEngineType, TSteps, TState, TInput, TOutput> =
       this.runs.get(runIdToUse) ??
       new EventedRun({
         workflowId: this.id,
@@ -357,9 +357,10 @@ export class EventedWorkflow<
 export class EventedRun<
   TEngineType = EventedEngineType,
   TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
+  TState extends z.ZodObject<any> = z.ZodObject<any>,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
-> extends Run<TEngineType, TSteps, TInput, TOutput> {
+> extends Run<TEngineType, TSteps, TState, TInput, TOutput> {
   constructor(params: {
     workflowId: string;
     runId: string;
@@ -381,10 +382,12 @@ export class EventedRun<
 
   async start({
     inputData,
+    initialState,
     runtimeContext,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
+    initialState?: z.infer<TState>;
   }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
@@ -416,13 +419,19 @@ export class EventedRun<
     });
 
     const inputDataToUse = await this._validateInput(inputData);
+    const initialStateToUse = await this._validateInitialState(initialState ?? {});
 
-    const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
+    const result = await this.executionEngine.execute<
+      z.infer<TState>,
+      z.infer<TInput>,
+      WorkflowResult<TInput, TOutput, TSteps>
+    >({
       workflowId: this.workflowId,
       runId: this.runId,
       graph: this.executionGraph,
       serializedStepGraph: this.serializedStepGraph,
       input: inputDataToUse,
+      initialState: initialStateToUse,
       emitter: {
         emit: async (event: string, data: any) => {
           this.emitter.emit(event, data);
@@ -510,7 +519,7 @@ export class EventedRun<
     const resumeDataToUse = await this._validateResumeData(params.resumeData, suspendedStep);
 
     const executionResultPromise = this.executionEngine
-      .execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
+      .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
         runId: this.runId,
         graph: this.executionGraph,

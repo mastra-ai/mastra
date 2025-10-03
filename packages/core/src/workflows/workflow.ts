@@ -399,7 +399,7 @@ export class Workflow<
 
   #mastra?: Mastra;
 
-  #runs: Map<string, Run<TEngineType, TSteps, TInput, TOutput>> = new Map();
+  #runs: Map<string, Run<TEngineType, TSteps, TState, TInput, TOutput>> = new Map();
 
   constructor({
     mastra,
@@ -934,7 +934,7 @@ export class Workflow<
     runId?: string;
     resourceId?: string;
     disableScorers?: boolean;
-  }): Run<TEngineType, TSteps, TInput, TOutput> {
+  }): Run<TEngineType, TSteps, TState, TInput, TOutput> {
     throw new Error(
       'createRun() has been deprecated. ' +
         'Please use createRunAsync() instead.\n\n' +
@@ -957,7 +957,7 @@ export class Workflow<
     runId?: string;
     resourceId?: string;
     disableScorers?: boolean;
-  }): Promise<Run<TEngineType, TSteps, TInput, TOutput>> {
+  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
     if (this.stepFlow.length === 0) {
       throw new Error(
         'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
@@ -973,6 +973,7 @@ export class Workflow<
       this.#runs.get(runIdToUse) ??
       new Run({
         workflowId: this.id,
+        stateSchema: this.stateSchema,
         runId: runIdToUse,
         resourceId: options?.resourceId,
         executionEngine: this.executionEngine,
@@ -1291,6 +1292,7 @@ export class Run<
     any,
     TEngineType
   >[],
+  TState extends z.ZodObject<any> = z.ZodObject<any>,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
 > {
@@ -1364,8 +1366,9 @@ export class Run<
   }
 
   protected closeStreamAction?: () => Promise<void>;
-  protected activeStream?: MastraWorkflowStream<TInput, TOutput, TSteps>;
+  protected activeStream?: MastraWorkflowStream<TState, TInput, TOutput, TSteps>;
   protected executionResults?: Promise<WorkflowResult<TInput, TOutput, TSteps>>;
+  protected stateSchema?: z.ZodObject<any>;
 
   protected cleanup?: () => void;
 
@@ -1378,6 +1381,7 @@ export class Run<
     workflowId: string;
     runId: string;
     resourceId?: string;
+    stateSchema?: z.ZodObject<any>;
     executionEngine: ExecutionEngine;
     executionGraph: ExecutionGraph;
     mastra?: Mastra;
@@ -1406,6 +1410,7 @@ export class Run<
     this.tracingPolicy = params.tracingPolicy;
     this.workflowSteps = params.workflowSteps;
     this.validateInputs = params.validateInputs;
+    this.stateSchema = params.stateSchema;
   }
 
   public get abortController(): AbortController {
@@ -1461,6 +1466,28 @@ export class Run<
     return inputDataToUse;
   }
 
+  protected async _validateInitialState(initialState: z.input<TState>) {
+    let initialStateToUse = initialState;
+    if (this.validateInputs) {
+      let inputSchema: z.ZodType<any> | undefined = this.stateSchema;
+
+      if (inputSchema) {
+        const validatedInputData = await inputSchema.safeParseAsync(initialState);
+
+        if (!validatedInputData.success) {
+          throw new Error(
+            'Invalid input data: \n' +
+              validatedInputData.error.errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+          );
+        }
+
+        initialStateToUse = validatedInputData.data;
+      }
+    }
+
+    return initialStateToUse;
+  }
+
   protected async _validateResumeData<TResumeSchema extends z.ZodType<any>>(
     resumeData: z.input<TResumeSchema>,
     suspendedStep?: StepWithComponent,
@@ -1487,6 +1514,7 @@ export class Run<
 
   protected async _start({
     inputData,
+    initialState,
     runtimeContext,
     writableStream,
     tracingContext,
@@ -1494,6 +1522,7 @@ export class Run<
     format,
   }: {
     inputData?: z.input<TInput>;
+    initialState?: z.input<TState>;
     runtimeContext?: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
@@ -1517,8 +1546,13 @@ export class Run<
     const traceId = getValidTraceId(workflowAISpan);
 
     const inputDataToUse = await this._validateInput(inputData);
+    const initialStateToUse = await this._validateInitialState(initialState ?? {});
 
-    const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
+    const result = await this.executionEngine.execute<
+      z.infer<TState>,
+      z.infer<TInput>,
+      WorkflowResult<TInput, TOutput, TSteps>
+    >({
       workflowId: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
@@ -1526,6 +1560,7 @@ export class Run<
       graph: this.executionGraph,
       serializedStepGraph: this.serializedStepGraph,
       input: inputDataToUse,
+      initialState: initialStateToUse,
       emitter: {
         emit: async (event: string, data: any) => {
           this.emitter.emit(event, data);
@@ -1563,12 +1598,14 @@ export class Run<
    */
   async start({
     inputData,
+    initialState,
     runtimeContext,
     writableStream,
     tracingContext,
     tracingOptions,
   }: {
     inputData?: z.input<TInput>;
+    initialState?: z.input<TState>;
     runtimeContext?: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
@@ -1576,6 +1613,7 @@ export class Run<
   }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
     return this._start({
       inputData,
+      initialState,
       runtimeContext,
       writableStream,
       tracingContext,
@@ -1803,14 +1841,14 @@ export class Run<
     format?: 'aisdk' | 'mastra' | undefined;
     closeOnSuspend?: boolean;
     onChunk?: (chunk: ChunkType) => Promise<unknown>;
-  } = {}): MastraWorkflowStream<TInput, TOutput, TSteps> {
+  } = {}): MastraWorkflowStream<TState, TInput, TOutput, TSteps> {
     if (this.closeStreamAction && this.activeStream) {
       return this.activeStream;
     }
 
     this.closeStreamAction = async () => {};
 
-    this.activeStream = new MastraWorkflowStream<TInput, TOutput, TSteps>({
+    this.activeStream = new MastraWorkflowStream<TState, TInput, TOutput, TSteps>({
       run: this,
       createStream: () => {
         const { readable, writable } = new TransformStream<ChunkType, ChunkType>({
@@ -2230,7 +2268,7 @@ export class Run<
     const traceId = getValidTraceId(workflowAISpan);
 
     const executionResultPromise = this.executionEngine
-      .execute<z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
+      .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
         runId: this.runId,
         resourceId: this.resourceId,
