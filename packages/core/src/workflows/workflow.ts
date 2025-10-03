@@ -718,11 +718,25 @@ export class Workflow<
   }
 
   // TODO: make typing better here
-  parallel<TParallelSteps extends Step<string, any, TPrevSchema, any, any, any, TEngineType>[]>(steps: TParallelSteps) {
+  parallel<TParallelSteps extends readonly Step<string, any, TPrevSchema, any, any, any, TEngineType>[]>(
+    steps: TParallelSteps & {
+      [K in keyof TParallelSteps]: TParallelSteps[K] extends Step<
+        string,
+        infer S extends z.ZodObject<any>,
+        TPrevSchema,
+        infer O,
+        infer R,
+        infer E,
+        TEngineType
+      >
+        ? Step<string, SubsetOf<S, TState>, TPrevSchema, O, R, E, TEngineType>
+        : `Error: Expected Step with state schema that is a subset of workflow state`;
+    },
+  ) {
     this.stepFlow.push({ type: 'parallel', steps: steps.map(step => ({ type: 'step', step: step as any })) });
     this.serializedStepFlow.push({
       type: 'parallel',
-      steps: steps.map(step => ({
+      steps: steps.map((step: any) => ({
         type: 'step',
         step: {
           id: step.id,
@@ -732,7 +746,7 @@ export class Workflow<
         },
       })),
     });
-    steps.forEach(step => {
+    steps.forEach((step: any) => {
       this.steps[step.id] = step;
     });
     return this as unknown as Workflow<
@@ -753,6 +767,7 @@ export class Workflow<
   }
 
   // TODO: make typing better here
+  // TODO: add state schema to the type, this is currently broken
   branch<
     TBranchSteps extends Array<
       [

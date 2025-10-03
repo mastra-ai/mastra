@@ -3200,6 +3200,65 @@ describe('Workflow', () => {
       });
     });
 
+    it('should execute multiple steps in parallel with state', async () => {
+      const step1Action = vi.fn().mockImplementation(async ({ state }) => {
+        return { value: 'step1', value2: state.value };
+      });
+      const step2Action = vi.fn().mockImplementation(async ({ state }) => {
+        return { value: 'step2', value2: state.value };
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        stateSchema: z.object({ value: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        stateSchema: z.object({ value: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        stateSchema: z.object({ value: z.string() }),
+        steps: [step1, step2],
+      });
+
+      workflow.parallel([step1, step2]).commit();
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: {}, initialState: { value: 'test-state' } });
+
+      expect(step1Action).toHaveBeenCalled();
+      expect(step2Action).toHaveBeenCalled();
+      expect(result.steps).toEqual({
+        input: {},
+        step1: {
+          status: 'success',
+          output: { value: 'step1', value2: 'test-state' },
+          payload: {},
+
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        step2: {
+          status: 'success',
+          output: { value: 'step2', value2: 'test-state' },
+          payload: {},
+
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
     it('should have runId in the step execute function - bug #4260', async () => {
       const step1Action = vi.fn().mockImplementation(({ runId }) => {
         return { value: runId };
@@ -4115,6 +4174,95 @@ describe('Workflow', () => {
           inputSchema: z.object({ status: z.string() }),
           outputSchema: z.object({ result: z.string() }),
           steps: [step1, step2, step3],
+        });
+
+        workflow
+          .then(step1)
+          .branch([
+            [
+              async ({ inputData }) => {
+                return inputData.status === 'success';
+              },
+              step2,
+            ],
+            [
+              async ({ inputData }) => {
+                return inputData.status === 'failed';
+              },
+              step3,
+            ],
+          ])
+          .map({
+            result: {
+              step: [step3, step2],
+              path: 'result',
+            },
+          })
+          .then(step4)
+          .commit();
+
+        const run = await workflow.createRunAsync();
+        const result = await run.start({ inputData: { status: 'success' } });
+
+        expect(step1Action).toHaveBeenCalled();
+        expect(step2Action).toHaveBeenCalled();
+        expect(step3Action).not.toHaveBeenCalled();
+        expect(result.steps).toMatchObject({
+          input: { status: 'success' },
+          step1: { status: 'success', output: { status: 'success' } },
+          step2: { status: 'success', output: { result: 'step2' } },
+          step4: { status: 'success', output: { result: 'step2' } },
+        });
+      });
+
+      it.todo('should follow conditional chains with state', async () => {
+        const step1Action = vi.fn().mockImplementation(() => {
+          return Promise.resolve({ status: 'success' });
+        });
+        const step2Action = vi.fn().mockImplementation(() => {
+          return Promise.resolve({ result: 'step2' });
+        });
+        const step3Action = vi.fn().mockImplementation(() => {
+          return Promise.resolve({ result: 'step3' });
+        });
+
+        const step1 = createStep({
+          id: 'step1',
+          execute: step1Action,
+          inputSchema: z.object({ status: z.string() }),
+          outputSchema: z.object({ status: z.string() }),
+          stateSchema: z.object({ value: z.string() }),
+        });
+        const step2 = createStep({
+          id: 'step2',
+          execute: step2Action,
+          inputSchema: z.object({ status: z.string() }),
+          outputSchema: z.object({ result: z.string() }),
+          stateSchema: z.object({ value: z.string() }),
+        });
+        const step3 = createStep({
+          id: 'step3',
+          execute: step3Action,
+          inputSchema: z.object({ status: z.string() }),
+          outputSchema: z.object({ result: z.string() }),
+          stateSchema: z.object({ value: z.string() }),
+        });
+        const step4 = createStep({
+          id: 'step4',
+          execute: async ({ inputData }) => {
+            return { result: inputData.result };
+          },
+          inputSchema: z.object({ result: z.string() }),
+          outputSchema: z.object({ result: z.string() }),
+          stateSchema: z.object({ value: z.string() }),
+        });
+
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: z.object({ status: z.string() }),
+          outputSchema: z.object({ result: z.string() }),
+          steps: [step1, step2, step3],
+          stateSchema: z.object({ value: z.string() }),
         });
 
         workflow
