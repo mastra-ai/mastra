@@ -4215,15 +4215,15 @@ describe('Workflow', () => {
         });
       });
 
-      it.todo('should follow conditional chains with state', async () => {
-        const step1Action = vi.fn().mockImplementation(() => {
-          return Promise.resolve({ status: 'success' });
+      it('should follow conditional chains with state', async () => {
+        const step1Action = vi.fn().mockImplementation(({ state }) => {
+          return Promise.resolve({ status: 'success', value: state.value });
         });
-        const step2Action = vi.fn().mockImplementation(() => {
-          return Promise.resolve({ result: 'step2' });
+        const step2Action = vi.fn().mockImplementation(({ state }) => {
+          return Promise.resolve({ result: 'step2', value: state.value });
         });
-        const step3Action = vi.fn().mockImplementation(() => {
-          return Promise.resolve({ result: 'step3' });
+        const step3Action = vi.fn().mockImplementation(({ state }) => {
+          return Promise.resolve({ result: 'step3', value: state.value });
         });
 
         const step1 = createStep({
@@ -4249,8 +4249,8 @@ describe('Workflow', () => {
         });
         const step4 = createStep({
           id: 'step4',
-          execute: async ({ inputData }) => {
-            return { result: inputData.result };
+          execute: async ({ inputData, state }) => {
+            return { result: inputData.result, value: state.value };
           },
           inputSchema: z.object({ result: z.string() }),
           outputSchema: z.object({ result: z.string() }),
@@ -4291,16 +4291,16 @@ describe('Workflow', () => {
           .commit();
 
         const run = await workflow.createRunAsync();
-        const result = await run.start({ inputData: { status: 'success' } });
+        const result = await run.start({ inputData: { status: 'success' }, initialState: { value: 'test-state' } });
 
         expect(step1Action).toHaveBeenCalled();
         expect(step2Action).toHaveBeenCalled();
         expect(step3Action).not.toHaveBeenCalled();
         expect(result.steps).toMatchObject({
           input: { status: 'success' },
-          step1: { status: 'success', output: { status: 'success' } },
-          step2: { status: 'success', output: { result: 'step2' } },
-          step4: { status: 'success', output: { result: 'step2' } },
+          step1: { status: 'success', output: { status: 'success', value: 'test-state' } },
+          step2: { status: 'success', output: { result: 'step2', value: 'test-state' } },
+          step4: { status: 'success', output: { result: 'step2', value: 'test-state' } },
         });
       });
 
