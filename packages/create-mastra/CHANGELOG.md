@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.14.1
+
+### Patch Changes
+
+- Make init versions latest pkgs ([#8434](https://github.com/mastra-ai/mastra/pull/8434))
+
 ## 0.14.1-alpha.0
 
 ### Patch Changes
