@@ -1,4 +1,4 @@
-import { BadgeMessage } from '@/components/assistant-ui/tools/badges/agent-badge';
+import { AgentMessage } from '@/components/assistant-ui/tools/badges/agent-badge';
 import { ThreadMessageLike } from '@assistant-ui/react';
 
 export const handleNetworkMessageFromMemory = (content: any): ThreadMessageLike => {
@@ -26,7 +26,7 @@ export const handleNetworkMessageFromMemory = (content: any): ThreadMessageLike 
   }
 
   if (content.primitiveType === 'agent') {
-    const badgeMessages: BadgeMessage[] = [];
+    const badgeMessages: AgentMessage[] = [];
     let toolCalls: Record<string, any> = {};
 
     // First message is sliced because it's the agent network prompt
