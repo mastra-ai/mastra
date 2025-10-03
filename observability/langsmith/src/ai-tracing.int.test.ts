@@ -38,12 +38,10 @@ it.skip('should initialize with correct configuration', async () => {
     },
   });
 
-  // Use generateVNext (AI SDK v5 method) with tools
-  const res = await mastra.getAgent('agent').generateVNext('What is 21 + 21? Use tools if needed.');
+  const res = await mastra.getAgent('agent').generate('What is 21 + 21? Use tools if needed.');
   console.log(res?.text ?? res);
 
-  // Use streamVNext for streaming responses
-  const stream = await mastra.getAgent('agent').streamVNext('What is 21 + 21? Use tools if needed.');
+  const stream = await mastra.getAgent('agent').stream('What is 21 + 21? Use tools if needed.');
   console.log(await stream.text);
 
   // TODO: Flush properly

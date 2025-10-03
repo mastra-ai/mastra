@@ -738,7 +738,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
           controller.enqueue(chunk);
         },
         flush: () => {
-          if (!self.#options.output && self.#delayedPromises.object.status.type !== 'resolved') {
+          if (self.#delayedPromises.object.status.type !== 'resolved') {
             // always resolve object promise as undefined if still hanging in flush and no output schema provided
             self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
           }
@@ -1052,7 +1052,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    *
    * @example
    * ```typescript
-   * const stream = await agent.streamVNext("Extract data", {
+   * const stream = await agent.stream("Extract data", {
    *   output: z.object({ name: z.string(), age: z.number() })
    * });
    * // partial json chunks
@@ -1121,7 +1121,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    *
    * @example
    * ```typescript
-   * const stream = await agent.streamVNext("Extract data", {
+   * const stream = await agent.stream("Extract data", {
    *   output: z.object({ name: z.string(), age: z.number() })
    * });
    * // final validated json

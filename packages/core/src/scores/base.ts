@@ -537,12 +537,12 @@ class MastraScorer<
     if (scorerStep.name === 'generateScore') {
       let result;
       if (model.specificationVersion === 'v2') {
-        result = await judge.generateVNext(prompt, {
+        result = await judge.generate(prompt, {
           output: z.object({ score: z.number() }),
           tracingContext,
         });
       } else {
-        result = await judge.generate(prompt, {
+        result = await judge.generateLegacy(prompt, {
           output: z.object({ score: z.number() }),
           tracingContext,
         });
@@ -553,21 +553,21 @@ class MastraScorer<
     } else if (scorerStep.name === 'generateReason') {
       let result;
       if (model.specificationVersion === 'v2') {
-        result = await judge.generateVNext(prompt, { tracingContext });
-      } else {
         result = await judge.generate(prompt, { tracingContext });
+      } else {
+        result = await judge.generateLegacy(prompt, { tracingContext });
       }
       return { result: result.text, prompt };
     } else {
       const promptStep = originalStep as PromptObject<any, any, any, TInput, TRunOutput>;
       let result;
       if (model.specificationVersion === 'v2') {
-        result = await judge.generateVNext(prompt, {
+        result = await judge.generate(prompt, {
           output: promptStep.outputSchema,
           tracingContext,
         });
       } else {
-        result = await judge.generate(prompt, {
+        result = await judge.generateLegacy(prompt, {
           output: promptStep.outputSchema,
           tracingContext,
         });

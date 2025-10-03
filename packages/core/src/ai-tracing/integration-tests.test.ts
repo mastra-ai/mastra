@@ -553,7 +553,7 @@ const mockModelV1 = new MockLanguageModelV1({
 
 /**
  * Mock V2 language model for testing new generation methods.
- * Supports both generateVNext() and streamVNext() operations.
+ * Supports both generate() and stream() operations.
  * Intelligently calls tools based on prompt content or returns structured text responses.
  * Limits tool calls to one per test to avoid infinite loops.
  * Supports structured output mode.
@@ -685,9 +685,9 @@ const agentMethods = [
     expectedText: 'Mock response',
   },
   {
-    name: 'generateVNext',
+    name: 'generate',
     method: async (agent: Agent, prompt: string, options?: any) => {
-      const result = await agent.generateVNext(prompt, options);
+      const result = await agent.generate(prompt, options);
       return { text: result.text, object: result.object, traceId: result.traceId };
     },
     model: mockModelV2,
@@ -707,9 +707,9 @@ const agentMethods = [
     expectedText: 'Mock streaming response',
   },
   {
-    name: 'streamVNext',
+    name: 'stream',
     method: async (agent: Agent, prompt: string, options?: any) => {
-      const result = await agent.streamVNext(prompt, options);
+      const result = await agent.stream(prompt, options);
       let fullText = '';
       for await (const chunk of result.textStream) {
         fullText += chunk;
@@ -1690,7 +1690,7 @@ describe('AI Tracing Integration Tests', () => {
     });
 
     const agent = mastra.getAgent('structuredAgent');
-    const result = await agent.generate('Generate a person object', {
+    const result = await agent.generateLegacy('Generate a person object', {
       output: schema,
     });
 

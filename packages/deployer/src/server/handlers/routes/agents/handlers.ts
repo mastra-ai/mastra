@@ -9,10 +9,8 @@ import {
   getLiveEvalsByAgentIdHandler as getOriginalLiveEvalsByAgentIdHandler,
   generateHandler as getOriginalGenerateHandler,
   streamGenerateHandler as getOriginalStreamGenerateHandler,
-  streamVNextGenerateHandler as getOriginalStreamVNextGenerateHandler,
   updateAgentModelHandler as getOriginalUpdateAgentModelHandler,
-  generateVNextHandler as getOriginalVNextGenerateHandler,
-  streamVNextUIMessageHandler as getOriginalStreamVNextUIMessageHandler,
+  streamUIMessageHandler as getOriginalStreamUIMessageHandler,
   generateLegacyHandler as getOriginalGenerateLegacyHandler,
   streamGenerateLegacyHandler as getOriginalStreamGenerateLegacyHandler,
   reorderAgentModelListHandler as getOriginalReorderAgentModelListHandler,
@@ -220,27 +218,6 @@ export async function generateHandler(c: Context) {
   }
 }
 
-export async function generateVNextHandler(c: Context) {
-  try {
-    const mastra: Mastra = c.get('mastra');
-    const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
-    const body = await c.req.json();
-
-    const result = await getOriginalVNextGenerateHandler({
-      mastra,
-      agentId,
-      runtimeContext,
-      body,
-      abortSignal: c.req.raw.signal,
-    });
-
-    return c.json(result);
-  } catch (error) {
-    return handleError(error, 'Error generating vnext from agent');
-  }
-}
-
 export async function streamGenerateLegacyHandler(c: Context): Promise<Response | undefined> {
   try {
     const mastra = c.get('mastra');
@@ -268,27 +245,6 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
     const agentId = c.req.param('agentId');
     const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const body = await c.req.json();
-
-    const streamResponse = await getOriginalStreamGenerateHandler({
-      mastra,
-      agentId,
-      runtimeContext,
-      body,
-      abortSignal: c.req.raw.signal,
-    });
-
-    return streamResponse;
-  } catch (error) {
-    return handleError(error, 'Error streaming from agent');
-  }
-}
-
-export async function streamVNextGenerateHandler(c: Context): Promise<Response | undefined> {
-  try {
-    const mastra = c.get('mastra');
-    const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
-    const body = await c.req.json();
     const logger = mastra.getLogger();
 
     c.header('Transfer-Encoding', 'chunked');
@@ -297,7 +253,7 @@ export async function streamVNextGenerateHandler(c: Context): Promise<Response |
       c,
       async stream => {
         try {
-          const streamResponse = await getOriginalStreamVNextGenerateHandler({
+          const streamResponse = await getOriginalStreamGenerateHandler({
             mastra,
             agentId,
             runtimeContext,
@@ -318,7 +274,7 @@ export async function streamVNextGenerateHandler(c: Context): Promise<Response |
 
           await stream.write('data: [DONE]\n\n');
         } catch (err) {
-          logger.error('Error in streamVNext generate: ' + ((err as Error)?.message ?? 'Unknown error'));
+          logger.error('Error in stream generate: ' + ((err as Error)?.message ?? 'Unknown error'));
         }
 
         await stream.close();
@@ -507,14 +463,14 @@ export async function streamNetworkHandler(c: Context) {
   }
 }
 
-export async function streamVNextUIMessageHandler(c: Context): Promise<Response | undefined> {
+export async function streamUIMessageHandler(c: Context): Promise<Response | undefined> {
   try {
     const mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const body = await c.req.json();
 
-    const streamResponse = await getOriginalStreamVNextUIMessageHandler({
+    const streamResponse = await getOriginalStreamUIMessageHandler({
       mastra,
       agentId,
       runtimeContext,
@@ -584,9 +540,9 @@ export async function deprecatedStreamVNextHandler(c: Context) {
   return c.json(
     {
       error: 'This endpoint is deprecated',
-      message: 'The /streamVNext endpoint has been deprecated. Please use an alternative streaming endpoint.',
-      deprecated_endpoint: '/api/agents/:agentId/streamVNext',
-      replacement_endpoint: '/api/agents/:agentId/stream/vnext',
+      message: 'The /stream/vnext endpoint has been deprecated. Please use an alternative streaming endpoint.',
+      deprecated_endpoint: '/api/agents/:agentId/stream/vnext',
+      replacement_endpoint: '/api/agents/:agentId/stream',
     },
     410, // 410 Gone status code for deprecated endpoints
   );

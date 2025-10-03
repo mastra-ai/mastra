@@ -227,13 +227,13 @@ async function executeWorkflow(target: Workflow, item: RunExperimentDataItem<any
 async function executeAgent(agent: Agent, item: RunExperimentDataItem<any>) {
   const model = await agent.getModel();
   if (model.specificationVersion === 'v2') {
-    return await agent.generateVNext(item.input as any, {
+    return await agent.generate(item.input as any, {
       scorers: {},
       returnScorerData: true,
       runtimeContext: item.runtimeContext,
     });
   } else {
-    return await agent.generate(item.input as any, {
+    return await agent.generateLegacy(item.input as any, {
       scorers: {},
       returnScorerData: true,
       runtimeContext: item.runtimeContext,

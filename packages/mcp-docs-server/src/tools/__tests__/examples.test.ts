@@ -82,11 +82,11 @@ describe('examplesTool', () => {
     });
 
     it('should include TypeScript type definitions', async () => {
-      const result = await callTool(tools.mastra_mastraExamples, { example: 'agent-network' });
+      const result = await callTool(tools.mastra_mastraExamples, { example: 'agent' });
 
       // Check for TypeScript types and interfaces
       expect(result).toMatch(/import\s+{\s*Agent\s*}\s+from/i); // Type import
-      expect(result).toMatch(/import\s+{\s*AgentNetwork\s*}\s+from/i); // Network type import
+      expect(result).toMatch(/import\s+{\s*Mastra\s*}\s+from/i); // Mastra type import
     });
 
     it('should demonstrate external API integration patterns', async () => {
@@ -179,7 +179,6 @@ describe('examplesTool', () => {
       const expectedExamples = [
         'quick-start',
         'agent',
-        'agent-network',
         'bird-checker-with-express',
         'bird-checker-with-nextjs',
         'memory-todo-agent',

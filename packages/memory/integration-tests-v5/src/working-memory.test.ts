@@ -115,7 +115,7 @@ describe('Working Memory Tests', () => {
         memory,
       });
 
-      await agent.generateVNext('Hi, my name is Tyler and I live in San Francisco', {
+      await agent.generate('Hi, my name is Tyler and I live in San Francisco', {
         threadId: thread.id,
         resourceId,
       });
@@ -240,7 +240,7 @@ describe('Working Memory Tests', () => {
 
       const thread = await memory.createThread(createTestThread(`Tool call working memory test`));
 
-      await agent.generateVNext('Hi, my name is Tyler and I live in San Francisco', {
+      await agent.generate('Hi, my name is Tyler and I live in San Francisco', {
         threadId: thread.id,
         resourceId,
       });
@@ -265,7 +265,7 @@ describe('Working Memory Tests', () => {
 
       const thread = await memory.createThread(createTestThread(`Tool call working memory context pollution test`));
 
-      await agent.generateVNext('Hi, my name is Tyler and I live in a submarine under the sea', {
+      await agent.generate('Hi, my name is Tyler and I live in a submarine under the sea', {
         threadId: thread.id,
         resourceId,
       });
@@ -279,7 +279,7 @@ describe('Working Memory Tests', () => {
         expect(workingMemory?.toLowerCase()).toContain('submarine under the sea');
       }
 
-      await agent.generateVNext('I changed my name to Jim', {
+      await agent.generate('I changed my name to Jim', {
         threadId: thread.id,
         resourceId,
       });
@@ -293,7 +293,7 @@ describe('Working Memory Tests', () => {
         expect(workingMemory?.toLowerCase()).toContain('submarine under the sea');
       }
 
-      await agent.generateVNext('I moved to Vancouver Island', {
+      await agent.generate('I moved to Vancouver Island', {
         threadId: thread.id,
         resourceId,
       });
@@ -489,7 +489,7 @@ describe('Working Memory Tests', () => {
       });
 
       // First call to establish a fact in working memory
-      await agent.generateVNext('My favorite animal is the majestic wolf.', {
+      await agent.generate('My favorite animal is the majestic wolf.', {
         threadId: thread.id,
         resourceId,
       });
@@ -502,13 +502,13 @@ describe('Working Memory Tests', () => {
       }
 
       // add messages to the thread
-      await agent.generateVNext('How are you doing?', {
+      await agent.generate('How are you doing?', {
         threadId: thread.id,
         resourceId,
       });
 
       // third call to see if the agent remembers the fact
-      const response = await agent.generateVNext('What is my favorite animal?', {
+      const response = await agent.generate('What is my favorite animal?', {
         threadId: thread.id,
         resourceId,
       });
@@ -581,7 +581,7 @@ describe('Working Memory Tests', () => {
 
       it('should accept valid working memory updates matching the schema', async () => {
         const validMemory = { city: 'Austin', temperature: 85 };
-        await agent.generateVNext('I am in the city of Austin and it is 85 degrees.', {
+        await agent.generate('I am in the city of Austin and it is 85 degrees.', {
           threadId: thread.id,
           resourceId,
         });
@@ -594,12 +594,12 @@ describe('Working Memory Tests', () => {
 
       it('should recall the most recent valid schema-based working memory', async () => {
         const second = { city: 'Denver', temperature: 75 };
-        await agent.generateVNext('Now I am in Seattle and it is 60 degrees', {
+        await agent.generate('Now I am in Seattle and it is 60 degrees', {
           threadId: thread.id,
           resourceId,
           modelSettings: { temperature: 0 },
         });
-        await agent.generateVNext('Now I am in Denver and it is 75 degrees', {
+        await agent.generate('Now I am in Denver and it is 75 degrees', {
           threadId: thread.id,
           resourceId,
           modelSettings: { temperature: 0 },
@@ -638,9 +638,9 @@ describe('Working Memory Tests', () => {
             },
           },
         };
-        await agent.generateVNext('Now I am in Toronto and it is 80 degrees', generateOptions);
+        await agent.generate('Now I am in Toronto and it is 80 degrees', generateOptions);
 
-        await agent.generateVNext('how are you doing?', generateOptions);
+        await agent.generate('how are you doing?', generateOptions);
 
         const firstWorkingMemory = await memory.getWorkingMemory({ threadId: newThread.id });
         const wm = typeof firstWorkingMemory === 'string' ? JSON.parse(firstWorkingMemory) : firstWorkingMemory;
@@ -665,9 +665,9 @@ describe('Working Memory Tests', () => {
         });
 
         // This should not update the working memory
-        await agent.generateVNext('how are you doing?', generateOptions);
+        await agent.generate('how are you doing?', generateOptions);
 
-        const result = await agent.generateVNext('Can you tell me where I am?', generateOptions);
+        const result = await agent.generate('Can you tell me where I am?', generateOptions);
 
         expect(result.text).toContain('Waterloo');
         const secondWorkingMemory = await memory.getWorkingMemory({ threadId: newThread.id });
@@ -790,7 +790,7 @@ describe('Working Memory Tests', () => {
     });
 
     it('should accept valid working memory updates matching the JSONSchema7', async () => {
-      await agent.generateVNext(
+      await agent.generate(
         'Hi, my name is John Doe, I am 30 years old and I live in Boston. I prefer dark theme and want notifications enabled.',
         {
           threadId: thread.id,
@@ -810,7 +810,7 @@ describe('Working Memory Tests', () => {
 
     it('should handle required and optional fields correctly with JSONSchema7', async () => {
       // Test with only required fields
-      await agent.generateVNext('My name is Jane Smith and I live in Portland.', {
+      await agent.generate('My name is Jane Smith and I live in Portland.', {
         threadId: thread.id,
         resourceId,
       });
@@ -827,7 +827,7 @@ describe('Working Memory Tests', () => {
 
     it('should update working memory progressively with JSONSchema7', async () => {
       // First message with partial info
-      await agent.generateVNext('Hi, I am Alex and I live in Miami.', {
+      await agent.generate('Hi, I am Alex and I live in Miami.', {
         threadId: thread.id,
         resourceId,
       });
@@ -841,7 +841,7 @@ describe('Working Memory Tests', () => {
       expect(userData.city).toBe('Miami');
 
       // Second message adding more info
-      await agent.generateVNext('I am 25 years old.', {
+      await agent.generate('I am 25 years old.', {
         threadId: thread.id,
         resourceId,
       });
@@ -858,7 +858,7 @@ describe('Working Memory Tests', () => {
 
     it('should persist working memory across multiple interactions with JSONSchema7', async () => {
       // Set initial data
-      await agent.generateVNext('My name is Sarah Wilson, I am 28 and live in Seattle.', {
+      await agent.generate('My name is Sarah Wilson, I am 28 and live in Seattle.', {
         threadId: thread.id,
         resourceId,
       });
@@ -871,7 +871,7 @@ describe('Working Memory Tests', () => {
       expect(userData.name).toBe('Sarah Wilson');
 
       // Ask a question that should use the working memory
-      const response = await agent.generateVNext('What is my name and where do I live?', {
+      const response = await agent.generate('What is my name and where do I live?', {
         threadId: thread.id,
         resourceId,
       });

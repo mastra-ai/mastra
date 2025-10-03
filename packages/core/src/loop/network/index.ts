@@ -239,7 +239,7 @@ export async function createNetworkLoop({
                           }
                       `;
 
-        completionResult = await routingAgent.generateVNext([{ role: 'assistant', content: completionPrompt }], {
+        completionResult = await routingAgent.generate([{ role: 'assistant', content: completionPrompt }], {
           structuredOutput: {
             schema: completionSchema,
           },
@@ -353,7 +353,7 @@ export async function createNetworkLoop({
         ...routingAgentOptions,
       };
 
-      const result = await routingAgent.generateVNext(prompt, options);
+      const result = await routingAgent.generate(prompt, options);
 
       const object = result.object;
 
@@ -428,7 +428,7 @@ export async function createNetworkLoop({
         },
       });
 
-      const result = await agentForStep.streamVNext(inputData.prompt, {
+      const result = await agentForStep.stream(inputData.prompt, {
         // resourceId: inputData.resourceId,
         // threadId: inputData.threadId,
         runtimeContext: runtimeContext,

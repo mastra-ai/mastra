@@ -164,7 +164,7 @@ export function createStep<
         text: z.string(),
       }),
       execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext, abortSignal, abort }) => {
-        // TODO: support streamVNext
+        // TODO: support stream
         let streamPromise = {} as {
           promise: Promise<string>;
           resolve: (value: string) => void;
@@ -175,7 +175,8 @@ export function createStep<
           streamPromise.resolve = resolve;
           streamPromise.reject = reject;
         });
-        const { fullStream } = await params.stream(inputData.prompt, {
+        // TODO: should use regular .stream()
+        const { fullStream } = await params.streamLegacy(inputData.prompt, {
           // resourceId: inputData.resourceId,
           // threadId: inputData.threadId,
           runtimeContext,
@@ -442,7 +443,7 @@ export class EventedRun<
     return result;
   }
 
-  // TODO: streamVNext
+  // TODO: stream
 
   async resume<TResumeSchema extends z.ZodType<any>>(params: {
     resumeData?: z.infer<TResumeSchema>;

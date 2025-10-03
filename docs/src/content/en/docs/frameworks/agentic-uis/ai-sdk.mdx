@@ -384,13 +384,13 @@ This guide covers Mastra-specific considerations when migrating from AI SDK v4 t
 
 > Please add any feedback or bug reports to the [AI SDK v5 mega issue in Github.](https://github.com/mastra-ai/mastra/issues/5470)
 
-### Experimental streamVNext Support
+### Stream Support
 
-Mastra's experimental `streamVNext` method now includes native AI SDK v5 support through the `format` parameter. This provides seamless integration with AI SDK v5's streaming interfaces without requiring compatibility wrappers.
+Mastra's experimental `stream` method now includes native AI SDK v5 support through the `format` parameter. This provides seamless integration with AI SDK v5's streaming interfaces without requiring compatibility wrappers.
 
 ```typescript
-// Use streamVNext with AI SDK v5 format
-const stream = await agent.streamVNext(messages, {
+// Use stream with AI SDK v5 format
+const stream = await agent.stream(messages, {
   format: 'aisdk'  // Enable AI SDK v5 compatibility
 });
 
@@ -482,10 +482,6 @@ const { error, status, sendMessage, messages, regenerate, stop } =
     }),
   });
 ```
-
-<Callout type="info">
-  **Note**: The `streamVNext` method with format support is experimental and may change as we refine the feature based on feedback. See the [Agent Streaming documentation](/docs/agents/streaming) for more details about streamVNext.
-</Callout>
 
 ### Type Inference for Tools
 

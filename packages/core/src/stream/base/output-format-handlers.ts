@@ -551,12 +551,15 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
       }
 
       if (['tool-calls'].includes(finishReason ?? '')) {
-        controller.enqueue({
-          from: ChunkFrom.AGENT,
-          runId: currentRunId ?? '',
-          type: 'object-result',
-          object: undefined as InferSchemaOutput<OUTPUT>,
-        });
+        // TODO: this breaks object output when tools are called.
+        // The reason we did this was to be able to work with client-side tool calls. We need the object to resolve in that case
+        // but this will
+        // controller.enqueue({
+        //   from: ChunkFrom.AGENT,
+        //   runId: currentRunId ?? '',
+        //   type: 'object-result',
+        //   object: undefined as InferSchemaOutput<OUTPUT>,
+        // });
         return;
       }
 

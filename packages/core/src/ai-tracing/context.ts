@@ -13,7 +13,7 @@ import type { Workflow } from '../workflows';
 import type { TracingContext, AnyAISpan } from './types';
 
 const AGENT_GETTERS = ['getAgent', 'getAgentById'];
-const AGENT_METHODS_TO_WRAP = ['generate', 'stream', 'generateVNext', 'streamVNext', 'generateLegacy', 'streamLegacy'];
+const AGENT_METHODS_TO_WRAP = ['generate', 'stream', 'generateLegacy', 'streamLegacy'];
 
 const WORKFLOW_GETTERS = ['getWorkflow', 'getWorkflowById'];
 const WORKFLOW_METHODS_TO_WRAP = ['execute', 'createRun', 'createRunAsync'];

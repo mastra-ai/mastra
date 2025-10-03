@@ -96,7 +96,7 @@ describe('Output Processor State Persistence Across Tool Execution', () => {
       outputProcessors: [new StateTrackingProcessor()],
     });
 
-    const stream = await agent.streamVNext('Execute the test tool', {
+    const stream = await agent.stream('Execute the test tool', {
       format: 'aisdk',
       maxSteps: 5,
     });
