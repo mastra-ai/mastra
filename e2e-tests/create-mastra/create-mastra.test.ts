@@ -113,9 +113,9 @@ describe('create mastra', () => {
                 Use the weatherTool to fetch current weather data.
           ",
               "modelId": "gpt-4o-mini",
-              "modelVersion": "v1",
+              "modelVersion": "v2",
               "name": "Weather Agent",
-              "provider": "openai.chat",
+               "provider": "openai.responses",
               "tools": {
                 "weatherTool": {
                   "description": "Get current weather for a location",
