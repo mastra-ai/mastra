@@ -68,6 +68,7 @@ export function mapVariable(config: any): any {
 
 type StepParams<
   TStepId extends string,
+  TState extends z.ZodObject<any>,
   TStepInput extends z.ZodType<any>,
   TStepOutput extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
@@ -82,6 +83,7 @@ type StepParams<
   retries?: number;
   scorers?: DynamicArgument<MastraScorers>;
   execute: ExecuteFunction<
+    z.infer<TState>,
     z.infer<TStepInput>,
     z.infer<TStepOutput>,
     z.infer<TResumeSchema>,
@@ -120,7 +122,7 @@ export function createStep<
   TResumeSchema extends z.ZodType<any>,
   TSuspendSchema extends z.ZodType<any>,
 >(
-  params: StepParams<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>,
+  params: StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>,
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType>;
 
 export function createStep<
@@ -153,7 +155,7 @@ export function createStep<
   TSuspendSchema extends z.ZodType<any>,
 >(
   params:
-    | StepParams<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>
+    | StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>
     | Agent<any, any, any>
     | ToolStep<TStepInput, TSuspendSchema, TResumeSchema, TStepOutput, any>,
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType> {
@@ -500,7 +502,7 @@ export class Workflow<
    * @param duration The duration to sleep for
    * @returns The workflow instance for chaining
    */
-  sleep(duration: number | ExecuteFunction<z.infer<TPrevSchema>, number, any, any, TEngineType>) {
+  sleep(duration: number | ExecuteFunction<z.infer<TState>, z.infer<TPrevSchema>, number, any, any, TEngineType>) {
     const id = `sleep_${this.#mastra?.generateId() || randomUUID()}`;
 
     const opts: StepFlowEntry<TEngineType> =
@@ -530,7 +532,7 @@ export class Workflow<
    * @param date The date to sleep until
    * @returns The workflow instance for chaining
    */
-  sleepUntil(date: Date | ExecuteFunction<z.infer<TPrevSchema>, Date, any, any, TEngineType>) {
+  sleepUntil(date: Date | ExecuteFunction<z.infer<TState>, z.infer<TPrevSchema>, Date, any, any, TEngineType>) {
     const id = `sleep_${this.#mastra?.generateId() || randomUUID()}`;
     const opts: StepFlowEntry<TEngineType> =
       typeof date === 'function'
@@ -599,7 +601,7 @@ export class Workflow<
               }
             | DynamicMapping<TPrevSchema, z.ZodType<any>>;
         }
-      | ExecuteFunction<z.infer<TPrevSchema>, any, any, any, TEngineType>,
+      | ExecuteFunction<z.infer<TState>, z.infer<TPrevSchema>, any, any, any, TEngineType>,
     stepOptions?: { id?: string | null },
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any> {
     // Create an implicit step that handles the mapping
@@ -750,7 +752,7 @@ export class Workflow<
   branch<
     TBranchSteps extends Array<
       [
-        ExecuteFunction<z.infer<TPrevSchema>, any, any, any, TEngineType>,
+        ExecuteFunction<z.infer<TState>, z.infer<TPrevSchema>, any, any, any, TEngineType>,
         // TODO: better type check for state schema
         Step<string, any, TPrevSchema, any, any, any, TEngineType>,
       ]
@@ -807,7 +809,7 @@ export class Workflow<
   dowhile<TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodType<any>>(
     // TODO: better type check for state schema
     step: Step<TStepId, any, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
-    condition: ExecuteFunction<z.infer<TSchemaOut>, any, any, any, TEngineType>,
+    condition: ExecuteFunction<z.infer<TState>, z.infer<TSchemaOut>, any, any, any, TEngineType>,
   ) {
     this.stepFlow.push({
       type: 'loop',
@@ -835,7 +837,7 @@ export class Workflow<
   dountil<TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodType<any>>(
     // TODO: better type check for state schema
     step: Step<TStepId, any, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
-    condition: ExecuteFunction<z.infer<TSchemaOut>, any, any, any, TEngineType>,
+    condition: ExecuteFunction<z.infer<TState>, z.infer<TSchemaOut>, any, any, any, TEngineType>,
   ) {
     this.stepFlow.push({
       type: 'loop',

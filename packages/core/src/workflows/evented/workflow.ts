@@ -90,6 +90,7 @@ export function createStep<
   resumeSchema?: TResumeSchema;
   suspendSchema?: TSuspendSchema;
   execute: ExecuteFunction<
+    z.infer<TState>,
     z.infer<TStepInput>,
     z.infer<TStepOutput>,
     z.infer<TResumeSchema>,
@@ -140,6 +141,7 @@ export function createStep<
         resumeSchema?: TResumeSchema;
         suspendSchema?: TSuspendSchema;
         execute: ExecuteFunction<
+          z.infer<TState>,
           z.infer<TStepInput>,
           z.infer<TStepOutput>,
           z.infer<TResumeSchema>,

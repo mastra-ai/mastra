@@ -188,7 +188,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  async execute<TInput, TOutput>(params: {
+  async execute<TState, TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
     resourceId?: string;
@@ -196,6 +196,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     graph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
+    initialState?: TState;
     resume?: {
       // TODO: add execute path
       steps: string[];
@@ -214,7 +215,18 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     writableStream?: WritableStream<ChunkType>;
     format?: 'aisdk' | 'mastra' | undefined;
   }): Promise<TOutput> {
-    const { workflowId, runId, resourceId, graph, input, resume, retryConfig, workflowAISpan, disableScorers } = params;
+    const {
+      workflowId,
+      runId,
+      resourceId,
+      graph,
+      input,
+      initialState,
+      resume,
+      retryConfig,
+      workflowAISpan,
+      disableScorers,
+    } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
 
@@ -244,6 +256,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     const stepResults: Record<string, any> = resume?.stepResults || { input };
+    let state: Record<string, any> = initialState ?? {};
     let lastOutput: any;
     for (let i = startIdx; i < steps.length; i++) {
       const entry = steps[i]!;
@@ -257,6 +270,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           serializedStepGraph: params.serializedStepGraph,
           prevStep: steps[i - 1]!,
           stepResults,
+          state,
           resume,
           executionContext: {
             workflowId,
@@ -294,6 +308,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             runId,
             resourceId,
             stepResults: lastOutput.stepResults as any,
+            state,
             serializedStepGraph: params.serializedStepGraph,
             executionContext: lastOutput.executionContext as ExecutionContext,
             workflowStatus: result.status,
@@ -344,6 +359,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           runId,
           resourceId,
           stepResults: lastOutput.stepResults as any,
+          state,
           serializedStepGraph: params.serializedStepGraph,
           executionContext: lastOutput.executionContext as ExecutionContext,
           workflowStatus: result.status,
@@ -370,6 +386,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       runId,
       resourceId,
       stepResults: lastOutput.stepResults as any,
+      state,
       serializedStepGraph: params.serializedStepGraph,
       executionContext: lastOutput.executionContext as ExecutionContext,
       workflowStatus: result.status,
@@ -427,6 +444,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     entry,
     prevOutput,
     stepResults,
+    state,
     emitter,
     abortController,
     runtimeContext,
@@ -441,11 +459,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       type: 'sleep';
       id: string;
       duration?: number;
-      fn?: ExecuteFunction<any, any, any, any, DefaultEngineType>;
+      fn?: ExecuteFunction<any, any, any, any, any, DefaultEngineType>;
     };
     prevStep: StepFlowEntry;
     prevOutput: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    state: Record<string, any>;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -479,6 +498,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         mastra: this.mastra!,
         runtimeContext,
         inputData: prevOutput,
+        state,
         runCount: -1,
         tracingContext: {
           currentSpan: sleepSpan,
@@ -528,6 +548,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     entry,
     prevOutput,
     stepResults,
+    state,
     emitter,
     abortController,
     runtimeContext,
@@ -542,11 +563,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       type: 'sleepUntil';
       id: string;
       date?: Date;
-      fn?: ExecuteFunction<any, any, any, any, DefaultEngineType>;
+      fn?: ExecuteFunction<any, any, any, any, any, DefaultEngineType>;
     };
     prevStep: StepFlowEntry;
     prevOutput: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    state: Record<string, any>;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -581,6 +603,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         mastra: this.mastra!,
         runtimeContext,
         inputData: prevOutput,
+        state,
         runCount: -1,
         tracingContext: {
           currentSpan: sleepUntilSpan,
@@ -686,6 +709,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     resourceId,
     step,
     stepResults,
+    state,
     executionContext,
     resume,
     prevOutput,
@@ -703,6 +727,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     resourceId?: string;
     step: Step<string, any, any>;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    state: Record<string, any>;
     executionContext: ExecutionContext;
     resume?: {
       steps: string[];
@@ -787,6 +812,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         ...stepResults,
         [step.id]: stepInfo,
       } as Record<string, StepResult<any, any, any, any>>,
+      state,
       executionContext,
       workflowStatus: 'running',
       runtimeContext,
@@ -840,6 +866,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           mastra: this.mastra ? wrapMastra(this.mastra, { currentSpan: stepAISpan }) : undefined,
           runtimeContext,
           inputData,
+          state,
           runCount: this.getOrGenerateRunCount(step.id),
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           tracingContext: { currentSpan: stepAISpan },
@@ -1077,6 +1104,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     prevStep,
     serializedStepGraph,
     stepResults,
+    state,
     resume,
     executionContext,
     tracingContext,
@@ -1093,6 +1121,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     serializedStepGraph: SerializedStepFlowEntry[];
     prevStep: StepFlowEntry;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    state: Record<string, any>;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -1128,6 +1157,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           entry: step,
           prevStep,
           stepResults,
+          state,
           serializedStepGraph,
           resume,
           executionContext: {
@@ -1195,6 +1225,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     prevStep,
     serializedStepGraph,
     stepResults,
+    state,
     resume,
     executionContext,
     tracingContext,
@@ -1211,11 +1242,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     entry: {
       type: 'conditional';
       steps: StepFlowEntry[];
-      conditions: ExecuteFunction<any, any, any, any, DefaultEngineType>[];
+      conditions: ExecuteFunction<any, any, any, any, any, DefaultEngineType>[];
     };
     prevStep: StepFlowEntry;
     prevOutput: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    state: Record<string, any>;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -1261,6 +1293,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               mastra: this.mastra!,
               runtimeContext,
               inputData: prevOutput,
+              state,
               runCount: -1,
               tracingContext: {
                 currentSpan: evalSpan,
@@ -1350,6 +1383,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           entry: step,
           prevStep,
           stepResults,
+          state,
           serializedStepGraph,
           resume,
           executionContext: {
@@ -1438,6 +1472,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     entry,
     prevOutput,
     stepResults,
+    state,
     resume,
     executionContext,
     tracingContext,
@@ -1454,12 +1489,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     entry: {
       type: 'loop';
       step: Step;
-      condition: ExecuteFunction<any, any, any, any, DefaultEngineType>;
+      condition: ExecuteFunction<any, any, any, any, any, DefaultEngineType>;
       loopType: 'dowhile' | 'dountil';
     };
     prevStep: StepFlowEntry;
     prevOutput: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    state: Record<string, any>;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -1500,6 +1536,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resourceId,
         step,
         stepResults,
+        state,
         executionContext,
         resume: currentResume,
         prevOutput: (result as { output: any }).output,
@@ -1545,6 +1582,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         mastra: this.mastra!,
         runtimeContext,
         inputData: result.output,
+        state,
         runCount: -1,
         tracingContext: {
           currentSpan: evalSpan,
@@ -1594,6 +1632,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     entry,
     prevOutput,
     stepResults,
+    state,
     resume,
     executionContext,
     tracingContext,
@@ -1617,6 +1656,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     prevStep: StepFlowEntry;
     prevOutput: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    state: Record<string, any>;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -1702,6 +1742,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             resourceId,
             step,
             stepResults,
+            state,
             executionContext,
             resume: resumeIndex === i + j ? resume : undefined,
             prevOutput: item,
@@ -1859,6 +1900,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     runId,
     resourceId,
     stepResults,
+    state,
     serializedStepGraph,
     executionContext,
     workflowStatus,
@@ -1870,6 +1912,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     runId: string;
     resourceId?: string;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    state: Record<string, any>;
     serializedStepGraph: SerializedStepFlowEntry[];
     executionContext: ExecutionContext;
     workflowStatus: 'success' | 'failed' | 'suspended' | 'running' | 'waiting';
@@ -1889,7 +1932,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       snapshot: {
         runId,
         status: workflowStatus,
-        value: {},
+        value: state,
         context: stepResults as any,
         activePaths: [],
         serializedStepGraph,
@@ -1912,6 +1955,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     prevStep,
     serializedStepGraph,
     stepResults,
+    state,
     resume,
     executionContext,
     tracingContext,
@@ -1928,6 +1972,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     prevStep: StepFlowEntry;
     serializedStepGraph: SerializedStepFlowEntry[];
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    state: Record<string, any>;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -1957,6 +2002,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resourceId,
         step,
         stepResults,
+        state,
         executionContext,
         resume,
         prevOutput,
@@ -1978,6 +2024,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         prevStep,
         serializedStepGraph,
         stepResults,
+        state,
         resume,
         executionContext: {
           workflowId,
@@ -2078,6 +2125,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         entry,
         prevStep,
         stepResults,
+        state,
         serializedStepGraph,
         resume,
         executionContext,
@@ -2096,6 +2144,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         prevStep,
         prevOutput,
         stepResults,
+        state,
         serializedStepGraph,
         resume,
         executionContext,
@@ -2114,6 +2163,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         prevStep,
         prevOutput,
         stepResults,
+        state,
         resume,
         executionContext,
         tracingContext,
@@ -2132,6 +2182,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         prevStep,
         prevOutput,
         stepResults,
+        state,
         resume,
         executionContext,
         tracingContext,
@@ -2184,6 +2235,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resourceId,
         serializedStepGraph,
         stepResults,
+        state,
         executionContext,
         workflowStatus: 'waiting',
         runtimeContext,
@@ -2196,6 +2248,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         prevStep,
         prevOutput,
         stepResults,
+        state,
         serializedStepGraph,
         resume,
         executionContext,
@@ -2212,6 +2265,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resourceId,
         serializedStepGraph,
         stepResults,
+        state,
         executionContext,
         workflowStatus: 'running',
         runtimeContext,
@@ -2307,6 +2361,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resourceId,
         serializedStepGraph,
         stepResults,
+        state,
         executionContext,
         workflowStatus: 'waiting',
         runtimeContext,
@@ -2319,6 +2374,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         prevStep,
         prevOutput,
         stepResults,
+        state,
         serializedStepGraph,
         resume,
         executionContext,
@@ -2335,6 +2391,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resourceId,
         serializedStepGraph,
         stepResults,
+        state,
         executionContext,
         workflowStatus: 'running',
         runtimeContext,
@@ -2432,6 +2489,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resourceId,
         serializedStepGraph,
         stepResults,
+        state,
         executionContext,
         workflowStatus: 'waiting',
         runtimeContext,
@@ -2452,6 +2510,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           resourceId,
           step,
           stepResults,
+          state,
           executionContext,
           resume: {
             resumePayload: eventData,
@@ -2496,6 +2555,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       resourceId,
       serializedStepGraph,
       stepResults,
+      state,
       executionContext,
       workflowStatus: execResults.status === 'success' ? 'running' : execResults.status,
       runtimeContext,

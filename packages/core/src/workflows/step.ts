@@ -10,13 +10,14 @@ import type { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import type { Emitter, StepResult } from './types';
 import type { Workflow } from './workflow';
 
-export type ExecuteFunctionParams<TStepInput, TResumeSchema, TSuspendSchema, EngineType> = {
+export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = {
   runId: string;
   resourceId?: string;
   workflowId: string;
   mastra: Mastra;
   runtimeContext: RuntimeContext;
   inputData: TStepInput;
+  state: TState;
   resumeData?: TResumeSchema;
   runCount: number;
   tracingContext: TracingContext;
@@ -44,8 +45,8 @@ export type ExecuteFunctionParams<TStepInput, TResumeSchema, TSuspendSchema, Eng
   validateSchemas?: boolean;
 };
 
-export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
-  params: ExecuteFunctionParams<TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
+export type ExecuteFunction<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
+  params: ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
 ) => Promise<TStepOutput>;
 
 // Define a Step interface
@@ -66,6 +67,7 @@ export interface Step<
   suspendSchema?: TSuspendSchema;
   stateSchema?: TState;
   execute: ExecuteFunction<
+    z.infer<TState>,
     z.infer<TSchemaIn>,
     z.infer<TSchemaOut>,
     z.infer<TResumeSchema>,
