@@ -27,7 +27,7 @@ interface CreatePrepareStreamWorkflowOptions<
   runId: string;
   runtimeContext: RuntimeContext;
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
-  methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
+  methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   format?: FORMAT;
   instructions: SystemMessage;
   memoryConfig?: MemoryConfig;

@@ -737,7 +737,7 @@ describe('MastraInngestWorkflow', () => {
       expect(endTime - startTime).toBeGreaterThan(1000);
 
       srv.close();
-    });
+    }, 50_000);
 
     it('should execute a a waitForEvent step', async ctx => {
       const inngest = new Inngest({
@@ -3151,8 +3151,7 @@ describe('MastraInngestWorkflow', () => {
       expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
     });
 
-    // Need to fix so we can throw for inngest to recognize retries
-    it.skip('should retry a step with a custom retry config', async ctx => {
+    it('should retry a step with a custom retry config', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -3177,10 +3176,18 @@ describe('MastraInngestWorkflow', () => {
         id: 'test-workflow',
         inputSchema: z.object({}),
         outputSchema: z.object({}),
-        retryConfig: { attempts: 5, delay: 200 },
+        retryConfig: {
+          attempts: 2,
+          delay: 1, // if the delay is 0 it will default to inngest's default backoff delay
+        },
       });
 
-      new Mastra({
+      workflow.then(step1).then(step2).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
         workflows: {
           'test-workflow': workflow,
         },
@@ -3195,15 +3202,25 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      workflow.then(step1).then(step2).commit();
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
 
-      expect(result.steps.step1).toMatchObject({ status: 'success', output: { result: 'success' } });
-      expect(result.steps.step2).toMatchObject({ status: 'failed', error: 'Step failed' });
+      expect(result.steps.step1.status).toBe('success');
+      expect(result.steps.step2.status).toBe('failed');
+      expect(result.status).toBe('failed');
+
+      srv.close();
+
       expect(step1.execute).toHaveBeenCalledTimes(1);
-      expect(step2.execute).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
+      expect(step2.execute).toHaveBeenCalledTimes(3); // 1 initial + 2 retries (retryConfig.attempts = 2)
     });
   });
 

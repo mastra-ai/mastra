@@ -195,7 +195,7 @@ export function createStep<
         let stream: ReadableStream<any>;
 
         if ((await params.getModel()).specificationVersion === 'v1') {
-          const { fullStream } = await params.stream(inputData.prompt, {
+          const { fullStream } = await params.streamLegacy(inputData.prompt, {
             // resourceId: inputData.resourceId,
             // threadId: inputData.threadId,
             runtimeContext,
@@ -206,7 +206,7 @@ export function createStep<
           });
           stream = fullStream as any;
         } else {
-          const modelOutput = await params.streamVNext(inputData.prompt, {
+          const modelOutput = await params.stream(inputData.prompt, {
             runtimeContext,
             onFinish: result => {
               streamPromise.resolve(result.text);
@@ -583,7 +583,7 @@ export class Workflow<
     if (typeof mappingConfig === 'function') {
       // @ts-ignore
       const mappingStep: any = createStep({
-        id: stepOptions?.id || `mapping_${this.#mastra?.generateId()}`,
+        id: stepOptions?.id || `mapping_${this.#mastra?.generateId() || randomUUID()}`,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         execute: mappingConfig as any,
@@ -622,9 +622,8 @@ export class Workflow<
       },
       {} as Record<string, any>,
     );
-
     const mappingStep: any = createStep({
-      id: stepOptions?.id || `mapping_${this.#mastra?.generateId()}`,
+      id: stepOptions?.id || `mapping_${this.#mastra?.generateId() || randomUUID()}`,
       inputSchema: z.any(),
       outputSchema: z.any(),
       execute: async ctx => {
