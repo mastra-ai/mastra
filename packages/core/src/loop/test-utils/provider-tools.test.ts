@@ -13,7 +13,7 @@ describe('Provider-executed tools', () => {
       },
     });
 
-    const result = await agent.generateVNext('Search for information about the latest AI news from OpenAI in 2024');
+    const result = await agent.generate('Search for information about the latest AI news from OpenAI in 2024');
 
     expect(result.toolCalls).toEqual(
       expect.arrayContaining([

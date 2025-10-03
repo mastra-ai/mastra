@@ -195,7 +195,7 @@ export function createStep<
         let stream: ReadableStream<any>;
 
         if ((await params.getModel()).specificationVersion === 'v1') {
-          const { fullStream } = await params.stream(inputData.prompt, {
+          const { fullStream } = await params.streamLegacy(inputData.prompt, {
             // resourceId: inputData.resourceId,
             // threadId: inputData.threadId,
             runtimeContext,
@@ -206,7 +206,7 @@ export function createStep<
           });
           stream = fullStream as any;
         } else {
-          const modelOutput = await params.streamVNext(inputData.prompt, {
+          const modelOutput = await params.stream(inputData.prompt, {
             runtimeContext,
             onFinish: result => {
               streamPromise.resolve(result.text);

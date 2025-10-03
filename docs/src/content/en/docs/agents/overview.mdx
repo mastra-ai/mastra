@@ -1,5 +1,5 @@
 ---
-title: "Agent Overview | Agent Documentation | Mastra"
+title: "Agent Overview | Agents | Mastra Docs"
 description: Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
 ---
 
@@ -76,9 +76,9 @@ Instructions can be provided in multiple formats for greater flexibility:
 instructions: "You are a helpful assistant."
 
 // System message object
-instructions: { 
-  role: "system", 
-  content: "You are an expert programmer." 
+instructions: {
+  role: "system",
+  content: "You are an expert programmer."
 }
 
 // Array of strings
@@ -112,10 +112,9 @@ Provider-specific options allow you to leverage unique features of different LLM
 
 > See [Agent](../../reference/agents/agent.mdx) for more information.
 
-
 ### Registering an agent
 
-Register your agent in the Mastra instance:
+Register your agent in the Mastra instance to make it available throughout your application. Once registered, it can be called from workflows, tools, or other agents, and has access to shared resources such as memory, logging, and observability features:
 
 ```typescript showLineNumbers filename="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core/mastra";
@@ -145,7 +144,7 @@ Use `.generate()` to get a response from an agent. Pass a single string for simp
 
 ### Generating text
 
-Call `.generate()` with an array of message objects that include `role` and `content`:
+Call `.generate()` with an array of message objects containing `role` and `content`. The `role` defines the speaker for each message. Typical roles are `user` for human input, `assistant` for agent responses, and `system` for instructions. This structure helps the LLM maintain conversation flow and generate contextually appropriate responses.
 
 ```typescript showLineNumbers copy
 const response = await testAgent.generate([
@@ -158,49 +157,9 @@ const response = await testAgent.generate([
 console.log(response.text);
 ```
 
-## Streaming responses
-
-Use `.stream()` for real-time responses. Pass a single string for simple prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content` for precise control over roles and conversational flows.
-
-> See [.stream()](../../reference/agents/stream.mdx) for more information.
-
-### Streaming text
-
-Use `.stream()` with an array of message objects that include `role` and `content`:
-
-```typescript showLineNumbers copy
-const stream = await testAgent.stream([
-  { role: "user", content: "Help me organize my day" },
-  { role: "user", content: "My day starts at 9am and finishes at 5.30pm" },
-  { role: "user", content: "I take lunch between 12:30 and 13:30" },
-  { role: "user", content: "I have meetings Monday to Friday between 10:30 and 11:30" }
-]);
-
-for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk);
-}
-```
-
-### Completion using `onFinish()`
-
-When streaming responses, the `onFinish()` callback runs after the LLM finishes generating its response and all tool executions are complete.
-It provides the final `text`, execution `steps`, `finishReason`, token `usage` statistics, and other metadata useful for monitoring or logging.
-
-```typescript showLineNumbers copy
-const stream = await testAgent.stream("Help me organize my day", {
-  onFinish: ({ steps, text, finishReason, usage }) => {
-    console.log({ steps, text, finishReason, usage });
-  }
-});
-
-for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk);
-}
-```
-
 ## Structured output
 
-Agents can return structured, type-safe data by defining the expected output with either [Zod](https://zod.dev/) or [JSON Schema](https://json-schema.org/). In both cases, the parsed result is available on `response.object`, allowing you to work directly with validated and typed data.
+Agents can return structured, type-safe data by defining the expected output using either [Zod](https://zod.dev/) or [JSON Schema](https://json-schema.org/). We recommend Zod for better TypeScript support and developer experience. The parsed result is available on `response.object`, allowing you to work directly with validated and typed data.
 
 ### Using Zod
 
@@ -233,7 +192,7 @@ console.log(response.object);
 
 #### Agents with tools
 
-To generate structured output with agents that use tools, use the `experimental_output` property:
+To generate structured output with agents that use tools, use the `output` property:
 
 ```typescript {6} showLineNumbers copy
 import { z } from "zod";
@@ -241,7 +200,7 @@ import { z } from "zod";
 const response = await testAgent.generate(
   // ...
   {
-    experimental_output: z.object({
+    output: z.object({
       summary: z.string(),
       keywords: z.array(z.string())
     })
@@ -251,7 +210,7 @@ const response = await testAgent.generate(
 console.log(response.object);
 ```
 
-## Describing images
+## Working with images
 
 Agents can analyze and describe images by processing both the visual content and any text within them. To enable image analysis, pass an object with `type: 'image'` and the image URL in the `content` array. You can combine image content with text prompts to guide the agent's analysis.
 
@@ -284,7 +243,7 @@ For a detailed guide to creating and configuring tools, see the [Tools Overview]
 
 ### Using `maxSteps`
 
-The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make, particularly important when using tool calls. By default, it is set to 1 to prevent infinite loops in case of misconfigured tools:
+The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 1, but can be increased:
 
 ```typescript showLineNumbers copy
 const response = await testAgent.generate("Help me organize my day", {
