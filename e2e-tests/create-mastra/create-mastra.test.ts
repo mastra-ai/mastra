@@ -115,7 +115,7 @@ describe('create mastra', () => {
               "modelId": "gpt-4o-mini",
               "modelVersion": "v2",
               "name": "Weather Agent",
-               "provider": "openai.responses",
+              "provider": "openai.responses",
               "tools": {
                 "weatherTool": {
                   "description": "Get current weather for a location",
