@@ -1015,4 +1015,9 @@ export const redirectList = [
     destination: "/:locale/reference/vectors/upstash",
     permanent: true,
   },
+  {
+    source: "/:locale/docs/agents/output-processors",
+    destination: "/:locale/docs/agents/sanitizing-output",
+    permanent: true,
+  },
 ];
