@@ -67,7 +67,6 @@ describe.for([['pnpm'] as const])(`%s cloudflare deployer`, ([pkgManager]) => {
         const onStdout = (data: unknown) => {
           const text = (data as any)?.toString?.();
           if (text) {
-            console.log({ text });
             process.stdout.write(text);
             if (text.includes(`http://localhost:${port}`)) {
               cleanup();
