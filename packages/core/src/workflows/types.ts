@@ -333,7 +333,7 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
     };
 
 export type SerializedStep<TEngineType = DefaultEngineType> = Pick<
-  Step<any, any, any, any, any, TEngineType>,
+  Step<any, any, any, any, any, any, TEngineType>,
   'id' | 'description'
 > & {
   component?: string;
@@ -446,6 +446,7 @@ export type WorkflowResult<
 
 export type WorkflowConfig<
   TWorkflowId extends string = string,
+  TState extends z.ZodObject<any> = z.ZodObject<any>,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
   TSteps extends Step<string, any, any, any, any, any>[] = Step<string, any, any, any, any, any>[],
@@ -455,6 +456,7 @@ export type WorkflowConfig<
   description?: string | undefined;
   inputSchema: TInput;
   outputSchema: TOutput;
+  stateSchema?: TState;
   executionEngine?: ExecutionEngine;
   steps?: TSteps;
   retryConfig?: {

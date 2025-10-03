@@ -23,10 +23,12 @@ export type EventedEngineType = {};
 
 export function cloneWorkflow<
   TWorkflowId extends string = string,
+  TState extends z.ZodObject<any> = z.ZodObject<any>,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
-  TSteps extends Step<string, any, any, any, any, EventedEngineType>[] = Step<
+  TSteps extends Step<string, any, any, any, any, any, EventedEngineType>[] = Step<
     string,
+    any,
     any,
     any,
     any,
@@ -35,10 +37,10 @@ export function cloneWorkflow<
   >[],
   TPrevSchema extends z.ZodType<any> = TInput,
 >(
-  workflow: Workflow<EventedEngineType, TSteps, string, TInput, TOutput, TPrevSchema>,
+  workflow: Workflow<EventedEngineType, TSteps, string, TState, TInput, TOutput, TPrevSchema>,
   opts: { id: TWorkflowId },
-): Workflow<EventedEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema> {
-  const wf: Workflow<EventedEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema> = new Workflow({
+): Workflow<EventedEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
+  const wf: Workflow<EventedEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> = new Workflow({
     id: opts.id,
     inputSchema: workflow.inputSchema,
     outputSchema: workflow.outputSchema,
@@ -52,9 +54,9 @@ export function cloneWorkflow<
 }
 
 export function cloneStep<TStepId extends string>(
-  step: Step<string, any, any, any, any, EventedEngineType>,
+  step: Step<string, any, any, any, any, any, EventedEngineType>,
   opts: { id: TStepId },
-): Step<TStepId, any, any, any, any, EventedEngineType> {
+): Step<TStepId, any, any, any, any, any, EventedEngineType> {
   return {
     id: opts.id,
     description: step.description,
@@ -75,6 +77,7 @@ function isTool(params: any): params is Tool<any, any, any> {
 
 export function createStep<
   TStepId extends string,
+  TState extends z.ZodObject<any>,
   TStepInput extends z.ZodType<any>,
   TStepOutput extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
@@ -93,17 +96,18 @@ export function createStep<
     z.infer<TSuspendSchema>,
     EventedEngineType
   >;
-}): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType>;
+}): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType>;
 
 export function createStep<
   TStepId extends string,
+  TState extends z.ZodObject<any>,
   TStepInput extends z.ZodObject<{ prompt: z.ZodString }>,
   TStepOutput extends z.ZodObject<{ text: z.ZodString }>,
   TResumeSchema extends z.ZodType<any>,
   TSuspendSchema extends z.ZodType<any>,
 >(
   agent: Agent<TStepId, any, any>,
-): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType>;
+): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType>;
 
 export function createStep<
   TSchemaIn extends z.ZodType<any>,
@@ -117,10 +121,11 @@ export function createStep<
     outputSchema: TSchemaOut;
     execute: (context: TContext) => Promise<any>;
   },
-): Step<string, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, EventedEngineType>;
+): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, EventedEngineType>;
 
 export function createStep<
   TStepId extends string,
+  TState extends z.ZodObject<any>,
   TStepInput extends z.ZodType<any>,
   TStepOutput extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
@@ -148,7 +153,7 @@ export function createStep<
         outputSchema: TStepOutput;
         execute: (context: ToolExecutionContext<TStepInput>) => Promise<any>;
       }),
-): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType> {
+): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType> {
   if (isAgent(params)) {
     return {
       id: params.name,
@@ -263,20 +268,22 @@ export function createStep<
 
 export function createWorkflow<
   TWorkflowId extends string = string,
+  TState extends z.ZodObject<any> = z.ZodObject<any>,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
-  TSteps extends Step<string, any, any, any, any, EventedEngineType>[] = Step<
+  TSteps extends Step<string, any, any, any, any, any, EventedEngineType>[] = Step<
     string,
+    any,
     any,
     any,
     any,
     any,
     EventedEngineType
   >[],
->(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
+>(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
   const eventProcessor = new WorkflowEventProcessor({ mastra: params.mastra! });
   const executionEngine = new EventedExecutionEngine({ mastra: params.mastra!, eventProcessor });
-  return new EventedWorkflow<EventedEngineType, TSteps, TWorkflowId, TInput, TOutput, TInput>({
+  return new EventedWorkflow<EventedEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput>({
     ...params,
     executionEngine,
   });
@@ -286,11 +293,12 @@ export class EventedWorkflow<
   TEngineType = EventedEngineType,
   TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
   TWorkflowId extends string = string,
+  TState extends z.ZodObject<any> = z.ZodObject<any>,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
   TPrevSchema extends z.ZodType<any> = TInput,
-> extends Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema> {
-  constructor(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
+> extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
+  constructor(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
     super(params);
   }
 
@@ -448,8 +456,11 @@ export class EventedRun<
   async resume<TResumeSchema extends z.ZodType<any>>(params: {
     resumeData?: z.infer<TResumeSchema>;
     step:
-      | Step<string, any, any, TResumeSchema, any, TEngineType>
-      | [...Step<string, any, any, any, any, TEngineType>[], Step<string, any, any, TResumeSchema, any, TEngineType>]
+      | Step<string, any, any, TResumeSchema, any, any, TEngineType>
+      | [
+          ...Step<string, any, any, any, any, any, TEngineType>[],
+          Step<string, any, any, TResumeSchema, any, any, TEngineType>,
+        ]
       | string
       | string[];
     runtimeContext?: RuntimeContext;
