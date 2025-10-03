@@ -192,13 +192,19 @@ Higher M values or efConstruction values will increase memory requirements signi
       name: "metadata",
       type: "Record<string, any>[]",
       isOptional: true,
-      description: "Metadata for each vector",
+      description: "Metadata for each vector. Fields matching table column names are mapped to those columns.",
     },
     {
       name: "ids",
       type: "string[]",
       isOptional: true,
       description: "Optional vector IDs (auto-generated if not provided)",
+    },
+    {
+      name: "columnMapping",
+      type: "Record<string, string>",
+      isOptional: true,
+      description: "Optional mapping of metadata field names to table column names for custom schemas",
     },
   ]}
 />
@@ -545,6 +551,62 @@ This enables advanced usage such as running direct SQL queries, managing transac
 - Direct access bypasses any validation or transaction logic provided by PgVector methods.
 
 This design supports advanced use cases but requires careful resource management by the user.
+
+## Custom Schema Support
+
+The `upsert()` method detects table schemas and maps metadata fields to table columns.
+
+```typescript copy
+// Table with custom columns:
+// CREATE TABLE documents (
+//   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+//   vector_id TEXT NOT NULL UNIQUE,
+//   content TEXT NOT NULL,          -- custom required column
+//   embedding VECTOR(1536),
+//   metadata JSONB DEFAULT '{}',
+//   url TEXT,                       -- custom optional column
+//   title TEXT,                     -- custom optional column
+//   category TEXT                   -- custom optional column
+// )
+
+// Name-based column mapping - fields matching column names are mapped
+await pgVector.upsert({
+  indexName: 'documents',
+  vectors: [[0.1, 0.2, ...]],
+  metadata: [{
+    content: 'Document text',       // Maps to content column
+    url: 'https://example.com',     // Maps to url column
+    title: 'My Document',           // Maps to title column
+    category: 'tech',               // Maps to category column
+    other_field: 'value'            // Goes to metadata JSONB
+  }],
+  ids: ['doc-1']
+});
+
+// Explicit column mapping when field names don't match
+await pgVector.upsert({
+  indexName: 'documents',
+  vectors: [[0.1, 0.2, ...]],
+  metadata: [{
+    text: 'Document text',
+    link: 'https://example.com',
+    heading: 'My Document',
+    type: 'tech'
+  }],
+  ids: ['doc-2'],
+  columnMapping: {
+    text: 'content',        // Map 'text' field to 'content' column
+    link: 'url',            // Map 'link' field to 'url' column
+    heading: 'title',       // Map 'heading' field to 'title' column
+    type: 'category'        // Map 'type' field to 'category' column
+  }
+});
+```
+
+- Metadata fields matching column names are mapped to those columns
+- Use `columnMapping` parameter for explicit field-to-column mapping
+- Non-mapped fields are stored in the JSONB metadata column
+- Schema detection occurs on first upsert and is cached per table
 
 ## Related
 

@@ -56,6 +56,25 @@ interface PgDefineIndexParams {
   indexConfig: IndexConfig;
 }
 
+// Extended interface for PgVector-specific upsert parameters
+interface PgUpsertVectorParams extends UpsertVectorParams {
+  /** Optional explicit column mapping when metadata key != column name */
+  columnMapping?: Record<string, string>;
+}
+
+// Interface for table schema information
+interface TableColumn {
+  name: string;
+  type: string;
+  nullable: boolean;
+  hasDefault: boolean;
+}
+
+interface TableSchema {
+  columns: TableColumn[];
+  requiredColumns: string[]; // columns that are NOT NULL and have no default
+}
+
 export class PgVector extends MastraVector<PGVectorFilter> {
   public pool: pg.Pool;
   private describeIndexCache: Map<string, PGIndexStats> = new Map();
@@ -68,6 +87,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private vectorExtensionSchema: string | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
   private cacheWarmupPromise: Promise<void> | null = null;
+
+  // Schema detection caching
+  private tableSchemaCache: Map<string, TableSchema> = new Map();
+  private schemaDetectionMutex = new Map<string, Mutex>();
 
   constructor({
     connectionString,
@@ -147,6 +170,78 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private getMutexByName(indexName: string) {
     if (!this.mutexesByName.has(indexName)) this.mutexesByName.set(indexName, new Mutex());
     return this.mutexesByName.get(indexName)!;
+  }
+
+  /**
+   * Detects and caches table schema information
+   */
+  private async detectTableSchema(indexName: string): Promise<TableSchema> {
+    // Validate indexName to prevent SQL injection
+    const validatedIndexName = parseSqlIdentifier(indexName, 'table name');
+    const cacheKey = `${this.schema || 'public'}.${validatedIndexName}`;
+
+    // Return cached schema if available
+    if (this.tableSchemaCache.has(cacheKey)) {
+      return this.tableSchemaCache.get(cacheKey)!;
+    }
+
+    // Use mutex to prevent concurrent schema detection for same table
+    if (!this.schemaDetectionMutex.has(cacheKey)) {
+      this.schemaDetectionMutex.set(cacheKey, new Mutex());
+    }
+    const mutex = this.schemaDetectionMutex.get(cacheKey)!;
+
+    return await mutex.runExclusive(async () => {
+      // Double-check cache after acquiring mutex
+      if (this.tableSchemaCache.has(cacheKey)) {
+        return this.tableSchemaCache.get(cacheKey)!;
+      }
+
+      const client = await this.pool.connect();
+      try {
+        const schemaName = this.schema || 'public';
+
+        // Query table schema from information_schema
+        const schemaQuery = `
+          SELECT 
+            column_name,
+            data_type,
+            is_nullable,
+            column_default
+          FROM information_schema.columns 
+          WHERE table_schema = $1 AND table_name = $2
+          ORDER BY ordinal_position
+        `;
+
+        const result = await client.query(schemaQuery, [schemaName, validatedIndexName]);
+
+        if (result.rows.length === 0) {
+          throw new Error(`Table "${validatedIndexName}" does not exist in schema "${schemaName}"`);
+        }
+
+        const columns: TableColumn[] = result.rows.map(row => ({
+          name: row.column_name,
+          type: row.data_type,
+          nullable: row.is_nullable === 'YES',
+          hasDefault: row.column_default !== null,
+        }));
+
+        // Identify required columns (NOT NULL with no default)
+        const requiredColumns = columns.filter(col => !col.nullable && !col.hasDefault).map(col => col.name);
+
+        const schema: TableSchema = {
+          columns,
+          requiredColumns,
+        };
+
+        // Cache the schema
+        this.tableSchemaCache.set(cacheKey, schema);
+
+        return schema;
+      } finally {
+        client.release();
+      }
+    });
   }
 
   /**
@@ -329,8 +424,19 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     }
   }
 
-  async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
+  async upsert({ indexName, vectors, metadata, ids, columnMapping }: PgUpsertVectorParams): Promise<string[]> {
     const { tableName } = this.getTableName(indexName);
+
+    // Attempt schema detection, but don't fail if it doesn't work
+    let tableSchema: TableSchema | null = null;
+    try {
+      tableSchema = await this.detectTableSchema(indexName);
+    } catch (error) {
+      // Log warning but continue with basic behavior (no custom column mapping)
+      console.warn(
+        `Schema detection failed for table "${indexName}" in schema "${this.schema || 'public'}", using basic upsert behavior: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
 
     // Start a transaction
     const client = await this.pool.connect();
@@ -342,17 +448,22 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const vectorType = this.getVectorTypeName();
 
       for (let i = 0; i < vectors.length; i++) {
-        const query = `
-          INSERT INTO ${tableName} (vector_id, embedding, metadata)
-          VALUES ($1, $2::${vectorType}, $3::jsonb)
-          ON CONFLICT (vector_id)
-          DO UPDATE SET
-            embedding = $2::${vectorType},
-            metadata = $3::jsonb
-          RETURNING embedding::text
-        `;
+        const rowMetadata = metadata?.[i] || {};
+        // Separate metadata into column values and remaining metadata
+        // If tableSchema is null, this will just return empty columnValues
+        const { columnValues, remainingMetadata } = this.mapMetadataToColumns(rowMetadata, tableSchema, columnMapping);
 
-        await client.query(query, [vectorIds[i], `[${vectors[i]?.join(',')}]`, JSON.stringify(metadata?.[i] || {})]);
+        // Build dynamic SQL based on available columns (handles null tableSchema gracefully)
+        const { query, values } = this.buildUpsertQuery({
+          tableName,
+          vectorId: vectorIds[i]!,
+          vector: vectors[i]!,
+          columnValues,
+          remainingMetadata,
+          vectorType,
+        });
+
+        await client.query(query, values);
       }
 
       await client.query('COMMIT');
@@ -400,6 +511,92 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     } finally {
       client.release();
     }
+  }
+
+  /**
+   * Maps metadata to column values and separates remaining metadata
+   */
+  private mapMetadataToColumns(
+    metadata: Record<string, any>,
+    tableSchema: TableSchema | null,
+    columnMapping?: Record<string, string>,
+  ): { columnValues: Record<string, any>; remainingMetadata: Record<string, any> } {
+    const columnValues: Record<string, any> = {};
+    const remainingMetadata: Record<string, any> = {};
+
+    // Get list of actual table columns (excluding standard vector columns)
+    const standardColumns = ['id', 'vector_id', 'embedding', 'metadata'];
+    const availableColumns =
+      tableSchema?.columns.map(col => col.name).filter(name => !standardColumns.includes(name)) || [];
+
+    for (const [key, value] of Object.entries(metadata)) {
+      let targetColumn: string | undefined;
+
+      // Check if there's an explicit mapping
+      if (columnMapping && columnMapping[key]) {
+        targetColumn = columnMapping[key];
+      }
+      // Otherwise, check if there's a direct column name match
+      else if (availableColumns.includes(key)) {
+        targetColumn = key;
+      }
+
+      if (targetColumn && availableColumns.includes(targetColumn)) {
+        columnValues[targetColumn] = value;
+      } else {
+        remainingMetadata[key] = value;
+      }
+    }
+
+    return { columnValues, remainingMetadata };
+  }
+
+  /**
+   * Builds dynamic upsert query based on available columns
+   */
+  private buildUpsertQuery({
+    tableName,
+    vectorId,
+    vector,
+    columnValues,
+    remainingMetadata,
+    vectorType,
+  }: {
+    tableName: string;
+    vectorId: string;
+    vector: number[];
+    columnValues: Record<string, any>;
+    remainingMetadata: Record<string, any>;
+    vectorType: string;
+  }): { query: string; values: any[] } {
+    // Base columns that are always included
+    const columns = ['vector_id', 'embedding', 'metadata'];
+    const values: any[] = [vectorId, `[${vector.join(',')}]`, JSON.stringify(remainingMetadata)];
+    const placeholders = ['$1', `$2::${vectorType}`, '$3::jsonb'];
+
+    // Add dynamic columns
+    let paramIndex = 4;
+    const updateClauses = [`embedding = $2::${vectorType}`, 'metadata = $3::jsonb'];
+
+    for (const [columnName, value] of Object.entries(columnValues)) {
+      // Validate column name to prevent SQL injection
+      const validatedColumnName = parseSqlIdentifier(columnName, 'column name');
+      columns.push(`"${validatedColumnName}"`);
+      values.push(value);
+      placeholders.push(`$${paramIndex}`);
+      updateClauses.push(`"${validatedColumnName}" = $${paramIndex}`);
+      paramIndex++;
+    }
+
+    const query = `
+      INSERT INTO ${tableName} (${columns.join(', ')})
+      VALUES (${placeholders.join(', ')})
+      ON CONFLICT (vector_id)
+      DO UPDATE SET ${updateClauses.join(', ')}
+      RETURNING embedding::text
+    `;
+
+    return { query, values };
   }
 
   private hasher = xxhash();
@@ -478,9 +675,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
     // Validate inputs
     try {
-      if (!indexName.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)) {
-        throw new Error('Invalid index name format');
-      }
+      parseSqlIdentifier(indexName, 'index name');
       if (!Number.isInteger(dimension) || dimension <= 0) {
         throw new Error('Dimension must be a positive integer');
       }
