@@ -9,7 +9,14 @@ import {
   resolveMessageLimit,
   TABLE_MESSAGES,
 } from '@mastra/core/storage';
-import type { StorageGetMessagesArg, PaginationInfo, StorageResourceType } from '@mastra/core/storage';
+import type {
+  StorageGetMessagesArg,
+  PaginationInfo,
+  StorageResourceType,
+  ThreadSortOptions,
+  ThreadOrderBy,
+  ThreadSortDirection,
+} from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
 import type { StoreOperationsUpstash } from '../operations';
 import { ensureDate, getKey, processRecord } from '../utils';
@@ -65,7 +72,11 @@ export class StoreMemoryUpstash extends MemoryStorage {
   /**
    * @deprecated use getThreadsByResourceIdPaginated instead
    */
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
+  async getThreadsByResourceId({
+    resourceId,
+    orderBy,
+    sortDirection,
+  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
     try {
       const pattern = `${TABLE_THREADS}:*`;
       const keys = await this.operations.scanKeys(pattern);
@@ -91,8 +102,12 @@ export class StoreMemoryUpstash extends MemoryStorage {
         }
       }
 
-      allThreads.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-      return allThreads;
+      const sortedThreads = this.sortThreads(
+        allThreads,
+        this.castThreadOrderBy(orderBy),
+        this.castThreadSortDirection(sortDirection),
+      );
+      return sortedThreads;
     } catch (error) {
       const mastraError = new MastraError(
         {
@@ -1043,5 +1058,22 @@ export class StoreMemoryUpstash extends MemoryStorage {
         error,
       );
     }
+  }
+
+  private sortThreads(
+    threads: StorageThreadType[],
+    orderBy: ThreadOrderBy,
+    sortDirection: ThreadSortDirection,
+  ): StorageThreadType[] {
+    return threads.sort((a, b) => {
+      const aValue = new Date(a[orderBy]).getTime();
+      const bValue = new Date(b[orderBy]).getTime();
+
+      if (sortDirection === 'ASC') {
+        return aValue - bValue;
+      } else {
+        return bValue - aValue;
+      }
+    });
   }
 }
