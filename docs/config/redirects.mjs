@@ -823,6 +823,17 @@ export const redirectList = [
     destination: "/:locale/reference/agents/network",
     permanent: true,
   },
+  // VNext to new standard methods redirects
+  {
+    source: "/:locale/reference/agents/generateVNext",
+    destination: "/:locale/reference/agents/generate",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/streaming/agents/streamVNext",
+    destination: "/:locale/reference/streaming/agents/stream",
+    permanent: true,
+  },
   {
     source: "/:locale/docs/observability/tracing",
     destination: "/:locale/docs/observability/otel-tracing",
