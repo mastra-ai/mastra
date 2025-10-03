@@ -25,8 +25,6 @@ export type Components = 'agents' | 'workflows' | 'tools';
 // TODO: Once the switch to AI SDK v5 is complete, this needs to be updated
 export const getAISDKPackageVersion = (llmProvider: LLMProvider) => {
   switch (llmProvider) {
-    case 'cerebras':
-      return 'latest';
     default:
       return 'latest';
   }
