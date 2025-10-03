@@ -2156,10 +2156,10 @@ export class Run<
   async resume<TResumeSchema extends z.ZodType<any>>(params: {
     resumeData?: z.input<TResumeSchema>;
     step?:
-      | Step<string, any, any, TResumeSchema, any, any, TEngineType>
+      | Step<string, any, any, any, TResumeSchema, any, TEngineType>
       | [
           ...Step<string, any, any, any, any, any, TEngineType>[],
-          Step<string, any, any, TResumeSchema, any, any, TEngineType>,
+          Step<string, any, any, any, TResumeSchema, any, TEngineType>,
         ]
       | string
       | string[];
