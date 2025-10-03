@@ -92,6 +92,8 @@ export function createPrepareMemoryStep<
           runtimeContext,
           tracingContext,
           messageList,
+          threadId: thread?.id,
+          resourceId,
         });
         return {
           threadExists: false,
@@ -229,6 +231,8 @@ export function createPrepareMemoryStep<
         runtimeContext,
         tracingContext,
         messageList,
+        threadId: threadObject.id,
+        resourceId,
       });
 
       const systemMessages = messageList.getSystemMessages();

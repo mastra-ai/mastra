@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { cookingTool } from '../tools';
 import { myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
+import { WorkingMemoryProcessor } from '@mastra/core/processors';
+import { LibSQLStore } from '@mastra/libsql';
 
 export const weatherInfo = createTool({
   id: 'weather-info',
@@ -26,6 +28,13 @@ export const weatherInfo = createTool({
 
 const memory = new Memory();
 
+const workingMemoryProcessor = new WorkingMemoryProcessor({
+  storage: new LibSQLStore({
+    url: 'file:./mastra.db',
+  }),
+  model: openai_v5('gpt-4o-mini'),
+});
+
 export const chefModelV2Agent = new Agent({
   name: 'Chef Agent V2 Model',
   description: 'A chef agent that can help you cook great meals with whatever ingredients you have available.',
@@ -43,6 +52,8 @@ export const chefModelV2Agent = new Agent({
   workflows: {
     myWorkflow,
   },
+  inputProcessors: [workingMemoryProcessor],
+  outputProcessors: [workingMemoryProcessor],
   scorers: ({ mastra }) => {
     if (!mastra) {
       throw new Error('Mastra not found');

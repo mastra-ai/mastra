@@ -35,3 +35,9 @@ export {
   type SystemPromptDetectionResult,
   type SystemPromptDetection,
 } from './system-prompt-scrubber';
+export {
+  WorkingMemoryProcessor,
+  type WorkingMemoryProcessorOptions,
+  type WorkingMemoryScope,
+  type WorkingMemoryTemplate,
+} from './working-memory';
