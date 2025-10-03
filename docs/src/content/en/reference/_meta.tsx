@@ -13,7 +13,7 @@ const meta: Meta = {
     title: "Legacy Workflows",
     display: "hidden",
   },
-  streaming: <Tag text="experimental">Streaming</Tag>,
+  streaming: "Streaming",
   tools: "Tools & MCP",
   memory: "Memory",
   rag: "RAG",
