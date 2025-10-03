@@ -133,7 +133,7 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
     }
     changeset += `---`;
     writeFileSync(join(monorepoDir, `.changeset/test-${new Date().toISOString()}.md`), changeset);
-    process.exit(0);
+    // process.exit(0); // Remove this - it prevents changeset commands from running
     console.log('Running pnpm changeset pre exit');
     await retryWithTimeout(
       async () => {
