@@ -251,7 +251,7 @@ export abstract class MastraMemory extends MastraBase {
    * This will be called when converting tools for the agent.
    * Implementations can override this to provide additional tools.
    *
-   * @param _config - Optional memory configuration to customize tool selection
+   * @param config - Optional memory configuration to customize tool selection
    * @returns A record of tool names to ToolAction implementations
    *
    * @example
