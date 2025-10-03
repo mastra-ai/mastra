@@ -43,11 +43,13 @@ export class MongoDBConnector {
       );
     }
 
-    const client = new MongoClient(config.url, config.options);
-    client.appendMetadata({
-      name: 'Mastra',
-      version: packageJson.version || '0.0.0',
-      platform: 'Node.js'
+    const client = new MongoClient(config.url, {
+      ...config.options,
+      driverInfo: {
+        name: 'mastra-storage',
+        version: packageJson.version || '0.0.0',
+        platform: 'Node.js'
+      }
     });
     return new MongoDBConnector({
       client,

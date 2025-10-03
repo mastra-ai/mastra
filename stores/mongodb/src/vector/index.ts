@@ -59,11 +59,13 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
   constructor({ uri, dbName, options }: { uri: string; dbName: string; options?: MongoClientOptions }) {
     super();
-    const client = new MongoClient(uri, options);
-    client.appendMetadata({
-      name: 'Mastra',
-      version: packageJson.version || '0.0.0',
-      platform: 'Node.js'
+    const client = new MongoClient(uri, {
+      ...options,
+      driverInfo: {
+        name: 'mastra-storage',
+        version: packageJson.version || '0.0.0',
+        platform: 'Node.js'
+      }
     });
     this.client = client;
     this.db = this.client.db(dbName);
