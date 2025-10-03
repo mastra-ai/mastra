@@ -8,6 +8,7 @@ import { execa, execaNode } from 'execa';
 
 const timeout = 5 * 60 * 1000;
 
+// run e2e test please
 describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
   let fixturePath: string;
 
