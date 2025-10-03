@@ -15,6 +15,7 @@
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   },
+  "private": true,
   "scripts": {
     "ci:publish": "pnpm publish -r",
     "build": "pnpm turbo build --filter \"!./examples/*\" --filter \"!./examples/**/*\" --filter \"!./docs/\"",
