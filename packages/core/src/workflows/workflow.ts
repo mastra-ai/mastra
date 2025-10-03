@@ -2303,6 +2303,7 @@ export class Run<
         graph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
         input: snapshot?.context?.input,
+        initialState: (snapshot?.value ?? {}) as any,
         resume: {
           steps,
           stepResults,
