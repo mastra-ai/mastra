@@ -5,6 +5,7 @@ import { serve } from '@hono/node-server';
 import { Agent } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { MCPServerConfig, Repository, PackageInfo, RemoteInfo, ConvertedTool } from '@mastra/core/mcp';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 import { createStep, Workflow } from '@mastra/core/workflows';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type {
@@ -1281,6 +1282,69 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     expect(server.tools()['ask_unique_agent_key_123']).toBeDefined();
   });
 
+  it('should pass authInfo to agent via RuntimeContext when executed through MCP', async () => {
+    // Create an agent that accesses runtimeContext
+    const testAgent = {
+      name: 'AuthAgent',
+      getDescription: () => 'Agent that needs auth',
+      generate: vi.fn(async (message: string, options: any) => {
+        // Access auth info from runtimeContext
+        const authToken = options?.runtimeContext?.get('authToken');
+        const userId = options?.runtimeContext?.get('userId');
+
+        return {
+          hasAuth: !!authToken,
+          authToken: authToken as string | undefined,
+          userId: userId as string | undefined,
+          message: `Processed: ${message}`,
+        };
+      }),
+    };
+
+    server = new MCPServer({
+      name: 'AuthAgentServer',
+      version: '1.0.0',
+      tools: {},
+      agents: { authAgent: testAgent as any },
+    });
+
+    const agentTool = server.tools()['ask_authAgent'] as ConvertedTool;
+    expect(agentTool).toBeDefined();
+
+    // Simulate execution with authInfo in extra parameter (as would happen via MCP)
+    const mockExtra = {
+      authInfo: {
+        authToken: 'agent-token-789',
+        userId: 'agent-user-123',
+      },
+    };
+
+    const result = await agentTool.execute(
+      { message: 'test message' },
+      {
+        toolCallId: 'test-agent-call',
+        messages: [],
+        extra: mockExtra,
+      } as any,
+    );
+
+    // The agent should have received the auth info through RuntimeContext
+    expect(result).toMatchObject({
+      hasAuth: true,
+      authToken: 'agent-token-789',
+      userId: 'agent-user-123',
+      message: 'Processed: test message',
+    });
+
+    // Verify the generate method was called with the correct RuntimeContext
+    expect(testAgent.generate).toHaveBeenCalledWith(
+      'test message',
+      expect.objectContaining({
+        runtimeContext: expect.any(RuntimeContext),
+      }),
+    );
+  });
+
   it('should throw an error if description is undefined (not provided to mock)', () => {
     const agentWithNoDesc = createMockAgent('NoDescAgent', mockAgentGenerate, mockAgentGetInstructions, undefined); // getDescription will return ''
 
@@ -1422,6 +1486,73 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
       workflows: { unique_workflow_key_789: uniqueKeyWorkflow },
     });
     expect(server.tools()['run_unique_workflow_key_789']).toBeDefined();
+  });
+
+  it('should pass authInfo to workflow via RuntimeContext when executed through MCP', async () => {
+    // Create a workflow that accesses runtimeContext
+    const testWorkflow = createMockWorkflow(
+      'AuthWorkflow',
+      'Workflow that needs auth',
+      z.object({ data: z.string() }),
+    );
+
+    const authStep = createStep({
+      id: 'auth-step',
+      description: 'Step that checks for auth',
+      inputSchema: z.object({ data: z.string() }),
+      outputSchema: z.object({
+        hasAuth: z.boolean(),
+        authToken: z.string().optional(),
+        userId: z.string().optional(),
+      }),
+      execute: async ({ inputData, runtimeContext }) => {
+        // Try to access auth info from runtimeContext
+        const authToken = runtimeContext?.get('authToken');
+        const userId = runtimeContext?.get('userId');
+
+        return {
+          hasAuth: !!authToken,
+          authToken: authToken as string | undefined,
+          userId: userId as string | undefined,
+        };
+      },
+    });
+
+    testWorkflow.then(authStep).commit();
+
+    server = new MCPServer({
+      name: 'AuthWorkflowServer',
+      version: '1.0.0',
+      tools: {},
+      workflows: { authWorkflow: testWorkflow },
+    });
+
+    const workflowTool = server.tools()['run_authWorkflow'] as ConvertedTool;
+    expect(workflowTool).toBeDefined();
+
+    // Simulate execution with authInfo in extra parameter (as would happen via MCP)
+    const mockExtra = {
+      authInfo: {
+        authToken: 'test-token-123',
+        userId: 'user-456',
+      },
+    };
+
+    const result = await workflowTool.execute(
+      { data: 'test' },
+      {
+        toolCallId: 'test-call',
+        messages: [],
+        extra: mockExtra,
+      } as any,
+    );
+
+    // The workflow should have received the auth info through RuntimeContext
+    expect(result?.steps?.['auth-step']?.output).toMatchObject({
+      hasAuth: true,
+      authToken: 'test-token-123',
+      userId: 'user-456',
+    });
   });
 });
 
