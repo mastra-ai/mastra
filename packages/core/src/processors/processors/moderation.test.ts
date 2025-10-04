@@ -209,7 +209,7 @@ describe('ModerationProcessor', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
       const messages = [createTestMessage('Questionable content', 'user')];
 
@@ -237,7 +237,7 @@ describe('ModerationProcessor', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => { });
 
       const messages = [
         createTestMessage('Safe message', 'user', 'msg1'),
@@ -431,7 +431,7 @@ describe('ModerationProcessor', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
       const messages = [createTestMessage('Test content', 'user')];
       const result = await moderator.processInput({ messages, abort: mockAbort as any });
@@ -490,7 +490,7 @@ describe('ModerationProcessor', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
       const messages = [createTestMessage('Flagged content', 'user')];
       await moderator.processInput({ messages, abort: mockAbort as any });
@@ -513,6 +513,20 @@ describe('ModerationProcessor', () => {
       // The custom instructions are used in the Agent constructor
       // which is mocked, but we can verify the processor was created successfully
     });
+
+    it('should accept providerOptions in constructor', () => {
+      const providerOptions = {
+        openai: { reasoningEffort: 'low' },
+      };
+      const model = setupMockModel({ object: createMockModerationResult(false) });
+
+      const moderator = new ModerationProcessor({
+        model,
+        providerOptions,
+      });
+
+      expect(moderator['providerOptions']).toEqual(providerOptions);
+    });
   });
 
   describe('edge cases', () => {
@@ -532,7 +546,7 @@ describe('ModerationProcessor', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
       const messages = [createTestMessage('Test content', 'user')];
       const result = await moderator.processInput({ messages, abort: mockAbort as any });
@@ -691,4 +705,5 @@ describe('ModerationProcessor', () => {
       expect(mockAbort).not.toHaveBeenCalled();
     });
   });
+
 });

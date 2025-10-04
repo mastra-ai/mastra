@@ -1,3 +1,4 @@
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
@@ -68,6 +69,13 @@ export interface PromptInjectionOptions {
    * Useful for tuning thresholds and debugging
    */
   includeScores?: boolean;
+
+  /**
+   * Provider-specific options (e.g., OpenAI reasoningEffort)
+   * Passed to the internal detection agent's generate call
+   * Useful for controlling thinking models to reduce latency and token usage
+   */
+  providerOptions?: SharedV2ProviderOptions;
 }
 
 /**
@@ -85,6 +93,7 @@ export class PromptInjectionDetector implements Processor {
   private threshold: number;
   private strategy: 'block' | 'warn' | 'filter' | 'rewrite';
   private includeScores: boolean;
+  private providerOptions?: SharedV2ProviderOptions;
 
   // Default detection categories based on OWASP LLM01 and common attack patterns
   private static readonly DEFAULT_DETECTION_TYPES = [
@@ -101,6 +110,7 @@ export class PromptInjectionDetector implements Processor {
     this.threshold = options.threshold ?? 0.7; // Higher default threshold for security
     this.strategy = options.strategy || 'block';
     this.includeScores = options.includeScores ?? false;
+    this.providerOptions = options.providerOptions;
 
     this.detectionAgent = new Agent({
       name: 'prompt-injection-detector',
@@ -198,6 +208,7 @@ export class PromptInjectionDetector implements Processor {
           modelSettings: {
             temperature: 0,
           },
+          providerOptions: this.providerOptions,
           tracingContext,
         });
       } else {
@@ -246,9 +257,8 @@ export class PromptInjectionDetector implements Processor {
       .filter(([_, score]) => typeof score === 'number' && score >= this.threshold)
       .map(([type]) => type);
 
-    const alertMessage = `Prompt injection detected. Types: ${flaggedTypes.join(', ')}${
-      result.reason ? `. Reason: ${result.reason}` : ''
-    }${this.includeScores ? `. Scores: ${JSON.stringify(result.categories)}` : ''}`;
+    const alertMessage = `Prompt injection detected. Types: ${flaggedTypes.join(', ')}${result.reason ? `. Reason: ${result.reason}` : ''
+      }${this.includeScores ? `. Scores: ${JSON.stringify(result.categories)}` : ''}`;
 
     switch (strategy) {
       case 'block':

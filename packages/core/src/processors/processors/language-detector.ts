@@ -1,3 +1,4 @@
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
@@ -94,6 +95,13 @@ export interface LanguageDetectorOptions {
    * - 'balanced': Balance between speed and quality
    */
   translationQuality?: 'speed' | 'quality' | 'balanced';
+
+  /**
+   * Provider-specific options (e.g., OpenAI reasoningEffort)
+   * Passed to the internal detection/translation agent's generate call
+   * Useful for controlling thinking models to reduce latency and token usage
+   */
+  providerOptions?: SharedV2ProviderOptions;
 }
 
 /**
@@ -114,6 +122,7 @@ export class LanguageDetector implements Processor {
   private minTextLength: number;
   private includeDetectionDetails: boolean;
   private translationQuality: 'speed' | 'quality' | 'balanced';
+  private providerOptions?: SharedV2ProviderOptions;
 
   // Default target language
   private static readonly DEFAULT_TARGET_LANGUAGES = ['English', 'en'];
@@ -167,6 +176,7 @@ export class LanguageDetector implements Processor {
     this.minTextLength = options.minTextLength ?? 10;
     this.includeDetectionDetails = options.includeDetectionDetails ?? false;
     this.translationQuality = options.translationQuality || 'quality';
+    this.providerOptions = options.providerOptions;
 
     // Create internal detection and translation agent
     this.detectionAgent = new Agent({
@@ -266,6 +276,7 @@ export class LanguageDetector implements Processor {
           modelSettings: {
             temperature: 0,
           },
+          providerOptions: this.providerOptions,
         });
       } else {
         response = await this.detectionAgent.generateLegacy(prompt, {
@@ -394,8 +405,8 @@ export class LanguageDetector implements Processor {
         }),
         ...(this.preserveOriginal &&
           originalMessage && {
-            original_content: this.extractTextContent(originalMessage),
-          }),
+          original_content: this.extractTextContent(originalMessage),
+        }),
       },
     };
 

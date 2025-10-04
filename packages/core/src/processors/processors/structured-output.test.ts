@@ -182,7 +182,7 @@ describe('StructuredOutputProcessor', () => {
 
       const { controller } = createMockController();
       const abort = createMockAbort();
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
       const finishChunk: ChunkType = {
         runId: 'test-run',
@@ -383,6 +383,22 @@ describe('StructuredOutputProcessor', () => {
 
       // The custom instructions should be used instead of generated ones
       expect((customProcessor as any).structuringAgent.instructions).toBe(customInstructions);
+    });
+  });
+
+  describe('configuration options', () => {
+    it('should accept providerOptions in constructor', () => {
+      const providerOptions = {
+        openai: { reasoningEffort: 'low' },
+      };
+
+      const customProcessor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        providerOptions,
+      });
+
+      expect(customProcessor['providerOptions']).toEqual(providerOptions);
     });
   });
 
@@ -681,4 +697,5 @@ describe('Structured Output with Tool Execution', () => {
     expect(finalObject.toolsCalled).toHaveLength(2);
     expect(finalObject.location).toBe('Toronto');
   }, 15000);
+
 });

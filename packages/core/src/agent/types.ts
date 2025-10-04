@@ -63,6 +63,13 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
    * If not provided, will generate instructions based on the schema.
    */
   instructions?: string;
+
+  /**
+   * Provider-specific options (e.g., OpenAI reasoningEffort)
+   * Passed to the internal structuring agent's stream call
+   * Useful for controlling thinking models to reduce latency and token usage
+   */
+  providerOptions?: import('@ai-sdk/provider-v5').SharedV2ProviderOptions;
 } & FallbackFields<OUTPUT>;
 
 export interface AgentCreateOptions {
@@ -176,7 +183,7 @@ export type AgentGenerateOptions<
   /** AI tracing options for starting new traces */
   tracingOptions?: TracingOptions;
 } & (
-  | {
+    | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
        */
@@ -186,7 +193,7 @@ export type AgentGenerateOptions<
        */
       threadId?: undefined;
     }
-  | {
+    | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
        */
@@ -196,7 +203,7 @@ export type AgentGenerateOptions<
        */
       threadId: string;
     }
-) &
+  ) &
   (OUTPUT extends undefined ? DefaultLLMTextOptions : DefaultLLMTextObjectOptions);
 
 /**
@@ -255,7 +262,7 @@ export type AgentStreamOptions<
   /** Scorers to use for this generation */
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
 } & (
-  | {
+    | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
        */
@@ -265,7 +272,7 @@ export type AgentStreamOptions<
        */
       threadId?: undefined;
     }
-  | {
+    | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
        */
@@ -275,7 +282,7 @@ export type AgentStreamOptions<
        */
       threadId: string;
     }
-) &
+  ) &
   (OUTPUT extends undefined ? DefaultLLMStreamOptions : DefaultLLMStreamObjectOptions);
 
 export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };

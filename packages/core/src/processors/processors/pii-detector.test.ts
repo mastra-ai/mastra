@@ -355,7 +355,7 @@ describe('PIIDetector', () => {
 
   describe('strategy: warn', () => {
     it('should log warning but continue processing', async () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
       const model = setupMockModel(createMockPIIResult(['email']));
       const detector = new PIIDetector({ model, strategy: 'warn' });
       const messages = [createTestMessage('My email is test@example.com')];
@@ -634,7 +634,7 @@ describe('PIIDetector', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
       const messages = [createTestMessage('test@example.com', 'user')];
       const result = await detector.processInput({ messages, abort: mockAbort as any });
@@ -702,7 +702,7 @@ describe('PIIDetector', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
       const messages = [createTestMessage('test@example.com', 'user')];
       await detector.processInput({ messages, abort: mockAbort as any });
@@ -723,6 +723,20 @@ describe('PIIDetector', () => {
 
       expect(detector.name).toBe('pii-detector');
     });
+
+    it('should accept providerOptions in constructor', () => {
+      const providerOptions = {
+        openai: { reasoningEffort: 'low' },
+      };
+      const model = setupMockModel(createMockPIIResult());
+
+      const detector = new PIIDetector({
+        model,
+        providerOptions,
+      });
+
+      expect(detector['providerOptions']).toEqual(providerOptions);
+    });
   });
 
   describe('edge cases', () => {
@@ -742,7 +756,7 @@ describe('PIIDetector', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
       const messages = [createTestMessage('test@example.com', 'user')];
       const result = await detector.processInput({ messages, abort: mockAbort as any });
@@ -958,7 +972,7 @@ describe('PIIDetector', () => {
     });
 
     it('should warn but allow content when strategy is warn and PII is detected', async () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
       const model = setupMockModel(createMockPIIResult(['email']));
       const detector = new PIIDetector({ model, strategy: 'warn' });
@@ -1092,7 +1106,7 @@ describe('PIIDetector', () => {
     });
 
     it('should warn but allow content when strategy is warn and PII is detected', async () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
       const model = setupMockModel(createMockPIIResult(['email']));
       const detector = new PIIDetector({ model, strategy: 'warn' });
@@ -1122,4 +1136,5 @@ describe('PIIDetector', () => {
       expect(result).toEqual(messages); // Should return original messages on failure
     });
   });
+
 });
