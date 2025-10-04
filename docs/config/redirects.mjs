@@ -944,6 +944,16 @@ export const redirectList = [
     destination: "/:locale/reference/observability/otel-tracing/providers",
     permanent: true,
   },
+  {
+    source: "/:locale/docs/agents/input-processors",
+    destination: "/:locale/docs/agents/guardrails",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/agents/output-processors",
+    destination: "/:locale/docs/agents/guardrails",
+    permanent: true,
+  },
   // Vector store reference redirects (moved from RAG to Vectors)
   {
     source: "/:locale/reference/rag/astra",
