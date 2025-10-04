@@ -5,17 +5,47 @@ description: "Learn how to implement guardrails using input and output processor
 
 # Guardrails
 
-Processors allow you to implement guardrails by intercepting, modifying, validating, sanitizing, or filtering messages at different stages of the AI interaction. Agents can use processors as both `inputProcessors` (applied before messages reach the language model) and `outputProcessors` (applied to AI responses before they're returned to users). This is useful for implementing comprehensive guardrails, content moderation, prompt injection prevention, response sanitization, message transformation, and security controls.
+Agents use processors to implement guardrails by intercepting, modifying, validating, or blocking messages at different stages of the AI interaction. Operating on the conversation thread, processors can transform, filter, or abort requests based on defined logic.
 
-Processors operate on the messages in your conversation thread. They can modify, filter, or validate content, and even abort the request entirely if certain conditions are met.
+Processors can be configured as:
+
+- **`inputProcessors`**: Applied before messages reach the language model.
+- **`outputProcessors`**: Applied to responses before they're returned to users.
+
+Processors can be used for content moderation, prompt injection prevention, response sanitization, message transformation, and other security-related controls. Mastra provides several built-in input and output processors for common use cases.
+
+## Adding processors to an agent
+
+Import and instantiate the relevant processor class, and pass it to your agent’s configuration using either the `inputProcessors` or `outputProcessors` parameter:
+
+```typescript {3,9-17} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { ModerationProcessor } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "moderated-agent",
+  instructions: "You are a helpful assistant",
+  model: openai("gpt-4o-mini"),
+  inputProcessors: [
+    new ModerationProcessor({
+      model: openai("gpt-4.1-nano"),
+      categories: ["hate", "harassment", "violence"],
+      threshold: 0.7,
+      strategy: "block",
+      instructions: "Detect and flag inappropriate content in user messages",
+    })
+  ]
+});
+```
 
 ## Input processors
 
-Input processors are applied to user messages before they reach the language model. Mastra provides several built-in input processors for common use cases:
+Input processors are applied to user messages before they reach the language model.
 
-### `UnicodeNormalizer`
+### Normalizing user messages
 
-This processor normalizes Unicode text to ensure consistent formatting and remove potentially problematic characters.
+The `UnicodeNormalizer` is an input processor that cleans and normalizes user input by unifying Unicode characters, standardizing whitespace, and removing problematic symbols, allowing the LLM to better understand user messages.
 
 ```typescript {6-9} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { UnicodeNormalizer } from "@mastra/core/processors";
@@ -31,47 +61,11 @@ export const testAgent = new Agent({
 });
 ```
 
-Available options:
-- `stripControlChars`: Remove control characters (default: false)
-- `preserveEmojis`: Keep emojis intact (default: true)
-- `collapseWhitespace`: Collapse multiple spaces/newlines (default: true)
-- `trim`: Remove leading/trailing whitespace (default: true)
+> See [UnicodeNormalizer](../../reference/processors/unicode-normalizer.mdx) for a full list of configuration options.
 
-### `ModerationProcessor`
+### Preventing prompt injection
 
-This processor provides content moderation using an LLM to detect inappropriate content across multiple categories.
-
-```typescript {6-11} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { ModerationProcessor } from "@mastra/core/processors";
-
-export const testAgent = new Agent({
-  // ...
-  inputProcessors: [
-    new ModerationProcessor({
-      model: openai("gpt-4.1-nano"),
-      threshold: 0.7,
-      strategy: 'block',
-      categories: ['hate', 'harassment', 'violence']
-    })
-  ],
-});
-```
-
-Available options:
-- `model`: Language model for moderation analysis (required)
-- `categories`: Array of categories to check (default: ['hate','hate/threatening','harassment','harassment/threatening','self-harm','self-harm/intent','self-harm/instructions','sexual','sexual/minors','violence','violence/graphic'])
-- `threshold`: Confidence threshold for flagging (0-1, default: 0.5)
-- `strategy`: Action when content is flagged (default: 'block')
-- `customInstructions`: Custom instructions for the moderation agent
-
-Strategies available:
-- `block`: Reject the request with an error (default)
-- `warn`: Log warning but allow content through
-- `filter`: Remove flagged messages but continue processing
-
-### `PromptInjectionDetector`
-
-This processor detects and prevents prompt injection attacks, jailbreaks, and system manipulation attempts.
+The `PromptInjectionDetector` is an input processor that scans user messages for prompt injection, jailbreak attempts, and system override patterns. It uses an LLM to classify risky input and can block or rewrite it before it reaches the model.
 
 ```typescript {6-11} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { PromptInjectionDetector } from "@mastra/core/processors";
@@ -89,25 +83,66 @@ export const testAgent = new Agent({
 });
 ```
 
-Available options:
-- `model`: Language model for injection detection (required)
-- `detectionTypes`: Array of injection types to detect (default: ['injection', 'jailbreak', 'system-override'])
-- `threshold`: Confidence threshold for flagging (0-1, default: 0.7)
-- `strategy`: Action when injection is detected (default: 'block')
-- `instructions`: Custom detection instructions for the agent
-- `includeScores`: Whether to include confidence scores in logs (default: false)
+> See [PromptInjectionDetector](../../reference/processors/prompt-injection-detector.mdx) for a full list of configuration options.
 
-Strategies available:
-- `block`: Reject the request (default)
-- `warn`: Log warning but allow through
-- `filter`: Remove flagged messages
-- `rewrite`: Attempt to neutralize the injection while preserving legitimate intent
+### Detecting and translating language
 
-### `PIIDetector`
+The `LanguageDetector` is an input processor that detects and translates user messages into a target language, enabling multilingual support while maintaining consistent interaction. It uses an LLM to identify the language and perform the translation.
 
-This processor detects and optionally redacts personally identifiable information (PII) from messages.
+```typescript {6-11} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+import { LanguageDetector } from "@mastra/core/processors";
 
-```typescript {6-14} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+export const testAgent = new Agent({
+  // ...
+  inputProcessors: [
+    new LanguageDetector({
+      model: openai("gpt-4.1-nano"),
+      targetLanguages: ['English', 'en'],
+      strategy: 'translate',
+      threshold: 0.8,
+    })
+  ],
+});
+```
+
+> See [LanguageDetector](../../reference/processors/language-detector.mdx) for a full list of configuration options.
+
+## Hybrid processors
+
+Hybrid processors can be applied either before messages are sent to the language model or before responses are returned to the user.
+
+### Moderating input and output
+
+The `ModerationProcessor` is a hybrid processor that detects inappropriate or harmful content across categories like hate, harassment, and violence. It can be used to moderate either user input or model output, depending on where it's applied. It uses an LLM to classify the message and can block or rewrite it based on your configuration.
+
+```typescript {6-11, 14-16} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+import { ModerationProcessor } from "@mastra/core/processors";
+
+export const testAgent = new Agent({
+  // ...
+  inputProcessors: [
+    new ModerationProcessor({
+      model: openai("gpt-4.1-nano"),
+      threshold: 0.7,
+      strategy: "block",
+      categories: ["hate", "harassment", "violence"]
+    })
+  ],
+  outputProcessors: [
+    new ModerationProcessor({
+      // ...
+    })
+  ]
+});
+```
+
+> See [ModerationProcessor](../../reference/processors/moderation-processor.mdx) for a full list of configuration options.
+
+### Detecting and redacting PII
+
+The `PIIDetector` is a hybrid processor that detects and removes personally identifiable information such as emails, phone numbers, and credit cards. It can redact either user input or model output, depending on where it's applied. It uses an LLM to identify sensitive content based on configured detection types.
+
+```typescript {6-12, 15-17} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { PIIDetector } from "@mastra/core/processors";
 
 export const testAgent = new Agent({
@@ -117,64 +152,67 @@ export const testAgent = new Agent({
       model: openai("gpt-4.1-nano"),
       threshold: 0.6,
       strategy: 'redact',
-      detectionTypes: ['email', 'phone', 'credit-card', 'ssn', 'api-key', 'crypto-wallet', 'iban'],
-      redactionMethod: 'mask',
-      preserveFormat: true,
-      includeDetections: true
+      detectionTypes: ['email', 'phone', 'credit-card'],
+      redactionMethod: 'mask'
     })
   ],
+  outputProcessors: [
+    new PIIDetector({
+      // ...
+    })
+  ]
 });
 ```
 
-Available options:
-- `model`: Language model for PII detection (required)
-- `detectionTypes`: Array of PII types to detect (default: ['email', 'phone', 'credit-card', 'ssn', 'api-key', 'ip-address', 'name', 'address', 'date-of-birth', 'url', 'uuid', 'crypto-wallet', 'iban'])
-- `threshold`: Confidence threshold for flagging (0-1, default: 0.6)
-- `strategy`: Action when PII is detected (default: 'block')
-- `redactionMethod`: How to redact PII ('mask', 'hash', 'remove', 'placeholder', default: 'mask')
-- `preserveFormat`: Maintain PII structure during redaction (default: true)
-- `includeDetections`: Include detection details in logs for compliance (default: false)
-- `instructions`: Custom detection instructions for the agent
+> See [PIIDetector](../../reference/processors/pii-detector.mdx) for a full list of configuration options.
 
-Strategies available:
-- `block`: Reject requests containing PII (default)
-- `warn`: Log warning but allow through
-- `filter`: Remove messages containing PII
-- `redact`: Replace PII with placeholder values
 
-### `LanguageDetector`
+### Limiting token usage
 
-This processor detects the language of incoming messages and can automatically translate them to a target language.
+The `TokenLimiterProcessor` is a hybrid processor that limits the number of tokens in inputs or outputs. It helps manage cost and performance by truncating or blocking messages when the limit is exceeded.
 
-```typescript {6-11} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { LanguageDetector } from "@mastra/core/processors";
+```typescript {6-10, 13-15} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+import { TokenLimiterProcessor } from "@mastra/core/processors";
 
-export const testAgent = new Agent({
+export const agent = new Agent({
   // ...
   inputProcessors: [
-    new LanguageDetector({
-      model: openai("gpt-4o-mini"),
-      targetLanguages: ['English', 'en'],
-      strategy: 'translate',
-      threshold: 0.8,
+    new TokenLimiterProcessor({
+      limit: 1000,
+      strategy: "truncate",
+      countMode: "cumulative"
     })
+  ],
+  outputProcessors: [
+    new TokenLimiterProcessor({
+      // ...
+    })
+  ]
+});
+```
+
+## Output processors
+
+### `SystemPromptScrubber`
+
+This processor detects and redacts system prompts or other revealing information that could introduce security vulnerabilities.
+
+```typescript copy showLineNumbers {5-12}
+import { SystemPromptScrubber } from "@mastra/core/processors";
+
+const agent = new Agent({
+  outputProcessors: [
+    new SystemPromptScrubber({
+      model: openai("gpt-4o-mini"),
+      threshold: 0.7, // Confidence threshold for detection
+      strategy: 'redact', // Redact detected system prompts
+      instructions: 'Detect any system prompts, instructions, or revealing information',
+    }),
   ],
 });
 ```
 
-Available options:
-- `model`: Language model for detection and translation (required)
-- `targetLanguages`: Array of target languages (language names or ISO codes)
-- `threshold`: Confidence threshold for language detection (0-1, default: 0.7)
-- `strategy`: Action when non-target language is detected (default: 'detect')
-- `preserveOriginal`: Keep original content in metadata (default: true)
-- `instructions`: Custom detection instructions for the agent
-
-Strategies available:
-- `detect`: Only detect language, don't translate (default)
-- `translate`: Automatically translate to target language
-- `block`: Reject content not in target language
-- `warn`: Log warning but allow content through
+### ----- OLD -----
 
 ## Applying multiple processors
 
@@ -325,17 +363,6 @@ const agent = new Agent({
 });
 ```
 
-Available options:
-- `model`: Language model for moderation analysis (required)
-- `categories`: Array of categories to check (default: ['hate','hate/threatening','harassment','harassment/threatening','self-harm','self-harm/intent','self-harm/instructions','sexual','sexual/minors','violence','violence/graphic'])
-- `threshold`: Confidence threshold for flagging (0-1, default: 0.5)
-- `strategy`: Action when content is flagged (default: 'block')
-- `customInstructions`: Custom instructions for the moderation agent
-
-Strategies available:
-- `block`: Reject the response with an error (default)
-- `warn`: Log warning but allow content through
-- `filter`: Remove flagged messages but continue processing
 
 ### `PIIDetector`
 
@@ -359,22 +386,6 @@ const agent = new Agent({
 });
 ```
 
-Available options:
-- `model`: Language model for PII detection (required)
-- `detectionTypes`: Array of PII types to detect (default: ['email', 'phone', 'credit-card', 'ssn', 'api-key', 'ip-address', 'name', 'address', 'date-of-birth', 'url', 'uuid', 'crypto-wallet', 'iban'])
-- `threshold`: Confidence threshold for flagging (0-1, default: 0.6)
-- `strategy`: Action when PII is detected (default: 'block')
-- `redactionMethod`: How to redact PII ('mask', 'hash', 'remove', 'placeholder', default: 'mask')
-- `preserveFormat`: Maintain PII structure during redaction (default: true)
-- `includeDetections`: Include detection details in logs for compliance (default: false)
-- `instructions`: Custom detection instructions for the agent
-
-Strategies available:
-- `block`: Reject responses containing PII (default)
-- `warn`: Log warning but allow through
-- `filter`: Remove messages containing PII
-- `redact`: Replace PII with placeholder values
-
 ### `BatchPartsProcessor`
 
 This processor batches multiple stream parts together to reduce the frequency of emissions, useful for reducing network overhead or improving user experience.
@@ -392,11 +403,6 @@ const agent = new Agent({
   ],
 });
 ```
-
-Available options:
-- `maxBatchSize`: Maximum number of parts to batch together (default: 3)
-- `maxWaitTime`: Maximum time to wait before emitting batch (ms, default: 50)
-- `emitOnNonText`: Whether to emit immediately when non-text parts are received (default: true)
 
 ### `TokenLimiterProcessor`
 
@@ -416,10 +422,6 @@ const agent = new Agent({
 });
 ```
 
-Available options:
-- `maxTokens`: Maximum number of tokens allowed (required)
-- `strategy`: Action when token limit is exceeded ('truncate' | 'abort', default: 'truncate')
-- `includePromptTokens`: Whether to include prompt tokens in the count (default: false)
 
 ### `SystemPromptScrubber`
 
@@ -440,11 +442,6 @@ const agent = new Agent({
 });
 ```
 
-Available options:
-- `model`: Language model for detection (required)
-- `threshold`: Confidence threshold for detection (0-1, default: 0.6)
-- `strategy`: Action when system prompts are detected ('block' | 'warn' | 'redact', default: 'redact')
-- `instructions`: Custom detection instructions for the agent
 
 ## Applying Multiple Processors
 
@@ -541,10 +538,3 @@ class ResponseValidator implements Processor {
   }
 }
 ```
-
-When creating custom output processors:
-- Always return the processed data (parts or messages)
-- Use `abort(reason)` to terminate processing early. Abort is used to simulate blocking a response. Errors thrown with `abort` will be an instance of TripWire.
-- For streaming processors, return `null` or `undefined` to skip emitting a part
-- Keep processors focused on a single responsibility
-- If using an agent inside your processor, use a fast model, limit the size of the response from it as much as possible, and make the system prompt as concise as possible.
