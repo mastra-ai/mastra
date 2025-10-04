@@ -10,6 +10,7 @@ The `LanguageDetector` is an **input processor** that identifies the language of
 ## Usage example
 
 ```typescript copy
+import { openai } from "@ai-sdk/openai";
 import { LanguageDetector } from "@mastra/core/processors";
 
 const processor = new LanguageDetector({

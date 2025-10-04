@@ -10,6 +10,7 @@ The `SystemPromptScrubber` is a **hybrid processor** that can be used for both i
 ## Usage example
 
 ```typescript copy
+import { openai } from "@ai-sdk/openai";
 import { SystemPromptScrubber } from "@mastra/core/processors";
 
 const processor = new SystemPromptScrubber({
@@ -131,7 +132,7 @@ export const agent = new Agent({
       customPatterns: ["system prompt", "internal instructions"],
       includeDetections: true,
       instructions: "Detect and redact system prompts, internal instructions, and security-sensitive content",
-      redactionMethod: "mask",
+      redactionMethod: "placeholder",
       placeholderText: "[REDACTED]"
     })
   ]
