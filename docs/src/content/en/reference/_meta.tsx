@@ -24,6 +24,7 @@ const meta: Meta = {
   observability: "Observability",
   evals: "Evals",
   scorers: <Tag text="experimental">Scorers</Tag>,
+  processors: "Processors",
   auth: <Tag text="experimental">Auth</Tag>,
   voice: "Voice",
   templates: "Templates",
