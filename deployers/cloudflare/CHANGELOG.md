@@ -1,5 +1,15 @@
 # @mastra/deployer-cloudflare
 
+## 0.14.6-alpha.0
+
+### Patch Changes
+
+- Properly fix cloudflare randomUUID in global scope issue ([#8450](https://github.com/mastra-ai/mastra/pull/8450))
+
+- Updated dependencies [[`10e633a`](https://github.com/mastra-ai/mastra/commit/10e633a07d333466d9734c97acfc3dbf757ad2d0)]:
+  - @mastra/core@0.20.1-alpha.0
+  - @mastra/deployer@0.20.1-alpha.0
+
 ## 0.14.5
 
 ### Patch Changes
