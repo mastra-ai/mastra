@@ -1,3 +1,4 @@
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import { z } from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
@@ -22,6 +23,12 @@ export interface SystemPromptScrubberOptions {
   placeholderText?: string;
   /** Model to use for the detection agent */
   model: MastraLanguageModel;
+  /**
+   * Provider-specific options (e.g., OpenAI reasoningEffort)
+   * Passed to the internal detection agent's generate call
+   * Useful for controlling thinking models to reduce latency and token usage
+   */
+  providerOptions?: SharedV2ProviderOptions;
 }
 
 export interface SystemPromptDetectionResult {
@@ -59,6 +66,7 @@ export class SystemPromptScrubber implements Processor {
   private placeholderText: string;
   private model: MastraLanguageModel;
   private detectionAgent: Agent;
+  private providerOptions?: SharedV2ProviderOptions;
 
   constructor(options: SystemPromptScrubberOptions) {
     if (!options.model) {
@@ -70,6 +78,7 @@ export class SystemPromptScrubber implements Processor {
     this.includeDetections = options.includeDetections || false;
     this.redactionMethod = options.redactionMethod || 'mask';
     this.placeholderText = options.placeholderText || '[SYSTEM_PROMPT]';
+    this.providerOptions = options.providerOptions;
 
     // Initialize instructions after customPatterns is set
     this.instructions = options.instructions || this.getDefaultInstructions();
@@ -254,6 +263,7 @@ export class SystemPromptScrubber implements Processor {
       if (model.specificationVersion === 'v2') {
         result = await this.detectionAgent.generate(text, {
           output: schema,
+          providerOptions: this.providerOptions,
           tracingContext,
         });
       } else {

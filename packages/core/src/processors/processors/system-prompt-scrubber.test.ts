@@ -191,7 +191,7 @@ describe('SystemPromptScrubber', () => {
 
   describe('strategy: warn', () => {
     it('should log warning but allow content through', async () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
       processor = new SystemPromptScrubber({
         model: mockModel,
@@ -314,7 +314,7 @@ describe('SystemPromptScrubber', () => {
 
   describe('error handling', () => {
     it('should fail open when detection agent fails', async () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
       processor = new SystemPromptScrubber({ model: mockModel });
       vi.spyOn(mockModel, 'doGenerate').mockRejectedValueOnce(new Error('Detection failed'));
@@ -353,6 +353,19 @@ describe('SystemPromptScrubber', () => {
       expect(() => {
         new SystemPromptScrubber({} as any);
       }).toThrow('SystemPromptScrubber requires a model for detection');
+    });
+
+    it('should accept providerOptions in constructor', () => {
+      const providerOptions = {
+        openai: { reasoningEffort: 'low' },
+      };
+
+      processor = new SystemPromptScrubber({
+        model: mockModel,
+        providerOptions,
+      });
+
+      expect(processor['providerOptions']).toEqual(providerOptions);
     });
   });
 });

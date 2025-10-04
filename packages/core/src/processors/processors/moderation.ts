@@ -1,3 +1,4 @@
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
@@ -79,6 +80,13 @@ export interface ModerationOptions {
    * Default: 0 (no context window)
    */
   chunkWindow?: number;
+
+  /**
+   * Provider-specific options (e.g., OpenAI reasoningEffort)
+   * Passed to the internal moderation agent's generate call
+   * Useful for controlling thinking models to reduce latency and token usage
+   */
+  providerOptions?: SharedV2ProviderOptions;
 }
 
 /**
@@ -97,6 +105,7 @@ export class ModerationProcessor implements Processor {
   private strategy: 'block' | 'warn' | 'filter';
   private includeScores: boolean;
   private chunkWindow: number;
+  private providerOptions?: SharedV2ProviderOptions;
 
   // Default OpenAI moderation categories
   private static readonly DEFAULT_CATEGORIES = [
@@ -119,6 +128,7 @@ export class ModerationProcessor implements Processor {
     this.strategy = options.strategy || 'block';
     this.includeScores = options.includeScores ?? false;
     this.chunkWindow = options.chunkWindow ?? 0;
+    this.providerOptions = options.providerOptions;
 
     // Create internal moderation agent
     this.moderationAgent = new Agent({
@@ -258,6 +268,7 @@ export class ModerationProcessor implements Processor {
           modelSettings: {
             temperature: 0,
           },
+          providerOptions: this.providerOptions,
           tracingContext,
         });
       } else {
@@ -305,9 +316,8 @@ export class ModerationProcessor implements Processor {
       .filter(([_, score]) => typeof score === 'number' && score >= this.threshold)
       .map(([category]) => category);
 
-    const message = `Content flagged for moderation. Categories: ${flaggedCategories.join(', ')}${
-      result.reason ? `. Reason: ${result.reason}` : ''
-    }${this.includeScores ? `. Scores: ${JSON.stringify(result.category_scores)}` : ''}`;
+    const message = `Content flagged for moderation. Categories: ${flaggedCategories.join(', ')}${result.reason ? `. Reason: ${result.reason}` : ''
+      }${this.includeScores ? `. Scores: ${JSON.stringify(result.category_scores)}` : ''}`;
 
     switch (strategy) {
       case 'block':

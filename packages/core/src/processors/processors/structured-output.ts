@@ -1,3 +1,4 @@
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { TransformStreamDefaultController } from 'stream/web';
 import { Agent } from '../../agent';
 import type { StructuredOutputOptions } from '../../agent/types';
@@ -33,11 +34,13 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
   private errorStrategy: 'strict' | 'warn' | 'fallback';
   private fallbackValue?: InferSchemaOutput<OUTPUT>;
   private isStructuringAgentStreamStarted = false;
+  private providerOptions?: SharedV2ProviderOptions;
 
   constructor(options: StructuredOutputOptions<OUTPUT>, fallbackModel?: MastraLanguageModel) {
     this.schema = options.schema;
     this.errorStrategy = options.errorStrategy ?? 'strict';
     this.fallbackValue = options.fallbackValue;
+    this.providerOptions = options.providerOptions;
 
     // Use provided model or fallback model
     const modelToUse = options.model || fallbackModel;
@@ -92,6 +95,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
 
       const structuringAgentStream = await this.structuringAgent.stream(prompt, {
         output: this.schema,
+        providerOptions: this.providerOptions,
       });
 
       const excludedChunkTypes = [
