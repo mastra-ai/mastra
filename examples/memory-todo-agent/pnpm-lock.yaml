@@ -25,8 +25,8 @@ importers:
         specifier: latest
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
       chalk:
-        specifier: ^5.4.1
-        version: 5.4.1
+        specifier: ^5.6.2
+        version: 5.6.2
       ora:
         specifier: ^8.2.0
         version: 8.2.0
@@ -86,8 +86,8 @@ packages:
     resolution: {integrity: sha512-7HSX4QQb4CspciLpVFwyRe79O3xsIZDDLER21kERQ71oaPodF8jL725AgJMFAYbooIqolJoRLuM81SpeUkpkvA==}
     engines: {node: '>=12'}
 
-  chalk@5.4.1:
-    resolution: {integrity: sha512-zgVZuo2WcZgfUEmsn6eO3kINexW8RAE4maiQ8QNs8CtpPCSyMiYsULR3HQYkm3w8FIA3SberyMJMSldGsW+U3w==}
+  chalk@5.6.2:
+    resolution: {integrity: sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA==, tarball: https://registry.npmjs.org/chalk/-/chalk-5.6.2.tgz}
     engines: {node: ^12.17.0 || ^14.13 || >=16.0.0}
 
   cli-cursor@5.0.0:
@@ -154,7 +154,7 @@ packages:
     engines: {node: '>=18'}
 
   react@19.1.0:
-    resolution: {integrity: sha512-FS+XFBNvn3GTAWq26joslQgWNoFu08F4kl0J4CgdNKADkdSGXQyTCnKteIAJy96Br6YbpEU1LSzV5dYtjMkMDg==}
+    resolution: {integrity: sha512-FS+XFBNvn3GTAWq26joslQgWNoFu08F4kl0J4CgdNKADkdSGXQyTCnKteIAJy96Br6YbpEU1LSzV5dYtjMkMDg==, tarball: https://registry.npmjs.org/react/-/react-19.1.0.tgz}
     engines: {node: '>=0.10.0'}
 
   restore-cursor@5.1.0:
@@ -200,7 +200,7 @@ packages:
       zod: ^3.24.1
 
   zod@3.24.3:
-    resolution: {integrity: sha512-HhY1oqzWCQWuUqvBFnsyrtZRhyPeR7SUGv+C4+MsisMuVfSPx8HpwWqH8tRahSlt6M3PiFAcoeFhZAqIXTxoSg==}
+    resolution: {integrity: sha512-HhY1oqzWCQWuUqvBFnsyrtZRhyPeR7SUGv+C4+MsisMuVfSPx8HpwWqH8tRahSlt6M3PiFAcoeFhZAqIXTxoSg==, tarball: https://registry.npmjs.org/zod/-/zod-3.24.3.tgz}
 
 snapshots:
 
@@ -256,7 +256,7 @@ snapshots:
 
   ansi-regex@6.1.0: {}
 
-  chalk@5.4.1: {}
+  chalk@5.6.2: {}
 
   cli-cursor@5.0.0:
     dependencies:
@@ -283,12 +283,12 @@ snapshots:
   jsondiffpatch@0.6.0:
     dependencies:
       '@types/diff-match-patch': 1.0.36
-      chalk: 5.4.1
+      chalk: 5.6.2
       diff-match-patch: 1.0.5
 
   log-symbols@6.0.0:
     dependencies:
-      chalk: 5.4.1
+      chalk: 5.6.2
       is-unicode-supported: 1.3.0
 
   mimic-function@5.0.1: {}
@@ -301,7 +301,7 @@ snapshots:
 
   ora@8.2.0:
     dependencies:
-      chalk: 5.4.1
+      chalk: 5.6.2
       cli-cursor: 5.0.0
       cli-spinners: 2.9.2
       is-interactive: 2.0.0
