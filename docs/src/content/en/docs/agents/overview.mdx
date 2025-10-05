@@ -204,13 +204,13 @@ Note that `mastra.getAgent()` is preferred over a direct import, since it will p
 
 ## Generating responses
 
-Use `.generate()` to get a response from an agent. Pass a single string for simple prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content` for precise control over roles and conversational flows.
+Agents can return results in two ways: generating the full output before returning it or streaming tokens in real time. Choose the approach that fits your use case: generate for short, internal responses or debugging, and stream to deliver pixels to end users as quickly as possible.
 
-> See [.generate()](../../reference/agents/generate.mdx) for more information.
+<Tabs items={["Generate", "Stream"]}>
+  <Tabs.Tab>
+Pass a single string for simple prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content`.
 
-### Generating text
-
-Call `.generate()` with an array of message objects containing `role` and `content`. The `role` defines the speaker for each message. Typical roles are `user` for human input, `assistant` for agent responses, and `system` for instructions. This structure helps the LLM maintain conversation flow and generate contextually appropriate responses.
+(The `role` defines the speaker for each message. Typical roles are `user` for human input, `assistant` for agent responses, and `system` for instructions.)
 
 ```typescript showLineNumbers copy
 const response = await testAgent.generate([
@@ -222,6 +222,45 @@ const response = await testAgent.generate([
 
 console.log(response.text);
 ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+Pass a single string for simple prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content`.
+
+(The `role` defines the speaker for each message. Typical roles are `user` for human input, `assistant` for agent responses, and `system` for instructions.)
+
+```typescript showLineNumbers copy
+const stream = await testAgent.stream([
+  { role: "user", content: "Help me organize my day" },
+  { role: "user", content: "My day starts at 9am and finishes at 5.30pm" },
+  { role: "user", content: "I take lunch between 12:30 and 13:30" },
+  { role: "user", content: "I have meetings Monday to Friday between 10:30 and 11:30" }
+]);
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+### Completion using `onFinish()`
+
+When streaming responses, the `onFinish()` callback runs after the LLM finishes generating its response and all tool executions are complete.
+It provides the final `text`, execution `steps`, `finishReason`, token `usage` statistics, and other metadata useful for monitoring or logging.
+
+```typescript showLineNumbers copy
+const stream = await testAgent.stream("Help me organize my day", {
+  onFinish: ({ steps, text, finishReason, usage }) => {
+    console.log({ steps, text, finishReason, usage });
+  }
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+  </Tabs.Tab>
+</Tabs>
+
+> See [.generate()](../../reference/agents/generate.mdx) or [.stream()](../../reference/agents/stream.mdx) for more information.
 
 ## Structured output
 
