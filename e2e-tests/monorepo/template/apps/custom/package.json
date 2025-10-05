@@ -13,7 +13,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@ai-sdk/openai": "^2.0.38",
+    "@ai-sdk/openai": "^2.0.42",
     "@mastra/core": "monorepo-test",
     "@inner/inner-tools": "workspace:*",
     "@inner/hello-world": "workspace:*",
