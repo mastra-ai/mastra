@@ -171,6 +171,8 @@ You can call agents from workflow steps, tools, the Mastra Client, or the comman
 const testAgent = mastra.getAgent("testAgent");
 ```
 
+Note that `mastra.getAgent()` is preferred over a direct import, since it will preserve the Mastra instance configuration (tools registered, telemetry, vector stores configuration for agent memory, etc.)
+
 > See [Calling agents](../../examples/agents/calling-agents.mdx) for more information.
 
 ## Generating responses
