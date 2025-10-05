@@ -3,7 +3,7 @@ title: "Agent Overview | Agents | Mastra Docs"
 description: Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
 ---
 
-import { Steps, Tabs } from "nextra/components";
+import { Steps, Tabs, Callout } from "nextra/components";
 
 # Using Agents
 
@@ -192,8 +192,11 @@ You can call agents from workflow steps, tools, the Mastra Client, or the comman
 ```typescript showLineNumbers copy
 const testAgent = mastra.getAgent("testAgent");
 ```
-
-Note that `mastra.getAgent()` is preferred over a direct import, since it will preserve the Mastra instance configuration (tools registered, telemetry, vector stores configuration for agent memory, etc.)
+<Callout type="info">
+  <p>
+    `mastra.getAgent()` is preferred over a direct import, since it preserves the Mastra instance configuration (tools registered, telemetry, vector stores configuration for agent memory, etc.)
+  </p>
+</Callout>
 
 > See [Calling agents](../../examples/agents/calling-agents.mdx) for more information.
 
