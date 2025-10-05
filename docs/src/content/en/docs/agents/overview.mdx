@@ -38,7 +38,7 @@ OPENAI_API_KEY=<your-api-key>
 
 ### Create an agent
 
-To create an agent in Mastra, use the `Agent` class. Every agent must include `instructions` to define its behavior, and a `model` parameter to specify the LLM provider and model you want to use:
+Create an agent by instantiating the `Agent` class with system `instructions` and a `model`:
 
 ```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
