@@ -7,9 +7,7 @@ import { Steps, Tabs } from "nextra/components";
 
 # Using Agents
 
-Agents let you build intelligent assistants powered by language models that can make decisions and perform actions. Each agent has required instructions and an LLM, with optional tools and memory, and they can respond in one step or run in a loop until they achieve a goal.
-
-An agent coordinates conversations, calls tools when needed, maintains context through memory, and produces responses tailored to the interaction. Agents can operate on their own or work as part of larger workflows.
+Agents use LLMs and tools to solve open-ended tasks. They reason about goals, decide which tools to use, retain conversation memory, and iterate internally until the model emits a final answer or an optional stop condition is met. Agents produce structured responses you can render in your UI or process programmatically. Use agents directly or compose them into workflows or agent networks.
 
 ![Agents overview](/image/agents/agents-overview.jpg)
 
