@@ -292,27 +292,6 @@ const response = await testAgent.generate(
 
 console.log(response.object);
 ```
-
-#### Agents with tools
-
-To generate structured output with agents that use tools, use the `output` property:
-
-```typescript {6} showLineNumbers copy
-import { z } from "zod";
-
-const response = await testAgent.generate(
-  // ...
-  {
-    output: z.object({
-      summary: z.string(),
-      keywords: z.array(z.string())
-    })
-  }
-);
-
-console.log(response.object);
-```
-
 ## Working with images
 
 Agents can analyze and describe images by processing both the visual content and any text within them. To enable image analysis, pass an object with `type: 'image'` and the image URL in the `content` array. You can combine image content with text prompts to guide the agent's analysis.
