@@ -25,33 +25,65 @@ This approach provides type safety and runtime validation, ensuring reliable beh
 
 ## Getting started
 
-To use agents, install the required dependencies:
+<Tabs items={["Mastra model routing", "Vercel AI SDK"]}>
+  <Tabs.Tab>
+    <Steps>
+### Install dependencies
+
+Add the Mastra core package to your project:
 
 ```bash
-npm install @mastra/core @ai-sdk/openai
+npm install @mastra/core
 ```
 
-> Mastra works with all AI SDK provider. See [Model Providers](../getting-started/model-providers.mdx) for more information.
+### Configure your API key
 
-Import the necessary class from the agents module, and an LLM provider:
-
-```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
-```
-### LLM providers
-
-Each LLM provider needs its own API key, named using the provider’s identifier:
+Mastra's model router automatically detects environment variables that match the provider you choose. For OpenAI models, set `OPENAI_API_KEY`:
 
 ```bash filename=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 
-> See the [AI SDK Providers](https://ai-sdk.dev/providers/ai-sdk-providers) in the Vercel AI SDK docs.
+> Browse [Model Providers](../getting-started/model-providers.mdx) to see all available `provider/model` strings.
 
-### Creating an agent
+### Create an agent
 
-To create an agent in Mastra, use the `Agent` class. Every agent must include `instructions` to define its behavior, and a `model` parameter to specify the LLM provider and model:
+Import the `Agent` class and point the `model` field to the provider/model combination you want to use:
+
+```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+
+export const testAgent = new Agent({
+  name: "test-agent",
+  instructions: "You are a helpful assistant.",
+  model: "openai/gpt-4o-mini"
+});
+```
+    </Steps>
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <Steps>
+### Install dependencies
+
+Include the Mastra core package alongside the Vercel AI SDK provider you want to use:
+
+```bash
+npm install @mastra/core @ai-sdk/openai
+```
+
+### Configure your API key
+
+Set the corresponding environment variable for your provider. For OpenAI via the AI SDK:
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+```
+
+> See the [AI SDK Providers](https://ai-sdk.dev/providers/ai-sdk-providers) in the Vercel AI SDK docs for additional configuration options.
+
+### Create an agent
+
+Import the AI SDK client and provide it to your agent's `model` field:
 
 ```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -61,6 +93,23 @@ export const testAgent = new Agent({
   name: "test-agent",
   instructions: "You are a helpful assistant.",
   model: openai("gpt-4o-mini")
+});
+```
+    </Steps>
+  </Tabs.Tab>
+</Tabs>
+
+### Creating an agent
+
+To create an agent in Mastra, use the `Agent` class. Every agent must include `instructions` to define its behavior, and a `model` parameter to specify the LLM provider and model:
+
+```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+
+export const testAgent = new Agent({
+  name: "test-agent",
+  instructions: "You are a helpful assistant.",
+  model: "openai/gpt-4o-mini"
 });
 ```
 
