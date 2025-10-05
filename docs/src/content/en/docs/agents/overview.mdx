@@ -222,9 +222,9 @@ Agents can return results in two ways: generating the full output before returni
 
 <Tabs items={["Generate", "Stream"]}>
   <Tabs.Tab>
-Pass a single string for simple prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content` for precise control over roles and conversational flows.
+Pass a single string for simple prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content`.
 
-Call `.generate()` with an array of message objects containing `role` and `content`. The `role` defines the speaker for each message. Typical roles are `user` for human input, `assistant` for agent responses, and `system` for instructions. This structure helps the LLM maintain conversation flow and generate contextually appropriate responses.
+(The `role` defines the speaker for each message. Typical roles are `user` for human input, `assistant` for agent responses, and `system` for instructions.)
 
 ```typescript showLineNumbers copy
 const response = await testAgent.generate([
@@ -238,9 +238,9 @@ console.log(response.text);
 ```
   </Tabs.Tab>
   <Tabs.Tab>
-Pass a single string for simple prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content` for precise control over roles and conversational flows.
+Pass a single string for simple prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content`.
 
-Use `.stream()` with an array of message objects that include `role` and `content`:
+(The `role` defines the speaker for each message. Typical roles are `user` for human input, `assistant` for agent responses, and `system` for instructions.)
 
 ```typescript showLineNumbers copy
 const stream = await testAgent.stream([
