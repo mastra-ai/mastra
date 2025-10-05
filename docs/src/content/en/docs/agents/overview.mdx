@@ -3,13 +3,11 @@ title: "Agent Overview | Agents | Mastra Docs"
 description: Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
 ---
 
-import { Steps, Tabs } from "nextra/components";
+import { Steps, Tabs, Callout } from "nextra/components";
 
 # Using Agents
 
-Agents let you build intelligent assistants powered by language models that can make decisions and perform actions. Each agent has required instructions and an LLM, with optional tools and memory, and they can respond in one step or run in a loop until they achieve a goal.
-
-An agent coordinates conversations, calls tools when needed, maintains context through memory, and produces responses tailored to the interaction. Agents can operate on their own or work as part of larger workflows.
+Agents use LLMs and tools to solve open-ended tasks. They reason about goals, decide which tools to use, retain conversation memory, and iterate internally until the model emits a final answer or an optional stop condition is met. Agents produce structured responses you can render in your UI or process programmatically. Use agents directly or compose them into workflows or agent networks.
 
 ![Agents overview](/image/agents/agents-overview.jpg)
 
@@ -17,7 +15,7 @@ An agent coordinates conversations, calls tools when needed, maintains context t
 
 ## Getting started
 
-<Tabs items={["Mastra model routing", "Vercel AI SDK"]}>
+<Tabs items={["Mastra model router", "Vercel AI SDK"]}>
   <Tabs.Tab>
     <Steps>
 ### Install dependencies
@@ -28,19 +26,19 @@ Add the Mastra core package to your project:
 npm install @mastra/core
 ```
 
-### Configure your API key
+### Set your API key
 
-Mastra's model router automatically detects environment variables that match the provider you choose. For OpenAI models, set `OPENAI_API_KEY`:
+Mastra's model router auto-detects environment variables for your chosen provider. For OpenAI, set `OPENAI_API_KEY`:
 
 ```bash filename=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 
-> Browse [Model Providers](../getting-started/model-providers.mdx) to see all available `provider/model` strings.
+> Mastra supports more than 600 models. Choose from the full list [here](../getting-started/model-providers.mdx).
 
 ### Create an agent
 
-To create an agent in Mastra, use the `Agent` class. Every agent must include `instructions` to define its behavior, and a `model` parameter to specify the LLM provider and model you want to use:
+Create an agent by instantiating the `Agent` class with system `instructions` and a `model`:
 
 ```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
@@ -63,7 +61,7 @@ Include the Mastra core package alongside the Vercel AI SDK provider you want to
 npm install @mastra/core @ai-sdk/openai
 ```
 
-### Configure your API key
+### Set your API key
 
 Set the corresponding environment variable for your provider. For OpenAI via the AI SDK:
 
@@ -194,8 +192,11 @@ You can call agents from workflow steps, tools, the Mastra Client, or the comman
 ```typescript showLineNumbers copy
 const testAgent = mastra.getAgent("testAgent");
 ```
-
-Note that `mastra.getAgent()` is preferred over a direct import, since it will preserve the Mastra instance configuration (tools registered, telemetry, vector stores configuration for agent memory, etc.)
+<Callout type="info">
+  <p>
+    `mastra.getAgent()` is preferred over a direct import, since it preserves the Mastra instance configuration (tools registered, telemetry, vector stores configuration for agent memory, etc.)
+  </p>
+</Callout>
 
 > See [Calling agents](../../examples/agents/calling-agents.mdx) for more information.
 
@@ -291,27 +292,6 @@ const response = await testAgent.generate(
 
 console.log(response.object);
 ```
-
-#### Agents with tools
-
-To generate structured output with agents that use tools, use the `output` property:
-
-```typescript {6} showLineNumbers copy
-import { z } from "zod";
-
-const response = await testAgent.generate(
-  // ...
-  {
-    output: z.object({
-      summary: z.string(),
-      keywords: z.array(z.string())
-    })
-  }
-);
-
-console.log(response.object);
-```
-
 ## Working with images
 
 Agents can analyze and describe images by processing both the visual content and any text within them. To enable image analysis, pass an object with `type: 'image'` and the image URL in the `content` array. You can combine image content with text prompts to guide the agent's analysis.
