@@ -222,11 +222,7 @@ Agents can return results in two ways: generating the full output before returni
 
 <Tabs items={["Generate", "Stream"]}>
   <Tabs.Tab>
-Use `.generate()` when you want the agent to finish its full reply before you use it—perfect for very short outputs, non user-facing automation, or while you're still validating that an agent returns the right content. Pass a single string for simple prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content` for precise control over roles and conversational flows.
-
-> See [.generate()](../../reference/agents/generate.mdx) for more information.
-
-### Generating text
+Pass a single string for simple prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content` for precise control over roles and conversational flows.
 
 Call `.generate()` with an array of message objects containing `role` and `content`. The `role` defines the speaker for each message. Typical roles are `user` for human input, `assistant` for agent responses, and `system` for instructions. This structure helps the LLM maintain conversation flow and generate contextually appropriate responses.
 
@@ -242,11 +238,7 @@ console.log(response.text);
 ```
   </Tabs.Tab>
   <Tabs.Tab>
-Use `.stream()` when you need the fastest time-to-first-token—ideal for user-facing interfaces or whenever you want people to see updates as they happen. Pass a single string for simple prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content` for precise control over roles and conversational flows.
-
-> See [.stream()](../../reference/agents/stream.mdx) for more information.
-
-### Streaming text
+Pass a single string for simple prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content` for precise control over roles and conversational flows.
 
 Use `.stream()` with an array of message objects that include `role` and `content`:
 
@@ -281,6 +273,8 @@ for await (const chunk of stream.textStream) {
 ```
   </Tabs.Tab>
 </Tabs>
+
+> See [.generate()](../../reference/agents/generate.mdx) or [.stream()](../../reference/agents/stream.mdx) for more information.
 
 ## Structured output
 
