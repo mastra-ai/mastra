@@ -3,7 +3,7 @@ title: "Agent Overview | Agents | Mastra Docs"
 description: Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
 ---
 
-import { Steps, Tabs, Callout } from "nextra/components";
+import { Steps, Callout, Tabs } from "nextra/components";
 
 # Using Agents
 
@@ -94,61 +94,29 @@ export const testAgent = new Agent({
 Instructions define the agent's behavior, personality, and capabilities.
 They are system-level prompts that establish the agent's core identity and expertise.
 
-Instructions can be provided in multiple formats for greater flexibility. Choose the approach that best matches your agent’s configuration:
-
-<Tabs
-  items={[
-    "String",
-    "System message",
-    "Array of strings",
-    "Array of system messages",
-    "With provider options"
-  ]}
->
-  <Tabs.Tab>
-Use a simple string for quick prototypes or straightforward behaviors.
+Instructions can be provided in multiple formats for greater flexibility. The examples below illustrate the supported shapes:
 
 ```typescript copy
 // String (most common)
 instructions: "You are a helpful assistant."
-```
-  </Tabs.Tab>
-  <Tabs.Tab>
-Wrap the prompt in a system message object when you need to pass structured metadata.
 
-```typescript copy
-// System message object
-instructions: {
-  role: "system",
-  content: "You are an expert programmer."
-}
-```
-  </Tabs.Tab>
-  <Tabs.Tab>
-Provide multiple guidance statements while keeping the format lightweight with an array of strings.
-
-```typescript copy
 // Array of strings
 instructions: [
   "You are a helpful assistant.",
   "Always be polite.",
   "Provide detailed answers."
 ]
-```
-  </Tabs.Tab>
-  <Tabs.Tab>
-Use fully structured messages when you want fine-grained control over roles and sequencing.
 
-```typescript copy
 // Array of system messages
 instructions: [
   { role: "system", content: "You are a helpful assistant." },
   { role: "system", content: "You have expertise in TypeScript." }
 ]
 ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-Attach provider-specific configuration to unlock capabilities like caching or reasoning modes.
+
+#### Provider-specific options
+
+Each model provider also enables a few different options, including prompt caching and configuring reasoning. We provide a `providerOptions` flag to manage these. You can set `providerOptions` on the instruction level to set different caching strategy per system instruction/prompt.
 
 ```typescript copy
 // With provider-specific options (e.g., caching, reasoning)
@@ -162,12 +130,6 @@ instructions: {
   }
 }
 ```
-  </Tabs.Tab>
-</Tabs>
-
-#### Provider-specific options
-
-Each model provider also enables a few different options, including prompt caching and configuring reasoning. We provide a `providerOptions` flag to manage these. You can set `providerOptions` on the instruction level to set different caching strategy per system instruction/prompt.
 
 > See the [Agent reference doc](../../reference/agents/agent.mdx) for more information.
 
