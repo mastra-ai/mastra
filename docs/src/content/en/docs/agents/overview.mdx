@@ -167,12 +167,9 @@ instructions: {
   </Tabs.Tab>
 </Tabs>
 
-### Provider-specific options
+#### Provider-specific options
 
-Provider-specific options allow you to leverage unique features of different LLM providers:
-- **Anthropic caching**: Reduce costs by caching frequently-used instructions
-- **OpenAI reasoning**: Enable deeper analysis for complex tasks
-- **Custom parameters**: Pass any provider-specific configuration
+Each model providers also enables a few different options, including prompt caching and configuring reasoning. We provide a `providerOptions` flag to manage these. You can set `providerOptions` on the instruction level to set different caching strategy per system instruction/prompt.
 
 > See the [Agent reference doc](../../reference/agents/agent.mdx) for more information.
 
