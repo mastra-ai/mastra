@@ -3700,7 +3700,6 @@ export class Agent<
       ...mergedStreamOptions,
       messages,
       methodType: 'stream',
-      model: llm.getModel(),
     } as InnerAgentExecutionOptions<OUTPUT, FORMAT>;
 
     const result = await this.#execute(executeOptions);
@@ -3776,7 +3775,6 @@ export class Agent<
       messages: [],
       resumeContext,
       methodType: 'stream',
-      model: llm.getModel(),
     } as InnerAgentExecutionOptions<OUTPUT, FORMAT>);
 
     if (result.status !== 'success') {
