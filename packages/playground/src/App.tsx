@@ -46,6 +46,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   toolLink: (toolId: string) => `/tools/all/${toolId}`,
+  mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
 };
 
 const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
