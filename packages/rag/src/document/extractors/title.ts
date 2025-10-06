@@ -121,7 +121,7 @@ export class TitleExtractor extends BaseExtractor {
           instructions:
             'You are a title extractor. You are given a list of nodes and you need to extract the title from the nodes.',
         });
-        const result = await miniAgent.generateVNext(
+        const result = await miniAgent.generate(
           [{ role: 'user', content: this.combineTemplate.format({ context: combinedTitles }) }],
           { format: 'mastra' },
         );
@@ -133,7 +133,7 @@ export class TitleExtractor extends BaseExtractor {
           instructions:
             'You are a title extractor. You are given a list of nodes and you need to extract the title from the nodes.',
         });
-        const result = await miniAgent.generate([
+        const result = await miniAgent.generateLegacy([
           { role: 'user', content: this.combineTemplate.format({ context: combinedTitles }) },
         ]);
         title = result.text;
@@ -160,13 +160,13 @@ export class TitleExtractor extends BaseExtractor {
     const titleJobs = nodes.map(async node => {
       let completion: string;
       if (this.llm.specificationVersion === 'v2') {
-        const result = await miniAgent.generateVNext(
+        const result = await miniAgent.generate(
           [{ role: 'user', content: this.nodeTemplate.format({ context: node.getContent() }) }],
           { format: 'mastra' },
         );
         completion = result.text;
       } else {
-        const result = await miniAgent.generate([
+        const result = await miniAgent.generateLegacy([
           { role: 'user', content: this.nodeTemplate.format({ context: node.getContent() }) },
         ]);
         completion = result.text;

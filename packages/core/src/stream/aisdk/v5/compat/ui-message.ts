@@ -174,7 +174,6 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     // TODO: Should this be a data part instead of a tool output type
     case 'tool-output': {
       return {
-        toolCallId: part.toolCallId,
         ...part.output,
       };
     }

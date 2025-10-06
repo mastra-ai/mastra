@@ -29,16 +29,7 @@ export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
 
         return {
           id: key,
-          name: agent.name,
-          instructions: agent.instructions,
-          provider: agent.provider,
-          branch: undefined,
-          executedAt: undefined,
-          repoUrl: undefined,
-          tools: agent.tools,
-          modelId: agent.modelId,
-          link: paths.agentLink(key),
-          modelList: agent.modelList,
+          ...agent,
         };
       }),
     [agents],
@@ -65,14 +56,14 @@ export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
         <Table>
           <Thead className="sticky top-0">
             {ths.headers.map(header => (
-              <Th key={header.id} style={{ width: header.index === 0 ? 'auto' : header.column.getSize() }}>
+              <Th key={header.id} style={{ width: header.column.getSize() ?? 'auto' }}>
                 {flexRender(header.column.columnDef.header, header.getContext())}
               </Th>
             ))}
           </Thead>
           <Tbody>
             {rows.map(row => (
-              <Row key={row.id} onClick={() => navigate(row.original.link)}>
+              <Row key={row.id} onClick={() => navigate(paths.agentLink(row.original.id))}>
                 {row.getVisibleCells().map(cell => (
                   <React.Fragment key={cell.id}>
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -91,8 +82,8 @@ export const AgentsTableSkeleton = () => (
   <Table>
     <Thead>
       <Th>Name</Th>
-      <Th width={160}>Model</Th>
-      <Th width={160}>Tools</Th>
+      <Th>Model</Th>
+      <Th>Attached entities</Th>
     </Thead>
     <Tbody>
       {Array.from({ length: 3 }).map((_, index) => (
@@ -100,10 +91,10 @@ export const AgentsTableSkeleton = () => (
           <Cell>
             <Skeleton className="h-4 w-1/2" />
           </Cell>
-          <Cell width={160}>
+          <Cell>
             <Skeleton className="h-4 w-1/2" />
           </Cell>
-          <Cell width={160}>
+          <Cell>
             <Skeleton className="h-4 w-1/2" />
           </Cell>
         </Row>

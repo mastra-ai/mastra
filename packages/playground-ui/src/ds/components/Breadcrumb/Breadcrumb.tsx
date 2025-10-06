@@ -34,7 +34,11 @@ export const Crumb = ({ className, as, isCurrent, ...props }: CrumbProps) => {
       <li className="flex h-full items-center">
         <Root
           aria-current={isCurrent ? 'page' : undefined}
-          className={clsx('text-ui-lg leading-ui-lg font-medium', isCurrent ? 'text-white' : 'text-icon3', className)}
+          className={clsx(
+            'text-ui-lg leading-ui-lg font-medium flex items-center gap-2',
+            isCurrent ? 'text-white' : 'text-icon3',
+            className,
+          )}
           {...props}
         />
       </li>

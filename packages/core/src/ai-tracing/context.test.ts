@@ -21,9 +21,9 @@ class MockMastra {
 class MockAgent {
   #mastra = { id: 'mock-mastra' };
   generate = vi.fn();
-  generateVNext = vi.fn();
+  generateLegacy = vi.fn();
   stream = vi.fn();
-  streamVNext = vi.fn();
+  streamLegacy = vi.fn();
   otherMethod = vi.fn().mockReturnValue('agent-other-result');
   getLLM() {
     // This accesses the private field to simulate the real getLLM behavior

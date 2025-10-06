@@ -53,7 +53,7 @@ describe('MessageList - File URL Handling', () => {
     const messageList = new MessageList();
     const imageUrl = 'https://httpbin.org/image/png';
 
-    // Simulate what happens when streamVNext receives messages with file parts
+    // Simulate what happens when stream receives messages with file parts
     const inputMessage: MastraMessageV2 = {
       id: 'input-msg',
       role: 'user',
