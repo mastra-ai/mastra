@@ -1015,4 +1015,34 @@ export const redirectList = [
     destination: "/:locale/reference/vectors/upstash",
     permanent: true,
   },
+  {
+    source: "/:locale/reference/cli/init",
+    destination: "/:locale/reference/cli/mastra",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/cli/dev",
+    destination: "/:locale/reference/cli/mastra",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/cli/build",
+    destination: "/:locale/reference/cli/mastra",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/cli/start",
+    destination: "/:locale/reference/cli/mastra",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/cli/lint",
+    destination: "/:locale/reference/cli/mastra",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/cli/scorers",
+    destination: "/:locale/reference/cli/mastra",
+    permanent: true,
+  },
 ];
