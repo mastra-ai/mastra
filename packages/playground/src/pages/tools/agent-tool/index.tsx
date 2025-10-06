@@ -10,7 +10,19 @@ import { useAgent } from '@/hooks/use-agents';
 import { useExecuteTool } from '@/hooks/use-execute-agent-tool';
 
 import ToolExecutor from '../tool-executor';
-import { Header, Crumb, Breadcrumb, usePlaygroundStore, Txt, MainContentLayout } from '@mastra/playground-ui';
+import {
+  Header,
+  Crumb,
+  Breadcrumb,
+  usePlaygroundStore,
+  Txt,
+  MainContentLayout,
+  AgentIcon,
+  Icon,
+  HeaderAction,
+  Button,
+  DocsIcon,
+} from '@mastra/playground-ui';
 
 const AgentTool = () => {
   const { toolId, agentId } = useParams();
@@ -46,6 +58,9 @@ const AgentTool = () => {
       <Header>
         <Breadcrumb>
           <Crumb as={Link} to={`/agents`}>
+            <Icon>
+              <AgentIcon />
+            </Icon>
             Agents
           </Crumb>
           <Crumb as={Link} to={`/agents/${agentId}/chat`}>
@@ -55,6 +70,15 @@ const AgentTool = () => {
             {toolId}
           </Crumb>
         </Breadcrumb>
+
+        <HeaderAction>
+          <Button as={Link} to="https://mastra.ai/en/docs/agents/using-tools-and-mcp" target="_blank">
+            <Icon>
+              <DocsIcon />
+            </Icon>
+            Tools documentation
+          </Button>
+        </HeaderAction>
       </Header>
 
       {isAgentLoading ? null : shouldShowEmpty ? (

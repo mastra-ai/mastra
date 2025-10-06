@@ -1,5 +1,18 @@
 import { useWorkflows } from '@/hooks/use-workflows';
-import { Header, HeaderTitle, MainContentLayout, MainContentContent, WorkflowTable } from '@mastra/playground-ui';
+import {
+  Header,
+  HeaderTitle,
+  MainContentLayout,
+  MainContentContent,
+  WorkflowTable,
+  Icon,
+  HeaderAction,
+  Button,
+  DocsIcon,
+  WorkflowIcon,
+} from '@mastra/playground-ui';
+
+import { Link } from 'react-router';
 
 function Workflows() {
   const { data: workflows, isLoading } = useWorkflows();
@@ -9,7 +22,21 @@ function Workflows() {
   return (
     <MainContentLayout>
       <Header>
-        <HeaderTitle>Workflows</HeaderTitle>
+        <HeaderTitle>
+          <Icon>
+            <WorkflowIcon />
+          </Icon>
+          Workflows
+        </HeaderTitle>
+
+        <HeaderAction>
+          <Button as={Link} to="https://mastra.ai/en/docs/workflows/overview" target="_blank">
+            <Icon>
+              <DocsIcon />
+            </Icon>
+            Workflows documentation
+          </Button>
+        </HeaderAction>
       </Header>
 
       <MainContentContent isCentered={isEmpty}>
