@@ -281,7 +281,7 @@ export function WorkflowTrigger({
             );
           })}
 
-        {result?.status && (
+        {result?.status === 'running' && (
           <Button
             variant="light"
             className="w-full"

@@ -10,9 +10,7 @@ import { ReactNode } from 'react';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { useScorers } from '@/domains/scores';
 import { AgentIcon } from '@/ds/icons';
-import { AlertTriangleIcon, GaugeIcon } from 'lucide-react';
-import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './agent-metadata-model-switcher';
-import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
+import { GaugeIcon } from 'lucide-react';
 import { LoadingBadge } from '@/components/assistant-ui/tools/badges/loading-badge';
 import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
 
@@ -21,11 +19,6 @@ export interface AgentMetadataProps {
   agent: GetAgentResponse;
   promptSlot: ReactNode;
   hasMemoryEnabled: boolean;
-  modelProviders: string[];
-  modelVersion: string;
-  updateModel: AgentMetadataModelSwitcherProps['updateModel'];
-  updateModelInModelList: AgentMetadataModelListProps['updateModelInModelList'];
-  reorderModelList: AgentMetadataModelListProps['reorderModelList'];
 }
 
 export interface AgentMetadataNetworkListProps {
@@ -54,17 +47,7 @@ export const AgentMetadataNetworkList = ({ agents }: AgentMetadataNetworkListPro
   );
 };
 
-export const AgentMetadata = ({
-  agentId,
-  agent,
-  promptSlot,
-  hasMemoryEnabled,
-  updateModel,
-  modelProviders,
-  updateModelInModelList,
-  reorderModelList,
-  modelVersion,
-}: AgentMetadataProps) => {
+export const AgentMetadata = ({ agentId, agent, promptSlot, hasMemoryEnabled }: AgentMetadataProps) => {
   const networkAgentsMap = agent.agents ?? {};
   const networkAgents = Object.values(networkAgentsMap);
 
@@ -76,37 +59,6 @@ export const AgentMetadata = ({
 
   return (
     <AgentMetadataWrapper>
-      {agent.modelList ? (
-        <AgentMetadataSection title="Models">
-          <AgentMetadataModelList
-            modelList={agent.modelList}
-            modelProviders={modelProviders}
-            updateModelInModelList={updateModelInModelList}
-            reorderModelList={reorderModelList}
-          />
-        </AgentMetadataSection>
-      ) : (
-        <AgentMetadataSection
-          title={'Model'}
-          hint={
-            modelVersion === 'v2'
-              ? undefined
-              : {
-                  link: 'https://mastra.ai/en/reference/agents/migration-guide',
-                  title: 'You are using a legacy v1 model',
-                  icon: <AlertTriangleIcon fontSize={14} className="mb-0.5" />,
-                }
-          }
-        >
-          <AgentMetadataModelSwitcher
-            defaultProvider={agent.provider}
-            defaultModel={agent.modelId}
-            updateModel={updateModel}
-            modelProviders={modelProviders}
-          />
-        </AgentMetadataSection>
-      )}
-
       <AgentMetadataSection
         title="Memory"
         hint={{
