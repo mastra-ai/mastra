@@ -6,13 +6,14 @@ import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 
 import { ScrollableContainer } from '@/components/scrollable-container';
 import { Skeleton } from '@/components/ui/skeleton';
 import { columns } from './columns';
 import { ScorerTableData } from './types';
 import { useLinkComponent } from '@/lib/framework';
+import { Searchbar, SearchbarWrapper } from '@/components/ui/searchbar';
 
 export interface ScorersTableProps {
   scorers: Record<string, GetScorerResponse>;
@@ -21,6 +22,7 @@ export interface ScorersTableProps {
 
 export function ScorersTable({ scorers, isLoading }: ScorersTableProps) {
   const { navigate, paths } = useLinkComponent();
+  const [search, setSearch] = useState('');
   const scorersData: ScorerTableData[] = useMemo(
     () =>
       Object.keys(scorers).map(key => {
@@ -49,29 +51,37 @@ export function ScorersTable({ scorers, isLoading }: ScorersTableProps) {
     return <EmptyScorersTable />;
   }
 
+  const filteredRows = rows.filter(row => row.original.scorer.config.name.toLowerCase().includes(search.toLowerCase()));
+
   return (
-    <ScrollableContainer>
-      <Table>
-        <Thead className="sticky top-0">
-          {ths.headers.map(header => (
-            <Th key={header.id} style={{ width: header.index === 0 ? 'auto' : header.column.getSize() }}>
-              {flexRender(header.column.columnDef.header, header.getContext())}
-            </Th>
-          ))}
-        </Thead>
-        <Tbody>
-          {rows.map(row => (
-            <Row key={row.id} onClick={() => navigate(paths.scorerLink(row.original.id))}>
-              {row.getVisibleCells().map(cell => (
-                <React.Fragment key={cell.id}>
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </React.Fragment>
-              ))}
-            </Row>
-          ))}
-        </Tbody>
-      </Table>
-    </ScrollableContainer>
+    <>
+      <SearchbarWrapper>
+        <Searchbar onSearch={setSearch} label="Search scorers" placeholder="Search scorers" />
+      </SearchbarWrapper>
+
+      <ScrollableContainer>
+        <Table>
+          <Thead className="sticky top-0">
+            {ths.headers.map(header => (
+              <Th key={header.id} style={{ width: header.index === 0 ? 'auto' : header.column.getSize() }}>
+                {flexRender(header.column.columnDef.header, header.getContext())}
+              </Th>
+            ))}
+          </Thead>
+          <Tbody>
+            {filteredRows.map(row => (
+              <Row key={row.id} onClick={() => navigate(paths.scorerLink(row.original.id))}>
+                {row.getVisibleCells().map(cell => (
+                  <React.Fragment key={cell.id}>
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </React.Fragment>
+                ))}
+              </Row>
+            ))}
+          </Tbody>
+        </Table>
+      </ScrollableContainer>
+    </>
   );
 }
 

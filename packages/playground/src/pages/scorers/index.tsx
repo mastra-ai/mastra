@@ -1,4 +1,4 @@
-import { Button, DocsIcon, HeaderAction, Icon, useScorers } from '@mastra/playground-ui';
+import { Button, DocsIcon, HeaderAction, Icon, MainContentContent, useScorers } from '@mastra/playground-ui';
 import { Header, HeaderTitle, MainContentLayout, ScorersTable } from '@mastra/playground-ui';
 import { GaugeIcon } from 'lucide-react';
 import { Link } from 'react-router';
@@ -26,7 +26,9 @@ export default function Scorers() {
         </HeaderAction>
       </Header>
 
-      <ScorersTable isLoading={isLoading} scorers={scorers} />
+      <MainContentContent isCentered={!isLoading && Object.keys(scorers || {}).length === 0}>
+        <ScorersTable isLoading={isLoading} scorers={scorers} />
+      </MainContentContent>
     </MainContentLayout>
   );
 }

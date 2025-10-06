@@ -61,7 +61,7 @@ export const Searchbar = ({ onSearch, label, placeholder }: SearchbarProps) => {
       </div>
 
       <button type="submit" className="text-ui-sm text-icon3 flex flex-row items-center gap-1">
-        <Kbd>Enter</Kbd>
+        <Kbd>↵ Enter</Kbd>
       </button>
     </form>
   );
