@@ -4,12 +4,12 @@ import {
   Header,
   HeaderTitle,
   MainContentContent,
-  ToolList,
   ToolsIcon,
   Icon,
   HeaderAction,
   DocsIcon,
   Button,
+  ToolTable,
 } from '@mastra/playground-ui';
 
 import { useTools } from '@/hooks/use-all-tools';
@@ -42,7 +42,7 @@ export default function Tools() {
       </Header>
 
       <MainContentContent isCentered={isEmpty}>
-        <ToolList tools={tools} agents={agentsRecord} isLoading={isLoadingAgents || isLoadingTools} />
+        <ToolTable tools={tools} agents={agentsRecord} isLoading={isLoadingAgents || isLoadingTools} />
       </MainContentContent>
     </MainContentLayout>
   );
