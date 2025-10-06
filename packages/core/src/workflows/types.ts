@@ -444,6 +444,27 @@ export type WorkflowResult<
       suspended: [string[], ...string[][]];
     } & TracingProperties);
 
+export type WorkflowStreamResult<
+  TInput extends z.ZodType<any>,
+  TOutput extends z.ZodType<any>,
+  TSteps extends Step<string, any, any>[],
+> =
+  | WorkflowResult<TInput, TOutput, TSteps>
+  | {
+      status: 'running' | 'waiting' | 'pending' | 'canceled';
+      input: z.infer<TInput>;
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown, unknown, unknown, unknown>
+          : StepResult<
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+            >;
+      };
+    };
+
 export type WorkflowConfig<
   TWorkflowId extends string = string,
   TInput extends z.ZodType<any> = z.ZodType<any>,

@@ -3,7 +3,7 @@ import { Txt } from '@/ds/components/Txt';
 
 import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
 import { WorkflowTrigger, WorkflowTriggerProps } from '../workflow/workflow-trigger';
-import { convertWorkflowRunStateToWatchResult } from '../utils';
+import { convertWorkflowRunStateToStreamResult } from '../utils';
 
 import { isObjectEmpty } from '@/lib/object';
 
@@ -44,15 +44,14 @@ export const WorkflowRunDetail = ({
   const runSnapshot = run?.snapshot;
 
   const runResult =
-    runSnapshot && typeof runSnapshot === 'object' ? convertWorkflowRunStateToWatchResult(runSnapshot) : null;
-  const runStatus = runResult?.payload?.workflowState?.status;
+    runSnapshot && typeof runSnapshot === 'object' ? convertWorkflowRunStateToStreamResult(runSnapshot) : null;
+  const runStatus = runResult?.status;
 
   if (runId) {
     return (
       <div className="h-full grid grid-rows-[1fr_auto]">
         <WorkflowTrigger
           {...triggerProps}
-          // isStreamingWorkflow={runStatus === 'suspended' ? false : triggerProps.isStreamingWorkflow}
           streamResult={isObjectEmpty(triggerProps.streamResult ?? {}) ? runResult : triggerProps.streamResult}
           paramsRunId={runId}
           workflowId={workflowId}
