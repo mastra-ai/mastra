@@ -1,5 +1,5 @@
 import type { Agent } from '@mastra/core/agent';
-import { PROVIDER_REGISTRY } from '@mastra/core/llm';
+import { PROVIDER_REGISTRY, type SystemMessage } from '@mastra/core/llm';
 import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
@@ -35,6 +35,40 @@ export interface SerializedTool {
   inputSchema?: string;
   outputSchema?: string;
   [key: string]: unknown;
+}
+
+export interface SerializedWorkflow {
+  name: string;
+  steps?: Record<string, { id: string; description?: string }>;
+}
+
+export interface SerializedAgent {
+  name: string;
+  instructions?: SystemMessage;
+  tools: Record<string, SerializedTool>;
+  agents: Record<string, SerializedAgentDefinition>;
+  workflows: Record<string, SerializedWorkflow>;
+  inputProcessors: SerializedProcessor[];
+  outputProcessors: SerializedProcessor[];
+  provider?: string;
+  modelId?: string;
+  modelVersion?: string;
+  modelList?: Array<{
+    id: string;
+    enabled: boolean;
+    maxRetries: number;
+    model: {
+      modelId: string;
+      provider: string;
+      modelVersion: string;
+    };
+  }>;
+  defaultGenerateOptions?: Record<string, unknown>;
+  defaultStreamOptions?: Record<string, unknown>;
+}
+
+export interface SerializedAgentWithId extends SerializedAgent {
+  id: string;
 }
 
 export async function getSerializedAgentTools(tools: Record<string, unknown>): Promise<Record<string, SerializedTool>> {
@@ -128,7 +162,7 @@ async function formatAgentList({
   mastra: Context['mastra'];
   agent: Agent;
   runtimeContext: RuntimeContext;
-}) {
+}): Promise<SerializedAgentWithId> {
   const instructions = await agent.getInstructions({ runtimeContext });
   const tools = await agent.getTools({ runtimeContext });
   const llm = await agent.getLLM({ runtimeContext });
@@ -198,7 +232,10 @@ async function formatAgentList({
 }
 
 // Agent handlers
-export async function getAgentsHandler({ mastra, runtimeContext }: Context & { runtimeContext: RuntimeContext }) {
+export async function getAgentsHandler({
+  mastra,
+  runtimeContext,
+}: Context & { runtimeContext: RuntimeContext }): Promise<Record<string, SerializedAgent>> {
   try {
     const agents = mastra.getAgents();
 
@@ -231,7 +268,7 @@ async function formatAgent({
   agent: Agent;
   runtimeContext: RuntimeContext;
   isPlayground: boolean;
-}) {
+}): Promise<SerializedAgent> {
   const tools = await agent.getTools({ runtimeContext });
 
   const serializedAgentTools = await getSerializedAgentTools(tools);
@@ -271,62 +308,62 @@ async function formatAgent({
     } catch (error) {
       logger.error('Error getting workflows for agent', { agentName: agent.name, error });
     }
-
-    let proxyRuntimeContext = runtimeContext;
-    if (isPlayground) {
-      proxyRuntimeContext = new Proxy(runtimeContext, {
-        get(target, prop) {
-          if (prop === 'get') {
-            return function (key: string) {
-              const value = target.get(key);
-              return value ?? `<${key}>`;
-            };
-          }
-          return Reflect.get(target, prop);
-        },
-      });
-    }
-
-    const instructions = await agent.getInstructions({ runtimeContext: proxyRuntimeContext });
-    const llm = await agent.getLLM({ runtimeContext });
-    const defaultGenerateOptions = await agent.getDefaultGenerateOptions({ runtimeContext: proxyRuntimeContext });
-    const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext: proxyRuntimeContext });
-
-    const model = llm?.getModel();
-    const models = await agent.getModelList(runtimeContext);
-    const modelList = models?.map(md => ({
-      ...md,
-      model: {
-        modelId: md.model.modelId,
-        provider: md.model.provider,
-        modelVersion: md.model.specificationVersion,
-      },
-    }));
-
-    const serializedAgentAgents = await getSerializedAgentDefinition({ agent, runtimeContext: proxyRuntimeContext });
-
-    // Get and serialize processors
-    const inputProcessors = await agent.getInputProcessors(proxyRuntimeContext);
-    const outputProcessors = await agent.getOutputProcessors(proxyRuntimeContext);
-    const serializedInputProcessors = getSerializedProcessors(inputProcessors);
-    const serializedOutputProcessors = getSerializedProcessors(outputProcessors);
-
-    return {
-      name: agent.name,
-      instructions,
-      tools: serializedAgentTools,
-      agents: serializedAgentAgents,
-      workflows: serializedAgentWorkflows,
-      inputProcessors: serializedInputProcessors,
-      outputProcessors: serializedOutputProcessors,
-      provider: llm?.getProvider(),
-      modelId: llm?.getModelId(),
-      modelVersion: model?.specificationVersion,
-      modelList,
-      defaultGenerateOptions,
-      defaultStreamOptions,
-    };
   }
+
+  let proxyRuntimeContext = runtimeContext;
+  if (isPlayground) {
+    proxyRuntimeContext = new Proxy(runtimeContext, {
+      get(target, prop) {
+        if (prop === 'get') {
+          return function (key: string) {
+            const value = target.get(key);
+            return value ?? `<${key}>`;
+          };
+        }
+        return Reflect.get(target, prop);
+      },
+    });
+  }
+
+  const instructions = await agent.getInstructions({ runtimeContext: proxyRuntimeContext });
+  const llm = await agent.getLLM({ runtimeContext });
+  const defaultGenerateOptions = await agent.getDefaultGenerateOptions({ runtimeContext: proxyRuntimeContext });
+  const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext: proxyRuntimeContext });
+
+  const model = llm?.getModel();
+  const models = await agent.getModelList(runtimeContext);
+  const modelList = models?.map(md => ({
+    ...md,
+    model: {
+      modelId: md.model.modelId,
+      provider: md.model.provider,
+      modelVersion: md.model.specificationVersion,
+    },
+  }));
+
+  const serializedAgentAgents = await getSerializedAgentDefinition({ agent, runtimeContext: proxyRuntimeContext });
+
+  // Get and serialize processors
+  const inputProcessors = await agent.getInputProcessors(proxyRuntimeContext);
+  const outputProcessors = await agent.getOutputProcessors(proxyRuntimeContext);
+  const serializedInputProcessors = getSerializedProcessors(inputProcessors);
+  const serializedOutputProcessors = getSerializedProcessors(outputProcessors);
+
+  return {
+    name: agent.name,
+    instructions,
+    tools: serializedAgentTools,
+    agents: serializedAgentAgents,
+    workflows: serializedAgentWorkflows,
+    inputProcessors: serializedInputProcessors,
+    outputProcessors: serializedOutputProcessors,
+    provider: llm?.getProvider(),
+    modelId: llm?.getModelId(),
+    modelVersion: model?.specificationVersion,
+    modelList,
+    defaultGenerateOptions,
+    defaultStreamOptions,
+  };
 }
 
 export async function getAgentByIdHandler({
@@ -334,7 +371,9 @@ export async function getAgentByIdHandler({
   runtimeContext,
   agentId,
   isPlayground = false,
-}: Context & { isPlayground?: boolean; runtimeContext: RuntimeContext; agentId: string }) {
+}: Context & { isPlayground?: boolean; runtimeContext: RuntimeContext; agentId: string }): Promise<
+  SerializedAgent | ReturnType<typeof handleError>
+> {
   try {
     const agent = mastra.getAgent(agentId);
     if (!agent) {
