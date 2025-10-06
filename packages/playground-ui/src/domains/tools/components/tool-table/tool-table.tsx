@@ -49,7 +49,7 @@ export function ToolTable({ tools, agents, isLoading }: ToolTableProps) {
   const filteredRows = rows.filter(row => row.original.id.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div>
+    <>
       <SearchbarWrapper>
         <Searchbar onSearch={handleSearch} label="Search tools" placeholder="Search tools" />
       </SearchbarWrapper>
@@ -85,7 +85,7 @@ export function ToolTable({ tools, agents, isLoading }: ToolTableProps) {
           </Table>
         </TooltipProvider>
       </ScrollableContainer>
-    </div>
+    </>
   );
 }
 
