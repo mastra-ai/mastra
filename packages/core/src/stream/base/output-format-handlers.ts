@@ -3,6 +3,7 @@ import { asSchema, isDeepEqualData, jsonSchema, parsePartialJson } from 'ai-v5';
 import type { JSONSchema7, Schema } from 'ai-v5';
 import type z3 from 'zod/v3';
 import type z4 from 'zod/v4';
+import type { StructuredOutputOptions } from '../../agent/types';
 import { MastraError } from '../../error';
 import { safeValidateTypes } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
@@ -485,13 +486,17 @@ function createOutputHandler<OUTPUT extends OutputSchema = undefined>({
  */
 export function createObjectStreamTransformer<OUTPUT extends OutputSchema = undefined>({
   isLLMExecutionStep,
-  schema,
+  structuredOutput,
+  structuredOutputMode,
 }: {
   isLLMExecutionStep?: boolean;
-  schema?: OUTPUT;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
+  structuredOutputMode?: 'direct' | 'processor' | undefined;
 }) {
-  const transformedSchema = getTransformedSchema(schema);
-  const handler = createOutputHandler({ transformedSchema, schema });
+  // Only run object transformer in direct mode (LLM generates JSON directly)
+  const shouldRunObjectTransformer = isLLMExecutionStep && structuredOutputMode === 'direct';
+  const transformedSchema = getTransformedSchema(structuredOutput?.schema);
+  const handler = createOutputHandler({ transformedSchema, schema: structuredOutput?.schema });
 
   let accumulatedText = '';
   let previousObject: any = undefined;
@@ -500,7 +505,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
-      if (!isLLMExecutionStep || !schema) {
+      if (!shouldRunObjectTransformer) {
         // Bypassing processing if we are not in the LLM execution step (inner stream)
         // OR if there is no output schema provided
         controller.enqueue(chunk);
@@ -546,7 +551,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
     async flush(controller) {
       // Bypass final validation if there is no output schema provided
       // or if we are not in the LLM execution step (inner stream)
-      if (!isLLMExecutionStep || !schema) {
+      if (!shouldRunObjectTransformer) {
         return;
       }
 
@@ -592,70 +597,6 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
         object: finalResult.value,
       });
       return;
-    },
-  });
-}
-
-/**
- * Transforms object chunks into JSON text chunks for streaming.
- *
- * This transformer:
- * - For arrays: emits opening bracket, new elements, and closing bracket
- * - For objects/no-schema: emits the object as JSON
- */
-export function createJsonTextStreamTransformer<OUTPUT extends OutputSchema = undefined>(schema?: OUTPUT) {
-  let previousArrayLength = 0;
-  let hasStartedArray = false;
-  let chunkCount = 0;
-  const outputSchema = getTransformedSchema(schema);
-
-  return new TransformStream<ChunkType<OUTPUT>, string>({
-    transform(chunk, controller) {
-      if (chunk.type !== 'object' || !chunk.object) {
-        return;
-      }
-
-      if (outputSchema?.outputFormat === 'array') {
-        chunkCount++;
-
-        // If this is the first chunk, decide between complete vs incremental streaming
-        if (chunkCount === 1) {
-          // If the first chunk already has multiple elements or is complete,
-          // emit as single JSON string
-          if (chunk.object.length > 0) {
-            controller.enqueue(JSON.stringify(chunk.object));
-            previousArrayLength = chunk.object.length;
-            hasStartedArray = true;
-            return;
-          }
-        }
-
-        // Incremental streaming mode (multiple chunks)
-        if (!hasStartedArray) {
-          controller.enqueue('[');
-          hasStartedArray = true;
-        }
-
-        // Emit new elements that were added
-        for (let i = previousArrayLength; i < chunk.object.length; i++) {
-          const elementJson = JSON.stringify(chunk.object[i]);
-          if (i > 0) {
-            controller.enqueue(',' + elementJson);
-          } else {
-            controller.enqueue(elementJson);
-          }
-        }
-        previousArrayLength = chunk.object.length;
-      } else {
-        // For non-array objects, just emit as JSON
-        controller.enqueue(JSON.stringify(chunk.object));
-      }
-    },
-    flush(controller) {
-      // Close the array when the stream ends (only for incremental streaming)
-      if (hasStartedArray && outputSchema?.outputFormat === 'array' && chunkCount > 1) {
-        controller.enqueue(']');
-      }
     },
   });
 }

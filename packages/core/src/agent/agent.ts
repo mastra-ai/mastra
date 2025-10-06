@@ -66,7 +66,12 @@ import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
-import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
+import type {
+  AgentExecutionOptions,
+  DeprecatedOutputOptions,
+  InnerAgentExecutionOptions,
+  MultiPrimitiveExecutionOptions,
+} from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata } from './message-list';
 import { SaveQueueManager } from './save-queue';
@@ -83,6 +88,7 @@ import type {
   AgentExecuteOnFinishOptions,
   AgentInstructions,
   DynamicAgentInstructions,
+  StructuredOutputOptions,
 } from './types';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 
@@ -181,7 +187,7 @@ export class Agent<
   #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
   #defaultGenerateOptions: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptions: DynamicArgument<AgentStreamOptions>;
-  #defaultVNextStreamOptions: DynamicArgument<AgentExecutionOptions>;
+  #defaultVNextStreamOptions: DynamicArgument<AgentExecutionOptions & DeprecatedOutputOptions>;
   #tools: DynamicArgument<TTools>;
   evals: TMetrics;
   #scorers: DynamicArgument<MastraScorers>;
@@ -793,12 +799,25 @@ export class Agent<
     runtimeContext = new RuntimeContext(),
   }: { runtimeContext?: RuntimeContext } = {}): AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>> {
     if (typeof this.#defaultVNextStreamOptions !== 'function') {
-      return this.#defaultVNextStreamOptions as AgentExecutionOptions<OUTPUT>;
+      if (this.#defaultVNextStreamOptions.output && this.#defaultVNextStreamOptions.structuredOutput) {
+        throw new MastraError({
+          id: 'AGENT_GET_DEFAULT_VNEXT_STREAM_OPTIONS_OUTPUT_AND_STRUCTURED_OUTPUT_PROVIDED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'output and structuredOutput cannot be provided at the same time',
+        });
+      }
+
+      const { output, ...defaultVNextStreamOptions } = this.#defaultVNextStreamOptions;
+      return {
+        ...(output ? { structuredOutput: { schema: output } } : {}),
+        ...defaultVNextStreamOptions,
+      } as AgentExecutionOptions<OUTPUT>;
     }
 
     const result = this.#defaultVNextStreamOptions({ runtimeContext, mastra: this.#mastra }) as
-      | AgentExecutionOptions<OUTPUT>
-      | Promise<AgentExecutionOptions<OUTPUT>>;
+      | (AgentExecutionOptions<OUTPUT> & DeprecatedOutputOptions<OUTPUT>)
+      | Promise<AgentExecutionOptions<OUTPUT> & DeprecatedOutputOptions<OUTPUT>>;
 
     return resolveMaybePromise(result, options => {
       if (!options) {
@@ -816,7 +835,12 @@ export class Agent<
         throw mastraError;
       }
 
-      return options;
+      const { output, ...restOptions } = options;
+
+      return {
+        ...(output ? { structuredOutput: { schema: output } } : {}),
+        ...restOptions,
+      } as AgentExecutionOptions<OUTPUT>;
     });
   }
 
@@ -3641,16 +3665,13 @@ export class Agent<
 
   async stream<OUTPUT extends OutputSchema = undefined, FORMAT extends 'mastra' | 'aisdk' | undefined = undefined>(
     messages: MessageListInput,
-    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
+    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT> & DeprecatedOutputOptions<OUTPUT>,
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
+    const defaultStreamOptions = await this.getDefaultVNextStreamOptions<OUTPUT>({
       runtimeContext: streamOptions?.runtimeContext,
     });
 
-    if (
-      (defaultStreamOptions.structuredOutput && defaultStreamOptions.output) ||
-      (streamOptions?.structuredOutput && streamOptions.output)
-    ) {
+    if (streamOptions?.structuredOutput && streamOptions.output) {
       throw new MastraError({
         id: 'AGENT_STREAM_STRUCTURED_OUTPUT_AND_OUTPUT_PROVIDED',
         domain: ErrorDomain.AGENT,
@@ -3659,40 +3680,22 @@ export class Agent<
       });
     }
 
-    // If streamOptions has either output or structuredOutput, remove both from defaultStreamOptions
-    // to ensure streamOptions takes precedence and avoid union type conflicts
-    let adjustedDefaultStreamOptions = { ...defaultStreamOptions };
-    if (streamOptions?.structuredOutput || streamOptions?.output) {
-      const { output, structuredOutput, ...restDefaultOptions } = adjustedDefaultStreamOptions;
-      adjustedDefaultStreamOptions = restDefaultOptions as typeof defaultStreamOptions;
-    }
-
-    let mergedStreamOptions = {
-      ...adjustedDefaultStreamOptions,
+    const mergedStreamOptions = {
+      ...defaultStreamOptions,
       ...(streamOptions ?? {}),
       onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
 
-    // Map structuredOutput to output when maxSteps is explicitly set to 1
-    // This allows the new structuredOutput API to use the existing output implementation
-    let modelOverride: MastraLanguageModel | undefined;
-    if (mergedStreamOptions.structuredOutput && mergedStreamOptions.maxSteps === 1) {
-      // If structuredOutput has a model, use it to override the agent's model
-      if (mergedStreamOptions.structuredOutput.model) {
-        modelOverride = mergedStreamOptions.structuredOutput.model;
-      }
-
-      // assign structuredOutput.schema to output when maxSteps is explicitly set to 1
-      const { structuredOutput, ...optionsWithoutStructuredOutput } = mergedStreamOptions;
-      mergedStreamOptions = {
-        ...optionsWithoutStructuredOutput,
-        output: structuredOutput.schema as OUTPUT,
-      };
+    // Deprecated `output` option now just maps to structuredOutput.schema
+    if (mergedStreamOptions.output) {
+      mergedStreamOptions.structuredOutput = { schema: mergedStreamOptions.output } as StructuredOutputOptions<
+        OUTPUT extends OutputSchema ? OUTPUT : never
+      >;
+      delete mergedStreamOptions.output;
     }
 
     const llm = await this.getLLM({
       runtimeContext: mergedStreamOptions.runtimeContext,
-      model: modelOverride,
     });
 
     if (llm.getModel().specificationVersion !== 'v2') {
@@ -3718,7 +3721,6 @@ export class Agent<
       ...mergedStreamOptions,
       messages,
       methodType: 'stream',
-      model: modelOverride,
     } as InnerAgentExecutionOptions<OUTPUT, FORMAT>;
 
     const result = await this.#execute(executeOptions);
@@ -3776,25 +3778,8 @@ export class Agent<
       onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
 
-    // Map structuredOutput to output when maxSteps is explicitly set to 1
-    // This allows the new structuredOutput API to use the existing output implementation
-    let modelOverride: MastraLanguageModel | undefined;
-    if (mergedStreamOptions.structuredOutput && mergedStreamOptions.maxSteps === 1) {
-      // If structuredOutput has a model, use it to override the agent's model
-      if (mergedStreamOptions.structuredOutput.model) {
-        modelOverride = mergedStreamOptions.structuredOutput.model;
-      }
-
-      mergedStreamOptions = {
-        ...mergedStreamOptions,
-        output: mergedStreamOptions.structuredOutput.schema as OUTPUT,
-        structuredOutput: undefined, // Remove structuredOutput to avoid confusion downstream
-      };
-    }
-
     const llm = await this.getLLM({
       runtimeContext: mergedStreamOptions.runtimeContext,
-      model: modelOverride,
     });
 
     if (llm.getModel().specificationVersion !== 'v2') {
@@ -3811,7 +3796,6 @@ export class Agent<
       messages: [],
       resumeContext,
       methodType: 'stream',
-      model: modelOverride,
     } as InnerAgentExecutionOptions<OUTPUT, FORMAT>);
 
     if (result.status !== 'success') {

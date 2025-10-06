@@ -34,14 +34,13 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
   private fallbackValue?: InferSchemaOutput<OUTPUT>;
   private isStructuringAgentStreamStarted = false;
 
-  constructor(options: StructuredOutputOptions<OUTPUT>, fallbackModel?: MastraLanguageModel) {
+  constructor(options: StructuredOutputOptions<OUTPUT>) {
     this.schema = options.schema;
     this.errorStrategy = options.errorStrategy ?? 'strict';
     this.fallbackValue = options.fallbackValue;
 
-    // Use provided model or fallback model
-    const modelToUse = options.model || fallbackModel;
-    if (!modelToUse) {
+    // Use provided model
+    if (!options.model) {
       throw new Error('StructuredOutputProcessor requires a model to be provided either in options or as fallback');
     }
 
@@ -49,7 +48,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
     this.structuringAgent = new Agent({
       name: 'structured-output-structurer',
       instructions: options.instructions || this.generateInstructions(),
-      model: modelToUse,
+      model: options.model,
       options: { tracingPolicy: { internal: InternalSpans.ALL } },
     });
   }
@@ -90,8 +89,12 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
       const structuringPrompt = this.buildStructuringPrompt(streamParts);
       const prompt = `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n${structuringPrompt}`;
 
+      // Use structuredOutput in 'direct' mode (no model) since this agent already has a model
       const structuringAgentStream = await this.structuringAgent.stream(prompt, {
-        output: this.schema,
+        structuredOutput: {
+          schema: this.schema,
+          // Inherit useJsonSchemaPromptInjection from parent if needed
+        },
       });
 
       const excludedChunkTypes = [
