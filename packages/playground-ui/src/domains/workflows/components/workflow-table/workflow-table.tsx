@@ -5,7 +5,7 @@ import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
 
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 
 import { ScrollableContainer } from '@/components/scrollable-container';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -13,6 +13,7 @@ import { columns } from './columns';
 import { WorkflowTableData } from './types';
 import { WorkflowCoinIcon, WorkflowIcon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
+import { Searchbar, SearchbarWrapper } from '@/components/ui/searchbar';
 
 export interface WorkflowTableProps {
   workflows: Record<string, GetWorkflowResponse>;
@@ -20,6 +21,7 @@ export interface WorkflowTableProps {
 }
 
 export function WorkflowTable({ workflows, isLoading }: WorkflowTableProps) {
+  const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
   const workflowData: WorkflowTableData[] = useMemo(() => {
     const _workflowsData = Object.keys(workflows ?? {}).map(key => {
@@ -49,29 +51,37 @@ export function WorkflowTable({ workflows, isLoading }: WorkflowTableProps) {
     return <EmptyWorkflowsTable />;
   }
 
+  const filteredRows = rows.filter(row => row.original.name.toLowerCase().includes(search.toLowerCase()));
+
   return (
-    <ScrollableContainer>
-      <Table>
-        <Thead className="sticky top-0">
-          {ths.headers.map(header => (
-            <Th key={header.id} style={{ width: header.index === 0 ? 'auto' : header.column.getSize() }}>
-              {flexRender(header.column.columnDef.header, header.getContext())}
-            </Th>
-          ))}
-        </Thead>
-        <Tbody>
-          {rows.map(row => (
-            <Row key={row.id} onClick={() => navigate(paths.workflowLink(row.original.id))}>
-              {row.getVisibleCells().map(cell => (
-                <React.Fragment key={cell.id}>
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </React.Fragment>
-              ))}
-            </Row>
-          ))}
-        </Tbody>
-      </Table>
-    </ScrollableContainer>
+    <>
+      <SearchbarWrapper>
+        <Searchbar onSearch={setSearch} label="Search workflows" placeholder="Search workflows" />
+      </SearchbarWrapper>
+
+      <ScrollableContainer>
+        <Table>
+          <Thead className="sticky top-0">
+            {ths.headers.map(header => (
+              <Th key={header.id} style={{ width: header.index === 0 ? 'auto' : header.column.getSize() }}>
+                {flexRender(header.column.columnDef.header, header.getContext())}
+              </Th>
+            ))}
+          </Thead>
+          <Tbody>
+            {filteredRows.map(row => (
+              <Row key={row.id} onClick={() => navigate(paths.workflowLink(row.original.id))}>
+                {row.getVisibleCells().map(cell => (
+                  <React.Fragment key={cell.id}>
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </React.Fragment>
+                ))}
+              </Row>
+            ))}
+          </Tbody>
+        </Table>
+      </ScrollableContainer>
+    </>
   );
 }
 

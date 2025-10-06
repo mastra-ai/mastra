@@ -52,13 +52,14 @@ export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
     return <EmptyAgentsTable />;
   }
 
-  const filteredRows = rows.filter(row => row.original.id.toLowerCase().includes(search.toLowerCase()));
+  const filteredRows = rows.filter(row => row.original.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <>
       <SearchbarWrapper>
         <Searchbar onSearch={setSearch} label="Search agents" placeholder="Search agents" />
       </SearchbarWrapper>
+
       <ScrollableContainer>
         <TooltipProvider>
           <Table>
