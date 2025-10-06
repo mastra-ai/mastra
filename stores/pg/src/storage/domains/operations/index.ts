@@ -728,7 +728,7 @@ export class StoreOperationsPG extends StoreOperations {
         {
           name: `${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`,
           table: TABLE_SCORERS,
-          columns: ['trace_id', 'span_id', 'created_at DESC'],
+          columns: ['traceId', 'spanId', 'createdAt DESC'],
         },
         // AI Spans indexes for optimal trace querying
         {

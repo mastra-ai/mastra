@@ -25,7 +25,7 @@
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "pnpm build --watch",
-    "test": "docker-compose up -d && vitest run --no-isolate --bail=1 --retry=1 && docker-compose down",
+    "test": "docker-compose up -d && vitest run --no-isolate --retry=1 && docker-compose down",
     "lint": "eslint ."
   },
   "dependencies": {
@@ -54,7 +54,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.20.0-0 <0.21.0-0",
+    "@mastra/core": ">=0.20.1-0 <0.21.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",
