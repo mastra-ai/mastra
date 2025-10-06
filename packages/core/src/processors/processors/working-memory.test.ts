@@ -85,6 +85,17 @@ describe('WorkingMemoryProcessor', () => {
     });
 
     it('should extract and store new user information immediately', async () => {
+      await mockStorage.saveThread({
+        thread: {
+          id: 'thread-1',
+          title: 'Test Thread',
+          resourceId: 'resource-1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+      });
+
       processor = new WorkingMemoryProcessor({
         storage: mockStorage,
         model: mockModel,
@@ -265,6 +276,17 @@ describe('WorkingMemoryProcessor', () => {
 
   describe('Output Processing (Information Extraction from Assistant)', () => {
     it('should extract and update working memory from assistant response', async () => {
+      await mockStorage.saveThread({
+        thread: {
+          id: 'thread-1',
+          title: 'Test Thread',
+          resourceId: 'resource-1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+      });
+
       processor = new WorkingMemoryProcessor({
         storage: mockStorage,
         model: mockModel,
@@ -541,6 +563,17 @@ describe('WorkingMemoryProcessor', () => {
 
   describe('Multi-turn Conversation Flow', () => {
     it('should capture user name from first message and use it in subsequent turns', async () => {
+      await mockStorage.saveThread({
+        thread: {
+          id: 'thread-1',
+          title: 'Test Thread',
+          resourceId: 'resource-1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+      });
+
       processor = new WorkingMemoryProcessor({
         storage: mockStorage,
         model: mockModel,
@@ -594,6 +627,17 @@ describe('WorkingMemoryProcessor', () => {
     });
 
     it('should update location and preferences across multiple turns', async () => {
+      await mockStorage.saveThread({
+        thread: {
+          id: 'thread-1',
+          title: 'Test Thread',
+          resourceId: 'resource-1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+      });
+
       processor = new WorkingMemoryProcessor({
         storage: mockStorage,
         model: mockModel,
@@ -736,6 +780,17 @@ describe('WorkingMemoryProcessor', () => {
     });
 
     it('should use aggressive extraction with low threshold', async () => {
+      await mockStorage.saveThread({
+        thread: {
+          id: 'thread-1',
+          title: 'Test Thread',
+          resourceId: 'resource-1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+      });
+
       processor = new WorkingMemoryProcessor({
         storage: mockStorage,
         model: mockModel,
@@ -841,7 +896,8 @@ describe('WorkingMemoryProcessor', () => {
       });
 
       expect(result.length).toBe(2);
-      expect(result[0].role).toBe('system');
+      expect(result[0].role).toBe('user');
+      expect((result[0].content as any).content).toContain('[Context]:');
       expect((result[0].content as any).content).toContain('Tyler');
       expect((result[0].content as any).content).toContain('Mastra');
     });
@@ -849,6 +905,17 @@ describe('WorkingMemoryProcessor', () => {
 
   describe('Template Formats', () => {
     it('should work with markdown template', async () => {
+      await mockStorage.saveThread({
+        thread: {
+          id: 'thread-1',
+          title: 'Test Thread',
+          resourceId: 'resource-1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+      });
+
       processor = new WorkingMemoryProcessor({
         storage: mockStorage,
         model: mockModel,
@@ -879,6 +946,17 @@ describe('WorkingMemoryProcessor', () => {
     });
 
     it('should work with JSON schema template', async () => {
+      await mockStorage.saveThread({
+        thread: {
+          id: 'thread-1',
+          title: 'Test Thread',
+          resourceId: 'resource-1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+      });
+
       processor = new WorkingMemoryProcessor({
         storage: mockStorage,
         model: mockModel,
