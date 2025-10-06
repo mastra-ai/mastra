@@ -279,7 +279,7 @@ export function WorkflowTrigger({
             );
           })}
 
-        {result?.runId && (
+        {result?.runId && result.payload?.workflowState?.status === 'running' && (
           <Button
             variant="light"
             className="w-full"
