@@ -3,17 +3,73 @@ title: "create-mastra | Create Project | Mastra CLI"
 description: Documentation for the create-mastra command, which creates a new Mastra project with interactive setup options.
 ---
 
+import { Tabs, Tab } from "@/components/tabs";
+
 # create-mastra
 
-The `create-mastra` command **creates** a new standalone Mastra project. Use this command to scaffold a complete Mastra setup in a dedicated directory.
+The `create-mastra` command **creates** a new standalone Mastra project. Use this command to scaffold a complete Mastra setup in a dedicated directory. You can run it with additional flags to customize the setup process.
 
 ## Usage
 
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+  <Tab>
+    ```bash copy
+    npx create-mastra@latest
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    yarn dlx create-mastra@latest
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    pnpm create mastra@latest
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    bun create mastra@latest
+    ```
+  </Tab>
+</Tabs>
+
+`create-mastra` automatically runs in _interactive_ mode, but you can also specify your project name and template with command line arguments.
+
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+  <Tab>
+    ```bash copy
+    npx create-mastra@latest my-mastra-project -- --template coding-agent
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    yarn dlx create-mastra@latest --template coding-agent
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    pnpm create mastra@latest --template coding-agent
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    bun create mastra@latest --template coding-agent
+    ```
+  </Tab>
+</Tabs>
+
+Check out the [full list](https://mastra.ai/api/templates.json) of templates and use the `slug` as input to the `--template` CLI flag.
+
+You can also use any GitHub repo as a template (it has to be a valid Mastra project):
+
 ```bash
-create-mastra [options]
+npx create-mastra@latest my-mastra-project -- --template mastra-ai/template-coding-agent
 ```
 
-## Options
+## CLI flags
+
+Instead of an interactive prompt you can also define these CLI flags.
 
 <PropertiesTable
   content={[
@@ -27,13 +83,13 @@ create-mastra [options]
       name: "--project-name",
       type: "string",
       description:
-        "Project name that will be used in package.json and as the project directory name",
+        "Project name that will be used in `package.json` and as the project directory name",
       isOptional: true,
     },
     {
       name: "--default",
       type: "boolean",
-      description: "Quick start with defaults(src, OpenAI, no examples)",
+      description: "Quick start with defaults (src, OpenAI, no examples)",
       isOptional: true,
     },
     {
@@ -85,7 +141,7 @@ create-mastra [options]
     {
       name: "--dir",
       type: "string",
-      description: "Target directory for Mastra source code (default: src/)",
+      description: "Target directory for Mastra source code (default: `src/`)",
       isOptional: true,
     },
     {
