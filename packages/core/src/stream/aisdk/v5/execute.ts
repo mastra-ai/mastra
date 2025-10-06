@@ -26,7 +26,6 @@ type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   includeRawChunks?: boolean;
   modelSettings?: CallSettings;
   onResult: OnResult;
-  output?: OUTPUT;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   /**
   Additional HTTP headers to be sent with the request.
@@ -49,7 +48,6 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
   telemetry_settings,
   includeRawChunks,
   modelSettings,
-  output,
   structuredOutput,
   headers,
   shouldThrowError,
@@ -71,10 +69,20 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
     });
   }
 
-  const responseFormat = output ? getResponseFormat(output) : undefined;
+  const structuredOutputMode = structuredOutput?.schema
+    ? structuredOutput?.model
+      ? 'processor'
+      : 'direct'
+    : undefined;
+
+  const responseFormat = getResponseFormat(structuredOutput?.schema);
 
   let prompt = inputMessages;
-  if (output && responseFormat?.type === 'json' && structuredOutput?.useJsonSchemaPromptInjection) {
+  if (
+    structuredOutputMode === 'direct' &&
+    responseFormat?.type === 'json' &&
+    structuredOutput?.useJsonSchemaPromptInjection
+  ) {
     prompt = injectJsonInstructionIntoMessages({
       messages: inputMessages,
       schema: responseFormat.schema,
@@ -92,7 +100,10 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
           providerOptions,
           abortSignal: options?.abortSignal,
           includeRawChunks,
-          responseFormat: !structuredOutput?.useJsonSchemaPromptInjection ? responseFormat : undefined,
+          responseFormat:
+            structuredOutputMode === 'direct' && !structuredOutput?.useJsonSchemaPromptInjection
+              ? responseFormat
+              : undefined,
           ...(modelSettings ?? {}),
           headers,
         });

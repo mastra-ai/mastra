@@ -487,14 +487,10 @@ function createOutputHandler<OUTPUT extends OutputSchema = undefined>({
 export function createObjectStreamTransformer<OUTPUT extends OutputSchema = undefined>({
   isLLMExecutionStep,
   structuredOutput,
-  structuredOutputMode,
 }: {
   isLLMExecutionStep?: boolean;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
-  structuredOutputMode?: 'direct' | 'processor' | undefined;
 }) {
-  // Only run object transformer in direct mode (LLM generates JSON directly)
-  const shouldRunObjectTransformer = isLLMExecutionStep && structuredOutputMode === 'direct';
   const transformedSchema = getTransformedSchema(structuredOutput?.schema);
   const handler = createOutputHandler({ transformedSchema, schema: structuredOutput?.schema });
 
@@ -505,7 +501,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
-      if (!shouldRunObjectTransformer) {
+      if (!isLLMExecutionStep) {
         // Bypassing processing if we are not in the LLM execution step (inner stream)
         // OR if there is no output schema provided
         controller.enqueue(chunk);
@@ -551,7 +547,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
     async flush(controller) {
       // Bypass final validation if there is no output schema provided
       // or if we are not in the LLM execution step (inner stream)
-      if (!shouldRunObjectTransformer) {
+      if (!isLLMExecutionStep) {
         return;
       }
 
