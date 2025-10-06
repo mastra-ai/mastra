@@ -1,27 +1,47 @@
 ---
-title: "Complex Task Execution with AgentNetwork Loop Method"
-description: "This page demonstrates how to use the AgentNetwork's loop method in Mastra vNext to handle complex tasks that require multiple agents and workflows, including memory-based orchestration and multi-step execution."
+title: "Handling Complex LLM Operations | Networks | Mastra"
+description: "Networks in Mastra help you execute individual or multiple Mastra primitives in a non-deterministic way using a single API."
 ---
 
-## Complex tasks requiring multiple primitives
+# Agent.network()
 
-As an example, we have an AgentNetwork with 3 primitives at its disposal:
+`Agent.network()` introduces a flexible, composable and non-deterministic way to orchestrate multiple specialized agents and workflows, enabling complex, reasoning and task completion.
+
+There are two main problem areas that this system is designed to solve:
+
+- Scenarios where a single agent is insufficient, and tasks require collaboration, routing, or sequential/parallel execution across multiple agents and workflows.
+- Scenarios where the task is not fully defined and is initiated with unstructured input. A network allows your Agent to figure out which primitive to call and turn unstructured input into a structured task.
+
+## Differences from Workflows
+
+- Workflows are linear or branched sequences of steps. This creates a deterministic flow of execution.
+- `Agent.network()` adds a layer of non-deterministic LLM-based orchestration, allowing dynamic, multi-agent collaboration and routing. This creates a non-deterministic flow of execution.
+
+## Important details
+
+- Providing memory to the Agent when using `network()` is _not_ optional, as it is required to store the task history. Memory is the core primitive used for any decisions on which primitives to run, as well as determine task completion.
+- Any available primitives (agents, workflows) are used based on their descriptions. The better the description, the better the routing agent will be able to select the right primitive. For workflows, the input schema is also used to determine which inputs to use when calling the workflow. More descriptive naming yields better results.
+- When primitives with overlapping capabilities are available, the agent will use the most specific primitive. For example, if both an agent and a workflow can do research, it will use the input schema of the workflow to determine which primitive to select.
+
+## Turning an Agent into a Network
+
+As an example, we have an Agent with 3 primitives at its disposal:
 
 - `agent1`: A general research agent that can do research on a given topic.
 - `agent2`: A general writing agent that can write a full report based on the researched material.
 - `workflow1`: A workflow that can research a given city and write a full report based on the researched material (using both agent1 and agent2).
 
-We use the `loop` method to create a task that requires multiple primitives. The AgentNetwork will, using memory, figure out which primitives to call and in which order, as well as when the task is complete.
+We use the `network` method to create a task that requires multiple primitives. The Agent will, using memory, figure out which primitives to call and in which order, as well as when the task is complete.
+
 
 ```typescript
-import { NewAgentNetwork } from '@mastra/core/network/vNext';
 import { Agent } from '@mastra/core/agent';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 import { Memory } from '@mastra/memory';
 import { openai } from '@ai-sdk/openai';
 import { LibSQLStore } from '@mastra/libsql';
 import { z } from 'zod';
-import { RuntimeContext } from '@mastra/core/runtime-context';
 
 const memory = new Memory({
   storage: new LibSQLStore({
@@ -103,7 +123,7 @@ const agent2 = new Agent({
   model: openai('gpt-4o'),
 });
 
-const network = new NewAgentNetwork({
+const routingAgent = new Agent({
   id: 'test-network',
   name: 'Test Network',
   instructions:
@@ -123,7 +143,7 @@ const runtimeContext = new RuntimeContext();
 
 console.log(
   // specifying the task, note that there is a mention here about using an agent for synthesis. This is because the routing agent can actually do some synthesis on results on its own, so this will force it to use agent2 instead
-  await network.loop(
+  await routingAgent.network(
     'What are the biggest cities in France? Give me 3. How are they like? Find cities, then do thorough research on each city, and give me a final full report synthesizing all that information. Make sure to use an agent for synthesis.',
     { runtimeContext },
   ),

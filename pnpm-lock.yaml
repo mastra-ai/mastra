@@ -363,8 +363,8 @@ importers:
   deployers/cloud:
     dependencies:
       '@mastra/core':
-        specifier: '>=0.18.1-0 <0.21.0-0'
-        version: 0.18.1-alpha.0(openapi-types@12.1.3)(react@19.1.1)(zod@4.1.9)
+        specifier: '>=0.20.1-0 <0.21.0-0'
+        version: 0.20.1-alpha.0(openapi-types@12.1.3)(react@19.1.1)(zod@4.1.9)
       '@mastra/deployer':
         specifier: workspace:^
         version: link:../../packages/deployer
@@ -1070,7 +1070,7 @@ importers:
         version: link:../mcp
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
-        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.1.0(@opentelemetry/api@1.9.0)
@@ -1270,7 +1270,7 @@ importers:
         version: 1.9.0
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
-        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.1.0(@opentelemetry/api@1.9.0)
@@ -3016,14 +3016,14 @@ importers:
   stores/dynamodb:
     dependencies:
       '@aws-sdk/client-dynamodb':
-        specifier: ^3.896.0
-        version: 3.901.0
+        specifier: ^3.902.0
+        version: 3.902.0
       '@aws-sdk/lib-dynamodb':
-        specifier: ^3.896.0
-        version: 3.901.0(@aws-sdk/client-dynamodb@3.901.0)
+        specifier: ^3.902.0
+        version: 3.902.0(@aws-sdk/client-dynamodb@3.902.0)
       electrodb:
         specifier: ^3.4.6
-        version: 3.4.6(@aws-sdk/client-dynamodb@3.901.0)
+        version: 3.4.6(@aws-sdk/client-dynamodb@3.902.0)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -3388,7 +3388,7 @@ importers:
   stores/s3vectors:
     dependencies:
       '@aws-sdk/client-s3vectors':
-        specifier: ^3.896.0
+        specifier: ^3.901.0
         version: 3.901.0
       uuid:
         specifier: ^11.1.0
@@ -4489,8 +4489,8 @@ packages:
     resolution: {integrity: sha512-YhhQNVmHykPC6h6Xj60BMG7ELxxlynwNW2wK+8HJRiT62nYhbDyHypY9W2zNshqh/SE+5gLvwt1sXAu7KHGWmQ==}
     engines: {node: '>=18.0.0'}
 
-  '@aws-sdk/client-dynamodb@3.901.0':
-    resolution: {integrity: sha512-LZ7j0UwRnPh6NgioRqeAvbBLvlUUjolEA+vvmmSnWZSGvs8T/QZzytvKvDPKpr5sYTJKVDOYqOXE9eDuqHaqjw==}
+  '@aws-sdk/client-dynamodb@3.902.0':
+    resolution: {integrity: sha512-WoBzn00MEvnhKFkrFPpqDjHxaqOriwJ2N00/GsoppHiMMPqinN53wB/phur7BsvhQCZZMbnIWrslcZcQxOzFLg==}
     engines: {node: '>=18.0.0'}
 
   '@aws-sdk/client-s3vectors@3.901.0':
@@ -4585,11 +4585,11 @@ packages:
     resolution: {integrity: sha512-KSwTfyLZyNLszz5f/yoLC+LC+CRKpeJii/+zVAy7JUOQsKhSykiRUPYUx7o2Sdc4oJfqqUl26A/jSttKYnYtAA==}
     engines: {node: '>=18.0.0'}
 
-  '@aws-sdk/lib-dynamodb@3.901.0':
-    resolution: {integrity: sha512-o7u+IIJgspWOkBzR657zBl+HJ+YyRKgWBlhhkSvIWTLMUbzrYCi/+Jg/th9VUHU7W7Rw/RmBE8ehYJtFjOg+gg==}
+  '@aws-sdk/lib-dynamodb@3.902.0':
+    resolution: {integrity: sha512-fe7DAz/57St3lrJoxayu55CJBj8JNhTh2keR+JNtA2lDdY7FZnRalUJse5Mts2gqG5+3zUdPDfMcevu7vhXIzw==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      '@aws-sdk/client-dynamodb': ^3.901.0
+      '@aws-sdk/client-dynamodb': ^3.902.0
 
   '@aws-sdk/middleware-endpoint-discovery@3.901.0':
     resolution: {integrity: sha512-nbqELNamIhsWcDmqa3rB5unNuOEGiNh2pEz663ZEzsa9DTasKvBHqdhVQo6DuWDvnkhAjOMrkM2sB4P45uy1Qw==}
@@ -4669,11 +4669,11 @@ packages:
     resolution: {integrity: sha512-FfEM25hLEs4LoXsLXQ/q6X6L4JmKkKkbVFpKD4mwfVHtRVQG6QxJiCPcrkcPISquiy6esbwK2eh64TWbiD60cg==}
     engines: {node: '>=18.0.0'}
 
-  '@aws-sdk/util-dynamodb@3.901.0':
-    resolution: {integrity: sha512-J5Pq/t9IgPM9NuCihRsK7xyMJeSljDs46c8HNg0iFOT9ESMggwUO4cJM9wx72acRP/c96q+wlLbsbAxUVR4TgQ==}
+  '@aws-sdk/util-dynamodb@3.902.0':
+    resolution: {integrity: sha512-elZ9e671bda7Z1NzNSHiYKktnoXx4z2FJCJf1hpHrA/rMqVmnErNl/QzHZqF+0jH/0UoK7g4LCjJRO5A+reBoQ==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      '@aws-sdk/client-dynamodb': ^3.901.0
+      '@aws-sdk/client-dynamodb': ^3.902.0
 
   '@aws-sdk/util-endpoints@3.828.0':
     resolution: {integrity: sha512-RvKch111SblqdkPzg3oCIdlGxlQs+k+P7Etory9FmxPHyPDvsP1j1c74PmgYqtzzMWmoXTjd+c9naUHh9xG8xg==}
@@ -7000,8 +7000,8 @@ packages:
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
 
-  '@mastra/core@0.18.1-alpha.0':
-    resolution: {integrity: sha512-b8q5aHFxzHS7WfvjxGrENNIE2Pyq1TZj1OOa16rCUxcXkFEV6bzADBcSP+kIMIl+7qs22Pe9kE1upd6ppuQOHQ==}
+  '@mastra/core@0.20.1-alpha.0':
+    resolution: {integrity: sha512-OSsSvLKc7TJoMgcAWZ4ZIvMk/lXsGHQLMzzql2DAycREE3dx5w+4BrPo8gHgcpJUEEG15cvg9MjB3q7TW3LbJw==}
     engines: {node: '>=20'}
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
@@ -17479,7 +17479,7 @@ snapshots:
     transitivePeerDependencies:
       - aws-crt
 
-  '@aws-sdk/client-dynamodb@3.901.0':
+  '@aws-sdk/client-dynamodb@3.902.0':
     dependencies:
       '@aws-crypto/sha256-browser': 5.2.0
       '@aws-crypto/sha256-js': 5.2.0
@@ -17955,11 +17955,11 @@ snapshots:
       mnemonist: 0.38.3
       tslib: 2.8.1
 
-  '@aws-sdk/lib-dynamodb@3.901.0(@aws-sdk/client-dynamodb@3.901.0)':
+  '@aws-sdk/lib-dynamodb@3.902.0(@aws-sdk/client-dynamodb@3.902.0)':
     dependencies:
-      '@aws-sdk/client-dynamodb': 3.901.0
+      '@aws-sdk/client-dynamodb': 3.902.0
       '@aws-sdk/core': 3.901.0
-      '@aws-sdk/util-dynamodb': 3.901.0(@aws-sdk/client-dynamodb@3.901.0)
+      '@aws-sdk/util-dynamodb': 3.902.0(@aws-sdk/client-dynamodb@3.902.0)
       '@smithy/core': 3.14.0
       '@smithy/smithy-client': 4.7.0
       '@smithy/types': 4.6.0
@@ -18183,9 +18183,9 @@ snapshots:
       '@smithy/types': 4.6.0
       tslib: 2.8.1
 
-  '@aws-sdk/util-dynamodb@3.901.0(@aws-sdk/client-dynamodb@3.901.0)':
+  '@aws-sdk/util-dynamodb@3.902.0(@aws-sdk/client-dynamodb@3.902.0)':
     dependencies:
-      '@aws-sdk/client-dynamodb': 3.901.0
+      '@aws-sdk/client-dynamodb': 3.902.0
       tslib: 2.8.1
 
   '@aws-sdk/util-endpoints@3.828.0':
@@ -20605,7 +20605,7 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
-  '@mastra/core@0.18.1-alpha.0(openapi-types@12.1.3)(react@19.1.1)(zod@4.1.9)':
+  '@mastra/core@0.20.1-alpha.0(openapi-types@12.1.3)(react@19.1.1)(zod@4.1.9)':
     dependencies:
       '@a2a-js/sdk': 0.2.5
       '@ai-sdk/provider': 1.1.3
@@ -20616,7 +20616,7 @@ snapshots:
       '@isaacs/ttlcache': 1.4.1
       '@mastra/schema-compat': 0.11.4(ai@4.3.19(react@19.1.1)(zod@4.1.9))(zod@4.1.9)
       '@opentelemetry/api': 1.9.0
-      '@opentelemetry/auto-instrumentations-node': 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+      '@opentelemetry/auto-instrumentations-node': 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))
       '@opentelemetry/core': 2.1.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-grpc': 0.203.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-http': 0.203.0(@opentelemetry/api@1.9.0)
@@ -21060,7 +21060,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
+  '@opentelemetry/auto-instrumentations-node@0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.1.0(@opentelemetry/api@1.9.0)
@@ -21109,7 +21109,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.3.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.10.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.3(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
+      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resources': 2.1.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.203.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -22268,7 +22268,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
+  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.1.0(@opentelemetry/api@1.9.0)
@@ -26266,10 +26266,10 @@ snapshots:
 
   efrt@2.7.0: {}
 
-  electrodb@3.4.6(@aws-sdk/client-dynamodb@3.901.0):
+  electrodb@3.4.6(@aws-sdk/client-dynamodb@3.902.0):
     dependencies:
-      '@aws-sdk/lib-dynamodb': 3.901.0(@aws-sdk/client-dynamodb@3.901.0)
-      '@aws-sdk/util-dynamodb': 3.901.0(@aws-sdk/client-dynamodb@3.901.0)
+      '@aws-sdk/lib-dynamodb': 3.902.0(@aws-sdk/client-dynamodb@3.902.0)
+      '@aws-sdk/util-dynamodb': 3.902.0(@aws-sdk/client-dynamodb@3.902.0)
       jsonschema: 1.2.7
     transitivePeerDependencies:
       - '@aws-sdk/client-dynamodb'

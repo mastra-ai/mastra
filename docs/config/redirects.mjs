@@ -1015,4 +1015,9 @@ export const redirectList = [
     destination: "/:locale/reference/vectors/upstash",
     permanent: true,
   },
+  {
+    source: "/:locale/reference/cli/mcp-docs-server",
+    destination: "/:locale/docs/getting-started/mcp-docs-server",
+    permanent: true,
+  },
 ];
