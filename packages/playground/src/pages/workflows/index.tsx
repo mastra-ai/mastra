@@ -34,7 +34,7 @@ function Workflows() {
             <Icon>
               <DocsIcon />
             </Icon>
-            Workflow documentation
+            Workflows documentation
           </Button>
         </HeaderAction>
       </Header>

@@ -29,7 +29,7 @@ export const HeaderTitle = ({ children }: HeaderProps) => {
 };
 
 export const HeaderAction = ({ children }: HeaderProps) => {
-  return <div className="ml-auto">{children}</div>;
+  return <div className="ml-auto flex items-center gap-2">{children}</div>;
 };
 
 export const HeaderGroup = ({ children }: HeaderProps) => {

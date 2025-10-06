@@ -33,7 +33,7 @@ function Agents() {
             <Icon>
               <DocsIcon />
             </Icon>
-            Agent documentation
+            Agents documentation
           </Button>
         </HeaderAction>
       </Header>
