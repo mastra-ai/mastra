@@ -27,9 +27,8 @@ export function ScorersTable({ scorers, isLoading }: ScorersTableProps) {
         const scorer = scorers[key];
 
         return {
+          ...scorer,
           id: key,
-          name: scorer.scorer.config.name,
-          description: scorer.scorer.config.description,
         };
       }),
     [scorers],

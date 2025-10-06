@@ -1,7 +1,6 @@
 import { CodeMirrorBlock } from '@/components/ui/code-mirror-block';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useMCPServerTools } from '@/hooks/use-mcp-server-tools';
 import { useMCPServers } from '@/hooks/use-mcp-servers';
 import { ToolIconMap } from '@/types';
 
@@ -27,6 +26,10 @@ import {
   TabList,
   Tab,
   TabContent,
+  HeaderAction,
+  Button,
+  DocsIcon,
+  useMCPServerTools,
 } from '@mastra/playground-ui';
 import { useRef } from 'react';
 import { Link, useParams } from 'react-router';
@@ -61,6 +64,9 @@ export const McpServerPage = () => {
       <Header>
         <Breadcrumb>
           <Crumb as={Link} to={`/mcps`}>
+            <Icon>
+              <McpServerIcon />
+            </Icon>
             MCP Servers
           </Crumb>
 
@@ -68,6 +74,15 @@ export const McpServerPage = () => {
             {isLoading ? <Skeleton className="w-20 h-4" /> : server?.name || 'Not found'}
           </Crumb>
         </Breadcrumb>
+
+        <HeaderAction>
+          <Button as={Link} to="https://mastra.ai/en/docs/tools-mcp/mcp-overview" target="_blank">
+            <Icon>
+              <DocsIcon />
+            </Icon>
+            MCP documentation
+          </Button>
+        </HeaderAction>
       </Header>
 
       {isLoading ? null : server ? (
@@ -126,7 +141,7 @@ export const McpServerPage = () => {
 };
 
 const McpToolList = ({ server }: { server: ServerInfo }) => {
-  const { tools, isLoading } = useMCPServerTools(server);
+  const { data: tools = {}, isLoading } = useMCPServerTools(server);
 
   if (isLoading) return null;
 
