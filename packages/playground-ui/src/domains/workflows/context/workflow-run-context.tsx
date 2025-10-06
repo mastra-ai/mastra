@@ -1,5 +1,4 @@
 import { WorkflowRunState, WorkflowStreamResult } from '@mastra/core/workflows';
-import { WorkflowWatchResult } from '@mastra/client-js';
 import { createContext, useEffect, useState } from 'react';
 import { convertWorkflowRunStateToStreamResult } from '../utils';
 
@@ -7,7 +6,7 @@ export type WorkflowRunStreamResult = WorkflowStreamResult<any, any, any>;
 
 type WorkflowRunContextType = {
   result: WorkflowRunStreamResult | null;
-  setResult: React.Dispatch<React.SetStateAction<any>>;
+  setResult: React.Dispatch<React.SetStateAction<WorkflowRunStreamResult | null>>;
   payload: any;
   setPayload: React.Dispatch<React.SetStateAction<any>>;
   clearData: () => void;
