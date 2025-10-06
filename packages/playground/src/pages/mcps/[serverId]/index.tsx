@@ -1,7 +1,6 @@
 import { CodeMirrorBlock } from '@/components/ui/code-mirror-block';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useMCPServerTools } from '@/hooks/use-mcp-server-tools';
 import { useMCPServers } from '@/hooks/use-mcp-servers';
 import { ToolIconMap } from '@/types';
 
@@ -30,6 +29,7 @@ import {
   HeaderAction,
   Button,
   DocsIcon,
+  useMCPServerTools,
 } from '@mastra/playground-ui';
 import { useRef } from 'react';
 import { Link, useParams } from 'react-router';
@@ -141,7 +141,7 @@ export const McpServerPage = () => {
 };
 
 const McpToolList = ({ server }: { server: ServerInfo }) => {
-  const { tools, isLoading } = useMCPServerTools(server);
+  const { data: tools = {}, isLoading } = useMCPServerTools(server);
 
   if (isLoading) return null;
 
