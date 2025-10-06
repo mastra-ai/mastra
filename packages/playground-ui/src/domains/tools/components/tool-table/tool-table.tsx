@@ -42,16 +42,12 @@ export function ToolTable({ tools, agents, isLoading }: ToolTableProps) {
     return <EmptyToolsTable />;
   }
 
-  const handleSearch = (search: string) => {
-    setSearch(search);
-  };
-
   const filteredRows = rows.filter(row => row.original.id.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <>
       <SearchbarWrapper>
-        <Searchbar onSearch={handleSearch} label="Search tools" placeholder="Search tools" />
+        <Searchbar onSearch={setSearch} label="Search tools" placeholder="Search tools" />
       </SearchbarWrapper>
 
       <ScrollableContainer>

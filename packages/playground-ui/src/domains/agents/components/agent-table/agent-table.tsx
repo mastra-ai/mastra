@@ -6,7 +6,7 @@ import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 
 import { ScrollableContainer } from '@/components/scrollable-container';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -14,6 +14,7 @@ import { columns } from './columns';
 import { AgentTableData } from './types';
 import { useLinkComponent } from '@/lib/framework';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { Searchbar, SearchbarWrapper } from '@/components/ui/searchbar';
 
 export interface AgentsTableProps {
   agents: Record<string, GetAgentResponse>;
@@ -21,6 +22,7 @@ export interface AgentsTableProps {
 }
 
 export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
+  const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
   const projectData: AgentTableData[] = useMemo(
     () =>
@@ -50,31 +52,38 @@ export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
     return <EmptyAgentsTable />;
   }
 
+  const filteredRows = rows.filter(row => row.original.id.toLowerCase().includes(search.toLowerCase()));
+
   return (
-    <ScrollableContainer>
-      <TooltipProvider>
-        <Table>
-          <Thead className="sticky top-0">
-            {ths.headers.map(header => (
-              <Th key={header.id} style={{ width: header.column.getSize() ?? 'auto' }}>
-                {flexRender(header.column.columnDef.header, header.getContext())}
-              </Th>
-            ))}
-          </Thead>
-          <Tbody>
-            {rows.map(row => (
-              <Row key={row.id} onClick={() => navigate(paths.agentLink(row.original.id))}>
-                {row.getVisibleCells().map(cell => (
-                  <React.Fragment key={cell.id}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </React.Fragment>
-                ))}
-              </Row>
-            ))}
-          </Tbody>
-        </Table>
-      </TooltipProvider>
-    </ScrollableContainer>
+    <>
+      <SearchbarWrapper>
+        <Searchbar onSearch={setSearch} label="Search agents" placeholder="Search agents" />
+      </SearchbarWrapper>
+      <ScrollableContainer>
+        <TooltipProvider>
+          <Table>
+            <Thead className="sticky top-0">
+              {ths.headers.map(header => (
+                <Th key={header.id} style={{ width: header.column.getSize() ?? 'auto' }}>
+                  {flexRender(header.column.columnDef.header, header.getContext())}
+                </Th>
+              ))}
+            </Thead>
+            <Tbody>
+              {filteredRows.map(row => (
+                <Row key={row.id} onClick={() => navigate(paths.agentLink(row.original.id))}>
+                  {row.getVisibleCells().map(cell => (
+                    <React.Fragment key={cell.id}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </React.Fragment>
+                  ))}
+                </Row>
+              ))}
+            </Tbody>
+          </Table>
+        </TooltipProvider>
+      </ScrollableContainer>
+    </>
   );
 }
 
