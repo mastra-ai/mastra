@@ -12,7 +12,7 @@ import { validateToolInput } from './validation';
  * @template TResumeSchema - Resume operation schema type
  * @template TContext - Execution context type
  *
- * @example
+ * @example Basic tool with validation
  * ```typescript
  * const weatherTool = createTool({
  *   id: 'get-weather',
@@ -23,6 +23,34 @@ import { validateToolInput } from './validation';
  *   }),
  *   execute: async ({ context }) => {
  *     return await fetchWeather(context.location, context.units);
+ *   }
+ * });
+ * ```
+ *
+ * @example Tool requiring approval
+ * ```typescript
+ * const deleteFileTool = createTool({
+ *   id: 'delete-file',
+ *   description: 'Delete a file',
+ *   requireApproval: true,
+ *   inputSchema: z.object({ filepath: z.string() }),
+ *   execute: async ({ context }) => {
+ *     await fs.unlink(context.filepath);
+ *     return { deleted: true };
+ *   }
+ * });
+ * ```
+ *
+ * @example Tool with Mastra integration
+ * ```typescript
+ * const saveTool = createTool({
+ *   id: 'save-data',
+ *   description: 'Save data to storage',
+ *   inputSchema: z.object({ key: z.string(), value: z.any() }),
+ *   execute: async ({ context, mastra }) => {
+ *     const storage = mastra?.getStorage();
+ *     await storage?.set(context.key, context.value);
+ *     return { saved: true };
  *   }
  * });
  * ```
@@ -68,13 +96,29 @@ export class Tool<
   /** Parent Mastra instance for accessing shared resources */
   mastra?: Mastra;
 
-  /** Whether the tool requires explicit user approval before execution */
+  /** 
+   * Whether the tool requires explicit user approval before execution
+   * @example
+   * ```typescript
+   * // For destructive operations
+   * requireApproval: true
+   * ```
+   */
   requireApproval?: boolean;
 
   /**
    * Creates a new Tool instance with input validation wrapper.
    *
    * @param opts - Tool configuration and execute function
+   * @example
+   * ```typescript
+   * const tool = new Tool({
+   *   id: 'my-tool',
+   *   description: 'Does something useful',
+   *   inputSchema: z.object({ name: z.string() }),
+   *   execute: async ({ context }) => ({ greeting: `Hello ${context.name}` })
+   * });
+   * ```
    */
   constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext>) {
     this.id = opts.id;
@@ -119,18 +163,65 @@ export class Tool<
  * @param opts - Tool configuration including schemas and execute function
  * @returns Type-safe Tool instance with conditional typing based on schemas
  *
- * @example
+ * @example Simple tool
+ * ```typescript
+ * const greetTool = createTool({
+ *   id: 'greet',
+ *   description: 'Say hello',
+ *   execute: async () => ({ message: 'Hello!' })
+ * });
+ * ```
+ *
+ * @example Tool with input validation
  * ```typescript
  * const calculateTool = createTool({
  *   id: 'calculate',
- *   description: 'Perform mathematical calculations',
+ *   description: 'Perform calculations',
  *   inputSchema: z.object({
  *     operation: z.enum(['add', 'subtract']),
  *     a: z.number(),
  *     b: z.number()
  *   }),
  *   execute: async ({ context }) => {
- *     return { result: context.a + context.b };
+ *     const result = context.operation === 'add' 
+ *       ? context.a + context.b 
+ *       : context.a - context.b;
+ *     return { result };
+ *   }
+ * });
+ * ```
+ *
+ * @example Tool with output schema
+ * ```typescript
+ * const userTool = createTool({
+ *   id: 'get-user',
+ *   description: 'Get user data',
+ *   inputSchema: z.object({ userId: z.string() }),
+ *   outputSchema: z.object({ 
+ *     id: z.string(), 
+ *     name: z.string(), 
+ *     email: z.string() 
+ *   }),
+ *   execute: async ({ context }) => {
+ *     return await fetchUser(context.userId);
+ *   }
+ * });
+ * ```
+ *
+ * @example Tool with external API
+ * ```typescript
+ * const weatherTool = createTool({
+ *   id: 'weather',
+ *   description: 'Get weather data',
+ *   inputSchema: z.object({ 
+ *     city: z.string(),
+ *     units: z.enum(['metric', 'imperial']).default('metric')
+ *   }),
+ *   execute: async ({ context }) => {
+ *     const response = await fetch(
+ *       `https://api.weather.com/v1/weather?q=${context.city}&units=${context.units}`
+ *     );
+ *     return response.json();
  *   }
  * });
  * ```
