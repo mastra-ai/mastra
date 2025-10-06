@@ -92,6 +92,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
 
       const structuringAgentStream = await this.structuringAgent.stream(prompt, {
         output: this.schema,
+        maxSteps: 1,
       });
 
       const excludedChunkTypes = [
