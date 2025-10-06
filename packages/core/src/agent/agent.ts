@@ -1306,7 +1306,12 @@ export class Agent<
       };
 
       try {
+        console.log(resourceId);
         messageList = await tracedRunInputProcessors(messageList, tracingContext);
+        console.log(
+          '[Agent.__runInputProcessors] Processors completed, message count:',
+          messageList.get.all.v2().length,
+        );
       } catch (error) {
         if (error instanceof TripWire) {
           tripwireTriggered = true;

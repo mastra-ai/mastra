@@ -773,7 +773,15 @@ Return the filled-in template as a single string, not as an object. The extracte
 
     switch (this.injectionStrategy) {
       case 'system': {
-        // Create a temporary MessageList to properly convert CoreMessage to MastraMessageV2
+        // NOTE: System message injection doesn't work properly with current ProcessorRunner architecture
+        // ProcessorRunner.runInputProcessors() adds all returned messages with source 'user' (line 307)
+        // but system messages must be added via MessageList.addSystem(), not MessageList.add()
+        //
+        // This means system messages stored separately in MessageList.systemMessages never make it
+        // into the final message array returned by messageList.get.all.v2()
+        //
+        // TODO: Either fix ProcessorRunner to handle system messages, or remove this strategy
+        // For now, using MessageList to convert CoreMessage format to MastraMessageV2
         const messageList = new MessageList({});
 
         // Add system message using CoreMessage format (string content)
@@ -786,6 +794,7 @@ Return the filled-in template as a single string, not as an object. The extracte
         messageList.add(messages, 'input');
 
         // Return all messages in MastraMessageV2 format
+        // WARNING: This only returns regular messages, NOT system messages!
         return messageList.get.all.v2();
       }
 
