@@ -83,17 +83,13 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
     // First conversation - user introduces themselves
     console.log('\n1. User introduces themselves...');
 
-    try {
-      const response1 = await agent.generate('Hello, my name is Daniel', {
-        memory: {
-          thread: thread.id,
-          resource: resourceId,
-        },
-      });
-      console.log('Agent response 1:', response1.text);
-    } catch (error) {
-      console.log('Agent generate failed, but checking working memory anyway:', error);
-    }
+    const response1 = await agent.generate('Hello, my name is Daniel', {
+      memory: {
+        thread: thread.id,
+        resource: resourceId,
+      },
+    });
+    console.log('Agent response 1:', response1.text);
 
     // Wait a bit for async operations to complete
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -107,20 +103,15 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
 
     // Second conversation - ask about the name
     console.log('\n2. User asks about their name...');
-    try {
-      const response2 = await agent.generate('What is my name?', {
-        memory: {
-          thread: thread.id,
-          resource: resourceId,
-        },
-      });
-      console.log('Agent response 2:', response2.text);
-      // The agent should know the name from working memory
-      expect(response2.text.toLowerCase()).toContain('daniel');
-    } catch {
-      console.log('Second generate also failed, but working memory was persisted successfully!');
-      console.log('The test passes because working memory contains Daniel');
-    }
+    const response2 = await agent.generate('What is my name?', {
+      memory: {
+        thread: thread.id,
+        resource: resourceId,
+      },
+    });
+    console.log('Agent response 2:', response2.text);
+    // The agent should know the name from working memory
+    expect(response2.text.toLowerCase()).toContain('daniel');
   });
 
   it('should accumulate information across multiple conversations', async () => {
@@ -457,28 +448,18 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
     console.log('Set working memory for Sarah Connor');
 
     // Now ask a question that should use the context
-    try {
-      const response = await agent.generate('What is my name?', {
-        memory: {
-          thread: thread.id,
-          resource: 'test-resource-injection',
-        },
-        maxSteps: 1,
-      });
+    const response = await agent.generate('What is my name?', {
+      memory: {
+        thread: thread.id,
+        resource: 'test-resource-injection',
+      },
+      maxSteps: 1,
+    });
 
-      console.log('Agent response:', response.text);
+    console.log('Agent response:', response.text);
 
-      // The agent should know the name from working memory
-      expect(response.text.toLowerCase()).toContain('sarah');
-    } catch (error) {
-      console.error('Error during generate:', error);
-      // Even if generate fails, check if working memory exists
-      const resourceData = await storage.stores?.memory?.getResourceById({
-        resourceId: 'test-resource-injection',
-      });
-      console.log('Working memory still exists:', resourceData?.workingMemory);
-      expect(resourceData?.workingMemory).toContain('Sarah Connor');
-    }
+    // The agent should know the name from working memory
+    expect(response.text.toLowerCase()).toContain('sarah');
   });
 
   it('should inject context without errors (basic smoke test)', async () => {
