@@ -1,6 +1,6 @@
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
-import { History, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
 import { ThreadItem, ThreadLink, ThreadList, Threads } from '@/components/threads';
 import { useLinkComponent } from '@/lib/framework';
@@ -28,41 +28,41 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
 
   return (
     <div className="overflow-y-auto h-full w-full">
-      {actualRuns.length === 0 ? (
-        <Txt variant="ui-md" className="text-icon6 p-4">
-          Your run history will appear here once you run the workflow
-        </Txt>
-      ) : (
-        <Threads>
-          <ThreadList>
-            <ThreadItem>
-              <ThreadLink as={Link} to={paths.workflowLink(workflowId)}>
-                <span className="text-accent1 flex items-center gap-4">
-                  <Icon className="bg-surface4 rounded-lg" size="lg">
-                    <Plus />
-                  </Icon>
-                  New workflow run
+      <Threads>
+        <ThreadList>
+          <ThreadItem>
+            <ThreadLink as={Link} to={paths.workflowLink(workflowId)}>
+              <span className="text-accent1 flex items-center gap-4">
+                <Icon className="bg-surface4 rounded-lg" size="lg">
+                  <Plus />
+                </Icon>
+                New workflow run
+              </span>
+            </ThreadLink>
+          </ThreadItem>
+
+          {actualRuns.length === 0 && (
+            <Txt variant="ui-md" className="text-icon3 py-3 px-5">
+              Your run history will appear here once you run the workflow
+            </Txt>
+          )}
+
+          {actualRuns.map(run => (
+            <ThreadItem isActive={run.runId === runId} key={run.runId}>
+              <ThreadLink as={Link} to={paths.workflowRunLink(workflowId, run.runId)}>
+                <span className="truncate max-w-[14rem] text-muted-foreground">{run.runId}</span>
+                <span>
+                  {typeof run?.snapshot === 'string'
+                    ? ''
+                    : run?.snapshot?.timestamp
+                      ? formatDate(run?.snapshot?.timestamp, 'MMM d, yyyy h:mm a')
+                      : ''}
                 </span>
               </ThreadLink>
             </ThreadItem>
-
-            {actualRuns.map(run => (
-              <ThreadItem isActive={run.runId === runId} key={run.runId}>
-                <ThreadLink as={Link} to={paths.workflowRunLink(workflowId, run.runId)}>
-                  <span className="truncate max-w-[14rem] text-muted-foreground">{run.runId}</span>
-                  <span>
-                    {typeof run?.snapshot === 'string'
-                      ? ''
-                      : run?.snapshot?.timestamp
-                        ? formatDate(run?.snapshot?.timestamp, 'MMM d, yyyy h:mm a')
-                        : ''}
-                  </span>
-                </ThreadLink>
-              </ThreadItem>
-            ))}
-          </ThreadList>
-        </Threads>
-      )}
+          ))}
+        </ThreadList>
+      </Threads>
     </div>
   );
 };
