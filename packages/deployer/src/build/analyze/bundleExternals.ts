@@ -177,7 +177,9 @@ async function getInputPlugins(
           },
         } satisfies Plugin)
       : null,
-    optimizeLodashImports(),
+    optimizeLodashImports({
+      include: '**/*.{js,ts,mjs,cjs}',
+    }),
     commonjs({
       strictRequires: 'strict',
       transformMixedEsModules: true,

@@ -11,6 +11,10 @@ import {
   TracesTools,
   TraceDialog,
   parseError,
+  Icon,
+  HeaderAction,
+  Button,
+  DocsIcon,
 } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
@@ -19,7 +23,7 @@ import { useAITraces } from '@/domains/observability/hooks/use-ai-traces';
 import { useAITrace } from '@/domains/observability/hooks/use-ai-trace';
 import { format, isToday } from 'date-fns';
 import { useWorkflows } from '@/hooks/use-workflows';
-import { useNavigate, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 
 const listColumns = [
   { name: 'shortId', label: 'ID', size: '6rem' },
@@ -196,7 +200,21 @@ export default function Observability() {
     <>
       <MainContentLayout>
         <Header>
-          <HeaderTitle>Observability</HeaderTitle>
+          <HeaderTitle>
+            <Icon>
+              <EyeIcon />
+            </Icon>
+            Observability
+          </HeaderTitle>
+
+          <HeaderAction>
+            <Button as={Link} to="https://mastra.ai/en/docs/observability/ai-tracing/overview" target="_blank">
+              <Icon>
+                <DocsIcon />
+              </Icon>
+              Observability documentation
+            </Button>
+          </HeaderAction>
         </Header>
 
         <div className={cn(`grid overflow-y-auto h-full`)}>

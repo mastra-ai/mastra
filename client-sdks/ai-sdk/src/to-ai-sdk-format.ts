@@ -5,7 +5,7 @@ import type {
   WorkflowRunStatus,
   WorkflowStepStatus,
 } from '@mastra/core/workflows';
-import type { ZodType } from 'zod';
+import type { ZodType, ZodObject } from 'zod';
 
 type StepResult = {
   name: string;
@@ -133,9 +133,10 @@ export function WokflowStreamToAISDKTransformer() {
 }
 
 export function toAISdkFormat<
+  TState extends ZodObject<any>,
   TInput extends ZodType<any>,
   TOutput extends ZodType<any>,
   TSteps extends Step<string, any, any>[],
->(stream: MastraWorkflowStream<TInput, TOutput, TSteps>) {
+>(stream: MastraWorkflowStream<TState, TInput, TOutput, TSteps>) {
   return stream.pipeThrough(WokflowStreamToAISDKTransformer());
 }
