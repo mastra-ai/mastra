@@ -4,7 +4,7 @@ import { formatDate } from 'date-fns';
 import clsx from 'clsx';
 import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
 import { WorkflowTrigger, WorkflowTriggerProps } from '../workflow/workflow-trigger';
-import { convertWorkflowRunStateToWatchResult } from '../utils';
+import { convertWorkflowRunStateToStreamResult } from '../utils';
 import { Icon } from '@/ds/icons';
 import { ChevronLeftIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
@@ -51,8 +51,8 @@ export const WorkflowRuns = ({
   const runSnapshot = run?.snapshot;
 
   const runResult =
-    runSnapshot && typeof runSnapshot === 'object' ? convertWorkflowRunStateToWatchResult(runSnapshot) : null;
-  const runStatus = runResult?.payload?.workflowState?.status;
+    runSnapshot && typeof runSnapshot === 'object' ? convertWorkflowRunStateToStreamResult(runSnapshot) : null;
+  const runStatus = runResult?.status;
 
   if (runId) {
     return (

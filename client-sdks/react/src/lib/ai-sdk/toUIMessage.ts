@@ -1,6 +1,6 @@
 import { ChunkType } from '@mastra/core/stream';
 import { type UIMessage } from '@ai-sdk/react';
-import { WorkflowStreamEvent } from '@mastra/core/workflows';
+import { WorkflowStreamResult, WorkflowStreamEvent, StepResult } from '@mastra/core/workflows';
 import { WorkflowWatchResult } from '@mastra/client-js';
 
 export type MastraUIMessage = UIMessage<any, any, any>;
@@ -16,154 +16,88 @@ type StreamChunk = {
 // Based on the pattern from packages/playground-ui/src/domains/workflows/utils.ts
 
 export const mapWorkflowStreamChunkToWatchResult = (
-  prev: WorkflowWatchResult,
+  prev: WorkflowStreamResult<any, any, any>,
   chunk: StreamChunk,
-): WorkflowWatchResult => {
+): WorkflowStreamResult<any, any, any> => {
   if (chunk.type === 'workflow-start') {
     return {
-      ...prev,
-      runId: chunk.runId,
-      eventTimestamp: new Date(),
-      payload: {
-        ...(prev?.payload || {}),
-        workflowState: {
-          ...prev?.payload?.workflowState,
-          status: 'running',
-          steps: prev?.payload?.workflowState?.steps || {},
-        },
-      },
+      input: prev?.input,
+      status: 'running',
+      steps: prev?.steps || {},
     };
   }
+
+  if (chunk.type === 'workflow-canceled') {
+    return {
+      ...prev,
+      status: 'canceled',
+    };
+  }
+
+  if (chunk.type === 'workflow-finish') {
+    const finalStatus = chunk.payload.workflowStatus;
+    const prevSteps = prev?.steps ?? {};
+    const lastStep = Object.values(prevSteps).pop();
+    return {
+      ...prev,
+      status: chunk.payload.workflowStatus,
+      ...(finalStatus === 'success' && lastStep?.status === 'success'
+        ? { result: lastStep?.output }
+        : finalStatus === 'failed' && lastStep?.status === 'failed'
+          ? { error: lastStep?.error }
+          : {}),
+    };
+  }
+
+  const { stepCallId, stepName, ...newPayload } = chunk.payload ?? {};
+
+  const newSteps = {
+    ...prev?.steps,
+    [chunk.payload.id]: {
+      ...prev?.steps?.[chunk.payload.id],
+      ...newPayload,
+    },
+  };
 
   if (chunk.type === 'workflow-step-start') {
     return {
       ...prev,
-      payload: {
-        ...prev?.payload,
-        currentStep: {
-          ...prev?.payload?.currentStep,
-          ...chunk.payload,
-        },
-        workflowState: {
-          ...prev?.payload?.workflowState,
-          steps: {
-            ...prev?.payload?.workflowState?.steps,
-            [chunk.payload.id]: {
-              ...prev?.payload?.workflowState?.steps?.[chunk.payload.id],
-              ...chunk.payload,
-            },
-          },
-        },
-      },
-      eventTimestamp: new Date(),
+      steps: newSteps,
     };
   }
 
   if (chunk.type === 'workflow-step-suspended') {
-    const current = prev?.payload?.workflowState?.steps?.[chunk.payload.id] || {};
+    const suspendedStepIds = Object.entries(newSteps as Record<string, StepResult<any, any, any, any>>).flatMap(
+      ([stepId, stepResult]) => {
+        if (stepResult?.status === 'suspended') {
+          const nestedPath = stepResult?.suspendPayload?.__workflow_meta?.path;
+          return nestedPath ? [[stepId, ...nestedPath]] : [[stepId]];
+        }
 
+        return [];
+      },
+    );
     return {
       ...prev,
-      payload: {
-        ...prev?.payload,
-        currentStep: {
-          id: chunk.payload.id,
-          ...prev?.payload?.currentStep,
-          ...chunk.payload,
-        },
-        workflowState: {
-          ...prev?.payload?.workflowState,
-          status: 'suspended',
-          steps: {
-            ...prev?.payload?.workflowState?.steps,
-            [chunk.payload.id]: {
-              ...(current || {}),
-              ...chunk.payload,
-            },
-          },
-        },
-      },
-      eventTimestamp: new Date(),
+      status: 'suspended',
+      steps: newSteps,
+      suspendPayload: chunk.payload.suspendPayload,
+      suspended: suspendedStepIds as any,
     };
   }
 
   if (chunk.type === 'workflow-step-waiting') {
     return {
       ...prev,
-      payload: {
-        ...prev?.payload,
-        currentStep: {
-          ...prev?.payload?.currentStep,
-          ...chunk.payload,
-        },
-        workflowState: {
-          ...prev?.payload?.workflowState,
-          status: 'waiting',
-          steps: {
-            ...prev?.payload?.workflowState?.steps,
-            [chunk.payload.id]: {
-              ...prev?.payload?.workflowState?.steps?.[chunk.payload.id],
-              ...chunk.payload,
-            },
-          },
-        },
-      },
-      eventTimestamp: new Date(),
+      status: 'waiting',
+      steps: newSteps,
     };
   }
 
   if (chunk.type === 'workflow-step-result') {
-    const next = {
-      ...prev,
-      payload: {
-        ...(prev?.payload || {}),
-        currentStep: {
-          ...prev?.payload?.currentStep,
-          ...chunk.payload,
-        },
-        workflowState: {
-          ...prev?.payload?.workflowState,
-          steps: {
-            ...prev?.payload?.workflowState?.steps,
-            [chunk.payload.id]: {
-              ...prev?.payload?.workflowState?.steps?.[chunk.payload.id],
-              ...chunk.payload,
-            },
-          },
-        },
-      },
-      eventTimestamp: new Date(),
-    };
-
-    return next;
-  }
-
-  if (chunk.type === 'workflow-canceled') {
     return {
       ...prev,
-      payload: {
-        ...prev?.payload,
-        workflowState: {
-          ...prev?.payload?.workflowState,
-          status: 'canceled',
-        },
-      },
-      eventTimestamp: new Date(),
-    };
-  }
-
-  if (chunk.type === 'workflow-finish') {
-    return {
-      ...prev,
-      payload: {
-        ...prev?.payload,
-        currentStep: undefined,
-        workflowState: {
-          ...prev?.payload?.workflowState,
-          status: chunk.payload.workflowStatus,
-        },
-      },
-      eventTimestamp: new Date(),
+      steps: newSteps,
     };
   }
 
@@ -394,7 +328,8 @@ export const toUIMessage = ({
           // Handle workflow-related output chunks
           if (chunk.payload.output?.type?.startsWith('workflow-')) {
             // Get existing workflow state from the output field
-            const existingWorkflowState = (toolPart.output as WorkflowWatchResult) || ({} as WorkflowWatchResult);
+            const existingWorkflowState =
+              (toolPart.output as WorkflowStreamResult<any, any, any>) || ({} as WorkflowStreamResult<any, any, any>);
 
             // Use the mapWorkflowStreamChunkToWatchResult pattern for accumulation
             const updatedWorkflowState = mapWorkflowStreamChunkToWatchResult(

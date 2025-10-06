@@ -1,5 +1,5 @@
 import { BadgeMessage } from '@/components/assistant-ui/tools/badges/agent-badge';
-import { mapWorkflowStreamChunkToWatchResult } from '@/domains/workflows/utils';
+import { mapWorkflowStreamChunkToWatchResult } from '@mastra/react';
 import { StreamChunk } from '@/types';
 import { ThreadMessageLike } from '@assistant-ui/react';
 import { ChunkType } from '@mastra/core';
