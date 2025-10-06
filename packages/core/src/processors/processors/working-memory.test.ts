@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
-import { WorkingMemoryProcessor } from './working-memory';
 import { InMemoryStore } from '../../storage/mock';
+import { WorkingMemoryProcessor } from './working-memory';
 
 // Mock model
 const mockModel: MastraLanguageModel = {
