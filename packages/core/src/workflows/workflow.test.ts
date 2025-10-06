@@ -3090,6 +3090,7 @@ describe('Workflow', () => {
         }),
         stateSchema: z.object({
           value: z.string(),
+          otherValue: z.string(),
         }),
         steps: [step1],
       });
@@ -3097,7 +3098,10 @@ describe('Workflow', () => {
       workflow.then(step1).commit();
 
       const run = await workflow.createRunAsync();
-      const result = await run.start({ inputData: {}, initialState: { value: 'test-state' } });
+      const result = await run.start({
+        inputData: {},
+        initialState: { value: 'test-state', otherValue: 'test-other-state' },
+      });
 
       expect(calls).toBe(1);
       expect(result.steps['step1']).toEqual({
