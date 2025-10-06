@@ -4743,7 +4743,7 @@ describe('MastraInngestWorkflow', () => {
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
     });
 
-    it.todo('should handle basic suspend and resume flow with async await syntax with state', async ctx => {
+    it('should handle basic suspend and resume flow with async await syntax with state', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -4764,8 +4764,8 @@ describe('MastraInngestWorkflow', () => {
       });
       const improveResponseAction = vi
         .fn()
-        .mockImplementationOnce(async ({ suspend, state }) => {
-          state.value = 'test state';
+        .mockImplementationOnce(async ({ suspend, state, setState }) => {
+          setState({ ...state, value: 'test state' });
           await suspend();
           return undefined;
         })

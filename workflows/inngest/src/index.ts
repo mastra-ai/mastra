@@ -304,6 +304,7 @@ export class InngestRun<
       name: `workflow.${this.workflowId}`,
       data: {
         inputData: resumeDataToUse,
+        initialState: snapshot?.value ?? {},
         runId: this.runId,
         workflowId: this.workflowId,
         stepResults: snapshot?.context as any,
@@ -1149,6 +1150,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           runtimeContext,
           inputData: prevOutput,
           state: executionContext.state,
+          setState: (state: any) => {
+            executionContext.state = state;
+          },
           runCount: -1,
           tracingContext: {
             currentSpan: sleepSpan,
@@ -1256,6 +1260,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           runtimeContext,
           inputData: prevOutput,
           state: executionContext.state,
+          setState: (state: any) => {
+            executionContext.state = state;
+          },
           runCount: -1,
           tracingContext: {
             currentSpan: sleepUntilSpan,
@@ -1691,6 +1698,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             runtimeContext,
             writableStream,
             state: executionContext?.state ?? {},
+            setState: (state: any) => {
+              executionContext.state = state;
+            },
             inputData,
             resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
             tracingContext: {
@@ -1859,6 +1869,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     Object.assign(executionContext.suspendedPaths, stepRes.executionContext.suspendedPaths);
     // @ts-ignore
     Object.assign(stepResults, stepRes.stepResults);
+    executionContext.state = stepRes.executionContext.state;
 
     // @ts-ignore
     return stepRes.result;
@@ -1988,6 +1999,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 runCount: -1,
                 inputData: prevOutput,
                 state: executionContext.state,
+                setState: (state: any) => {
+                  executionContext.state = state;
+                },
                 tracingContext: {
                   currentSpan: evalSpan,
                 },
@@ -2086,7 +2100,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     if (hasFailed) {
       execResults = { status: 'failed', error: hasFailed.result.error };
     } else if (hasSuspended) {
-      execResults = { status: 'suspended', payload: hasSuspended.result.suspendPayload };
+      execResults = { status: 'suspended', suspendPayload: hasSuspended.result.suspendPayload };
     } else {
       execResults = {
         status: 'success',

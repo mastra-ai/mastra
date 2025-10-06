@@ -8323,8 +8323,8 @@ describe('Workflow', () => {
       });
       const improveResponseAction = vi
         .fn()
-        .mockImplementationOnce(async ({ suspend, state }) => {
-          state.value = 'test state';
+        .mockImplementationOnce(async ({ suspend, state, setState }) => {
+          setState({ ...state, value: 'test state' });
           await suspend();
           return undefined;
         })

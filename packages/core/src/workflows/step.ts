@@ -18,6 +18,7 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
   runtimeContext: RuntimeContext;
   inputData: TStepInput;
   state: TState;
+  setState(state: TState): void;
   resumeData?: TResumeSchema;
   runCount: number;
   tracingContext: TracingContext;

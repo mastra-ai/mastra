@@ -76,6 +76,10 @@ export class StepExecutor extends MastraBase {
         runtimeContext,
         inputData,
         state: params.state,
+        setState: (state: any) => {
+          // TODO
+          params.state = state;
+        },
         runCount,
         resumeData: params.resumeData,
         getInitData: () => stepResults?.input as any,
@@ -225,6 +229,9 @@ export class StepExecutor extends MastraBase {
       runtimeContext,
       inputData,
       state,
+      setState: (_state: any) => {
+        // TODO
+      },
       runCount,
       resumeData: resumeData,
       getInitData: () => stepResults?.input as any,
@@ -282,6 +289,9 @@ export class StepExecutor extends MastraBase {
         inputData: params.input,
         // TODO: implement state
         state: {},
+        setState: (_state: any) => {
+          // TODO
+        },
         runCount,
         resumeData: params.resumeData,
         getInitData: () => stepResults?.input as any,
@@ -343,6 +353,9 @@ export class StepExecutor extends MastraBase {
         inputData: params.input,
         // TODO: implement state
         state: {},
+        setState: (_state: any) => {
+          // TODO
+        },
         runCount,
         resumeData: params.resumeData,
         getInitData: () => stepResults?.input as any,

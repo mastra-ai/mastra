@@ -495,6 +495,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runtimeContext,
         inputData: prevOutput,
         state: executionContext.state,
+        setState: (state: any) => {
+          executionContext.state = state;
+        },
         runCount: -1,
         tracingContext: {
           currentSpan: sleepSpan,
@@ -598,6 +601,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runtimeContext,
         inputData: prevOutput,
         state: executionContext.state,
+        setState: (state: any) => {
+          executionContext.state = state;
+        },
         runCount: -1,
         tracingContext: {
           currentSpan: sleepUntilSpan,
@@ -858,6 +864,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           runtimeContext,
           inputData,
           state: executionContext.state,
+          setState: (state: any) => {
+            executionContext.state = state;
+          },
           runCount: this.getOrGenerateRunCount(step.id),
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           tracingContext: { currentSpan: stepAISpan },
@@ -1281,6 +1290,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               runtimeContext,
               inputData: prevOutput,
               state: executionContext.state,
+              setState: (state: any) => {
+                executionContext.state = state;
+              },
               runCount: -1,
               tracingContext: {
                 currentSpan: evalSpan,
@@ -1567,6 +1579,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runtimeContext,
         inputData: result.output,
         state: executionContext.state,
+        setState: (state: any) => {
+          executionContext.state = state;
+        },
         runCount: -1,
         tracingContext: {
           currentSpan: evalSpan,
