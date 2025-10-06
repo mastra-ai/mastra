@@ -6,7 +6,6 @@ const meta = {
   start: "mastra start",
   lint: "mastra lint",
   scorers: "mastra scorers",
-  "mcp-docs-server": "mcp-docs-server",
 };
 
 export default meta;
