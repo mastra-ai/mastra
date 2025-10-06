@@ -19,6 +19,8 @@ const MCPs = () => {
 
   const mcpServers = servers ?? [];
 
+  const isEmpty = !isLoading && mcpServers.length === 0;
+
   return (
     <MainContentLayout>
       <Header>
@@ -39,7 +41,7 @@ const MCPs = () => {
         </HeaderAction>
       </Header>
 
-      <MainContentContent>
+      <MainContentContent isCentered={isEmpty}>
         <MCPTable mcpServers={mcpServers} isLoading={isLoading} />
       </MainContentContent>
     </MainContentLayout>

@@ -66,3 +66,7 @@ export const Searchbar = ({ onSearch, label, placeholder }: SearchbarProps) => {
     </form>
   );
 };
+
+export const SearchbarWrapper = ({ children }: { children: React.ReactNode }) => {
+  return <div className="px-4 py-2 border-b-sm border-border1">{children}</div>;
+};

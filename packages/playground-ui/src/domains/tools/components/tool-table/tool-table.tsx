@@ -4,7 +4,7 @@ import { EmptyState } from '@/ds/components/EmptyState';
 import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 
 import { ScrollableContainer } from '@/components/scrollable-container';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -14,6 +14,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { ToolCoinIcon } from '@/ds/icons/ToolCoinIcon';
 import { ToolsIcon } from '@/ds/icons';
 import { prepareToolsTable, ToolWithAgents } from '@/domains/tools/utils/prepareToolsTable';
+import { Searchbar, SearchbarWrapper } from '@/components/ui/searchbar';
 
 export interface ToolTableProps {
   tools: Record<string, GetToolResponse>;
@@ -22,6 +23,7 @@ export interface ToolTableProps {
 }
 
 export function ToolTable({ tools, agents, isLoading }: ToolTableProps) {
+  const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
   const toolData = useMemo(() => prepareToolsTable(tools, agents), [tools, agents]);
 
@@ -40,38 +42,50 @@ export function ToolTable({ tools, agents, isLoading }: ToolTableProps) {
     return <EmptyToolsTable />;
   }
 
-  return (
-    <ScrollableContainer>
-      <TooltipProvider>
-        <Table>
-          <Thead className="sticky top-0">
-            {ths.headers.map(header => (
-              <Th key={header.id} style={{ width: header.column.getSize() ?? 'auto' }}>
-                {flexRender(header.column.columnDef.header, header.getContext())}
-              </Th>
-            ))}
-          </Thead>
-          <Tbody>
-            {rows.map(row => {
-              const firstAgent = row.original.agents[0];
-              const link = firstAgent
-                ? paths.agentToolLink(firstAgent.id, row.original.id)
-                : paths.toolLink(row.original.id);
+  const handleSearch = (search: string) => {
+    setSearch(search);
+  };
 
-              return (
-                <Row key={row.id} onClick={() => navigate(link)}>
-                  {row.getVisibleCells().map(cell => (
-                    <React.Fragment key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </React.Fragment>
-                  ))}
-                </Row>
-              );
-            })}
-          </Tbody>
-        </Table>
-      </TooltipProvider>
-    </ScrollableContainer>
+  const filteredRows = rows.filter(row => row.original.id.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div>
+      <SearchbarWrapper>
+        <Searchbar onSearch={handleSearch} label="Search tools" placeholder="Search tools" />
+      </SearchbarWrapper>
+
+      <ScrollableContainer>
+        <TooltipProvider>
+          <Table>
+            <Thead className="sticky top-0">
+              {ths.headers.map(header => (
+                <Th key={header.id} style={{ width: header.column.getSize() ?? 'auto' }}>
+                  {flexRender(header.column.columnDef.header, header.getContext())}
+                </Th>
+              ))}
+            </Thead>
+            <Tbody>
+              {filteredRows.map(row => {
+                const firstAgent = row.original.agents[0];
+                const link = firstAgent
+                  ? paths.agentToolLink(firstAgent.id, row.original.id)
+                  : paths.toolLink(row.original.id);
+
+                return (
+                  <Row key={row.id} onClick={() => navigate(link)}>
+                    {row.getVisibleCells().map(cell => (
+                      <React.Fragment key={cell.id}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </React.Fragment>
+                    ))}
+                  </Row>
+                );
+              })}
+            </Tbody>
+          </Table>
+        </TooltipProvider>
+      </ScrollableContainer>
+    </div>
   );
 }
 
