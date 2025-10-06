@@ -43,7 +43,7 @@ export abstract class ExecutionEngine extends MastraBase {
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  abstract execute<TInput, TOutput>(params: {
+  abstract execute<TState, TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
     resourceId?: string;
@@ -51,6 +51,7 @@ export abstract class ExecutionEngine extends MastraBase {
     graph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
+    initialState?: TState;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -67,5 +68,8 @@ export abstract class ExecutionEngine extends MastraBase {
     abortController: AbortController;
     writableStream?: WritableStream<ChunkType>;
     format?: 'aisdk' | 'mastra' | undefined;
+    outputOptions?: {
+      includeState?: boolean;
+    };
   }): Promise<TOutput>;
 }

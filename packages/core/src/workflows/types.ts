@@ -79,7 +79,7 @@ export type StepsRecord<T extends readonly Step<any, any, any>[]> = {
 };
 
 export type DynamicMapping<TPrevSchema extends z.ZodTypeAny, TSchemaOut extends z.ZodTypeAny> = {
-  fn: ExecuteFunction<z.infer<TPrevSchema>, z.infer<TSchemaOut>, any, any, any>;
+  fn: ExecuteFunction<any, z.infer<TPrevSchema>, z.infer<TSchemaOut>, any, any, any>;
   schema: TSchemaOut;
 };
 
@@ -304,8 +304,8 @@ export type DefaultEngineType = {};
 
 export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | { type: 'step'; step: Step }
-  | { type: 'sleep'; id: string; duration?: number; fn?: ExecuteFunction<any, any, any, any, TEngineType> }
-  | { type: 'sleepUntil'; id: string; date?: Date; fn?: ExecuteFunction<any, any, any, any, TEngineType> }
+  | { type: 'sleep'; id: string; duration?: number; fn?: ExecuteFunction<any, any, any, any, any, TEngineType> }
+  | { type: 'sleepUntil'; id: string; date?: Date; fn?: ExecuteFunction<any, any, any, any, any, TEngineType> }
   | { type: 'waitForEvent'; event: string; step: Step; timeout?: number }
   | {
       type: 'parallel';
@@ -314,13 +314,13 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | {
       type: 'conditional';
       steps: StepFlowEntry[];
-      conditions: ExecuteFunction<any, any, any, any, TEngineType>[];
+      conditions: ExecuteFunction<any, any, any, any, any, TEngineType>[];
       serializedConditions: { id: string; fn: string }[];
     }
   | {
       type: 'loop';
       step: Step;
-      condition: ExecuteFunction<any, any, any, any, TEngineType>;
+      condition: ExecuteFunction<any, any, any, any, any, TEngineType>;
       serializedCondition: { id: string; fn: string };
       loopType: 'dowhile' | 'dountil';
     }
@@ -333,7 +333,7 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
     };
 
 export type SerializedStep<TEngineType = DefaultEngineType> = Pick<
-  Step<any, any, any, any, any, TEngineType>,
+  Step<any, any, any, any, any, any, TEngineType>,
   'id' | 'description'
 > & {
   component?: string;
@@ -393,12 +393,14 @@ export type StepWithComponent = Step<string, any, any, any, any, any> & {
 };
 
 export type WorkflowResult<
+  TState extends z.ZodObject<any>,
   TInput extends z.ZodType<any>,
   TOutput extends z.ZodType<any>,
   TSteps extends Step<string, any, any>[],
 > =
   | ({
       status: 'success';
+      state?: z.infer<TState>;
       result: z.infer<TOutput>;
       input: z.infer<TInput>;
       steps: {
@@ -415,6 +417,7 @@ export type WorkflowResult<
   | ({
       status: 'failed';
       input: z.infer<TInput>;
+      state?: z.infer<TState>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
@@ -430,6 +433,7 @@ export type WorkflowResult<
   | ({
       status: 'suspended';
       input: z.infer<TInput>;
+      state?: z.infer<TState>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
@@ -467,6 +471,7 @@ export type WorkflowStreamResult<
 
 export type WorkflowConfig<
   TWorkflowId extends string = string,
+  TState extends z.ZodObject<any> = z.ZodObject<any>,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
   TSteps extends Step<string, any, any, any, any, any>[] = Step<string, any, any, any, any, any>[],
@@ -476,6 +481,7 @@ export type WorkflowConfig<
   description?: string | undefined;
   inputSchema: TInput;
   outputSchema: TOutput;
+  stateSchema?: TState;
   executionEngine?: ExecutionEngine;
   steps?: TSteps;
   retryConfig?: {
@@ -484,3 +490,20 @@ export type WorkflowConfig<
   };
   options?: WorkflowOptions;
 };
+
+/**
+ * Utility type to ensure that TStepState is a subset of TState.
+ * This means that all properties in TStepState must exist in TState with compatible types.
+ */
+export type SubsetOf<TStepState extends z.ZodObject<any>, TState extends z.ZodObject<any>> =
+  TStepState extends z.ZodObject<infer TStepShape>
+    ? TState extends z.ZodObject<infer TStateShape>
+      ? keyof TStepShape extends keyof TStateShape
+        ? {
+            [K in keyof TStepShape]: TStepShape[K] extends TStateShape[K] ? TStepShape[K] : never;
+          } extends TStepShape
+          ? TStepState
+          : never
+        : never
+      : never
+    : never;
