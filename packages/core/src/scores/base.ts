@@ -538,7 +538,10 @@ class MastraScorer<
       let result;
       if (model.specificationVersion === 'v2') {
         result = await judge.generate(prompt, {
-          output: z.object({ score: z.number() }),
+          structuredOutput: {
+            schema: z.object({ score: z.number() }),
+            useJsonSchemaPromptInjection: true,
+          },
           tracingContext,
         });
       } else {
@@ -563,7 +566,10 @@ class MastraScorer<
       let result;
       if (model.specificationVersion === 'v2') {
         result = await judge.generate(prompt, {
-          output: promptStep.outputSchema,
+          structuredOutput: {
+            schema: promptStep.outputSchema,
+            useJsonSchemaPromptInjection: true,
+          },
           tracingContext,
         });
       } else {
