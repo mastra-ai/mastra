@@ -85,6 +85,7 @@ describe('WorkingMemoryProcessor', () => {
           content: {
             content: 'What do I like?',
             parts: [{ type: 'text', text: 'What do I like?' }],
+            format: 2,
           },
         },
       ];
@@ -129,6 +130,7 @@ describe('WorkingMemoryProcessor', () => {
           content: {
             content: 'My name is Daniel',
             parts: [{ type: 'text', text: 'My name is Daniel' }],
+            format: 2,
           },
         },
       ];
@@ -169,6 +171,7 @@ describe('WorkingMemoryProcessor', () => {
           content: {
             content: 'Tell me more',
             parts: [{ type: 'text', text: 'Tell me more' }],
+            format: 2,
           },
         },
       ];
@@ -205,6 +208,7 @@ describe('WorkingMemoryProcessor', () => {
           content: {
             content: 'Hello',
             parts: [{ type: 'text', text: 'Hello' }],
+            format: 2,
           },
         },
       ];
@@ -245,6 +249,7 @@ describe('WorkingMemoryProcessor', () => {
           content: {
             content: 'What is 2+2?',
             parts: [{ type: 'text', text: 'What is 2+2?' }],
+            format: 2,
           },
         },
       ];
@@ -283,6 +288,7 @@ describe('WorkingMemoryProcessor', () => {
           content: {
             content: 'What type is this resource?',
             parts: [{ type: 'text', text: 'What type is this resource?' }],
+            format: 2,
           },
         },
       ];
@@ -324,6 +330,7 @@ describe('WorkingMemoryProcessor', () => {
           content: {
             content: 'My name is Bob and I prefer dark mode',
             parts: [{ type: 'text', text: 'My name is Bob and I prefer dark mode' }],
+            format: 2,
           },
         },
         {
@@ -331,6 +338,7 @@ describe('WorkingMemoryProcessor', () => {
           content: {
             content: 'Nice to meet you Bob! I will remember that you prefer dark mode.',
             parts: [{ type: 'text', text: 'Nice to meet you Bob! I will remember that you prefer dark mode.' }],
+            format: 2,
           },
         },
       ];
@@ -374,6 +382,7 @@ describe('WorkingMemoryProcessor', () => {
           content: {
             content: 'I really like TypeScript',
             parts: [{ type: 'text', text: 'I really like TypeScript' }],
+            format: 2,
           },
         },
         {
@@ -381,6 +390,7 @@ describe('WorkingMemoryProcessor', () => {
           content: {
             content: "That's great! TypeScript is a powerful language.",
             parts: [{ type: 'text', text: "That's great! TypeScript is a powerful language." }],
+            format: 2,
           },
         },
       ];
@@ -420,6 +430,7 @@ describe('WorkingMemoryProcessor', () => {
           content: {
             content: 'What is the weather?',
             parts: [{ type: 'text', text: 'What is the weather?' }],
+            format: 2,
           },
         },
         {
@@ -427,6 +438,7 @@ describe('WorkingMemoryProcessor', () => {
           content: {
             content: "I don't have access to weather data.",
             parts: [{ type: 'text', text: "I don't have access to weather data." }],
+            format: 2,
           },
         },
       ];
@@ -460,6 +472,7 @@ describe('WorkingMemoryProcessor', () => {
           content: {
             content: 'Hello',
             parts: [{ type: 'text', text: 'Hello' }],
+            format: 2,
           },
         },
       ];
@@ -496,6 +509,7 @@ describe('WorkingMemoryProcessor', () => {
           content: {
             content: 'This document contains TypeScript code',
             parts: [{ type: 'text', text: 'This document contains TypeScript code' }],
+            format: 2,
           },
         },
         {
@@ -503,6 +517,7 @@ describe('WorkingMemoryProcessor', () => {
           content: {
             content: 'I see, this is a TypeScript document.',
             parts: [{ type: 'text', text: 'I see, this is a TypeScript document.' }],
+            format: 2,
           },
         },
       ];
@@ -584,6 +599,7 @@ describe('WorkingMemoryProcessor', () => {
           content: {
             content: 'Hello',
             parts: [{ type: 'text', text: 'Hello' }],
+            format: 2,
           },
         },
       ];
@@ -617,6 +633,7 @@ describe('WorkingMemoryProcessor', () => {
           content: {
             content: 'Hello',
             parts: [{ type: 'text', text: 'Hello' }],
+            format: 2,
           },
         },
       ];
@@ -643,6 +660,7 @@ describe('WorkingMemoryProcessor', () => {
 
       // Mock extraction for first message
       const extractSpy = vi.spyOn(processor as any, 'extractInformation');
+      const selectContextSpy = vi.spyOn(processor as any, 'selectRelevantContext');
       extractSpy.mockResolvedValueOnce({
         has_memorable_info: true,
         confidence: 0.9,
@@ -656,6 +674,7 @@ describe('WorkingMemoryProcessor', () => {
           content: {
             content: 'Hi, my name is Tyler',
             parts: [{ type: 'text', text: 'Hi, my name is Tyler' }],
+            format: 2,
             format: 2,
           },
           id: 'msg-1',
@@ -676,7 +695,6 @@ describe('WorkingMemoryProcessor', () => {
       expect(thread1?.metadata?.workingMemory).toContain('Tyler');
 
       // Second turn: ask something that needs context
-      const selectContextSpy = vi.spyOn(processor as any, 'selectRelevantContext');
       selectContextSpy.mockResolvedValue({ relevance_score: 0.9 });
 
       // Don't extract from this message
@@ -688,6 +706,7 @@ describe('WorkingMemoryProcessor', () => {
           content: {
             content: 'What is my name?',
             parts: [{ type: 'text', text: 'What is my name?' }],
+            format: 2,
             format: 2,
           },
           id: 'msg-2',
@@ -740,6 +759,7 @@ describe('WorkingMemoryProcessor', () => {
               content: 'My name is Tyler',
               parts: [{ type: 'text', text: 'My name is Tyler' }],
               format: 2,
+              format: 2,
             },
             id: 'msg-1',
             createdAt: new Date(),
@@ -766,6 +786,7 @@ describe('WorkingMemoryProcessor', () => {
               content: 'I live in San Francisco',
               parts: [{ type: 'text', text: 'I live in San Francisco' }],
               format: 2,
+              format: 2,
             },
             id: 'msg-2',
             createdAt: new Date(),
@@ -791,6 +812,7 @@ describe('WorkingMemoryProcessor', () => {
             content: {
               content: 'I love TypeScript and prefer dark mode',
               parts: [{ type: 'text', text: 'I love TypeScript and prefer dark mode' }],
+              format: 2,
               format: 2,
             },
             id: 'msg-3',
@@ -840,6 +862,7 @@ describe('WorkingMemoryProcessor', () => {
               content: 'Actually, I changed my name to Jim',
               parts: [{ type: 'text', text: 'Actually, I changed my name to Jim' }],
               format: 2,
+              format: 2,
             },
             id: 'msg-1',
             createdAt: new Date(),
@@ -885,6 +908,7 @@ describe('WorkingMemoryProcessor', () => {
             content: {
               content: 'My name is Tyler',
               parts: [{ type: 'text', text: 'My name is Tyler' }],
+              format: 2,
               format: 2,
             },
             id: 'msg-1',
@@ -934,6 +958,7 @@ describe('WorkingMemoryProcessor', () => {
               content: 'Setting up template',
               parts: [{ type: 'text', text: 'Setting up template' }],
               format: 2,
+              format: 2,
             },
             id: 'msg-1',
             createdAt: new Date(),
@@ -976,6 +1001,7 @@ describe('WorkingMemoryProcessor', () => {
               content: 'This is a technical specification',
               parts: [{ type: 'text', text: 'This is a technical specification' }],
               format: 2,
+              format: 2,
             },
             id: 'msg-1',
             createdAt: new Date(),
@@ -1001,6 +1027,7 @@ describe('WorkingMemoryProcessor', () => {
             content: {
               content: 'This is a user manual',
               parts: [{ type: 'text', text: 'This is a user manual' }],
+              format: 2,
               format: 2,
             },
             id: 'msg-2',
@@ -1048,6 +1075,7 @@ describe('WorkingMemoryProcessor', () => {
               content: 'My name is Alice',
               parts: [{ type: 'text', text: 'My name is Alice' }],
               format: 2,
+              format: 2,
             },
             id: 'msg-1',
             createdAt: new Date(),
@@ -1073,6 +1101,7 @@ describe('WorkingMemoryProcessor', () => {
             content: {
               content: 'My name is Bob',
               parts: [{ type: 'text', text: 'My name is Bob' }],
+              format: 2,
               format: 2,
             },
             id: 'msg-2',
@@ -1145,6 +1174,7 @@ describe('WorkingMemoryProcessor', () => {
             content: {
               content: 'I am Tyler from San Francisco, I like TypeScript and dark mode',
               parts: [{ type: 'text', text: 'I am Tyler from San Francisco, I like TypeScript and dark mode' }],
+              format: 2,
               format: 2,
             },
             id: 'msg-1',
@@ -1246,6 +1276,7 @@ describe('WorkingMemoryProcessor', () => {
               content: 'Coffee sounds good',
               parts: [{ type: 'text', text: 'Coffee sounds good' }],
               format: 2,
+              format: 2,
             },
             id: 'msg-1',
             createdAt: new Date(),
@@ -1287,6 +1318,7 @@ describe('WorkingMemoryProcessor', () => {
               content: 'Coffee sounds good',
               parts: [{ type: 'text', text: 'Coffee sounds good' }],
               format: 2,
+              format: 2,
             },
             id: 'msg-1',
             createdAt: new Date(),
@@ -1320,6 +1352,7 @@ describe('WorkingMemoryProcessor', () => {
           content: {
             content: 'Some text with [WORKING_MEMORY_INJECTED] marker',
             parts: [{ type: 'text', text: 'Some text with [WORKING_MEMORY_INJECTED] marker' }],
+            format: 2,
             format: 2,
           },
           id: 'msg-1',

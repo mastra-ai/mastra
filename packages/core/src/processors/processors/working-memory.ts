@@ -1,13 +1,12 @@
-import { z, ZodObject } from 'zod';
 import type { JSONSchema7 } from 'json-schema';
-import { zodToJsonSchema } from '../../zod-to-json';
+import { z, ZodObject } from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
-import { TripWire } from '../../agent/trip-wire';
 import { InternalSpans } from '../../ai-tracing';
 import type { TracingContext } from '../../ai-tracing';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { MastraStorage } from '../../storage/base';
+import { zodToJsonSchema } from '../../zod-to-json';
 import type { Processor } from '../index';
 
 /**
@@ -235,14 +234,13 @@ export class WorkingMemoryProcessor implements Processor {
       }
     }
 
-    // CONTEXT SELECTION OPTIMIZATION - Commented out for now
     // Create context selection agent for input processing
-    // this.contextSelectionAgent = new Agent({
-    //   name: 'working-memory-context-selector',
-    //   instructions: options.contextSelectionInstructions || this.createContextSelectionInstructions(),
-    //   model: options.model,
-    //   options: { tracingPolicy: { internal: InternalSpans.ALL } },
-    // });
+    this.contextSelectionAgent = new Agent({
+      name: 'working-memory-context-selector',
+      instructions: options.contextSelectionInstructions || this.createContextSelectionInstructions(),
+      model: options.model,
+      options: { tracingPolicy: { internal: InternalSpans.ALL } },
+    });
 
     // Create extraction agent for output processing
     this.extractionAgent = new Agent({
@@ -260,7 +258,7 @@ export class WorkingMemoryProcessor implements Processor {
    */
   async processInput({
     messages,
-    abort,
+    abort: _abort,
     tracingContext,
     threadId,
     resourceId,
@@ -340,33 +338,30 @@ export class WorkingMemoryProcessor implements Processor {
           ? workingMemory.substring(0, this.maxInjectionSize) + '\n...(truncated)'
           : workingMemory;
 
-      // CONTEXT SELECTION OPTIMIZATION - Commented out for now
-      // Always inject context for now, can re-enable optimization later
-      //
-      // // Get the user's query from the last user message for relevance check
-      // const lastUserMessage = [...messages].reverse().find(msg => msg.role === 'user');
+      // Get the user's query from the last user message for relevance check
+      const lastUserMessage = [...messages].reverse().find(msg => msg.role === 'user');
 
-      // if (lastUserMessage) {
-      //   const userQuery = this.extractTextContent(lastUserMessage);
+      if (lastUserMessage) {
+        const userQuery = this.extractTextContent(lastUserMessage);
 
-      //   // Use context selection agent to determine relevance
-      //   let relevanceResult;
-      //   try {
-      //     relevanceResult = await this.selectRelevantContext({
-      //       workingMemory: truncatedMemory,
-      //       userQuery,
-      //       tracingContext,
-      //     });
-      //   } catch (contextError) {
-      //     console.warn('[WorkingMemoryProcessor] Context selection failed, defaulting to inject:', contextError);
-      //     relevanceResult = { relevance_score: 1.0 };
-      //   }
+        // Use context selection agent to determine relevance
+        let relevanceResult;
+        try {
+          relevanceResult = await this.selectRelevantContext({
+            workingMemory: truncatedMemory,
+            userQuery,
+            tracingContext,
+          });
+        } catch (contextError) {
+          console.warn('[WorkingMemoryProcessor] Context selection failed, defaulting to inject:', contextError);
+          relevanceResult = { relevance_score: 1.0 };
+        }
 
-      //   // Check if context is relevant enough to inject
-      //   if ((relevanceResult.relevance_score ?? 0) < this.injectionThreshold) {
-      //     return messages;
-      //   }
-      // }
+        // Check if context is relevant enough to inject
+        if ((relevanceResult.relevance_score ?? 0) < this.injectionThreshold) {
+          return messages;
+        }
+      }
 
       // Inject context according to strategy
       const injectedMessages = this.injectContext(messages, truncatedMemory);
@@ -400,7 +395,7 @@ export class WorkingMemoryProcessor implements Processor {
    */
   async processOutputResult({
     messages,
-    abort,
+    abort: _abort,
     tracingContext,
     threadId,
     resourceId,
@@ -595,63 +590,61 @@ export class WorkingMemoryProcessor implements Processor {
 
   // ============= Agent Helper Methods =============
 
-  // CONTEXT SELECTION OPTIMIZATION - Commented out for now
-  // /**
-  //  * Use context selection agent to determine if working memory is relevant
-  //  */
-  // private async selectRelevantContext({
-  //   workingMemory,
-  //   userQuery,
-  //   tracingContext,
-  // }: {
-  //   workingMemory: string;
-  //   userQuery: string;
-  //   tracingContext?: TracingContext;
-  // }): Promise<ContextRelevanceResult> {
-  //   const prompt = `
-  // Analyze if the working memory is relevant to the user's query.
+  /**
+   * Use context selection agent to determine if working memory is relevant
+   */
+  private async selectRelevantContext({
+    workingMemory,
+    userQuery,
+    tracingContext,
+  }: {
+    workingMemory: string;
+    userQuery: string;
+    tracingContext?: TracingContext;
+  }): Promise<ContextRelevanceResult> {
+    const prompt = `
+Analyze if the working memory is relevant to the user's query.
 
-  // Working Memory:
-  // ${workingMemory}
+Working Memory:
+${workingMemory}
 
-  // User Query:
-  // ${userQuery}
-  // `;
+User Query:
+${userQuery}
+`;
 
-  //   const schema = z.object({
-  //     relevant_sections: z.array(z.string()).optional(),
-  //     relevance_score: z.number().min(0).max(1).optional(),
-  //     reason: z.string().optional(),
-  //   });
+    const schema = z.object({
+      relevant_sections: z.array(z.string()).optional(),
+      relevance_score: z.number().min(0).max(1).optional(),
+      reason: z.string().optional(),
+    });
 
-  //   try {
-  //     const model = await this.contextSelectionAgent!.getModel();
-  //     let response;
+    try {
+      const model = await this.contextSelectionAgent!.getModel();
+      let response;
 
-  //     if (model.specificationVersion === 'v2') {
-  //       response = await this.contextSelectionAgent!.generate(prompt, {
-  //         output: schema,
-  //         modelSettings: {
-  //           temperature: 0,
-  //         },
-  //         maxSteps: 1,
-  //         tracingContext,
-  //       });
-  //       // With output option in v5, the result is in the object property
-  //       return (response as any).object as ContextRelevanceResult;
-  //     } else {
-  //       response = await this.contextSelectionAgent!.generateLegacy(prompt, {
-  //         output: schema,
-  //         temperature: 0,
-  //         tracingContext,
-  //       });
-  //       return response.object as ContextRelevanceResult;
-  //     }
-  //   } catch (error) {
-  //     console.warn('[WorkingMemoryProcessor] Context selection failed, defaulting to relevant:', error);
-  //     return { relevance_score: 1.0 };
-  //   }
-  // }
+      if (model.specificationVersion === 'v2') {
+        response = await this.contextSelectionAgent!.generate(prompt, {
+          output: schema,
+          modelSettings: {
+            temperature: 0,
+          },
+          maxSteps: 1,
+          tracingContext,
+        });
+        return (response as any).object as ContextRelevanceResult;
+      } else {
+        response = await this.contextSelectionAgent!.generateLegacy(prompt, {
+          output: schema,
+          temperature: 0,
+          tracingContext,
+        });
+        return response.object as ContextRelevanceResult;
+      }
+    } catch (error) {
+      console.warn('[WorkingMemoryProcessor] Context selection failed, defaulting to relevant:', error);
+      return { relevance_score: 1.0 };
+    }
+  }
 
   /**
    * Use extraction agent to analyze conversation and extract information
