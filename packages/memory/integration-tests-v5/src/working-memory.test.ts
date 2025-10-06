@@ -1204,6 +1204,44 @@ describe('Working Memory Tests', () => {
         expect(wm1).toBe(wm2);
         expect(wm1).toBe(workingMemoryData);
       });
+
+      it('should update working memory at resource level when updating thread metadata', async () => {
+        const initialWM = `# User Data
+- Name: Charlie`;
+
+        const thread = await memory.createThread({
+          resourceId,
+          metadata: { workingMemory: initialWM },
+        });
+
+        // Verify initial working memory is set
+        const retrievedInitial = await memory.getWorkingMemory({
+          threadId: thread.id,
+          resourceId,
+        });
+        expect(retrievedInitial).toBe(initialWM);
+
+        // Update thread metadata with new working memory
+        const updatedWM = `# User Data
+- Name: Charlie
+- Email: charlie@example.com`;
+
+        await memory.updateThread({
+          id: thread.id,
+          title: thread.title || 'Test Thread',
+          metadata: {
+            ...thread.metadata,
+            workingMemory: updatedWM,
+          },
+        });
+
+        // Verify working memory was updated in resource table
+        const retrievedUpdated = await memory.getWorkingMemory({
+          threadId: thread.id,
+          resourceId,
+        });
+        expect(retrievedUpdated).toBe(updatedWM);
+      });
     });
   });
 
@@ -1211,7 +1249,6 @@ describe('Working Memory Tests', () => {
     let memory: Memory;
     let storage: LibSQLStore;
     let vector: LibSQLVector;
-    let thread: any;
 
     beforeEach(async () => {
       const dbPath = join(await mkdtemp(join(tmpdir(), `memory-thread-working-test-`)), 'test.db');
