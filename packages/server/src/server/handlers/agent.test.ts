@@ -4,6 +4,7 @@ import type { AgentConfig } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
+import { UnicodeNormalizer, TokenLimiterProcessor } from '@mastra/core/processors';
 import type { EvalRow, MastraStorage } from '@mastra/core/storage';
 import type { AISDKV5OutputStream } from '@mastra/core/stream';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
@@ -119,6 +120,8 @@ describe('Agent Handlers', () => {
           tools: {},
           agents: {},
           workflows: {},
+          inputProcessors: [],
+          outputProcessors: [],
           provider: 'openai.chat',
           modelId: 'gpt-4o',
           modelVersion: 'v1',
@@ -132,6 +135,8 @@ describe('Agent Handlers', () => {
           tools: {},
           agents: {},
           workflows: {},
+          inputProcessors: [],
+          outputProcessors: [],
           provider: 'openai.responses',
           modelId: 'gpt-4o-mini',
           modelVersion: 'v2',
@@ -158,6 +163,39 @@ describe('Agent Handlers', () => {
             },
           ],
         },
+      });
+    });
+
+    it('should return agents with serialized processors', async () => {
+      const unicodeNormalizer = new UnicodeNormalizer();
+      const tokenLimiter = new TokenLimiterProcessor({ limit: 1000 });
+
+      const agentWithCoreProcessors = makeMockAgent({
+        name: 'agent-with-core-processors',
+        inputProcessors: [unicodeNormalizer],
+        outputProcessors: [tokenLimiter],
+      });
+
+      const mastraWithCoreProcessors = makeMastraMock({
+        agents: {
+          'agent-with-core-processors': agentWithCoreProcessors,
+        },
+      });
+
+      const result = await getAgentsHandler({ mastra: mastraWithCoreProcessors, runtimeContext });
+
+      expect(result['agent-with-core-processors']).toMatchObject({
+        name: 'agent-with-core-processors',
+        inputProcessors: [
+          {
+            name: 'unicode-normalizer',
+          },
+        ],
+        outputProcessors: [
+          {
+            name: 'token-limiter',
+          },
+        ],
       });
     });
   });
@@ -216,6 +254,8 @@ describe('Agent Handlers', () => {
             },
           },
         },
+        inputProcessors: [],
+        outputProcessors: [],
         provider: 'openai.chat',
         modelId: 'gpt-4o',
         modelVersion: 'v1',

@@ -361,6 +361,26 @@ export class Agent<
     return this.#outputProcessors;
   }
 
+  private async getResolvedInputProcessors(runtimeContext?: RuntimeContext): Promise<InputProcessor[]> {
+    if (!this.#inputProcessors) {
+      return [];
+    }
+
+    if (typeof this.#inputProcessors === 'function') {
+      return await this.#inputProcessors({ runtimeContext: runtimeContext || new RuntimeContext() });
+    }
+
+    return this.#inputProcessors;
+  }
+
+  public async getInputProcessors(runtimeContext?: RuntimeContext): Promise<InputProcessor[]> {
+    return this.getResolvedInputProcessors(runtimeContext);
+  }
+
+  public async getOutputProcessors(runtimeContext?: RuntimeContext): Promise<OutputProcessor[]> {
+    return this.getResolvedOutputProcessors(runtimeContext);
+  }
+
   public hasOwnMemory(): boolean {
     return Boolean(this.#memory);
   }

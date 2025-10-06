@@ -1,5 +1,6 @@
 import type { Agent } from '@mastra/core/agent';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
+import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
@@ -24,29 +25,47 @@ type GetHITLBody<
   T extends keyof Agent & { [K in keyof Agent]: Agent[K] extends (...args: any) => any ? K : never }[keyof Agent],
 > = Parameters<Agent[T]>[0];
 
-export async function getSerializedAgentTools(tools: Record<string, any>) {
-  return Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
-    const _tool = tool as any;
+export interface SerializedProcessor {
+  name: string;
+}
+
+export interface SerializedTool {
+  id: string;
+  description?: string;
+  inputSchema?: string;
+  outputSchema?: string;
+  [key: string]: unknown;
+}
+
+export async function getSerializedAgentTools(tools: Record<string, unknown>): Promise<Record<string, SerializedTool>> {
+  return Object.entries(tools || {}).reduce<Record<string, SerializedTool>>((acc, [key, tool]) => {
+    const _tool = tool as {
+      id?: string;
+      description?: string;
+      inputSchema?: { jsonSchema?: unknown } | unknown;
+      outputSchema?: { jsonSchema?: unknown } | unknown;
+      [key: string]: unknown;
+    };
 
     const toolId = _tool.id ?? `tool-${key}`;
 
-    let inputSchemaForReturn = undefined;
+    let inputSchemaForReturn: string | undefined = undefined;
 
     if (_tool.inputSchema) {
-      if (_tool.inputSchema?.jsonSchema) {
+      if (_tool.inputSchema && typeof _tool.inputSchema === 'object' && 'jsonSchema' in _tool.inputSchema) {
         inputSchemaForReturn = stringify(_tool.inputSchema.jsonSchema);
-      } else {
-        inputSchemaForReturn = stringify(zodToJsonSchema(_tool.inputSchema));
+      } else if (_tool.inputSchema) {
+        inputSchemaForReturn = stringify(zodToJsonSchema(_tool.inputSchema as Parameters<typeof zodToJsonSchema>[0]));
       }
     }
 
-    let outputSchemaForReturn = undefined;
+    let outputSchemaForReturn: string | undefined = undefined;
 
     if (_tool.outputSchema) {
-      if (_tool.outputSchema?.jsonSchema) {
+      if (_tool.outputSchema && typeof _tool.outputSchema === 'object' && 'jsonSchema' in _tool.outputSchema) {
         outputSchemaForReturn = stringify(_tool.outputSchema.jsonSchema);
-      } else {
-        outputSchemaForReturn = stringify(zodToJsonSchema(_tool.outputSchema));
+      } else if (_tool.outputSchema) {
+        outputSchemaForReturn = stringify(zodToJsonSchema(_tool.outputSchema as Parameters<typeof zodToJsonSchema>[0]));
       }
     }
 
@@ -60,23 +79,41 @@ export async function getSerializedAgentTools(tools: Record<string, any>) {
   }, {});
 }
 
+export function getSerializedProcessors(processors: (InputProcessor | OutputProcessor)[]): SerializedProcessor[] {
+  return processors.map(processor => {
+    // Processors are class instances or objects with a name property
+    // Use the name property if available, otherwise fall back to constructor name
+    return {
+      name: processor.name || processor.constructor.name,
+    };
+  });
+}
+
+interface SerializedAgentDefinition {
+  id: string;
+  name: string;
+}
+
 async function getSerializedAgentDefinition({
   agent,
   runtimeContext,
 }: {
   agent: Agent;
   runtimeContext: RuntimeContext;
-}) {
-  let serializedAgentAgents = {};
+}): Promise<Record<string, SerializedAgentDefinition>> {
+  let serializedAgentAgents: Record<string, SerializedAgentDefinition> = {};
 
   if ('listAgents' in agent) {
     const agents = await agent.listAgents({ runtimeContext });
-    serializedAgentAgents = Object.entries(agents || {}).reduce<any>((acc, [key, agent]) => {
-      return {
-        ...acc,
-        [key]: { id: agent.id, name: agent.name },
-      };
-    }, {});
+    serializedAgentAgents = Object.entries(agents || {}).reduce<Record<string, SerializedAgentDefinition>>(
+      (acc, [key, agent]) => {
+        return {
+          ...acc,
+          [key]: { id: agent.id, name: agent.name },
+        };
+      },
+      {},
+    );
   }
   return serializedAgentAgents;
 }
@@ -99,17 +136,22 @@ async function formatAgentList({
   const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext });
   const serializedAgentTools = await getSerializedAgentTools(tools);
 
-  let serializedAgentWorkflows = {};
+  let serializedAgentWorkflows: Record<
+    string,
+    { name: string; steps?: Record<string, { id: string; description?: string }> }
+  > = {};
 
   if ('getWorkflows' in agent) {
     const logger = mastra.getLogger();
     try {
       const workflows = await agent.getWorkflows({ runtimeContext });
-      serializedAgentWorkflows = Object.entries(workflows || {}).reduce<any>((acc, [key, workflow]) => {
+      serializedAgentWorkflows = Object.entries(workflows || {}).reduce<
+        Record<string, { name: string; steps?: Record<string, { id: string; description?: string }> }>
+      >((acc, [key, workflow]) => {
         return {
           ...acc,
           [key]: {
-            name: workflow.name,
+            name: workflow.name || 'Unnamed workflow',
           },
         };
       }, {});
@@ -119,6 +161,12 @@ async function formatAgentList({
   }
 
   const serializedAgentAgents = await getSerializedAgentDefinition({ agent, runtimeContext });
+
+  // Get and serialize processors
+  const inputProcessors = await agent.getInputProcessors(runtimeContext);
+  const outputProcessors = await agent.getOutputProcessors(runtimeContext);
+  const serializedInputProcessors = getSerializedProcessors(inputProcessors);
+  const serializedOutputProcessors = getSerializedProcessors(outputProcessors);
 
   const model = llm?.getModel();
   const models = await agent.getModelList(runtimeContext);
@@ -138,11 +186,13 @@ async function formatAgentList({
     agents: serializedAgentAgents,
     tools: serializedAgentTools,
     workflows: serializedAgentWorkflows,
+    inputProcessors: serializedInputProcessors,
+    outputProcessors: serializedOutputProcessors,
     provider: llm?.getProvider(),
     modelId: llm?.getModelId(),
     modelVersion: model?.specificationVersion,
-    defaultGenerateOptions: defaultGenerateOptions as any,
-    defaultStreamOptions: defaultStreamOptions as any,
+    defaultGenerateOptions,
+    defaultStreamOptions,
     modelList,
   };
 }
@@ -186,27 +236,35 @@ async function formatAgent({
 
   const serializedAgentTools = await getSerializedAgentTools(tools);
 
-  let serializedAgentWorkflows = {};
+  let serializedAgentWorkflows: Record<
+    string,
+    { name: string; steps: Record<string, { id: string; description?: string }> }
+  > = {};
 
   if ('getWorkflows' in agent) {
     const logger = mastra.getLogger();
     try {
       const workflows = await agent.getWorkflows({ runtimeContext });
 
-      serializedAgentWorkflows = Object.entries(workflows || {}).reduce<any>((acc, [key, workflow]) => {
+      serializedAgentWorkflows = Object.entries(workflows || {}).reduce<
+        Record<string, { name: string; steps: Record<string, { id: string; description?: string }> }>
+      >((acc, [key, workflow]) => {
         return {
           ...acc,
           [key]: {
-            name: workflow.name,
-            steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
-              return {
-                ...acc,
-                [key]: {
-                  id: step.id,
-                  description: step.description,
-                },
-              };
-            }, {}),
+            name: workflow.name || 'Unnamed workflow',
+            steps: Object.entries(workflow.steps).reduce<Record<string, { id: string; description?: string }>>(
+              (acc, [key, step]) => {
+                return {
+                  ...acc,
+                  [key]: {
+                    id: step.id,
+                    description: step.description,
+                  },
+                };
+              },
+              {},
+            ),
           },
         };
       }, {});
@@ -247,18 +305,26 @@ async function formatAgent({
 
     const serializedAgentAgents = await getSerializedAgentDefinition({ agent, runtimeContext: proxyRuntimeContext });
 
+    // Get and serialize processors
+    const inputProcessors = await agent.getInputProcessors(proxyRuntimeContext);
+    const outputProcessors = await agent.getOutputProcessors(proxyRuntimeContext);
+    const serializedInputProcessors = getSerializedProcessors(inputProcessors);
+    const serializedOutputProcessors = getSerializedProcessors(outputProcessors);
+
     return {
       name: agent.name,
       instructions,
       tools: serializedAgentTools,
       agents: serializedAgentAgents,
       workflows: serializedAgentWorkflows,
+      inputProcessors: serializedInputProcessors,
+      outputProcessors: serializedOutputProcessors,
       provider: llm?.getProvider(),
       modelId: llm?.getModelId(),
       modelVersion: model?.specificationVersion,
       modelList,
-      defaultGenerateOptions: defaultGenerateOptions as any,
-      defaultStreamOptions: defaultStreamOptions as any,
+      defaultGenerateOptions,
+      defaultStreamOptions,
     };
   }
 }
