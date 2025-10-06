@@ -304,7 +304,7 @@ export class Mastra<
   }
 
   /**
-   * Generates a unique identifier using the configured generator or defaults to crypto.randomUUID().
+   * Generates a unique identifier using the configured generator or defaults to `crypto.randomUUID()`.
    *
    * This method is used internally by Mastra for creating unique IDs for various entities
    * like workflow runs, agent conversations, and other resources that need unique identification.
