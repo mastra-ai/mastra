@@ -340,7 +340,7 @@ export class Mastra<
    * Sets a custom ID generator function for creating unique identifiers.
    *
    * The ID generator function will be used by `generateId()` instead of the default
-   * crypto.randomUUID(). This is useful for creating application-specific ID formats
+   * `crypto.randomUUID()`. This is useful for creating application-specific ID formats
    * or integrating with existing ID generation systems.
    *
    * @example
