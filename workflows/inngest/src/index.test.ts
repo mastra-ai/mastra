@@ -395,6 +395,118 @@ describe('MastraInngestWorkflow', () => {
       });
     });
 
+    it('should execute a single step nested workflow successfully with state being set by the nested workflow', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+      let calls = 0;
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ state, setState }) => {
+          calls++;
+          setState({ ...state, value: state.value + '!!!' });
+          return {};
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema: z.object({
+          value: z.string(),
+          // someOtherValue: z.string(),
+        }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ state }) => {
+          calls++;
+          return { result: 'success', value: state.value };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), value: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+          // someOtherValue: z.string(),
+        }),
+      });
+
+      const nestedWorkflow = createWorkflow({
+        id: 'nested-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), value: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+          // someOtherValue: z.string(),
+        }),
+        steps: [step1, step2],
+      })
+        .then(step1)
+        .then(step2)
+        .commit();
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+          value: z.string(),
+        }),
+        stateSchema: z.object({
+          value: z.string(),
+          otherValue: z.string(),
+        }),
+        steps: [nestedWorkflow],
+      })
+        .then(nestedWorkflow)
+        .commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({
+        inputData: {},
+        initialState: { value: 'test-state', otherValue: 'test-other-state' },
+      });
+
+      srv.close();
+
+      expect(calls).toBe(2);
+      expect(result.steps['nested-workflow']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state!!!' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    });
+
     it('should execute multiple steps in parallel', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',

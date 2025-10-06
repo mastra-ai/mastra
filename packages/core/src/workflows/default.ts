@@ -215,6 +215,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController: AbortController;
     writableStream?: WritableStream<ChunkType>;
     format?: 'aisdk' | 'mastra' | undefined;
+    outputOptions?: {
+      includeState?: boolean;
+    };
   }): Promise<TOutput> {
     const {
       workflowId,
@@ -257,10 +260,21 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     const stepResults: Record<string, any> = resume?.stepResults || { input };
-    let state: Record<string, any> = initialState ?? {};
     let lastOutput: any;
+    let lastState: Record<string, any> = initialState ?? {};
     for (let i = startIdx; i < steps.length; i++) {
       const entry = steps[i]!;
+
+      const executionContext: ExecutionContext = {
+        workflowId,
+        runId,
+        executionPath: [i],
+        suspendedPaths: {},
+        retryConfig: { attempts, delay },
+        executionSpan: executionSpan as Span,
+        format: params.format,
+        state: lastState ?? initialState,
+      };
 
       try {
         lastOutput = await this.executeEntry({
@@ -268,20 +282,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           runId,
           resourceId,
           entry,
+          executionContext,
           serializedStepGraph: params.serializedStepGraph,
           prevStep: steps[i - 1]!,
           stepResults,
           resume,
-          executionContext: {
-            workflowId,
-            runId,
-            executionPath: [i],
-            suspendedPaths: {},
-            retryConfig: { attempts, delay },
-            executionSpan: executionSpan as Span,
-            format: params.format,
-            state,
-          },
           tracingContext: {
             currentSpan: workflowAISpan,
           },
@@ -291,6 +296,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           writableStream: params.writableStream,
           disableScorers,
         });
+
+        if (lastOutput.executionContext?.state) {
+          lastState = lastOutput.executionContext.state;
+        }
 
         // if step result is not success, stop and return
         if (lastOutput.result.status !== 'success') {
@@ -400,6 +409,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       },
     });
 
+    if (params.outputOptions?.includeState) {
+      return { ...result, state: lastState };
+    }
     return result;
   }
 

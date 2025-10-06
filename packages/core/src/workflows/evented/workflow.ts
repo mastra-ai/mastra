@@ -390,7 +390,7 @@ export class EventedRun<
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
     initialState?: z.infer<TState>;
-  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
       throw new Error(
@@ -426,7 +426,7 @@ export class EventedRun<
     const result = await this.executionEngine.execute<
       z.infer<TState>,
       z.infer<TInput>,
-      WorkflowResult<TInput, TOutput, TSteps>
+      WorkflowResult<TState, TInput, TOutput, TSteps>
     >({
       workflowId: this.workflowId,
       runId: this.runId,
@@ -475,7 +475,7 @@ export class EventedRun<
       | string
       | string[];
     runtimeContext?: RuntimeContext;
-  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
     );
@@ -521,7 +521,7 @@ export class EventedRun<
     const resumeDataToUse = await this._validateResumeData(params.resumeData, suspendedStep);
 
     const executionResultPromise = this.executionEngine
-      .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
+      .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
         runId: this.runId,
         graph: this.executionGraph,

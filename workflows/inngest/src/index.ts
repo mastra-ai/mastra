@@ -572,7 +572,7 @@ export class InngestWorkflow<
       },
       { event: `workflow.${this.id}` },
       async ({ event, step, attempt, publish }) => {
-        let { inputData, initialState, runId, resourceId, resume } = event.data;
+        let { inputData, initialState, runId, resourceId, resume, outputOptions } = event.data;
 
         if (!runId) {
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
@@ -622,6 +622,7 @@ export class InngestWorkflow<
           resume,
           abortController: new AbortController(),
           currentSpan: undefined, // TODO: Pass actual parent AI span from workflow execution context
+          outputOptions,
         });
 
         // Final step to check workflow status and throw NonRetriableError if failed
@@ -996,6 +997,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     runtimeContext: RuntimeContext;
     abortController: AbortController;
     currentSpan?: AnyAISpan;
+    outputOptions?: {
+      includeState?: boolean;
+    };
   }): Promise<TOutput> {
     await params.emitter.emit('watch-v2', {
       type: 'workflow-start',
@@ -1445,20 +1449,24 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 // @ts-ignore
                 resumePath: snapshot?.suspendedPaths?.[resume.steps?.[1]] as any,
               },
+              outputOptions: { includeState: true },
             },
           })) as any;
           result = invokeResp.result;
           runId = invokeResp.runId;
+          executionContext.state = invokeResp.result.state;
         } else {
           const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
             function: step.getFunction(),
             data: {
               inputData,
               initialState: executionContext.state ?? {},
+              outputOptions: { includeState: true },
             },
           })) as any;
           result = invokeResp.result;
           runId = invokeResp.runId;
+          executionContext.state = invokeResp.result.state;
         }
       } catch (e) {
         // Nested workflow threw an error (likely from finalization step)

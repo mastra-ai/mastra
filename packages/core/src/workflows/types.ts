@@ -393,12 +393,14 @@ export type StepWithComponent = Step<string, any, any, any, any, any> & {
 };
 
 export type WorkflowResult<
+  TState extends z.ZodObject<any>,
   TInput extends z.ZodType<any>,
   TOutput extends z.ZodType<any>,
   TSteps extends Step<string, any, any>[],
 > =
   | ({
       status: 'success';
+      state?: z.infer<TState>;
       result: z.infer<TOutput>;
       input: z.infer<TInput>;
       steps: {
@@ -415,6 +417,7 @@ export type WorkflowResult<
   | ({
       status: 'failed';
       input: z.infer<TInput>;
+      state?: z.infer<TState>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
@@ -430,6 +433,7 @@ export type WorkflowResult<
   | ({
       status: 'suspended';
       input: z.infer<TInput>;
+      state?: z.infer<TState>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
