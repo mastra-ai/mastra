@@ -15,7 +15,7 @@ import { WorkflowCoinIcon, WorkflowIcon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface WorkflowTableProps {
-  workflows?: Record<string, GetWorkflowResponse>;
+  workflows: Record<string, GetWorkflowResponse>;
   isLoading: boolean;
 }
 
@@ -23,14 +23,11 @@ export function WorkflowTable({ workflows, isLoading }: WorkflowTableProps) {
   const { navigate, paths } = useLinkComponent();
   const workflowData: WorkflowTableData[] = useMemo(() => {
     const _workflowsData = Object.keys(workflows ?? {}).map(key => {
-      const workflow = workflows?.[key];
+      const workflow = workflows[key as keyof typeof workflows];
 
       return {
         id: key,
-        name: workflow?.name || 'N/A',
-        stepsCount: Object.keys(workflow?.steps ?? {})?.length,
-
-        link: paths.workflowLink(key),
+        ...workflow,
       };
     });
 
@@ -64,7 +61,7 @@ export function WorkflowTable({ workflows, isLoading }: WorkflowTableProps) {
         </Thead>
         <Tbody>
           {rows.map(row => (
-            <Row key={row.id} onClick={() => navigate(row.original.link)}>
+            <Row key={row.id} onClick={() => navigate(paths.workflowLink(row.original.id))}>
               {row.getVisibleCells().map(cell => (
                 <React.Fragment key={cell.id}>
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}

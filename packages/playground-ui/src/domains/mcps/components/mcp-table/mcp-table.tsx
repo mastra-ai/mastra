@@ -1,4 +1,4 @@
-import { GetAgentResponse } from '@mastra/client-js';
+import { GetAgentResponse, McpServerListResponse } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
@@ -11,43 +11,32 @@ import React, { useMemo } from 'react';
 import { ScrollableContainer } from '@/components/scrollable-container';
 import { Skeleton } from '@/components/ui/skeleton';
 import { columns } from './columns';
-import { AgentTableData } from './types';
+
 import { useLinkComponent } from '@/lib/framework';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { McpCoinIcon, McpServerIcon } from '@/ds/icons';
 
-export interface AgentsTableProps {
-  agents: Record<string, GetAgentResponse>;
+export interface MCPTableProps {
+  mcpServers: McpServerListResponse['servers'];
   isLoading: boolean;
 }
 
-export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
+export function MCPTable({ mcpServers, isLoading }: MCPTableProps) {
   const { navigate, paths } = useLinkComponent();
-  const projectData: AgentTableData[] = useMemo(
-    () =>
-      Object.keys(agents).map(key => {
-        const agent = agents[key];
-
-        return {
-          id: key,
-          ...agent,
-        };
-      }),
-    [agents],
-  );
 
   const table = useReactTable({
-    data: projectData,
-    columns: columns as ColumnDef<AgentTableData>[],
+    data: mcpServers,
+    columns: columns as ColumnDef<McpServerListResponse['servers'][number]>[],
     getCoreRowModel: getCoreRowModel(),
   });
 
-  if (isLoading) return <AgentsTableSkeleton />;
+  if (isLoading) return <MCPTableSkeleton />;
 
   const ths = table.getHeaderGroups()[0];
   const rows = table.getRowModel().rows.concat();
 
   if (rows.length === 0) {
-    return <EmptyAgentsTable />;
+    return <EmptyMCPTable />;
   }
 
   return (
@@ -63,7 +52,7 @@ export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
           </Thead>
           <Tbody>
             {rows.map(row => (
-              <Row key={row.id} onClick={() => navigate(paths.agentLink(row.original.id))}>
+              <Row key={row.id} onClick={() => navigate(paths.mcpServerLink(row.original.id))}>
                 {row.getVisibleCells().map(cell => (
                   <React.Fragment key={cell.id}>
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -78,7 +67,7 @@ export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
   );
 }
 
-export const AgentsTableSkeleton = () => (
+export const MCPTableSkeleton = () => (
   <Table>
     <Thead>
       <Th>Name</Th>
@@ -103,23 +92,23 @@ export const AgentsTableSkeleton = () => (
   </Table>
 );
 
-export const EmptyAgentsTable = () => (
+export const EmptyMCPTable = () => (
   <div className="flex h-full items-center justify-center">
     <EmptyState
-      iconSlot={<AgentCoinIcon />}
-      titleSlot="Configure Agents"
-      descriptionSlot="Mastra agents are not configured yet. You can find more information in the documentation."
+      iconSlot={<McpCoinIcon />}
+      titleSlot="Configure MCP servers"
+      descriptionSlot="MCP servers are not configured yet. You can find more information in the documentation."
       actionSlot={
         <Button
           size="lg"
           className="w-full"
           variant="light"
           as="a"
-          href="https://mastra.ai/en/docs/agents/overview"
+          href="https://mastra.ai/en/docs/getting-started/mcp-docs-server"
           target="_blank"
         >
           <Icon>
-            <AgentIcon />
+            <McpServerIcon />
           </Icon>
           Docs
         </Button>

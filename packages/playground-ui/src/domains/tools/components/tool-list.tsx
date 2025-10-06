@@ -11,7 +11,6 @@ import { ToolCoinIcon } from '@/ds/icons/ToolCoinIcon';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { useLinkComponent } from '@/lib/framework';
 import { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
-import { SearchIcon } from 'lucide-react';
 import { startTransition, useMemo, useRef, useState } from 'react';
 
 export interface ToolListProps {
@@ -102,10 +101,6 @@ const ToolEntity = ({ tool }: ToolEntityProps) => {
 
   return (
     <Entity onClick={() => linkRef.current?.click()}>
-      <EntityIcon>
-        <ToolsIcon className="group-hover/entity:text-[#ECB047]" />
-      </EntityIcon>
-
       <EntityContent>
         <EntityName>
           <Link ref={linkRef} href={toolLink}>
