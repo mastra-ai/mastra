@@ -7,7 +7,7 @@ import { validateToolInput } from './validation';
  * A type-safe tool that agents and workflows can call to perform specific actions.
  *
  * @template TSchemaIn - Input schema type
- * @template TSchemaOut - Output schema type  
+ * @template TSchemaOut - Output schema type
  * @template TSuspendSchema - Suspend operation schema type
  * @template TResumeSchema - Resume operation schema type
  * @template TContext - Execution context type
@@ -85,7 +85,7 @@ export class Tool<
   /** Schema for resume operation data */
   resumeSchema?: TResumeSchema;
 
-  /** 
+  /**
    * Function that performs the tool's action
    * @param context - Execution context with validated input
    * @param options - Invocation options including suspend/resume data
@@ -96,7 +96,7 @@ export class Tool<
   /** Parent Mastra instance for accessing shared resources */
   mastra?: Mastra;
 
-  /** 
+  /**
    * Whether the tool requires explicit user approval before execution
    * @example
    * ```typescript
@@ -183,8 +183,8 @@ export class Tool<
  *     b: z.number()
  *   }),
  *   execute: async ({ context }) => {
- *     const result = context.operation === 'add' 
- *       ? context.a + context.b 
+ *     const result = context.operation === 'add'
+ *       ? context.a + context.b
  *       : context.a - context.b;
  *     return { result };
  *   }
@@ -197,10 +197,10 @@ export class Tool<
  *   id: 'get-user',
  *   description: 'Get user data',
  *   inputSchema: z.object({ userId: z.string() }),
- *   outputSchema: z.object({ 
- *     id: z.string(), 
- *     name: z.string(), 
- *     email: z.string() 
+ *   outputSchema: z.object({
+ *     id: z.string(),
+ *     name: z.string(),
+ *     email: z.string()
  *   }),
  *   execute: async ({ context }) => {
  *     return await fetchUser(context.userId);
@@ -213,7 +213,7 @@ export class Tool<
  * const weatherTool = createTool({
  *   id: 'weather',
  *   description: 'Get weather data',
- *   inputSchema: z.object({ 
+ *   inputSchema: z.object({
  *     city: z.string(),
  *     units: z.enum(['metric', 'imperial']).default('metric')
  *   }),
