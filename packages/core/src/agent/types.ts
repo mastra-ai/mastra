@@ -63,6 +63,11 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
    * If not provided, will generate instructions based on the schema.
    */
   instructions?: string;
+
+  /**
+   * Whether to use system prompt injection instead of native response format.
+   */
+  useJsonSchemaPromptInjection?: boolean;
 } & FallbackFields<OUTPUT>;
 
 /**

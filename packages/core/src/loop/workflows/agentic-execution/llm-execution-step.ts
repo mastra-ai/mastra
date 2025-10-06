@@ -436,6 +436,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   toolCallStreaming,
   controller,
   output,
+  structuredOutput,
   outputProcessors,
   headers,
   downloadRetries,
@@ -532,6 +533,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
               telemetry_settings,
               includeRawChunks,
               output,
+              structuredOutput,
               headers,
               onResult: ({
                 warnings: warningsFromStream,
