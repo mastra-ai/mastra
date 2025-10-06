@@ -6,7 +6,7 @@ import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { WorkingMemoryProcessor } from '@mastra/core/processors';
 import { fastembed } from '@mastra/fastembed';
-import { LibSQLStore } from '@mastra/libsql';
+import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { config } from 'dotenv';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
@@ -18,6 +18,7 @@ const resourceId = 'test-resource';
 describe('WorkingMemoryProcessor Integration Tests', () => {
   let memory: Memory;
   let storage: LibSQLStore;
+  let vector: LibSQLVector;
   let processor: WorkingMemoryProcessor;
   let agent: Agent;
 
@@ -30,26 +31,46 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
       url: `file:${dbPath}`,
     });
 
+    vector = new LibSQLVector({
+      connectionUrl: `file:${dbPath}`,
+    });
+
     // Create memory instance WITHOUT built-in working memory (we'll use the processor)
     memory = new Memory({
       options: {
+        workingMemory: {
+          enabled: false, // Disable built-in working memory
+        },
         lastMessages: 10,
+        semanticRecall: {
+          topK: 3,
+          messageRange: 2,
+        },
         threads: {
           generateTitle: false,
         },
       },
       storage,
+      vector,
       embedder: fastembed,
     });
 
-    // Create the WorkingMemoryProcessor with markdown template
+    // Create the WorkingMemoryProcessor with resource scope (default)
     processor = new WorkingMemoryProcessor({
       storage: storage as any, // Cast to MastraStorage
       model: openai('gpt-4o-mini'),
       scope: 'resource',
-      // Uses default markdown template
+      template: {
+        format: 'markdown',
+        content: `# User Information
+- **Name**:
+- **Location**:
+- **Preferences**:
+`,
+      },
       extractFromUserMessages: true,
       injectionStrategy: 'system',
+      includeReasoning: true,
     });
 
     // Create agent with the working memory processor
@@ -59,13 +80,15 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
       model: openai('gpt-4o-mini'),
       memory,
       inputProcessors: [processor],
-      // outputProcessors: [processor],
+      outputProcessors: [processor],
     });
   });
 
   afterEach(async () => {
     //@ts-ignore
     await storage.client?.close();
+    //@ts-ignore
+    await vector.turso?.close();
   });
 
   it('should remember user name introduced in first message', async () => {
@@ -89,6 +112,7 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
         resource: resourceId,
       },
     });
+
     console.log('Agent response 1:', response1.text);
 
     // Wait a bit for async operations to complete
@@ -109,7 +133,9 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
         resource: resourceId,
       },
     });
+
     console.log('Agent response 2:', response2.text);
+
     // The agent should know the name from working memory
     expect(response2.text.toLowerCase()).toContain('daniel');
   });
@@ -441,11 +467,11 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
 
     // Manually set working memory
     const testMemory = `# User Information
-- Name: Sarah Connor
+- Name: Jane Deer
 - Job: Software Engineer`;
 
     await processor.manualUpdateWorkingMemory(testMemory, thread.id, 'test-resource-injection');
-    console.log('Set working memory for Sarah Connor');
+    console.log('Set working memory for Jane Deer');
 
     // Now ask a question that should use the context
     const response = await agent.generate('What is my name?', {
@@ -459,7 +485,7 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
     console.log('Agent response:', response.text);
 
     // The agent should know the name from working memory
-    expect(response.text.toLowerCase()).toContain('sarah');
+    expect(response.text.toLowerCase()).toContain('jane');
   });
 
   it('should inject context without errors (basic smoke test)', async () => {

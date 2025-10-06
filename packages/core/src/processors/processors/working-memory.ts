@@ -1,7 +1,7 @@
 import type { JSONSchema7 } from 'json-schema';
 import { z, ZodObject } from 'zod';
 import { Agent } from '../../agent';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import { MessageList, type MastraMessageV2 } from '../../agent/message-list';
 import { InternalSpans } from '../../ai-tracing';
 import type { TracingContext } from '../../ai-tracing';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
@@ -773,18 +773,20 @@ Return the filled-in template as a single string, not as an object. The extracte
 
     switch (this.injectionStrategy) {
       case 'system': {
-        // Add as system message at the beginning
-        const systemMessage: MastraMessageV2 = {
+        // Create a temporary MessageList to properly convert CoreMessage to MastraMessageV2
+        const messageList = new MessageList({});
+
+        // Add system message using CoreMessage format (string content)
+        messageList.addSystem({
           role: 'system',
-          content: {
-            content: `Working Memory Context:\n\n${contextWithMarker}`,
-            parts: [],
-            format: 2,
-          },
-          id: `working-memory-${Date.now()}`,
-          createdAt: new Date(),
-        };
-        return [systemMessage, ...messages];
+          content: `Working Memory Context:\n\n${contextWithMarker}`,
+        });
+
+        // Add existing messages
+        messageList.add(messages, 'input');
+
+        // Return all messages in MastraMessageV2 format
+        return messageList.get.all.v2();
       }
 
       case 'user-prefix': {
@@ -797,14 +799,18 @@ Return the filled-in template as a single string, not as an object. The extracte
         if (!lastUserMessage) return messages;
         const existingText = this.extractTextContent(lastUserMessage);
 
-        modifiedMessages[lastUserIndex] = {
-          ...lastUserMessage,
-          content: {
+        // Use MessageList to properly create the modified user message
+        const messageList = new MessageList({});
+        messageList.add(
+          {
+            role: 'user',
             content: `Context from working memory:\n${contextWithMarker}\n\n${existingText}`,
-            parts: lastUserMessage.content.parts || [],
-            format: lastUserMessage.content.format || 2,
           },
-        };
+          'input',
+        );
+
+        // Replace the last user message with the properly formatted one
+        modifiedMessages[lastUserIndex] = messageList.get.all.v2()[0]!;
 
         return modifiedMessages;
       }
@@ -814,19 +820,18 @@ Return the filled-in template as a single string, not as an object. The extracte
         const lastUserIndex = messages.map(m => m.role).lastIndexOf('user');
         if (lastUserIndex === -1) return messages;
 
-        const contextMessage: MastraMessageV2 = {
-          role: 'user',
-          content: {
+        // Use MessageList to create a properly formatted user message
+        const messageList = new MessageList({});
+        messageList.add(
+          {
+            role: 'user',
             content: `[Context]: ${contextWithMarker}`,
-            parts: [],
-            format: 2,
           },
-          id: `working-memory-${Date.now()}`,
-          createdAt: new Date(),
-        };
+          'input',
+        );
 
         const modifiedMessages = [...messages];
-        modifiedMessages.splice(lastUserIndex, 0, contextMessage);
+        modifiedMessages.splice(lastUserIndex, 0, messageList.get.all.v2()[0]!);
         return modifiedMessages;
       }
 

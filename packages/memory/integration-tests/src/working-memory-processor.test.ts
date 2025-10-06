@@ -105,12 +105,16 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
 
     // First conversation - user introduces themselves
     console.log('\n1. User introduces themselves...');
-    const response1 = await agent.generate('Hello, my name is Daniel', {
+
+    const response1 = await agent.generateLegacy('Hello, my name is Daniel', {
       threadId: thread.id,
       resourceId,
     });
 
     console.log('Agent response 1:', response1.text);
+
+    // Wait a bit for async operations to complete
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Check that working memory was updated with the name
     const resourceData = await storage.stores?.memory?.getResourceById({ resourceId });
@@ -121,7 +125,7 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
 
     // Second conversation - ask about the name
     console.log('\n2. User asks about their name...');
-    const response2 = await agent.generate('What is my name?', {
+    const response2 = await agent.generateLegacy('What is my name?', {
       threadId: thread.id,
       resourceId,
     });
@@ -143,7 +147,7 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
 
     // Turn 1: Name
     console.log('\n1. Providing name...');
-    await agent.generate('My name is Alice', {
+    await agent.generateLegacy('My name is Alice', {
       threadId: thread.id,
       resourceId,
     });
@@ -154,7 +158,7 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
 
     // Turn 2: Location
     console.log('\n2. Providing location...');
-    await agent.generate('I live in San Francisco', {
+    await agent.generateLegacy('I live in San Francisco', {
       threadId: thread.id,
       resourceId,
     });
@@ -166,7 +170,7 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
 
     // Turn 3: Preferences
     console.log('\n3. Providing preferences...');
-    await agent.generate('I love TypeScript and dark mode', {
+    await agent.generateLegacy('I love TypeScript and dark mode', {
       threadId: thread.id,
       resourceId,
     });
@@ -179,7 +183,7 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
 
     // Turn 4: Ask for summary
     console.log('\n4. Asking for summary...');
-    const summaryResponse = await agent.generate('Can you tell me everything you remember about me?', {
+    const summaryResponse = await agent.generateLegacy('Can you tell me everything you remember about me?', {
       threadId: thread.id,
       resourceId,
     });
@@ -213,14 +217,14 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
 
     // Conversation in resource 1
     console.log('\n1. Resource 1 conversation...');
-    await agent.generate('I am Bob and I like JavaScript', {
+    await agent.generateLegacy('I am Bob and I like JavaScript', {
       threadId: thread1.id,
       resourceId: resource1,
     });
 
     // Conversation in resource 2
     console.log('\n2. Resource 2 conversation...');
-    await agent.generate('I am Charlie and I like Python', {
+    await agent.generateLegacy('I am Charlie and I like Python', {
       threadId: thread2.id,
       resourceId: resource2,
     });
@@ -246,7 +250,7 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
 
     // Ask about name in each context
     console.log('\n3. Asking for name in resource 1...');
-    const query1 = await agent.generate('What is my name and what do I like?', {
+    const query1 = await agent.generateLegacy('What is my name and what do I like?', {
       threadId: thread1.id,
       resourceId: resource1,
     });
@@ -255,7 +259,7 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
     expect(query1.text.toLowerCase()).toContain('javascript');
 
     console.log('\n4. Asking for name in resource 2...');
-    const query2 = await agent.generate('What is my name and what do I like?', {
+    const query2 = await agent.generateLegacy('What is my name and what do I like?', {
       threadId: thread2.id,
       resourceId: resource2,
     });
@@ -304,14 +308,14 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
 
     // Conversation in thread 1
     console.log('\n1. Thread 1 conversation...');
-    await threadAgent.generate('My name is David and I like Go', {
+    await threadAgent.generateLegacy('My name is David and I like Go', {
       threadId: thread1.id,
       resourceId,
     });
 
     // Conversation in thread 2
     console.log('\n2. Thread 2 conversation...');
-    await threadAgent.generate('My name is Emily and I like Ruby', {
+    await threadAgent.generateLegacy('My name is Emily and I like Ruby', {
       threadId: thread2.id,
       resourceId,
     });
@@ -335,14 +339,14 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
 
     // Query each thread
     console.log('\n3. Querying thread 1...');
-    const response1 = await threadAgent.generate('What is my name?', {
+    const response1 = await threadAgent.generateLegacy('What is my name?', {
       threadId: thread1.id,
       resourceId,
     });
     expect(response1.text.toLowerCase()).toContain('david');
 
     console.log('\n4. Querying thread 2...');
-    const response2 = await threadAgent.generate('What is my name?', {
+    const response2 = await threadAgent.generateLegacy('What is my name?', {
       threadId: thread2.id,
       resourceId,
     });
@@ -360,7 +364,7 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
 
     // Initial name
     console.log('\n1. Setting initial name...');
-    await agent.generate('My name is Tyler', {
+    await agent.generateLegacy('My name is Tyler', {
       threadId: thread.id,
       resourceId,
     });
@@ -371,7 +375,7 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
 
     // Change name
     console.log('\n2. Changing name...');
-    await agent.generate('Actually, I changed my name to Jim', {
+    await agent.generateLegacy('Actually, I changed my name to Jim', {
       threadId: thread.id,
       resourceId,
     });
@@ -382,11 +386,92 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
 
     // Verify the agent uses the new name
     console.log('\n3. Verifying new name...');
-    const response = await agent.generate('What is my name?', {
+    const response = await agent.generateLegacy('What is my name?', {
       threadId: thread.id,
       resourceId,
     });
     console.log('Name query response:', response.text);
     expect(response.text.toLowerCase()).toContain('jim');
+  });
+
+  it('should manually update and retrieve working memory', async () => {
+    console.log('\n=== Test: Manual Update ===');
+
+    // Create thread
+    const thread = await memory.createThread({
+      resourceId: 'test-resource-manual',
+    });
+    console.log('Thread created:', thread.id);
+
+    // Manually update working memory
+    const testMemory = `# User Information
+- Name: John Doe
+- Location: San Francisco
+- Interests: Programming, AI`;
+
+    await processor.manualUpdateWorkingMemory(testMemory, thread.id, 'test-resource-manual');
+    console.log('Manually updated working memory');
+
+    // Check if working memory was saved
+    const resourceData = await storage.stores?.memory?.getResourceById({
+      resourceId: 'test-resource-manual',
+    });
+    console.log('Resource working memory:', resourceData?.workingMemory);
+
+    expect(resourceData?.workingMemory).toBeDefined();
+    expect(resourceData?.workingMemory).toContain('John Doe');
+    expect(resourceData?.workingMemory).toContain('San Francisco');
+  });
+
+  it('should inject working memory context into conversation', async () => {
+    console.log('\n=== Test: Context Injection ===');
+
+    // Create thread
+    const thread = await memory.createThread({
+      resourceId: 'test-resource-injection',
+    });
+
+    // Manually set working memory
+    const testMemory = `# User Information
+- Name: Jane Deer
+- Job: Software Engineer`;
+
+    await processor.manualUpdateWorkingMemory(testMemory, thread.id, 'test-resource-injection');
+    console.log('Set working memory for Jane Deer');
+
+    // Now ask a question that should use the context
+    const response = await agent.generateLegacy('What is my name?', {
+      threadId: thread.id,
+      resourceId: 'test-resource-injection',
+    });
+
+    console.log('Agent response:', response.text);
+
+    // The agent should know the name from working memory
+    expect(response.text.toLowerCase()).toContain('jane');
+  });
+
+  it('should inject context without errors (basic smoke test)', async () => {
+    console.log('\n=== Test: Basic Injection Smoke Test ===');
+
+    // Create thread
+    const thread = await memory.createThread({
+      resourceId: 'test-resource-smoke',
+    });
+
+    // Manually set some working memory using the processor
+    const resourceId = 'test-resource-smoke';
+    await processor.manualUpdateWorkingMemory('# User Info\n- Name: TestUser', thread.id, resourceId);
+
+    console.log('Set working memory manually');
+
+    // Now try to generate - this should inject the context
+    const response = await agent.generateLegacy('Hello', {
+      threadId: thread.id,
+      resourceId,
+    });
+
+    console.log('SUCCESS! Response:', response.text);
+    expect(response.text).toBeDefined();
   });
 });
