@@ -14,11 +14,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 
 import { CopyIcon } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { useNavigate, useParams } from 'react-router';
+import { useParams } from 'react-router';
 
 export function WorkflowInformation({ workflowId }: { workflowId: string }) {
   const params = useParams();
-  const navigate = useNavigate();
   const { data: workflow, isLoading } = useWorkflow(workflowId);
 
   const { createWorkflowRun } = useExecuteWorkflow();
@@ -70,8 +69,6 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
             <WorkflowRunDetail
               workflowId={workflowId}
               runId={params?.runId}
-              onPressRun={({ workflowId, runId }) => navigate(`/workflows/${workflowId}/graph/${runId}`)}
-              onPressBackToRuns={() => navigate(`/workflows/${workflowId}/graph`)}
               setRunId={setRunId}
               workflow={workflow ?? undefined}
               isLoading={isLoading}

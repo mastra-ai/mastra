@@ -10,15 +10,11 @@ import { isObjectEmpty } from '@/lib/object';
 export interface WorkflowRunDetailProps extends Omit<WorkflowTriggerProps, 'paramsRunId' | 'workflowId'> {
   workflowId: string;
   runId?: string;
-  onPressRun: ({ workflowId, runId }: { workflowId: string; runId: string }) => void;
-  onPressBackToRuns: () => void;
 }
 
 export const WorkflowRunDetail = ({
   workflowId,
   runId,
-  onPressRun,
-  onPressBackToRuns,
   observeWorkflowStream,
   ...triggerProps
 }: WorkflowRunDetailProps) => {
