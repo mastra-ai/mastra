@@ -42,12 +42,10 @@ export function WorkflowTable({ workflows, isLoading }: WorkflowTableProps) {
     getCoreRowModel: getCoreRowModel(),
   });
 
-  if (isLoading) return <WorkflowTableSkeleton />;
-
   const ths = table.getHeaderGroups()[0];
   const rows = table.getRowModel().rows.concat();
 
-  if (rows.length === 0) {
+  if (rows.length === 0 && !isLoading) {
     return <EmptyWorkflowsTable />;
   }
 
@@ -59,33 +57,37 @@ export function WorkflowTable({ workflows, isLoading }: WorkflowTableProps) {
         <Searchbar onSearch={setSearch} label="Search workflows" placeholder="Search workflows" />
       </SearchbarWrapper>
 
-      <ScrollableContainer>
-        <Table>
-          <Thead className="sticky top-0">
-            {ths.headers.map(header => (
-              <Th key={header.id} style={{ width: header.index === 0 ? 'auto' : header.column.getSize() }}>
-                {flexRender(header.column.columnDef.header, header.getContext())}
-              </Th>
-            ))}
-          </Thead>
-          <Tbody>
-            {filteredRows.map(row => (
-              <Row key={row.id} onClick={() => navigate(paths.workflowLink(row.original.id))}>
-                {row.getVisibleCells().map(cell => (
-                  <React.Fragment key={cell.id}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </React.Fragment>
-                ))}
-              </Row>
-            ))}
-          </Tbody>
-        </Table>
-      </ScrollableContainer>
+      {isLoading ? (
+        <WorkflowTableSkeleton />
+      ) : (
+        <ScrollableContainer>
+          <Table>
+            <Thead className="sticky top-0">
+              {ths.headers.map(header => (
+                <Th key={header.id} style={{ width: header.index === 0 ? 'auto' : header.column.getSize() }}>
+                  {flexRender(header.column.columnDef.header, header.getContext())}
+                </Th>
+              ))}
+            </Thead>
+            <Tbody>
+              {filteredRows.map(row => (
+                <Row key={row.id} onClick={() => navigate(paths.workflowLink(row.original.id))}>
+                  {row.getVisibleCells().map(cell => (
+                    <React.Fragment key={cell.id}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </React.Fragment>
+                  ))}
+                </Row>
+              ))}
+            </Tbody>
+          </Table>
+        </ScrollableContainer>
+      )}
     </>
   );
 }
 
-export const WorkflowTableSkeleton = () => (
+const WorkflowTableSkeleton = () => (
   <Table>
     <Thead>
       <Th>Name</Th>
@@ -106,7 +108,7 @@ export const WorkflowTableSkeleton = () => (
   </Table>
 );
 
-export const EmptyWorkflowsTable = () => (
+const EmptyWorkflowsTable = () => (
   <div className="flex h-full items-center justify-center">
     <EmptyState
       iconSlot={<WorkflowCoinIcon />}

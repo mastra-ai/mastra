@@ -33,12 +33,10 @@ export function ToolTable({ tools, agents, isLoading }: ToolTableProps) {
     getCoreRowModel: getCoreRowModel(),
   });
 
-  if (isLoading) return <ToolTableSkeleton />;
-
   const ths = table.getHeaderGroups()[0];
   const rows = table.getRowModel().rows.concat();
 
-  if (rows.length === 0) {
+  if (rows.length === 0 && !isLoading) {
     return <EmptyToolsTable />;
   }
 
@@ -49,43 +47,46 @@ export function ToolTable({ tools, agents, isLoading }: ToolTableProps) {
       <SearchbarWrapper>
         <Searchbar onSearch={setSearch} label="Search tools" placeholder="Search tools" />
       </SearchbarWrapper>
+      {isLoading ? (
+        <ToolTableSkeleton />
+      ) : (
+        <ScrollableContainer>
+          <TooltipProvider>
+            <Table>
+              <Thead className="sticky top-0">
+                {ths.headers.map(header => (
+                  <Th key={header.id} style={{ width: header.column.getSize() ?? 'auto' }}>
+                    {flexRender(header.column.columnDef.header, header.getContext())}
+                  </Th>
+                ))}
+              </Thead>
+              <Tbody>
+                {filteredRows.map(row => {
+                  const firstAgent = row.original.agents[0];
+                  const link = firstAgent
+                    ? paths.agentToolLink(firstAgent.id, row.original.id)
+                    : paths.toolLink(row.original.id);
 
-      <ScrollableContainer>
-        <TooltipProvider>
-          <Table>
-            <Thead className="sticky top-0">
-              {ths.headers.map(header => (
-                <Th key={header.id} style={{ width: header.column.getSize() ?? 'auto' }}>
-                  {flexRender(header.column.columnDef.header, header.getContext())}
-                </Th>
-              ))}
-            </Thead>
-            <Tbody>
-              {filteredRows.map(row => {
-                const firstAgent = row.original.agents[0];
-                const link = firstAgent
-                  ? paths.agentToolLink(firstAgent.id, row.original.id)
-                  : paths.toolLink(row.original.id);
-
-                return (
-                  <Row key={row.id} onClick={() => navigate(link)}>
-                    {row.getVisibleCells().map(cell => (
-                      <React.Fragment key={cell.id}>
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </React.Fragment>
-                    ))}
-                  </Row>
-                );
-              })}
-            </Tbody>
-          </Table>
-        </TooltipProvider>
-      </ScrollableContainer>
+                  return (
+                    <Row key={row.id} onClick={() => navigate(link)}>
+                      {row.getVisibleCells().map(cell => (
+                        <React.Fragment key={cell.id}>
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </React.Fragment>
+                      ))}
+                    </Row>
+                  );
+                })}
+              </Tbody>
+            </Table>
+          </TooltipProvider>
+        </ScrollableContainer>
+      )}
     </>
   );
 }
 
-export const ToolTableSkeleton = () => (
+const ToolTableSkeleton = () => (
   <Table>
     <Thead>
       <Th>Name</Th>
@@ -106,7 +107,7 @@ export const ToolTableSkeleton = () => (
   </Table>
 );
 
-export const EmptyToolsTable = () => (
+const EmptyToolsTable = () => (
   <div className="flex h-full items-center justify-center">
     <EmptyState
       iconSlot={<ToolCoinIcon />}

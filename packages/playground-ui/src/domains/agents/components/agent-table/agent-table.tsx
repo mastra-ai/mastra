@@ -43,12 +43,10 @@ export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
     getCoreRowModel: getCoreRowModel(),
   });
 
-  if (isLoading) return <AgentsTableSkeleton />;
-
   const ths = table.getHeaderGroups()[0];
   const rows = table.getRowModel().rows.concat();
 
-  if (rows.length === 0) {
+  if (rows.length === 0 && !isLoading) {
     return <EmptyAgentsTable />;
   }
 
@@ -60,35 +58,39 @@ export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
         <Searchbar onSearch={setSearch} label="Search agents" placeholder="Search agents" />
       </SearchbarWrapper>
 
-      <ScrollableContainer>
-        <TooltipProvider>
-          <Table>
-            <Thead className="sticky top-0">
-              {ths.headers.map(header => (
-                <Th key={header.id} style={{ width: header.column.getSize() ?? 'auto' }}>
-                  {flexRender(header.column.columnDef.header, header.getContext())}
-                </Th>
-              ))}
-            </Thead>
-            <Tbody>
-              {filteredRows.map(row => (
-                <Row key={row.id} onClick={() => navigate(paths.agentLink(row.original.id))}>
-                  {row.getVisibleCells().map(cell => (
-                    <React.Fragment key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </React.Fragment>
-                  ))}
-                </Row>
-              ))}
-            </Tbody>
-          </Table>
-        </TooltipProvider>
-      </ScrollableContainer>
+      {isLoading ? (
+        <AgentsTableSkeleton />
+      ) : (
+        <ScrollableContainer>
+          <TooltipProvider>
+            <Table>
+              <Thead className="sticky top-0">
+                {ths.headers.map(header => (
+                  <Th key={header.id} style={{ width: header.column.getSize() ?? 'auto' }}>
+                    {flexRender(header.column.columnDef.header, header.getContext())}
+                  </Th>
+                ))}
+              </Thead>
+              <Tbody>
+                {filteredRows.map(row => (
+                  <Row key={row.id} onClick={() => navigate(paths.agentLink(row.original.id))}>
+                    {row.getVisibleCells().map(cell => (
+                      <React.Fragment key={cell.id}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </React.Fragment>
+                    ))}
+                  </Row>
+                ))}
+              </Tbody>
+            </Table>
+          </TooltipProvider>
+        </ScrollableContainer>
+      )}
     </>
   );
 }
 
-export const AgentsTableSkeleton = () => (
+const AgentsTableSkeleton = () => (
   <Table>
     <Thead>
       <Th>Name</Th>
@@ -113,7 +115,7 @@ export const AgentsTableSkeleton = () => (
   </Table>
 );
 
-export const EmptyAgentsTable = () => (
+const EmptyAgentsTable = () => (
   <div className="flex h-full items-center justify-center">
     <EmptyState
       iconSlot={<AgentCoinIcon />}
