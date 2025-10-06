@@ -159,23 +159,6 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
             writer.write(part);
           }
         },
-        onFinish: async () => {
-          console.log({
-            name: 'weatherAgent',
-            object: await result.object,
-            finishReason: await result.finishReason,
-            usage: await result.usage,
-            warnings: await result.warnings,
-            text: await result.text,
-            reasoning: await result.reasoning,
-            sources: await result.sources,
-            files: await result.files,
-            toolCalls: await result.toolCalls,
-            toolResults: await result.toolResults,
-            steps: await result.steps,
-            status: 'running',
-          });
-        },
       });
 
       return createUIMessageStreamResponse({

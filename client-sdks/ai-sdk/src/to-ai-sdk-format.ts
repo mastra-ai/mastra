@@ -256,108 +256,18 @@ export function AgentStreamToAISDKTransformer() {
         onError() {
           return 'Error';
         },
-        usedInAiSDKPackage: true,
       });
 
       if (transformedChunk) {
         // @ts-ignore
         // TODO: make this work for networks and workflows
-        // TODO:
-        if (transformedChunk.type === '_mastra_tool-output') {
+        if (transformedChunk.type === 'nested_tool-output') {
           // @ts-ignore
           const payload = transformedChunk.payload as unknown as ChunkType;
           // @ts-ignore
           if (payload?.from === 'AGENT') {
-            // TODO move to transformAgent
-            let hasChanged = false;
-            // @ts-ignore
-            switch (payload.type) {
-              case 'start':
-                bufferedSteps.set(payload.runId!, {
-                  name: 'weatherAgent',
-                  object: null,
-                  finishReason: null,
-                  usage: null,
-                  warnings: [],
-                  text: '',
-                  reasoning: [],
-                  sources: [],
-                  files: [],
-                  toolCalls: [],
-                  toolResults: [],
-                  steps: [],
-                  status: 'running',
-                });
-                hasChanged = true;
-                break;
-              case 'finish':
-                bufferedSteps.set(payload.runId!, {
-                  ...bufferedSteps.get(payload.runId!),
-                  finishReason: payload.payload.stepResult.reason,
-                  status: 'finished',
-                });
-                hasChanged = true;
-                break;
-              case 'text-delta':
-                const prevData = bufferedSteps.get(payload.runId!)!;
-                bufferedSteps.set(payload.runId!, {
-                  ...prevData,
-                  text: `${prevData.text}${payload.payload.text}`,
-                });
-                hasChanged = true;
-                break;
-              case 'reasoning-delta':
-                bufferedSteps.set(payload.runId!, {
-                  ...bufferedSteps.get(payload.runId!),
-                  reasoning: [...bufferedSteps.get(payload.runId)!.reasoning, payload.payload.text],
-                });
-                hasChanged = true;
-                break;
-              case 'source':
-                bufferedSteps.set(payload.runId!, {
-                  ...bufferedSteps.get(payload.runId!),
-                  // @ts-ignore
-                  sources: [...bufferedSteps.get(payload.runId)!.sources, payload.payload.source],
-                });
-                hasChanged = true;
-                break;
-              case 'file':
-                bufferedSteps.set(payload.runId!, {
-                  ...bufferedSteps.get(payload.runId!),
-                  // @ts-ignore
-                  files: [...bufferedSteps.get(payload.runId)!.files, payload.payload.file],
-                });
-                hasChanged = true;
-                break;
-              case 'tool-call':
-                console.log('tool-call', payload.payload);
-                bufferedSteps.set(payload.runId!, {
-                  ...bufferedSteps.get(payload.runId!),
-                  // @ts-ignore
-                  toolCalls: [...bufferedSteps.get(payload.runId)!.toolCalls, payload.payload.toolCall],
-                });
-                hasChanged = true;
-                break;
-              case 'tool-result':
-                bufferedSteps.set(payload.runId!, {
-                  ...bufferedSteps.get(payload.runId!),
-                  // @ts-ignore
-                  toolResults: [...bufferedSteps.get(payload.runId)!.toolResults, payload.payload.toolResult],
-                });
-                hasChanged = true;
-                break;
-              default:
-                console.log('default', payload.type, payload);
-                break;
-            }
-
-            if (hasChanged) {
-              controller.enqueue({
-                type: 'data-tool-agent',
-                id: payload.runId!,
-                data: bufferedSteps.get(payload.runId!),
-              });
-            }
+            const agentTransformed = transformAgent(payload, bufferedSteps);
+            if (agentTransformed) controller.enqueue(agentTransformed);
           } else if (payload?.from === 'WORKFLOW') {
             // const workflowChunk = transformWorkflow(payload.payload);
             // controller.enqueue(workflowChunk);
@@ -374,6 +284,115 @@ export function AgentStreamToAISDKTransformer() {
       }
     },
   });
+}
+
+function transformAgent(payload: ChunkType, bufferedSteps: Map<string, any>) {
+  let hasChanged = false;
+  // @ts-ignore
+  switch (payload.type) {
+    case 'start':
+      bufferedSteps.set(payload.runId!, {
+        name: 'weatherAgent',
+        object: null,
+        finishReason: null,
+        usage: null,
+        warnings: [],
+        text: '',
+        reasoning: [],
+        sources: [],
+        files: [],
+        toolCalls: [],
+        toolResults: [],
+        steps: [],
+        status: 'running',
+      });
+      hasChanged = true;
+      break;
+    case 'finish':
+      bufferedSteps.set(payload.runId!, {
+        ...bufferedSteps.get(payload.runId!),
+        finishReason: payload.payload.stepResult.reason,
+        usage: payload.payload?.output?.usage,
+        warnings: payload.payload?.stepResult?.warnings,
+        status: 'finished',
+      });
+      hasChanged = true;
+      break;
+    case 'text-delta':
+      const prevData = bufferedSteps.get(payload.runId!)!;
+      bufferedSteps.set(payload.runId!, {
+        ...prevData,
+        text: `${prevData.text}${payload.payload.text}`,
+      });
+      hasChanged = true;
+      break;
+    case 'reasoning-delta':
+      bufferedSteps.set(payload.runId!, {
+        ...bufferedSteps.get(payload.runId!),
+        reasoning: [...bufferedSteps.get(payload.runId)!.reasoning, payload.payload.text],
+      });
+      hasChanged = true;
+      break;
+    case 'source':
+      bufferedSteps.set(payload.runId!, {
+        ...bufferedSteps.get(payload.runId!),
+        // @ts-ignore
+        sources: [...bufferedSteps.get(payload.runId)!.sources, payload.payload.source],
+      });
+      hasChanged = true;
+      break;
+    case 'file':
+      bufferedSteps.set(payload.runId!, {
+        ...bufferedSteps.get(payload.runId!),
+        // @ts-ignore
+        files: [...bufferedSteps.get(payload.runId)!.files, payload.payload.file],
+      });
+      hasChanged = true;
+      break;
+    case 'tool-call':
+      console.info('tool-call', payload.payload);
+      bufferedSteps.set(payload.runId!, {
+        ...bufferedSteps.get(payload.runId!),
+        // @ts-ignore
+        toolCalls: [...bufferedSteps.get(payload.runId)!.toolCalls, payload.payload.toolCall],
+      });
+      hasChanged = true;
+      break;
+    case 'tool-result':
+      bufferedSteps.set(payload.runId!, {
+        ...bufferedSteps.get(payload.runId!),
+        // @ts-ignore
+        toolResults: [...bufferedSteps.get(payload.runId)!.toolResults, payload.payload.toolResult],
+      });
+      hasChanged = true;
+      break;
+    case 'object-result':
+      bufferedSteps.set(payload.runId!, {
+        ...bufferedSteps.get(payload.runId!),
+        object: payload.object,
+      });
+      hasChanged = true;
+      break;
+    case 'object':
+      bufferedSteps.set(payload.runId!, {
+        ...bufferedSteps.get(payload.runId!),
+        object: payload.object,
+      });
+      hasChanged = true;
+      break;
+    default:
+      console.info('default', payload.type, payload);
+      break;
+  }
+
+  if (hasChanged) {
+    return {
+      type: 'data-tool-agent',
+      id: payload.runId!,
+      data: bufferedSteps.get(payload.runId!),
+    } as const;
+  }
+  return null;
 }
 
 export function toAISdkFormat<
