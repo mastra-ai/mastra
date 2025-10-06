@@ -15,6 +15,8 @@ import {
   WorkflowIcon,
   MainContentLayout,
   MainContentContent,
+  DocsIcon,
+  HeaderAction,
 } from '@mastra/playground-ui';
 
 import { useMCPServers } from '@/hooks/use-mcp-servers';
@@ -108,7 +110,21 @@ const MCPs = () => {
   return (
     <MainContentLayout>
       <Header>
-        <HeaderTitle>MCP Servers</HeaderTitle>
+        <HeaderTitle>
+          <Icon>
+            <McpServerIcon />
+          </Icon>
+          MCP Servers
+        </HeaderTitle>
+
+        <HeaderAction>
+          <Button as={Link} to="https://mastra.ai/en/docs/tools-mcp/mcp-overview" target="_blank">
+            <Icon>
+              <DocsIcon />
+            </Icon>
+            MCP documentation
+          </Button>
+        </HeaderAction>
       </Header>
 
       {mcpServers.length === 0 ? (
