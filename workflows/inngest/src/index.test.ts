@@ -4676,7 +4676,7 @@ describe('MastraInngestWorkflow', () => {
         getUserInput: { status: 'success', output: { userInput: 'test input' } },
         promptAgent: {
           status: 'suspended',
-          suspendedPayload: { testPayload: 'hello' },
+          suspendPayload: { testPayload: 'hello' },
           payload: { userInput: 'test input' },
         },
       });
@@ -6714,7 +6714,7 @@ describe('MastraInngestWorkflow', () => {
       expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
       expect(result.steps['nested-workflow-c']).toMatchObject({
         status: 'suspended',
-        payload: {
+        suspendPayload: {
           __workflow_meta: {
             path: ['nested-workflow-b', 'nested-workflow-a', 'other'],
           },

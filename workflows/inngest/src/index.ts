@@ -1072,7 +1072,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {
-          const nestedPath = stepResult?.payload?.__workflow_meta?.path;
+          const nestedPath = stepResult?.suspendPayload?.__workflow_meta?.path;
           return nestedPath ? [[stepId, ...nestedPath]] : [[stepId]];
         }
 
@@ -1417,7 +1417,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       try {
         if (isResume) {
           // @ts-ignore
-          runId = stepResults[resume?.steps?.[0]]?.payload?.__workflow_meta?.runId ?? randomUUID();
+          runId = stepResults[resume?.steps?.[0]]?.suspendPayload?.__workflow_meta?.runId ?? randomUUID();
 
           const snapshot: any = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
             workflowName: step.id,
@@ -1516,7 +1516,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
             for (const [stepName, stepResult] of suspendedSteps) {
               // @ts-ignore
-              const suspendPath: string[] = [stepName, ...(stepResult?.payload?.__workflow_meta?.path ?? [])];
+              const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
               executionContext.suspendedPaths[step.id] = executionContext.executionPath;
 
               await emitter.emit('watch', {
@@ -1525,7 +1525,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                   currentStep: {
                     id: step.id,
                     status: 'suspended',
-                    payload: { ...(stepResult as any)?.payload, __workflow_meta: { runId: runId, path: suspendPath } },
+                    payload: stepResult.payload,
+                    suspendPayload: {
+                      ...(stepResult as any)?.suspendPayload,
+                      __workflow_meta: { runId: runId, path: suspendPath },
+                    },
                   },
                   workflowState: {
                     status: 'running',
@@ -1549,7 +1553,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 executionContext,
                 result: {
                   status: 'suspended',
-                  payload: { ...(stepResult as any)?.payload, __workflow_meta: { runId: runId, path: suspendPath } },
+                  payload: stepResult.payload,
+                  suspendPayload: {
+                    ...(stepResult as any)?.suspendPayload,
+                    __workflow_meta: { runId: runId, path: suspendPath },
+                  },
                 },
               };
             }
@@ -1701,7 +1709,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               steps: resume?.steps?.slice(1) || [],
               resumePayload: resume?.resumePayload,
               // @ts-ignore
-              runId: stepResults[step.id]?.payload?.__workflow_meta?.runId,
+              runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
             },
             [EMITTER_SYMBOL]: emitter,
             engine: {
