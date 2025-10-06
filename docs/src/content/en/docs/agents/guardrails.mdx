@@ -24,12 +24,12 @@ Processors can be used for content moderation, prompt injection prevention, resp
 
 Import and instantiate the relevant processor class, and pass it to your agent’s configuration using either the `inputProcessors` or `outputProcessors` parameter:
 
-```typescript {3,9-17} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+```typescript {3,9-17} filename="src/mastra/agents/moderated-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { ModerationProcessor } from "@mastra/core/processors";
 
-export const agent = new Agent({
+export const moderatedAgent = new Agent({
   name: "moderated-agent",
   instructions: "You are a helpful assistant",
   model: openai("gpt-4o-mini"),
@@ -56,10 +56,10 @@ export const agent = new Agent({
 
   The `UnicodeNormalizer` is an input processor that cleans and normalizes user input by unifying Unicode characters, standardizing whitespace, and removing problematic symbols, allowing the LLM to better understand user messages.
 
-  ```typescript {6-9} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+  ```typescript {6-9} filename="src/mastra/agents/normalized-agent.ts" showLineNumbers copy
   import { UnicodeNormalizer } from "@mastra/core/processors";
 
-  export const testAgent = new Agent({
+  export const normalizedAgent = new Agent({
     // ...
     inputProcessors: [
       new UnicodeNormalizer({
@@ -76,10 +76,10 @@ export const agent = new Agent({
 
   The `PromptInjectionDetector` is an input processor that scans user messages for prompt injection, jailbreak attempts, and system override patterns. It uses an LLM to classify risky input and can block or rewrite it before it reaches the model.
 
-  ```typescript {6-11} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+  ```typescript {6-11} filename="src/mastra/agents/secure-agent.ts" showLineNumbers copy
   import { PromptInjectionDetector } from "@mastra/core/processors";
 
-  export const testAgent = new Agent({
+  export const secureAgent = new Agent({
     // ...
     inputProcessors: [
       new PromptInjectionDetector({
@@ -98,10 +98,10 @@ export const agent = new Agent({
 
   The `LanguageDetector` is an input processor that detects and translates user messages into a target language, enabling multilingual support while maintaining consistent interaction. It uses an LLM to identify the language and perform the translation.
 
-  ```typescript {6-11} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+  ```typescript {6-11} filename="src/mastra/agents/multilingual-agent.ts" showLineNumbers copy
   import { LanguageDetector } from "@mastra/core/processors";
 
-  export const testAgent = new Agent({
+  export const multilingualAgent = new Agent({
     // ...
     inputProcessors: [
       new LanguageDetector({
@@ -126,10 +126,10 @@ export const agent = new Agent({
 
   The `BatchPartsProcessor` is an output processor that combines multiple stream parts before emitting them to the client. This reduces network overhead and improves the user experience by consolidating small chunks into larger batches.
 
-  ```typescript {6-10} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+  ```typescript {6-10} filename="src/mastra/agents/batched-agent.ts" showLineNumbers copy
   import { BatchPartsProcessor } from "@mastra/core/processors";
 
-  export const agent = new Agent({
+  export const batchedAgent = new Agent({
     // ...
     outputProcessors: [
       new BatchPartsProcessor({
@@ -147,10 +147,10 @@ export const agent = new Agent({
 
   The `TokenLimiterProcessor` is an output processor that limits the number of tokens in model responses. It helps manage cost and performance by truncating or blocking messages when the limit is exceeded.
 
-  ```typescript {6-10, 13-15} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+  ```typescript {6-10, 13-15} filename="src/mastra/agents/limited-agent.ts" showLineNumbers copy
   import { TokenLimiterProcessor } from "@mastra/core/processors";
 
-  export const agent = new Agent({
+  export const limitedAgent = new Agent({
     // ...
     outputProcessors: [
       new TokenLimiterProcessor({
@@ -167,10 +167,10 @@ export const agent = new Agent({
 
   The `SystemPromptScrubber` is an output processor that detects and redacts system prompts or other internal instructions from model responses. It helps prevent unintended disclosure of prompt content or configuration details that could introduce security risks. It uses an LLM to identify and redact sensitive content based on configured detection types.
 
-  ```typescript copy showLineNumbers {5-13}
+  ```typescript {5-13} filename="src/mastra/agents/scrubbed-agent.ts" copy showLineNumbers
   import { SystemPromptScrubber } from "@mastra/core/processors";
 
-  const agent = new Agent({
+  const scrubbedAgent = new Agent({
     outputProcessors: [
       new SystemPromptScrubber({
         model: openai("gpt-4.1-nano"),
@@ -197,10 +197,10 @@ export const agent = new Agent({
 
   The `ModerationProcessor` is a hybrid processor that detects inappropriate or harmful content across categories like hate, harassment, and violence. It can be used to moderate either user input or model output, depending on where it's applied. It uses an LLM to classify the message and can block or rewrite it based on your configuration.
 
-  ```typescript {6-11, 14-16} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+  ```typescript {6-11, 14-16} filename="src/mastra/agents/moderated-agent.ts" showLineNumbers copy
   import { ModerationProcessor } from "@mastra/core/processors";
 
-  export const testAgent = new Agent({
+  export const moderatedAgent = new Agent({
     // ...
     inputProcessors: [
       new ModerationProcessor({
@@ -224,10 +224,10 @@ export const agent = new Agent({
 
   The `PIIDetector` is a hybrid processor that detects and removes personally identifiable information such as emails, phone numbers, and credit cards. It can redact either user input or model output, depending on where it's applied. It uses an LLM to identify sensitive content based on configured detection types.
 
-  ```typescript {6-13, 16-18} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+  ```typescript {6-13, 16-18} filename="src/mastra/agents/private-agent.ts" showLineNumbers copy
   import { PIIDetector } from "@mastra/core/processors";
 
-  export const testAgent = new Agent({
+  export const privateAgent = new Agent({
     // ...
     inputProcessors: [
       new PIIDetector({
@@ -290,18 +290,18 @@ export const testAgent = new Agent({
 });
 ```
 
-## Understanding aborted requests
+## Understanding responses
 
-If a user message or agent response fails the checks defined by a processor, the request is immediately stopped and no further processors run. The agent still returns a 200 response with details explaining why the request was aborted.
+If a user message or agent response fails the checks defined by a processor, the request is immediately stopped and no further processors run. The agent will still respond with a message but will also include details explaining what was detected and how it was handled.
 
 For example, if an agent uses the `PIIDetector` and a `.generate()` or `.stream()` call includes a credit card number:
 
 ```typescript
-const result = await agent.generate("4543 1374 5089 4332");
+const result = await agent.generate("Is this credit card number correct? 4543 1374 5089 4332");
 
 console.log(result.text);
 
-const stream = await agent.stream("4543 1374 5089 4332");
+const stream = await agent.stream("Is this credit card number correct? 4543 1374 5089 4332");
 
 for await (const chunk of stream.textStream) {
   process.stdout.write(chunk);
@@ -311,10 +311,9 @@ for await (const chunk of stream.textStream) {
 The response would include a message explaining what was detected and redacted:
 
 ```text
-[PIIDetector] Redacted PII: PII detected.
-Types: credit-card.
+[PIIDetector] Redacted PII: PII detected. Types: credit-card. Detections: 1 items
 
-Detections: 1 items
+I'm sorry, but I can't assist with entering or processing sensitive information like credit card numbers.
 ```
 
 
