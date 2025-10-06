@@ -682,6 +682,7 @@ export function createStep<
   outputSchema: TStepOutput;
   resumeSchema?: TResumeSchema;
   suspendSchema?: TSuspendSchema;
+  stateSchema?: TState;
   execute: ExecuteFunction<
     z.infer<TState>,
     z.infer<TStepInput>,
@@ -907,7 +908,7 @@ export function init(inngest: Inngest) {
     },
     createStep,
     cloneStep<TStepId extends string>(
-      step: Step<string, any, any, any, any, any, InngestEngineType>,
+      step: Step<TStepId, any, any, any, any, any, InngestEngineType>,
       opts: { id: TStepId },
     ): Step<TStepId, any, any, any, any, any, InngestEngineType> {
       return {
@@ -915,6 +916,9 @@ export function init(inngest: Inngest) {
         description: step.description,
         inputSchema: step.inputSchema,
         outputSchema: step.outputSchema,
+        resumeSchema: step.resumeSchema,
+        suspendSchema: step.suspendSchema,
+        stateSchema: step.stateSchema,
         execute: step.execute,
         component: step.component,
       };
@@ -1327,6 +1331,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   async executeStep({
     step,
     stepResults,
+    state,
     executionContext,
     resume,
     prevOutput,
@@ -1339,6 +1344,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }: {
     step: Step<string, any, any>;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    state: Record<string, any>;
     executionContext: ExecutionContext;
     resume?: {
       steps: string[];
@@ -1428,6 +1434,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             function: step.getFunction(),
             data: {
               inputData,
+              initialState: snapshot?.value ?? {},
               runId: runId,
               resume: {
                 runId: runId,
@@ -1505,7 +1512,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               },
             });
 
-            return { executionContext, result: { status: 'failed', error: result?.error } };
+            return { state, executionContext, result: { status: 'failed', error: result?.error } };
           } else if (result.status === 'suspended') {
             const suspendedSteps = Object.entries(result.steps).filter(([_stepName, stepResult]) => {
               const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
@@ -1544,6 +1551,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               });
 
               return {
+                state,
                 executionContext,
                 result: {
                   status: 'suspended',
@@ -1571,6 +1579,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             });
 
             return {
+              state,
               executionContext,
               result: {
                 status: 'suspended',
@@ -1616,15 +1625,17 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             },
           });
 
-          return { executionContext, result: { status: 'success', output: result?.result } };
+          return { state, executionContext, result: { status: 'success', output: result?.result } };
         },
       );
 
       Object.assign(executionContext, res.executionContext);
+      Object.assign(state, res.state);
       return res.result as StepResult<any, any, any, any>;
     }
 
     let stepRes: {
+      state: Record<string, any>;
       result: {
         status: 'success' | 'failed' | 'suspended' | 'bailed';
         output?: any;
@@ -1634,7 +1645,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         error?: string;
         resumedAt?: number;
         resumePayload?: any;
-        suspendedPayload?: any;
+        suspendPayload?: any;
         suspendedAt?: number;
       };
       executionContext: Omit<ExecutionContext, 'executionSpan'> & {
@@ -1657,7 +1668,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           error?: string;
           resumedAt?: number;
           resumePayload?: any;
-          suspendedPayload?: any;
+          suspendPayload?: any;
           suspendedAt?: number;
         };
         let suspended: { payload: any } | undefined;
@@ -1673,6 +1684,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             mastra: this.mastra!,
             runtimeContext,
             writableStream,
+            state,
             inputData,
             resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
             tracingContext: {
@@ -1733,7 +1745,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         if (suspended) {
           execResults = {
             status: 'suspended',
-            suspendedPayload: suspended.payload,
+            suspendPayload: suspended.payload,
             payload: inputData,
             suspendedAt: Date.now(),
             startedAt,
@@ -1795,7 +1807,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
         stepAISpan?.end({ output: execResults });
 
-        return { result: execResults, executionContext, stepResults };
+        return { result: execResults, executionContext, stepResults, state };
       });
     } catch (e) {
       const stepFailure: Omit<StepFailure<any, any, any>, 'error'> & { error?: string } =
@@ -1810,6 +1822,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             };
 
       stepRes = {
+        state,
         result: stepFailure,
         executionContext,
         stepResults: {
@@ -1841,6 +1854,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     Object.assign(executionContext.suspendedPaths, stepRes.executionContext.suspendedPaths);
     // @ts-ignore
     Object.assign(stepResults, stepRes.stepResults);
+    // @ts-ignore
+    Object.assign(state, stepRes.state);
 
     // @ts-ignore
     return stepRes.result;
