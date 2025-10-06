@@ -10,7 +10,18 @@ import { useTool } from '@/hooks/use-all-tools';
 import { useExecuteTool } from '@/hooks/use-execute-tool';
 
 import ToolExecutor from '../tool-executor';
-import { Header, Breadcrumb, Crumb, usePlaygroundStore, Txt } from '@mastra/playground-ui';
+import {
+  Header,
+  Breadcrumb,
+  Crumb,
+  usePlaygroundStore,
+  Txt,
+  Icon,
+  ToolsIcon,
+  HeaderAction,
+  Button,
+  DocsIcon,
+} from '@mastra/playground-ui';
 
 const Tool = () => {
   const { toolId } = useParams();
@@ -38,12 +49,24 @@ const Tool = () => {
       <Header>
         <Breadcrumb>
           <Crumb as={Link} to={`/tools`}>
+            <Icon>
+              <ToolsIcon />
+            </Icon>
             Tools
           </Crumb>
           <Crumb as={Link} to={`/tools/all/${toolId}`} isCurrent>
             {toolId}
           </Crumb>
         </Breadcrumb>
+
+        <HeaderAction>
+          <Button as={Link} to="https://mastra.ai/en/docs/agents/using-tools-and-mcp" target="_blank">
+            <Icon>
+              <DocsIcon />
+            </Icon>
+            Tools documentation
+          </Button>
+        </HeaderAction>
       </Header>
       {isLoading ? null : !tool ? (
         <div className="py-12 text-center px-6">
