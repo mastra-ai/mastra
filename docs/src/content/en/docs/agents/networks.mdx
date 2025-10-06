@@ -21,7 +21,7 @@ There are two main problem areas that this system is designed to solve:
 
 - Providing memory to the Agent when using `network()` is _not_ optional, as it is required to store the task history. Memory is the core primitive used for any decisions on which primitives to run, as well as determine task completion.
 - Any available primitives (agents, workflows) are used based on their descriptions. The better the description, the better the routing agent will be able to select the right primitive. For workflows, the input schema is also used to determine which inputs to use when calling the workflow. More descriptive naming yields better results.
-- When primitives with overlapping capabilities are available, the agent will use the most specific primitive. For example, if both an agent and a workflow can do research, it will use the input schema of the worklfow to determine
+- When primitives with overlapping capabilities are available, the agent will use the most specific primitive. For example, if both an agent and a workflow can do research, it will use the input schema of the workflow to determine which primitive to select.
 
 ## Turning an Agent into a Network
 
