@@ -120,7 +120,7 @@ export const moderatedAgent = new Agent({
 
   ## Output processors
 
-  Output processors are applied after the language model generates a response, but before it is returned to the user. They are useful for response optomization, moderation, transformation, and applying safety controls.
+  Output processors are applied after the language model generates a response, but before it is returned to the user. They are useful for response optimization, moderation, transformation, and applying safety controls.
 
   ### Batching streamed output
 
@@ -159,6 +159,7 @@ export const moderatedAgent = new Agent({
         countMode: "cumulative"
       })
     ]
+  })
   ```
 
   > See [TokenLimiterProcessor](../../reference/processors/token-limiter-processor.mdx) for a full list of configuration options.
