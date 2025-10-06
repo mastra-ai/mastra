@@ -1069,5 +1069,285 @@ describe('Working Memory Tests', () => {
       // For now, we'll just verify that LibSQL supports it
       expect(storage.supports.resourceWorkingMemory).toBe(true);
     });
+
+    it('should initialize working memory when creating new threads for existing resources', async () => {
+      // Create first thread and set working memory
+      const thread1 = await memory.saveThread({
+        thread: createTestThread('First Thread'),
+      });
+
+      const workingMemoryData = `# User Information
+- **First Name**: David
+- **Last Name**: Wilson
+- **Location**: Portland
+- **Interests**: Music, Photography
+`;
+
+      await memory.updateWorkingMemory({
+        threadId: thread1.id,
+        resourceId,
+        workingMemory: workingMemoryData,
+      });
+
+      // Create a new thread for the same resource
+      const thread2 = await memory.saveThread({
+        thread: createTestThread('Second Thread'),
+      });
+
+      // The new thread should immediately have access to the existing working memory
+      const retrievedMemory = await memory.getWorkingMemory({
+        threadId: thread2.id,
+        resourceId,
+      });
+
+      expect(retrievedMemory).toBe(workingMemoryData);
+    });
+
+    describe('Setting Working Memory via Thread Metadata (Resource Scope)', () => {
+      it('should set working memory at resource level when creating thread with metadata.workingMemory', async () => {
+        const workingMemoryData = `# User Information
+- **First Name**: John
+- **Last Name**: Doe
+- **Location**: New York`;
+
+        const thread = await memory.createThread({
+          resourceId,
+          metadata: {
+            workingMemory: workingMemoryData,
+          },
+        });
+
+        const retrievedWM = await memory.getWorkingMemory({
+          threadId: thread.id,
+          resourceId,
+        });
+
+        expect(retrievedWM).toBe(workingMemoryData);
+      });
+
+      it('should store working memory in resource table, not thread metadata', async () => {
+        const workingMemoryData = `# User Info
+- Name: Alice
+- Email: alice@example.com`;
+
+        const thread = await memory.createThread({
+          resourceId,
+          metadata: {
+            workingMemory: workingMemoryData,
+          },
+        });
+
+        // Verify it's in the resource table
+        const resource = await storage.getResourceById({ resourceId });
+        expect(resource?.workingMemory).toBe(workingMemoryData);
+
+        // The working memory should come from resource, not thread metadata
+        const wmFromResource = await memory.getWorkingMemory({
+          threadId: thread.id,
+          resourceId,
+        });
+        expect(wmFromResource).toBe(workingMemoryData);
+      });
+
+      it('should share working memory across threads when set via metadata on first thread', async () => {
+        const workingMemoryData = `# Shared User Data
+- Name: Bob
+- Preferences: Dark Mode`;
+
+        // Create first thread with working memory
+        const thread1 = await memory.createThread({
+          resourceId,
+          metadata: {
+            workingMemory: workingMemoryData,
+          },
+        });
+
+        // Create second thread without working memory
+        const thread2 = await memory.createThread({
+          resourceId,
+        });
+
+        // Both threads should see the same working memory
+        const wm1 = await memory.getWorkingMemory({ threadId: thread1.id, resourceId });
+        const wm2 = await memory.getWorkingMemory({ threadId: thread2.id, resourceId });
+
+        expect(wm1).toBe(workingMemoryData);
+        expect(wm2).toBe(workingMemoryData);
+      });
+
+      it('should produce same result as updateWorkingMemory for resource scope', async () => {
+        const workingMemoryData = `# User Profile
+- ID: user-123
+- Subscription: Premium`;
+
+        // Method 1: Via metadata (this should work but doesn't)
+        const thread1 = await memory.createThread({
+          resourceId: 'resource-1',
+          metadata: { workingMemory: workingMemoryData },
+        });
+
+        // Method 2: Via updateWorkingMemory (this works)
+        const thread2 = await memory.createThread({ resourceId: 'resource-2' });
+        await memory.updateWorkingMemory({
+          threadId: thread2.id,
+          resourceId: 'resource-2',
+          workingMemory: workingMemoryData,
+        });
+
+        const wm1 = await memory.getWorkingMemory({
+          threadId: thread1.id,
+          resourceId: 'resource-1',
+        });
+        const wm2 = await memory.getWorkingMemory({
+          threadId: thread2.id,
+          resourceId: 'resource-2',
+        });
+
+        expect(wm1).toBe(wm2);
+        expect(wm1).toBe(workingMemoryData);
+      });
+    });
+  });
+
+  describe('Setting Working Memory via Thread Metadata (Thread Scope)', () => {
+    let memory: Memory;
+    let storage: LibSQLStore;
+    let vector: LibSQLVector;
+    let thread: any;
+
+    beforeEach(async () => {
+      const dbPath = join(await mkdtemp(join(tmpdir(), `memory-thread-working-test-`)), 'test.db');
+
+      storage = new LibSQLStore({
+        url: `file:${dbPath}`,
+      });
+      vector = new LibSQLVector({
+        connectionUrl: `file:${dbPath}`,
+      });
+
+      // Create memory instance with thread-scoped working memory (default)
+      memory = new Memory({
+        options: {
+          workingMemory: {
+            enabled: true,
+            // scope defaults to 'thread'
+            template: `# User Information
+- **First Name**: 
+- **Last Name**: 
+- **Location**: 
+`,
+          },
+          lastMessages: 10,
+          semanticRecall: {
+            topK: 3,
+            messageRange: 2,
+          },
+          threads: {
+            generateTitle: false,
+          },
+        },
+        storage,
+        vector,
+        embedder: fastembed,
+      });
+    });
+
+    afterEach(async () => {
+      //@ts-ignore
+      await storage.client.close();
+      //@ts-ignore
+      await vector.turso.close();
+    });
+
+    it('should set working memory when creating thread with metadata.workingMemory', async () => {
+      const workingMemoryData = `# User Information
+- **First Name**: Jane
+- **Last Name**: Smith
+- **Location**: Boston`;
+
+      const thread = await memory.createThread({
+        resourceId,
+        metadata: {
+          workingMemory: workingMemoryData,
+        },
+      });
+
+      const retrievedWM = await memory.getWorkingMemory({ threadId: thread.id });
+      expect(retrievedWM).toBe(workingMemoryData);
+    });
+
+    it('should update working memory when updating thread metadata', async () => {
+      const initialWM = `# Patient Profile
+- Name: John Doe`;
+
+      const thread = await memory.createThread({
+        resourceId,
+        metadata: { workingMemory: initialWM },
+      });
+
+      const updatedWM = `# Patient Profile
+- Name: John Doe
+- Blood Type: O+`;
+
+      await memory.updateThread({
+        id: thread.id,
+        title: thread.title || 'Test Thread',
+        metadata: {
+          ...thread.metadata,
+          workingMemory: updatedWM,
+        },
+      });
+
+      const retrievedWM = await memory.getWorkingMemory({ threadId: thread.id });
+      expect(retrievedWM).toBe(updatedWM);
+    });
+
+    it('should produce same result as updateWorkingMemory for thread scope', async () => {
+      const workingMemoryData = `# User Info
+- Name: Jane Smith
+- Location: NYC`;
+
+      // Method 1: Via metadata
+      const thread1 = await memory.createThread({
+        resourceId,
+        metadata: { workingMemory: workingMemoryData },
+      });
+
+      // Method 2: Via updateWorkingMemory
+      const thread2 = await memory.createThread({ resourceId });
+      await memory.updateWorkingMemory({
+        threadId: thread2.id,
+        resourceId,
+        workingMemory: workingMemoryData,
+      });
+
+      const wm1 = await memory.getWorkingMemory({ threadId: thread1.id });
+      const wm2 = await memory.getWorkingMemory({ threadId: thread2.id });
+
+      expect(wm1).toBe(wm2);
+      expect(wm1).toBe(workingMemoryData);
+    });
+
+    it('should work as documented in medical consultation example', async () => {
+      // Exact example from docs
+      const thread = await memory.createThread({
+        threadId: 'thread-123',
+        resourceId: 'user-456',
+        title: 'Medical Consultation',
+        metadata: {
+          workingMemory: `# Patient Profile
+- Name: John Doe
+- Blood Type: O+
+- Allergies: Penicillin
+- Current Medications: None
+- Medical History: Hypertension (controlled)`,
+        },
+      });
+
+      const wm = await memory.getWorkingMemory({ threadId: thread.id });
+      expect(wm).toContain('John Doe');
+      expect(wm).toContain('O+');
+      expect(wm).toContain('Penicillin');
+    });
   });
 });
