@@ -1434,7 +1434,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             function: step.getFunction(),
             data: {
               inputData,
-              initialState: snapshot?.value ?? {},
+              initialState: state ?? snapshot?.valeu ?? {},
               runId: runId,
               resume: {
                 runId: runId,
@@ -1453,6 +1453,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             function: step.getFunction(),
             data: {
               inputData,
+              initialState: state ?? {},
             },
           })) as any;
           result = invokeResp.result;
@@ -1631,7 +1632,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
       Object.assign(executionContext, res.executionContext);
       Object.assign(state, res.state);
-      return res.result as StepResult<any, any, any, any>;
+      return {
+        ...res.result,
+        startedAt,
+        endedAt: Date.now(),
+        payload: inputData,
+        resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
+        resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
+      } as StepResult<any, any, any, any>;
     }
 
     let stepRes: {

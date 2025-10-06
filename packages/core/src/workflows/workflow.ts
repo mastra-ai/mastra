@@ -1078,6 +1078,7 @@ export class Workflow<
     runId,
     inputData,
     resumeData,
+    state,
     suspend,
     resume,
     [EMITTER_SYMBOL]: emitter,
@@ -1093,6 +1094,7 @@ export class Workflow<
     runId?: string;
     inputData: z.infer<TInput>;
     resumeData?: any;
+    state: z.infer<TState>;
     getStepResult<T extends Step<any, any, any, any, any, any, TEngineType>>(
       stepId: T,
     ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
@@ -1152,7 +1154,7 @@ export class Workflow<
 
     const res = isResume
       ? await run.resume({ resumeData, step: resume.steps as any, runtimeContext, tracingContext })
-      : await run.start({ inputData, runtimeContext, tracingContext, writableStream: writer });
+      : await run.start({ inputData, runtimeContext, tracingContext, writableStream: writer, initialState: state });
     unwatch();
     unwatchV2();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
