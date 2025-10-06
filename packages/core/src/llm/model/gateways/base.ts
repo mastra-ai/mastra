@@ -48,4 +48,6 @@ export abstract class MastraModelGateway {
     modelId: string,
     envVars: Record<string, string>,
   ): Record<string, string> | Promise<Record<string, string>>;
+
+  abstract getApiKey(modelId: string): Promise<string>;
 }

@@ -1,3 +1,4 @@
+import { MastraError } from '../../error/index.js';
 import type { MastraModelGateway } from './gateways/base.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
@@ -12,9 +13,9 @@ const gateways = [new NetlifyGateway(), new ModelsDevGateway(getStaticProvidersB
 /**
  * Find the gateway that handles a specific model ID based on prefix
  */
-function findGatewayForModel(modelId: string): MastraModelGateway | null {
+export function findGatewayForModel(gatewayId: string): MastraModelGateway {
   // First, check for gateways with specific prefixes
-  const prefixedGateway = gateways.find((g: MastraModelGateway) => g.prefix && modelId.startsWith(`${g.prefix}/`));
+  const prefixedGateway = gateways.find((g: MastraModelGateway) => g.prefix && gatewayId.startsWith(`${g.prefix}/`));
   if (prefixedGateway) {
     return prefixedGateway;
   }
@@ -26,29 +27,36 @@ function findGatewayForModel(modelId: string): MastraModelGateway | null {
     return gateway; // For now, return the first unprefixed gateway (models.dev)
   }
 
-  return null;
+  throw new MastraError({
+    id: 'MODEL_ROUTER_NO_GATEWAY_FOUND',
+    category: 'USER',
+    domain: 'MODEL_ROUTER',
+    text: `No Mastra model router gateway found for model id ${gatewayId}`,
+  });
 }
 
+export type ResolvedModelConfig = {
+  url: string | false;
+  headers: Record<string, string>;
+  resolvedModelId: string;
+  fullModelId: string;
+};
 /**
  * Resolve URL and headers for a model using runtime gateways
  */
 export async function resolveModelConfig(
   modelId: string,
   envVars: Record<string, string> = process.env as Record<string, string>,
-): Promise<{
-  url: string | false;
-  headers: Record<string, string>;
-  resolvedModelId: string;
-}> {
+): Promise<ResolvedModelConfig> {
   const gateway = findGatewayForModel(modelId);
 
   if (!gateway) {
-    return { url: false, headers: {}, resolvedModelId: modelId };
+    return { url: false, headers: {}, resolvedModelId: modelId, fullModelId: modelId };
   }
 
   const url = await gateway.buildUrl(modelId, envVars);
   if (url === false) {
-    return { url: false, headers: {}, resolvedModelId: modelId };
+    return { url: false, headers: {}, resolvedModelId: modelId, fullModelId: modelId };
   }
 
   const headers = gateway.buildHeaders ? await gateway.buildHeaders(modelId, envVars) : {};
@@ -67,5 +75,5 @@ export async function resolveModelConfig(
     resolvedModelId = resolvedModelId.substring(firstSlashIndex + 1);
   }
 
-  return { url, headers, resolvedModelId };
+  return { url, headers, resolvedModelId, fullModelId: modelId };
 }

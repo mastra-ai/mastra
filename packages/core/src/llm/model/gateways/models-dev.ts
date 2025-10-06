@@ -168,6 +168,26 @@ export class ModelsDevGateway extends MastraModelGateway {
     return customBaseUrl || config.url;
   }
 
+  getApiKey(modelId: string): Promise<string> {
+    const [provider, model] = modelId.split('/');
+    if (!provider || !model) {
+      throw new Error(`Could not identify provider from model id ${modelId}`);
+    }
+    const config = this.providerConfigs[provider];
+
+    if (!config) {
+      throw new Error(`Could not find config for provider ${provider} with model id ${modelId}`);
+    }
+
+    const apiKey = typeof config.apiKeyEnvVar === `string` ? process.env[config.apiKeyEnvVar] : undefined; // we only use single string env var for models.dev for now
+
+    if (!apiKey) {
+      throw new Error(`Could not find API key process.env.${config.apiKeyEnvVar} for model id ${modelId}`);
+    }
+
+    return Promise.resolve(apiKey);
+  }
+
   buildHeaders(
     modelId: string,
     envVars: Record<string, string>,

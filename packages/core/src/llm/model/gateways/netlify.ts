@@ -28,6 +28,7 @@ interface TokenData {
   token: string;
   url: string;
 }
+
 export class NetlifyGateway extends MastraModelGateway {
   readonly name = 'netlify';
   readonly prefix = 'netlify'; // All providers will be prefixed with "netlify/"
@@ -145,9 +146,13 @@ export class NetlifyGateway extends MastraModelGateway {
 
     return { token: tokenResponse.token, url: tokenResponse.url };
   }
-  async buildHeaders(modelId: string, envVars: Record<string, string>): Promise<Record<string, string>> {
-    const siteId = envVars['NETLIFY_SITE_ID'];
-    const netlifyToken = envVars['NETLIFY_TOKEN'];
+
+  /**
+   * Get cached token or fetch a new site-specific AI Gateway token from Netlify
+   */
+  async getApiKey(modelId: string): Promise<string> {
+    const siteId = process.env['NETLIFY_SITE_ID'];
+    const netlifyToken = process.env['NETLIFY_TOKEN'];
 
     if (!netlifyToken) {
       throw new MastraError({
@@ -168,10 +173,7 @@ export class NetlifyGateway extends MastraModelGateway {
     }
 
     try {
-      const tokenData = await this.getOrFetchToken(siteId, netlifyToken);
-      return {
-        Authorization: `Bearer ${tokenData.token}`,
-      };
+      return (await this.getOrFetchToken(siteId, netlifyToken)).token;
     } catch (error) {
       throw new MastraError({
         id: 'NETLIFY_GATEWAY_TOKEN_ERROR',
