@@ -62,8 +62,13 @@ export const memoryDefaultOptions = {
 } satisfies MemoryConfig;
 
 /**
- * Abstract Memory class that defines the interface for storing and retrieving
- * conversation threads and messages.
+ * Abstract base class for implementing conversation memory systems.
+ *
+ * Key features:
+ * - Thread-based conversation organization with resource association
+ * - Optional vector database integration for semantic similarity search
+ * - Working memory templates for structured conversation state
+ * - Handles memory processors to manipulate messages before they are sent to the LLM
  */
 export abstract class MastraMemory extends MastraBase {
   MAX_CONTEXT_TOKENS?: number;
@@ -207,6 +212,12 @@ export abstract class MastraMemory extends MastraBase {
         mergedConfig.workingMemory.schema = config.workingMemory.schema;
       }
     }
+
+    if (!mergedConfig?.threads) {
+      mergedConfig.threads = {};
+    }
+
+    mergedConfig.threads.generateTitle = config?.threads?.generateTitle !== false;
 
     return mergedConfig;
   }
