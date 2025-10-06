@@ -4,8 +4,7 @@ test('has valid links', async ({ page }) => {
   await page.goto('http://localhost:4111/tools');
 
   const el = await page.locator('text=get-weather');
-  const attachedAgent = await page.locator('text=Weather Agent');
-  await expect(attachedAgent).toBeVisible();
+  await expect(page.locator('text=Weather Agent')).toBeVisible();
 
   await el.click();
 
