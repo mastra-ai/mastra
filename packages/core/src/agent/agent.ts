@@ -3628,12 +3628,20 @@ export class Agent<
 
   async generate<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' = 'mastra'>(
     messages: MessageListInput,
-    options?: AgentExecutionOptions<OUTPUT, FORMAT>,
+    options?: AgentExecutionOptions<OUTPUT, FORMAT> & DeprecatedOutputOptions<OUTPUT>,
   ): Promise<
     FORMAT extends 'aisdk'
       ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
   > {
+    // Deprecated `output` option now just maps to structuredOutput.schema
+    if (options?.output) {
+      options.structuredOutput = {
+        schema: options.output as OUTPUT extends OutputSchema ? OUTPUT : never,
+      };
+      delete options.output;
+    }
+
     const result = await this.stream(messages, options);
     const fullOutput = await result.getFullOutput();
 
