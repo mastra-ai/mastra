@@ -52,15 +52,22 @@ export function ToolTable({ tools, agents, isLoading }: ToolTableProps) {
             ))}
           </Thead>
           <Tbody>
-            {rows.map(row => (
-              <Row key={row.id} onClick={() => navigate(paths.toolLink(row.original.id))}>
-                {row.getVisibleCells().map(cell => (
-                  <React.Fragment key={cell.id}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </React.Fragment>
-                ))}
-              </Row>
-            ))}
+            {rows.map(row => {
+              const firstAgent = row.original.agents[0];
+              const link = firstAgent
+                ? paths.agentToolLink(firstAgent.id, row.original.id)
+                : paths.toolLink(row.original.id);
+
+              return (
+                <Row key={row.id} onClick={() => navigate(link)}>
+                  {row.getVisibleCells().map(cell => (
+                    <React.Fragment key={cell.id}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </React.Fragment>
+                  ))}
+                </Row>
+              );
+            })}
           </Tbody>
         </Table>
       </TooltipProvider>

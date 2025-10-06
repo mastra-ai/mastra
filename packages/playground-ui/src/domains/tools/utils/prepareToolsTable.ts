@@ -1,7 +1,7 @@
 import { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
 
 export interface ToolWithAgents extends GetToolResponse {
-  agents: Array<GetAgentResponse>;
+  agents: Array<GetAgentResponse & { id: string }>;
 }
 
 export const prepareToolsTable = (
@@ -27,7 +27,7 @@ export const prepareToolsTable = (
         });
       }
 
-      toolsWithAgents.get(tool.id)!.agents.push(agent);
+      toolsWithAgents.get(tool.id)!.agents.push({ ...agent, id: k });
     }
   }
 
