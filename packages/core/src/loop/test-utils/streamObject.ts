@@ -14,7 +14,6 @@ import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import { createMockServerResponse } from './mock-server-response';
 import { mockDate, testUsage } from './utils';
-import { MastraError } from '../../error';
 
 function createTestModels({
   warnings = [],
@@ -93,7 +92,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         const result = loopFn({
           runId,
           models: createTestModels(),
-          output: z.object({ content: z.string() }),
+          structuredOutput: { schema: z.object({ content: z.string() }) },
           messageList: new MessageList(),
         });
 
@@ -121,7 +120,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             ]),
           }),
-          output: z.array(z.object({ content: z.string() })),
+          structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
           messageList: new MessageList(),
         });
 
@@ -135,7 +134,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         const result = loopFn({
           runId,
           models: createTestModels(),
-          output: z.object({ content: z.string() }),
+          structuredOutput: { schema: z.object({ content: z.string() }) },
           messageList: new MessageList(),
         });
 
@@ -160,7 +159,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             runId,
             models: mockModel,
             messageList,
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
           });
 
           expect(await convertAsyncIterableToArray(result.objectStream)).toMatchInlineSnapshot(`
@@ -204,7 +203,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const result = loopFn({
             runId,
             models,
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -224,12 +223,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         `);
           expect(models[0]?.model?.doStreamCalls?.[0]?.prompt).toMatchInlineSnapshot(`
             [
-              {
-                "content": "JSON schema:
-            {"type":"object","properties":{"content":{"type":"string"}},"required":["content"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}
-            You MUST answer with a JSON object that matches the JSON schema above.",
-                "role": "system",
-              },
               {
                 "content": [
                   {
@@ -278,7 +271,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
             options: {
               onError: () => {},
@@ -304,7 +297,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
             options: {
               onError(event) {
@@ -327,7 +320,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const result = loopFn({
             runId,
             models: createTestModels(),
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -408,7 +401,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const result = loopFn({
             runId,
             models: createTestModels(),
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -438,7 +431,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const result = loopFn({
             runId,
             models: createTestModels(),
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -466,7 +459,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
           const result = loopFn({
             models: createTestModels(),
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -514,7 +507,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 { type: 'finish', finishReason: 'stop', usage: testUsage },
               ]),
             }),
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -554,7 +547,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 },
               ]),
             }),
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -596,7 +589,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               ]),
               response: { headers: { call: '2' } },
             }),
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -691,7 +684,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -735,7 +728,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -775,7 +768,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -813,7 +806,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -852,7 +845,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -898,7 +891,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             options: {
               onFinish: async event => {
                 result = event;
@@ -1106,7 +1099,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             options: {
               onFinish: async event => {
                 result = event;
@@ -1313,7 +1306,7 @@ Error message: Validation failed]`);
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             options: {
               onFinish: async event => {
                 result = event;
@@ -1520,7 +1513,7 @@ Error message: Validation failed]`);
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
             modelSettings: { headers: { 'custom-request-header': 'request-header-value' } },
             headers: { 'custom-request-header': 'request-header-value' },
@@ -1570,7 +1563,7 @@ Error message: Validation failed]`);
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
             providerOptions: {
               aProvider: { someKey: 'someValue' },
@@ -1595,12 +1588,14 @@ Error message: Validation failed]`);
           const result = loopFn({
             runId,
             models,
-            output: jsonSchema({
-              type: 'object',
-              properties: { content: { type: 'string' } },
-              required: ['content'],
-              additionalProperties: false,
-            }),
+            structuredOutput: {
+              schema: jsonSchema({
+                type: 'object',
+                properties: { content: { type: 'string' } },
+                required: ['content'],
+                additionalProperties: false,
+              }),
+            },
             messageList: new MessageList(),
           });
           const expectedOutput = `
@@ -1674,7 +1669,7 @@ Error message: Validation failed]`);
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -1725,7 +1720,7 @@ Error message: Validation failed]`);
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -1773,7 +1768,7 @@ Error message: Validation failed]`);
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -1819,7 +1814,7 @@ Error message: Validation failed]`);
                 },
               ]),
             }),
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -1852,7 +1847,7 @@ Error message: Validation failed]`);
                 },
               ]),
             }),
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -1884,7 +1879,7 @@ Error message: Validation failed]`);
                 },
               ]),
             }),
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -1925,7 +1920,7 @@ Error message: Validation failed]`);
                 },
               ]),
             }),
-            output: z.array(z.object({ content: z.string() })),
+            structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
             messageList: new MessageList(),
           });
 
@@ -1951,7 +1946,7 @@ Error message: Validation failed]`);
                 },
               ]),
             }),
-            output: z.array(z.object({ content: z.string() })),
+            structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
             messageList: new MessageList(),
           });
 
@@ -1984,7 +1979,7 @@ Error message: Validation failed]`);
                 },
               ]),
             }),
-            output: z.enum(['sunny', 'rainy', 'snowy']),
+            structuredOutput: { schema: z.enum(['sunny', 'rainy', 'snowy']) },
             messageList: new MessageList(),
           });
 
@@ -2012,7 +2007,7 @@ Error message: Validation failed]`);
                 },
               ]),
             }),
-            output: z.enum(['sunny', 'rainy', 'snowy']),
+            structuredOutput: { schema: z.enum(['sunny', 'rainy', 'snowy']) },
             messageList: new MessageList(),
           });
 
@@ -2063,7 +2058,7 @@ Error message: Validation failed]`);
                 },
               ]),
             }),
-            output: z.array(z.object({ content: z.string() })),
+            structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
             options: {
               onFinish: async event => {
                 onFinishResult = event as unknown as typeof onFinishResult;
@@ -2150,10 +2145,8 @@ Error message: Validation failed]`);
                 },
               ]),
             }),
-            output: z.array(z.object({ content: z.string() })),
+            structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
             options: {
-              // schema: z.object({ content: z.string() }),
-              // output: 'array',
               onFinish: async event => {
                 onFinishResult = event as unknown as typeof onFinishResult;
               },
@@ -2233,7 +2226,7 @@ Error message: Validation failed]`);
                 },
               ]),
             }),
-            output: z.array(z.object({ content: z.string() })),
+            structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
 
             messageList: new MessageList(),
           });
@@ -2262,7 +2255,7 @@ Error message: Validation failed]`);
         const result = loopFn({
           runId,
           models: mockModels,
-          output: z.enum(['sunny', 'rainy', 'snowy']),
+          structuredOutput: { schema: z.enum(['sunny', 'rainy', 'snowy']) },
           messageList: new MessageList(),
         });
 
@@ -2328,7 +2321,7 @@ Error message: Validation failed]`);
         const result = loopFn({
           runId,
           models: mockModels,
-          output: z.enum(['sunny', 'rainy', 'snowy']),
+          structuredOutput: { schema: z.enum(['sunny', 'rainy', 'snowy']) },
           messageList: new MessageList(),
         });
 
@@ -2356,7 +2349,7 @@ Error message: Validation failed]`);
         const result = loopFn({
           runId,
           models: mockModels,
-          output: z.enum(['foobar', 'foobar2']),
+          structuredOutput: { schema: z.enum(['foobar', 'foobar2']) },
           messageList: new MessageList(),
         });
 
@@ -2390,7 +2383,7 @@ Error message: Validation failed]`);
         const result = loopFn({
           runId,
           models: mockModels,
-          output: z.enum(['foobar', 'barfoo']),
+          structuredOutput: { schema: z.enum(['foobar', 'barfoo']) },
           messageList: new MessageList(),
         });
 
@@ -2436,7 +2429,7 @@ Error message: Validation failed]`);
               }),
             },
           ],
-          output: z.object({ content: z.string() }),
+          structuredOutput: { schema: z.object({ content: z.string() }) },
           // TODO
           // options: {
           //   experimental_repairText: async ({ text, error }) => {
@@ -2489,7 +2482,7 @@ Error message: Validation failed]`);
               }),
             },
           ],
-          output: z.object({ content: z.string() }),
+          structuredOutput: { schema: z.object({ content: z.string() }) },
           // TODO
           // options: {
           //   experimental_repairText: async ({ text, error }) => {
@@ -2543,7 +2536,7 @@ Error message: Validation failed]`);
             },
           ],
 
-          output: z.object({ content: z.string() }),
+          structuredOutput: { schema: z.object({ content: z.string() }) },
 
           // TODO: experimental_repairText?
           // options: {
@@ -2597,7 +2590,7 @@ Error message: Validation failed]`);
               }),
             },
           ],
-          output: z.object({ content: z.string() }),
+          structuredOutput: { schema: z.object({ content: z.string() }) },
           // TODO
           // options: {
           //   experimental_repairText: async ({ text, error }) => {
@@ -2649,7 +2642,7 @@ Error message: Validation failed]`);
               }),
             },
           ],
-          output: z.object({ content: z.string() }),
+          structuredOutput: { schema: z.object({ content: z.string() }) },
           // TODO
           // options: {
           //   experimental_repairText: async ({ text }) => text + '{',
