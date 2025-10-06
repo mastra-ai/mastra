@@ -31,7 +31,7 @@ export type MemoryProcessorOpts = {
 };
 
 /**
- * Base MemoryProcessor classs for implementing message processors that can filter or transform messages
+ * Base MemoryProcessor class for implementing message processors that can filter or transform messages
  * before they're sent to the LLM. Processors can be chained together to create complex
  * message transformation pipelines.
  */
