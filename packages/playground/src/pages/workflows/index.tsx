@@ -40,7 +40,7 @@ function Workflows() {
       </Header>
 
       <MainContentContent isCentered={isEmpty}>
-        <WorkflowTable workflows={workflows} isLoading={isLoading} />
+        <WorkflowTable workflows={workflows || {}} isLoading={isLoading} />
       </MainContentContent>
     </MainContentLayout>
   );
