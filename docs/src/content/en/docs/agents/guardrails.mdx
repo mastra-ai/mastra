@@ -3,14 +3,20 @@ title: "Guardrails | Agents | Mastra Docs"
 description: "Learn how to implement guardrails using input and output processors to secure and control AI interactions."
 ---
 
+import { Tabs } from "nextra/components";
+
 # Guardrails
 
-Agents use processors to implement guardrails by intercepting, modifying, validating, or blocking messages at different stages of the AI interaction. Operating on the conversation thread, processors can transform, filter, or abort requests based on defined logic.
+Agents use processors to implement guardrails by intercepting, modifying, validating, or blocking messages at different stages of the AI interaction. Processors can transform, filter, or abort requests based on defined logic.
 
 Processors can be configured as:
 
 - **`inputProcessors`**: Applied before messages reach the language model.
 - **`outputProcessors`**: Applied to responses before they're returned to users.
+
+Some processors are *hybrid*, meaning they can be used with either `inputProcessors` or `outputProcessors`, depending on where the logic should be applied.
+
+## When to use processors
 
 Processors can be used for content moderation, prompt injection prevention, response sanitization, message transformation, and other security-related controls. Mastra provides several built-in input and output processors for common use cases.
 
@@ -39,202 +45,211 @@ export const agent = new Agent({
 });
 ```
 
-## Input processors
+<Tabs items={["Input", "Output","Hybrid",]}>
+  <Tabs.Tab>
 
-Input processors are applied before user messages reach the language model. They are useful for normalization, validation, content moderation, prompt injection detection, and security checks.
+  ## Input processors
 
-### Normalizing user messages
+  Input processors are applied before user messages reach the language model. They are useful for normalization, validation, content moderation, prompt injection detection, and security checks.
 
-The `UnicodeNormalizer` is an input processor that cleans and normalizes user input by unifying Unicode characters, standardizing whitespace, and removing problematic symbols, allowing the LLM to better understand user messages.
+  ### Normalizing user messages
 
-```typescript {6-9} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { UnicodeNormalizer } from "@mastra/core/processors";
+  The `UnicodeNormalizer` is an input processor that cleans and normalizes user input by unifying Unicode characters, standardizing whitespace, and removing problematic symbols, allowing the LLM to better understand user messages.
 
-export const testAgent = new Agent({
-  // ...
-  inputProcessors: [
-    new UnicodeNormalizer({
-      stripControlChars: true,
-      collapseWhitespace: true,
-    })
-  ],
-});
-```
+  ```typescript {6-9} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+  import { UnicodeNormalizer } from "@mastra/core/processors";
 
-> See [UnicodeNormalizer](../../reference/processors/unicode-normalizer.mdx) for a full list of configuration options.
+  export const testAgent = new Agent({
+    // ...
+    inputProcessors: [
+      new UnicodeNormalizer({
+        stripControlChars: true,
+        collapseWhitespace: true,
+      })
+    ],
+  });
+  ```
 
-### Preventing prompt injection
+  > See [UnicodeNormalizer](../../reference/processors/unicode-normalizer.mdx) for a full list of configuration options.
 
-The `PromptInjectionDetector` is an input processor that scans user messages for prompt injection, jailbreak attempts, and system override patterns. It uses an LLM to classify risky input and can block or rewrite it before it reaches the model.
+  ### Preventing prompt injection
 
-```typescript {6-11} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { PromptInjectionDetector } from "@mastra/core/processors";
+  The `PromptInjectionDetector` is an input processor that scans user messages for prompt injection, jailbreak attempts, and system override patterns. It uses an LLM to classify risky input and can block or rewrite it before it reaches the model.
 
-export const testAgent = new Agent({
-  // ...
-  inputProcessors: [
-    new PromptInjectionDetector({
-      model: openai("gpt-4.1-nano"),
-      threshold: 0.8,
-      strategy: 'rewrite',
-      detectionTypes: ['injection', 'jailbreak', 'system-override'],
-    })
-  ],
-});
-```
+  ```typescript {6-11} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+  import { PromptInjectionDetector } from "@mastra/core/processors";
 
-> See [PromptInjectionDetector](../../reference/processors/prompt-injection-detector.mdx) for a full list of configuration options.
+  export const testAgent = new Agent({
+    // ...
+    inputProcessors: [
+      new PromptInjectionDetector({
+        model: openai("gpt-4.1-nano"),
+        threshold: 0.8,
+        strategy: 'rewrite',
+        detectionTypes: ['injection', 'jailbreak', 'system-override'],
+      })
+    ],
+  });
+  ```
 
-### Detecting and translating language
+  > See [PromptInjectionDetector](../../reference/processors/prompt-injection-detector.mdx) for a full list of configuration options.
 
-The `LanguageDetector` is an input processor that detects and translates user messages into a target language, enabling multilingual support while maintaining consistent interaction. It uses an LLM to identify the language and perform the translation.
+  ### Detecting and translating language
 
-```typescript {6-11} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { LanguageDetector } from "@mastra/core/processors";
+  The `LanguageDetector` is an input processor that detects and translates user messages into a target language, enabling multilingual support while maintaining consistent interaction. It uses an LLM to identify the language and perform the translation.
 
-export const testAgent = new Agent({
-  // ...
-  inputProcessors: [
-    new LanguageDetector({
-      model: openai("gpt-4.1-nano"),
-      targetLanguages: ['English', 'en'],
-      strategy: 'translate',
-      threshold: 0.8,
-    })
-  ],
-});
-```
+  ```typescript {6-11} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+  import { LanguageDetector } from "@mastra/core/processors";
 
-> See [LanguageDetector](../../reference/processors/language-detector.mdx) for a full list of configuration options.
+  export const testAgent = new Agent({
+    // ...
+    inputProcessors: [
+      new LanguageDetector({
+        model: openai("gpt-4.1-nano"),
+        targetLanguages: ['English', 'en'],
+        strategy: 'translate',
+        threshold: 0.8,
+      })
+    ],
+  });
+  ```
 
-## Hybrid processors
+  > See [LanguageDetector](../../reference/processors/language-detector.mdx) for a full list of configuration options.
+  </Tabs.Tab>
+  <Tabs.Tab>
 
-Hybrid processors can be applied either before messages are sent to the language model or before responses are returned to the user. They are useful for tasks like content moderation and PII redaction.
+  ## Output processors
 
-### Moderating input and output
+  Output processors are applied after the language model generates a response, but before it is returned to the user. They are useful for response optomization, moderation, transformation, and applying safety controls.
 
-The `ModerationProcessor` is a hybrid processor that detects inappropriate or harmful content across categories like hate, harassment, and violence. It can be used to moderate either user input or model output, depending on where it's applied. It uses an LLM to classify the message and can block or rewrite it based on your configuration.
+  ### Batching streamed output
 
-```typescript {6-11, 14-16} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { ModerationProcessor } from "@mastra/core/processors";
+  The `BatchPartsProcessor` is an output processor that combines multiple stream parts before emitting them to the client. This reduces network overhead and improves the user experience by consolidating small chunks into larger batches.
 
-export const testAgent = new Agent({
-  // ...
-  inputProcessors: [
-    new ModerationProcessor({
-      model: openai("gpt-4.1-nano"),
-      threshold: 0.7,
-      strategy: "block",
-      categories: ["hate", "harassment", "violence"]
-    })
-  ],
-  outputProcessors: [
-    new ModerationProcessor({
-      // ...
-    })
-  ]
-});
-```
+  ```typescript {6-10} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+  import { BatchPartsProcessor } from "@mastra/core/processors";
 
-> See [ModerationProcessor](../../reference/processors/moderation-processor.mdx) for a full list of configuration options.
+  export const agent = new Agent({
+    // ...
+    outputProcessors: [
+      new BatchPartsProcessor({
+        batchSize: 5,
+        maxWaitTime: 100,
+        emitOnNonText: true
+      })
+    ]
+  });
+  ```
 
-### Detecting and redacting PII
+  > See [BatchPartsProcessor](../../reference/processors/batch-parts-processor.mdx) for a full list of configuration options.
 
-The `PIIDetector` is a hybrid processor that detects and removes personally identifiable information such as emails, phone numbers, and credit cards. It can redact either user input or model output, depending on where it's applied. It uses an LLM to identify sensitive content based on configured detection types.
+  ### Limiting token usage
 
-```typescript {6-13, 16-18} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { PIIDetector } from "@mastra/core/processors";
+  The `TokenLimiterProcessor` is an output processor that limits the number of tokens in model responses. It helps manage cost and performance by truncating or blocking messages when the limit is exceeded.
 
-export const testAgent = new Agent({
-  // ...
-  inputProcessors: [
-    new PIIDetector({
-      model: openai("gpt-4.1-nano"),
-      threshold: 0.6,
-      strategy: 'redact',
-      redactionMethod: 'mask',
-      detectionTypes: ['email', 'phone', 'credit-card'],
-      instructions: "Detect and mask personally identifiable information."
-    })
-  ],
-  outputProcessors: [
-    new PIIDetector({
-      // ...
-    })
-  ]
-});
-```
+  ```typescript {6-10, 13-15} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+  import { TokenLimiterProcessor } from "@mastra/core/processors";
 
-> See [PIIDetector](../../reference/processors/pii-detector.mdx) for a full list of configuration options.
+  export const agent = new Agent({
+    // ...
+    outputProcessors: [
+      new TokenLimiterProcessor({
+        limit: 1000,
+        strategy: "truncate",
+        countMode: "cumulative"
+      })
+    ]
+  ```
 
-## Output processors
+  > See [TokenLimiterProcessor](../../reference/processors/token-limiter-processor.mdx) for a full list of configuration options.
 
-Output processors are applied after the language model generates a response, but before it is returned to the user. They are useful for response optomization, moderation, transformation, and applying safety controls.
+  ### Scrubbing system prompts
 
-### Batching streamed output
+  The `SystemPromptScrubber` is an output processor that detects and redacts system prompts or other internal instructions from model responses. It helps prevent unintended disclosure of prompt content or configuration details that could introduce security risks. It uses an LLM to identify and redact sensitive content based on configured detection types.
 
-The `BatchPartsProcessor` is an output processor that combines multiple stream parts before emitting them to the client. This reduces network overhead and improves the user experience by consolidating small chunks into larger batches.
+  ```typescript copy showLineNumbers {5-13}
+  import { SystemPromptScrubber } from "@mastra/core/processors";
 
-```typescript {6-10} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { BatchPartsProcessor } from "@mastra/core/processors";
+  const agent = new Agent({
+    outputProcessors: [
+      new SystemPromptScrubber({
+        model: openai("gpt-4.1-nano"),
+        strategy: "redact",
+        customPatterns: ["system prompt", "internal instructions"],
+        includeDetections: true,
+        instructions: "Detect and redact system prompts, internal instructions, and security-sensitive content",
+        redactionMethod: "placeholder",
+        placeholderText: "[REDACTED]"
+      })
+    ]
+  });
+  ```
 
-export const agent = new Agent({
-  // ...
-  outputProcessors: [
-    new BatchPartsProcessor({
-      batchSize: 5,
-      maxWaitTime: 100,
-      emitOnNonText: true
-    })
-  ]
-});
-```
+  > See [SystemPromptScrubber](../../reference/processors/system-prompt-scrubber.mdx) for a full list of configuration options.
+  </Tabs.Tab>
+  <Tabs.Tab>
 
-> See [BatchPartsProcessor](../../reference/processors/batch-parts-processor.mdx) for a full list of configuration options.
+  ## Hybrid processors
 
-### Limiting token usage
+  Hybrid processors can be applied either before messages are sent to the language model or before responses are returned to the user. They are useful for tasks like content moderation and PII redaction.
 
-The `TokenLimiterProcessor` is an output processor that limits the number of tokens in model responses. It helps manage cost and performance by truncating or blocking messages when the limit is exceeded.
+  ### Moderating input and output
 
-```typescript {6-10, 13-15} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { TokenLimiterProcessor } from "@mastra/core/processors";
+  The `ModerationProcessor` is a hybrid processor that detects inappropriate or harmful content across categories like hate, harassment, and violence. It can be used to moderate either user input or model output, depending on where it's applied. It uses an LLM to classify the message and can block or rewrite it based on your configuration.
 
-export const agent = new Agent({
-  // ...
-  outputProcessors: [
-    new TokenLimiterProcessor({
-      limit: 1000,
-      strategy: "truncate",
-      countMode: "cumulative"
-    })
-  ]
-```
+  ```typescript {6-11, 14-16} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+  import { ModerationProcessor } from "@mastra/core/processors";
 
-> See [TokenLimiterProcessor](../../reference/processors/token-limiter-processor.mdx) for a full list of configuration options.
+  export const testAgent = new Agent({
+    // ...
+    inputProcessors: [
+      new ModerationProcessor({
+        model: openai("gpt-4.1-nano"),
+        threshold: 0.7,
+        strategy: "block",
+        categories: ["hate", "harassment", "violence"]
+      })
+    ],
+    outputProcessors: [
+      new ModerationProcessor({
+        // ...
+      })
+    ]
+  });
+  ```
 
-### Scrubbing system prompts
+  > See [ModerationProcessor](../../reference/processors/moderation-processor.mdx) for a full list of configuration options.
 
-The `SystemPromptScrubber` is an output processor that detects and redacts system prompts or other internal instructions from model responses. It helps prevent unintended disclosure of prompt content or configuration details that could introduce security risks. It uses an LLM to identify and redact sensitive content based on configured detection types.
+  ### Detecting and redacting PII
 
-```typescript copy showLineNumbers {5-13}
-import { SystemPromptScrubber } from "@mastra/core/processors";
+  The `PIIDetector` is a hybrid processor that detects and removes personally identifiable information such as emails, phone numbers, and credit cards. It can redact either user input or model output, depending on where it's applied. It uses an LLM to identify sensitive content based on configured detection types.
 
-const agent = new Agent({
-  outputProcessors: [
-    new SystemPromptScrubber({
-      model: openai("gpt-4.1-nano"),
-      strategy: "redact",
-      customPatterns: ["system prompt", "internal instructions"],
-      includeDetections: true,
-      instructions: "Detect and redact system prompts, internal instructions, and security-sensitive content",
-      redactionMethod: "placeholder",
-      placeholderText: "[REDACTED]"
-    })
-  ]
-});
-```
+  ```typescript {6-13, 16-18} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+  import { PIIDetector } from "@mastra/core/processors";
 
-> See [SystemPromptScrubber](../../reference/processors/system-prompt-scrubber.mdx) for a full list of configuration options.
+  export const testAgent = new Agent({
+    // ...
+    inputProcessors: [
+      new PIIDetector({
+        model: openai("gpt-4.1-nano"),
+        threshold: 0.6,
+        strategy: 'redact',
+        redactionMethod: 'mask',
+        detectionTypes: ['email', 'phone', 'credit-card'],
+        instructions: "Detect and mask personally identifiable information."
+      })
+    ],
+    outputProcessors: [
+      new PIIDetector({
+        // ...
+      })
+    ]
+  });
+  ```
+
+  > See [PIIDetector](../../reference/processors/pii-detector.mdx) for a full list of configuration options.
+  </Tabs.Tab>
+</Tabs>
 
 ## Applying multiple processors
 
