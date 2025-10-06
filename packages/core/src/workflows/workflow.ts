@@ -1869,6 +1869,9 @@ export class Run<
     this.validateInputs = params.validateInputs;
   }
 
+  /**
+   * Returns the abort controller for this run
+   */
   public get abortController(): AbortController {
     if (!this.#abortController) {
       this.#abortController = new AbortController();
@@ -1878,12 +1881,41 @@ export class Run<
   }
 
   /**
-   * Cancels the workflow execution
+   * Cancels the workflow execution and stops the workflow run.
+   * If there is a step being executed, it waits for it to finish before stopping the run.
+   *
+   * If the step was created from an agent or has an LLM call with the abortController passed, it will abort the call.
+   *
+   * @example
+   * ```typescript
+   * const run = await workflow.createRunAsync();
+   * run.start({ inputData: { value: 'hello' } });
+   * setTimeout(() => {
+   *   run.cancel();
+   * }, 2000);
+   * ```
    */
   async cancel() {
     this.abortController?.abort();
   }
 
+  /**
+   * Sends an event to the workflow run.
+   * @param event - The event to send.
+   * @param data - The data to send with the event.
+   *
+   * This is often used with `waitForEvent` to resume the workflow after the event is received. In the execcution function of the step, the event payload will be under resumeData.
+   *
+   * @example
+   * ```typescript
+   * workflow.then(step1).waitForEvent('my-event', step2).then(step3).commit();
+   *
+   * const run = await workflow.createRunAsync();
+   * run.start({ inputData: {} }); // This will start the workflow execution, after the step1 is executed, the workflow will wait for the event 'my-event'
+   * run.sendEvent('my-event', { data: 'hello' }); // This will send the event to the workflow run, and the workflow will resume from the step2
+   * ```
+   *
+   */
   async sendEvent(event: string, data: any) {
     this.emitter.emit(`user-event-${event}`, data);
   }
@@ -2019,8 +2051,21 @@ export class Run<
 
   /**
    * Starts the workflow execution with the provided input
-   * @param input The input data for the workflow
+   * @params.inputData The input data for the workflow. The inputData structure is determined by the workflow inputSchema
+   * @params.runtimeContext The runtime context for the workflow.
+   * @params.writableStream The writable stream for the workflow.
+   * @params.tracingContext The tracing context for the workflow.
+   * @params.tracingOptions The tracing options for the workflow.
    * @returns A promise that resolves to the workflow output
+   *
+   * The promise resolves when the workflow state becomes `success`, `suspended` or `failed`.
+   *
+   * @example
+   * ```typescript
+   * const run = await workflow.createRunAsync();
+   * const result = await run.start({ inputData: { value: 'hello' } });
+   * console.log(result);
+   * ```
    */
   async start({
     inputData,
@@ -2046,9 +2091,30 @@ export class Run<
   }
 
   /**
-   * Starts the workflow execution with the provided input as a stream
-   * @param input The input data for the workflow
-   * @returns A promise that resolves to the workflow output
+   * Starts the workflow execution with the provided input and returns a stream of the workflow events.
+   * @param inputData The input data for the workflow. The inputData structure is determined by the workflow inputSchema
+   * @param runtimeContext The runtime context for the workflow.
+   * @param onChunk The callback function to handle the chunk. It will be called for each workflow event.
+   * @param tracingContext The tracing context for the workflow.
+   * @param tracingOptions The tracing options for the workflow.
+   * @returns An object with the stream and the getWorkflowState function.
+   *
+   * getWorkflowState returns a promise that resolves to the workflow output.
+   *
+   * The stream only ends when the workflow state becomes `success` or `failed`. It remains open otherwise.
+   *
+   * @example
+   * ```typescript
+   * const run = await workflow.createRunAsync();
+   * const { stream, getWorkflowState } = run.stream({ inputData: { value: 'hello' } });
+   *
+   * for await (const chunk of stream) {
+   *   console.log(chunk);
+   * }
+   *
+   * const result = await getWorkflowState();
+   * console.log(result);
+   * ```
    */
   stream({
     inputData,
@@ -2135,6 +2201,19 @@ export class Run<
   /**
    * Observe the workflow stream
    * @returns A readable stream of the workflow events
+   *
+   * Opens a new stream to an already running workflow run.
+   *
+   * @example
+   * ```typescript
+   * const run = await workflow.createRunAsync();
+   * run.start({ inputData: { value: 'hello' } });
+   * const { stream } = run.observeStream();
+   *
+   * for await (const chunk of stream) {
+   *   console.log(chunk);
+   * }
+   * ```
    */
   observeStream(): {
     stream: ReadableStream<StreamEvent>;
@@ -2172,6 +2251,19 @@ export class Run<
   /**
    * Observe the workflow stream vnext
    * @returns A readable stream of the workflow events
+   *
+   * Opens a new stream to an already running workflow run.
+   *
+   * @example
+   * ```typescript
+   * const run = await workflow.createRunAsync();
+   * run.start({ inputData: { value: 'hello' } });
+   * const stream = run.observeStreamVNext();
+   *
+   * for await (const chunk of stream) {
+   *   console.log(chunk);
+   * }
+   * ```
    */
   observeStreamVNext(): ReadableStream<ChunkType> {
     const { readable, writable } = new TransformStream<ChunkType, ChunkType>({
@@ -2233,6 +2325,7 @@ export class Run<
     return readable;
   }
 
+  /**@internal*/
   async streamAsync({
     inputData,
     runtimeContext,
@@ -2244,9 +2337,27 @@ export class Run<
   }
 
   /**
-   * Starts the workflow execution with the provided input as a stream
-   * @param input The input data for the workflow
-   * @returns A promise that resolves to the workflow output
+   * Starts the workflow execution with the provided input and returns a stream of the workflow events.
+   * @param inputData The input data for the workflow. The inputData structure is determined by the workflow inputSchema
+   * @param runtimeContext The runtime context for the workflow.
+   * @param tracingContext The tracing context for the workflow.
+   * @param tracingOptions The tracing options for the workflow.
+   * @param format The format of the stream.
+   * @param closeOnSuspend Whether to close the stream when the workflow is suspended.
+   * @param onChunk The callback function to handle the chunk. It will be called for each workflow event.
+   * @returns A custom stream that extends ReadableStream<ChunkType>
+   *
+   * By default the stream closes when the workflow state becomes `success`, `failed` or `suspended`, but this can be changed by setting the `closeOnSuspend` parameter to `false` which will keep the stream open until the workflow is finished (by success or error).
+   *
+   * @example
+   * ```typescript
+   * const run = await workflow.createRunAsync();
+   * const stream = run.streamVNext({ inputData: { value: 'hello' } });
+   *
+   * for await (const chunk of stream) {
+   *   console.log(chunk);
+   * }
+   * ```
    */
   streamVNext({
     inputData,
@@ -2364,9 +2475,34 @@ export class Run<
   }
 
   /**
-   * Resumes the workflow execution with the provided input as a stream
-   * @param input The input data for the workflow
-   * @returns A promise that resolves to the workflow output
+   * Resumes the workflow execution with the provided resumeData and returns a stream of the workflow events.
+   * @param resumeData The resume data for the workflow. The resumeData structure is determined by the resumeSchema of the step to resume.
+   * @param step The step to resume. This can either be the step itself or the step id. For nested steps, you can pass an array of steps or step ids.
+   * @param runtimeContext The runtime context for the workflow.
+   * @param tracingContext The tracing context for the workflow.
+   * @param tracingOptions The tracing options for the workflow.
+   * @param format The format of the stream.
+   * @param onChunk The callback function to handle the chunk. It will be called for each workflow event.
+   * @returns A custom stream that extends ReadableStream<ChunkType>
+   *
+   * The stream only ends when the workflow state becomes `success` or `failed`. It remains open otherwise.
+   *
+   * @example
+   * ```typescript
+   * const myWorkflow = workflow.then(step1).then(step2).then(step3).commit(); step2 has a suspend call
+   * const run = await myWorkflow.createRunAsync();
+   * const stream = run.streamVNext({ inputData: { value: 'hello' } }); // the stream closes when step2 gets suspended
+   *
+   * for await (const chunk of stream) {
+   *   console.log(chunk);
+   * }
+   * const resumedStream = run.resumeStreamVNext({ resumeData: { resume: 'world' }, step: 'step2' });
+   *
+   * for await (const chunk of resumedStream) {
+   *   console.log(chunk);
+   * }
+   * ```
+   *
    */
   resumeStreamVNext({
     step,
@@ -2548,6 +2684,30 @@ export class Run<
     return this.watch(cb, type);
   }
 
+  /**
+   * Resumes the workflow execution with the provided resumeData and returns a promise that resolves to the workflow output.
+   * @param params The parameters for the resume.
+   * @param params.resumeData The resume data for the workflow. The resumeData structure is determined by the resumeSchema of the step to resume.
+   * @param params.step The step to resume. This can either be the step itself or the step id. For nested steps, you can pass an array of steps or step ids.
+   * @param params.runtimeContext The runtime context for the workflow.
+   * @param params.runCount The run count for the workflow.
+   * @param params.tracingContext The tracing context for the workflow.
+   * @param params.tracingOptions The tracing options for the workflow.
+   * @param params.writableStream The writable stream for the workflow.
+   * @returns A promise that resolves to the workflow output
+   *
+   * @example
+   * ```typescript
+   * const myWorkflow = workflow.then(step1).then(step2).then(step3).commit(); step2 has a suspend call
+   * const run = await myWorkflow.createRunAsync();
+   * const result = await run.start({ inputData: { value: 'hello' } });
+   * console.log(result);
+   * if (result.status === 'suspended') {
+   *   const resumedResult = await run.resume({ resumeData: { resume: 'world' }, step: 'step2' });
+   *   console.log(resumedResult);
+   * }
+   * ```
+   */
   async resume<TResumeSchema extends z.ZodType<any>>(params: {
     resumeData?: z.input<TResumeSchema>;
     step?:
@@ -2733,14 +2893,20 @@ export class Run<
   }
 
   /**
+   * @internal
    * Returns the current state of the workflow run
    * @returns The current state of the workflow run
    */
-  getState(): Record<string, any> {
+  protected getState(): Record<string, any> {
     return this.state;
   }
 
-  updateState(state: Record<string, any>) {
+  /**
+   * @internal
+   * Updates the state of the workflow run
+   * @param state The state to update
+   */
+  protected updateState(state: Record<string, any>) {
     if (state.currentStep) {
       this.state.currentStep = state.currentStep;
     } else if (state.workflowState?.status !== 'running') {
@@ -2761,6 +2927,7 @@ export class Run<
   }
 }
 
+/**@internal */
 function deepMergeWorkflowState(a: Record<string, any>, b: Record<string, any>): Record<string, any> {
   if (!a || typeof a !== 'object') return b;
   if (!b || typeof b !== 'object') return a;
