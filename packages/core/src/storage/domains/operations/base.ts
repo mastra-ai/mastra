@@ -137,7 +137,7 @@ export abstract class StoreOperations extends MastraBase {
    * Storage adapters can override this to define indexes that should be created during initialization
    * @returns Array of index definitions to create automatically
    */
-  getAutomaticIndexDefinitions(): CreateIndexOptions[] {
+  protected getAutomaticIndexDefinitions(): CreateIndexOptions[] {
     return [];
   }
 }

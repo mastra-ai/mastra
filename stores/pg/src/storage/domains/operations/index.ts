@@ -696,7 +696,7 @@ export class StoreOperationsPG extends StoreOperations {
    * Returns definitions for automatic performance indexes
    * These composite indexes cover both filtering and sorting in single index
    */
-  getAutomaticIndexDefinitions(): CreateIndexOptions[] {
+  protected getAutomaticIndexDefinitions(): CreateIndexOptions[] {
     const schemaPrefix = this.schemaName ? `${this.schemaName}_` : '';
     return [
       // Composite index for threads (filter + sort)
