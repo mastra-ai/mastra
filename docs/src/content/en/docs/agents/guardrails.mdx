@@ -292,7 +292,21 @@ export const testAgent = new Agent({
 
 ## Understanding responses
 
-If a user message or agent response fails the checks defined by a processor, the request is immediately stopped and no further processors run. The agent will still respond with a message but will also include details explaining what was detected and how it was handled.
+Processors behave differently depending on their purpose:
+
+- **Transformers**: Modify messages (e.g. normalize input, translate language). These allow processing to continue.
+- **Validators**: Check for violations (e.g. prompt injection, PII, harmful content) and may stop further processing if certain conditions are not met.
+
+If a validator stops processing:
+
+- No subsequent processors in the same `inputProcessors` or `outputProcessors` array are run.
+- The agent still returns a 200 response.
+
+In all cases:
+
+- The response includes details about what was detected and how it was handled.
+
+### PIIDetector example
 
 For example, if an agent uses the `PIIDetector` and a `.generate()` or `.stream()` call includes a credit card number:
 
@@ -308,7 +322,7 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-The response would include a message explaining what was detected and redacted:
+The response would include a message from the agent along with details explaining what was detected and how it was handled.
 
 ```text
 [PIIDetector] Redacted PII: PII detected. Types: credit-card. Detections: 1 items
