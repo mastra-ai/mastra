@@ -2,7 +2,7 @@ import { WorkflowRunState, WorkflowStreamResult } from '@mastra/core/workflows';
 import { createContext, useEffect, useState } from 'react';
 import { convertWorkflowRunStateToStreamResult } from '../utils';
 
-export type WorkflowRunStreamResult = WorkflowStreamResult<any, any, any>;
+export type WorkflowRunStreamResult = WorkflowStreamResult<any, any, any, any>;
 
 type WorkflowRunContextType = {
   result: WorkflowRunStreamResult | null;

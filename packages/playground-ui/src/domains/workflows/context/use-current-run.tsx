@@ -20,7 +20,7 @@ export const useCurrentRun = (): UseCurrentRunReturnType => {
   const context = useContext(WorkflowRunContext);
 
   const workflowCurrentSteps = context.result?.steps ?? {};
-  const steps = Object.entries(workflowCurrentSteps).reduce((acc, [key, value]) => {
+  const steps = Object.entries(workflowCurrentSteps).reduce((acc, [key, value]: [string, any]) => {
     return {
       ...acc,
       [key]: {
