@@ -32,6 +32,8 @@ type LinkComponentPaths = {
   toolLink: (toolId: string) => string;
 
   mcpServerLink: (serverId: string) => string;
+
+  workflowRunLink: (workflowId: string, runId: string) => string;
 };
 
 const LinkComponentContext = createContext<{
@@ -55,6 +57,7 @@ const LinkComponentContext = createContext<{
     scorerLink: () => '',
     toolLink: () => '',
     mcpServerLink: () => '',
+    workflowRunLink: () => '',
   },
 });
 
