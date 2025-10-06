@@ -44,19 +44,13 @@ const McpServerRow = ({ server }: { server: ServerInfo }) => {
       to={`/mcps/${server.id}`}
       className="flex justify-between items-center pl-5 pr-6 h-table-row border-b-sm border-border1 hover:bg-surface3 cursor-pointer group/mcp-server"
     >
-      <div className="flex gap-3 items-center">
-        <Icon size="lg">
-          <McpServerIcon />
-        </Icon>
-
-        <div>
-          <Txt variant="ui-md" className="font-medium text-icon6 !leading-none pb-1">
-            {server.name}
-          </Txt>
-          <Txt variant="ui-xs" className="text-icon3 !leading-none">
-            {sseUrl}
-          </Txt>
-        </div>
+      <div>
+        <Txt variant="ui-md" className="font-medium text-icon6 !leading-none pb-1">
+          {server.name}
+        </Txt>
+        <Txt variant="ui-xs" className="text-icon3 !leading-none">
+          {sseUrl}
+        </Txt>
       </div>
 
       {isLoading ? (
@@ -65,7 +59,7 @@ const McpServerRow = ({ server }: { server: ServerInfo }) => {
         <div className="flex gap-x-2 items-center">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Badge icon={<ToolsIcon className="group-hover/mcp-server:text-[#ECB047]" />}>
+              <Badge icon={<ToolsIcon className="text-accent6" />}>
                 {toolsCount} tool{toolsCount === 1 ? '' : 's'}
               </Badge>
             </TooltipTrigger>
