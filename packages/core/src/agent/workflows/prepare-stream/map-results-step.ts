@@ -127,9 +127,9 @@ export function createMapResultsStep<
         : []);
 
     // Handle structuredOutput option by creating an StructuredOutputProcessor
-    if (options.structuredOutput) {
-      const agentModel = await capabilities.getModel({ runtimeContext: result.runtimeContext! });
-      const structuredProcessor = new StructuredOutputProcessor(options.structuredOutput, agentModel);
+    // Only create the processor if a model is explicitly provided
+    if (options.structuredOutput?.model) {
+      const structuredProcessor = new StructuredOutputProcessor(options.structuredOutput);
       effectiveOutputProcessors = effectiveOutputProcessors
         ? [...effectiveOutputProcessors, structuredProcessor]
         : [structuredProcessor];
