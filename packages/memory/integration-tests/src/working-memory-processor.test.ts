@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { openai } from '@mastra/ai/openai';
+import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { WorkingMemoryProcessor } from '@mastra/core/processors';
 import { fastembed } from '@mastra/fastembed';

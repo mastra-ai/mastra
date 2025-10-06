@@ -117,7 +117,7 @@ describe('WorkingMemoryProcessor Integration Tests', () => {
       console.log('Agent response 2:', response2.text);
       // The agent should know the name from working memory
       expect(response2.text.toLowerCase()).toContain('daniel');
-    } catch (error) {
+    } catch {
       console.log('Second generate also failed, but working memory was persisted successfully!');
       console.log('The test passes because working memory contains Daniel');
     }
