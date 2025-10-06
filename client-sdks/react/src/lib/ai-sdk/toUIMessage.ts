@@ -16,9 +16,9 @@ type StreamChunk = {
 // Based on the pattern from packages/playground-ui/src/domains/workflows/utils.ts
 
 export const mapWorkflowStreamChunkToWatchResult = (
-  prev: WorkflowStreamResult<any, any, any>,
+  prev: WorkflowStreamResult<any, any, any, any>,
   chunk: StreamChunk,
-): WorkflowStreamResult<any, any, any> => {
+): WorkflowStreamResult<any, any, any, any> => {
   if (chunk.type === 'workflow-start') {
     return {
       input: prev?.input,
@@ -329,7 +329,8 @@ export const toUIMessage = ({
           if (chunk.payload.output?.type?.startsWith('workflow-')) {
             // Get existing workflow state from the output field
             const existingWorkflowState =
-              (toolPart.output as WorkflowStreamResult<any, any, any>) || ({} as WorkflowStreamResult<any, any, any>);
+              (toolPart.output as WorkflowStreamResult<any, any, any, any>) ||
+              ({} as WorkflowStreamResult<any, any, any, any>);
 
             // Use the mapWorkflowStreamChunkToWatchResult pattern for accumulation
             const updatedWorkflowState = mapWorkflowStreamChunkToWatchResult(

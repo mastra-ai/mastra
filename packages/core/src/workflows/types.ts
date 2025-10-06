@@ -449,11 +449,12 @@ export type WorkflowResult<
     } & TracingProperties);
 
 export type WorkflowStreamResult<
+  TState extends z.ZodObject<any>,
   TInput extends z.ZodType<any>,
   TOutput extends z.ZodType<any>,
   TSteps extends Step<string, any, any>[],
 > =
-  | WorkflowResult<TInput, TOutput, TSteps>
+  | WorkflowResult<TState, TInput, TOutput, TSteps>
   | {
       status: 'running' | 'waiting' | 'pending' | 'canceled';
       input: z.infer<TInput>;
