@@ -59,7 +59,6 @@ export interface LogMessage {
   serverName: string;
   /** Optional additional details */
   details?: Record<string, any>;
-  /** Optional runtime context */
   runtimeContext?: RuntimeContext | null;
 }
 
@@ -455,13 +454,6 @@ export class InternalMastraMCPClient extends MastraBase {
     return undefined;
   }
 
-  /**
-   * Disconnects from the MCP server and cleans up the transport.
-   *
-   * @throws {Error} If disconnection fails
-   *
-   * @internal
-   */
   async disconnect() {
     if (!this.transport) {
       this.log('debug', 'Disconnect called but no transport was connected.');
@@ -670,16 +662,6 @@ export class InternalMastraMCPClient extends MastraBase {
     }
   }
 
-  /**
-   * Retrieves all tools from the MCP server and converts them to Mastra tool format.
-   *
-   * Automatically converts JSON schemas to Zod schemas for input/output validation.
-   *
-   * @returns Object mapping tool names to tool implementations
-   * @throws {MastraError} If tool schema conversion fails
-   *
-   * @internal
-   */
   async tools() {
     this.log('debug', `Requesting tools from MCP server`);
     const { tools } = await this.client.listTools({ timeout: this.timeout });
@@ -740,30 +722,9 @@ export class InternalMastraMCPClient extends MastraBase {
 
 /**
  * @deprecated MastraMCPClient is deprecated and will be removed in a future release. Please use MCPClient instead.
- *
- * This class has been replaced by {@link MCPClient} which provides better instance management
- * and supports multiple server connections.
- *
- * @example
- * ```typescript
- * // Old way (deprecated)
- * const client = new MastraMCPClient({
- *   name: 'myServer',
- *   server: { command: 'npx', args: ['tsx', 'server.ts'] }
- * });
- *
- * // New way (recommended)
- * const client = new MCPClient({
- *   servers: {
- *     myServer: { command: 'npx', args: ['tsx', 'server.ts'] }
- *   }
- * });
- * ```
  */
+
 export class MastraMCPClient extends InternalMastraMCPClient {
-  /**
-   * @deprecated Use MCPClient instead
-   */
   constructor(args: InternalMastraMCPClientOptions) {
     super(args);
     this.logger.warn(
