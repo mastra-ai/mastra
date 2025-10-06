@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.20.1-alpha.0
+
+### Patch Changes
+
+- Properly fix cloudflare randomUUID in global scope issue ([#8450](https://github.com/mastra-ai/mastra/pull/8450))
+
 ## 0.20.0
 
 ### Minor Changes

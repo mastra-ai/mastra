@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 6.3.1-alpha.0
+
+### Patch Changes
+
+- streamLegacy/generateLegacy clarification in playground ([#8468](https://github.com/mastra-ai/mastra/pull/8468))
+
+- Updated dependencies [[`10e633a`](https://github.com/mastra-ai/mastra/commit/10e633a07d333466d9734c97acfc3dbf757ad2d0)]:
+  - @mastra/core@0.20.1-alpha.0
+  - @mastra/client-js@0.15.1-alpha.0
+  - @mastra/react@0.0.4-alpha.0
+
 ## 6.3.0
 
 ### Minor Changes
