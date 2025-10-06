@@ -104,7 +104,6 @@
  */
 
 import type { MastraModelOutput, ChunkType as AgentChunkType } from '@mastra/core/stream';
-import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from '@mastra/core/stream';
 import type {
   MastraWorkflowStream,
   ChunkType,
@@ -113,6 +112,7 @@ import type {
   WorkflowStepStatus,
 } from '@mastra/core/workflows';
 import type { ZodType } from 'zod';
+import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from './helpers';
 
 type StepResult = {
   name: string;
@@ -316,6 +316,7 @@ export function AgentStreamToAISDKTransformer() {
               case 'source':
                 bufferedSteps.set(payload.runId!, {
                   ...bufferedSteps.get(payload.runId!),
+                  // @ts-ignore
                   sources: [...bufferedSteps.get(payload.runId)!.sources, payload.payload.source],
                 });
                 hasChanged = true;
@@ -323,6 +324,7 @@ export function AgentStreamToAISDKTransformer() {
               case 'file':
                 bufferedSteps.set(payload.runId!, {
                   ...bufferedSteps.get(payload.runId!),
+                  // @ts-ignore
                   files: [...bufferedSteps.get(payload.runId)!.files, payload.payload.file],
                 });
                 hasChanged = true;
@@ -331,6 +333,7 @@ export function AgentStreamToAISDKTransformer() {
                 console.log('tool-call', payload.payload);
                 bufferedSteps.set(payload.runId!, {
                   ...bufferedSteps.get(payload.runId!),
+                  // @ts-ignore
                   toolCalls: [...bufferedSteps.get(payload.runId)!.toolCalls, payload.payload.toolCall],
                 });
                 hasChanged = true;
@@ -338,6 +341,7 @@ export function AgentStreamToAISDKTransformer() {
               case 'tool-result':
                 bufferedSteps.set(payload.runId!, {
                   ...bufferedSteps.get(payload.runId!),
+                  // @ts-ignore
                   toolResults: [...bufferedSteps.get(payload.runId)!.toolResults, payload.payload.toolResult],
                 });
                 hasChanged = true;
@@ -357,6 +361,7 @@ export function AgentStreamToAISDKTransformer() {
           } else if (payload?.from === 'WORKFLOW') {
             // const workflowChunk = transformWorkflow(payload.payload);
             // controller.enqueue(workflowChunk);
+            // @ts-ignore
           } else if (payload?.from === 'NETWORK') {
             // const networkChunk = transformNetwork(payload.payload);
             // controller.enqueue(networkChunk);
