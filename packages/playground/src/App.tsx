@@ -47,6 +47,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   toolLink: (toolId: string) => `/tools/all/${toolId}`,
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
+  workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
 };
 
 const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
