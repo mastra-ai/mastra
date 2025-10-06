@@ -73,6 +73,22 @@ const result = await run.start({
         }
       ]
     },
+    {
+      name: "outputOptions",
+      type: "OutputOptions",
+      isOptional: true,
+      description: "Options for AI tracing configuration.",
+      properties: [
+        {
+          parameters: [{
+            name: "includeState",
+            type: "boolean",
+            isOptional: true,
+            description: "Whether to include the workflow run state in the result."
+          }]
+        }
+      ]
+    },
   ]}
 />
 

@@ -42,7 +42,13 @@ export const workflow = createWorkflow({
       name: "outputSchema",
       type: "z.ZodType<any>",
       description: "Zod schema defining the output structure for the workflow",
-    }
+    },
+    {
+      name: "stateSchema",
+      type: "z.ZodObject<any>",
+      description: "Optional Zod schema for the workflow state. Automatically injected when using Mastra's state system. If not specified, type is 'any'.",
+      isOptional: true,
+    },
   ]}
 />
 
