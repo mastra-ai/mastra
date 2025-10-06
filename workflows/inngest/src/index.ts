@@ -211,7 +211,7 @@ export class InngestRun<
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
     initialState?: z.infer<TState>;
-  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     await this.#mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
@@ -266,7 +266,7 @@ export class InngestRun<
       | string
       | string[];
     runtimeContext?: RuntimeContext;
-  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const p = this._resume(params).then(result => {
       if (result.status !== 'suspended') {
         this.closeStreamAction?.().catch(() => {});
@@ -287,7 +287,7 @@ export class InngestRun<
       | string
       | string[];
     runtimeContext?: RuntimeContext;
-  }): Promise<WorkflowResult<TInput, TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
     );
@@ -359,7 +359,7 @@ export class InngestRun<
 
   stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
     stream: ReadableStream<StreamEvent>;
-    getWorkflowState: () => Promise<WorkflowResult<TInput, TOutput, TSteps>>;
+    getWorkflowState: () => Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   } {
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
@@ -608,7 +608,11 @@ export class InngestWorkflow<
         };
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt);
-        const result = await engine.execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TInput, TOutput, TSteps>>({
+        const result = await engine.execute<
+          z.infer<TState>,
+          z.infer<TInput>,
+          WorkflowResult<TState, TInput, TOutput, TSteps>
+        >({
           workflowId: this.id,
           runId,
           resourceId,
@@ -1422,7 +1426,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
     if (step instanceof InngestWorkflow) {
       const isResume = !!resume?.steps?.length;
-      let result: WorkflowResult<any, any, any>;
+      let result: WorkflowResult<any, any, any, any>;
       let runId: string;
 
       try {
@@ -1475,7 +1479,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
         // Try to extract runId from error cause or generate new one
         if (errorCause && typeof errorCause === 'object') {
-          result = errorCause as WorkflowResult<any, any, any>;
+          result = errorCause as WorkflowResult<any, any, any, any>;
           // The runId might be in the result's steps metadata
           runId = errorCause.runId || randomUUID();
         } else {
@@ -1486,7 +1490,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             error: e instanceof Error ? e : new Error(String(e)),
             steps: {},
             input: inputData,
-          } as WorkflowResult<any, any, any>;
+          } as WorkflowResult<any, any, any, any>;
         }
       }
 
