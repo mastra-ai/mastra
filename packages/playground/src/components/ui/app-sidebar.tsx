@@ -121,9 +121,9 @@ const links = [
     icon: AgentIcon,
   },
   {
-    name: 'Tools',
-    url: '/tools',
-    icon: ToolsIcon,
+    name: 'Workflows',
+    url: '/workflows',
+    icon: WorkflowIcon,
   },
   {
     name: 'MCP Servers',
@@ -131,9 +131,9 @@ const links = [
     icon: McpServerIcon,
   },
   {
-    name: 'Workflows',
-    url: '/workflows',
-    icon: WorkflowIcon,
+    name: 'Tools',
+    url: '/tools',
+    icon: ToolsIcon,
   },
   {
     name: 'Scorers',
