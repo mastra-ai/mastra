@@ -19,8 +19,8 @@ import type {
   MastraModelOutputOptions,
   MastraOnFinishCallbackArgs,
 } from '../types';
-import { createObjectStreamTransformer } from './output-format-handlers';
-import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
+import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
+import { getTransformedSchema, type InferSchemaOutput, type OutputSchema, type PartialSchemaOutput } from './schema';
 
 export class JsonToSseTransformStream extends TransformStream<unknown, string> {
   constructor() {
@@ -1116,6 +1116,15 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * Stream of only text content, filtering out metadata and other chunk types.
    */
   get textStream() {
+    if (this.#structuredOutputMode === 'direct') {
+      const outputSchema = getTransformedSchema(this.#options.structuredOutput?.schema);
+      if (outputSchema?.outputFormat === 'array') {
+        return this.#createEventedStream().pipeThrough(
+          createJsonTextStreamTransformer(this.#options.structuredOutput?.schema),
+        );
+      }
+    }
+
     return this.#createEventedStream().pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, string>({
         transform(chunk, controller) {

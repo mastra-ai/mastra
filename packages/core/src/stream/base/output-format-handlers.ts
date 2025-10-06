@@ -596,3 +596,67 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
     },
   });
 }
+
+/**
+ * Transforms object chunks into JSON text chunks for streaming.
+ *
+ * This transformer:
+ * - For arrays: emits opening bracket, new elements, and closing bracket
+ * - For objects/no-schema: emits the object as JSON
+ */
+export function createJsonTextStreamTransformer<OUTPUT extends OutputSchema = undefined>(schema?: OUTPUT) {
+  let previousArrayLength = 0;
+  let hasStartedArray = false;
+  let chunkCount = 0;
+  const outputSchema = getTransformedSchema(schema);
+
+  return new TransformStream<ChunkType<OUTPUT>, string>({
+    transform(chunk, controller) {
+      if (chunk.type !== 'object' || !chunk.object) {
+        return;
+      }
+
+      if (outputSchema?.outputFormat === 'array') {
+        chunkCount++;
+
+        // If this is the first chunk, decide between complete vs incremental streaming
+        if (chunkCount === 1) {
+          // If the first chunk already has multiple elements or is complete,
+          // emit as single JSON string
+          if (chunk.object.length > 0) {
+            controller.enqueue(JSON.stringify(chunk.object));
+            previousArrayLength = chunk.object.length;
+            hasStartedArray = true;
+            return;
+          }
+        }
+
+        // Incremental streaming mode (multiple chunks)
+        if (!hasStartedArray) {
+          controller.enqueue('[');
+          hasStartedArray = true;
+        }
+
+        // Emit new elements that were added
+        for (let i = previousArrayLength; i < chunk.object.length; i++) {
+          const elementJson = JSON.stringify(chunk.object[i]);
+          if (i > 0) {
+            controller.enqueue(',' + elementJson);
+          } else {
+            controller.enqueue(elementJson);
+          }
+        }
+        previousArrayLength = chunk.object.length;
+      } else {
+        // For non-array objects, just emit as JSON
+        controller.enqueue(JSON.stringify(chunk.object));
+      }
+    },
+    flush(controller) {
+      // Close the array when the stream ends (only for incremental streaming)
+      if (hasStartedArray && outputSchema?.outputFormat === 'array' && chunkCount > 1) {
+        controller.enqueue(']');
+      }
+    },
+  });
+}
