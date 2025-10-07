@@ -43,7 +43,7 @@ export const mastra = new Mastra({
   serverMiddleware: [
     {
       handler: (c, next) => {
-        console.log('Middleware called');
+        // console.log('Middleware called');
         return next();
       },
     },
@@ -51,12 +51,12 @@ export const mastra = new Mastra({
   scorers: {
     testScorer,
   },
-  telemetry: {
-    enabled: false,
-  },
-  observability: {
-    default: {
-      enabled: true,
-    },
-  },
+  // telemetry: {
+  //   enabled: true,
+  // },
+  // observability: {
+  //   default: {
+  //     enabled: true,
+  //   },
+  // },
 });

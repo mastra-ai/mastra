@@ -1474,11 +1474,15 @@ export class Agent<
     tracingContext,
     messageList,
     inputProcessorOverrides,
+    threadId,
+    resourceId,
   }: {
     runtimeContext: RuntimeContext;
     tracingContext: TracingContext;
     messageList: MessageList;
     inputProcessorOverrides?: InputProcessor[];
+    threadId?: string;
+    resourceId?: string;
   }): Promise<{
     messageList: MessageList;
     tripwireTriggered: boolean;
@@ -1496,12 +1500,12 @@ export class Agent<
       const tracedRunInputProcessors = (messageList: MessageList, tracingContext: TracingContext) => {
         const telemetry = this.#mastra?.getTelemetry();
         if (!telemetry) {
-          return runner.runInputProcessors(messageList, tracingContext, undefined);
+          return runner.runInputProcessors(messageList, tracingContext, undefined, threadId, resourceId);
         }
 
         return telemetry.traceMethod(
           async (data: { messageList: MessageList }) => {
-            return runner.runInputProcessors(data.messageList, tracingContext, telemetry);
+            return runner.runInputProcessors(data.messageList, tracingContext, telemetry, threadId, resourceId);
           },
           {
             spanName: `agent.${this.name}.inputProcessors`,
@@ -1515,7 +1519,12 @@ export class Agent<
       };
 
       try {
+        console.log(resourceId);
         messageList = await tracedRunInputProcessors(messageList, tracingContext);
+        console.log(
+          '[Agent.__runInputProcessors] Processors completed, message count:',
+          messageList.get.all.v2().length,
+        );
       } catch (error) {
         if (error instanceof TripWire) {
           tripwireTriggered = true;
@@ -1550,11 +1559,15 @@ export class Agent<
     tracingContext,
     messageList,
     outputProcessorOverrides,
+    threadId,
+    resourceId,
   }: {
     runtimeContext: RuntimeContext;
     tracingContext: TracingContext;
     messageList: MessageList;
     outputProcessorOverrides?: OutputProcessor[];
+    threadId?: string;
+    resourceId?: string;
   }): Promise<{
     messageList: MessageList;
     tripwireTriggered: boolean;
@@ -1573,12 +1586,12 @@ export class Agent<
       const tracedRunOutputProcessors = (messageList: MessageList, tracingContext: TracingContext) => {
         const telemetry = this.#mastra?.getTelemetry();
         if (!telemetry) {
-          return runner.runOutputProcessors(messageList, tracingContext, undefined);
+          return runner.runOutputProcessors(messageList, tracingContext, undefined, threadId, resourceId);
         }
 
         return telemetry.traceMethod(
           async (data: { messageList: MessageList }) => {
-            return runner.runOutputProcessors(data.messageList, tracingContext, telemetry);
+            return runner.runOutputProcessors(data.messageList, tracingContext, telemetry, threadId, resourceId);
           },
           {
             spanName: `agent.${this.name}.outputProcessors`,
@@ -2246,6 +2259,8 @@ export class Agent<
             runtimeContext,
             tracingContext: innerTracingContext,
             messageList,
+            threadId,
+            resourceId,
           });
           return {
             messageObjects: messageList.get.all.prompt(),
@@ -2388,6 +2403,8 @@ export class Agent<
           runtimeContext,
           tracingContext: innerTracingContext,
           messageList,
+          threadId,
+          resourceId,
         });
 
         const systemMessages = messageList.getSystemMessages();
@@ -3982,6 +3999,8 @@ export class Agent<
           },
           'response',
         ),
+        threadId: llmOptions.threadId,
+        resourceId: llmOptions.resourceId,
       });
 
       // Handle tripwire for output processors
@@ -4102,6 +4121,8 @@ export class Agent<
         },
         'response',
       ),
+      threadId: llmOptions.threadId,
+      resourceId: llmOptions.resourceId,
     });
 
     // Handle tripwire for output processors

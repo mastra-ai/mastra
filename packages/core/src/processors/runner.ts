@@ -53,6 +53,8 @@ export class ProcessorRunner {
     messageList: MessageList,
     tracingContext?: TracingContext,
     telemetry?: any,
+    threadId?: string,
+    resourceId?: string,
   ): Promise<MessageList> {
     const responseMessages = messageList.clear.response.v2();
 
@@ -81,7 +83,13 @@ export class ProcessorRunner {
       }
 
       if (!telemetry) {
-        processableMessages = await processMethod({ messages: processableMessages, abort: ctx.abort, tracingContext });
+        processableMessages = await processMethod({
+          messages: processableMessages,
+          abort: ctx.abort,
+          tracingContext,
+          threadId,
+          resourceId,
+        });
       } else {
         await telemetry.traceMethod(
           async () => {
@@ -89,6 +97,8 @@ export class ProcessorRunner {
               messages: processableMessages,
               abort: ctx.abort,
               tracingContext,
+              threadId,
+              resourceId,
             });
             return processableMessages;
           },
@@ -118,6 +128,8 @@ export class ProcessorRunner {
     part: ChunkType<OUTPUT>,
     processorStates: Map<string, ProcessorState<OUTPUT>>,
     tracingContext?: TracingContext,
+    threadId?: string,
+    resourceId?: string,
   ): Promise<{
     part: ChunkType<OUTPUT> | null | undefined;
     blocked: boolean;
@@ -151,6 +163,8 @@ export class ProcessorRunner {
                 throw new TripWire(reason || `Stream part blocked by ${processor.name}`);
               },
               tracingContext,
+              threadId,
+              resourceId,
             });
 
             // If result is null, or undefined, don't emit
@@ -228,6 +242,8 @@ export class ProcessorRunner {
     messageList: MessageList,
     tracingContext?: TracingContext,
     telemetry?: any,
+    threadId?: string,
+    resourceId?: string,
   ): Promise<MessageList> {
     const userMessages = messageList.clear.input.v2();
 
@@ -256,7 +272,13 @@ export class ProcessorRunner {
       }
 
       if (!telemetry) {
-        processableMessages = await processMethod({ messages: processableMessages, abort: ctx.abort, tracingContext });
+        processableMessages = await processMethod({
+          messages: processableMessages,
+          abort: ctx.abort,
+          tracingContext,
+          threadId,
+          resourceId,
+        });
       } else {
         await telemetry.traceMethod(
           async () => {
@@ -264,6 +286,8 @@ export class ProcessorRunner {
               messages: processableMessages,
               abort: ctx.abort,
               tracingContext,
+              threadId,
+              resourceId,
             });
             return processableMessages;
           },

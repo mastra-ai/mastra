@@ -12,6 +12,8 @@ export interface Processor {
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
+    threadId?: string;
+    resourceId?: string;
   }): Promise<MastraMessageV2[]> | MastraMessageV2[];
 
   /**
@@ -25,6 +27,8 @@ export interface Processor {
     state: Record<string, any>;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
+    threadId?: string;
+    resourceId?: string;
   }): Promise<ChunkType | null | undefined>;
 
   /**
@@ -34,6 +38,8 @@ export interface Processor {
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
+    threadId?: string;
+    resourceId?: string;
   }): Promise<MastraMessageV2[]> | MastraMessageV2[];
 }
 
