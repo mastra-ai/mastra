@@ -77,7 +77,7 @@ export default async function RootLayout({
           <Toaster />
           <CookieConsent />
         </GTProvider>
-        <VercelToolbar />
+        {process.env.NODE_ENV !== 'production' && <VercelToolbar />}
         <Analytics />
       </body>
     </html>
