@@ -9,5 +9,5 @@
  * cleanProviderId('openai') // returns 'openai'
  */
 export const cleanProviderId = (providerId: string): string => {
-  return providerId.replace(/\.(chat|x|messages|completion)$/i, '');
+  return providerId.includes(`.`) ? providerId.split(`.`)[0] : providerId;
 };
