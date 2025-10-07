@@ -663,6 +663,7 @@ describe('Structured Output with Tool Execution', () => {
       maxSteps: 10,
       structuredOutput: {
         schema: responseSchema,
+        model: openai('gpt-4o-mini'), // Use real model for structured output processor
       },
     });
 
@@ -680,5 +681,31 @@ describe('Structured Output with Tool Execution', () => {
     expect(finalObject.activities.length).toBeGreaterThanOrEqual(1);
     expect(finalObject.toolsCalled).toHaveLength(2);
     expect(finalObject.location).toBe('Toronto');
+  }, 15000);
+
+  it('should NOT use structured output processor when model is not provided', async () => {
+    const responseSchema = z.object({
+      answer: z.string(),
+      confidence: z.number(),
+    });
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'You are a helpful assistant. Respond with JSON matching the required schema.',
+      model: openai('gpt-4o-mini'),
+    });
+
+    const result = await agent.generate('What is 2+2?', {
+      structuredOutput: {
+        schema: responseSchema,
+        // Note: no model provided - should use response_format or JSON prompt injection
+      },
+    });
+
+    // Verify the result has the expected structure
+    expect(result.object).toBeDefined();
+    expect(result.object.answer).toBeDefined();
+    expect(typeof result.object.confidence).toBe('number');
+    expect(typeof result.object.answer).toBe('string');
   }, 15000);
 });
