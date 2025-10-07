@@ -856,8 +856,6 @@ export class Agent extends BaseResource {
       onChunk: async (chunk: any) => {
         switch (chunk.type) {
           case 'tripwire': {
-            console.log('THIS IS CALLED', message);
-
             message.parts.push({
               type: 'text',
               text: chunk.payload.tripwireReason,
@@ -1139,7 +1137,7 @@ export class Agent extends BaseResource {
                 const lines = text.split('\n\n');
                 const readableLines = lines.filter(line => line !== '[DONE]').join('\n\n');
 
-                await writer.write(readableLines);
+                await writer.write(new TextEncoder().encode(readableLines));
               } catch {
                 await writer?.write(chunk);
               } finally {
