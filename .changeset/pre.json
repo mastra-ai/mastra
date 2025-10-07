@@ -78,6 +78,7 @@
     "@mastra/inngest": "0.15.0"
   },
   "changesets": [
+    "@mastra_chroma-8554-dependencies",
     "@mastra_dynamodb-8436-dependencies",
     "@mastra_langsmith-8560-dependencies",
     "@mastra_s3vectors-8436-dependencies",
@@ -106,6 +107,9 @@
     "strong-kiwis-relate",
     "tricky-coats-design",
     "two-swans-pull",
+    "violet-buckets-mate",
+    "violet-dolls-tell",
+    "violet-fans-smoke",
     "weak-results-go",
     "wet-llamas-pull"
   ]

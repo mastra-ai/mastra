@@ -1,5 +1,14 @@
 # @mastra/chroma
 
+## 0.11.13-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#8554](https://github.com/mastra-ai/mastra/pull/8554))
+  - Updated dependency [`chromadb@^3.0.17` ↗︎](https://www.npmjs.com/package/chromadb/v/3.0.17) (from `^3.0.15`, in `dependencies`)
+- Updated dependencies [[`a6d69c5`](https://github.com/mastra-ai/mastra/commit/a6d69c5fb50c0875b46275811fece5862f03c6a0), [`84199af`](https://github.com/mastra-ai/mastra/commit/84199af8673f6f9cb59286ffb5477a41932775de), [`7f431af`](https://github.com/mastra-ai/mastra/commit/7f431afd586b7d3265075e73106eb73167edbb86)]:
+  - @mastra/core@0.20.1-alpha.3
+
 ## 0.11.12
 
 ### Patch Changes
