@@ -239,10 +239,10 @@ export function WorkflowStreamToAISDKTransformer() {
   });
 }
 
-export function AgentStreamToAISDKTransformer() {
+export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>() {
   let bufferedSteps = new Map<string, any>();
 
-  return new TransformStream<AgentChunkType, object>({
+  return new TransformStream<AgentChunkType<TOutput>, object>({
     transform(chunk, controller) {
       const part = convertMastraChunkToAISDKv5({ chunk, mode: 'stream' });
 
@@ -259,12 +259,10 @@ export function AgentStreamToAISDKTransformer() {
       });
 
       if (transformedChunk) {
-        // @ts-ignore
         // TODO: make this work for networks and workflows
         if (transformedChunk.type === 'tool-agent') {
-          // @ts-ignore
-          const payload = transformedChunk.payload as unknown as ChunkType;
-          const agentTransformed = transformAgent(payload, bufferedSteps);
+          const payload = transformedChunk.payload;
+          const agentTransformed = transformAgent<TOutput>(payload as AgentChunkType<TOutput>, bufferedSteps);
           if (agentTransformed) controller.enqueue(agentTransformed);
           //  } else if (transformedChunk.type === 'tool-workflow') {
           //     const workflowChunk = transformWorkflow(payload.payload);
@@ -281,7 +279,10 @@ export function AgentStreamToAISDKTransformer() {
   });
 }
 
-function transformAgent(payload: ChunkType, bufferedSteps: Map<string, any>) {
+function transformAgent<TOutput extends ZodType<any>>(
+  payload: AgentChunkType<TOutput>,
+  bufferedSteps: Map<string, any>,
+) {
   let hasChanged = false;
   switch (payload.type) {
     case 'start':
@@ -436,8 +437,8 @@ export function toAISdkFormat<
   TSteps extends Step<string, any, any>[],
 >(stream: MastraWorkflowStream<TInput, TOutput, TSteps> | MastraModelOutput<TOutput>) {
   if ('fullStream' in stream) {
-    // @ts-ignore
-    return stream.fullStream.pipeThrough(AgentStreamToAISDKTransformer());
+    return stream.fullStream.pipeThrough(AgentStreamToAISDKTransformer<TOutput>());
+  } else {
+    return stream.pipeThrough(WorkflowStreamToAISDKTransformer());
   }
-  return stream.pipeThrough(WorkflowStreamToAISDKTransformer());
 }

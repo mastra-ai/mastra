@@ -9,6 +9,8 @@ export type OutputChunkType<OUTPUT extends OutputSchema = undefined> =
   | ObjectStreamPart<PartialSchemaOutput<OUTPUT>>
   | undefined;
 
+export type ToolAgentChunkType = { type: 'tool-agent'; toolCallId: string; payload: any };
+
 export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefined>({
   chunk,
   mode = 'stream',
@@ -245,7 +247,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   sendStart?: boolean;
   sendFinish?: boolean;
   responseMessageId?: string;
-}): InferUIMessageChunk<UI_MESSAGE> | undefined {
+}): InferUIMessageChunk<UI_MESSAGE> | ToolAgentChunkType | undefined {
   const partType = part.type;
 
   switch (partType) {
@@ -376,7 +378,6 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
 
     case 'tool-output': {
       if (part.output.from === 'AGENT') {
-        // @ts-ignore
         return {
           type: 'tool-agent',
           toolCallId: part.toolCallId,
