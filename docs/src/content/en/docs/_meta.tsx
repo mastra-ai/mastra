@@ -13,7 +13,6 @@ const meta = {
   streaming: <Tag text="experimental">Streaming</Tag>,
   "tools-mcp": { title: "Tools & MCP", theme: { collapsed: true } },
   memory: { title: "Memory", theme: { collapsed: true } },
-  "networks-vnext": <Tag text="experimental">Networks</Tag>,
   rag: { title: "RAG" },
   "server-db": {
     title: "Server & DB",

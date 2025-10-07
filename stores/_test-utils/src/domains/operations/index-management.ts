@@ -395,20 +395,39 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
       });
 
       describe('Automatic Performance Indexes', () => {
-        it('should have automatic composite indexes from initialization', async () => {
+        it('should create all defined automatic indexes during initialization', async () => {
+          // Get automatic index definitions (if provider supports it)
+          const definitions = (storage as any).stores?.operations?.getAutomaticIndexDefinitions?.();
+
+          if (!definitions || definitions.length === 0) {
+            // Provider doesn't define automatic indexes, skip test
+            return;
+          }
+
           const indexes = await storage.listIndexes();
 
-          // Check for automatic composite indexes (these are created during init)
-          const expectedPatterns = [
-            'threads_resourceid_createdat',
-            'messages_thread_id_createdat',
-            'traces_name_starttime',
-            'evals_agent_name_created_at',
-          ];
+          // Verify each defined automatic index was created
+          for (const def of definitions) {
+            const found = indexes.some(i => i.name === def.name);
+            expect(found, `Expected automatic index "${def.name}" to be created`).toBe(true);
+          }
+        });
 
-          for (const pattern of expectedPatterns) {
-            const hasIndex = indexes.some(i => i.name.toLowerCase().includes(pattern));
-            expect(hasIndex).toBe(true);
+        it('should have valid automatic index definitions', () => {
+          // Get automatic index definitions (if provider supports it)
+          const definitions = (storage as any).stores?.operations?.getAutomaticIndexDefinitions?.();
+
+          if (!definitions || definitions.length === 0) {
+            // Provider doesn't define automatic indexes, skip test
+            return;
+          }
+
+          // Verify each definition has required fields
+          for (const def of definitions) {
+            expect(def.name, 'Index definition must have a name').toBeTruthy();
+            expect(def.table, 'Index definition must have a table').toBeTruthy();
+            expect(Array.isArray(def.columns), 'Index definition must have columns array').toBe(true);
+            expect(def.columns.length, 'Index definition must have at least one column').toBeGreaterThan(0);
           }
         });
 

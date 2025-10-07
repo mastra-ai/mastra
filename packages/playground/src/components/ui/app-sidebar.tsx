@@ -292,12 +292,13 @@ export function AppSidebar() {
                       href="https://mastra.ai/cloud"
                       target="_blank"
                       rel="noopener"
+                      id="deploy-to-mastra-cloud"
                     >
                       <Icon>
                         <Cloudy />
                       </Icon>
 
-                      <span className="text-[0.8rem] font-normal">Deploy to Mastra Cloud</span>
+                      <span className="text-[0.8rem] font-normal">Deploy your Playground</span>
                     </a>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
