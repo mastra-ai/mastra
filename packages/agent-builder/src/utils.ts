@@ -6,10 +6,10 @@ import { createRequire } from 'module';
 import { dirname, basename, extname, resolve, join } from 'path';
 import { promisify } from 'util';
 import type { MastraLanguageModel } from '@mastra/core/agent';
+import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { UNIT_KINDS } from './types';
 import type { UnitKind } from './types';
-import { ModelRouterLanguageModel } from '@mastra/core';
 
 export const exec = promisify(execNodejs);
 export const execFile = promisify(execFileNodejs);
