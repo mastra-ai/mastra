@@ -21,7 +21,7 @@ import type { DynamicArgument } from '../types';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
-import type { ExecuteFunction, Step } from './step';
+import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } from './step';
 import type {
   DefaultEngineType,
   DynamicMapping,
@@ -770,7 +770,7 @@ export class Workflow<
   branch<
     TBranchSteps extends Array<
       [
-        ExecuteFunction<z.infer<TState>, z.infer<TPrevSchema>, any, any, any, TEngineType>,
+        ConditionFunction<z.infer<TState>, z.infer<TPrevSchema>, any, any, TEngineType>,
         Step<string, any, TPrevSchema, any, any, any, TEngineType>,
       ]
     >,
@@ -830,7 +830,7 @@ export class Workflow<
     TSchemaOut extends z.ZodType<any>,
   >(
     step: Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
-    condition: ExecuteFunction<z.infer<TState>, z.infer<TSchemaOut>, any, any, any, TEngineType>,
+    condition: LoopConditionFunction<z.infer<TState>, any, any, any, TEngineType>,
   ) {
     this.stepFlow.push({
       type: 'loop',
@@ -862,7 +862,7 @@ export class Workflow<
     TSchemaOut extends z.ZodType<any>,
   >(
     step: Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
-    condition: ExecuteFunction<z.infer<TState>, z.infer<TSchemaOut>, any, any, any, TEngineType>,
+    condition: LoopConditionFunction<z.infer<TState>, any, any, any, TEngineType>,
   ) {
     this.stepFlow.push({
       type: 'loop',

@@ -879,7 +879,7 @@ export async function createNetworkLoop({
       [async ({ inputData }) => !inputData.isComplete && inputData.primitiveType === 'agent', agentStep],
       [async ({ inputData }) => !inputData.isComplete && inputData.primitiveType === 'workflow', workflowStep],
       [async ({ inputData }) => !inputData.isComplete && inputData.primitiveType === 'tool', toolStep],
-      [async ({ inputData }) => inputData.isComplete, finishStep],
+      [async ({ inputData }) => !!inputData.isComplete, finishStep],
     ])
     .map({
       task: {
