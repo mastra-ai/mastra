@@ -214,6 +214,299 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
     });
 
+    it('should execute a single step workflow successfully with state', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      let calls = 0;
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ state }) => {
+          calls++;
+          return { result: 'success', value: state.value };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), value: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+          // someOtherValue: z.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+          value: z.string(),
+        }),
+        stateSchema: z.object({
+          value: z.string(),
+          otherValue: z.string(),
+        }),
+        steps: [step1],
+      })
+        .then(step1)
+        .commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({
+        inputData: {},
+        initialState: { value: 'test-state', otherValue: 'test-other-state' },
+      });
+
+      srv.close();
+
+      expect(calls).toBe(1);
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    });
+
+    it('should execute a single step nested workflow successfully with state', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      let calls = 0;
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ state }) => {
+          calls++;
+          return { result: 'success', value: state.value };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), value: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+          // someOtherValue: z.string(),
+        }),
+      });
+
+      const nestedWorkflow = createWorkflow({
+        id: 'nested-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), value: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+          // someOtherValue: z.string(),
+        }),
+        steps: [step1],
+      })
+        .then(step1)
+        .commit();
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+          value: z.string(),
+        }),
+        stateSchema: z.object({
+          value: z.string(),
+          otherValue: z.string(),
+        }),
+        steps: [nestedWorkflow],
+      })
+        .then(nestedWorkflow)
+        .commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({
+        inputData: {},
+        initialState: { value: 'test-state', otherValue: 'test-other-state' },
+      });
+
+      srv.close();
+
+      expect(calls).toBe(1);
+      expect(result.steps['nested-workflow']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    });
+
+    it('should execute a single step nested workflow successfully with state being set by the nested workflow', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+      let calls = 0;
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ state, setState }) => {
+          calls++;
+          setState({ ...state, value: state.value + '!!!' });
+          return {};
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema: z.object({
+          value: z.string(),
+          // someOtherValue: z.string(),
+        }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ state }) => {
+          calls++;
+          return { result: 'success', value: state.value };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), value: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+          // someOtherValue: z.string(),
+        }),
+      });
+
+      const nestedWorkflow = createWorkflow({
+        id: 'nested-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), value: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+          // someOtherValue: z.string(),
+        }),
+        steps: [step1, step2],
+      })
+        .then(step1)
+        .then(step2)
+        .commit();
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+          value: z.string(),
+        }),
+        stateSchema: z.object({
+          value: z.string(),
+          otherValue: z.string(),
+        }),
+        steps: [nestedWorkflow],
+      })
+        .then(nestedWorkflow)
+        .commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({
+        inputData: {},
+        initialState: { value: 'test-state', otherValue: 'test-other-state' },
+      });
+
+      srv.close();
+
+      expect(calls).toBe(2);
+      expect(result.steps['nested-workflow']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state!!!' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    });
+
     it('should execute multiple steps in parallel', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
@@ -289,6 +582,100 @@ describe('MastraInngestWorkflow', () => {
       });
 
       srv.close();
+    });
+
+    it('should execute multiple steps in parallel with state', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1Action = vi.fn().mockImplementation(async ({ state }) => {
+        return { value: 'step1', value2: state.value };
+      });
+      const step2Action = vi.fn().mockImplementation(async ({ state }) => {
+        return { value: 'step2', value2: state.value };
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        stateSchema: z.object({ value: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        stateSchema: z.object({ value: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        stateSchema: z.object({ value: z.string() }),
+        steps: [step1, step2],
+      })
+        .parallel([step1, step2])
+        .commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: {}, initialState: { value: 'test-state' } });
+
+      srv.close();
+
+      expect(step1Action).toHaveBeenCalled();
+      expect(step2Action).toHaveBeenCalled();
+      expect(result.steps).toEqual({
+        input: {},
+        step1: {
+          status: 'success',
+          output: { value: 'step1', value2: 'test-state' },
+          payload: {},
+
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        step2: {
+          status: 'success',
+          output: { value: 'step2', value2: 'test-state' },
+          payload: {},
+
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
     });
 
     it('should execute steps sequentially', async ctx => {
@@ -1676,6 +2063,128 @@ describe('MastraInngestWorkflow', () => {
         input: { status: 'success' },
         step1: { status: 'success', output: { status: 'success' } },
         step2: { status: 'success', output: { result: 'step2' } },
+      });
+    });
+
+    it('should follow conditional chains with state', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1Action = vi.fn().mockImplementation(({ state }) => {
+        return Promise.resolve({ status: 'success', value: state.value });
+      });
+      const step2Action = vi.fn().mockImplementation(({ state }) => {
+        return Promise.resolve({ result: 'step2', value: state.value });
+      });
+      const step3Action = vi.fn().mockImplementation(({ state }) => {
+        return Promise.resolve({ result: 'step3', value: state.value });
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({ status: z.string() }),
+        outputSchema: z.object({ status: z.string() }),
+        stateSchema: z.object({ value: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({ status: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        stateSchema: z.object({ value: z.string() }),
+      });
+      const step3 = createStep({
+        id: 'step3',
+        execute: step3Action,
+        inputSchema: z.object({ status: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        stateSchema: z.object({ value: z.string() }),
+      });
+      const step4 = createStep({
+        id: 'step4',
+        execute: async ({ inputData, state }) => {
+          return { result: inputData.result, value: state.value };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        stateSchema: z.object({ value: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ status: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1, step2, step3],
+        stateSchema: z.object({ value: z.string() }),
+      })
+        .then(step1)
+        .branch([
+          [
+            async ({ inputData }) => {
+              return inputData.status === 'success';
+            },
+            step2,
+          ],
+          [
+            async ({ inputData }) => {
+              return inputData.status === 'failed';
+            },
+            step3,
+          ],
+        ])
+        .map({
+          result: {
+            step: [step3, step2],
+            path: 'result',
+          },
+        })
+        .then(step4)
+        .commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: { status: 'success' }, initialState: { value: 'test-state' } });
+
+      srv.close();
+
+      expect(step1Action).toHaveBeenCalled();
+      expect(step2Action).toHaveBeenCalled();
+      expect(step3Action).not.toHaveBeenCalled();
+      expect(result.steps).toMatchObject({
+        input: { status: 'success' },
+        step1: { status: 'success', output: { status: 'success', value: 'test-state' } },
+        step2: { status: 'success', output: { result: 'step2', value: 'test-state' } },
+        step4: { status: 'success', output: { result: 'step2', value: 'test-state' } },
       });
     });
 
@@ -4279,7 +4788,7 @@ describe('MastraInngestWorkflow', () => {
         getUserInput: { status: 'success', output: { userInput: 'test input' } },
         promptAgent: {
           status: 'suspended',
-          suspendedPayload: { testPayload: 'hello' },
+          suspendPayload: { testPayload: 'hello' },
           payload: { userInput: 'test input' },
         },
       });
@@ -4344,6 +4853,263 @@ describe('MastraInngestWorkflow', () => {
       });
 
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
+    });
+
+    it('should handle basic suspend and resume flow with async await syntax with state', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          return suspend({ testPayload: 'hello' });
+        })
+        .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
+      const evaluateToneAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.8 },
+        completenessScore: { score: 0.7 },
+      });
+      const improveResponseAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend, state, setState }) => {
+          setState({ ...state, value: 'test state' });
+          await suspend();
+          return undefined;
+        })
+        .mockImplementationOnce(() => ({ improvedOutput: 'improved output' }));
+      const evaluateImprovedAction = vi.fn().mockImplementation(({ state }) => ({
+        toneScore: { score: 0.9 },
+        completenessScore: { score: 0.8 },
+        value: state.value,
+      }));
+
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+        suspendSchema: z.object({ testPayload: z.string() }),
+        resumeSchema: z.object({ userInput: z.string() }),
+      });
+      const evaluateTone = createStep({
+        id: 'evaluateToneConsistency',
+        execute: evaluateToneAction,
+        inputSchema: z.object({ modelOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+      const improveResponse = createStep({
+        id: 'improveResponse',
+        execute: improveResponseAction,
+        resumeSchema: z.object({
+          toneScore: z.object({ score: z.number() }),
+          completenessScore: z.object({ score: z.number() }),
+        }),
+        inputSchema: z.object({ toneScore: z.any(), completenessScore: z.any() }),
+        outputSchema: z.object({ improvedOutput: z.string() }),
+      });
+      const evaluateImproved = createStep({
+        id: 'evaluateImprovedResponse',
+        execute: evaluateImprovedAction,
+        inputSchema: z.object({ improvedOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+
+      const promptEvalWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+      })
+        .then(getUserInput)
+        .then(promptAgent)
+        .then(evaluateTone)
+        .then(improveResponse)
+        .then(evaluateImproved)
+        .commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': promptEvalWorkflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await promptEvalWorkflow.createRunAsync();
+
+      const initialResult = await run.start({ inputData: { input: 'test' } });
+      expect(initialResult.steps.promptAgent.status).toBe('suspended');
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+      // expect(initialResult.activePaths.size).toBe(1);
+      // expect(initialResult.activePaths.get('promptAgent')?.status).toBe('suspended');
+      // expect(initialResult.activePaths.get('promptAgent')?.suspendPayload).toEqual({ testPayload: 'hello' });
+      expect(initialResult.steps).toEqual({
+        input: { input: 'test' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'suspended',
+          payload: { userInput: 'test input' },
+          startedAt: expect.any(Number),
+          suspendPayload: { testPayload: 'hello' },
+          suspendedAt: expect.any(Number),
+        },
+      });
+
+      const newCtx = {
+        userInput: 'test input for resumption',
+      };
+
+      expect(initialResult.steps.promptAgent.status).toBe('suspended');
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+
+      const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx });
+      if (!firstResumeResult) {
+        throw new Error('Resume failed to return a result');
+      }
+
+      // expect(firstResumeResult.activePaths.size).toBe(1);
+      // expect(firstResumeResult.activePaths.get('improveResponse')?.status).toBe('suspended');
+      expect(firstResumeResult.steps).toEqual({
+        input: { input: 'test' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input' },
+          resumePayload: { userInput: 'test input for resumption' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: {
+            toneScore: { score: 0.8 },
+            completenessScore: { score: 0.7 },
+          },
+          payload: { modelOutput: 'test output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        improveResponse: {
+          status: 'suspended',
+          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          startedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
+      });
+
+      const secondResumeResult = await run.resume({
+        step: improveResponse,
+        resumeData: {
+          toneScore: { score: 0.8 },
+          completenessScore: { score: 0.7 },
+        },
+      });
+      if (!secondResumeResult) {
+        throw new Error('Resume failed to return a result');
+      }
+
+      expect(promptAgentAction).toHaveBeenCalledTimes(2);
+
+      expect(secondResumeResult.steps).toEqual({
+        input: { input: 'test' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input' },
+          resumePayload: { userInput: 'test input for resumption' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: {
+            toneScore: { score: 0.8 },
+            completenessScore: { score: 0.7 },
+          },
+          payload: { modelOutput: 'test output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        improveResponse: {
+          status: 'success',
+          output: { improvedOutput: 'improved output' },
+          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          resumePayload: {
+            toneScore: { score: 0.8 },
+            completenessScore: { score: 0.7 },
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        evaluateImprovedResponse: {
+          status: 'success',
+          output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 }, value: 'test state' },
+          payload: { improvedOutput: 'improved output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      expect(promptAgentAction).toHaveBeenCalledTimes(2);
+
+      srv.close();
     });
 
     it('should handle consecutive nested workflows with suspend/resume', async ctx => {
@@ -6060,7 +6826,7 @@ describe('MastraInngestWorkflow', () => {
       expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
       expect(result.steps['nested-workflow-c']).toMatchObject({
         status: 'suspended',
-        payload: {
+        suspendPayload: {
           __workflow_meta: {
             path: ['nested-workflow-b', 'nested-workflow-a', 'other'],
           },

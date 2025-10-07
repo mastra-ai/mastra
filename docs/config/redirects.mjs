@@ -1016,6 +1016,11 @@ export const redirectList = [
     permanent: true,
   },
   {
+    source: "/:locale/reference/cli/mcp-docs-server",
+    destination: "/:locale/docs/getting-started/mcp-docs-server",
+    permanent: true,
+  },
+  {
     source: "/:locale/reference/cli/init",
     destination: "/:locale/reference/cli/mastra",
     permanent: true,

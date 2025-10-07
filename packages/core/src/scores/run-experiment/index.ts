@@ -51,7 +51,7 @@ export function runExperiment<TWorkflow extends Workflow>(config: {
   target: TWorkflow;
   onItemComplete?: (params: {
     item: RunExperimentDataItem<TWorkflow>;
-    targetResult: WorkflowResult<any, any, any>;
+    targetResult: WorkflowResult<any, any, any, any>;
     scorerResults: Record<string, any>; // Flat structure: { scorerName: result }
   }) => void | Promise<void>;
   concurrency?: number;
@@ -64,7 +64,7 @@ export function runExperiment<TWorkflow extends Workflow>(config: {
   target: TWorkflow;
   onItemComplete?: (params: {
     item: RunExperimentDataItem<TWorkflow>;
-    targetResult: WorkflowResult<any, any, any>;
+    targetResult: WorkflowResult<any, any, any, any>;
     scorerResults: {
       workflow?: Record<string, any>;
       steps?: Record<string, Record<string, any>>;
