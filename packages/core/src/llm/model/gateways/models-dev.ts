@@ -150,7 +150,7 @@ export class ModelsDevGateway extends MastraModelGateway {
     return providerConfigs;
   }
 
-  buildUrl(routerId: string): string | undefined {
+  buildUrl(routerId: string, envVars?: typeof process.env): string | undefined {
     const { providerId } = parseModelRouterId(routerId);
 
     const config = this.providerConfigs[providerId];
@@ -161,7 +161,7 @@ export class ModelsDevGateway extends MastraModelGateway {
 
     // Check for custom base URL from env vars
     const baseUrlEnvVar = `${providerId.toUpperCase().replace(/-/g, '_')}_BASE_URL`;
-    const customBaseUrl = process.env[baseUrlEnvVar];
+    const customBaseUrl = envVars?.[baseUrlEnvVar] || process.env[baseUrlEnvVar];
 
     return customBaseUrl || config.url;
   }
