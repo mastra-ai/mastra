@@ -92,7 +92,7 @@ export function KapaChat({
 
                     {!!a && (
                       <div className="relative pl-4 text-[13px] bg-transparent max-w-full dark:text-icons-6 text-[var(--light-color-text-4)]">
-                        <Clippy className="absolute top-1 -left-2 w-5 h-5" />
+                        <Clippy className="absolute top-1 -left-2 w-5 h-5 dark:text-accent-green text-accent-green-2" />
                         <Markdown content={a} />
                         {/* Feedback buttons - only show when answer is complete */}
                         {id && (
@@ -146,7 +146,7 @@ export function KapaChat({
       <div className="px-2 pb-4">
         <form
           onSubmit={handleSubmit}
-          className="border-t dark:border-borders-1 border-[var(--light-border-code)] "
+          className="border-t dark:border-borders-1 border-borders-3"
         >
           <div className="flex items-center">
             <Textarea
@@ -163,9 +163,9 @@ export function KapaChat({
                 variant="ghost"
                 size="icon-sm"
                 onClick={stopGeneration}
-                className="relative self-end p-2 rounded-full cursor-pointer dark:bg-red-500/20 bg-red-100 dark:ring-red-500/50 dark:ring hover:dark:bg-red-500/30 hover:bg-red-200 transition-colors"
+                className="relative self-end p-2 bg-red-100 rounded-full transition-colors cursor-pointer dark:bg-red-500/20 dark:ring-red-500/50 dark:ring hover:dark:bg-red-500/30 hover:bg-red-200"
               >
-                <Square className="w-4 h-4 dark:text-red-400 text-red-600 fill-current" />
+                <Square className="w-4 h-4 text-red-600 fill-current dark:text-red-400" />
               </Button>
             ) : (
               <Button
