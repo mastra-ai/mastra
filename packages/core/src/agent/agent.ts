@@ -3635,14 +3635,19 @@ export class Agent<
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
   > {
     // Deprecated `output` option now just maps to structuredOutput.schema
-    if (options?.output) {
-      options.structuredOutput = {
-        schema: options.output as OUTPUT extends OutputSchema ? OUTPUT : never,
-      };
-      delete options.output;
-    }
+    // Create a new options object to avoid mutating the input parameter
+    const normalizedOptions = options?.output
+      ? {
+          structuredOutput: {
+            schema: options.output as OUTPUT extends OutputSchema ? OUTPUT : never,
+            ...options.structuredOutput,
+          },
+          ...options,
+          output: undefined,
+        }
+      : options;
 
-    const result = await this.stream(messages, options);
+    const result = await this.stream(messages, normalizedOptions);
     const fullOutput = await result.getFullOutput();
 
     const error = fullOutput.error;
@@ -3688,19 +3693,24 @@ export class Agent<
       });
     }
 
-    const mergedStreamOptions = {
+    const baseStreamOptions = {
       ...defaultStreamOptions,
       ...(streamOptions ?? {}),
       onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
 
     // Deprecated `output` option now just maps to structuredOutput.schema
-    if (mergedStreamOptions.output) {
-      mergedStreamOptions.structuredOutput = { schema: mergedStreamOptions.output } as StructuredOutputOptions<
-        OUTPUT extends OutputSchema ? OUTPUT : never
-      >;
-      delete mergedStreamOptions.output;
-    }
+    // Create a new options object to avoid mutating
+    const mergedStreamOptions = baseStreamOptions.output
+      ? {
+          structuredOutput: {
+            schema: baseStreamOptions.output,
+            ...baseStreamOptions.structuredOutput,
+          } as StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>,
+          ...baseStreamOptions,
+          output: undefined,
+        }
+      : baseStreamOptions;
 
     const llm = await this.getLLM({
       runtimeContext: mergedStreamOptions.runtimeContext,
