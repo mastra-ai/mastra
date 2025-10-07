@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Markdown } from "@copilotkit/react-ui";
 import "@copilotkit/react-ui/styles.css";
 import { useChat } from "@kapaai/react-sdk";
-import { ArrowUp } from "lucide-react";
+import { ArrowUp, ThumbsUp, ThumbsDown } from "lucide-react";
 import React, { useState } from "react";
 import { useStickToBottom } from "use-stick-to-bottom";
 
@@ -19,8 +19,13 @@ export function KapaChat({
   setIsAgentMode: (isAgentMode: boolean) => void;
   searchQuery: string;
 }) {
-  const { conversation, submitQuery, isGeneratingAnswer, isPreparingAnswer } =
-    useChat();
+  const {
+    conversation,
+    submitQuery,
+    isGeneratingAnswer,
+    isPreparingAnswer,
+    addFeedback,
+  } = useChat();
   const [inputValue, setInputValue] = useState(searchQuery || "");
 
   const isLoading = isGeneratingAnswer || isPreparingAnswer;
@@ -47,6 +52,13 @@ export function KapaChat({
     }
   };
 
+  const handleFeedback = (
+    questionAnswerId: string,
+    reaction: "upvote" | "downvote",
+  ) => {
+    addFeedback(questionAnswerId, reaction);
+  };
+
   const { scrollRef, contentRef } = useStickToBottom();
 
   return (
@@ -69,7 +81,7 @@ export function KapaChat({
           {/* spacer */}
           <div className="h-20" />
           {conversation.length > 0
-            ? conversation.map(({ answer: a, question: q, id }) => {
+            ? conversation.map(({ answer: a, question: q, id, reaction }) => {
                 return (
                   <div key={id} className={`flex flex-col gap-8 w-full`}>
                     {!!q && (
@@ -82,6 +94,38 @@ export function KapaChat({
                       <div className="relative pl-4 text-[13px] bg-transparent max-w-full dark:text-icons-6 text-[var(--light-color-text-4)]">
                         <Clippy className="absolute top-1 -left-2 w-5 h-5" />
                         <Markdown content={a} />
+                        {/* Feedback buttons - only show when answer is complete */}
+                        {id && (
+                          <div className="flex gap-2 items-center mt-3">
+                            <span className="text-xs text-icons-2">
+                              Was this helpful?
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => handleFeedback(id, "upvote")}
+                              className={`p-1 hover:bg-surface-4 cursor-pointer ${
+                                reaction === "upvote"
+                                  ? "dark:text-accent-green text-[var(--light-green-accent)]"
+                                  : "dark:text-icons-3 text-[var(--light-color-text-4)]"
+                              }`}
+                            >
+                              <ThumbsUp className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => handleFeedback(id, "downvote")}
+                              className={`p-1 hover:bg-surface-4 cursor-pointer ${
+                                reaction === "downvote"
+                                  ? "dark:text-red-500 text-red-600"
+                                  : "dark:text-icons-3 text-[var(--light-color-text-4)]"
+                              }`}
+                            >
+                              <ThumbsDown className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

@@ -6,6 +6,7 @@ import "nextra-theme-docs/style.css";
 import { getPageMap } from "nextra/page-map";
 import { fonts } from "../font/setup";
 import "../globals.css";
+import { VercelToolbar } from "@vercel/toolbar/next";
 
 import { PostHogProvider } from "@/analytics/posthog-provider";
 import { CookieConsent } from "@/components/cookie/cookie-consent";
@@ -76,6 +77,7 @@ export default async function RootLayout({
           <Toaster />
           <CookieConsent />
         </GTProvider>
+        <VercelToolbar />
         <Analytics />
       </body>
     </html>
