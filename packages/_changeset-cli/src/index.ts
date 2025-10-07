@@ -69,9 +69,9 @@ function prepareVersionBumpInputs(changedPackages: ChangedPackage[], parsedArgs:
   return {
     major: parsedArgs.major,
     minor: parsedArgs.minor.filter(pkg => !parsedArgs.major.includes(pkg)),
-    patch: changedPackages
-      .map(pkg => pkg.name)
-      .filter(pkg => !parsedArgs.major.includes(pkg) && !parsedArgs.minor.includes(pkg)),
+    patch: Array.from(new Set(changedPackages.map(pkg => pkg.name).concat(parsedArgs.patch))).filter(
+      pkg => !parsedArgs.major.includes(pkg) && !parsedArgs.minor.includes(pkg),
+    ),
   };
 }
 
