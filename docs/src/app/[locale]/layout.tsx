@@ -14,7 +14,7 @@ import { NextraLayout } from "@/components/nextra-layout";
 import { GTProvider } from "gt-next";
 import { CustomHead } from "@/components/custom-head";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
-import { kapaChatbotFlag } from "@/lib/flags";
+import { kapaChatbotFlag } from "../../../flags";
 
 const fetchStars = async () => {
   try {
