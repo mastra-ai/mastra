@@ -1,6 +1,5 @@
 import * as p from '@clack/prompts';
 import color from 'picocolors';
-import type { ChangedPackage } from '../git/getChangedPackages.js';
 import { getPublicPackages } from '../pkg/getPublicPackages.js';
 import type { VersionBumps } from './getChangesetMessage.js';
 
