@@ -3,12 +3,11 @@ import { PulsingDots } from "@/components/loading";
 import { Clippy } from "@/components/svgs/clippy";
 import { ArrowLeftIcon } from "@/components/svgs/Icons";
 import { Button } from "@/components/ui/button";
-import Spinner from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { Markdown } from "@copilotkit/react-ui";
 import "@copilotkit/react-ui/styles.css";
 import { useChat } from "@kapaai/react-sdk";
-import { ArrowUp, ThumbsUp, ThumbsDown } from "lucide-react";
+import { ArrowUp, ThumbsUp, ThumbsDown, Square } from "lucide-react";
 import React, { useState } from "react";
 import { useStickToBottom } from "use-stick-to-bottom";
 
@@ -24,6 +23,7 @@ export function KapaChat({
     submitQuery,
     isGeneratingAnswer,
     isPreparingAnswer,
+    stopGeneration,
     addFeedback,
   } = useChat();
   const [inputValue, setInputValue] = useState(searchQuery || "");
@@ -157,19 +157,27 @@ export function KapaChat({
               placeholder="Enter your message..."
               className="border-none outline-none shadow-none resize-none dark:text-icons-6 text-[var(--light-color-text-4)] placeholder:text-icons-2 focus-visible:ring-0"
             />
-            <Button
-              type="submit"
-              variant="ghost"
-              size="icon-sm"
-              disabled={isLoading || inputValue.trim() === ""}
-              className="relative self-end p-2 rounded-full cursor-pointer dark:bg-surface-5 bg-[var(--light-color-surface-1)] dark:ring-borders-2 dark:ring"
-            >
-              {isLoading ? (
-                <Spinner className="dark:text-accent-green text-[var(--light-green-accent-2)]" />
-              ) : (
+            {isLoading ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={stopGeneration}
+                className="relative self-end p-2 rounded-full cursor-pointer dark:bg-red-500/20 bg-red-100 dark:ring-red-500/50 dark:ring hover:dark:bg-red-500/30 hover:bg-red-200 transition-colors"
+              >
+                <Square className="w-4 h-4 dark:text-red-400 text-red-600 fill-current" />
+              </Button>
+            ) : (
+              <Button
+                type="submit"
+                variant="ghost"
+                size="icon-sm"
+                disabled={inputValue.trim() === ""}
+                className="relative self-end p-2 rounded-full cursor-pointer dark:bg-surface-5 bg-[var(--light-color-surface-1)] dark:ring-borders-2 dark:ring disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 <ArrowUp className="w-4 h-4 dark:text-accent-green text-[var(--light-green-accent)]" />
-              )}
-            </Button>
+              </Button>
+            )}
           </div>
         </form>
       </div>
