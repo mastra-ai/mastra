@@ -5653,6 +5653,7 @@ describe('Workflow', () => {
 
   describe('Loops', () => {
     it('should run an until loop', async () => {
+      let count = 0;
       const increment = vi.fn().mockImplementation(async ({ inputData }) => {
         // Get the current value (either from trigger or previous increment)
         const currentValue = inputData.value;
@@ -5703,7 +5704,8 @@ describe('Workflow', () => {
       });
 
       counterWorkflow
-        .dountil(incrementStep, async ({ inputData }) => {
+        .dountil(incrementStep, async ({ inputData, iterationCount }) => {
+          expect(iterationCount).toBe(++count);
           return (inputData?.value ?? 0) >= 12;
         })
         .then(finalStep)
@@ -5721,6 +5723,7 @@ describe('Workflow', () => {
     });
 
     it('should run a while loop', async () => {
+      let count = 0;
       const increment = vi.fn().mockImplementation(async ({ inputData }) => {
         // Get the current value (either from trigger or previous increment)
         const currentValue = inputData.value;
@@ -5771,7 +5774,8 @@ describe('Workflow', () => {
       });
 
       counterWorkflow
-        .dowhile(incrementStep, async ({ inputData }) => {
+        .dowhile(incrementStep, async ({ inputData, iterationCount }) => {
+          expect(iterationCount).toBe(++count);
           return (inputData?.value ?? 0) < 12;
         })
         .then(finalStep)
@@ -8760,6 +8764,7 @@ describe('Workflow', () => {
     });
 
     it('should handle basic suspend and resume in a dountil workflow', async () => {
+      let count = 0;
       const resumeStep = createStep({
         id: 'resume',
         inputSchema: z.object({ value: z.number() }),
@@ -8810,7 +8815,10 @@ describe('Workflow', () => {
             .then(incrementStep)
             .then(resumeStep)
             .commit(),
-          async ({ inputData }) => inputData.value >= 10,
+          async ({ inputData, iterationCount }) => {
+            expect(iterationCount).toBe(++count);
+            return inputData.value >= 10;
+          },
         )
         .then(
           createStep({
