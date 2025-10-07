@@ -21,7 +21,9 @@ interface SharedArgs {
   signal?: AbortSignal;
 }
 
-export type GenerateArgs<TMessage> = SharedArgs & { onFinish: (messages: UIMessage[]) => TMessage[] };
+export type GenerateArgs<TMessage> = SharedArgs & {
+  onFinish: ({ messages, tripwireReason }: { messages: UIMessage[]; tripwireReason: string }) => TMessage[];
+};
 
 export type StreamArgs<TMessage> = SharedArgs & {
   onChunk: (chunk: ChunkType, conversation: TMessage[]) => TMessage[];
@@ -86,10 +88,11 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
 
     setIsRunning(false);
 
-    if (response && 'uiMessages' in response.response && response.response.uiMessages) {
-      const formatted = onFinish(response.response.uiMessages);
-      setMessages(prev => [...prev, ...formatted]);
-    }
+    const uiMessages =
+      response && 'uiMessages' in response.response && response.response.uiMessages ? response.response.uiMessages : [];
+
+    const formatted = onFinish({ messages: uiMessages, tripwireReason: response.tripwireReason });
+    setMessages(prev => [...prev, ...formatted]);
   };
 
   const stream = async ({

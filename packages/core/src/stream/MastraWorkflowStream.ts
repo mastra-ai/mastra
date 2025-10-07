@@ -5,6 +5,7 @@ import type { ChunkType } from './types';
 import { ChunkFrom } from './types';
 
 export class MastraWorkflowStream<
+  TState extends z.ZodObject<any>,
   TInput extends z.ZodType<any>,
   TOutput extends z.ZodType<any>,
   TSteps extends Step<string, any, any>[],
@@ -19,14 +20,14 @@ export class MastraWorkflowStream<
     resolve: (value: void) => void;
     reject: (reason?: any) => void;
   };
-  #run: Run<any, TSteps, TInput, TOutput>;
+  #run: Run<any, TSteps, TState, TInput, TOutput>;
 
   constructor({
     createStream,
     run,
   }: {
     createStream: (writer: WritableStream<ChunkType>) => Promise<ReadableStream<any>> | ReadableStream<any>;
-    run: Run<any, TSteps, TInput, TOutput>;
+    run: Run<any, TSteps, TState, TInput, TOutput>;
   }) {
     const deferredPromise = {
       promise: null,

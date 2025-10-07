@@ -367,8 +367,8 @@ importers:
   deployers/cloud:
     dependencies:
       '@mastra/core':
-        specifier: '>=0.18.1-0 <0.21.0-0'
-        version: 0.18.1-alpha.0(openapi-types@12.1.3)(react@19.1.1)(zod@4.1.9)
+        specifier: '>=0.20.1-0 <0.21.0-0'
+        version: 0.20.1-alpha.0(openapi-types@12.1.3)(react@19.1.1)(zod@4.1.9)
       '@mastra/deployer':
         specifier: workspace:^
         version: link:../../packages/deployer
@@ -394,6 +394,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
+      '@manypkg/get-packages':
+        specifier: ^3.1.0
+        version: 3.1.0
       '@types/fs-extra':
         specifier: ^11.0.4
         version: 11.0.4
@@ -888,8 +891,8 @@ importers:
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.14)(@vitest/ui@3.2.4)(jiti@2.6.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(lightningcss@1.30.1)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)
     optionalDependencies:
       '@grpc/grpc-js':
-        specifier: ^1.13.4
-        version: 1.13.4
+        specifier: ^1.14.0
+        version: 1.14.0
       '@opentelemetry/exporter-trace-otlp-grpc':
         specifier: ^0.205.0
         version: 0.205.0(@opentelemetry/api@1.9.0)
@@ -2497,8 +2500,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@storybook/addon-docs':
-        specifier: ^9.1.8
-        version: 9.1.9(@types/react@19.1.13)(storybook@9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))
+        specifier: ^9.1.10
+        version: 9.1.10(@types/react@19.1.13)(storybook@9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))
       '@storybook/react-vite':
         specifier: ^9.1.8
         version: 9.1.8(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(rollup@4.50.2)(storybook@9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))(typescript@5.8.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1))
@@ -3020,14 +3023,14 @@ importers:
   stores/dynamodb:
     dependencies:
       '@aws-sdk/client-dynamodb':
-        specifier: ^3.896.0
-        version: 3.901.0
+        specifier: ^3.902.0
+        version: 3.902.0
       '@aws-sdk/lib-dynamodb':
-        specifier: ^3.896.0
-        version: 3.901.0(@aws-sdk/client-dynamodb@3.901.0)
+        specifier: ^3.902.0
+        version: 3.902.0(@aws-sdk/client-dynamodb@3.902.0)
       electrodb:
         specifier: ^3.4.6
-        version: 3.4.6(@aws-sdk/client-dynamodb@3.901.0)
+        version: 3.4.6(@aws-sdk/client-dynamodb@3.902.0)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -3392,7 +3395,7 @@ importers:
   stores/s3vectors:
     dependencies:
       '@aws-sdk/client-s3vectors':
-        specifier: ^3.896.0
+        specifier: ^3.901.0
         version: 3.901.0
       uuid:
         specifier: ^11.1.0
@@ -4499,8 +4502,8 @@ packages:
     resolution: {integrity: sha512-YhhQNVmHykPC6h6Xj60BMG7ELxxlynwNW2wK+8HJRiT62nYhbDyHypY9W2zNshqh/SE+5gLvwt1sXAu7KHGWmQ==}
     engines: {node: '>=18.0.0'}
 
-  '@aws-sdk/client-dynamodb@3.901.0':
-    resolution: {integrity: sha512-LZ7j0UwRnPh6NgioRqeAvbBLvlUUjolEA+vvmmSnWZSGvs8T/QZzytvKvDPKpr5sYTJKVDOYqOXE9eDuqHaqjw==}
+  '@aws-sdk/client-dynamodb@3.902.0':
+    resolution: {integrity: sha512-WoBzn00MEvnhKFkrFPpqDjHxaqOriwJ2N00/GsoppHiMMPqinN53wB/phur7BsvhQCZZMbnIWrslcZcQxOzFLg==}
     engines: {node: '>=18.0.0'}
 
   '@aws-sdk/client-s3vectors@3.901.0':
@@ -4595,11 +4598,11 @@ packages:
     resolution: {integrity: sha512-KSwTfyLZyNLszz5f/yoLC+LC+CRKpeJii/+zVAy7JUOQsKhSykiRUPYUx7o2Sdc4oJfqqUl26A/jSttKYnYtAA==}
     engines: {node: '>=18.0.0'}
 
-  '@aws-sdk/lib-dynamodb@3.901.0':
-    resolution: {integrity: sha512-o7u+IIJgspWOkBzR657zBl+HJ+YyRKgWBlhhkSvIWTLMUbzrYCi/+Jg/th9VUHU7W7Rw/RmBE8ehYJtFjOg+gg==}
+  '@aws-sdk/lib-dynamodb@3.902.0':
+    resolution: {integrity: sha512-fe7DAz/57St3lrJoxayu55CJBj8JNhTh2keR+JNtA2lDdY7FZnRalUJse5Mts2gqG5+3zUdPDfMcevu7vhXIzw==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      '@aws-sdk/client-dynamodb': ^3.901.0
+      '@aws-sdk/client-dynamodb': ^3.902.0
 
   '@aws-sdk/middleware-endpoint-discovery@3.901.0':
     resolution: {integrity: sha512-nbqELNamIhsWcDmqa3rB5unNuOEGiNh2pEz663ZEzsa9DTasKvBHqdhVQo6DuWDvnkhAjOMrkM2sB4P45uy1Qw==}
@@ -4679,11 +4682,11 @@ packages:
     resolution: {integrity: sha512-FfEM25hLEs4LoXsLXQ/q6X6L4JmKkKkbVFpKD4mwfVHtRVQG6QxJiCPcrkcPISquiy6esbwK2eh64TWbiD60cg==}
     engines: {node: '>=18.0.0'}
 
-  '@aws-sdk/util-dynamodb@3.901.0':
-    resolution: {integrity: sha512-J5Pq/t9IgPM9NuCihRsK7xyMJeSljDs46c8HNg0iFOT9ESMggwUO4cJM9wx72acRP/c96q+wlLbsbAxUVR4TgQ==}
+  '@aws-sdk/util-dynamodb@3.902.0':
+    resolution: {integrity: sha512-elZ9e671bda7Z1NzNSHiYKktnoXx4z2FJCJf1hpHrA/rMqVmnErNl/QzHZqF+0jH/0UoK7g4LCjJRO5A+reBoQ==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      '@aws-sdk/client-dynamodb': ^3.901.0
+      '@aws-sdk/client-dynamodb': ^3.902.0
 
   '@aws-sdk/util-endpoints@3.828.0':
     resolution: {integrity: sha512-RvKch111SblqdkPzg3oCIdlGxlQs+k+P7Etory9FmxPHyPDvsP1j1c74PmgYqtzzMWmoXTjd+c9naUHh9xG8xg==}
@@ -6350,12 +6353,17 @@ packages:
       '@modelcontextprotocol/sdk':
         optional: true
 
-  '@grpc/grpc-js@1.13.4':
-    resolution: {integrity: sha512-GsFaMXCkMqkKIvwCQjCrwH+GHbPKBjhwo/8ZuUkWHqbI73Kky9I+pQltrlT0+MWpedCoosda53lgjYfyEPgxBg==}
+  '@grpc/grpc-js@1.14.0':
+    resolution: {integrity: sha512-N8Jx6PaYzcTRNzirReJCtADVoq4z7+1KQ4E70jTg/koQiMoUSN1kbNjPOqpPbhMFhfU1/l7ixspPl8dNY+FoUg==}
     engines: {node: '>=12.10.0'}
 
   '@grpc/proto-loader@0.7.15':
     resolution: {integrity: sha512-tMXdRCfYVixjuFK+Hk0Q1s38gV9zDiDJfWL3h1rv4Qc39oILCu1TRTDt7+fGUI8K4G1Fj125Hx/ru3azECWTyQ==}
+    engines: {node: '>=6'}
+    hasBin: true
+
+  '@grpc/proto-loader@0.8.0':
+    resolution: {integrity: sha512-rc1hOQtjIWGxcxpb9aHAfLpIctjEnsDehj0DAiVfBlmT84uvR0uUtN2hEi/ecvWVjXUGf5qPF4qEgiLOx1YIMQ==}
     engines: {node: '>=6'}
     hasBin: true
 
@@ -6999,14 +7007,26 @@ packages:
   '@manypkg/find-root@1.1.0':
     resolution: {integrity: sha512-mki5uBvhHzO8kYYix/WRy2WX8S3B5wdVSc9D6KcU5lQNglP2yt58/VfLuAK49glRXChosY8ap2oJ1qgma3GUVA==}
 
+  '@manypkg/find-root@3.1.0':
+    resolution: {integrity: sha512-BcSqCyKhBVZ5YkSzOiheMCV41kqAFptW6xGqYSTjkVTl9XQpr+pqHhwgGCOHQtjDCv7Is6EFyA14Sm5GVbVABA==}
+    engines: {node: '>=20.0.0'}
+
   '@manypkg/get-packages@1.1.3':
     resolution: {integrity: sha512-fo+QhuU3qE/2TQMQmbVMqaQ6EWbMhi4ABWP+O4AM1NqPBuy0OrApV5LO6BrrgnhtAHS2NH6RrVk9OL181tTi8A==}
+
+  '@manypkg/get-packages@3.1.0':
+    resolution: {integrity: sha512-0TbBVyvPrP7xGYBI/cP8UP+yl/z+HtbTttAD7FMAJgn/kXOTwh5/60TsqP9ZYY710forNfyV0N8P/IE/ujGZJg==}
+    engines: {node: '>=20.0.0'}
+
+  '@manypkg/tools@2.1.0':
+    resolution: {integrity: sha512-0FOIepYR4ugPYaHwK7hDeHDkfPOBVvayt9QpvRbi2LT/h2b0GaE/gM9Gag7fsnyYyNaTZ2IGyOuVg07IYepvYQ==}
+    engines: {node: '>=20.0.0'}
 
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
 
-  '@mastra/core@0.18.1-alpha.0':
-    resolution: {integrity: sha512-b8q5aHFxzHS7WfvjxGrENNIE2Pyq1TZj1OOa16rCUxcXkFEV6bzADBcSP+kIMIl+7qs22Pe9kE1upd6ppuQOHQ==}
+  '@mastra/core@0.20.1-alpha.0':
+    resolution: {integrity: sha512-OSsSvLKc7TJoMgcAWZ4ZIvMk/lXsGHQLMzzql2DAycREE3dx5w+4BrPo8gHgcpJUEEG15cvg9MjB3q7TW3LbJw==}
     engines: {node: '>=20'}
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
@@ -9549,10 +9569,10 @@ packages:
   '@standard-schema/spec@1.0.0':
     resolution: {integrity: sha512-m2bOd0f2RT9k8QJx1JN85cZYyH1RqFBdlwtkSlf4tBDYLCiiZnv1fIIwacK6cqwXavOydf0NPToMQgpKq+dVlA==}
 
-  '@storybook/addon-docs@9.1.9':
-    resolution: {integrity: sha512-76OHwsYCC6u8Nu5IUQ3E580BVnto6u4UgQC66inf+ot0+LI9fFPieg7fmcnQtYoFwiAyya3/JEwhY2GuFk7eMg==}
+  '@storybook/addon-docs@9.1.10':
+    resolution: {integrity: sha512-LYK3oXy/0PgY39FhkYVd9D0bzatLGTsMhaPPwSjBOmZgK0f0yBLqaePy7urUFeHYm/rjwAaRmDJNBqUnGTVoig==}
     peerDependencies:
-      storybook: ^9.1.9
+      storybook: ^9.1.10
 
   '@storybook/builder-vite@9.1.8':
     resolution: {integrity: sha512-JjvBag0nM1N51O3VF5++op9Ly5OC8Q+y4PrWLgi2dKhMxJFs8fD9D4PeI/v41PUiQcI0suQxN9BoYoKn2QxUZw==}
@@ -9560,15 +9580,15 @@ packages:
       storybook: ^9.1.8
       vite: ^5.0.0 || ^6.0.0 || ^7.0.0
 
+  '@storybook/csf-plugin@9.1.10':
+    resolution: {integrity: sha512-247F/JU0Naxm/RIUnQYpqXeCL0wG8UNJkZe+/GkLjdqzsyML0lb+8OwBsWFfG8zfj6fkjmRU2mF44TnNkzoQcg==}
+    peerDependencies:
+      storybook: ^9.1.10
+
   '@storybook/csf-plugin@9.1.8':
     resolution: {integrity: sha512-KnrXPz87bn+8ZGkzFEBc7TT5HkWpR1Xz7ojxPclSvkKxTfzazuaw0JlOQMzJoI1+wHXDAIw/4MIsO8HEiaWyfQ==}
     peerDependencies:
       storybook: ^9.1.8
-
-  '@storybook/csf-plugin@9.1.9':
-    resolution: {integrity: sha512-8tMZaGqer9PkPl7xRD/d97pgzl6Aw5/rWH+q8fAA09bvjLllKOlytj3vTckGJ4DlkKKXGvxoECG/n35AbJOYIA==}
-    peerDependencies:
-      storybook: ^9.1.9
 
   '@storybook/global@5.0.0':
     resolution: {integrity: sha512-FcOqPAXACP0I3oJ/ws6/rrPT9WGhu915Cg8D02a9YxLo0DE9zI+a9A5gRGvmQ09fiWPukqI8ZAEoQEdWUKMQdQ==}
@@ -9580,19 +9600,19 @@ packages:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0-beta
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0-beta
 
+  '@storybook/react-dom-shim@9.1.10':
+    resolution: {integrity: sha512-cxy8GTj73RMJIFPrgqdnMXePGX5iFohM5pDCZ63Te5m5GtzKqsILRXtBBLO6Ouexm/ZYRVznkKiwNKX/Fu24fQ==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0-beta
+      react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0-beta
+      storybook: ^9.1.10
+
   '@storybook/react-dom-shim@9.1.8':
     resolution: {integrity: sha512-OepccjVZh/KQugTH8/RL2CIyf1g5Lwc5ESC8x8BH3iuYc82WMQBwMJzRI5EofQdirau63NGrqkWCgQASoVreEA==}
     peerDependencies:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0-beta
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0-beta
       storybook: ^9.1.8
-
-  '@storybook/react-dom-shim@9.1.9':
-    resolution: {integrity: sha512-RFaB+N63XXEEo8l5INlvWnqxDUH7UGZ++MOsFsVUqfn7lAzxfR9HcJTGN3WOyIDBoS0vD3+LfnplqFyQU/anuw==}
-    peerDependencies:
-      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0-beta
-      react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0-beta
-      storybook: ^9.1.9
 
   '@storybook/react-vite@9.1.8':
     resolution: {integrity: sha512-DIxp76vcelyFOUJupeQEIHXDrSPP6KDXj6Z+Z9thS1HH7JY+OdGtcMLy4fbiD77Zyc8TV9RRZ1D33z2Ot/v9Vw==}
@@ -17501,7 +17521,7 @@ snapshots:
     transitivePeerDependencies:
       - aws-crt
 
-  '@aws-sdk/client-dynamodb@3.901.0':
+  '@aws-sdk/client-dynamodb@3.902.0':
     dependencies:
       '@aws-crypto/sha256-browser': 5.2.0
       '@aws-crypto/sha256-js': 5.2.0
@@ -17977,11 +17997,11 @@ snapshots:
       mnemonist: 0.38.3
       tslib: 2.8.1
 
-  '@aws-sdk/lib-dynamodb@3.901.0(@aws-sdk/client-dynamodb@3.901.0)':
+  '@aws-sdk/lib-dynamodb@3.902.0(@aws-sdk/client-dynamodb@3.902.0)':
     dependencies:
-      '@aws-sdk/client-dynamodb': 3.901.0
+      '@aws-sdk/client-dynamodb': 3.902.0
       '@aws-sdk/core': 3.901.0
-      '@aws-sdk/util-dynamodb': 3.901.0(@aws-sdk/client-dynamodb@3.901.0)
+      '@aws-sdk/util-dynamodb': 3.902.0(@aws-sdk/client-dynamodb@3.902.0)
       '@smithy/core': 3.14.0
       '@smithy/smithy-client': 4.7.0
       '@smithy/types': 4.6.0
@@ -18205,9 +18225,9 @@ snapshots:
       '@smithy/types': 4.6.0
       tslib: 2.8.1
 
-  '@aws-sdk/util-dynamodb@3.901.0(@aws-sdk/client-dynamodb@3.901.0)':
+  '@aws-sdk/util-dynamodb@3.902.0(@aws-sdk/client-dynamodb@3.902.0)':
     dependencies:
-      '@aws-sdk/client-dynamodb': 3.901.0
+      '@aws-sdk/client-dynamodb': 3.902.0
       tslib: 2.8.1
 
   '@aws-sdk/util-endpoints@3.828.0':
@@ -20025,12 +20045,19 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@grpc/grpc-js@1.13.4':
+  '@grpc/grpc-js@1.14.0':
     dependencies:
-      '@grpc/proto-loader': 0.7.15
+      '@grpc/proto-loader': 0.8.0
       '@js-sdsl/ordered-map': 4.4.2
 
   '@grpc/proto-loader@0.7.15':
+    dependencies:
+      lodash.camelcase: 4.3.0
+      long: 5.3.2
+      protobufjs: 7.5.3
+      yargs: 17.7.2
+
+  '@grpc/proto-loader@0.8.0':
     dependencies:
       lodash.camelcase: 4.3.0
       long: 5.3.2
@@ -20609,6 +20636,10 @@ snapshots:
       find-up: 4.1.0
       fs-extra: 8.1.0
 
+  '@manypkg/find-root@3.1.0':
+    dependencies:
+      '@manypkg/tools': 2.1.0
+
   '@manypkg/get-packages@1.1.3':
     dependencies:
       '@babel/runtime': 7.28.3
@@ -20618,9 +20649,20 @@ snapshots:
       globby: 11.1.0
       read-yaml-file: 1.1.0
 
+  '@manypkg/get-packages@3.1.0':
+    dependencies:
+      '@manypkg/find-root': 3.1.0
+      '@manypkg/tools': 2.1.0
+
+  '@manypkg/tools@2.1.0':
+    dependencies:
+      jju: 1.4.0
+      js-yaml: 4.1.0
+      tinyglobby: 0.2.15
+
   '@marijn/find-cluster-break@1.0.2': {}
 
-  '@mastra/core@0.18.1-alpha.0(openapi-types@12.1.3)(react@19.1.1)(zod@4.1.9)':
+  '@mastra/core@0.20.1-alpha.0(openapi-types@12.1.3)(react@19.1.1)(zod@4.1.9)':
     dependencies:
       '@a2a-js/sdk': 0.2.5
       '@ai-sdk/provider': 1.1.3
@@ -21160,7 +21202,7 @@ snapshots:
 
   '@opentelemetry/exporter-logs-otlp-grpc@0.203.0(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@grpc/grpc-js': 1.13.4
+      '@grpc/grpc-js': 1.14.0
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/otlp-exporter-base': 0.203.0(@opentelemetry/api@1.9.0)
@@ -21170,7 +21212,7 @@ snapshots:
 
   '@opentelemetry/exporter-logs-otlp-grpc@0.57.2(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@grpc/grpc-js': 1.13.4
+      '@grpc/grpc-js': 1.14.0
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/otlp-exporter-base': 0.57.2(@opentelemetry/api@1.9.0)
@@ -21220,7 +21262,7 @@ snapshots:
 
   '@opentelemetry/exporter-metrics-otlp-grpc@0.203.0(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@grpc/grpc-js': 1.13.4
+      '@grpc/grpc-js': 1.14.0
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-metrics-otlp-http': 0.203.0(@opentelemetry/api@1.9.0)
@@ -21232,7 +21274,7 @@ snapshots:
 
   '@opentelemetry/exporter-metrics-otlp-grpc@0.57.2(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@grpc/grpc-js': 1.13.4
+      '@grpc/grpc-js': 1.14.0
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-metrics-otlp-http': 0.57.2(@opentelemetry/api@1.9.0)
@@ -21296,7 +21338,7 @@ snapshots:
 
   '@opentelemetry/exporter-trace-otlp-grpc@0.203.0(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@grpc/grpc-js': 1.13.4
+      '@grpc/grpc-js': 1.14.0
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/otlp-exporter-base': 0.203.0(@opentelemetry/api@1.9.0)
@@ -21307,7 +21349,7 @@ snapshots:
 
   '@opentelemetry/exporter-trace-otlp-grpc@0.205.0(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@grpc/grpc-js': 1.13.4
+      '@grpc/grpc-js': 1.14.0
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.1.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/otlp-exporter-base': 0.205.0(@opentelemetry/api@1.9.0)
@@ -21319,7 +21361,7 @@ snapshots:
 
   '@opentelemetry/exporter-trace-otlp-grpc@0.57.2(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@grpc/grpc-js': 1.13.4
+      '@grpc/grpc-js': 1.14.0
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/otlp-exporter-base': 0.57.2(@opentelemetry/api@1.9.0)
@@ -22127,7 +22169,7 @@ snapshots:
 
   '@opentelemetry/otlp-grpc-exporter-base@0.203.0(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@grpc/grpc-js': 1.13.4
+      '@grpc/grpc-js': 1.14.0
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/otlp-exporter-base': 0.203.0(@opentelemetry/api@1.9.0)
@@ -22135,7 +22177,7 @@ snapshots:
 
   '@opentelemetry/otlp-grpc-exporter-base@0.205.0(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@grpc/grpc-js': 1.13.4
+      '@grpc/grpc-js': 1.14.0
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.1.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/otlp-exporter-base': 0.205.0(@opentelemetry/api@1.9.0)
@@ -22144,7 +22186,7 @@ snapshots:
 
   '@opentelemetry/otlp-grpc-exporter-base@0.57.2(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@grpc/grpc-js': 1.13.4
+      '@grpc/grpc-js': 1.14.0
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/otlp-exporter-base': 0.57.2(@opentelemetry/api@1.9.0)
@@ -23769,12 +23811,12 @@ snapshots:
 
   '@standard-schema/spec@1.0.0': {}
 
-  '@storybook/addon-docs@9.1.9(@types/react@19.1.13)(storybook@9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))':
+  '@storybook/addon-docs@9.1.10(@types/react@19.1.13)(storybook@9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))':
     dependencies:
       '@mdx-js/react': 3.1.0(@types/react@19.1.13)(react@19.1.1)
-      '@storybook/csf-plugin': 9.1.9(storybook@9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))
+      '@storybook/csf-plugin': 9.1.10(storybook@9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))
       '@storybook/icons': 1.4.0(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
-      '@storybook/react-dom-shim': 9.1.9(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(storybook@9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))
+      '@storybook/react-dom-shim': 9.1.10(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(storybook@9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))
       react: 19.1.1
       react-dom: 19.1.1(react@19.1.1)
       storybook: 9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1))
@@ -23789,12 +23831,12 @@ snapshots:
       ts-dedent: 2.2.0
       vite: 6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)
 
-  '@storybook/csf-plugin@9.1.8(storybook@9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))':
+  '@storybook/csf-plugin@9.1.10(storybook@9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))':
     dependencies:
       storybook: 9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1))
       unplugin: 1.16.1
 
-  '@storybook/csf-plugin@9.1.9(storybook@9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))':
+  '@storybook/csf-plugin@9.1.8(storybook@9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))':
     dependencies:
       storybook: 9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1))
       unplugin: 1.16.1
@@ -23806,13 +23848,13 @@ snapshots:
       react: 19.1.1
       react-dom: 19.1.1(react@19.1.1)
 
-  '@storybook/react-dom-shim@9.1.8(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(storybook@9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))':
+  '@storybook/react-dom-shim@9.1.10(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(storybook@9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))':
     dependencies:
       react: 19.1.1
       react-dom: 19.1.1(react@19.1.1)
       storybook: 9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1))
 
-  '@storybook/react-dom-shim@9.1.9(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(storybook@9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))':
+  '@storybook/react-dom-shim@9.1.8(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(storybook@9.1.8(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.6(@types/node@20.19.14)(jiti@2.6.0)(lightningcss@1.30.1)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)))':
     dependencies:
       react: 19.1.1
       react-dom: 19.1.1(react@19.1.1)
@@ -26291,10 +26333,10 @@ snapshots:
 
   efrt@2.7.0: {}
 
-  electrodb@3.4.6(@aws-sdk/client-dynamodb@3.901.0):
+  electrodb@3.4.6(@aws-sdk/client-dynamodb@3.902.0):
     dependencies:
-      '@aws-sdk/lib-dynamodb': 3.901.0(@aws-sdk/client-dynamodb@3.901.0)
-      '@aws-sdk/util-dynamodb': 3.901.0(@aws-sdk/client-dynamodb@3.901.0)
+      '@aws-sdk/lib-dynamodb': 3.902.0(@aws-sdk/client-dynamodb@3.902.0)
+      '@aws-sdk/util-dynamodb': 3.902.0(@aws-sdk/client-dynamodb@3.902.0)
       jsonschema: 1.2.7
     transitivePeerDependencies:
       - '@aws-sdk/client-dynamodb'
@@ -27410,7 +27452,7 @@ snapshots:
 
   google-gax@4.6.1(encoding@0.1.13):
     dependencies:
-      '@grpc/grpc-js': 1.13.4
+      '@grpc/grpc-js': 1.14.0
       '@grpc/proto-loader': 0.7.15
       '@types/long': 4.0.2
       abort-controller: 3.0.0
@@ -27428,7 +27470,7 @@ snapshots:
 
   google-gax@5.0.1:
     dependencies:
-      '@grpc/grpc-js': 1.13.4
+      '@grpc/grpc-js': 1.14.0
       '@grpc/proto-loader': 0.7.15
       abort-controller: 3.0.0
       duplexify: 4.1.3
