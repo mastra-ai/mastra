@@ -487,7 +487,7 @@ export class Memory extends MastraMemory {
       : new Mutex();
     this.updateWorkingMemoryMutexes.set(mutexKey, mutex);
     const release = await mutex.acquire();
-
+    // test
     try {
       const existingWorkingMemory = (await this.getWorkingMemory({ threadId, resourceId, memoryConfig })) || '';
       const template = await this.getWorkingMemoryTemplate({ memoryConfig });
