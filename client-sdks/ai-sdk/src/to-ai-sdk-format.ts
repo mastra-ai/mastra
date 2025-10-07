@@ -177,7 +177,7 @@ function transformAgent<TOutput extends ZodType<any>>(
   switch (payload.type) {
     case 'start':
       bufferedSteps.set(payload.runId!, {
-        id: payload.payload.agentId,
+        id: payload.payload.id,
         object: null,
         finishReason: null,
         usage: null,
