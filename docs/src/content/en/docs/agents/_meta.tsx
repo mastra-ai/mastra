@@ -6,6 +6,7 @@ const meta = {
   "adding-voice": "Adding Voice",
   "runtime-context": "Runtime Context",
   "dynamic-agents": "Dynamic Agents",
+  networks: "Networks",
 };
 
 export default meta;
