@@ -1,7 +1,7 @@
 import z from 'zod';
 import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
-import { Agent } from '../../agent/index';
+import { Agent, tryWithFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
 import type { MastraMessageV2, MessageListInput } from '../../agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
@@ -239,7 +239,7 @@ export async function createNetworkLoop({
                           }
                       `;
 
-        completionResult = await routingAgent.generate([{ role: 'assistant', content: completionPrompt }], {
+        const completionOptions = {
           structuredOutput: {
             schema: completionSchema,
           },
@@ -251,7 +251,18 @@ export async function createNetworkLoop({
             readOnly: true,
           },
           ...routingAgentOptions,
-        });
+        };
+        completionResult = await tryWithFallback(
+          () => routingAgent.generate([{ role: 'assistant', content: completionPrompt }], completionOptions),
+          () =>
+            routingAgent.generate([{ role: 'assistant', content: completionPrompt }], {
+              ...completionOptions,
+              structuredOutput: {
+                ...completionOptions.structuredOutput,
+                jsonPromptInjection: true, // Fallback to using prompt injection if first attempt fails
+              },
+            }),
+        );
 
         if (completionResult?.object?.isComplete) {
           const endPayload = {
@@ -353,7 +364,14 @@ export async function createNetworkLoop({
         ...routingAgentOptions,
       };
 
-      const result = await routingAgent.generate(prompt, options);
+      const result = await tryWithFallback(
+        () => routingAgent.generate(prompt, options),
+        () =>
+          routingAgent.generate(prompt, {
+            ...options,
+            structuredOutput: { ...options.structuredOutput, jsonPromptInjection: true },
+          }),
+      );
 
       const object = result.object;
 
