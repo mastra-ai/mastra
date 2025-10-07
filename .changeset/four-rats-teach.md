@@ -5,4 +5,4 @@
 'create-mastra': patch
 ---
 
-Save waiting step status in store
+Save waiting step status in snapshot
