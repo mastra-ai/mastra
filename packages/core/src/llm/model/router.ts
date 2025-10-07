@@ -7,7 +7,7 @@ import { findGatewayForModel } from './gateways/index.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
 import type { ModelRouterModelId } from './provider-registry.generated.js';
-import { parseModelString, getProviderConfig, PROVIDER_REGISTRY } from './provider-registry.generated.js';
+import { PROVIDER_REGISTRY } from './provider-registry.generated.js';
 import type { OpenAICompatibleConfig } from './shared.types';
 
 function getStaticProvidersByGateway(name: string) {
@@ -15,25 +15,6 @@ function getStaticProvidersByGateway(name: string) {
 }
 
 export const gateways = [new NetlifyGateway(), new ModelsDevGateway(getStaticProvidersByGateway(`models.dev`))];
-
-// Helper function to resolve API key from environment
-function resolveApiKey({ provider, apiKey }: { provider?: string; apiKey?: string }): string | undefined {
-  if (apiKey) return apiKey;
-
-  if (provider) {
-    const config = getProviderConfig(provider);
-    if (typeof config?.apiKeyEnvVar === `string`) {
-      return process.env[config.apiKeyEnvVar];
-    }
-    if (Array.isArray(config?.apiKeyEnvVar)) {
-      for (const key of config.apiKeyEnvVar) {
-        if (process.env[key]) return process.env[key];
-      }
-    }
-  }
-
-  return undefined;
-}
 
 export class ModelRouterLanguageModel implements LanguageModelV2 {
   readonly specificationVersion = 'v2' as const;
@@ -45,76 +26,27 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
   readonly modelId: string;
   readonly provider: string;
 
-  private config: OpenAICompatibleConfig & { fullModelId: string };
+  private config: OpenAICompatibleConfig & { routerId: string };
   private gateway: MastraModelGateway;
 
   constructor(config: ModelRouterModelId | OpenAICompatibleConfig) {
-    // Parse configuration
-    let parsedConfig: OpenAICompatibleConfig & { fullModelId: string };
+    if (typeof config === `string`) config = { id: config };
 
-    if (typeof config === 'string') {
-      // First check if it's a valid URL
-      let isUrl = false;
-      try {
-        new URL(config);
-        isUrl = true;
-      } catch {
-        // Not a URL, continue with provider parsing
-      }
+    const parsedConfig: OpenAICompatibleConfig & { routerId: string } = { ...config, routerId: config.id };
 
-      if (isUrl) {
-        // If it's a direct URL - use as-is
-        parsedConfig = {
-          id: 'unknown',
-          url: config,
-          fullModelId: 'unknown',
-        };
-        this.provider = 'openai-compatible';
-        this.config = { id: 'unknown', url: config, fullModelId: 'unknown' };
-      } else {
-        this.gateway = findGatewayForModel(config, gateways);
-        // Extract provider from id if present
-        const parsed = parseModelString(
-          this.gateway.prefix && config.startsWith(`${this.gateway.prefix}/`)
-            ? config.substring(`${this.gateway.prefix}/`.length)
-            : config,
-        );
+    this.gateway = findGatewayForModel(config.id, gateways);
+    // Extract provider from id if present
+    const parsed = parseModelRouterId(config.id, this.gateway.prefix);
 
-        // Handle magic strings like "openai/gpt-4o" or "netlify/openai/gpt-4o"
-        parsedConfig = {
-          id: this.gateway.prefix ? `${parsed.provider}/${parsed.modelId}` : parsed.modelId,
-          apiKey: resolveApiKey({ provider: parsed.provider || config }),
-          fullModelId: config,
-        };
-        this.provider = this.gateway.prefix || parsed.provider || config;
-      }
-    } else {
-      // Handle config object
-      parsedConfig = { ...config, fullModelId: config.id };
+    this.provider = parsed.providerId || 'openai-compatible';
 
-      this.gateway = findGatewayForModel(config.id, gateways);
-      // Extract provider from id if present
-      const parsed = parseModelString(
-        this.gateway.prefix && config.id.startsWith(`${this.gateway.prefix}/`)
-          ? config.id.substring(`${this.gateway.prefix}/`.length)
-          : config.id,
-      );
-      this.provider = parsed.provider || 'openai-compatible';
-
-      if (parsed.provider && parsed.modelId !== config.id) {
-        parsedConfig.id = parsed.modelId;
-      }
-
-      // Resolve API key if not provided
-      if (!parsedConfig.apiKey) {
-        parsedConfig.apiKey = resolveApiKey({ provider: parsed.provider || undefined });
-      }
+    if (parsed.providerId && parsed.modelId !== config.id) {
+      parsedConfig.id = parsed.modelId;
     }
 
-    // Store the configuration
     this.modelId = parsedConfig.id;
     this.config = parsedConfig;
-    this.gateway = findGatewayForModel(parsedConfig.fullModelId, gateways);
+    this.gateway = findGatewayForModel(parsedConfig.routerId, gateways);
   }
 
   async doGenerate(): Promise<never> {
@@ -128,7 +60,7 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
     // Validate API key and return error stream if validation fails
     let apiKey: string;
     try {
-      apiKey = await this.gateway.getApiKey(this.config.fullModelId);
+      apiKey = await this.gateway.getApiKey(this.config.routerId);
     } catch (error) {
       // Return an error stream instead of throwing
       return {
@@ -145,7 +77,7 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
 
     const model = await this.resolveLanguageModel({
       apiKey,
-      ...parseModelRouterId(this.config.fullModelId, this.gateway.prefix),
+      ...parseModelRouterId(this.config.routerId, this.gateway.prefix),
     });
 
     return model.doStream(options);
