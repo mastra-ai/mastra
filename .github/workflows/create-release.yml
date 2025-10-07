@@ -89,8 +89,8 @@ jobs:
         # prerelease mode, enter prerelease mode with tag alpha
         if: steps.check_files.outputs.files_exists == 'true'
         run: |
-          pnpm changeset pre exit
-          pnpm changeset version
+          pnpm changeset-cli pre exit
+          pnpm changeset-cli version
           git add -A
           git commit -m 'chore: version - exit prerelease mode' --no-verify
           git push
@@ -123,7 +123,7 @@ jobs:
 
       - name: Add tags
         run: |
-          pnpm changeset tag;
+          pnpm changeset-cli tag;
           git push --follow-tags
 
   enter_prerelease:
@@ -178,7 +178,7 @@ jobs:
       - name: Enter prerelease mode
         run: |
           git pull
-          pnpm changeset pre enter alpha
+          pnpm changeset-cli pre enter alpha
           git add -A
           git commit -m 'chore: version - enter prerelease mode' --no-verify
 
