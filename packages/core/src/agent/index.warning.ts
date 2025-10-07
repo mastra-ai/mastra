@@ -17,6 +17,6 @@ export class Agent<
   constructor(config: AgentConfig<TAgentId, TTools, TMetrics>) {
     super(config);
 
-    this.logger.warn('Please import "Agent from "@mastra/core/agent" instead of "@mastra/core"');
+    this.logger.warn('Please import Agent from "@mastra/core/agent" instead of "@mastra/core"');
   }
 }
