@@ -5,11 +5,21 @@ import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
 import { WorkflowTrigger, WorkflowTriggerProps } from '../workflow/workflow-trigger';
 import { convertWorkflowRunStateToStreamResult } from '../utils';
 
-import { isObjectEmpty } from '@/lib/object';
+import { WorkflowRunStreamResult } from '../context/workflow-run-context';
 
-export interface WorkflowRunDetailProps extends Omit<WorkflowTriggerProps, 'paramsRunId' | 'workflowId'> {
+export interface WorkflowRunDetailProps
+  extends Omit<WorkflowTriggerProps, 'paramsRunId' | 'workflowId' | 'observeWorkflowStream'> {
   workflowId: string;
   runId?: string;
+  observeWorkflowStream?: ({
+    workflowId,
+    runId,
+    storeRunResult,
+  }: {
+    workflowId: string;
+    runId: string;
+    storeRunResult: WorkflowRunStreamResult | null;
+  }) => void;
 }
 
 export const WorkflowRunDetail = ({
@@ -52,12 +62,11 @@ export const WorkflowRunDetail = ({
       <div className="h-full grid grid-rows-[1fr_auto]">
         <WorkflowTrigger
           {...triggerProps}
-          streamResult={isObjectEmpty(triggerProps.streamResult ?? {}) ? runResult : triggerProps.streamResult}
           paramsRunId={runId}
           workflowId={workflowId}
           observeWorkflowStream={() => {
             if (runStatus !== 'success' && runStatus !== 'failed' && runStatus !== 'canceled') {
-              observeWorkflowStream?.({ workflowId, runId });
+              observeWorkflowStream?.({ workflowId, runId, storeRunResult: runResult });
             }
           }}
         />

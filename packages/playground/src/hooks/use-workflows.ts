@@ -176,7 +176,7 @@ export const useWatchWorkflow = () => {
   };
 };
 
-type WorkflowStreamResult = CoreWorkflowStreamResult<any, any, any>;
+type WorkflowStreamResult = CoreWorkflowStreamResult<any, any, any, any>;
 
 export const useStreamWorkflow = () => {
   const [streamResult, setStreamResult] = useState<WorkflowStreamResult>({} as WorkflowStreamResult);
@@ -291,7 +291,15 @@ export const useStreamWorkflow = () => {
   });
 
   const observeWorkflowStream = useMutation({
-    mutationFn: async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
+    mutationFn: async ({
+      workflowId,
+      runId,
+      storeRunResult,
+    }: {
+      workflowId: string;
+      runId: string;
+      storeRunResult: WorkflowStreamResult | null;
+    }) => {
       // Clean up any existing reader before starting new stream
       if (observerRef.current) {
         observerRef.current.releaseLock();
@@ -300,7 +308,12 @@ export const useStreamWorkflow = () => {
       if (!isMountedRef.current) return;
 
       setIsStreaming(true);
-      setStreamResult({} as WorkflowStreamResult);
+
+      setStreamResult((storeRunResult || {}) as WorkflowStreamResult);
+      if (storeRunResult?.status === 'suspended') {
+        setIsStreaming(false);
+        return;
+      }
       const workflow = client.getWorkflow(workflowId);
       const stream = await workflow.observeStreamVNext({ runId });
 
