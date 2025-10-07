@@ -55,5 +55,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "dependencies": {
+    "ai": "^5.0.60"
   }
 }
