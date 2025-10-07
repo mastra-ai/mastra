@@ -1,4 +1,4 @@
-// import DocsChat from "@/chatbot/components/chat-widget";
+import { KapaChat } from "@/chatbot/components/chat-widget";
 import {
   Dialog,
   DialogBackdrop,
@@ -6,18 +6,18 @@ import {
   DialogTitle,
 } from "@headlessui/react";
 import { useEffect, useState } from "react";
-// import { CustomSearch } from "./custom-search";
-// import { getSearchPlaceholder } from "./search-placeholder";
+import { CustomSearch } from "./custom-search";
+import { getSearchPlaceholder } from "./search-placeholder";
 import { Shortcut } from "./shortcut";
 import { Button } from "./ui/button";
-import { CustomSearchWithoutAI } from "./custom-search-without-ai";
+import { KapaProvider } from "@kapaai/react-sdk";
 
 const INPUTS = new Set(["INPUT", "SELECT", "BUTTON", "TEXTAREA"]);
 
 export const SearchWrapper = ({ locale }: { locale: string }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAgentMode, setIsAgentMode] = useState(false);
-  // const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -56,10 +56,10 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
     setIsAgentMode(false);
   }
 
-  // function handleUseAgent({ searchQuery }: { searchQuery: string }) {
-  //   setIsAgentMode(true);
-  //   setSearchQuery(searchQuery);
-  // }
+  function handleUseAgent({ searchQuery }: { searchQuery: string }) {
+    setIsAgentMode(true);
+    setSearchQuery(searchQuery);
+  }
 
   // Configure Algolia search options
   const searchOptions = {
@@ -88,41 +88,45 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
       <Dialog
         open={isOpen}
         as="div"
-        className="relative hidden md:block z-1000 focus:outline-none"
+        className="hidden relative md:block z-1000 focus:outline-none"
         onClose={close}
       >
         <DialogBackdrop className="fixed inset-0 transition duration-150 ease-out data-closed:opacity-0 bg-black/70" />
-        <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
-          <div className="flex items-start pt-[200px] justify-center min-h-full p-4">
+        <div className="overflow-y-auto fixed inset-0 z-10 w-screen">
+          <div className="flex items-start pt-[100px] justify-center min-h-full p-4">
             <DialogPanel
               transition
-              className="w-full border-[0.5px] border-[var(--light-border-code)] dark:border-borders-2 h-fit max-w-[660px] mx-auto rounded-xl bg-[var(--light-color-surface-15)] dark:bg-surface-4 transition duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
+              className="w-full overflow-hidden border-[0.5px] border-[var(--light-border-code)] dark:border-borders-2 h-fit max-w-[560px] mx-auto rounded-xl bg-[var(--light-color-surface-15)] dark:bg-surface-4 transition duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
             >
               <DialogTitle as="h3" className="sr-only">
                 Search
               </DialogTitle>
               <div className="w-full">
                 {isAgentMode ? (
-                  // TODO; uncomment when re-enabling AI search
-                  // <DocsChat
-                  //   setIsAgentMode={setIsAgentMode}
-                  //   searchQuery={searchQuery}
-                  // />
-                  <></>
+                  // TODO: place behind Feature Flag
+                  <KapaProvider
+                    integrationId={process.env.NEXT_PUBLIC_KAPA_INTEGRATION_ID!}
+                    callbacks={{
+                      askAI: {
+                        onQuerySubmit(p) {
+                          console.log({ p });
+                        },
+                      },
+                    }}
+                  >
+                    <KapaChat
+                      searchQuery={searchQuery}
+                      setIsAgentMode={setIsAgentMode}
+                    />
+                  </KapaProvider>
                 ) : (
                   <div className="p-[10px]">
-                    <CustomSearchWithoutAI
-                      searchOptions={searchOptions}
-                      closeModal={close}
-                    />
-                    {/* 
-                      disabling AI search for now
                     <CustomSearch
                       placeholder={getSearchPlaceholder(locale)}
                       searchOptions={searchOptions}
                       onUseAgent={handleUseAgent}
                       closeModal={close}
-                    /> */}
+                    />
                   </div>
                 )}
               </div>

@@ -22,6 +22,7 @@
   --color-text-icon-5: hsla(0, 0%, 90%, 1);
   --color-text-icon-6: hsla(0, 0%, 100%, 1);
   --primary: #050505;
+  --border-1: #303030;
   --border-2: hsla(0, 0%, 26%, 1);
   --button-outline: hsla(125, 66%, 50%, 1);
 }
@@ -83,6 +84,7 @@
   --color-surface-3: hsla(0, 0%, 8%, 1);
   --color-surface-4: hsla(0, 0%, 10%, 1);
   --color-surface-5: hsla(0, 0%, 18%, 0.9);
+  --color-surface-6: hsla(0, 0%, 10%, 0.5);
   --color-borders-1: hsla(0, 0%, 19%, 1);
   --color-borders-2: hsla(0, 0%, 26%, 1);
   --color-accent-green: hsla(143, 97%, 54%, 1);
@@ -729,7 +731,8 @@ table td code.nextra-code:not([class*="twoslash-"]) {
   }
 }
 
-#headlessui-portal-root ul {
+/* TODO: Too aggressive, might need to revisit */
+/* #headlessui-portal-root ul {
   border-radius: 12px;
   padding-inline: 0.25rem;
   border-width: 0.5px;
@@ -746,7 +749,7 @@ table td code.nextra-code:not([class*="twoslash-"]) {
 
 #headlessui-portal-root ul li {
   border-radius: 8px;
-}
+} */
 
 .nextra-breadcrumb + div {
   border-radius: 10px !important;
