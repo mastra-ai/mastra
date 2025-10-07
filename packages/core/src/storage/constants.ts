@@ -8,6 +8,9 @@ export const TABLE_TRACES = 'mastra_traces';
 export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_AI_SPANS = 'mastra_ai_spans';
+export const TABLE_DATASETS = 'mastra_datasets';
+export const TABLE_DATASET_VERSIONS = 'mastra_dataset_versions';
+export const TABLE_DATASET_ROWS = 'mastra_dataset_rows';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -17,7 +20,10 @@ export type TABLE_NAMES =
   | typeof TABLE_TRACES
   | typeof TABLE_RESOURCES
   | typeof TABLE_SCORERS
-  | typeof TABLE_AI_SPANS;
+  | typeof TABLE_AI_SPANS
+  | typeof TABLE_DATASETS
+  | typeof TABLE_DATASET_VERSIONS
+  | typeof TABLE_DATASET_ROWS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -78,6 +84,42 @@ export const AI_SPAN_SCHEMA: Record<string, StorageColumn> = {
   isEvent: { type: 'boolean', nullable: false },
 };
 
+export const DATASET_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  name: { type: 'text', nullable: false }, // Unique name for the dataset
+  description: { type: 'text', nullable: true }, // Optional description of what this dataset contains
+  metadata: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: true },
+};
+
+export const DATASET_VERSION_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true }, // Primary identifier - ULID (time-based sortable)
+  datasetId: { type: 'text', nullable: false },
+  version: { type: 'text', nullable: false }, // Human-readable version label
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: true },
+};
+
+export const DATASET_ROW_SCHEMA: Record<string, StorageColumn> = {
+  rowId: { type: 'text', nullable: false }, // Logical row identifier - stays the same across versions
+  rowVersionId: { type: 'text', nullable: false, primaryKey: true }, // Unique identifier for the row version
+  datasetId: { type: 'text', nullable: false }, // Foreign key to datasets.id
+  versionId: { type: 'text', nullable: false }, // Foreign key to dataset_versions.id
+  input: { type: 'jsonb', nullable: false }, // The input data for this dataset row
+  groundTruth: { type: 'jsonb', nullable: true }, // The expected/correct output (ground truth) for evaluation
+  runtimeContext: { type: 'jsonb', nullable: true }, // Runtime context to pass to agents/workflows when using this item
+
+  deleted: { type: 'boolean', nullable: false },
+
+  // Links to traces (optional) for the row
+  traceId: { type: 'text', nullable: true },
+  spanId: { type: 'text', nullable: true },
+
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: true },
+};
+
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
     workflow_name: {
@@ -98,6 +140,9 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     },
   },
   [TABLE_SCORERS]: SCORERS_SCHEMA,
+  [TABLE_DATASETS]: DATASET_SCHEMA,
+  [TABLE_DATASET_ROWS]: DATASET_ROW_SCHEMA,
+  [TABLE_DATASET_VERSIONS]: DATASET_VERSION_SCHEMA,
   [TABLE_EVALS]: {
     input: {
       type: 'text',

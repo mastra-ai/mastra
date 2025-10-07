@@ -27,6 +27,7 @@ import type {
   MemoryStorage,
   LegacyEvalsStorage,
   ObservabilityStorage,
+  DatasetsStorage,
 } from './domains';
 import type {
   EvalRow,
@@ -59,6 +60,7 @@ export type StorageDomains = {
   traces: TracesStorage;
   memory: MemoryStorage;
   observability?: ObservabilityStorage;
+  datasets?: DatasetsStorage;
 };
 
 export function ensureDate(date: Date | string | undefined): Date | undefined {
@@ -117,6 +119,7 @@ export abstract class MastraStorage extends MastraBase {
     aiTracing?: boolean;
     indexManagement?: boolean;
     getScoresBySpan?: boolean;
+    datasets?: boolean;
   } {
     return {
       selectByIncludeResourceScope: false,
@@ -127,6 +130,7 @@ export abstract class MastraStorage extends MastraBase {
       aiTracing: false,
       indexManagement: false,
       getScoresBySpan: false,
+      datasets: false,
     };
   }
 
@@ -761,6 +765,94 @@ export abstract class MastraStorage extends MastraBase {
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
       text: `Index management is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * DATASETS
+   * These methods delegate to the datasets store for dataset management.
+   */
+
+  /**
+   * Creates a new dataset
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async createDataset(args: { name: string; description?: string; metadata?: Record<string, any> }) {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.createDataset(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_CREATE_DATASET_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Datasets are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Updates an existing dataset
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async updateDataset(args: {
+    id: string;
+    updates: { name?: string; description?: string; metadata?: Record<string, any> };
+  }) {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.updateDataset(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_UPDATE_DATASET_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Datasets are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Deletes a dataset
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async deleteDataset(args: { id: string }): Promise<void> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.deleteDataset(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_DELETE_DATASET_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Datasets are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Retrieves a single dataset by ID
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async getDataset(args: { id: string }) {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.getDataset(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_GET_DATASET_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Datasets are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Retrieves datasets with pagination
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async getDatasets(args: { pagination: StoragePagination }) {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.getDatasets(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_GET_DATASETS_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Datasets are not supported by this storage adapter (${this.constructor.name})`,
     });
   }
 }
