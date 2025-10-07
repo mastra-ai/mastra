@@ -134,28 +134,28 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
     changeset += `---`;
     writeFileSync(join(monorepoDir, `.changeset/test-${new Date().toISOString()}.md`), changeset);
     // process.exit(0); // Remove this - it prevents changeset commands from running
-    console.log('Running pnpm changeset pre exit');
+    console.log('Running pnpm changeset-cli pre exit');
     await retryWithTimeout(
       async () => {
-        await execAsync('pnpm changeset pre exit', {
+        await execAsync('pnpm changeset-cli pre exit', {
           cwd: monorepoDir,
           stdio: ['inherit', 'inherit', 'inherit'],
         });
       },
       defaultTimeout,
-      'pnpm changeset pre exit',
+      'pnpm changeset-cli pre exit',
     );
 
-    console.log(`Running pnpm changeset version --snapshot ${tag}`);
+    console.log(`Running pnpm changeset-cli version --snapshot ${tag}`);
     await retryWithTimeout(
       async () => {
-        await execAsync(`pnpm changeset version --snapshot ${tag}`, {
+        await execAsync(`pnpm changeset-cli version --snapshot ${tag}`, {
           cwd: monorepoDir,
           stdio: ['inherit', 'inherit', 'inherit'],
         });
       },
       defaultTimeout,
-      `pnpm changeset version --snapshot ${tag}`,
+      `pnpm changeset-cli version --snapshot ${tag}`,
     );
   } catch (error) {
     cleanup(monorepoDir, false);
