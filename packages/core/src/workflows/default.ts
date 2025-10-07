@@ -15,7 +15,7 @@ import type { DynamicArgument } from '../types';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
-import type { ExecuteFunction, LoopConditionFunction, Step } from './step';
+import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } from './step';
 import { getStepResult } from './step';
 import type {
   DefaultEngineType,
@@ -771,9 +771,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       ...(startTime ? { startedAt: startTime } : {}),
       ...(resumeTime ? { resumedAt: resumeTime } : {}),
       status: 'running',
-      metadata: {
-        iterationCount: iterationCount,
-      },
+      ...(iterationCount ? { metadata: { iterationCount } } : {}),
     };
 
     const stepAISpan = tracingContext.currentSpan?.createChildSpan({
@@ -1256,7 +1254,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     entry: {
       type: 'conditional';
       steps: StepFlowEntry[];
-      conditions: ExecuteFunction<any, any, any, any, any, DefaultEngineType>[];
+      conditions: ConditionFunction<any, any, any, any, DefaultEngineType>[];
     };
     prevStep: StepFlowEntry;
     prevOutput: any;
@@ -1504,7 +1502,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     entry: {
       type: 'loop';
       step: Step;
-      condition: LoopConditionFunction<any, any, any, any, any, DefaultEngineType>;
+      condition: LoopConditionFunction<any, any, any, any, DefaultEngineType>;
       loopType: 'dowhile' | 'dountil';
     };
     prevStep: StepFlowEntry;

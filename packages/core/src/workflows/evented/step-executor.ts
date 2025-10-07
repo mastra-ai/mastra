@@ -213,7 +213,7 @@ export class StepExecutor extends MastraBase {
     iterationCount,
   }: {
     workflowId: string;
-    condition: LoopConditionFunction<any, any, any, any, any, any>;
+    condition: LoopConditionFunction<any, any, any, any, any>;
     runId: string;
     inputData?: any;
     resumeData?: any;

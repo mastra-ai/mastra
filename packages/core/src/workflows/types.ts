@@ -3,7 +3,7 @@ import type { z } from 'zod';
 import type { TracingPolicy, TracingProperties } from '../ai-tracing';
 import type { Mastra } from '../mastra';
 import type { ExecutionEngine } from './execution-engine';
-import type { ExecuteFunction, LoopConditionFunction, Step } from './step';
+import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } from './step';
 
 export type { ChunkType } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
@@ -321,13 +321,13 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | {
       type: 'conditional';
       steps: StepFlowEntry[];
-      conditions: ExecuteFunction<any, any, any, any, any, TEngineType>[];
+      conditions: ConditionFunction<any, any, any, any, TEngineType>[];
       serializedConditions: { id: string; fn: string }[];
     }
   | {
       type: 'loop';
       step: Step;
-      condition: LoopConditionFunction<any, any, any, any, any, TEngineType>;
+      condition: LoopConditionFunction<any, any, any, any, TEngineType>;
       serializedCondition: { id: string; fn: string };
       loopType: 'dowhile' | 'dountil';
     }
