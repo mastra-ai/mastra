@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { Agent } from '../agent';
-import { tryWithFallback } from '../agent/utils';
+import { tryGenerateWithJsonFallback } from '../agent/utils';
 import { InternalSpans } from '../ai-tracing';
 import type { TracingContext } from '../ai-tracing';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
@@ -539,23 +539,12 @@ class MastraScorer<
       const schema = z.object({ score: z.number() });
       let result;
       if (model.specificationVersion === 'v2') {
-        result = await tryWithFallback(
-          () =>
-            judge.generate(prompt, {
-              structuredOutput: {
-                schema,
-              },
-              tracingContext,
-            }),
-          () =>
-            judge.generate(prompt, {
-              structuredOutput: {
-                schema,
-                jsonPromptInjection: true,
-              },
-              tracingContext,
-            }),
-        );
+        result = await tryGenerateWithJsonFallback(judge, prompt, {
+          structuredOutput: {
+            schema,
+          },
+          tracingContext,
+        });
       } else {
         result = await judge.generateLegacy(prompt, {
           output: schema,
@@ -577,23 +566,12 @@ class MastraScorer<
       const promptStep = originalStep as PromptObject<any, any, any, TInput, TRunOutput>;
       let result;
       if (model.specificationVersion === 'v2') {
-        result = await tryWithFallback(
-          () =>
-            judge.generate(prompt, {
-              structuredOutput: {
-                schema: promptStep.outputSchema,
-              },
-              tracingContext,
-            }),
-          () =>
-            judge.generate(prompt, {
-              structuredOutput: {
-                schema: promptStep.outputSchema,
-                jsonPromptInjection: true, // Fallback to using prompt injection if first attempt fails
-              },
-              tracingContext,
-            }),
-        );
+        result = await tryGenerateWithJsonFallback(judge, prompt, {
+          structuredOutput: {
+            schema: promptStep.outputSchema,
+          },
+          tracingContext,
+        });
       } else {
         result = await judge.generateLegacy(prompt, {
           output: promptStep.outputSchema,

@@ -3,7 +3,7 @@ import { mkdtemp, copyFile, readFile, mkdir, readdir, rm, writeFile } from 'fs/p
 import { tmpdir } from 'os';
 import { join, dirname, resolve, extname, basename } from 'path';
 import { openai } from '@ai-sdk/openai';
-import { Agent, tryWithFallback } from '@mastra/core/agent';
+import { Agent, tryGenerateWithJsonFallback, tryStreamWithJsonFallback } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
@@ -233,23 +233,12 @@ Return the actual exported names of the units, as well as the file names.`,
       });
 
       const result = isV2
-        ? await tryWithFallback(
-            () =>
-              agent.generate(prompt, {
-                structuredOutput: {
-                  schema: output,
-                },
-                maxSteps: 100,
-              }),
-            () =>
-              agent.generate(prompt, {
-                structuredOutput: {
-                  schema: output,
-                  jsonPromptInjection: true, // Fallback to using prompt injection if first attempt fails
-                },
-                maxSteps: 100,
-              }),
-          )
+        ? await tryGenerateWithJsonFallback(agent, prompt, {
+            structuredOutput: {
+              schema: output,
+            },
+            maxSteps: 100,
+          })
         : await agent.generateLegacy(prompt, {
             experimental_output: output,
             maxSteps: 100,
@@ -1451,21 +1440,11 @@ Previous iterations may have fixed some issues, so start by re-running validateC
         const isV2 = model.specificationVersion === 'v2';
         const output = z.object({ success: z.boolean() });
         const result = isV2
-          ? await tryWithFallback(
-              () =>
-                validationAgent.stream(iterationPrompt, {
-                  structuredOutput: {
-                    schema: output,
-                  },
-                }),
-              () =>
-                validationAgent.stream(iterationPrompt, {
-                  structuredOutput: {
-                    schema: output,
-                    jsonPromptInjection: true, // Fallback to using prompt injection if first attempt fails
-                  },
-                }),
-            )
+          ? await tryStreamWithJsonFallback(validationAgent, iterationPrompt, {
+              structuredOutput: {
+                schema: output,
+              },
+            })
           : await validationAgent.streamLegacy(iterationPrompt, {
               experimental_output: output,
             });
