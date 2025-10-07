@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { SUPPORTED_PROVIDERS } from '../src/llm/model/gateways/constants.js';
+import { PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants.js';
 import { PROVIDER_REGISTRY } from '../src/llm/model/provider-registry.generated.js';
 
 /**
@@ -246,7 +246,7 @@ for await (const chunk of stream) {
 }
 \`\`\`
 ${
-  !SUPPORTED_PROVIDERS.includes(provider.id)
+  !PROVIDERS_WITH_INSTALLED_PACKAGES.includes(provider.id)
     ? // if it's not a directly supported provider then it's openai compatible, so warn about it
       `
 <Callout type="info">
@@ -473,7 +473,7 @@ function generateIndexPage(grouped: GroupedProviders): string {
 
   return `---
 title: "Models"
-  description: "Access ${totalProviders}+ AI providers and ${totalModels}+ models through Mastra's model router."
+description: "Access ${totalProviders}+ AI providers and ${totalModels}+ models through Mastra's model router."
 ---
 
 ${getGeneratedComment()}
