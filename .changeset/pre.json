@@ -75,7 +75,8 @@
     "@mastra/voice-playai": "0.11.8",
     "@mastra/voice-sarvam": "0.11.8",
     "@mastra/voice-speechify": "0.11.8",
-    "@mastra/inngest": "0.15.0"
+    "@mastra/inngest": "0.15.0",
+    "@internal/changeset-cli": "0.0.0"
   },
   "changesets": [
     "@mastra_chroma-8554-dependencies",
@@ -97,10 +98,13 @@
     "lucky-cooks-laugh",
     "moody-bottles-taste",
     "nine-carrots-wish",
+    "petite-trees-fall",
     "polite-cloths-show",
     "pretty-bags-cut",
     "puny-zebras-rest",
+    "rich-impalas-grin",
     "sharp-worlds-invite",
+    "slimy-teeth-fly",
     "slow-rings-try",
     "smooth-geckos-share",
     "spicy-icons-clean",

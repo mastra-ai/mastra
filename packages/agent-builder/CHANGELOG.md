@@ -1,5 +1,14 @@
 # @mastra/agent-builder
 
+## 0.1.1-alpha.2
+
+### Patch Changes
+
+- Added model router support to agent builder ([#8590](https://github.com/mastra-ai/mastra/pull/8590))
+
+- Updated dependencies [[`b728a45`](https://github.com/mastra-ai/mastra/commit/b728a45ab3dba59da0f5ee36b81fe246659f305d)]:
+  - @mastra/core@0.20.1-alpha.4
+
 ## 0.1.1-alpha.1
 
 ### Patch Changes
