@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 6.3.1-alpha.2
+
+### Patch Changes
+
+- Added AI SDK provider packages to model router for anthropic/google/openai/openrouter/xai ([#8559](https://github.com/mastra-ai/mastra/pull/8559))
+
+- Updated dependencies [[`ee9108f`](https://github.com/mastra-ai/mastra/commit/ee9108fa29bb8368fc23df158c9f0645b2d7b65c)]:
+  - @mastra/core@0.20.1-alpha.2
+  - @mastra/client-js@0.15.1-alpha.2
+  - @mastra/react@0.0.4-alpha.2
+
 ## 6.3.1-alpha.1
 
 ### Patch Changes
