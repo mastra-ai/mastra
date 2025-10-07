@@ -141,7 +141,6 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
       providerOptions: providerOptions as any,
     });
 
-    console.log('looool', response);
     if (!response.body) {
       setIsRunning(false);
       throw new Error('[Stream] No response body');
@@ -149,7 +148,6 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
 
     await response.processDataStream({
       onChunk: (chunk: ChunkType) => {
-        console.log('REACT CHUNK', chunk);
         // Without this, React might batch intermediate chunks which would break the message reconstruction over time
         flushSync(() => {
           setMessages(prev => onChunk(chunk, prev));

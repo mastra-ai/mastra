@@ -1393,11 +1393,9 @@ export class Agent extends BaseResource {
     }: {
       onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
     }) => {
-      console.log('yoooo');
       await processMastraStream({
         stream: streamResponse.body as ReadableStream<Uint8Array>,
         onChunk: x => {
-          console.log('NOT CALLED', x);
           return onChunk(x);
         },
       });
