@@ -1,0 +1,13 @@
+diff --git a/dist/changesets-get-dependents-graph.cjs.js b/dist/changesets-get-dependents-graph.cjs.js
+index 3379ebefac1f304e171afb8d8fe1bc248e4dd8d2..95004f1b26438a1699b8ca64f17310bdd949ca6c 100644
+--- a/dist/changesets-get-dependents-graph.cjs.js
++++ b/dist/changesets-get-dependents-graph.cjs.js
+@@ -42,7 +42,7 @@ const getValidRange = potentialRange => {
+   }
+ 
+   try {
+-    return new Range__default["default"](potentialRange);
++    return new Range__default["default"](potentialRange, {includePrerelease: true});
+   } catch (_unused) {
+     return null;
+   }

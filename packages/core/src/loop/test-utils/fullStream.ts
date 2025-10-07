@@ -44,6 +44,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
         'input',
       );
       const result = loopFn({
+        agentId: 'agent-id',
         runId,
         models: [
           {
@@ -180,6 +181,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       );
       const result = await loopFn({
         runId,
+        agentId: 'agent-id',
         models: [
           {
             maxRetries: 0,
@@ -710,6 +712,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       );
 
       const result = await loopFn({
+        agentId: 'agent-id',
         runId,
         messageList,
         models: [
@@ -836,6 +839,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const result = await loopFn({
         runId,
+        agentId: 'agent-id',
         messageList,
         models: [
           {
@@ -925,6 +929,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const result = await loopFn({
         runId,
+        agentId: 'agent-id',
         models: createTestModels({
           stream: convertArrayToReadableStream([
             {
@@ -1131,6 +1136,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const result = await loopFn({
         runId,
+        agentId: 'agent-id',
         models: createTestModels({
           stream: convertArrayToReadableStream([
             {
@@ -1192,6 +1198,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const result = await loopFn({
         runId,
+        agentId: 'agent-id',
         models: createTestModels({
           stream: convertArrayToReadableStream([
             {
@@ -1247,6 +1254,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const result = await loopFn({
         runId,
+        agentId: 'agent-id',
         models: createTestModels({
           stream: convertArrayToReadableStream([
             {

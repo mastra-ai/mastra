@@ -87,6 +87,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   downloadConcurrency?: number;
   llmAISpan?: AISpan<AISpanType.LLM_GENERATION>;
   requireToolApproval?: boolean;
+  agentId: string;
 };
 
 export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = LoopOptions<
