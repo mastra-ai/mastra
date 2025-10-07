@@ -11,6 +11,7 @@ import { getSearchPlaceholder } from "./search-placeholder";
 import { Shortcut } from "./shortcut";
 import { Button } from "./ui/button";
 import { KapaProvider } from "@kapaai/react-sdk";
+import { usePostHog } from "posthog-js/react";
 
 const INPUTS = new Set(["INPUT", "SELECT", "BUTTON", "TEXTAREA"]);
 
@@ -24,6 +25,7 @@ export const SearchWrapper = ({
   const [isOpen, setIsOpen] = useState(false);
   const [isAgentMode, setIsAgentMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const posthog = usePostHog();
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -114,8 +116,30 @@ export const SearchWrapper = ({
                     integrationId={process.env.NEXT_PUBLIC_KAPA_INTEGRATION_ID!}
                     callbacks={{
                       askAI: {
-                        onQuerySubmit(p) {
-                          console.log({ p });
+                        onQuerySubmit({ question, threadId, conversation }) {
+                          posthog.capture("DOCS_CHATBOT_QUESTION", {
+                            question,
+                            thread_id: threadId,
+                            conversation_length: conversation.length,
+                            timestamp: new Date().toISOString(),
+                          });
+                        },
+                        onAnswerGenerationCompleted({
+                          answer,
+                          question,
+                          threadId,
+                          questionAnswerId,
+                          conversation,
+                        }) {
+                          posthog.capture("DOCS_CHATBOT_RESPONSE", {
+                            answer,
+                            question,
+                            question_answer_id: questionAnswerId,
+                            thread_id: threadId,
+                            conversation_length: conversation.length,
+                            answer_length: answer.length,
+                            timestamp: new Date().toISOString(),
+                          });
                         },
                       },
                     }}
