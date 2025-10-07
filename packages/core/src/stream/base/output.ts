@@ -20,7 +20,8 @@ import type {
   MastraOnFinishCallbackArgs,
 } from '../types';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
-import { getTransformedSchema, type InferSchemaOutput, type OutputSchema, type PartialSchemaOutput } from './schema';
+import { getTransformedSchema } from './schema';
+import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
 
 export class JsonToSseTransformStream extends TransformStream<unknown, string> {
   constructor() {
