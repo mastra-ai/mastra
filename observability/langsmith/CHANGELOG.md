@@ -1,5 +1,14 @@
 # @mastra/langsmith
 
+## 0.0.3-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#8560](https://github.com/mastra-ai/mastra/pull/8560))
+  - Updated dependency [`langsmith@>=0.3.72` ↗︎](https://www.npmjs.com/package/langsmith/v/0.3.72) (from `>=0.3.71`, in `dependencies`)
+- Updated dependencies [[`ee9108f`](https://github.com/mastra-ai/mastra/commit/ee9108fa29bb8368fc23df158c9f0645b2d7b65c)]:
+  - @mastra/core@0.20.1-alpha.2
+
 ## 0.0.2
 
 ### Patch Changes

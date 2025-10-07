@@ -19,16 +19,8 @@ describe('ModelsDevGateway - Real API Integration', () => {
 
     // Validate each provider has the expected shape
     for (const [providerId, config] of Object.entries(providers)) {
-      // Check required fields
-      expect(config.url, `Provider ${providerId} missing url`).toBeDefined();
-      expect(typeof config.url).toBe('string');
-      expect(config.url).toMatch(/^https?:\/\//);
-
       expect(config.apiKeyEnvVar, `Provider ${providerId} missing apiKeyEnvVar`).toBeDefined();
       expect(typeof config.apiKeyEnvVar).toBe('string');
-
-      expect(config.apiKeyHeader, `Provider ${providerId} missing apiKeyHeader`).toBeDefined();
-      expect(typeof config.apiKeyHeader).toBe('string');
 
       expect(config.name, `Provider ${providerId} missing name`).toBeDefined();
       expect(typeof config.name).toBe('string');
@@ -36,9 +28,6 @@ describe('ModelsDevGateway - Real API Integration', () => {
       expect(config.models, `Provider ${providerId} missing models`).toBeDefined();
       expect(Array.isArray(config.models)).toBe(true);
       expect(config.models.length, `Provider ${providerId} has no models`).toBeGreaterThan(0);
-
-      // All URLs should end with /chat/completions (our normalization)
-      expect(config.url).toMatch(/\/chat\/completions$/);
     }
 
     // Check for specific known providers that should definitely be there
@@ -49,16 +38,12 @@ describe('ModelsDevGateway - Real API Integration', () => {
 
     // Validate specific provider configurations
     if (providers.openai) {
-      expect(providers.openai.url).toBe('https://api.openai.com/v1/chat/completions');
       expect(providers.openai.apiKeyEnvVar).toBe('OPENAI_API_KEY');
-      expect(providers.openai.apiKeyHeader).toBe('Authorization');
       expect(providers.openai.models).toContain('gpt-4o');
     }
 
     if (providers.anthropic) {
-      expect(providers.anthropic.url).toBe('https://api.anthropic.com/v1/chat/completions');
       expect(providers.anthropic.apiKeyEnvVar).toBe('ANTHROPIC_API_KEY');
-      expect(providers.anthropic.apiKeyHeader).toBe('x-api-key');
       expect(providers.anthropic.models.some(m => m.includes('claude'))).toBe(true);
     }
 
@@ -82,32 +67,6 @@ describe('ModelsDevGateway - Real API Integration', () => {
     console.log(`- Total providers: ${Object.keys(providers).length}`);
     console.log(`- Total models: ${totalModels}`);
     console.log(`- Average models per provider: ${(totalModels / Object.keys(providers).length).toFixed(1)}`);
-
-    // Check that buildUrl and buildHeaders work with real data
-    const testEnvVars = {
-      OPENAI_API_KEY: 'sk-test',
-      ANTHROPIC_API_KEY: 'ant-test',
-      GROQ_API_KEY: 'gsk-test',
-    };
-
-    if (providers.openai) {
-      const url = gateway.buildUrl('openai/gpt-4o', testEnvVars);
-      expect(url).toBe('https://api.openai.com/v1/chat/completions');
-
-      const headers = gateway.buildHeaders('openai/gpt-4o', testEnvVars);
-      expect(headers).toEqual({ Authorization: 'Bearer sk-test' });
-    }
-
-    if (providers.anthropic) {
-      const url = gateway.buildUrl('anthropic/claude-3-opus', testEnvVars);
-      expect(url).toBe('https://api.anthropic.com/v1/chat/completions');
-
-      const headers = gateway.buildHeaders('anthropic/claude-3-opus', testEnvVars);
-      expect(headers).toEqual({
-        'x-api-key': 'ant-test',
-        'anthropic-version': '2023-06-01',
-      });
-    }
   }, 30000); // 30 second timeout for real API call
 
   it('should handle API errors gracefully', async () => {

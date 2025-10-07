@@ -3,7 +3,7 @@ import type { z } from 'zod';
 import type { TracingPolicy, TracingProperties } from '../ai-tracing';
 import type { Mastra } from '../mastra';
 import type { ExecutionEngine } from './execution-engine';
-import type { ExecuteFunction, Step } from './step';
+import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } from './step';
 
 export type { ChunkType } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
@@ -15,6 +15,8 @@ export type Emitter = {
   once: (event: string, callback: (data: any) => void) => void;
 };
 
+export type StepMetadata = Record<string, any>;
+
 export type StepSuccess<P, R, S, T> = {
   status: 'success';
   output: T;
@@ -25,6 +27,7 @@ export type StepSuccess<P, R, S, T> = {
   endedAt: number;
   suspendedAt?: number;
   resumedAt?: number;
+  metadata?: StepMetadata;
 };
 
 export type StepFailure<P, R, S> = {
@@ -37,6 +40,7 @@ export type StepFailure<P, R, S> = {
   endedAt: number;
   suspendedAt?: number;
   resumedAt?: number;
+  metadata?: StepMetadata;
 };
 
 export type StepSuspended<P, S> = {
@@ -45,6 +49,7 @@ export type StepSuspended<P, S> = {
   suspendPayload?: S;
   startedAt: number;
   suspendedAt: number;
+  metadata?: StepMetadata;
 };
 
 export type StepRunning<P, R, S> = {
@@ -55,6 +60,7 @@ export type StepRunning<P, R, S> = {
   startedAt: number;
   suspendedAt?: number;
   resumedAt?: number;
+  metadata?: StepMetadata;
 };
 
 export type StepWaiting<P, R, S> = {
@@ -63,6 +69,7 @@ export type StepWaiting<P, R, S> = {
   suspendPayload?: S;
   resumePayload?: R;
   startedAt: number;
+  metadata?: StepMetadata;
 };
 
 export type StepResult<P, R, S, T> =
@@ -79,7 +86,7 @@ export type StepsRecord<T extends readonly Step<any, any, any>[]> = {
 };
 
 export type DynamicMapping<TPrevSchema extends z.ZodTypeAny, TSchemaOut extends z.ZodTypeAny> = {
-  fn: ExecuteFunction<z.infer<TPrevSchema>, z.infer<TSchemaOut>, any, any, any>;
+  fn: ExecuteFunction<any, z.infer<TPrevSchema>, z.infer<TSchemaOut>, any, any, any>;
   schema: TSchemaOut;
 };
 
@@ -304,8 +311,8 @@ export type DefaultEngineType = {};
 
 export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | { type: 'step'; step: Step }
-  | { type: 'sleep'; id: string; duration?: number; fn?: ExecuteFunction<any, any, any, any, TEngineType> }
-  | { type: 'sleepUntil'; id: string; date?: Date; fn?: ExecuteFunction<any, any, any, any, TEngineType> }
+  | { type: 'sleep'; id: string; duration?: number; fn?: ExecuteFunction<any, any, any, any, any, TEngineType> }
+  | { type: 'sleepUntil'; id: string; date?: Date; fn?: ExecuteFunction<any, any, any, any, any, TEngineType> }
   | { type: 'waitForEvent'; event: string; step: Step; timeout?: number }
   | {
       type: 'parallel';
@@ -314,13 +321,13 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | {
       type: 'conditional';
       steps: StepFlowEntry[];
-      conditions: ExecuteFunction<any, any, any, any, TEngineType>[];
+      conditions: ConditionFunction<any, any, any, any, TEngineType>[];
       serializedConditions: { id: string; fn: string }[];
     }
   | {
       type: 'loop';
       step: Step;
-      condition: ExecuteFunction<any, any, any, any, TEngineType>;
+      condition: LoopConditionFunction<any, any, any, any, TEngineType>;
       serializedCondition: { id: string; fn: string };
       loopType: 'dowhile' | 'dountil';
     }
@@ -333,7 +340,7 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
     };
 
 export type SerializedStep<TEngineType = DefaultEngineType> = Pick<
-  Step<any, any, any, any, any, TEngineType>,
+  Step<any, any, any, any, any, any, TEngineType>,
   'id' | 'description'
 > & {
   component?: string;
@@ -393,12 +400,14 @@ export type StepWithComponent = Step<string, any, any, any, any, any> & {
 };
 
 export type WorkflowResult<
+  TState extends z.ZodObject<any>,
   TInput extends z.ZodType<any>,
   TOutput extends z.ZodType<any>,
   TSteps extends Step<string, any, any>[],
 > =
   | ({
       status: 'success';
+      state?: z.infer<TState>;
       result: z.infer<TOutput>;
       input: z.infer<TInput>;
       steps: {
@@ -415,6 +424,7 @@ export type WorkflowResult<
   | ({
       status: 'failed';
       input: z.infer<TInput>;
+      state?: z.infer<TState>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
@@ -430,6 +440,7 @@ export type WorkflowResult<
   | ({
       status: 'suspended';
       input: z.infer<TInput>;
+      state?: z.infer<TState>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
@@ -444,8 +455,31 @@ export type WorkflowResult<
       suspended: [string[], ...string[][]];
     } & TracingProperties);
 
+export type WorkflowStreamResult<
+  TState extends z.ZodObject<any>,
+  TInput extends z.ZodType<any>,
+  TOutput extends z.ZodType<any>,
+  TSteps extends Step<string, any, any>[],
+> =
+  | WorkflowResult<TState, TInput, TOutput, TSteps>
+  | {
+      status: 'running' | 'waiting' | 'pending' | 'canceled';
+      input: z.infer<TInput>;
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown, unknown, unknown, unknown>
+          : StepResult<
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+            >;
+      };
+    };
+
 export type WorkflowConfig<
   TWorkflowId extends string = string,
+  TState extends z.ZodObject<any> = z.ZodObject<any>,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
   TSteps extends Step<string, any, any, any, any, any>[] = Step<string, any, any, any, any, any>[],
@@ -455,6 +489,7 @@ export type WorkflowConfig<
   description?: string | undefined;
   inputSchema: TInput;
   outputSchema: TOutput;
+  stateSchema?: TState;
   executionEngine?: ExecutionEngine;
   steps?: TSteps;
   retryConfig?: {
@@ -463,3 +498,20 @@ export type WorkflowConfig<
   };
   options?: WorkflowOptions;
 };
+
+/**
+ * Utility type to ensure that TStepState is a subset of TState.
+ * This means that all properties in TStepState must exist in TState with compatible types.
+ */
+export type SubsetOf<TStepState extends z.ZodObject<any>, TState extends z.ZodObject<any>> =
+  TStepState extends z.ZodObject<infer TStepShape>
+    ? TState extends z.ZodObject<infer TStateShape>
+      ? keyof TStepShape extends keyof TStateShape
+        ? {
+            [K in keyof TStepShape]: TStepShape[K] extends TStateShape[K] ? TStepShape[K] : never;
+          } extends TStepShape
+          ? TStepState
+          : never
+        : never
+      : never
+    : never;

@@ -37,12 +37,15 @@ export async function processWorkflowLoop(
     condition: step.condition,
     runId,
     stepResults,
+    // TODO: implement state
+    state: {},
     emitter: new EventEmitter() as any, // TODO
     runtimeContext: new RuntimeContext(), // TODO
     inputData: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
     abortController: new AbortController(),
     runCount,
+    iterationCount: 0, //TODO: implement
   });
 
   if (step.loopType === 'dountil') {

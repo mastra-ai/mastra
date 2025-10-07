@@ -83,6 +83,8 @@ export async function processWorkflowConditional(
     step,
     runId,
     stepResults,
+    // TODO: implement state
+    state: {},
     emitter: new EventEmitter() as any, // TODO
     runtimeContext: new RuntimeContext(), // TODO
     input: prevResult?.status === 'success' ? prevResult.output : undefined,

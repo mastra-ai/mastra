@@ -1,18 +1,24 @@
 import { ActionBarPrimitive, MessagePrimitive, ToolCallMessagePartComponent, useMessage } from '@assistant-ui/react';
-import { AudioLinesIcon, BrainIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
+import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon, Triangle, TriangleAlert } from 'lucide-react';
 
-import { MarkdownText } from './markdown-text';
 import { ErrorAwareText } from './error-aware-text';
 import { TooltipIconButton } from '../tooltip-icon-button';
 import { ToolFallback } from '@/components/assistant-ui/tools/tool-fallback';
 import { Reasoning } from './reasoning';
 import { cn } from '@/lib/utils';
 import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provider-logo';
+import clsx from 'clsx';
+import { Icon } from '@/ds/icons';
 
 export interface AssistantMessageProps {
   ToolFallback?: ToolCallMessagePartComponent;
   hasModelList?: boolean;
 }
+
+const statusClasses = {
+  warning: 'bg-yellow-900/20 border-sm border-yellow-200 text-yellow-200 rounded-lg px-4 py-2 flex gap-4 items-center',
+  default: '',
+};
 
 export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom, hasModelList }: AssistantMessageProps) => {
   const data = useMessage();
@@ -21,12 +27,21 @@ export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom, hasModelLis
   const isToolCallAndOrReasoning = data.content.every(({ type }) => type === 'tool-call' || type === 'reasoning');
 
   const modelMetadata = data.metadata?.custom?.modelMetadata as { modelId: string; modelProvider: string } | undefined;
+  const messageStatus = data.metadata?.custom?.status as 'warning' | undefined;
+
+  const statusClass = statusClasses[messageStatus || 'default'];
 
   const showModelUsed = hasModelList && modelMetadata;
 
   return (
     <MessagePrimitive.Root className="max-w-full" data-message-id={messageId}>
-      <div className="text-icon6 text-ui-lg leading-ui-lg">
+      <div className={clsx('text-icon6 text-ui-lg leading-ui-lg', statusClass)}>
+        {messageStatus === 'warning' && (
+          <Icon size="lg">
+            <TriangleAlert />
+          </Icon>
+        )}
+
         <MessagePrimitive.Parts
           components={{
             Text: ErrorAwareText,

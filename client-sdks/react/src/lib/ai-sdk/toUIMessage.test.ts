@@ -754,8 +754,7 @@ describe('toUIMessage', () => {
     const output = (toolPart as any).output;
     expect(output).toBeDefined();
 
-    expect(output.runId).toBe('wf-run-789');
-    expect(output.payload.workflowState.steps['step-1']).toEqual({
+    expect(output.steps['step-1']).toEqual({
       id: 'step-1',
       name: 'process-data',
       status: 'success',
@@ -823,7 +822,6 @@ describe('toUIMessage', () => {
 
     const toolPart = conversation[0].parts[0] as any;
     const output = toolPart.output;
-    expect(output.payload.workflowState.status).toBe('success');
-    expect(output.payload.currentStep).toBeUndefined();
+    expect(output.status).toBe('success');
   });
 });

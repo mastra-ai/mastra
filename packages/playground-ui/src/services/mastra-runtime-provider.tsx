@@ -368,8 +368,18 @@ export function MastraRuntimeProvider({
               threadId,
               modelSettings: modelSettingsArgs,
               signal: controller.signal,
-              onFinish: messages => {
-                return messages.map(message => toAssistantUIMessage(message));
+              onFinish: ({ messages, tripwireReason }) => {
+                const next = messages.length > 0 ? messages.map(message => toAssistantUIMessage(message)) : [];
+
+                if (tripwireReason) {
+                  next.push({
+                    role: 'assistant',
+                    content: [{ type: 'text', text: tripwireReason }],
+                    metadata: { custom: { status: 'warning' } },
+                  });
+                }
+
+                return next;
               },
             });
 

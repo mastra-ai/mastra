@@ -26,7 +26,11 @@ export type SamplingStrategy =
       };
     };
 
-/** Configuration options for OpenTelemetry */
+/**
+ * Configuration options for OpenTelemetry
+ *
+ * @deprecated Use {@link ObservabilityRegistryConfig} instead.
+ */
 export type OtelConfig = {
   /** Name of the service for telemetry identification */
   serviceName?: string;

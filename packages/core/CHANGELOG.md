@@ -1,5 +1,45 @@
 # @mastra/core
 
+## 0.20.1-alpha.2
+
+### Patch Changes
+
+- Added AI SDK provider packages to model router for anthropic/google/openai/openrouter/xai ([#8559](https://github.com/mastra-ai/mastra/pull/8559))
+
+## 0.20.1-alpha.1
+
+### Patch Changes
+
+- workflow run thread more visible ([#8539](https://github.com/mastra-ai/mastra/pull/8539))
+
+- Add iterationCount to loop condition params ([#8579](https://github.com/mastra-ai/mastra/pull/8579))
+
+- Mutable shared workflow run state ([#8545](https://github.com/mastra-ai/mastra/pull/8545))
+
+- avoid refetching memory threads and messages on window focus ([#8519](https://github.com/mastra-ai/mastra/pull/8519))
+
+- add tripwire reason in playground ([#8568](https://github.com/mastra-ai/mastra/pull/8568))
+
+- Add validation for index creation ([#8552](https://github.com/mastra-ai/mastra/pull/8552))
+
+- Save waiting step status in snapshot ([#8576](https://github.com/mastra-ai/mastra/pull/8576))
+
+- type fixes and missing changeset ([#8545](https://github.com/mastra-ai/mastra/pull/8545))
+
+- Convert WorkflowWatchResult to WorkflowResult in workflow graph ([#8541](https://github.com/mastra-ai/mastra/pull/8541))
+
+- add new deploy to cloud button ([#8549](https://github.com/mastra-ai/mastra/pull/8549))
+
+- remove icons in entity lists ([#8520](https://github.com/mastra-ai/mastra/pull/8520))
+
+- add client search to all entities ([#8523](https://github.com/mastra-ai/mastra/pull/8523))
+
+- Improve JSDoc documentation for Agent ([#8389](https://github.com/mastra-ai/mastra/pull/8389))
+
+- UX for the agents page ([#8517](https://github.com/mastra-ai/mastra/pull/8517))
+
+- add icons into playground titles + a link to the entity doc ([#8518](https://github.com/mastra-ai/mastra/pull/8518))
+
 ## 0.20.1-alpha.0
 
 ### Patch Changes
