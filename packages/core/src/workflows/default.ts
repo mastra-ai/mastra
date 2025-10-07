@@ -2476,6 +2476,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         },
       });
 
+      stepResults[entry.step.id] = {
+        status: 'waiting',
+        payload: prevOutput,
+        startedAt,
+      };
+
       await this.persistStepUpdate({
         workflowId,
         runId,
