@@ -1,11 +1,6 @@
-import type { MastraModelOutput, ChunkType as AgentChunkType } from '@mastra/core/stream';
-import type {
-  MastraWorkflowStream,
-  ChunkType,
-  Step,
-  WorkflowRunStatus,
-  WorkflowStepStatus,
-} from '@mastra/core/workflows';
+import type { MastraModelOutput, ChunkType as AgentChunkType, OutputSchema } from '@mastra/core/stream';
+import type { ChunkType, WorkflowRunStatus, WorkflowStepStatus } from '@mastra/core/workflows';
+import type { InferUIMessageChunk, UIMessage } from 'ai';
 import type { ZodType } from 'zod';
 import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from './helpers';
 
@@ -326,14 +321,10 @@ function transformAgent<TOutput extends ZodType<any>>(
   return null;
 }
 
-export function toAISdkFormat<
-  TInput extends ZodType<any>,
-  TOutput extends ZodType<any>,
-  TSteps extends Step<string, any, any>[],
->(stream: MastraWorkflowStream<TInput, TOutput, TSteps> | MastraModelOutput<TOutput>) {
-  if ('fullStream' in stream) {
-    return stream.fullStream.pipeThrough(AgentStreamToAISDKTransformer<TOutput>());
-  } else {
-    return stream.pipeThrough(WorkflowStreamToAISDKTransformer());
-  }
+export function toAISdkFormat<TOutput extends OutputSchema>(
+  stream: MastraModelOutput<TOutput>,
+): ReadableStream<InferUIMessageChunk<UIMessage>> {
+  return stream.fullStream.pipeThrough(AgentStreamToAISDKTransformer<any>()) as ReadableStream<
+    InferUIMessageChunk<UIMessage>
+  >;
 }

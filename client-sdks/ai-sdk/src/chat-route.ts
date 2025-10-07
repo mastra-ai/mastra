@@ -146,16 +146,14 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
         throw new Error(`Agent ${agentToUse} not found`);
       }
 
-      const result = await agentObj.stream<OUTPUT, 'aisdk'>(messages, {
+      const result = await agentObj.stream<OUTPUT, 'mastra'>(messages, {
         ...defaultOptions,
         ...rest,
       });
 
       const uiMessageStream = createUIMessageStream({
         execute: async ({ writer }) => {
-          // @ts-ignore
-          for await (const part of toAISdkFormat(result)) {
-            // @ts-ignore
+          for await (const part of toAISdkFormat(result)!) {
             writer.write(part);
           }
         },
