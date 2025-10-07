@@ -112,7 +112,6 @@ export const SearchWrapper = ({
               </DialogTitle>
               <div className="w-full">
                 {isAgentMode && isKapaChatbotEnabled ? (
-                  // TODO: place behind Feature Flag
                   <KapaProvider
                     integrationId={process.env.NEXT_PUBLIC_KAPA_INTEGRATION_ID!}
                     callbacks={{
