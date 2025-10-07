@@ -264,7 +264,6 @@ export function AgentStreamToAISDKTransformer() {
         if (transformedChunk.type === 'nested_tool-output') {
           // @ts-ignore
           const payload = transformedChunk.payload as unknown as ChunkType;
-          // @ts-ignore
           if (payload?.from === 'AGENT') {
             const agentTransformed = transformAgent(payload, bufferedSteps);
             if (agentTransformed) controller.enqueue(agentTransformed);
@@ -288,7 +287,6 @@ export function AgentStreamToAISDKTransformer() {
 
 function transformAgent(payload: ChunkType, bufferedSteps: Map<string, any>) {
   let hasChanged = false;
-  // @ts-ignore
   switch (payload.type) {
     case 'start':
       bufferedSteps.set(payload.runId!, {
@@ -336,16 +334,14 @@ function transformAgent(payload: ChunkType, bufferedSteps: Map<string, any>) {
     case 'source':
       bufferedSteps.set(payload.runId!, {
         ...bufferedSteps.get(payload.runId!),
-        // @ts-ignore
-        sources: [...bufferedSteps.get(payload.runId)!.sources, payload.payload.source],
+        sources: [...bufferedSteps.get(payload.runId)!.sources, payload.payload],
       });
       hasChanged = true;
       break;
     case 'file':
       bufferedSteps.set(payload.runId!, {
         ...bufferedSteps.get(payload.runId!),
-        // @ts-ignore
-        files: [...bufferedSteps.get(payload.runId)!.files, payload.payload.file],
+        files: [...bufferedSteps.get(payload.runId)!.files, payload.payload],
       });
       hasChanged = true;
       break;
@@ -353,16 +349,14 @@ function transformAgent(payload: ChunkType, bufferedSteps: Map<string, any>) {
       console.info('tool-call', payload.payload);
       bufferedSteps.set(payload.runId!, {
         ...bufferedSteps.get(payload.runId!),
-        // @ts-ignore
-        toolCalls: [...bufferedSteps.get(payload.runId)!.toolCalls, payload.payload.toolCall],
+        toolCalls: [...bufferedSteps.get(payload.runId)!.toolCalls, payload.payload],
       });
       hasChanged = true;
       break;
     case 'tool-result':
       bufferedSteps.set(payload.runId!, {
         ...bufferedSteps.get(payload.runId!),
-        // @ts-ignore
-        toolResults: [...bufferedSteps.get(payload.runId)!.toolResults, payload.payload.toolResult],
+        toolResults: [...bufferedSteps.get(payload.runId)!.toolResults, payload.payload],
       });
       hasChanged = true;
       break;
@@ -381,7 +375,6 @@ function transformAgent(payload: ChunkType, bufferedSteps: Map<string, any>) {
       hasChanged = true;
       break;
     default:
-      console.info('default', payload.type, payload);
       break;
   }
 
