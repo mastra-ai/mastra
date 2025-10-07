@@ -12,6 +12,19 @@ export interface HandleStreamChunkOptions {
 
 export const handleStreamChunk = ({ chunk, conversation }: HandleStreamChunkOptions): ThreadMessageLike[] => {
   switch (chunk.type) {
+    case 'tripwire': {
+      console.log('?????', chunk);
+      const newMessage: ThreadMessageLike = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'text',
+            text: chunk.payload.tripwireReason,
+          },
+        ],
+      };
+      return [...conversation, newMessage];
+    }
     case 'start': {
       const newMessage: ThreadMessageLike = {
         role: 'assistant',

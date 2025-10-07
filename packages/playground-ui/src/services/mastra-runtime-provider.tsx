@@ -387,6 +387,7 @@ export function MastraRuntimeProvider({
               threadId,
               modelSettings: modelSettingsArgs,
               onChunk: (chunk, conversation) => {
+                console.log('chunk', chunk);
                 const next = handleStreamChunk({ chunk, conversation });
 
                 if (

@@ -1,10 +1,11 @@
 import { Agent } from '@mastra/core/agent';
-import { openai as openai_v5 } from '@ai-sdk/openai-v5';
+import { openai, openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { cookingTool } from '../tools';
 import { myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
+import { ModerationProcessor } from '@mastra/core/processors';
 
 export const weatherInfo = createTool({
   id: 'weather-info',
@@ -54,6 +55,15 @@ export const chefModelV2Agent = new Agent({
     };
   },
   memory,
+
+  inputProcessors: [
+    new ModerationProcessor({
+      model: openai('gpt-4.1-nano'), // Use a fast, cost-effective model
+      threshold: 0.7, // Confidence threshold for flagging
+      strategy: 'block', // Block flagged content
+      categories: ['hate', 'harassment', 'violence'], // Custom categories
+    }),
+  ],
 });
 
 const weatherAgent = new Agent({

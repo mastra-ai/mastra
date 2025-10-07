@@ -855,6 +855,18 @@ export class Agent extends BaseResource {
       // but this is completely wrong and this fn is probably broken. Remove ":any" and you'll see a bunch of type errors
       onChunk: async (chunk: any) => {
         switch (chunk.type) {
+          case 'tripwire': {
+            console.log('THIS IS CALLED', message);
+
+            message.parts.push({
+              type: 'text',
+              text: chunk.payload.tripwireReason,
+            });
+
+            execUpdate();
+            break;
+          }
+
           case 'step-start': {
             // keep message id stable when we are updating an existing message:
             if (!replaceLastMessage) {
@@ -1114,24 +1126,24 @@ export class Agent extends BaseResource {
       const [streamForWritable, streamForProcessing] = response.body.tee();
 
       // Pipe one branch to the writable stream without holding a persistent lock
+
       streamForWritable
         .pipeTo(
           new WritableStream<Uint8Array>({
             async write(chunk) {
+              const writer = writable.getWriter();
+
               // Filter out terminal markers so the client stream doesn't end before recursion
               try {
                 const text = new TextDecoder().decode(chunk);
-                if (text.includes('[DONE]')) {
-                  return;
-                }
+                const lines = text.split('\n\n');
+                const readableLines = lines.filter(line => line !== '[DONE]').join('\n\n');
+
+                await writer.write(readableLines);
               } catch {
-                // If decoding fails, fall back to writing raw chunk
-              }
-              const writer = writable.getWriter();
-              try {
-                await writer.write(chunk);
+                await writer?.write(chunk);
               } finally {
-                writer.releaseLock();
+                writer?.releaseLock();
               }
             },
           }),
@@ -1383,9 +1395,13 @@ export class Agent extends BaseResource {
     }: {
       onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
     }) => {
+      console.log('yoooo');
       await processMastraStream({
         stream: streamResponse.body as ReadableStream<Uint8Array>,
-        onChunk,
+        onChunk: x => {
+          console.log('NOT CALLED', x);
+          return onChunk(x);
+        },
       });
     };
 
