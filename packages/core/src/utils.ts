@@ -6,7 +6,7 @@ import { z } from 'zod';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
 import type { TracingContext, TracingPolicy } from './ai-tracing';
-import type { MastraModelConfig } from './llm/model/shared.types';
+import type { MastraLanguageModel } from './llm/model/shared.types';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
@@ -229,7 +229,7 @@ export interface ToolOptions {
   tracingPolicy?: TracingPolicy;
   memory?: MastraMemory;
   agentName?: string;
-  model?: MastraModelConfig;
+  model?: MastraLanguageModel;
   writableStream?: WritableStream<ChunkType>;
   requireApproval?: boolean;
 }
