@@ -1129,10 +1129,11 @@ export class Agent extends BaseResource {
         .pipeTo(
           new WritableStream<Uint8Array>({
             async write(chunk) {
-              const writer = writable.getWriter();
+              let writer;
 
               // Filter out terminal markers so the client stream doesn't end before recursion
               try {
+                writer = writable.getWriter();
                 const text = new TextDecoder().decode(chunk);
                 const lines = text.split('\n\n');
                 const readableLines = lines.filter(line => line !== '[DONE]').join('\n\n');
@@ -1395,9 +1396,7 @@ export class Agent extends BaseResource {
     }) => {
       await processMastraStream({
         stream: streamResponse.body as ReadableStream<Uint8Array>,
-        onChunk: x => {
-          return onChunk(x);
-        },
+        onChunk,
       });
     };
 

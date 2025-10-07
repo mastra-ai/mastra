@@ -55,15 +55,6 @@ export const chefModelV2Agent = new Agent({
     };
   },
   memory,
-
-  inputProcessors: [
-    new ModerationProcessor({
-      model: openai('gpt-4.1-nano'), // Use a fast, cost-effective model
-      threshold: 0.7, // Confidence threshold for flagging
-      strategy: 'block', // Block flagged content
-      categories: ['hate', 'harassment', 'violence'], // Custom categories
-    }),
-  ],
 });
 
 const weatherAgent = new Agent({
