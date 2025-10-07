@@ -82,7 +82,7 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
     return (
       <tr
         className={clsx(
-          'border-b-sm border-border1 hover:bg-surface3 focus:bg-surface3 -outline-offset-2 last:border-b-0',
+          'border-b-sm border-border1 hover:bg-surface3 focus:bg-surface3 -outline-offset-2',
           selected && 'bg-surface4',
           onClick && 'cursor-pointer',
           className,
