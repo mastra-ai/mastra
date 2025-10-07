@@ -2,6 +2,8 @@ import type { Mastra, ProviderConfig } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { getProviderConfig, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { ChunkType } from '@mastra/core/stream';
+import { ChunkFrom } from '@mastra/core/stream';
 import {
   getAgentsHandler as getOriginalAgentsHandler,
   getAgentByIdHandler as getOriginalAgentByIdHandler,
@@ -280,23 +282,23 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
       } catch (err) {
         logger.error('Error in stream generate: ' + ((err as Error)?.message ?? 'Unknown error'));
 
-        await stream.write(
-          `data: ${JSON.stringify({
-            type: 'error',
-            from: 'AGENT',
-            runId: body.runId || 'unknown',
-            payload: {
-              error:
-                err instanceof Error
-                  ? {
-                      message: err.message,
-                      name: err.name,
-                      stack: err.stack,
-                    }
-                  : String(err),
-            },
-          })}\n\n`,
-        );
+        const errorChunk: ChunkType = {
+          type: 'error',
+          from: ChunkFrom.AGENT,
+          runId: body.runId || 'unknown',
+          payload: {
+            error:
+              err instanceof Error
+                ? {
+                    message: err.message,
+                    name: err.name,
+                    stack: err.stack,
+                  }
+                : String(err),
+          },
+        };
+
+        await stream.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
       }
 
       await stream.close();
@@ -348,23 +350,23 @@ export async function approveToolCallHandler(c: Context): Promise<Response | und
       } catch (err) {
         logger.error('Error in approve tool call: ' + ((err as Error)?.message ?? 'Unknown error'));
 
-        await stream.write(
-          `data: ${JSON.stringify({
-            type: 'error',
-            from: 'AGENT',
-            runId: body.runId || 'unknown',
-            payload: {
-              error:
-                err instanceof Error
-                  ? {
-                      message: err.message,
-                      name: err.name,
-                      stack: err.stack,
-                    }
-                  : String(err),
-            },
-          })}\n\n`,
-        );
+        const errorChunk: ChunkType = {
+          type: 'error',
+          from: ChunkFrom.AGENT,
+          runId: body.runId || 'unknown',
+          payload: {
+            error:
+              err instanceof Error
+                ? {
+                    message: err.message,
+                    name: err.name,
+                    stack: err.stack,
+                  }
+                : String(err),
+          },
+        };
+
+        await stream.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
       }
 
       await stream.close();
@@ -416,23 +418,23 @@ export async function declineToolCallHandler(c: Context): Promise<Response | und
       } catch (err) {
         logger.error('Error in decline tool call: ' + ((err as Error)?.message ?? 'Unknown error'));
 
-        await stream.write(
-          `data: ${JSON.stringify({
-            type: 'error',
-            from: 'AGENT',
-            runId: body.runId || 'unknown',
-            payload: {
-              error:
-                err instanceof Error
-                  ? {
-                      message: err.message,
-                      name: err.name,
-                      stack: err.stack,
-                    }
-                  : String(err),
-            },
-          })}\n\n`,
-        );
+        const errorChunk: ChunkType = {
+          type: 'error',
+          from: ChunkFrom.AGENT,
+          runId: body.runId || 'unknown',
+          payload: {
+            error:
+              err instanceof Error
+                ? {
+                    message: err.message,
+                    name: err.name,
+                    stack: err.stack,
+                  }
+                : String(err),
+          },
+        };
+
+        await stream.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
       }
 
       await stream.close();
@@ -516,23 +518,23 @@ export async function streamNetworkHandler(c: Context) {
       } catch (err) {
         logger.error('Error in streamNetwork generate: ' + ((err as Error)?.message ?? 'Unknown error'));
 
-        await stream.write(
-          `data: ${JSON.stringify({
-            type: 'error',
-            from: 'AGENT',
-            runId: body.runId || 'unknown',
-            payload: {
-              error:
-                err instanceof Error
-                  ? {
-                      message: err.message,
-                      name: err.name,
-                      stack: err.stack,
-                    }
-                  : String(err),
-            },
-          })}\n\n`,
-        );
+        const errorChunk: ChunkType = {
+          type: 'error',
+          from: ChunkFrom.AGENT,
+          runId: body.runId || 'unknown',
+          payload: {
+            error:
+              err instanceof Error
+                ? {
+                    message: err.message,
+                    name: err.name,
+                    stack: err.stack,
+                  }
+                : String(err),
+          },
+        };
+
+        await stream.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
       }
 
       await stream.close();

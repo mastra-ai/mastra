@@ -2,6 +2,8 @@
 import type { Agent } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import type { ChunkType } from '@mastra/core/stream';
+import { ChunkFrom } from '@mastra/core/stream';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -280,14 +282,10 @@ describe('Stream Error Handling for Rate Limits and Provider Errors', () => {
       const errorData = JSON.parse(errorChunk!.replace('data: ', ''));
 
       // Verify Mastra ChunkType structure
-      expect(errorData).toMatchObject({
-        type: 'error',
-        from: expect.any(String),
-        runId: expect.any(String),
-        payload: {
-          error: expect.any(Object),
-        },
-      });
+      expect(errorData.type).toBe('error');
+      expect(errorData.from).toBe(ChunkFrom.AGENT);
+      expect(errorData.runId).toBe('test-run-id');
+      expect(errorData.payload).toBeDefined();
 
       // Verify error details
       expect(errorData.payload.error).toHaveProperty('message');
