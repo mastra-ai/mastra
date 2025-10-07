@@ -1425,7 +1425,8 @@ describe('Working Memory Tests', () => {
       await vector.turso.close();
     });
 
-    it('should handle working memory tools in agent network - thread scope', async () => {
+    // This test is flaky. It sometimes fails with workingMemory being null.
+    it('should handle working memory tools in agent network - thread scope', { retry: 2 }, async () => {
       // Create an agent that has memory capabilities
       const memoryAgent = new Agent({
         name: 'memory-agent',
