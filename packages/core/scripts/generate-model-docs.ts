@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants.js';
 import { PROVIDER_REGISTRY } from '../src/llm/model/provider-registry.generated.js';
 
 /**
@@ -245,17 +246,14 @@ for await (const chunk of stream) {
 }
 \`\`\`
 ${
-  provider.id === 'openai'
-    ? `
-<Callout type="info">
-Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-specific features may not be available. Check the [OpenAI documentation](https://platform.openai.com/docs/api-reference/chat) for details.
-</Callout>
-`
-    : `
+  !PROVIDERS_WITH_INSTALLED_PACKAGES.includes(provider.id)
+    ? // if it's not a directly supported provider then it's openai compatible, so warn about it
+      `
 <Callout type="info">
 Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-specific features may not be available. Check the [${provider.name} documentation](${docUrl || '#'}) for details.
 </Callout>
 `
+    : ``
 }
 ## Models
 
@@ -270,8 +268,7 @@ Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-
 \`\`\`typescript
 const agent = new Agent({
   name: "custom-agent",
-  model: {
-    url: "${provider.url}",
+  model: {${provider.url ? `\n    url: "${provider.url}",` : ''}
     modelId: "${provider.models[0]}",
     apiKey: process.env.${provider.apiKeyEnvVar},
     headers: {
@@ -476,7 +473,7 @@ function generateIndexPage(grouped: GroupedProviders): string {
 
   return `---
 title: "Models"
-  description: "Access ${totalProviders}+ AI providers and ${totalModels}+ models through Mastra's model router."
+description: "Access ${totalProviders}+ AI providers and ${totalModels}+ models through Mastra's model router."
 ---
 
 ${getGeneratedComment()}

@@ -1,5 +1,23 @@
 # @mastra/core
 
+## 0.20.1-alpha.3
+
+### Patch Changes
+
+- Marked OTEL based telemetry as deprecated. ([#8586](https://github.com/mastra-ai/mastra/pull/8586))
+
+- Add support for streaming nested agent tools ([#8580](https://github.com/mastra-ai/mastra/pull/8580))
+
+- Fix TypeScript errors with provider-defined tools by updating ai-v5 and openai-v5 to matching provider-utils versions. This ensures npm deduplicates to a single provider-utils instance, resolving type incompatibility issues when passing provider tools to Agent. ([#8584](https://github.com/mastra-ai/mastra/pull/8584))
+
+  Also adds deprecation warning to Agent import from root path to encourage using the recommended subpath import.
+
+## 0.20.1-alpha.2
+
+### Patch Changes
+
+- Added AI SDK provider packages to model router for anthropic/google/openai/openrouter/xai ([#8559](https://github.com/mastra-ai/mastra/pull/8559))
+
 ## 0.20.1-alpha.1
 
 ### Patch Changes

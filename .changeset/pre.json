@@ -78,11 +78,14 @@
     "@mastra/inngest": "0.15.0"
   },
   "changesets": [
+    "@mastra_chroma-8554-dependencies",
     "@mastra_dynamodb-8436-dependencies",
+    "@mastra_langsmith-8560-dependencies",
     "@mastra_s3vectors-8436-dependencies",
     "afraid-experts-hammer",
     "angry-towns-relax",
     "breezy-peaches-laugh",
+    "busy-radios-call",
     "cuddly-dragons-admire",
     "dirty-monkeys-repair",
     "eleven-nights-relate",
@@ -90,6 +93,7 @@
     "forty-cameras-enjoy",
     "forty-walls-post",
     "four-rats-teach",
+    "loose-suns-knock",
     "lucky-cooks-laugh",
     "moody-bottles-taste",
     "nine-carrots-wish",
@@ -103,6 +107,9 @@
     "strong-kiwis-relate",
     "tricky-coats-design",
     "two-swans-pull",
+    "violet-buckets-mate",
+    "violet-dolls-tell",
+    "violet-fans-smoke",
     "weak-results-go",
     "wet-llamas-pull"
   ]

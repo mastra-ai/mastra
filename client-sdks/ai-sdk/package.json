@@ -1,6 +1,6 @@
 {
   "name": "@mastra/ai-sdk",
-  "version": "0.1.1-alpha.0",
+  "version": "0.1.1-alpha.1",
   "description": "Adds custom API routes to be compatible with the AI SDK UI parts",
   "type": "module",
   "main": "dist/index.js",
@@ -55,5 +55,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "dependencies": {
+    "ai": "^5.0.60"
   }
 }

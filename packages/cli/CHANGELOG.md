@@ -1,5 +1,15 @@
 # mastra
 
+## 0.14.2-alpha.2
+
+### Patch Changes
+
+- Added AI SDK provider packages to model router for anthropic/google/openai/openrouter/xai ([#8559](https://github.com/mastra-ai/mastra/pull/8559))
+
+- Updated dependencies [[`42ffed3`](https://github.com/mastra-ai/mastra/commit/42ffed311b9d8750652bbc55c773be62c989fcc6), [`ee9108f`](https://github.com/mastra-ai/mastra/commit/ee9108fa29bb8368fc23df158c9f0645b2d7b65c)]:
+  - @mastra/deployer@0.20.1-alpha.2
+  - @mastra/core@0.20.1-alpha.2
+
 ## 0.14.2-alpha.1
 
 ### Patch Changes

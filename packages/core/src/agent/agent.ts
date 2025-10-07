@@ -11,6 +11,7 @@ import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
+import { ModelRouterLanguageModel } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
 import type {
   GenerateObjectWithMessagesArgs,
@@ -27,7 +28,6 @@ import type {
   StreamTextResult,
 } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
-import { OpenAICompatibleModel } from '../llm/model/openai-compatible';
 import type {
   TripwireProperties,
   MastraLanguageModel,
@@ -1025,13 +1025,13 @@ export class Agent<
 
     // If it's a string (magic string like "openai/gpt-4o" or URL) or OpenAICompatibleConfig, create OpenAICompatibleModel
     if (typeof modelConfig === 'string' || this.isOpenaiCompatibleObjectConfig(modelConfig)) {
-      return new OpenAICompatibleModel(modelConfig);
+      return new ModelRouterLanguageModel(modelConfig);
     }
 
     if (typeof modelConfig === `function`) {
       const fromDynamic = await modelConfig({ runtimeContext, mastra: this.#mastra });
       if (typeof fromDynamic === `string` || this.isOpenaiCompatibleObjectConfig(fromDynamic)) {
-        return new OpenAICompatibleModel(fromDynamic);
+        return new ModelRouterLanguageModel(fromDynamic);
       }
       return fromDynamic;
     }
@@ -1284,6 +1284,7 @@ export class Agent<
         runtimeContext,
         tracingContext,
         messageList,
+        agentId: this.id,
       });
 
       text = await result.text;
@@ -3377,6 +3378,7 @@ export class Agent<
       returnScorerData: options.returnScorerData,
       requireToolApproval: options.requireToolApproval,
       resumeContext,
+      agentId: this.id,
     });
 
     const run = await executionWorkflow.createRunAsync();

@@ -1,5 +1,23 @@
 # @mastra/deployer
 
+## 0.20.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`a6d69c5`](https://github.com/mastra-ai/mastra/commit/a6d69c5fb50c0875b46275811fece5862f03c6a0), [`84199af`](https://github.com/mastra-ai/mastra/commit/84199af8673f6f9cb59286ffb5477a41932775de), [`7f431af`](https://github.com/mastra-ai/mastra/commit/7f431afd586b7d3265075e73106eb73167edbb86)]:
+  - @mastra/core@0.20.1-alpha.3
+  - @mastra/server@0.20.1-alpha.3
+
+## 0.20.1-alpha.2
+
+### Patch Changes
+
+- Correctly handle errors in streams. Errors (e.g. rate limiting) before the stream begins are now returned with their code. Mid-stream errors are passed as a chunk (with `type: 'error'`) to the stream. ([#8567](https://github.com/mastra-ai/mastra/pull/8567))
+
+- Updated dependencies [[`ee9108f`](https://github.com/mastra-ai/mastra/commit/ee9108fa29bb8368fc23df158c9f0645b2d7b65c)]:
+  - @mastra/core@0.20.1-alpha.2
+  - @mastra/server@0.20.1-alpha.2
+
 ## 0.20.1-alpha.1
 
 ### Patch Changes

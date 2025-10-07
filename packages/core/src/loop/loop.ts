@@ -26,6 +26,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   returnScorerData,
   llmAISpan,
   requireToolApproval,
+  agentId,
   ...rest
 }: LoopOptions<Tools, OUTPUT>) {
   let loggerToUse =
@@ -121,6 +122,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     outputProcessors,
     llmAISpan,
     messageId: messageId!,
+    agentId,
     requireToolApproval,
     streamState: {
       serialize: serializeStreamState,
