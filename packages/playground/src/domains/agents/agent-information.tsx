@@ -79,8 +79,13 @@ export function AgentInformation({ agentId }: { agentId: string }) {
               <AgentMetadata
                 agentId={agentId}
                 agent={agent}
+                updateModel={updateModel}
+                updateModelInModelList={updateModelInModelList}
+                reorderModelList={reorderModelList}
+                modelProviders={modelProviders || []}
                 hasMemoryEnabled={Boolean(memory?.result)}
                 promptSlot={<AgentPromptEnhancer agentId={agentId} />}
+                modelVersion={agent.modelVersion}
               />
             )}
           </TabContent>
@@ -91,11 +96,6 @@ export function AgentInformation({ agentId }: { agentId: string }) {
                 modelVersion={agent.modelVersion}
                 hasMemory={Boolean(memory?.result)}
                 hasSubAgents={Boolean(Object.keys(agent.agents || {}).length > 0)}
-                updateModel={updateModel}
-                updateModelInModelList={updateModelInModelList}
-                reorderModelList={reorderModelList}
-                modelProviders={modelProviders || []}
-                agent={agent}
               />
             )}
           </TabContent>
