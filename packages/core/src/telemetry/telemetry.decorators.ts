@@ -35,7 +35,7 @@ interface EnhancedSpan extends Span {
 }
 
 function isStreamingResult(result: unknown, methodName: string): boolean {
-  if (methodName === 'stream' || methodName === 'streamVNext') {
+  if (methodName === 'stream' || methodName === 'streamLegacy') {
     return true;
   }
 
@@ -53,7 +53,7 @@ function enhanceStreamingArgumentsWithTelemetry(
   spanName: string,
   methodName: string,
 ): unknown[] {
-  if (methodName === 'stream' || methodName === 'streamVNext') {
+  if (methodName === 'stream' || methodName === 'streamLegacy') {
     const enhancedArgs = [...args];
     const streamOptions = (enhancedArgs.length > 1 && (enhancedArgs[1] as StreamOptions)) || ({} as StreamOptions);
     const enhancedStreamOptions: StreamOptions = { ...streamOptions };

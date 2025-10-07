@@ -21,9 +21,11 @@ interface SharedArgs {
   signal?: AbortSignal;
 }
 
-export type GenerateVNextArgs<TMessage> = SharedArgs & { onFinish: (messages: UIMessage[]) => TMessage[] };
+export type GenerateArgs<TMessage> = SharedArgs & {
+  onFinish: ({ messages, tripwireReason }: { messages: UIMessage[]; tripwireReason: string }) => TMessage[];
+};
 
-export type StreamVNextArgs<TMessage> = SharedArgs & {
+export type StreamArgs<TMessage> = SharedArgs & {
   onChunk: (chunk: ChunkType, conversation: TMessage[]) => TMessage[];
 };
 
@@ -43,7 +45,7 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
     modelSettings,
     signal,
     onFinish,
-  }: GenerateVNextArgs<TMessage>) => {
+  }: GenerateArgs<TMessage>) => {
     const {
       frequencyPenalty,
       presencePenalty,
@@ -66,7 +68,7 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
 
     const agent = clientWithAbort.getAgent(agentId);
 
-    const response = await agent.generateVNext({
+    const response = await agent.generate({
       messages: coreUserMessages,
       runId: agentId,
       modelSettings: {
@@ -86,10 +88,11 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
 
     setIsRunning(false);
 
-    if (response && 'uiMessages' in response.response && response.response.uiMessages) {
-      const formatted = onFinish(response.response.uiMessages);
-      setMessages(prev => [...prev, ...formatted]);
-    }
+    const uiMessages =
+      response && 'uiMessages' in response.response && response.response.uiMessages ? response.response.uiMessages : [];
+
+    const formatted = onFinish({ messages: uiMessages, tripwireReason: response.tripwireReason });
+    setMessages(prev => [...prev, ...formatted]);
   };
 
   const stream = async ({
@@ -99,7 +102,7 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
     onChunk,
     modelSettings,
     signal,
-  }: StreamVNextArgs<TMessage>) => {
+  }: StreamArgs<TMessage>) => {
     const {
       frequencyPenalty,
       presencePenalty,
@@ -123,7 +126,7 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
 
     const agent = clientWithAbort.getAgent(agentId);
 
-    const response = await agent.streamVNext({
+    const response = await agent.stream({
       messages: coreUserMessages,
       runId: agentId,
       modelSettings: {
@@ -143,7 +146,7 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
 
     if (!response.body) {
       setIsRunning(false);
-      throw new Error('[StreamVNext] No response body');
+      throw new Error('[Stream] No response body');
     }
 
     await response.processDataStream({

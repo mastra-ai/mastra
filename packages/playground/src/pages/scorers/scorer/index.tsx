@@ -11,6 +11,10 @@ import {
   KeyValueList,
   useScorer,
   useScoresByScorerId,
+  Icon,
+  HeaderAction,
+  Button,
+  DocsIcon,
 } from '@mastra/playground-ui';
 import { useParams, Link, useSearchParams } from 'react-router';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -204,6 +208,9 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
         <Header>
           <Breadcrumb>
             <Crumb as={Link} to={`/scorers`}>
+              <Icon>
+                <GaugeIcon />
+              </Icon>
               Scorers
             </Crumb>
 
@@ -211,6 +218,15 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
               {isScorerLoading ? <Skeleton className="w-20 h-4" /> : scorer?.scorer.config.name || 'Not found'}
             </Crumb>
           </Breadcrumb>
+
+          <HeaderAction>
+            <Button as={Link} to="https://mastra.ai/en/docs/scorers/overview" target="_blank">
+              <Icon>
+                <DocsIcon />
+              </Icon>
+              Scorers documentation
+            </Button>
+          </HeaderAction>
         </Header>
 
         <div className={cn(`grid overflow-y-auto h-full`)}>

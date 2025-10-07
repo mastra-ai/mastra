@@ -1,5 +1,145 @@
 # @mastra/core
 
+## 0.20.1-alpha.1
+
+### Patch Changes
+
+- workflow run thread more visible ([#8539](https://github.com/mastra-ai/mastra/pull/8539))
+
+- Add iterationCount to loop condition params ([#8579](https://github.com/mastra-ai/mastra/pull/8579))
+
+- Mutable shared workflow run state ([#8545](https://github.com/mastra-ai/mastra/pull/8545))
+
+- avoid refetching memory threads and messages on window focus ([#8519](https://github.com/mastra-ai/mastra/pull/8519))
+
+- add tripwire reason in playground ([#8568](https://github.com/mastra-ai/mastra/pull/8568))
+
+- Add validation for index creation ([#8552](https://github.com/mastra-ai/mastra/pull/8552))
+
+- Save waiting step status in snapshot ([#8576](https://github.com/mastra-ai/mastra/pull/8576))
+
+- type fixes and missing changeset ([#8545](https://github.com/mastra-ai/mastra/pull/8545))
+
+- Convert WorkflowWatchResult to WorkflowResult in workflow graph ([#8541](https://github.com/mastra-ai/mastra/pull/8541))
+
+- add new deploy to cloud button ([#8549](https://github.com/mastra-ai/mastra/pull/8549))
+
+- remove icons in entity lists ([#8520](https://github.com/mastra-ai/mastra/pull/8520))
+
+- add client search to all entities ([#8523](https://github.com/mastra-ai/mastra/pull/8523))
+
+- Improve JSDoc documentation for Agent ([#8389](https://github.com/mastra-ai/mastra/pull/8389))
+
+- UX for the agents page ([#8517](https://github.com/mastra-ai/mastra/pull/8517))
+
+- add icons into playground titles + a link to the entity doc ([#8518](https://github.com/mastra-ai/mastra/pull/8518))
+
+## 0.20.1-alpha.0
+
+### Patch Changes
+
+- Properly fix cloudflare randomUUID in global scope issue ([#8450](https://github.com/mastra-ai/mastra/pull/8450))
+
+## 0.20.0
+
+### Minor Changes
+
+- Breaking change to move the agent.streamVNext/generateVNext implementation to the default stream/generate. The old stream/generate have now been moved to streamLegacy and generateLegacy ([#8097](https://github.com/mastra-ai/mastra/pull/8097))
+
+### Patch Changes
+
+- Remove log drains UI from the playground ([#8379](https://github.com/mastra-ai/mastra/pull/8379))
+
+- add refetch interval to traces to make it feel "instant" ([#8386](https://github.com/mastra-ai/mastra/pull/8386))
+
+- better memory message ([#8382](https://github.com/mastra-ai/mastra/pull/8382))
+
+- Add doc url to netlify gateway ([#8356](https://github.com/mastra-ai/mastra/pull/8356))
+
+- fix codeblock line number color contrast for legacy traces ([#8385](https://github.com/mastra-ai/mastra/pull/8385))
+
+- Fixes two issues, one where finish chunks were passed to output processors after every step, and the other where the processorState would get reset after every step, meaning that the final StructuredOutput process prompt was missing lots of context from the previous steps. ([#8373](https://github.com/mastra-ai/mastra/pull/8373))
+
+- Convert structured output to a stream processor ([#8229](https://github.com/mastra-ai/mastra/pull/8229))
+
+- Model router documentation and playground UI improvements ([#8372](https://github.com/mastra-ai/mastra/pull/8372))
+
+  **Documentation generation (`@mastra/core`):**
+  - Fixed inverted dynamic model selection logic in provider examples
+  - Improved copy: replaced marketing language with action-oriented descriptions
+  - Added generated file comments with timestamps to all MDX outputs so maintainers know not to directly edit generated files
+
+  **Playground UI model picker (`@mastra/playground-ui`):**
+  - Fixed provider field clearing when typing in model input
+  - Added responsive layout (stacks on mobile, side-by-side on desktop)
+  - Improved general styling of provider/model pickers
+
+  **Environment variables (`@mastra/deployer`):**
+  - Properly handle array of env vars (e.g., NETLIFY_TOKEN, NETLIFY_SITE_ID)
+  - Added correct singular/plural handling for "environment variable(s)"
+
+- Add approve and decline tool calls to mastra server pkg ([#8360](https://github.com/mastra-ai/mastra/pull/8360))
+
+- Fix/8219 preserve resourceid on resume ([#8359](https://github.com/mastra-ai/mastra/pull/8359))
+
+- Fix ai-sdk custom data output ([#8414](https://github.com/mastra-ai/mastra/pull/8414))
+
+- show thread list in desc order ([#8381](https://github.com/mastra-ai/mastra/pull/8381))
+
+- Fix an issue preventing showing working memory and semantic recall in the playground ([#8358](https://github.com/mastra-ai/mastra/pull/8358))
+
+- Add observe strean to get streans after workflow has been interrupted ([#8318](https://github.com/mastra-ai/mastra/pull/8318))
+
+## 0.20.0-alpha.0
+
+### Minor Changes
+
+- Breaking change to move the agent.streamVNext/generateVNext implementation to the default stream/generate. The old stream/generate have now been moved to streamLegacy and generateLegacy ([#8097](https://github.com/mastra-ai/mastra/pull/8097))
+
+### Patch Changes
+
+- Remove log drains UI from the playground ([#8379](https://github.com/mastra-ai/mastra/pull/8379))
+
+- add refetch interval to traces to make it feel "instant" ([#8386](https://github.com/mastra-ai/mastra/pull/8386))
+
+- better memory message ([#8382](https://github.com/mastra-ai/mastra/pull/8382))
+
+- Add doc url to netlify gateway ([#8356](https://github.com/mastra-ai/mastra/pull/8356))
+
+- fix codeblock line number color contrast for legacy traces ([#8385](https://github.com/mastra-ai/mastra/pull/8385))
+
+- Fixes two issues, one where finish chunks were passed to output processors after every step, and the other where the processorState would get reset after every step, meaning that the final StructuredOutput process prompt was missing lots of context from the previous steps. ([#8373](https://github.com/mastra-ai/mastra/pull/8373))
+
+- Convert structured output to a stream processor ([#8229](https://github.com/mastra-ai/mastra/pull/8229))
+
+- Model router documentation and playground UI improvements ([#8372](https://github.com/mastra-ai/mastra/pull/8372))
+
+  **Documentation generation (`@mastra/core`):**
+  - Fixed inverted dynamic model selection logic in provider examples
+  - Improved copy: replaced marketing language with action-oriented descriptions
+  - Added generated file comments with timestamps to all MDX outputs so maintainers know not to directly edit generated files
+
+  **Playground UI model picker (`@mastra/playground-ui`):**
+  - Fixed provider field clearing when typing in model input
+  - Added responsive layout (stacks on mobile, side-by-side on desktop)
+  - Improved general styling of provider/model pickers
+
+  **Environment variables (`@mastra/deployer`):**
+  - Properly handle array of env vars (e.g., NETLIFY_TOKEN, NETLIFY_SITE_ID)
+  - Added correct singular/plural handling for "environment variable(s)"
+
+- Add approve and decline tool calls to mastra server pkg ([#8360](https://github.com/mastra-ai/mastra/pull/8360))
+
+- Fix/8219 preserve resourceid on resume ([#8359](https://github.com/mastra-ai/mastra/pull/8359))
+
+- Fix ai-sdk custom data output ([#8414](https://github.com/mastra-ai/mastra/pull/8414))
+
+- show thread list in desc order ([#8381](https://github.com/mastra-ai/mastra/pull/8381))
+
+- Fix an issue preventing showing working memory and semantic recall in the playground ([#8358](https://github.com/mastra-ai/mastra/pull/8358))
+
+- Add observe strean to get streans after workflow has been interrupted ([#8318](https://github.com/mastra-ai/mastra/pull/8318))
+
 ## 0.19.1
 
 ### Patch Changes

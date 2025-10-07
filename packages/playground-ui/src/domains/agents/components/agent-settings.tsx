@@ -68,10 +68,10 @@ export const AgentSettings = ({ modelVersion, hasMemory = false, hasSubAgents = 
     if (settings?.modelSettings?.chatWithNetwork) {
       radioValue = 'network';
     } else {
-      radioValue = settings?.modelSettings?.chatWithGenerateVNext ? 'generateVNext' : 'streamVNext';
+      radioValue = settings?.modelSettings?.chatWithGenerate ? 'generate' : 'stream';
     }
   } else {
-    radioValue = settings?.modelSettings?.chatWithGenerate ? 'generate' : 'stream';
+    radioValue = settings?.modelSettings?.chatWithGenerateLegacy ? 'generateLegacy' : 'streamLegacy';
   }
 
   return (
@@ -86,9 +86,8 @@ export const AgentSettings = ({ modelVersion, hasMemory = false, hasSubAgents = 
                 ...settings,
                 modelSettings: {
                   ...settings?.modelSettings,
+                  chatWithGenerateLegacy: value === 'generateLegacy',
                   chatWithGenerate: value === 'generate',
-                  chatWithGenerateVNext: value === 'generateVNext',
-                  chatWithStreamVNext: value === 'streamVNext',
                   chatWithNetwork: value === 'network',
                 },
               })
@@ -97,33 +96,33 @@ export const AgentSettings = ({ modelVersion, hasMemory = false, hasSubAgents = 
           >
             {modelVersion !== 'v2' && (
               <div className="flex items-center gap-2">
+                <RadioGroupItem value="generateLegacy" id="generateLegacy" className="text-icon6" />
+                <Label className="text-icon6 text-ui-md" htmlFor="generateLegacy">
+                  Generate (Legacy)
+                </Label>
+              </div>
+            )}
+            {modelVersion === 'v2' && (
+              <div className="flex items-center gap-2">
                 <RadioGroupItem value="generate" id="generate" className="text-icon6" />
                 <Label className="text-icon6 text-ui-md" htmlFor="generate">
                   Generate
                 </Label>
               </div>
             )}
-            {modelVersion === 'v2' && (
+            {modelVersion !== 'v2' && (
               <div className="flex items-center gap-2">
-                <RadioGroupItem value="generateVNext" id="generateVNext" className="text-icon6" />
-                <Label className="text-icon6 text-ui-md" htmlFor="generateVNext">
-                  Generate vNext
+                <RadioGroupItem value="streamLegacy" id="streamLegacy" className="text-icon6" />
+                <Label className="text-icon6 text-ui-md" htmlFor="streamLegacy">
+                  Stream (Legacy)
                 </Label>
               </div>
             )}
-            {modelVersion !== 'v2' && (
+            {modelVersion === 'v2' && (
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="stream" id="stream" className="text-icon6" />
                 <Label className="text-icon6 text-ui-md" htmlFor="stream">
                   Stream
-                </Label>
-              </div>
-            )}
-            {modelVersion === 'v2' && (
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="streamVNext" id="streamVNext" className="text-icon6" />
-                <Label className="text-icon6 text-ui-md" htmlFor="streamVNext">
-                  Stream vNext
                 </Label>
               </div>
             )}
