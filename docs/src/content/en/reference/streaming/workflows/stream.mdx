@@ -81,7 +81,7 @@ const stream = await run.stream({
     },
     {
       name: "getWorkflowState",
-      type: "() => Promise<WorkflowResult<TOutput, TSteps>>",
+      type: "() => Promise<WorkflowResult<TState, TOutput, TSteps>>",
       description: "A function that returns a promise resolving to the final workflow result",
     },
     {

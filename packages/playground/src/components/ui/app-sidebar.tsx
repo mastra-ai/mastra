@@ -121,9 +121,9 @@ const links = [
     icon: AgentIcon,
   },
   {
-    name: 'Tools',
-    url: '/tools',
-    icon: ToolsIcon,
+    name: 'Workflows',
+    url: '/workflows',
+    icon: WorkflowIcon,
   },
   {
     name: 'MCP Servers',
@@ -131,9 +131,9 @@ const links = [
     icon: McpServerIcon,
   },
   {
-    name: 'Workflows',
-    url: '/workflows',
-    icon: WorkflowIcon,
+    name: 'Tools',
+    url: '/tools',
+    icon: ToolsIcon,
   },
   {
     name: 'Scorers',
@@ -292,12 +292,13 @@ export function AppSidebar() {
                       href="https://mastra.ai/cloud"
                       target="_blank"
                       rel="noopener"
+                      id="deploy-to-mastra-cloud"
                     >
                       <Icon>
                         <Cloudy />
                       </Icon>
 
-                      <span className="text-[0.8rem] font-normal">Deploy to Mastra Cloud</span>
+                      <span className="text-[0.8rem] font-normal">Deploy your Playground</span>
                     </a>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

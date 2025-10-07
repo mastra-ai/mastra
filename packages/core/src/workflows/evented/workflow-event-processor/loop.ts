@@ -37,6 +37,8 @@ export async function processWorkflowLoop(
     condition: step.condition,
     runId,
     stepResults,
+    // TODO: implement state
+    state: {},
     emitter: new EventEmitter() as any, // TODO
     runtimeContext: new RuntimeContext(), // TODO
     inputData: prevResult?.status === 'success' ? prevResult.output : undefined,

@@ -11,6 +11,7 @@ import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
 
 import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
+import { WorkflowRunStreamResult } from '@/domains/workflows/context/workflow-run-context';
 
 export interface WorkflowBadgeProps {
   workflow: GetWorkflowResponse;
@@ -84,7 +85,7 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
   );
 };
 
-export const useWorkflowStream = (workflowFullState?: WorkflowWatchResult) => {
+export const useWorkflowStream = (workflowFullState?: WorkflowRunStreamResult) => {
   const { setResult } = useContext(WorkflowRunContext);
 
   useEffect(() => {
