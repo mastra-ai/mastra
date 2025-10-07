@@ -87,6 +87,9 @@ describe('Handlers', () => {
   let mockContext: Partial<Context>;
   let mockLogger: any;
   let originalStreamGenerateHandler: typeof handlers.streamGenerateHandler;
+  let originalApproveToolCallHandler: typeof handlers.approveToolCallHandler;
+  let originalDeclineToolCallHandler: typeof handlers.declineToolCallHandler;
+  let originalStreamNetworkHandler: typeof handlers.streamNetworkHandler;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -105,6 +108,10 @@ describe('Handlers', () => {
     mockAgent = {} as Agent;
     mockAgent.name = 'test-agent';
     mockAgent.stream = vi.fn();
+    mockAgent.approveToolCall = vi.fn();
+    mockAgent.declineToolCall = vi.fn();
+    mockAgent.network = vi.fn();
+    mockAgent.getMemory = vi.fn();
 
     mockMastra = {
       getAgent: vi.fn((id: string) => (id === 'test-agent' ? mockAgent : undefined)),
@@ -140,6 +147,9 @@ describe('Handlers', () => {
     };
 
     originalStreamGenerateHandler = handlers.streamGenerateHandler;
+    originalApproveToolCallHandler = handlers.approveToolCallHandler;
+    originalDeclineToolCallHandler = handlers.declineToolCallHandler;
+    originalStreamNetworkHandler = handlers.streamNetworkHandler;
   });
 
   describe('Early error detection', () => {
@@ -344,6 +354,131 @@ describe('Handlers', () => {
       // Verify error chunk was emitted before closing
       const errorData = findErrorChunk(chunks);
       expect(errorData).toBeDefined();
+    });
+  });
+
+  describe('approveToolCallHandler', () => {
+    it('should return HTTP 429 when rate limit error occurs before streaming', async () => {
+      const rateLimitError = createAI_APICallError({
+        message: 'Rate limit exceeded',
+        statusCode: 429,
+        isRetryable: true,
+      });
+
+      (mockAgent.approveToolCall as any).mockRejectedValue(rateLimitError);
+
+      await expectHTTPException(() => originalApproveToolCallHandler(mockContext as Context), 429);
+    });
+
+    it('should emit error chunk when error occurs during streaming', async () => {
+      const streamError = createAI_APICallError({
+        message: 'Stream error',
+        statusCode: 500,
+        isRetryable: true,
+      });
+
+      const mockReader = {
+        read: vi
+          .fn()
+          .mockResolvedValueOnce({ done: false, value: { type: 'text-delta', payload: { text: 'Test' } } })
+          .mockRejectedValueOnce(streamError),
+        cancel: vi.fn(),
+      };
+
+      (mockAgent.approveToolCall as any).mockResolvedValue({
+        fullStream: { getReader: vi.fn(() => mockReader) },
+      });
+
+      const response = await originalApproveToolCallHandler(mockContext as Context);
+      const chunks = await readStreamChunks(response!);
+      const errorData = findErrorChunk(chunks);
+
+      expect(errorData).toBeDefined();
+      expect(errorData.type).toBe('error');
+    });
+  });
+
+  describe('declineToolCallHandler', () => {
+    it('should return HTTP 500 when provider error occurs before streaming', async () => {
+      const providerError = createAI_APICallError({
+        message: 'Provider error',
+        statusCode: 500,
+        isRetryable: true,
+      });
+
+      (mockAgent.declineToolCall as any).mockRejectedValue(providerError);
+
+      await expectHTTPException(() => originalDeclineToolCallHandler(mockContext as Context), 500);
+    });
+
+    it('should emit error chunk when error occurs during streaming', async () => {
+      const streamError = createAI_APICallError({
+        message: 'Stream interrupted',
+        statusCode: 503,
+        isRetryable: true,
+      });
+
+      const mockReader = {
+        read: vi
+          .fn()
+          .mockResolvedValueOnce({ done: false, value: { type: 'text-delta', payload: { text: 'Test' } } })
+          .mockRejectedValueOnce(streamError),
+        cancel: vi.fn(),
+      };
+
+      (mockAgent.declineToolCall as any).mockResolvedValue({
+        fullStream: { getReader: vi.fn(() => mockReader) },
+      });
+
+      const response = await originalDeclineToolCallHandler(mockContext as Context);
+      const chunks = await readStreamChunks(response!);
+      const errorData = findErrorChunk(chunks);
+
+      expect(errorData).toBeDefined();
+      expect(errorData.type).toBe('error');
+    });
+  });
+
+  describe('streamNetworkHandler', () => {
+    beforeEach(() => {
+      (mockAgent.getMemory as any).mockResolvedValue({ threadId: 'test-thread' });
+    });
+
+    it('should return HTTP 500 when provider error occurs before streaming', async () => {
+      const providerError = createAI_APICallError({
+        message: 'Provider error',
+        statusCode: 500,
+        isRetryable: true,
+      });
+
+      (mockAgent.network as any).mockRejectedValue(providerError);
+
+      await expectHTTPException(() => originalStreamNetworkHandler(mockContext as Context), 500);
+    });
+
+    it('should emit error chunk when error occurs during streaming', async () => {
+      const streamError = createAI_APICallError({
+        message: 'Network stream error',
+        statusCode: 500,
+        isRetryable: true,
+      });
+
+      const mockReader = {
+        read: vi
+          .fn()
+          .mockResolvedValueOnce({ done: false, value: { type: 'text-delta', payload: { text: 'Test' } } })
+          .mockRejectedValueOnce(streamError),
+        cancel: vi.fn(),
+      };
+
+      (mockAgent.network as any).mockResolvedValue(mockReader);
+
+      const response = await originalStreamNetworkHandler(mockContext as Context);
+      const chunks = await readStreamChunks(response!);
+      const errorData = findErrorChunk(chunks);
+
+      expect(errorData).toBeDefined();
+      expect(errorData.type).toBe('error');
     });
   });
 });
