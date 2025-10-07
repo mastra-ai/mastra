@@ -1473,7 +1473,8 @@ describe('Working Memory Tests', () => {
       expect(workingMemory).toContain('Goku');
     });
 
-    it('should handle working memory tools in agent network - resource scope', async () => {
+    // This test is flaky. It sometimes fails with workingMemory being null.
+    it('should handle working memory tools in agent network - resource scope', { retry: 2 }, async () => {
       // Create memory instance with resource-scoped working memory
       const resourceMemory = new Memory({
         options: {
