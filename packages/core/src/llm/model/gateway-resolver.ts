@@ -21,7 +21,6 @@ export function parseModelRouterId(routerId: string, gatewayPrefix?: string): { 
   const providerId = idParts.at(gatewayPrefix ? 1 : 0);
   const modelId = idParts.slice(gatewayPrefix ? 2 : 1).join(`/`);
 
-  console.info({ providerId, modelId, idParts });
   if (!routerId.includes(`/`) || !providerId || !modelId) {
     throw new Error(
       `Attempted to parse provider/model from ${routerId} but this ID doesn't appear to contain a provider`,
