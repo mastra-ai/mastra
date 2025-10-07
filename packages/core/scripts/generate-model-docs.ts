@@ -1,8 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { PROVIDER_REGISTRY } from '../src/llm/model/provider-registry.generated.js';
 import { SUPPORTED_PROVIDERS } from '../src/llm/model/gateways/constants.js';
+import { PROVIDER_REGISTRY } from '../src/llm/model/provider-registry.generated.js';
 
 /**
  * Generate a comment indicating the file was auto-generated
