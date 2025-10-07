@@ -78,10 +78,32 @@
     "@mastra/inngest": "0.15.0"
   },
   "changesets": [
+    "@mastra_dynamodb-8436-dependencies",
+    "@mastra_s3vectors-8436-dependencies",
+    "afraid-experts-hammer",
+    "angry-towns-relax",
+    "breezy-peaches-laugh",
+    "cuddly-dragons-admire",
     "dirty-monkeys-repair",
+    "eleven-nights-relate",
+    "fine-beans-exist",
     "forty-cameras-enjoy",
+    "forty-walls-post",
+    "four-rats-teach",
+    "lucky-cooks-laugh",
+    "moody-bottles-taste",
+    "nine-carrots-wish",
+    "polite-cloths-show",
+    "pretty-bags-cut",
+    "puny-zebras-rest",
+    "sharp-worlds-invite",
+    "slow-rings-try",
+    "smooth-geckos-share",
     "spicy-icons-clean",
+    "strong-kiwis-relate",
     "tricky-coats-design",
-    "two-swans-pull"
+    "two-swans-pull",
+    "weak-results-go",
+    "wet-llamas-pull"
   ]
 }
