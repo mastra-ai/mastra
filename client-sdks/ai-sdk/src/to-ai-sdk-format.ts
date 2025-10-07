@@ -301,6 +301,14 @@ function transformAgent(payload: ChunkType, bufferedSteps: Map<string, any>) {
         files: [],
         toolCalls: [],
         toolResults: [],
+        request: {},
+        response: {
+          id: '',
+          timestamp: new Date(),
+          modelId: '',
+          messages: [],
+        },
+        providerMetadata: undefined,
         steps: [],
         status: 'running',
       });
@@ -312,6 +320,7 @@ function transformAgent(payload: ChunkType, bufferedSteps: Map<string, any>) {
         finishReason: payload.payload.stepResult.reason,
         usage: payload.payload?.output?.usage,
         warnings: payload.payload?.stepResult?.warnings,
+        steps: bufferedSteps.get(payload.runId!)!.steps,
         status: 'finished',
       });
       hasChanged = true;
@@ -346,7 +355,6 @@ function transformAgent(payload: ChunkType, bufferedSteps: Map<string, any>) {
       hasChanged = true;
       break;
     case 'tool-call':
-      console.info('tool-call', payload.payload);
       bufferedSteps.set(payload.runId!, {
         ...bufferedSteps.get(payload.runId!),
         toolCalls: [...bufferedSteps.get(payload.runId)!.toolCalls, payload.payload],
@@ -371,6 +379,51 @@ function transformAgent(payload: ChunkType, bufferedSteps: Map<string, any>) {
       bufferedSteps.set(payload.runId!, {
         ...bufferedSteps.get(payload.runId!),
         object: payload.object,
+      });
+      hasChanged = true;
+      break;
+    case 'step-finish':
+      const currentRun = bufferedSteps.get(payload.runId!)!;
+      const stepResult = {
+        stepType: currentRun.steps.length === 0 ? 'initial' : 'tool-result',
+        sources: bufferedSteps.get(payload.runId!)!.sources,
+        files: bufferedSteps.get(payload.runId!)!.files,
+        toolCalls: bufferedSteps.get(payload.runId!)!.toolCalls,
+        toolResults: bufferedSteps.get(payload.runId!)!.toolResults,
+        text: bufferedSteps.get(payload.runId!)!.text,
+        reasoningText: bufferedSteps.get(payload.runId!)!.reasoning.join(''),
+        reasoning: bufferedSteps.get(payload.runId!)!.reasoning,
+        staticToolCalls: bufferedSteps
+          .get(payload.runId!)!
+          .toolCalls.filter((part: any) => part.type === 'tool-call' && part.payload?.dynamic === false),
+        dynamicToolCalls: bufferedSteps
+          .get(payload.runId!)!
+          .toolCalls.filter((part: any) => part.type === 'tool-call' && part.payload?.dynamic === true),
+        staticToolResults: bufferedSteps
+          .get(payload.runId!)!
+          .toolResults.filter((part: any) => part.type === 'tool-result' && part.payload?.dynamic === false),
+        dynamicToolResults: bufferedSteps
+          .get(payload.runId!)!
+          .toolResults.filter((part: any) => part.type === 'tool-result' && part.payload?.dynamic === true),
+        finishReason: payload.payload.stepResult.reason,
+        usage: payload.payload.output.usage,
+        warnings: payload.payload.stepResult.warnings || [],
+        request: bufferedSteps.get(payload.runId!)!.request,
+        response: {
+          id: payload.payload.id || '',
+          timestamp: (payload.payload.metadata?.timestamp as Date) || new Date(),
+          modelId: (payload.payload.metadata?.modelId as string) || (payload.payload.metadata?.model as string) || '',
+          ...bufferedSteps.get(payload.runId!)!.response,
+          messages: bufferedSteps.get(payload.runId!)!.response.messages || [],
+        },
+        providerMetadata: bufferedSteps.get(payload.runId!)!.providerMetadata,
+      };
+
+      bufferedSteps.set(payload.runId!, {
+        ...bufferedSteps.get(payload.runId!)!,
+        usage: payload.payload.output.usage,
+        warnings: payload.payload.stepResult.warnings || [],
+        steps: [...bufferedSteps.get(payload.runId!)!.steps, stepResult],
       });
       hasChanged = true;
       break;
