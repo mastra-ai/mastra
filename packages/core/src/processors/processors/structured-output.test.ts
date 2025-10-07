@@ -736,8 +736,6 @@ describe('Structured Output with Tool Execution', () => {
     expect(result.object.answer).toBeDefined();
     expect(typeof result.object.confidence).toBe('number');
 
-    console.log('response messages', JSON.stringify(await stream.response, null, 2));
-
     // Check that the structured output is in response message metadata (untyped v2 format)
     const responseMessages = stream.messageList.get.response.v2();
     const lastAssistantMessage = [...responseMessages].reverse().find(m => m.role === 'assistant');
