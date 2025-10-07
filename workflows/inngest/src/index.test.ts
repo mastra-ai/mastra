@@ -2883,9 +2883,10 @@ describe('MastraInngestWorkflow', () => {
           finalValue: z.number(),
         }),
       });
-
+      let totalCount = 0;
       counterWorkflow
-        .dountil(incrementStep, async ({ inputData }) => {
+        .dountil(incrementStep, async ({ inputData, iterationCount }) => {
+          totalCount = iterationCount;
           return (inputData?.value ?? 0) >= 12;
         })
         .then(finalStep)
@@ -2926,6 +2927,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result.result).toMatchObject({ finalValue: 12 });
       // @ts-ignore
       expect(result.steps.increment.output).toMatchObject({ value: 12 });
+      expect(totalCount).toBe(12);
 
       srv.close();
     });
@@ -2986,9 +2988,10 @@ describe('MastraInngestWorkflow', () => {
           finalValue: z.number(),
         }),
       });
-
+      let totalCount = 0;
       counterWorkflow
-        .dowhile(incrementStep, async ({ inputData }) => {
+        .dowhile(incrementStep, async ({ inputData, iterationCount }) => {
+          totalCount = iterationCount;
           return (inputData?.value ?? 0) < 12;
         })
         .then(finalStep)
@@ -3029,7 +3032,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result.result).toMatchObject({ finalValue: 12 });
       // @ts-ignore
       expect(result.steps.increment.output).toMatchObject({ value: 12 });
-
+      expect(totalCount).toBe(12);
       srv.close();
     });
   });
