@@ -35,6 +35,7 @@ import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
 import type { SaveQueueManager } from './save-queue';
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 
 export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
 export type { Message as AiMessageType } from 'ai';
@@ -69,7 +70,7 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
    * Passed to the internal structuring agent's stream call
    * Useful for controlling thinking models to reduce latency and token usage
    */
-  providerOptions?: import('@ai-sdk/provider-v5').SharedV2ProviderOptions;
+  providerOptions?: SharedV2ProviderOptions;
 } & FallbackFields<OUTPUT>;
 
 export interface AgentCreateOptions {
