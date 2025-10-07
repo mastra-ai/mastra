@@ -1,17 +1,16 @@
 "use client";
 import { PulsingDots } from "@/components/loading";
+import { Clippy } from "@/components/svgs/clippy";
 import { ArrowLeftIcon } from "@/components/svgs/Icons";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import Spinner from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { Markdown } from "@copilotkit/react-ui";
 import "@copilotkit/react-ui/styles.css";
 import { useChat } from "@kapaai/react-sdk";
 import { ArrowUp } from "lucide-react";
 import React, { useState } from "react";
-import { Markdown } from "@copilotkit/react-ui";
-import { StickToBottom } from "use-stick-to-bottom";
-import { Clippy } from "@/components/svgs/clippy";
+import { useStickToBottom } from "use-stick-to-bottom";
 
 export function KapaChat({
   setIsAgentMode,
@@ -20,13 +19,8 @@ export function KapaChat({
   setIsAgentMode: (isAgentMode: boolean) => void;
   searchQuery: string;
 }) {
-  const {
-    conversation,
-    submitQuery,
-    isGeneratingAnswer,
-    isPreparingAnswer,
-    error,
-  } = useChat();
+  const { conversation, submitQuery, isGeneratingAnswer, isPreparingAnswer } =
+    useChat();
   const [inputValue, setInputValue] = useState(searchQuery || "");
 
   const isLoading = isGeneratingAnswer || isPreparingAnswer;
@@ -53,8 +47,10 @@ export function KapaChat({
     }
   };
 
+  const { scrollRef, contentRef } = useStickToBottom();
+
   return (
-    <div className="flex relative flex-col w-full">
+    <div className="flex relative flex-col w-full h-[700px]">
       {/* Chat header */}
       <div className="flex absolute top-0 right-0 left-0 z-20 px-5 py-3 w-full backdrop-blur-md dark:bg-surface-6">
         <Button
@@ -68,43 +64,39 @@ export function KapaChat({
         </Button>
       </div>
 
-      <ScrollArea className="h-[600px] overflow-hidden w-full px-5">
-        <div className="h-20" />
-        <StickToBottom className="overflow-auto flex-1" resize="smooth">
-          <StickToBottom.Content className="flex flex-col gap-8">
-            {conversation.length > 0
-              ? conversation.map(({ answer: a, question: q, id }) => {
-                  return (
-                    <div key={id} className={`flex flex-col gap-8 w-full`}>
-                      {!!q && (
-                        <div className="px-4 self-end text-[13px] py-2 rounded-lg max-w-[80%] dark:bg-surface-3 bg-[var(--light-color-surface-4)] dark:text-icons-6 text-[var(--light-color-text-4)]  rounded-br-none">
-                          {q}
-                        </div>
-                      )}
+      <div className="overflow-y-auto px-5 h-full" ref={scrollRef}>
+        <div ref={contentRef} className="flex flex-col gap-8">
+          {/* spacer */}
+          <div className="h-20" />
+          {conversation.length > 0
+            ? conversation.map(({ answer: a, question: q, id }) => {
+                return (
+                  <div key={id} className={`flex flex-col gap-8 w-full`}>
+                    {!!q && (
+                      <div className="px-4 self-end text-[13px] py-2 rounded-lg max-w-[80%] dark:bg-surface-3 bg-[var(--light-color-surface-4)] dark:text-icons-6 text-[var(--light-color-text-4)]  rounded-br-none">
+                        {q}
+                      </div>
+                    )}
 
-                      {!!a && (
-                        <div className="flex gap-4 text-[13px] bg-transparent relative w-full dark:text-icons-6 text-[var(--light-color-text-4)]">
-                          {/* <Markdown remarkPlugins={[remarkGfm]}>{a}</Markdown> */}
-                          <div className="mt-1 w-5 h-5 shrink-0">
-                            <Clippy className="w-full h-full" />
-                          </div>
-
-                          <Markdown content={a} />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              : null}
-            {isPreparingAnswer && (
-              <div className="self-start p-4">
-                <PulsingDots />
-              </div>
-            )}
-          </StickToBottom.Content>
-        </StickToBottom>
-        <div className="h-20" />
-      </ScrollArea>
+                    {!!a && (
+                      <div className="relative pl-4 text-[13px] bg-transparent max-w-full dark:text-icons-6 text-[var(--light-color-text-4)]">
+                        <Clippy className="absolute top-1 -left-2 w-5 h-5" />
+                        <Markdown content={a} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            : null}
+          {isPreparingAnswer && (
+            <div className="self-start p-4 w-fit">
+              <PulsingDots />
+            </div>
+          )}
+          {/* spacer */}
+          <div className="h-20" />
+        </div>
+      </div>
 
       {/* Input area */}
       <div className="px-2 pb-4">

@@ -14,7 +14,13 @@ import { KapaProvider } from "@kapaai/react-sdk";
 
 const INPUTS = new Set(["INPUT", "SELECT", "BUTTON", "TEXTAREA"]);
 
-export const SearchWrapper = ({ locale }: { locale: string }) => {
+export const SearchWrapper = ({
+  locale,
+  isKapaChatbotEnabled,
+}: {
+  locale: string;
+  isKapaChatbotEnabled: boolean;
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAgentMode, setIsAgentMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -102,7 +108,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
                 Search
               </DialogTitle>
               <div className="w-full">
-                {isAgentMode ? (
+                {isAgentMode && isKapaChatbotEnabled ? (
                   // TODO: place behind Feature Flag
                   <KapaProvider
                     integrationId={process.env.NEXT_PUBLIC_KAPA_INTEGRATION_ID!}

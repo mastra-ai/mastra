@@ -125,10 +125,6 @@ html[class~="dark"] *::selection {
   background: var(--copilot-kit-background-color);
 }
 
-#scroll-area-viewport > div {
-  display: block !important;
-}
-
 .copilotKitMarkdown p {
   font-size: 13px !important;
 }
@@ -140,10 +136,23 @@ html[class~="dark"] *::selection {
 
 .copilotKitMarkdown a {
   color: var(--color-accent-green) !important;
+  padding-left: 4px !important;
+}
+
+.copilotKitMarkdown code {
+  background-color: var(--color-surface-5);
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.copilotKitMarkdown .copilotKitCodeBlock code {
+  background-color: unset;
+  padding: 0;
+  border-radius: 0;
 }
 
 .copilotKitMarkdown {
-  max-width: 100% !important;
+  width: 100% !important;
 }
 
 button.copilotKitCodeBlockToolbarButton {

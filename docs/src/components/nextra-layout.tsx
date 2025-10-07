@@ -17,17 +17,24 @@ export const NextraLayout = ({
   children,
   locale,
   stars,
+  isKapaChatbotEnabled,
 }: {
   pageMap: PageMapItem[];
   children: React.ReactNode;
   locale: string;
   stars: number;
+  isKapaChatbotEnabled: boolean;
 }) => {
   const pathname = usePathname();
   const isReference = pathname.includes("/reference");
   return (
     <Layout
-      search={<SearchWrapper locale={locale} />}
+      search={
+        <SearchWrapper
+          locale={locale}
+          isKapaChatbotEnabled={isKapaChatbotEnabled}
+        />
+      }
       navbar={
         <div className="flex  sticky top-0 z-30 bg-light-color-surface-15 dark:bg-[var(--primary-bg)] flex-col">
           <Nav stars={stars} locale={locale} />
@@ -38,7 +45,7 @@ export const NextraLayout = ({
       toc={{
         title: <T id="_locale_.layout.toc">On This Page</T>,
         extraContent: (
-          <div className="flex gap-3 flex-col">
+          <div className="flex flex-col gap-3">
             <SubscribeForm
               className="pt-[1.5rem] mt-0 md:flex-col"
               placeholder="you@company.com"
