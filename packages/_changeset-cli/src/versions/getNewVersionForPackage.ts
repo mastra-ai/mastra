@@ -17,7 +17,7 @@ interface VersionInfo {
 export async function getReleasePlan(changesets?: NewChangeset[]) {
   try {
     const packages = await getPackages(rootDir, {
-      tools: [],
+      tools: [PnpmTool],
     });
     changesets = changesets || (await getChangesets(rootDir));
     const config = await readConfig(rootDir);
@@ -44,9 +44,7 @@ export async function getNewVersionForPackage(
   changesets?: NewChangeset[],
 ): Promise<string | null> {
   try {
-    console.log('??');
     const releasePlan = await getReleasePlan(changesets);
-    console.log('plan');
     if (!releasePlan) {
       return null;
     }
