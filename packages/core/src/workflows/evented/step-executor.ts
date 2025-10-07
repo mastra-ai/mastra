@@ -1,5 +1,5 @@
 import EventEmitter from 'events';
-import type { Emitter, ExecuteFunction, Mastra, Step, StepFlowEntry, StepResult } from '../..';
+import type { Emitter, LoopConditionFunction, Mastra, Step, StepFlowEntry, StepResult } from '../..';
 import { MastraBase } from '../../base';
 import type { RuntimeContext } from '../../di';
 import type { PubSub } from '../../events';
@@ -178,6 +178,7 @@ export class StepExecutor extends MastraBase {
             abortController,
             stepResults,
             emitter: ee,
+            iterationCount: 0,
           });
         } catch (e) {
           console.error('error evaluating condition', e);
@@ -209,9 +210,10 @@ export class StepExecutor extends MastraBase {
     emitter,
     abortController,
     runCount = 0,
+    iterationCount,
   }: {
     workflowId: string;
-    condition: ExecuteFunction<any, any, any, any, any, any>;
+    condition: LoopConditionFunction<any, any, any, any, any, any>;
     runId: string;
     inputData?: any;
     resumeData?: any;
@@ -221,6 +223,7 @@ export class StepExecutor extends MastraBase {
     runtimeContext: RuntimeContext;
     abortController: AbortController;
     runCount?: number;
+    iterationCount: number;
   }): Promise<boolean> {
     return condition({
       workflowId,
@@ -253,6 +256,7 @@ export class StepExecutor extends MastraBase {
       abortSignal: abortController?.signal,
       // TODO
       tracingContext: {},
+      iterationCount,
     });
   }
 

@@ -50,6 +50,12 @@ export type ExecuteFunction<TState, TStepInput, TStepOutput, TResumeSchema, TSus
   params: ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
 ) => Promise<TStepOutput>;
 
+export type LoopConditionFunction<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
+  params: ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> & {
+    iterationCount: number;
+  },
+) => Promise<TStepOutput>;
+
 // Define a Step interface
 export interface Step<
   TStepId extends string = string,

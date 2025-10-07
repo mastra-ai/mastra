@@ -3,7 +3,7 @@ import type { z } from 'zod';
 import type { TracingPolicy, TracingProperties } from '../ai-tracing';
 import type { Mastra } from '../mastra';
 import type { ExecutionEngine } from './execution-engine';
-import type { ExecuteFunction, Step } from './step';
+import type { ExecuteFunction, LoopConditionFunction, Step } from './step';
 
 export type { ChunkType } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
@@ -15,6 +15,8 @@ export type Emitter = {
   once: (event: string, callback: (data: any) => void) => void;
 };
 
+export type StepMetadata = Record<string, any>;
+
 export type StepSuccess<P, R, S, T> = {
   status: 'success';
   output: T;
@@ -25,6 +27,7 @@ export type StepSuccess<P, R, S, T> = {
   endedAt: number;
   suspendedAt?: number;
   resumedAt?: number;
+  metadata?: StepMetadata;
 };
 
 export type StepFailure<P, R, S> = {
@@ -37,6 +40,7 @@ export type StepFailure<P, R, S> = {
   endedAt: number;
   suspendedAt?: number;
   resumedAt?: number;
+  metadata?: StepMetadata;
 };
 
 export type StepSuspended<P, S> = {
@@ -45,6 +49,7 @@ export type StepSuspended<P, S> = {
   suspendPayload?: S;
   startedAt: number;
   suspendedAt: number;
+  metadata?: StepMetadata;
 };
 
 export type StepRunning<P, R, S> = {
@@ -55,6 +60,7 @@ export type StepRunning<P, R, S> = {
   startedAt: number;
   suspendedAt?: number;
   resumedAt?: number;
+  metadata?: StepMetadata;
 };
 
 export type StepWaiting<P, R, S> = {
@@ -63,6 +69,7 @@ export type StepWaiting<P, R, S> = {
   suspendPayload?: S;
   resumePayload?: R;
   startedAt: number;
+  metadata?: StepMetadata;
 };
 
 export type StepResult<P, R, S, T> =
@@ -320,7 +327,7 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | {
       type: 'loop';
       step: Step;
-      condition: ExecuteFunction<any, any, any, any, any, TEngineType>;
+      condition: LoopConditionFunction<any, any, any, any, any, TEngineType>;
       serializedCondition: { id: string; fn: string };
       loopType: 'dowhile' | 'dountil';
     }

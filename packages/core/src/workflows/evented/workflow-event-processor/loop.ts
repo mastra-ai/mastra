@@ -45,6 +45,7 @@ export async function processWorkflowLoop(
     resumeData,
     abortController: new AbortController(),
     runCount,
+    iterationCount: 0, //TODO: implement
   });
 
   if (step.loopType === 'dountil') {
