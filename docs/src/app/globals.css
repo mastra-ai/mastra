@@ -157,7 +157,6 @@ html[class~="dark"] *::selection {
   }
 }
 
-
 .copilotKitMarkdown .copilotKitCodeBlock code {
   background-color: unset;
   padding: 0;
