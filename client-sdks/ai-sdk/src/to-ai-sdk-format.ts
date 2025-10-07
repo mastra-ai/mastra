@@ -152,7 +152,6 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>() {
         // TODO: make this work for networks and workflows
         if (transformedChunk.type === 'tool-agent') {
           const payload = transformedChunk.payload;
-          console.log('payload', payload);
           const agentTransformed = transformAgent<TOutput>(payload as AgentChunkType<TOutput>, bufferedSteps);
           if (agentTransformed) controller.enqueue(agentTransformed);
           //  } else if (transformedChunk.type === 'tool-workflow') {
