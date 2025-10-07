@@ -75,7 +75,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
       : 'direct'
     : undefined;
 
-  const responseFormat = getResponseFormat(structuredOutput?.schema);
+  const responseFormat = structuredOutput?.schema ? getResponseFormat(structuredOutput?.schema) : undefined;
 
   let prompt = inputMessages;
   if (
