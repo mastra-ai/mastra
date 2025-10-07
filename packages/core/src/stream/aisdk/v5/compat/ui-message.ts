@@ -31,7 +31,6 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   sendStart,
   sendFinish,
   responseMessageId,
-  usedInAiSDKPackage = false,
 }: {
   // tool-output is a custom mastra chunk type used in ToolStream
   part: TextStreamPart<ToolSet> | { type: 'tool-output'; toolCallId: string; output: any };
@@ -42,7 +41,6 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   sendStart?: boolean;
   sendFinish?: boolean;
   responseMessageId?: string;
-  usedInAiSDKPackage?: boolean;
 }): InferUIMessageChunk<UI_MESSAGE> | undefined {
   const partType = part.type;
 
@@ -172,37 +170,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
       };
     }
 
-    // tool-output is a custom mastra chunk type used in ToolStream
-    // TODO: Should this be a data part instead of a tool output type
     case 'tool-output': {
-      if (usedInAiSDKPackage) {
-        // if (part.output.from === 'AGENT') {
-        //   return {
-        //     type: 'tool-nested-agent',
-        //     toolCallId: part.toolCallId,
-        //     payload: part.output,
-        //   };
-        // } else if (part.output.from === 'WORKFLOW') {
-        //   return {
-        //     type: 'tool-nested-workflow',
-        //     toolCallId: part.toolCallId,
-        //     payload: part.output,
-        //   };
-        // } else if (part.output.from === 'NETWORK') {
-        //   return {
-        //     type: 'tool-nested-network',
-        //     toolCallId: part.toolCallId,
-        //     payload: part.output,
-        //   };
-        // }
-        // @ts-ignore
-        return {
-          type: '_mastra_tool-output',
-          toolCallId: part.toolCallId,
-          payload: part.output,
-        };
-      }
-
       return {
         ...part.output,
       };
