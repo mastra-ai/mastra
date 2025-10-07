@@ -115,6 +115,8 @@ export interface Config<
 
   /**
    * OpenTelemetry configuration for distributed tracing and observability.
+   *
+   * @deprecated Use {@link observability} instead.
    */
   telemetry?: OtelConfig;
 
@@ -246,6 +248,10 @@ export class Mastra<
     handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
     path: string;
   }> = [];
+
+  /**
+   * @deprecated Use {@link getAITracing()} instead.
+   */
   #telemetry?: Telemetry;
   #storage?: MastraStorage;
   #memory?: MastraMemory;
@@ -263,7 +269,7 @@ export class Mastra<
   #serverCache: MastraServerCache;
 
   /**
-   * @deprecated use getTelemetry() instead
+   * @deprecated use {@link getAITracing()} instead
    */
   get telemetry() {
     return this.#telemetry;
@@ -468,6 +474,13 @@ export class Mastra<
         `Mastra telemetry is enabled, but the required instrumentation file was not loaded. ` +
           `If you are using Mastra outside of the mastra server environment, see: https://mastra.ai/en/docs/observability/tracing#tracing-outside-mastra-server-environment`,
         `If you are using a custom instrumentation file or want to disable this warning, set the globalThis.___MASTRA_TELEMETRY___ variable to true in your instrumentation file.`,
+      );
+    }
+
+    if (config?.telemetry?.enabled !== false) {
+      this.#logger?.warn(
+        `Mastra telemetry is deprecated and will be removed on the Nov 4th release. Instead use AI Tracing. ` +
+          `More info can be found here: https://github.com/mastra-ai/mastra/issues/8577 and here: https://mastra.ai/en/docs/observability/ai-tracing/overview`,
       );
     }
 
@@ -1527,6 +1540,8 @@ do:
    *   span.end();
    * }
    * ```
+   *
+   * @deprecated use {@link getAITracing()} instead
    */
   public getTelemetry() {
     return this.#telemetry;
