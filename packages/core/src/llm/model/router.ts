@@ -119,7 +119,7 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
 
   async doGenerate(): Promise<never> {
     throw new Error(
-      'doGenerate is not supported by OpenAICompatibleModel. ' +
+      'doGenerate is not supported by Mastra model router. ' +
         'Mastra only uses streaming (doStream) for all LLM calls.',
     );
   }
