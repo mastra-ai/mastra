@@ -64,13 +64,10 @@ export class NetlifyGateway extends MastraModelGateway {
     return { netlify };
   }
 
-  async buildUrl(routerId: string): Promise<string> {
-    // Check if this model ID is for our gateway
-    // parseModelRouterId(routerId, 'netlify'); // will throw if there's a problem
-
+  async buildUrl(routerId: string, envVars?: typeof process.env): Promise<string> {
     // Check for Netlify site ID first (for token exchange)
-    const siteId = process.env['NETLIFY_SITE_ID'];
-    const netlifyToken = process.env['NETLIFY_TOKEN'];
+    const siteId = envVars?.['NETLIFY_SITE_ID'] || process.env['NETLIFY_SITE_ID'];
+    const netlifyToken = envVars?.['NETLIFY_TOKEN'] || process.env['NETLIFY_TOKEN'];
 
     if (!netlifyToken) {
       throw new MastraError({
