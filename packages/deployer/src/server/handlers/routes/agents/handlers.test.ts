@@ -2,6 +2,7 @@ import type { Agent } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import type { Context } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as handlers from './handlers';
 
@@ -76,14 +77,15 @@ describe('Stream Error Handling for Rate Limits and Provider Errors', () => {
 
       (mockAgent.stream as any).mockRejectedValue(rateLimitError);
 
-      const response = await originalStreamGenerateHandler(mockContext as Context);
-
-      expect(response).toBeDefined();
-      expect(response!.status).toBe(429);
-
-      const body = await response!.json();
-      expect(body.error).toBeDefined();
-      expect(body.error).toContain('rate limit');
+      try {
+        await originalStreamGenerateHandler(mockContext as Context);
+        expect.fail('Should have thrown HTTPException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        const httpException = error as HTTPException;
+        expect(httpException.status).toBe(429);
+        expect(httpException.message).toContain('rate limit');
+      }
     });
 
     it('should return HTTP 500 status when generic provider error occurs before streaming', async () => {
@@ -93,13 +95,14 @@ describe('Stream Error Handling for Rate Limits and Provider Errors', () => {
 
       (mockAgent.stream as any).mockRejectedValue(apiError);
 
-      const response = await originalStreamGenerateHandler(mockContext as Context);
-
-      expect(response).toBeDefined();
-      expect(response!.status).toBe(500);
-
-      const body = await response!.json();
-      expect(body.error).toBeDefined();
+      try {
+        await originalStreamGenerateHandler(mockContext as Context);
+        expect.fail('Should have thrown HTTPException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        const httpException = error as HTTPException;
+        expect(httpException.status).toBe(500);
+      }
     });
 
     it('should return HTTP 401 status when authentication error occurs', async () => {
@@ -109,10 +112,14 @@ describe('Stream Error Handling for Rate Limits and Provider Errors', () => {
 
       (mockAgent.stream as any).mockRejectedValue(authError);
 
-      const response = await originalStreamGenerateHandler(mockContext as Context);
-
-      expect(response).toBeDefined();
-      expect(response!.status).toBe(401);
+      try {
+        await originalStreamGenerateHandler(mockContext as Context);
+        expect.fail('Should have thrown HTTPException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        const httpException = error as HTTPException;
+        expect(httpException.status).toBe(401);
+      }
     });
 
     it('should not return 200 OK when rate limit error occurs', async () => {
@@ -122,11 +129,15 @@ describe('Stream Error Handling for Rate Limits and Provider Errors', () => {
 
       (mockAgent.stream as any).mockRejectedValue(rateLimitError);
 
-      const response = await originalStreamGenerateHandler(mockContext as Context);
-
-      expect(response).toBeDefined();
-      expect(response!.status).not.toBe(200);
-      expect(response!.status).toBe(429);
+      try {
+        await originalStreamGenerateHandler(mockContext as Context);
+        expect.fail('Should have thrown HTTPException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        const httpException = error as HTTPException;
+        expect(httpException.status).not.toBe(200);
+        expect(httpException.status).toBe(429);
+      }
     });
   });
 
@@ -176,7 +187,6 @@ describe('Stream Error Handling for Rate Limits and Provider Errors', () => {
           if (done) break;
           chunks.push(decoder.decode(value, { stream: true }));
         }
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (e) {
         // Stream may close after error
       }
@@ -248,7 +258,6 @@ describe('Stream Error Handling for Rate Limits and Provider Errors', () => {
           if (done) break;
           chunks.push(decoder.decode(value, { stream: true }));
         }
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (e) {
         // Expected to finish
       }
@@ -330,7 +339,6 @@ describe('Stream Error Handling for Rate Limits and Provider Errors', () => {
           }
           chunks.push(decoder.decode(value, { stream: true }));
         }
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (e) {
         // Should not throw, stream should close gracefully
         streamClosed = true;

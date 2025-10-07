@@ -240,178 +240,236 @@ export async function streamGenerateLegacyHandler(c: Context): Promise<Response 
 }
 
 export async function streamGenerateHandler(c: Context): Promise<Response | undefined> {
+  const mastra = c.get('mastra');
+  const agentId = c.req.param('agentId');
+  const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const body = await c.req.json();
+  const logger = mastra.getLogger();
+
+  let streamResponse;
   try {
-    const mastra = c.get('mastra');
-    const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
-    const body = await c.req.json();
-    const logger = mastra.getLogger();
+    streamResponse = await getOriginalStreamGenerateHandler({
+      mastra,
+      agentId,
+      runtimeContext,
+      body,
+      abortSignal: c.req.raw.signal,
+    });
+  } catch (err) {
+    return handleError(err, 'Error streaming from agent');
+  }
 
-    c.header('Transfer-Encoding', 'chunked');
+  c.header('Transfer-Encoding', 'chunked');
 
-    return stream(
-      c,
-      async stream => {
-        try {
-          const streamResponse = await getOriginalStreamGenerateHandler({
-            mastra,
-            agentId,
-            runtimeContext,
-            body,
-            abortSignal: c.req.raw.signal,
-          });
+  return stream(
+    c,
+    async stream => {
+      try {
+        const reader = streamResponse.fullStream.getReader();
 
-          const reader = streamResponse.fullStream.getReader();
+        stream.onAbort(() => {
+          void reader.cancel('request aborted');
+        });
 
-          stream.onAbort(() => {
-            void reader.cancel('request aborted');
-          });
-
-          let chunkResult;
-          while ((chunkResult = await reader.read()) && !chunkResult.done) {
-            await stream.write(`data: ${JSON.stringify(chunkResult.value)}\n\n`);
-          }
-
-          await stream.write('data: [DONE]\n\n');
-        } catch (err) {
-          logger.error('Error in stream generate: ' + ((err as Error)?.message ?? 'Unknown error'));
+        let chunkResult;
+        while ((chunkResult = await reader.read()) && !chunkResult.done) {
+          await stream.write(`data: ${JSON.stringify(chunkResult.value)}\n\n`);
         }
 
-        await stream.close();
-      },
-      async err => {
-        logger.error('Error in watch stream: ' + err?.message);
-      },
-    );
-  } catch (error) {
-    return handleError(error, 'Error streaming from agent');
-  }
+        await stream.write('data: [DONE]\n\n');
+      } catch (err) {
+        logger.error('Error in stream generate: ' + ((err as Error)?.message ?? 'Unknown error'));
+
+        await stream.write(
+          `data: ${JSON.stringify({
+            type: 'error',
+            from: 'AGENT',
+            runId: body.runId || 'unknown',
+            payload: {
+              error:
+                err instanceof Error
+                  ? {
+                      message: err.message,
+                      name: err.name,
+                      stack: err.stack,
+                    }
+                  : String(err),
+            },
+          })}\n\n`,
+        );
+      }
+
+      await stream.close();
+    },
+    async err => {
+      logger.error('Error in watch stream: ' + err?.message);
+    },
+  );
 }
 
 export async function approveToolCallHandler(c: Context): Promise<Response | undefined> {
+  const mastra = c.get('mastra');
+  const agentId = c.req.param('agentId');
+  const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const body = await c.req.json();
+  const logger = mastra.getLogger();
+
+  let streamResponse;
   try {
-    const mastra = c.get('mastra');
-    const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
-    const body = await c.req.json();
-    const logger = mastra.getLogger();
+    streamResponse = await getOriginalApproveToolCallHandler({
+      mastra,
+      runtimeContext,
+      agentId,
+      body,
+      abortSignal: c.req.raw.signal,
+    });
+  } catch (err) {
+    return handleError(err, 'Error approving tool call');
+  }
 
-    c.header('Transfer-Encoding', 'chunked');
+  c.header('Transfer-Encoding', 'chunked');
 
-    c.header('Transfer-Encoding', 'chunked');
+  return stream(
+    c,
+    async stream => {
+      try {
+        const reader = streamResponse.fullStream.getReader();
 
-    return stream(
-      c,
-      async stream => {
-        try {
-          const streamResponse = await getOriginalApproveToolCallHandler({
-            mastra,
-            runtimeContext,
-            agentId,
-            body,
-            abortSignal: c.req.raw.signal,
-          });
+        stream.onAbort(() => {
+          void reader.cancel('request aborted');
+        });
 
-          const reader = streamResponse.fullStream.getReader();
-
-          stream.onAbort(() => {
-            void reader.cancel('request aborted');
-          });
-
-          let chunkResult;
-          while ((chunkResult = await reader.read()) && !chunkResult.done) {
-            await stream.write(`data: ${JSON.stringify(chunkResult.value)}\n\n`);
-          }
-
-          await stream.write('data: [DONE]\n\n');
-        } catch (err) {
-          logger.error('Error in approve tool call: ' + ((err as Error)?.message ?? 'Unknown error'));
+        let chunkResult;
+        while ((chunkResult = await reader.read()) && !chunkResult.done) {
+          await stream.write(`data: ${JSON.stringify(chunkResult.value)}\n\n`);
         }
 
-        await stream.close();
-      },
-      async err => {
-        logger.error('Error in watch stream: ' + err?.message);
-      },
-    );
-  } catch (error) {
-    return handleError(error, 'Error approving tool call');
-  }
+        await stream.write('data: [DONE]\n\n');
+      } catch (err) {
+        logger.error('Error in approve tool call: ' + ((err as Error)?.message ?? 'Unknown error'));
+
+        await stream.write(
+          `data: ${JSON.stringify({
+            type: 'error',
+            from: 'AGENT',
+            runId: body.runId || 'unknown',
+            payload: {
+              error:
+                err instanceof Error
+                  ? {
+                      message: err.message,
+                      name: err.name,
+                      stack: err.stack,
+                    }
+                  : String(err),
+            },
+          })}\n\n`,
+        );
+      }
+
+      await stream.close();
+    },
+    async err => {
+      logger.error('Error in watch stream: ' + err?.message);
+    },
+  );
 }
 
 export async function declineToolCallHandler(c: Context): Promise<Response | undefined> {
+  const mastra = c.get('mastra');
+  const agentId = c.req.param('agentId');
+  const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const body = await c.req.json();
+  const logger = mastra.getLogger();
+
+  let streamResponse;
   try {
-    const mastra = c.get('mastra');
-    const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
-    const body = await c.req.json();
-    const logger = mastra.getLogger();
+    streamResponse = await getOriginalDeclineToolCallHandler({
+      mastra,
+      runtimeContext,
+      agentId,
+      body,
+      abortSignal: c.req.raw.signal,
+    });
+  } catch (err) {
+    return handleError(err, 'Error declining tool call');
+  }
 
-    c.header('Transfer-Encoding', 'chunked');
+  c.header('Transfer-Encoding', 'chunked');
 
-    return stream(
-      c,
-      async stream => {
-        try {
-          const streamResponse = await getOriginalDeclineToolCallHandler({
-            mastra,
-            runtimeContext,
-            agentId,
-            body,
-            abortSignal: c.req.raw.signal,
-          });
+  return stream(
+    c,
+    async stream => {
+      try {
+        const reader = streamResponse.fullStream.getReader();
 
-          const reader = streamResponse.fullStream.getReader();
+        stream.onAbort(() => {
+          void reader.cancel('request aborted');
+        });
 
-          stream.onAbort(() => {
-            void reader.cancel('request aborted');
-          });
-
-          let chunkResult;
-          while ((chunkResult = await reader.read()) && !chunkResult.done) {
-            await stream.write(`data: ${JSON.stringify(chunkResult.value)}\n\n`);
-          }
-
-          await stream.write('data: [DONE]\n\n');
-        } catch (err) {
-          logger.error('Error in decline tool call: ' + ((err as Error)?.message ?? 'Unknown error'));
+        let chunkResult;
+        while ((chunkResult = await reader.read()) && !chunkResult.done) {
+          await stream.write(`data: ${JSON.stringify(chunkResult.value)}\n\n`);
         }
 
-        await stream.close();
-      },
-      async err => {
-        logger.error('Error in watch stream: ' + err?.message);
-      },
-    );
-  } catch (error) {
-    return handleError(error, 'Error declining tool call');
-  }
+        await stream.write('data: [DONE]\n\n');
+      } catch (err) {
+        logger.error('Error in decline tool call: ' + ((err as Error)?.message ?? 'Unknown error'));
+
+        await stream.write(
+          `data: ${JSON.stringify({
+            type: 'error',
+            from: 'AGENT',
+            runId: body.runId || 'unknown',
+            payload: {
+              error:
+                err instanceof Error
+                  ? {
+                      message: err.message,
+                      name: err.name,
+                      stack: err.stack,
+                    }
+                  : String(err),
+            },
+          })}\n\n`,
+        );
+      }
+
+      await stream.close();
+    },
+    async err => {
+      logger.error('Error in watch stream: ' + err?.message);
+    },
+  );
 }
 
 export async function streamNetworkHandler(c: Context) {
-  try {
-    const mastra: Mastra = c.get('mastra');
-    const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
-    const body = await c.req.json();
-    const logger = mastra.getLogger();
+  const mastra: Mastra = c.get('mastra');
+  const agentId = c.req.param('agentId');
+  const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const body = await c.req.json();
+  const logger = mastra.getLogger();
 
-    // Validate agent exists and has memory before starting stream
-    const agent = mastra.getAgent(agentId);
-    if (!agent) {
-      throw new MastraError({
+  // Validate agent exists and has memory before starting stream
+  const agent = mastra.getAgent(agentId);
+  if (!agent) {
+    return handleError(
+      new MastraError({
         id: 'AGENT_NOT_FOUND',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
         text: 'Agent not found',
-      });
-    }
+      }),
+      'Agent not found',
+    );
+  }
 
-    // Check if agent has memory configured before starting the stream
-    const memory = await agent.getMemory({ runtimeContext });
+  // Check if agent has memory configured before starting the stream
+  const memory = await agent.getMemory({ runtimeContext });
 
-    if (!memory) {
-      throw new MastraError({
+  if (!memory) {
+    return handleError(
+      new MastraError({
         id: 'AGENT_NETWORK_MEMORY_REQUIRED',
         domain: ErrorDomain.AGENT_NETWORK,
         category: ErrorCategory.USER,
@@ -419,48 +477,70 @@ export async function streamNetworkHandler(c: Context) {
         details: {
           status: 400,
         },
-      });
-    }
+      }),
+      'Memory required for agent network',
+    );
+  }
 
-    c.header('Transfer-Encoding', 'chunked');
+  let streamResponse;
+  try {
+    streamResponse = await getOriginalStreamNetworkHandler({
+      mastra,
+      agentId,
+      runtimeContext,
+      body,
+      // abortSignal: c.req.raw.signal,
+    });
+  } catch (err) {
+    return handleError(err, 'Error streaming from agent in network mode');
+  }
 
-    return stream(
-      c,
-      async stream => {
-        try {
-          const streamResponse = await getOriginalStreamNetworkHandler({
-            mastra,
-            agentId,
-            runtimeContext,
-            body,
-            // abortSignal: c.req.raw.signal,
-          });
+  c.header('Transfer-Encoding', 'chunked');
 
-          const reader = streamResponse.getReader();
+  return stream(
+    c,
+    async stream => {
+      try {
+        const reader = streamResponse.getReader();
 
-          stream.onAbort(() => {
-            void reader.cancel('request aborted');
-          });
+        stream.onAbort(() => {
+          void reader.cancel('request aborted');
+        });
 
-          let chunkResult;
-          while ((chunkResult = await reader.read()) && !chunkResult.done) {
-            await stream.write(`data: ${JSON.stringify(chunkResult.value)}\n\n`);
-          }
-
-          await stream.write('data: [DONE]\n\n');
-        } catch (err) {
-          logger.error('Error in streamNetwork generate: ' + ((err as Error)?.message ?? 'Unknown error'));
+        let chunkResult;
+        while ((chunkResult = await reader.read()) && !chunkResult.done) {
+          await stream.write(`data: ${JSON.stringify(chunkResult.value)}\n\n`);
         }
 
-        await stream.close();
-      },
-      async err => {
-        logger.error('Error in watch stream: ' + err?.message);
-      },
-    );
-  } catch (error) {
-    return handleError(error, 'Error streaming from agent in network mode');
-  }
+        await stream.write('data: [DONE]\n\n');
+      } catch (err) {
+        logger.error('Error in streamNetwork generate: ' + ((err as Error)?.message ?? 'Unknown error'));
+
+        await stream.write(
+          `data: ${JSON.stringify({
+            type: 'error',
+            from: 'AGENT',
+            runId: body.runId || 'unknown',
+            payload: {
+              error:
+                err instanceof Error
+                  ? {
+                      message: err.message,
+                      name: err.name,
+                      stack: err.stack,
+                    }
+                  : String(err),
+            },
+          })}\n\n`,
+        );
+      }
+
+      await stream.close();
+    },
+    async err => {
+      logger.error('Error in watch stream: ' + err?.message);
+    },
+  );
 }
 
 export async function streamUIMessageHandler(c: Context): Promise<Response | undefined> {
