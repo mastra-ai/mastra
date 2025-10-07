@@ -233,7 +233,12 @@ export class CoreToolBuilder extends MastraBase {
             details: {
               errorMessage: String(error),
               argsJson: JSON.stringify(args),
-              model: rest.model?.modelId ?? '',
+              model:
+                typeof rest.model === 'object' && rest.model && 'modelId' in rest.model
+                  ? rest.model.modelId
+                  : typeof rest.model === 'string'
+                    ? rest.model
+                    : '',
             },
           },
           err,
@@ -286,7 +291,8 @@ export class CoreToolBuilder extends MastraBase {
 
     const schemaCompatLayers = [];
 
-    if (model) {
+    // Only apply schema compat layers if model is already a resolved LanguageModel instance
+    if (model && typeof model === 'object' && 'specificationVersion' in model) {
       const supportsStructuredOutputs =
         model.specificationVersion !== 'v2' ? (model.supportsStructuredOutputs ?? false) : false;
 

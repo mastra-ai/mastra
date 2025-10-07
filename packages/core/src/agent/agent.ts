@@ -11,7 +11,7 @@ import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
-import { ModelRouterLanguageModel } from '../llm';
+import { resolveModelConfig } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
 import type {
   GenerateObjectWithMessagesArgs,
@@ -33,7 +33,6 @@ import type {
   MastraLanguageModel,
   MastraLanguageModelV2,
   MastraModelConfig,
-  OpenAICompatibleConfig,
 } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
@@ -960,22 +959,6 @@ export class Agent<
   }
 
   /**
-   * Returns true for model router config object
-   * @internal
-   */
-  private isOpenaiCompatibleObjectConfig(
-    modelConfig: DynamicArgument<MastraModelConfig>,
-  ): modelConfig is OpenAICompatibleConfig {
-    if (typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) return false;
-    // Check for OpenAICompatibleConfig specifically - it should have 'id' but NOT 'model'
-    // ModelWithRetries has both 'id' and 'model', so we exclude it
-    // TODO: should probably do some additional checking using providers list to see if the ID starts with a known provider
-    // we can also do some duck typing around optional properties like url/apiKey/etc
-    if (typeof modelConfig === 'object' && 'id' in modelConfig && !('model' in modelConfig)) return true;
-    return false;
-  }
-
-  /**
    * Resolves a model configuration to a LanguageModel instance
    * @param modelConfig The model configuration (magic string, config object, or LanguageModel)
    * @returns A LanguageModel instance
@@ -985,36 +968,23 @@ export class Agent<
     modelConfig: DynamicArgument<MastraModelConfig>,
     runtimeContext: RuntimeContext,
   ): Promise<MastraLanguageModel> {
-    // If it's already a LanguageModel, return it
-    if (typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) {
-      return modelConfig;
+    try {
+      return await resolveModelConfig(modelConfig, runtimeContext, this.#mastra);
+    } catch (error) {
+      const mastraError = new MastraError({
+        id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+          originalError: error instanceof Error ? error.message : String(error),
+        },
+        text: `[Agent:${this.name}] - Failed to resolve model configuration`,
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
-
-    // If it's a string (magic string like "openai/gpt-4o" or URL) or OpenAICompatibleConfig, create OpenAICompatibleModel
-    if (typeof modelConfig === 'string' || this.isOpenaiCompatibleObjectConfig(modelConfig)) {
-      return new ModelRouterLanguageModel(modelConfig);
-    }
-
-    if (typeof modelConfig === `function`) {
-      const fromDynamic = await modelConfig({ runtimeContext, mastra: this.#mastra });
-      if (typeof fromDynamic === `string` || this.isOpenaiCompatibleObjectConfig(fromDynamic)) {
-        return new ModelRouterLanguageModel(fromDynamic);
-      }
-      return fromDynamic;
-    }
-
-    const mastraError = new MastraError({
-      id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
-      domain: ErrorDomain.AGENT,
-      category: ErrorCategory.USER,
-      details: {
-        agentName: this.name,
-      },
-      text: `[Agent:${this.name}] - No model provided`,
-    });
-    this.logger.trackException(mastraError);
-    this.logger.error(mastraError.toString());
-    throw mastraError;
   }
 
   /**
