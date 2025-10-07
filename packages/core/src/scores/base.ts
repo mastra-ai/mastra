@@ -5,6 +5,7 @@ import { InternalSpans } from '../ai-tracing';
 import type { TracingContext } from '../ai-tracing';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { MastraModelConfig } from '../llm/model/shared.types';
+import { resolveModelConfig } from '../llm/model/resolve-model';
 import { createWorkflow, createStep } from '../workflows';
 import type { ScoringSamplingConfig, ScorerRunInputForAgent, ScorerRunOutputForAgent } from './types';
 
