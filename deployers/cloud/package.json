@@ -29,7 +29,7 @@
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "lint": "eslint .",
-    "prepare": "node scripts/sync-versions.mjs"
+    "prepack": "node scripts/sync-versions.mjs"
   },
   "keywords": [],
   "license": "Apache-2.0",
