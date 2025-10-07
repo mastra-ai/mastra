@@ -163,7 +163,7 @@ const liveEvals = await agent.liveEvals();
 ### Stream
 
 
-Stream responses using the enhanced API with improved method signatures. This method provides enhanced capabilities and format flexibility, with support for both Mastra's native format and AI SDK v5 compatibility:
+Stream responses using the enhanced API with improved method signatures. This method provides enhanced capabilities and format flexibility, with support for both Mastra's native format.
 
 ```typescript
 const response = await agent.stream(
@@ -171,15 +171,6 @@ const response = await agent.stream(
   {
     threadId: "thread-1",
     clientTools: { colorChangeTool },
-  }
-);
-
-// AI SDK v5 compatible format
-const response = await agent.stream(
-  "Tell me a story",
-  {
-    format: 'aisdk', // Enable AI SDK v5 compatibility
-    threadId: "thread-1",
   }
 );
 
