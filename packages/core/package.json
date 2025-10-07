@@ -229,7 +229,8 @@
     "@ai-sdk/openai-compatible-v5": "npm:@ai-sdk/openai-compatible@1.0.19",
     "@ai-sdk/google-v5": "npm:@ai-sdk/google@2.0.17",
     "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.23",
-    "@openrouter/ai-sdk-provider-v5": "npm:@openrouter/ai-sdk-provider@1.2.0"
+    "@openrouter/ai-sdk-provider-v5": "npm:@openrouter/ai-sdk-provider@1.2.0",
+    "@ai-sdk/xai-v5": "npm:@ai-sdk/xai@2.0.23"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"

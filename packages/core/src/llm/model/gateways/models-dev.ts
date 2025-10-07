@@ -1,4 +1,5 @@
 import { createAnthropic } from '@ai-sdk/anthropic-v5';
+import { createXai } from '@ai-sdk/xai-v5';
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import { createOpenAI } from '@ai-sdk/openai-v5';
@@ -208,6 +209,10 @@ export class ModelsDevGateway extends MastraModelGateway {
         return createAnthropic({ apiKey })(modelId);
       case 'openrouter':
         return createOpenRouter({ apiKey })(modelId);
+      case 'xai':
+        return createXai({
+          apiKey,
+        })(modelId);
       default:
         return createOpenAICompatible({ name: providerId, apiKey, baseURL }).chatModel(modelId);
     }

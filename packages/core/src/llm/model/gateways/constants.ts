@@ -1,1 +1,1 @@
-export const SUPPORTED_PROVIDERS = ['anthropic', 'google', 'openai', 'openrouter'];
+export const SUPPORTED_PROVIDERS = ['anthropic', 'google', 'openai', 'openrouter', 'xai'];
