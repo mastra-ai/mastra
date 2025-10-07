@@ -3,6 +3,8 @@ title: "Guardrails | Agents | Mastra Docs"
 description: "Learn how to implement guardrails using input and output processors to secure and control AI interactions."
 ---
 
+import { Tabs } from "nextra/components";
+
 # Guardrails
 
 Agents use processors to apply guardrails to inputs and outputs. They run before or after each interaction, giving you a way to review, transform, or block information as it passes between the user and the agent.
@@ -280,44 +282,61 @@ export const testAgent = new Agent({
 });
 ```
 
-## Understanding responses
+## Processor strategies
 
-Processors behave differently depending on their purpose:
+Many of the built-in processors support a `strategy` parameter that controls how they handle flagged input or output. Supported values may include: `block`, `warn`, `detect`, or `redact`.
 
-- **Transformers**: Modify messages (e.g. normalize input, translate language). These allow processing to continue.
-- **Validators**: Check for violations (e.g. prompt injection, PII, harmful content) and may stop further processing if certain conditions are not met.
+Most strategies allow the request to continue without interruption. When `block` is used, the processor calls its internal `abort()` function, which immediately stops the request and prevents any subsequent processors from running.
 
-If a validator stops processing:
+```typescript {10} filename="src/mastra/agents/private-agent.ts" showLineNumbers copy
+import { PIIDetector } from "@mastra/core/processors";
 
-- No subsequent processors in the same `inputProcessors` or `outputProcessors` array are run.
-- The agent still returns a 200 response.
-
-In all cases:
-
-- The response includes details about what was detected and how it was handled.
-
-### PIIDetector example
-
-For example, if an agent uses the `PIIDetector` and a `.generate()` or `.stream()` call includes a credit card number:
-
-```typescript
-const result = await agent.generate("Is this credit card number correct? 4543 1374 5089 4332");
-
-console.log(result.text);
-
-const stream = await agent.stream("Is this credit card number correct? 4543 1374 5089 4332");
-
-for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk);
-}
+export const privateAgent = new Agent({
+  // ...
+  inputProcessors: [
+    new PIIDetector({
+      model: openai("gpt-4.1-nano"),
+      detectionTypes: ["email", "phone", "credit-card", "ssn"],
+      threshold: 0.6,
+      strategy: "block"
+    })
+  ]
+})
 ```
 
-The response would include a message from the agent along with details explaining what was detected and how it was handled.
+### Handling blocked requests
+
+When a processor blocks a request, the agent will still return successfully without throwing an error. To handle blocked requests, you can check for a `tripwire` or `tripwireReason` in the response.
+
+For example, if an agent uses the `PIIDetector` with `strategy: "block"` and a `.generate()` or `.stream()` call includes a credit card number, the request would be blocked, and the response will include a `tripwireReason`:
+
+<Tabs items={["Generate", "Stream"]}>
+  <Tabs.Tab>
+
+```typescript {3} showLineNumbers
+const result = await agent.generate("Is this credit card number valid?: 4543 1374 5089 4332");
+
+console.log(result.tripwireReason);
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+
+```typescript {5} showLineNumbers
+const stream = await agent.stream("Is this credit card number valid?: 4543 1374 5089 4332");
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === "tripwire") {
+    console.log(chunk.payload.tripwireReason);
+  }
+}
+```
+  </Tabs.Tab>
+</Tabs>
+
+The response will include a `tripwireReason` indicating the type of PII that was detected.
 
 ```text
-[PIIDetector] Redacted PII: PII detected. Types: credit-card. Detections: 1 items
-
-I'm sorry, but I can't assist with entering or processing sensitive information like credit card numbers.
+PII detected. Types: credit-card
 ```
 
 
