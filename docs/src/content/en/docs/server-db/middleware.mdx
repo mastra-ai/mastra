@@ -142,7 +142,7 @@ be inspected by middleware to tailor behaviour:
 - `x-mastra-client-type`: identifies the client SDK, e.g. `js` or `python`
 - `x-mastra-dev-playground`: request triggered from a local playground
 
-### Accessing `runtimeContext`
+### Setting `runtimeContext`
 
 You can populate `runtimeContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
 
