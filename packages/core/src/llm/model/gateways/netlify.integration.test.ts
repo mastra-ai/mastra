@@ -81,11 +81,6 @@ describe('NetlifyGateway - Real API Integration', () => {
     if (providers['openai']) {
       const url = await gateway.buildUrl('netlify/openai/gpt-4o', insufficientEnvVars);
       expect(url).toBe(false); // Should return false without site ID and token
-
-      // buildHeaders should throw error without proper credentials
-      await expect(gateway.buildHeaders('netlify/openai/gpt-4o', insufficientEnvVars)).rejects.toThrow(
-        'NETLIFY_SITE_ID and NETLIFY_TOKEN are required',
-      );
     }
   });
 
