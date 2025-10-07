@@ -12,6 +12,7 @@ import { Shortcut } from "./shortcut";
 import { Button } from "./ui/button";
 import { KapaProvider } from "@kapaai/react-sdk";
 import { usePostHog } from "posthog-js/react";
+import { CustomSearchWithoutAI } from "./custom-search-without-ai";
 
 const INPUTS = new Set(["INPUT", "SELECT", "BUTTON", "TEXTAREA"]);
 
@@ -149,12 +150,18 @@ export const SearchWrapper = ({
                       setIsAgentMode={setIsAgentMode}
                     />
                   </KapaProvider>
+                ) : isKapaChatbotEnabled ? (
+                  <CustomSearch
+                    placeholder={getSearchPlaceholder(locale)}
+                    searchOptions={searchOptions}
+                    onUseAgent={handleUseAgent}
+                    closeModal={close}
+                  />
                 ) : (
                   <div className="p-[10px]">
-                    <CustomSearch
+                    <CustomSearchWithoutAI
                       placeholder={getSearchPlaceholder(locale)}
                       searchOptions={searchOptions}
-                      onUseAgent={handleUseAgent}
                       closeModal={close}
                     />
                   </div>
