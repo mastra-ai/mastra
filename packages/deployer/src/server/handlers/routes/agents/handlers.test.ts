@@ -8,6 +8,9 @@ import { HTTPException } from 'hono/http-exception';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as handlers from './handlers';
 
+/**
+ * @see https://ai-sdk.dev/docs/reference/ai-sdk-errors/ai-api-call-error
+ */
 interface AI_APICallErrorOptions {
   message: string;
   statusCode?: number;
@@ -152,7 +155,7 @@ describe('Handlers', () => {
     originalStreamNetworkHandler = handlers.streamNetworkHandler;
   });
 
-  describe('Early error detection', () => {
+  describe('streamGenerateHandler: Early error detection', () => {
     it('should return HTTP 429 status when rate limit error occurs before streaming', async () => {
       const rateLimitError = createAI_APICallError({
         message: 'This request would exceed the rate limit for your organization of 30,000 input tokens per minute.',
@@ -214,7 +217,7 @@ describe('Handlers', () => {
     });
   });
 
-  describe('Mid-Stream error handling', () => {
+  describe('streamGenerateHandler: Mid-Stream error handling', () => {
     it('should emit error chunk when rate limit error occurs during streaming', async () => {
       const rateLimitError = createAI_APICallError({
         message: 'This request would exceed the rate limit for your organization of 30,000 input tokens per minute.',
