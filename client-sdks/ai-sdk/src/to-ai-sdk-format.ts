@@ -261,25 +261,21 @@ export function AgentStreamToAISDKTransformer() {
       if (transformedChunk) {
         // @ts-ignore
         // TODO: make this work for networks and workflows
-        if (transformedChunk.type === 'nested_tool-output') {
+        if (transformedChunk.type === 'tool-agent') {
           // @ts-ignore
           const payload = transformedChunk.payload as unknown as ChunkType;
-          if (payload?.from === 'AGENT') {
-            const agentTransformed = transformAgent(payload, bufferedSteps);
-            if (agentTransformed) controller.enqueue(agentTransformed);
-          } else if (payload?.from === 'WORKFLOW') {
-            // const workflowChunk = transformWorkflow(payload.payload);
-            // controller.enqueue(workflowChunk);
-            // @ts-ignore
-          } else if (payload?.from === 'NETWORK') {
-            // const networkChunk = transformNetwork(payload.payload);
-            // controller.enqueue(networkChunk);
-          }
+          const agentTransformed = transformAgent(payload, bufferedSteps);
+          if (agentTransformed) controller.enqueue(agentTransformed);
+          //  } else if (transformedChunk.type === 'tool-workflow') {
+          //     const workflowChunk = transformWorkflow(payload.payload);
+          //     controller.enqueue(workflowChunk);
 
-          return;
+          //  } else if (transformedChunk.type === 'tool-network') {
+          //     const networkChunk = transformNetwork(payload.payload);
+          //     controller.enqueue(networkChunk);
+        } else {
+          controller.enqueue(transformedChunk);
         }
-
-        controller.enqueue(transformedChunk);
       }
     },
   });
@@ -290,7 +286,7 @@ function transformAgent(payload: ChunkType, bufferedSteps: Map<string, any>) {
   switch (payload.type) {
     case 'start':
       bufferedSteps.set(payload.runId!, {
-        name: 'weatherAgent',
+        id: payload.payload.agentId,
         object: null,
         finishReason: null,
         usage: null,
@@ -385,14 +381,9 @@ function transformAgent(payload: ChunkType, bufferedSteps: Map<string, any>) {
     case 'step-finish':
       const currentRun = bufferedSteps.get(payload.runId!)!;
       const stepResult = {
+        ...bufferedSteps.get(payload.runId!)!,
         stepType: currentRun.steps.length === 0 ? 'initial' : 'tool-result',
-        sources: bufferedSteps.get(payload.runId!)!.sources,
-        files: bufferedSteps.get(payload.runId!)!.files,
-        toolCalls: bufferedSteps.get(payload.runId!)!.toolCalls,
-        toolResults: bufferedSteps.get(payload.runId!)!.toolResults,
-        text: bufferedSteps.get(payload.runId!)!.text,
         reasoningText: bufferedSteps.get(payload.runId!)!.reasoning.join(''),
-        reasoning: bufferedSteps.get(payload.runId!)!.reasoning,
         staticToolCalls: bufferedSteps
           .get(payload.runId!)!
           .toolCalls.filter((part: any) => part.type === 'tool-call' && part.payload?.dynamic === false),
@@ -408,7 +399,6 @@ function transformAgent(payload: ChunkType, bufferedSteps: Map<string, any>) {
         finishReason: payload.payload.stepResult.reason,
         usage: payload.payload.output.usage,
         warnings: payload.payload.stepResult.warnings || [],
-        request: bufferedSteps.get(payload.runId!)!.request,
         response: {
           id: payload.payload.id || '',
           timestamp: (payload.payload.metadata?.timestamp as Date) || new Date(),
@@ -416,7 +406,6 @@ function transformAgent(payload: ChunkType, bufferedSteps: Map<string, any>) {
           ...bufferedSteps.get(payload.runId!)!.response,
           messages: bufferedSteps.get(payload.runId!)!.response.messages || [],
         },
-        providerMetadata: bufferedSteps.get(payload.runId!)!.providerMetadata,
       };
 
       bufferedSteps.set(payload.runId!, {

@@ -1046,6 +1046,7 @@ export class Agent<
         runtimeContext,
         tracingContext,
         messageList,
+        agentId: this.name,
       });
 
       text = await result.text;
@@ -3071,6 +3072,7 @@ export class Agent<
       returnScorerData: options.returnScorerData,
       requireToolApproval: options.requireToolApproval,
       resumeContext,
+      agentId: this.id,
     });
 
     const run = await executionWorkflow.createRunAsync();

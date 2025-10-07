@@ -25,6 +25,7 @@ interface MapResultsStepOptions<
   saveQueueManager: SaveQueueManager;
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
   instructions: SystemMessage;
+  agentId: string;
 }
 
 export function createMapResultsStep<
@@ -41,6 +42,7 @@ export function createMapResultsStep<
   saveQueueManager,
   agentAISpan,
   instructions,
+  agentId,
 }: MapResultsStepOptions<OUTPUT, FORMAT>) {
   return async ({
     inputData,
@@ -59,6 +61,7 @@ export function createMapResultsStep<
 
     const result = {
       ...options,
+      agentId,
       tools: toolsData.convertedTools,
       runId,
       temperature: options.modelSettings?.temperature,
@@ -138,6 +141,7 @@ export function createMapResultsStep<
     const messageList = memoryData.messageList!;
 
     const loopOptions: ModelLoopStreamArgs<any, OUTPUT> = {
+      agentId,
       runtimeContext: result.runtimeContext!,
       tracingContext: { currentSpan: agentAISpan },
       runId,

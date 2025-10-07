@@ -237,7 +237,6 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   sendFinish,
   responseMessageId,
 }: {
-  // tool-output is a custom mastra chunk type used in ToolStream
   part: TextStreamPart<ToolSet> | { type: 'tool-output'; toolCallId: string; output: any };
   messageMetadataValue?: unknown;
   sendReasoning?: boolean;
@@ -376,12 +375,15 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     case 'tool-output': {
-      // @ts-ignore
-      return {
-        type: 'nested_tool-output',
-        toolCallId: part.toolCallId,
-        payload: part.output,
-      };
+      if (part.output.from === 'AGENT') {
+        // @ts-ignore
+        return {
+          type: 'tool-agent',
+          toolCallId: part.toolCallId,
+          payload: part.output,
+        };
+      }
+      return;
     }
 
     case 'tool-error': {
