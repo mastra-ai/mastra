@@ -1,9 +1,9 @@
 import { createAnthropic } from '@ai-sdk/anthropic-v5';
-import { createXai } from '@ai-sdk/xai-v5';
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import { createXai } from '@ai-sdk/xai-v5';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
@@ -150,13 +150,13 @@ export class ModelsDevGateway extends MastraModelGateway {
     return providerConfigs;
   }
 
-  buildUrl(routerId: string): string {
+  buildUrl(routerId: string): string | undefined {
     const { providerId } = parseModelRouterId(routerId);
 
     const config = this.providerConfigs[providerId];
 
     if (!config?.url) {
-      throw new Error(`Saw provider with unknown API URL. Provider: ${providerId}`);
+      return;
     }
 
     // Check for custom base URL from env vars
@@ -214,6 +214,7 @@ export class ModelsDevGateway extends MastraModelGateway {
           apiKey,
         })(modelId);
       default:
+        if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
         return createOpenAICompatible({ name: providerId, apiKey, baseURL }).chatModel(modelId);
     }
   }

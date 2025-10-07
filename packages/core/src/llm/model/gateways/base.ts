@@ -40,7 +40,7 @@ export abstract class MastraModelGateway {
    * @param envVars Environment variables available
    * @returns URL string if this gateway can handle the model, false otherwise
    */
-  abstract buildUrl(modelId: string, envVars: Record<string, string>): string | false | Promise<string | false>;
+  abstract buildUrl(modelId: string, envVars: Record<string, string>): string | undefined | Promise<string | undefined>;
 
   abstract getApiKey(modelId: string): Promise<string>;
 
