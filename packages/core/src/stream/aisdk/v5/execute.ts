@@ -78,11 +78,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
   const responseFormat = structuredOutput?.schema ? getResponseFormat(structuredOutput?.schema) : undefined;
 
   let prompt = inputMessages;
-  if (
-    structuredOutputMode === 'direct' &&
-    responseFormat?.type === 'json' &&
-    structuredOutput?.useJsonSchemaPromptInjection
-  ) {
+  if (structuredOutputMode === 'direct' && responseFormat?.type === 'json' && structuredOutput?.jsonPromptInjection) {
     prompt = injectJsonInstructionIntoMessages({
       messages: inputMessages,
       schema: responseFormat.schema,
@@ -101,9 +97,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
           abortSignal: options?.abortSignal,
           includeRawChunks,
           responseFormat:
-            structuredOutputMode === 'direct' && !structuredOutput?.useJsonSchemaPromptInjection
-              ? responseFormat
-              : undefined,
+            structuredOutputMode === 'direct' && !structuredOutput?.jsonPromptInjection ? responseFormat : undefined,
           ...(modelSettings ?? {}),
           headers,
         });

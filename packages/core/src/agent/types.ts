@@ -67,7 +67,7 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   /**
    * Whether to use system prompt injection instead of native response format.
    */
-  useJsonSchemaPromptInjection?: boolean;
+  jsonPromptInjection?: boolean;
 } & FallbackFields<OUTPUT>;
 
 /**

@@ -33,7 +33,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
   private errorStrategy: 'strict' | 'warn' | 'fallback';
   private fallbackValue?: InferSchemaOutput<OUTPUT>;
   private isStructuringAgentStreamStarted = false;
-  private useJsonSchemaPromptInjection?: boolean;
+  private jsonPromptInjection?: boolean;
 
   constructor(options: StructuredOutputOptions<OUTPUT>) {
     if (!options.schema) {
@@ -56,7 +56,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
     this.schema = options.schema;
     this.errorStrategy = options.errorStrategy ?? 'strict';
     this.fallbackValue = options.fallbackValue;
-    this.useJsonSchemaPromptInjection = options.useJsonSchemaPromptInjection;
+    this.jsonPromptInjection = options.jsonPromptInjection;
     // Create internal structuring agent
     this.structuringAgent = new Agent({
       name: 'structured-output-structurer',
@@ -106,7 +106,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
       const structuringAgentStream = await this.structuringAgent.stream(prompt, {
         structuredOutput: {
           schema: this.schema as OUTPUT extends OutputSchema ? OUTPUT : never,
-          useJsonSchemaPromptInjection: this.useJsonSchemaPromptInjection,
+          jsonPromptInjection: this.jsonPromptInjection,
         },
       });
 
