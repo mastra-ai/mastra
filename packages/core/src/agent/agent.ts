@@ -1046,7 +1046,7 @@ export class Agent<
         runtimeContext,
         tracingContext,
         messageList,
-        agentId: this.name,
+        agentId: this.id,
       });
 
       text = await result.text;
