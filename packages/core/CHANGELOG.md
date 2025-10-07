@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.20.1-alpha.4
+
+### Patch Changes
+
+- Fixed an issue where model router was adding /chat/completions to API urls when it shouldn't. ([#8589](https://github.com/mastra-ai/mastra/pull/8589))
+  fixed an issue with provider ID rendering in playground UI
+
 ## 0.20.1-alpha.3
 
 ### Patch Changes

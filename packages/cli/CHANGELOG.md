@@ -1,5 +1,19 @@
 # mastra
 
+## 0.15.0-alpha.3
+
+### Minor Changes
+
+- Update peer dependencies to match core package version bump (0.20.1) ([#8589](https://github.com/mastra-ai/mastra/pull/8589))
+
+### Patch Changes
+
+- Fixed an issue where model router was adding /chat/completions to API urls when it shouldn't. ([#8589](https://github.com/mastra-ai/mastra/pull/8589))
+  fixed an issue with provider ID rendering in playground UI
+- Updated dependencies [[`b728a45`](https://github.com/mastra-ai/mastra/commit/b728a45ab3dba59da0f5ee36b81fe246659f305d)]:
+  - @mastra/core@0.20.1-alpha.4
+  - @mastra/deployer@0.20.1-alpha.4
+
 ## 0.14.2-alpha.2
 
 ### Patch Changes
