@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import type { Agent } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { RuntimeContext } from '@mastra/core/runtime-context';
