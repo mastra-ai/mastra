@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.20.1-alpha.2
+
+### Patch Changes
+
+- Added AI SDK provider packages to model router for anthropic/google/openai/openrouter/xai ([#8559](https://github.com/mastra-ai/mastra/pull/8559))
+
 ## 0.20.1-alpha.1
 
 ### Patch Changes
