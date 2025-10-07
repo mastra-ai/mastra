@@ -1,11 +1,11 @@
 /**
- * Removes common provider suffixes like .chat, .x, .messages, .completion
+ * Removes any provider API suffixes like .chat, .responses, .messages, .completion
  * from provider IDs to get the clean provider name.
  *
  * @example
  * cleanProviderId('cerebras.chat') // returns 'cerebras'
- * cleanProviderId('xai.x') // returns 'xai'
  * cleanProviderId('anthropic.messages') // returns 'anthropic'
+ * cleanProviderId('openai.responses') // returns 'openai'
  * cleanProviderId('openai') // returns 'openai'
  */
 export const cleanProviderId = (providerId: string): string => {
