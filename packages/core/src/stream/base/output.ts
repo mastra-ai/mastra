@@ -653,9 +653,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                       ? undefined
                       : self.#delayedPromises.object.status.type === 'resolved'
                         ? self.#delayedPromises.object.status.value
-                        : self.#options.structuredOutput?.schema &&
-                            !self.#options.structuredOutput?.model &&
-                            baseFinishStep.text
+                        : self.#structuredOutputMode === 'direct' && baseFinishStep.text
                           ? (() => {
                               try {
                                 return JSON.parse(baseFinishStep.text);
