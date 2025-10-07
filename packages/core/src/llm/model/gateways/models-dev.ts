@@ -8,7 +8,7 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
 import type { ProviderConfig } from './base.js';
-import { SUPPORTED_PROVIDERS } from './constants.js';
+import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
 
 interface ModelsDevProviderInfo {
   id: string;
@@ -82,8 +82,8 @@ export class ModelsDevGateway extends MastraModelGateway {
     const providerConfigs: Record<string, ProviderConfig> = {};
 
     for (const [providerId, providerInfo] of Object.entries(data)) {
-      // Skip this provider, it doesn't work
-      if (providerId === `github-copilot`) continue;
+      // Skip excluded providers
+      if (EXCLUDED_PROVIDERS.includes(providerId)) continue;
       // Skip non-provider entries (if any)
       if (!providerInfo || typeof providerInfo !== 'object' || !providerInfo.models) continue;
 
@@ -96,12 +96,13 @@ export class ModelsDevGateway extends MastraModelGateway {
         providerInfo.npm === '@ai-sdk/gateway' || // Vercel AI Gateway is OpenAI-compatible
         normalizedId in OPENAI_COMPATIBLE_OVERRIDES;
 
-      const isOtherProvider = SUPPORTED_PROVIDERS.includes(providerId);
+      // these have their ai sdk provider package installed and don't use openai-compat
+      const hasInstalledPackage = PROVIDERS_WITH_INSTALLED_PACKAGES.includes(providerId);
 
       // Also include providers that have an API URL and env vars (likely OpenAI-compatible)
       const hasApiAndEnv = providerInfo.api && providerInfo.env && providerInfo.env.length > 0;
 
-      if (isOpenAICompatible || isOtherProvider || hasApiAndEnv) {
+      if (isOpenAICompatible || hasInstalledPackage || hasApiAndEnv) {
         // Get model IDs from the models object
         const modelIds = Object.keys(providerInfo.models).sort();
 
@@ -109,12 +110,12 @@ export class ModelsDevGateway extends MastraModelGateway {
         let url = providerInfo.api || OPENAI_COMPATIBLE_OVERRIDES[normalizedId]?.url;
 
         // Ensure the URL ends with /chat/completions if it doesn't already
-        if (!isOtherProvider && url && !url.includes('/chat/completions') && !url.includes('/messages')) {
+        if (!hasInstalledPackage && url && !url.includes('/chat/completions') && !url.includes('/messages')) {
           url = url.replace(/\/$/, '') + '/chat/completions';
         }
 
         // Skip if we don't have a URL
-        if (!isOtherProvider && !url) {
+        if (!hasInstalledPackage && !url) {
           console.info(`Skipping ${normalizedId}: No API URL available`);
           continue;
         }
@@ -124,7 +125,7 @@ export class ModelsDevGateway extends MastraModelGateway {
         const apiKeyEnvVar = providerInfo.env?.[0] || `${normalizedId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
 
         // Determine the API key header (special case for Anthropic)
-        const apiKeyHeader = !isOtherProvider
+        const apiKeyHeader = !hasInstalledPackage
           ? OPENAI_COMPATIBLE_OVERRIDES[normalizedId]?.apiKeyHeader || 'Authorization'
           : undefined;
 
