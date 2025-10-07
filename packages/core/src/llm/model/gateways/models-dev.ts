@@ -1,5 +1,13 @@
+import { createAnthropic } from '@ai-sdk/anthropic-v5';
+import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
+import { createOpenAI } from '@ai-sdk/openai-v5';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
+import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
 import type { ProviderConfig } from './base.js';
+import { SUPPORTED_PROVIDERS } from './constants.js';
 
 interface ModelsDevProviderInfo {
   id: string;
@@ -22,13 +30,6 @@ interface ModelsDevResponse {
 // which providers from models.dev should be included in the registry.
 // At runtime, buildUrl() and buildHeaders() use the pre-generated PROVIDER_REGISTRY instead.
 const OPENAI_COMPATIBLE_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
-  openai: {
-    url: 'https://api.openai.com/v1/chat/completions',
-  },
-  anthropic: {
-    url: 'https://api.anthropic.com/v1/chat/completions',
-    apiKeyHeader: 'x-api-key',
-  },
   cerebras: {
     url: 'https://api.cerebras.ai/v1/chat/completions',
   },
@@ -37,9 +38,6 @@ const OPENAI_COMPATIBLE_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
   },
   mistral: {
     url: 'https://api.mistral.ai/v1/chat/completions',
-  },
-  google: {
-    url: 'https://generativelanguage.googleapis.com/v1beta/chat/completions',
   },
   groq: {
     url: 'https://api.groq.com/openai/v1/chat/completions',
@@ -83,6 +81,8 @@ export class ModelsDevGateway extends MastraModelGateway {
     const providerConfigs: Record<string, ProviderConfig> = {};
 
     for (const [providerId, providerInfo] of Object.entries(data)) {
+      // Skip this provider, it doesn't work
+      if (providerId === `github-copilot`) continue;
       // Skip non-provider entries (if any)
       if (!providerInfo || typeof providerInfo !== 'object' || !providerInfo.models) continue;
 
@@ -95,10 +95,12 @@ export class ModelsDevGateway extends MastraModelGateway {
         providerInfo.npm === '@ai-sdk/gateway' || // Vercel AI Gateway is OpenAI-compatible
         normalizedId in OPENAI_COMPATIBLE_OVERRIDES;
 
+      const isOtherProvider = SUPPORTED_PROVIDERS.includes(providerId);
+
       // Also include providers that have an API URL and env vars (likely OpenAI-compatible)
       const hasApiAndEnv = providerInfo.api && providerInfo.env && providerInfo.env.length > 0;
 
-      if (isOpenAICompatible || hasApiAndEnv) {
+      if (isOpenAICompatible || isOtherProvider || hasApiAndEnv) {
         // Get model IDs from the models object
         const modelIds = Object.keys(providerInfo.models).sort();
 
@@ -106,12 +108,12 @@ export class ModelsDevGateway extends MastraModelGateway {
         let url = providerInfo.api || OPENAI_COMPATIBLE_OVERRIDES[normalizedId]?.url;
 
         // Ensure the URL ends with /chat/completions if it doesn't already
-        if (url && !url.includes('/chat/completions') && !url.includes('/messages')) {
+        if (!isOtherProvider && url && !url.includes('/chat/completions') && !url.includes('/messages')) {
           url = url.replace(/\/$/, '') + '/chat/completions';
         }
 
         // Skip if we don't have a URL
-        if (!url) {
+        if (!isOtherProvider && !url) {
           console.info(`Skipping ${normalizedId}: No API URL available`);
           continue;
         }
@@ -121,14 +123,16 @@ export class ModelsDevGateway extends MastraModelGateway {
         const apiKeyEnvVar = providerInfo.env?.[0] || `${normalizedId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
 
         // Determine the API key header (special case for Anthropic)
-        const apiKeyHeader = OPENAI_COMPATIBLE_OVERRIDES[normalizedId]?.apiKeyHeader || 'Authorization';
+        const apiKeyHeader = !isOtherProvider
+          ? OPENAI_COMPATIBLE_OVERRIDES[normalizedId]?.apiKeyHeader || 'Authorization'
+          : undefined;
 
         providerConfigs[normalizedId] = {
           url,
           apiKeyEnvVar,
           apiKeyHeader,
           name: providerInfo.name || providerId.charAt(0).toUpperCase() + providerId.slice(1),
-          models: modelIds.filter(id => !id.includes(`codex`)), // codex requires responses api
+          models: modelIds,
           docUrl: providerInfo.doc, // Include documentation URL if available
           gateway: `models.dev`,
         };
@@ -145,25 +149,18 @@ export class ModelsDevGateway extends MastraModelGateway {
     return providerConfigs;
   }
 
-  buildUrl(modelId: string, envVars: Record<string, string>): string | false | Promise<string | false> {
-    // Parse model ID to get provider
-    const [provider, ...modelParts] = modelId.split('/');
+  buildUrl(routerId: string): string {
+    const { providerId } = parseModelRouterId(routerId);
 
-    // This gateway only handles models without a prefix (since we have no prefix)
-    // and only if we know about the provider
-    if (!provider || !modelParts.length) {
-      return false; // Not a full model ID
-    }
-
-    const config = this.providerConfigs[provider];
+    const config = this.providerConfigs[providerId];
 
     if (!config?.url) {
-      return false; // We don't know how to handle this provider
+      throw new Error(`Saw provider with unknown API URL. Provider: ${providerId}`);
     }
 
     // Check for custom base URL from env vars
-    const baseUrlEnvVar = `${provider.toUpperCase().replace(/-/g, '_')}_BASE_URL`;
-    const customBaseUrl = envVars[baseUrlEnvVar];
+    const baseUrlEnvVar = `${providerId.toUpperCase().replace(/-/g, '_')}_BASE_URL`;
+    const customBaseUrl = process.env[baseUrlEnvVar];
 
     return customBaseUrl || config.url;
   }
@@ -188,39 +185,31 @@ export class ModelsDevGateway extends MastraModelGateway {
     return Promise.resolve(apiKey);
   }
 
-  buildHeaders(
-    modelId: string,
-    envVars: Record<string, string>,
-  ): Record<string, string> | Promise<Record<string, string>> {
-    const [provider] = modelId.split('/');
-    if (!provider) {
-      return {};
+  async resolveLanguageModel({
+    modelId,
+    providerId,
+    apiKey,
+  }: {
+    modelId: string;
+    providerId: string;
+    apiKey: string;
+  }): Promise<LanguageModelV2> {
+    const baseURL = this.buildUrl(`${providerId}/${modelId}`);
+
+    switch (providerId) {
+      case 'openai':
+        return createOpenAI({ apiKey }).responses(modelId);
+      case 'gemini':
+      case 'google':
+        return createGoogleGenerativeAI({
+          apiKey,
+        }).chat(modelId);
+      case 'anthropic':
+        return createAnthropic({ apiKey })(modelId);
+      case 'openrouter':
+        return createOpenRouter({ apiKey })(modelId);
+      default:
+        return createOpenAICompatible({ name: providerId, apiKey, baseURL }).chatModel(modelId);
     }
-
-    const config = this.providerConfigs[provider];
-
-    if (!config) {
-      return {};
-    }
-
-    const apiKey = typeof config.apiKeyEnvVar === `string` ? envVars[config.apiKeyEnvVar] : undefined; // we only use single string env var for models.dev for now
-    if (!apiKey) {
-      return {};
-    }
-
-    const headers: Record<string, string> = {};
-
-    if (config.apiKeyHeader === 'Authorization' || !config.apiKeyHeader) {
-      headers['Authorization'] = `Bearer ${apiKey}`;
-    } else {
-      headers[config.apiKeyHeader] = apiKey;
-    }
-
-    // Special handling for Anthropic
-    if (provider === 'anthropic') {
-      headers['anthropic-version'] = '2023-06-01';
-    }
-
-    return headers;
   }
 }

@@ -84,7 +84,7 @@ export const AgentMetadataModelSwitcher = ({
     fetchProviders();
   }, [apiUrl]);
 
-  const currentModelProvider = selectedProvider;
+  const currentModelProvider = selectedProvider.split(`.`)[0];
 
   // Get all models with their provider info
   const allModels = useMemo(() => {
@@ -191,7 +191,7 @@ export const AgentMetadataModelSwitcher = ({
 
   // Handle provider selection
   const handleProviderSelect = async (provider: Provider) => {
-    setSelectedProvider(provider.id);
+    setSelectedProvider(provider.id.split(`.`)[0]);
     setProviderSearch('');
     setIsSearchingProvider(false);
     setShowProviderSuggestions(false);
@@ -234,7 +234,7 @@ export const AgentMetadataModelSwitcher = ({
 
       if (providerChanged && modelEmpty) {
         // Reset to defaults
-        setSelectedProvider(defaultProvider);
+        setSelectedProvider(defaultProvider.split(`.`)[0]);
         setSelectedModel(defaultModel);
 
         // Update back to default configuration
