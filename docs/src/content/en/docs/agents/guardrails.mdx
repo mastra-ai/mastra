@@ -3,8 +3,6 @@ title: "Guardrails | Agents | Mastra Docs"
 description: "Learn how to implement guardrails using input and output processors to secure and control AI interactions."
 ---
 
-import { Tabs } from "nextra/components";
-
 # Guardrails
 
 Agents use processors to apply guardrails to inputs and outputs. They run before or after each interaction, giving you a way to review, transform, or block information as it passes between the user and the agent.
@@ -288,16 +286,14 @@ Many of the built-in processors support a `strategy` parameter that controls how
 
 Most strategies allow the request to continue without interruption. When `block` is used, the processor calls its internal `abort()` function, which immediately stops the request and prevents any subsequent processors from running.
 
-```typescript {10} filename="src/mastra/agents/private-agent.ts" showLineNumbers copy
+```typescript {8} filename="src/mastra/agents/private-agent.ts" showLineNumbers copy
 import { PIIDetector } from "@mastra/core/processors";
 
 export const privateAgent = new Agent({
   // ...
   inputProcessors: [
     new PIIDetector({
-      model: openai("gpt-4.1-nano"),
-      detectionTypes: ["email", "phone", "credit-card", "ssn"],
-      threshold: 0.6,
+      // ...
       strategy: "block"
     })
   ]
@@ -306,34 +302,31 @@ export const privateAgent = new Agent({
 
 ### Handling blocked requests
 
-When a processor blocks a request, the agent will still return successfully without throwing an error. To handle blocked requests, you can check for a `tripwire` or `tripwireReason` in the response.
+When a processor blocks a request, the agent will still return successfully without throwing an error. To handle blocked requests, check for `tripwire` or `tripwireReason` in the response.
 
-For example, if an agent uses the `PIIDetector` with `strategy: "block"` and a `.generate()` or `.stream()` call includes a credit card number, the request would be blocked, and the response will include a `tripwireReason`:
+For example, if an agent uses the `PIIDetector` with `strategy: "block"` and the request includes a credit card number, it will be blocked and the response will include a `tripwireReason`.
 
-<Tabs items={["Generate", "Stream"]}>
-  <Tabs.Tab>
+#### `.generate()` example
 
-```typescript {3} showLineNumbers
+```typescript {3-4, } showLineNumbers
 const result = await agent.generate("Is this credit card number valid?: 4543 1374 5089 4332");
 
-console.log(result.tripwireReason);
+console.error(result.tripwire);
+console.error(result.tripwireReason);
 ```
-  </Tabs.Tab>
-  <Tabs.Tab>
+#### `.stream()` example
 
-```typescript {5} showLineNumbers
+```typescript {4-5} showLineNumbers
 const stream = await agent.stream("Is this credit card number valid?: 4543 1374 5089 4332");
 
 for await (const chunk of stream.fullStream) {
   if (chunk.type === "tripwire") {
-    console.log(chunk.payload.tripwireReason);
+    console.error(chunk.payload.tripwireReason);
   }
 }
 ```
-  </Tabs.Tab>
-</Tabs>
 
-The response will include a `tripwireReason` indicating the type of PII that was detected.
+In this case, the `tripwireReason` indicates that a credit card number was detected:
 
 ```text
 PII detected. Types: credit-card
