@@ -931,6 +931,9 @@ importers:
       '@manypkg/get-packages':
         specifier: ^2.2.2
         version: 2.2.2
+      '@manypkg/tools':
+        specifier: ^2.1.0
+        version: 2.1.0
       execa:
         specifier: ^9.5.1
         version: 9.6.0

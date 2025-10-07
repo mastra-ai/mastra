@@ -7,6 +7,7 @@ import { createCustomChangeset } from './changeset/createCustomChangeset.js';
 import { getChangesetMessage } from './changeset/getChangesetMessage.js';
 import { getVersionBumps } from './changeset/getVersionBumps.js';
 import { getChangedPackages } from './git/getChangedPackages.js';
+import type { CliArgs, VersionBumps, UpdatedPeerDependencies, ChangedPackage } from './types.js';
 import { getSummary } from './ui/getSummary.js';
 import { getDefaultUpdatedPeerDependencies, updatePeerDependencies } from './versions/updatePeerDependencies.js';
 
@@ -15,16 +16,13 @@ function onCancel(message = 'Interrupted...'): never {
   process.exit(0);
 }
 
-async function main() {
-  p.intro('Mastra Changesets');
-
-  const args = process.argv.slice(2);
+function parseArguments(args: string[]): CliArgs {
   const parsedArgs = mri<{
     message: string;
     skipPrompt: boolean;
-    major: string[];
-    minor: string[];
-    patch: string[];
+    major: string | string[];
+    minor: string | string[];
+    patch: string | string[];
   }>(args, {
     alias: {
       message: 'm',
@@ -40,59 +38,119 @@ async function main() {
     boolean: ['skipPrompt'],
     string: ['message', 'major', 'minor', 'patch'],
   });
-  parsedArgs.patch = ([] as string[]).concat(parsedArgs.patch);
-  parsedArgs.minor = ([] as string[]).concat(parsedArgs.minor);
-  parsedArgs.major = ([] as string[]).concat(parsedArgs.major);
 
-  const skipPrompt: boolean = parsedArgs.skipPrompt;
-  let message: string = parsedArgs.message;
+  const ensureArray = (value: string | string[]): string[] => {
+    return ([] as string[]).concat(value);
+  };
+
+  return {
+    message: parsedArgs.message,
+    skipPrompt: parsedArgs.skipPrompt,
+    major: ensureArray(parsedArgs.major),
+    minor: ensureArray(parsedArgs.minor),
+    patch: ensureArray(parsedArgs.patch),
+  };
+}
+
+async function detectChangedPackages(): Promise<ChangedPackage[]> {
+  const s = p.spinner();
+  s.start('Finding changed packages');
+
+  const changedPackages = await getChangedPackages();
+
+  s.stop(
+    `Found ${changedPackages.length} changed package(s): ${color.dim(changedPackages.map(pkg => pkg.name).join(', '))}`,
+  );
+
+  return changedPackages;
+}
+
+function prepareVersionBumpInputs(changedPackages: ChangedPackage[], parsedArgs: CliArgs) {
+  return {
+    major: parsedArgs.major,
+    minor: parsedArgs.minor.filter(pkg => !parsedArgs.major.includes(pkg)),
+    patch: changedPackages
+      .map(pkg => pkg.name)
+      .filter(pkg => !parsedArgs.major.includes(pkg) && !parsedArgs.minor.includes(pkg)),
+  };
+}
+
+async function createChangesetWithMessage(
+  versionBumps: VersionBumps,
+  message: string | undefined,
+  skipPrompt: boolean,
+  onCancel: (message?: string) => never,
+): Promise<string> {
+  let finalMessage = message;
+
+  if (!finalMessage && !skipPrompt) {
+    finalMessage = await getChangesetMessage(versionBumps, onCancel);
+  }
+
+  if (!finalMessage) {
+    p.log.error('No changeset message provided');
+    process.exit(1);
+  }
+
+  const s = p.spinner();
+  s.start('Creating changeset');
+  const changesetId = await createCustomChangeset(versionBumps, finalMessage);
+  s.stop(`Created changeset: ${changesetId}`);
+
+  return changesetId;
+}
+
+function displaySummary(versionBumps: VersionBumps, updatedPeerDeps: UpdatedPeerDependencies): void {
+  const updatedPackagesList = Object.entries(versionBumps).map(([pkg, bump]) => `${pkg}: ${bump}`);
+
+  const summaryOutput = getSummary(updatedPackagesList, updatedPeerDeps);
+  p.note(summaryOutput, 'Summary');
+}
+
+async function main() {
+  p.intro('Mastra Changesets');
+
+  const parsedArgs = parseArguments(process.argv.slice(2));
 
   try {
-    const s = p.spinner();
-    s.start('Finding changed packages');
-    const changedPackages = await getChangedPackages();
-    s.stop(
-      `Found ${changedPackages.length} changed package(s): ${color.dim(changedPackages.map(pkg => `${pkg.name}`).join(', '))}`,
-    );
+    // Detect changed packages
+    const changedPackages = await detectChangedPackages();
 
-    let versionBumps = await getVersionBumps(
-      {
-        major: parsedArgs.major,
-        minor: parsedArgs.minor.filter(pkg => !parsedArgs.major.includes(pkg)),
-        patch: ([] as string[])
-          .concat(changedPackages.map(pkg => pkg.name))
-          .filter(pkg => !parsedArgs.major.includes(pkg) && !parsedArgs.minor.includes(pkg)),
-      },
-      onCancel,
-      skipPrompt,
-    );
-    let updatedPeerDeps = getDefaultUpdatedPeerDependencies();
-    // Open external editor for changeset message if there are version bumps
-    if (versionBumps && Object.keys(versionBumps).length > 0) {
-      if (!message) {
-        message = await getChangesetMessage(versionBumps, onCancel);
-      }
+    // Prepare version bump inputs
+    const versionBumpInputs = prepareVersionBumpInputs(changedPackages, parsedArgs);
 
-      // Create a changeset with the user's message
-      const s = p.spinner();
-      s.start('Creating changeset');
-      const changesetId = await createCustomChangeset(versionBumps, message);
-      s.stop(`Created changeset: ${changesetId}`);
+    // Get version bumps from user
+    const versionBumps = await getVersionBumps(versionBumpInputs, onCancel, parsedArgs.skipPrompt);
+
+    // Initialize peer dependency tracking
+    let updatedPeerDeps: UpdatedPeerDependencies = getDefaultUpdatedPeerDependencies();
+
+    // Process changesets if there are version bumps
+    if (Object.keys(versionBumps).length > 0) {
+      await createChangesetWithMessage(versionBumps, parsedArgs.message, parsedArgs.skipPrompt, onCancel);
 
       // Handle peer dependencies updates
       updatedPeerDeps = await updatePeerDependencies(versionBumps);
     }
 
-    const updatedPackagesList = Object.entries(versionBumps).map(([pkg, bump]) => `${pkg}: ${bump}`);
-
-    const summaryOutput = getSummary(updatedPackagesList, updatedPeerDeps);
-    p.note(summaryOutput, 'Summary');
+    // Display summary
+    displaySummary(versionBumps, updatedPeerDeps);
 
     p.outro('✨ Changeset process completed successfully!');
-  } catch (error: any) {
-    p.cancel(`Error: ${error.message}`);
+  } catch (error) {
+    if (error instanceof Error) {
+      p.cancel(`Unexpected error: ${error.message}`);
+      if (error.stack) {
+        p.log.error(error.stack);
+      }
+    } else {
+      p.cancel('An unknown error occurred');
+    }
     process.exit(1);
   }
 }
 
-main().catch(console.error);
+main().catch(error => {
+  console.error('Fatal error:', error);
+  process.exit(1);
+});

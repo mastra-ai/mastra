@@ -27,6 +27,7 @@
     "@clack/prompts": "1.0.0-alpha.5",
     "@inquirer/editor": "^4.2.0",
     "@manypkg/get-packages": "^2.2.2",
+    "@manypkg/tools": "^2.1.0",
     "execa": "^9.5.1",
     "mri": "^1.2.0",
     "picocolors": "^1.1.1",

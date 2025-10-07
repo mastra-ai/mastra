@@ -3,6 +3,7 @@ import { read as readConfig } from '@changesets/config';
 import getChangesets from '@changesets/read';
 import type { NewChangeset } from '@changesets/types';
 import { getPackages } from '@manypkg/get-packages';
+import { PnpmTool } from '@manypkg/tools';
 import { rootDir } from '../config.js';
 
 interface VersionInfo {
@@ -15,7 +16,9 @@ interface VersionInfo {
 // Get the release plan which calculates all new versions
 export async function getReleasePlan(changesets?: NewChangeset[]) {
   try {
-    const packages = await getPackages(rootDir);
+    const packages = await getPackages(rootDir, {
+      tools: [],
+    });
     changesets = changesets || (await getChangesets(rootDir));
     const config = await readConfig(rootDir);
 
@@ -41,8 +44,9 @@ export async function getNewVersionForPackage(
   changesets?: NewChangeset[],
 ): Promise<string | null> {
   try {
+    console.log('??');
     const releasePlan = await getReleasePlan(changesets);
-
+    console.log('plan');
     if (!releasePlan) {
       return null;
     }

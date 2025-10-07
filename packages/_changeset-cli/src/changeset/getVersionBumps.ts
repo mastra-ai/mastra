@@ -1,36 +1,27 @@
 import * as p from '@clack/prompts';
 import color from 'picocolors';
 import { getPublicPackages } from '../pkg/getPublicPackages.js';
-import type { VersionBumps } from './getChangesetMessage.js';
+import type { VersionBumps, PreSelectedPackages, BumpType } from '../types.js';
 
-function getAvailablePackagesForBump(
-  packages: string[],
-  major: string[] | undefined,
-  minor: string[] | undefined,
-): string[] {
-  const majorArray = Array.isArray(major) ? major : [];
-  const minorArray = Array.isArray(minor) ? minor : [];
-  return packages.filter(pkg => !majorArray.includes(pkg) && !minorArray.includes(pkg));
+function getAvailablePackagesForBump(packages: string[], major: string[] = [], minor: string[] = []): string[] {
+  return packages.filter(pkg => !major.includes(pkg) && !minor.includes(pkg));
 }
 
 async function promptForVersionBumps({
   preSelectedPackages,
   onCancel,
 }: {
-  preSelectedPackages: {
-    major: string[];
-    minor: string[];
-    patch: string[];
-  };
+  preSelectedPackages: PreSelectedPackages;
   onCancel: (message?: string) => never;
-}): Promise<any> {
+}): Promise<PreSelectedPackages> {
   const allPackages = await getPublicPackages();
 
   const changedPackages = Array.from(
     new Set([...preSelectedPackages.major, ...preSelectedPackages.minor, ...preSelectedPackages.patch]),
   );
   const unchangedPackages = allPackages.filter(pkg => !changedPackages.includes(pkg.packageJson.name));
-  return await p.group(
+
+  const result = await p.group(
     {
       packages: () => {
         return p.autocompleteMultiselect({
@@ -45,21 +36,21 @@ async function promptForVersionBumps({
           initialValues: changedPackages,
         });
       },
-      major: ({ results }: any) => {
+      major: ({ results }): Promise<string[]> => {
         const packages = (results.packages ?? []) as string[];
         return p.multiselect({
           message: `Which packages should have a ${color.red('major')} bump?`,
           options: packages.map((value: string) => ({ value })),
           initialValues: preSelectedPackages.major.filter(pkg => packages.includes(pkg)),
           required: false,
-        });
+        }) as Promise<string[]>;
       },
-      minor: ({ results }: any) => {
+      minor: ({ results }): Promise<string[]> => {
         const packages = (results.packages ?? []) as string[];
-        const possiblePackages = getAvailablePackagesForBump(packages, results.major as string[] | undefined, []);
+        const possiblePackages = getAvailablePackagesForBump(packages, results.major as string[] | undefined);
 
         if (possiblePackages.length === 0) {
-          return;
+          return Promise.resolve([] as string[]);
         }
 
         return p.multiselect({
@@ -67,9 +58,9 @@ async function promptForVersionBumps({
           options: possiblePackages.map(value => ({ value })),
           initialValues: preSelectedPackages.minor.filter(pkg => packages.includes(pkg)),
           required: false,
-        });
+        }) as Promise<string[]>;
       },
-      patch: async ({ results }: any) => {
+      patch: async ({ results }): Promise<string[]> => {
         const packages = (results.packages ?? []) as string[];
         const possiblePackages = getAvailablePackagesForBump(
           packages,
@@ -78,7 +69,7 @@ async function promptForVersionBumps({
         );
 
         if (possiblePackages.length === 0) {
-          return;
+          return Promise.resolve([] as string[]);
         }
         const note = possiblePackages.join(',');
 
@@ -88,11 +79,27 @@ async function promptForVersionBumps({
     },
     {
       onCancel: () => {
-        onCancel('Version selection cancelled.');
-        return;
+        return void onCancel('Version selection cancelled.');
       },
     },
   );
+
+  return result as PreSelectedPackages;
+}
+
+function processBumpSelections(bumpSelections: PreSelectedPackages, versionBumps: VersionBumps): VersionBumps {
+  const bumpTypes = ['major', 'minor', 'patch'] as const;
+
+  bumpTypes.forEach(bumpType => {
+    const packages = bumpSelections[bumpType];
+    if (Array.isArray(packages)) {
+      packages.forEach(pkg => {
+        versionBumps[pkg] = bumpType as BumpType;
+      });
+    }
+  });
+
+  return versionBumps;
 }
 
 export async function getVersionBumps(
@@ -113,43 +120,24 @@ export async function getVersionBumps(
   const publicPackages = await getPublicPackages();
   const packagesByName = new Set(publicPackages.map(pkg => pkg.packageJson.name));
 
-  const preSelectedPackages = {
+  const preSelectedPackages: PreSelectedPackages = {
     major: major.filter(pkg => packagesByName.has(pkg)),
     minor: minor.filter(pkg => packagesByName.has(pkg)),
     patch: patch.filter(pkg => packagesByName.has(pkg)),
   };
 
   if (skipPrompt) {
-    for (const [bumpType, values] of Object.entries(preSelectedPackages)) {
-      values.forEach((pkg: string) => {
-        versionBumps[pkg] = bumpType as 'major' | 'minor' | 'patch';
+    const bumpTypes: Array<keyof PreSelectedPackages> = ['major', 'minor', 'patch'];
+    bumpTypes.forEach(bumpType => {
+      preSelectedPackages[bumpType].forEach(pkg => {
+        versionBumps[pkg] = bumpType as BumpType;
       });
-    }
+    });
   } else {
     const bumpSelections = await promptForVersionBumps({ preSelectedPackages, onCancel });
 
-    // Transform the selections into a versionBumps object
     if (bumpSelections) {
-      // Add major bumps
-      if (bumpSelections.major && Array.isArray(bumpSelections.major)) {
-        bumpSelections.major.forEach((pkg: string) => {
-          versionBumps[pkg] = 'major';
-        });
-      }
-
-      // Add minor bumps
-      if (bumpSelections.minor && Array.isArray(bumpSelections.minor)) {
-        bumpSelections.minor.forEach((pkg: string) => {
-          versionBumps[pkg] = 'minor';
-        });
-      }
-
-      // Add patch bumps
-      if (bumpSelections.patch && Array.isArray(bumpSelections.patch)) {
-        bumpSelections.patch.forEach((pkg: string) => {
-          versionBumps[pkg] = 'patch';
-        });
-      }
+      versionBumps = processBumpSelections(bumpSelections, versionBumps);
     }
   }
 
