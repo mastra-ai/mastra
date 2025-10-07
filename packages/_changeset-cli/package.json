@@ -5,12 +5,9 @@
   "type": "module",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
-  "bin": {
-    "mastra-changeset": "./dist/src/index.js"
-  },
   "private": true,
   "scripts": {
-    "start": "tsx src/index.ts",
+    "start": "tsx --env-file=./.env.dev src/index.ts",
     "typecheck": "tsc --noEmit --incremental",
     "lint": "eslint ."
   },
