@@ -250,7 +250,7 @@ ${
     ? // if it's not a directly supported provider then it's openai compatible, so warn about it
       `
 <Callout type="info">
-Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-specific features may not be available. Check the [OpenAI documentation](https://platform.openai.com/docs/api-reference/chat) for details.
+Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-specific features may not be available. Check the [${provider.name} documentation](${docUrl || '#'}) for details.
 </Callout>
 `
     : ``
