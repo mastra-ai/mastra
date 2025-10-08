@@ -125,43 +125,59 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-### Useful patterns for loop conditions
+### Loop management
 
-#### Condition based on `inputData`
+Loop conditions can be implemented in different ways depending on how you want the loop to end. Common patterns include checking values returned in `inputData`, setting a maximum number of iterations, or aborting execution when a limit is reached.
 
-The `inputData` of the loop step is the same as the output of the previous iteration of that step. For that reason, most often what we need to decide if the loop is done or not will be passed as `inputData` to the condition function.
+#### Conditional loops
 
-```typescript
+The `inputData` for a loop step is the output of a previous step. Use the values in `inputData` to determine whether the loop should continue or stop.
+
+```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const counterStep = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
 .dountil(nestedWorkflowStep, async ({ inputData: { userResponse } }) => userResponse === "yes")
+.commit();
 ```
 
-If the `nestedWorkflowStep` is a workflow that suspends and resumes with a `userResponse` and eventually returns it as the result of the workflow, the condition will have access to it through `inputData`.
+#### Limiting loops
 
-#### Maximum iterations with a successful result
+The `iterationCount` tracks how many times the loop step has run. You can use this to limit the number of iterations and prevent infinite loops. Combine it with `inputData` values to stop the loop after a set number of attempts.
 
-The `iterationCount` is the number of times the loop has been executed. This is useful when we need to decide if the loop is done or not based on the number of iterations.
+```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
 
-```typescript
+const counterStep = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
 .dountil(nestedWorkflowStep, async ({ inputData: { userResponse, iterationCount } }) => userResponse === "yes" || iterationCount >= 10)
+.commit();
 ```
 
-Here, even if the user does not respond with "yes", after 10 iterations the loop will be done and the workflow will continue with the last iteration's result.
+#### Aborting loops
 
+Use `iterationCount` to limit how many times a loop runs. If the count exceeds your threshold, throw an error to fail the step and stop the workflow.
 
-#### Abort workflow execution when maximum iterations is reached
+```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
 
-The `iterationCount` is the number of times the loop has been executed. This is useful when we need to decide if the loop is done or not based on the number of iterations.
+const counterStep = createStep({...});
 
-```typescript
+export const testWorkflow = createWorkflow({...})
 .dountil(nestedWorkflowStep, async ({ inputData: { userResponse, iterationCount } }) => {
   if (iterationCount >= 10) {
     throw new Error("Maximum iterations reached");
   }
   return userResponse === "yes";
 })
+.commit();
 ```
-
-Here, if the user does not respond with "yes" within 10 iterations we throw an error which will cause the step to fail and in turn cause the workflow to fail.
 
 ### Repeating with `.foreach()`
 
