@@ -19,9 +19,13 @@ export function isOpenAICompatibleObjectConfig(
       }) => MastraModelConfig | Promise<MastraModelConfig>),
 ): modelConfig is OpenAICompatibleConfig {
   if (typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) return false;
-  // Check for OpenAICompatibleConfig specifically - it should have 'id' but NOT 'model'
-  // ModelWithRetries has both 'id' and 'model', so we exclude it
-  if (typeof modelConfig === 'object' && 'id' in modelConfig && !('model' in modelConfig)) return true;
+  // Check for OpenAICompatibleConfig - it should have either:
+  // 1. 'id' field (but NOT 'model' - that's ModelWithRetries)
+  // 2. Both 'providerId' and 'modelId' fields
+  if (typeof modelConfig === 'object' && !('model' in modelConfig)) {
+    if ('id' in modelConfig) return true;
+    if ('providerId' in modelConfig && 'modelId' in modelConfig) return true;
+  }
   return false;
 }
 
