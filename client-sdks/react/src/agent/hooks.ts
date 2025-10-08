@@ -56,6 +56,7 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
       topP,
       instructions,
       providerOptions,
+      maxSteps,
     } = modelSettings || {};
     setIsRunning(true);
 
@@ -71,6 +72,7 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
     const response = await agent.generate({
       messages: coreUserMessages,
       runId: agentId,
+      maxSteps,
       modelSettings: {
         frequencyPenalty,
         presencePenalty,
@@ -113,6 +115,7 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
       topP,
       instructions,
       providerOptions,
+      maxSteps,
     } = modelSettings || {};
 
     setIsRunning(true);
@@ -129,6 +132,7 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
     const response = await agent.stream({
       messages: coreUserMessages,
       runId: agentId,
+      maxSteps,
       modelSettings: {
         frequencyPenalty,
         presencePenalty,
