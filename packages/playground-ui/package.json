@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "6.3.1-alpha.0",
+  "version": "6.4.1-alpha.0",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -121,7 +121,7 @@
   "devDependencies": {
     "@mastra/core": "workspace:*",
     "@storybook/addon-docs": "^9.1.10",
-    "@storybook/react-vite": "^9.1.8",
+    "@storybook/react-vite": "^9.1.10",
     "@types/node": "^20.19.0",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",

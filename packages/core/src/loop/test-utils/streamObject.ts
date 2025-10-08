@@ -92,6 +92,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       it('should resolve object promise without manual stream consumption', async () => {
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: createTestModels(),
           output: z.object({ content: z.string() }),
           messageList: new MessageList(),
@@ -109,6 +110,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       it('should work with array schemas too', async () => {
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: createTestModels({
             stream: convertArrayToReadableStream([
               { type: 'text-start', id: '1' },
@@ -134,6 +136,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       it('should still work when stream is manually consumed first', async () => {
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: createTestModels(),
           output: z.object({ content: z.string() }),
           messageList: new MessageList(),
@@ -158,6 +161,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const messageList = new MessageList();
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: mockModel,
             messageList,
             output: z.object({ content: z.string() }),
@@ -203,6 +207,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const models = createTestModels();
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models,
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
@@ -266,6 +271,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         it('should suppress error in partialObjectStream', async () => {
           const result = loopFn({
+            agentId: 'agent-id',
             runId,
             models: [
               {
@@ -293,6 +299,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
           const output = loopFn({
             runId,
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -326,6 +333,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it.todo('should send full stream data', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels(),
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
@@ -407,6 +415,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should send text stream', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels(),
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
@@ -437,6 +446,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should create a Response with a text stream', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels(),
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
@@ -465,6 +475,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const mockResponse = createMockServerResponse();
 
           const result = loopFn({
+            agentId: 'agent-id',
             models: createTestModels(),
             output: z.object({ content: z.string() }),
             messageList: new MessageList(),
@@ -502,6 +513,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.usage', () => {
         it('should resolve with token usage', async () => {
           const result = loopFn({
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -535,6 +547,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.providerMetadata', () => {
         it('should resolve with provider metadata', async () => {
           const result = loopFn({
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -573,6 +586,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.response', () => {
         it('should resolve with response information', async () => {
           const result = loopFn({
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 {
@@ -636,6 +650,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 id: expect.any(String),
                 metadata: {
                   __originalContent: '{"content": "Hello, world!"}',
+                  structuredOutput: {
+                    content: 'Hello, world!',
+                  },
                   createdAt: expect.any(Date),
                 },
                 parts: [
@@ -660,6 +677,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.request', () => {
         it('should contain request information', async () => {
           const result = loopFn({
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -710,6 +728,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should resolve with typed object', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -750,6 +769,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should reject object promise when the streamed object does not match the schema', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -788,6 +808,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should not lead to unhandled promise rejections when the streamed object does not match the schema', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -827,6 +848,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.finishReason', () => {
         it('should resolve with finish reason', async () => {
           const result = loopFn({
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -865,6 +887,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should be called when a valid object is generated', async () => {
           let result: any;
           const { objectStream } = loopFn({
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -1075,6 +1098,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it("should be called when object doesn't match the schema without destructuring", async () => {
           let result: any;
           const output = loopFn({
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -1282,6 +1306,7 @@ Error message: Validation failed]`);
         it("should be called when object doesn't match the schema with destructuring", async () => {
           let result: any;
           const { consumeStream, objectStream, object } = loopFn({
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -1490,6 +1515,7 @@ Error message: Validation failed]`);
       describe('options.headers', () => {
         it('should pass headers to model', async () => {
           const result = loopFn({
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -1540,6 +1566,7 @@ Error message: Validation failed]`);
         it('should pass provider options to model', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -1593,6 +1620,7 @@ Error message: Validation failed]`);
           const models = createTestModels();
 
           const result = loopFn({
+            agentId: 'agent-id',
             runId,
             models,
             output: jsonSchema({
@@ -1648,6 +1676,7 @@ Error message: Validation failed]`);
         it('should throw NoObjectGeneratedError when schema validation fails', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -1699,6 +1728,7 @@ Error message: Validation failed]`);
         it('should throw NoObjectGeneratedError when parsing fails', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -1750,6 +1780,7 @@ Error message: Validation failed]`);
         it('should throw NoObjectGeneratedError when no text is generated', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -1802,6 +1833,7 @@ Error message: Validation failed]`);
         it('should handle complete ```json...``` code blocks', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -1840,6 +1872,7 @@ Error message: Validation failed]`);
         it('should handle ```json code blocks without newlines', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -1866,6 +1899,7 @@ Error message: Validation failed]`);
         it('should handle ```json prefix during streaming', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -1908,6 +1942,7 @@ Error message: Validation failed]`);
         it('should handle array wrapped in ```json...``` blocks', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -1935,6 +1970,7 @@ Error message: Validation failed]`);
         it('should handle partial array streaming with ```json prefix', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -1970,6 +2006,7 @@ Error message: Validation failed]`);
         it('should handle enum wrapped in ```json...``` blocks', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -1994,6 +2031,7 @@ Error message: Validation failed]`);
         it('should handle partial enum streaming with ```json prefix', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -2032,6 +2070,7 @@ Error message: Validation failed]`);
         beforeEach(async () => {
           result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -2128,6 +2167,7 @@ Error message: Validation failed]`);
         beforeEach(async () => {
           result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 {
@@ -2202,6 +2242,7 @@ Error message: Validation failed]`);
         it.skip('should reject object promise when the streamed object does not match the schema', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -2261,6 +2302,7 @@ Error message: Validation failed]`);
 
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: mockModels,
           output: z.enum(['sunny', 'rainy', 'snowy']),
           messageList: new MessageList(),
@@ -2327,6 +2369,7 @@ Error message: Validation failed]`);
 
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: mockModels,
           output: z.enum(['sunny', 'rainy', 'snowy']),
           messageList: new MessageList(),
@@ -2355,6 +2398,7 @@ Error message: Validation failed]`);
 
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: mockModels,
           output: z.enum(['foobar', 'foobar2']),
           messageList: new MessageList(),
@@ -2389,6 +2433,7 @@ Error message: Validation failed]`);
 
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: mockModels,
           output: z.enum(['foobar', 'barfoo']),
           messageList: new MessageList(),
@@ -2406,6 +2451,7 @@ Error message: Validation failed]`);
       it('should be able to repair a JSONParseError', async () => {
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: [
             {
               id: 'test-model',
@@ -2459,6 +2505,7 @@ Error message: Validation failed]`);
       it('should be able to repair a TypeValidationError', async () => {
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: [
             {
               id: 'test-model',
@@ -2512,6 +2559,7 @@ Error message: Validation failed]`);
       it('should be able to handle repair that returns null', async () => {
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: [
             {
               id: 'test-model',
@@ -2567,6 +2615,7 @@ Error message: Validation failed]`);
       it('should be able to repair JSON wrapped with markdown code blocks', async () => {
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: [
             {
               id: 'test-model',
@@ -2623,6 +2672,7 @@ Error message: Validation failed]`);
       it('should throw NoObjectGeneratedError when parsing fails with repairText', async () => {
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: [
             {
               id: 'test-model',

@@ -11,6 +11,7 @@ import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
+import { ModelRouterLanguageModel } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
 import type {
   GenerateObjectWithMessagesArgs,
@@ -27,7 +28,6 @@ import type {
   StreamTextResult,
 } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
-import { OpenAICompatibleModel } from '../llm/model/openai-compatible';
 import type {
   TripwireProperties,
   MastraLanguageModel,
@@ -1022,13 +1022,13 @@ export class Agent<
 
     // If it's a string (magic string like "openai/gpt-4o" or URL) or OpenAICompatibleConfig, create OpenAICompatibleModel
     if (typeof modelConfig === 'string' || this.isOpenaiCompatibleObjectConfig(modelConfig)) {
-      return new OpenAICompatibleModel(modelConfig);
+      return new ModelRouterLanguageModel(modelConfig);
     }
 
     if (typeof modelConfig === `function`) {
       const fromDynamic = await modelConfig({ runtimeContext, mastra: this.#mastra });
       if (typeof fromDynamic === `string` || this.isOpenaiCompatibleObjectConfig(fromDynamic)) {
-        return new OpenAICompatibleModel(fromDynamic);
+        return new ModelRouterLanguageModel(fromDynamic);
       }
       return fromDynamic;
     }
@@ -1281,6 +1281,7 @@ export class Agent<
         runtimeContext,
         tracingContext,
         messageList,
+        agentId: this.id,
       });
 
       text = await result.text;
@@ -3374,6 +3375,7 @@ export class Agent<
       returnScorerData: options.returnScorerData,
       requireToolApproval: options.requireToolApproval,
       resumeContext,
+      agentId: this.id,
     });
 
     const run = await executionWorkflow.createRunAsync();
@@ -3703,26 +3705,8 @@ export class Agent<
       onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
 
-    // Map structuredOutput to output when maxSteps is explicitly set to 1
-    // This allows the new structuredOutput API to use the existing output implementation
-    let modelOverride: MastraLanguageModel | undefined;
-    if (mergedStreamOptions.structuredOutput && mergedStreamOptions.maxSteps === 1) {
-      // If structuredOutput has a model, use it to override the agent's model
-      if (mergedStreamOptions.structuredOutput.model) {
-        modelOverride = mergedStreamOptions.structuredOutput.model;
-      }
-
-      // assign structuredOutput.schema to output when maxSteps is explicitly set to 1
-      const { structuredOutput, ...optionsWithoutStructuredOutput } = mergedStreamOptions;
-      mergedStreamOptions = {
-        ...optionsWithoutStructuredOutput,
-        output: structuredOutput.schema as OUTPUT,
-      };
-    }
-
     const llm = await this.getLLM({
       runtimeContext: mergedStreamOptions.runtimeContext,
-      model: modelOverride,
     });
 
     if (llm.getModel().specificationVersion !== 'v2') {
@@ -3748,7 +3732,6 @@ export class Agent<
       ...mergedStreamOptions,
       messages,
       methodType: 'stream',
-      model: modelOverride,
     } as InnerAgentExecutionOptions<OUTPUT, FORMAT>;
 
     const result = await this.#execute(executeOptions);
@@ -3806,25 +3789,8 @@ export class Agent<
       onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
 
-    // Map structuredOutput to output when maxSteps is explicitly set to 1
-    // This allows the new structuredOutput API to use the existing output implementation
-    let modelOverride: MastraLanguageModel | undefined;
-    if (mergedStreamOptions.structuredOutput && mergedStreamOptions.maxSteps === 1) {
-      // If structuredOutput has a model, use it to override the agent's model
-      if (mergedStreamOptions.structuredOutput.model) {
-        modelOverride = mergedStreamOptions.structuredOutput.model;
-      }
-
-      mergedStreamOptions = {
-        ...mergedStreamOptions,
-        output: mergedStreamOptions.structuredOutput.schema as OUTPUT,
-        structuredOutput: undefined, // Remove structuredOutput to avoid confusion downstream
-      };
-    }
-
     const llm = await this.getLLM({
       runtimeContext: mergedStreamOptions.runtimeContext,
-      model: modelOverride,
     });
 
     if (llm.getModel().specificationVersion !== 'v2') {
@@ -3841,7 +3807,6 @@ export class Agent<
       messages: [],
       resumeContext,
       methodType: 'stream',
-      model: modelOverride,
     } as InnerAgentExecutionOptions<OUTPUT, FORMAT>);
 
     if (result.status !== 'success') {

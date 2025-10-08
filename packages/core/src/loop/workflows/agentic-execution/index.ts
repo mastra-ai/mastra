@@ -50,6 +50,7 @@ export function createAgenticExecutionWorkflow<
         // VNext execution as internal
         internal: InternalSpans.WORKFLOW,
       },
+      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
     },
   })
     .then(llmExecutionStep)
