@@ -39,7 +39,7 @@
     "execa": "^9.6.0",
     "fs-extra": "^11.3.2",
     "pino": "^9.7.0",
-    "redis": "^5.8.2"
+    "redis": "^5.8.3"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -47,7 +47,7 @@
     "@manypkg/get-packages": "^3.1.0",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^20.19.0",
-    "eslint": "^9.35.0",
+    "eslint": "^9.36.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
