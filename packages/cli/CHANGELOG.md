@@ -1,5 +1,11 @@
 # mastra
 
+## 0.15.1-alpha.1
+
+### Patch Changes
+
+- Marked telemetry as disabled in the default template, in preperation for the Nov 4th deprecation. ([#8618](https://github.com/mastra-ai/mastra/pull/8618))
+
 ## 0.15.1-alpha.0
 
 ### Patch Changes
