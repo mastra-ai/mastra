@@ -22,27 +22,24 @@ const exec = util.promisify(child_process.exec);
 export type LLMProvider = 'openai' | 'anthropic' | 'groq' | 'google' | 'cerebras' | 'mistral';
 export type Components = 'agents' | 'workflows' | 'tools';
 
-export const getProviderImportAndModelItem = (llmProvider: LLMProvider) => {
-  let modelItem = '';
-
+export const getModelIdentifier = (llmProvider: LLMProvider) => {
   if (llmProvider === 'openai') {
-    modelItem = `'openai/gpt-4o-mini'`;
+    return `'openai/gpt-4o-mini'`;
   } else if (llmProvider === 'anthropic') {
-    modelItem = `'anthropic/claude-3-5-sonnet-20241022'`;
+    return `'anthropic/claude-3-5-sonnet-20241022'`;
   } else if (llmProvider === 'groq') {
-    modelItem = `'groq/llama-3.3-70b-versatile'`;
+    return `'groq/llama-3.3-70b-versatile'`;
   } else if (llmProvider === 'google') {
-    modelItem = `'google/gemini-2.5-pro'`;
+    return `'google/gemini-2.5-pro'`;
   } else if (llmProvider === 'cerebras') {
-    modelItem = `'cerebras/llama-3.3-70b'`;
+    return `'cerebras/llama-3.3-70b'`;
   } else if (llmProvider === 'mistral') {
-    modelItem = `'mistral/mistral-medium-2508'`;
+    return `'mistral/mistral-medium-2508'`;
   }
-  return { modelItem };
 };
 
 export async function writeAgentSample(llmProvider: LLMProvider, destPath: string, addExampleTool: boolean) {
-  const { modelItem } = getProviderImportAndModelItem(llmProvider);
+  const modelString = getModelIdentifier(llmProvider);
 
   const instructions = `
       You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
@@ -67,7 +64,7 @@ ${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
 export const weatherAgent = new Agent({
   name: 'Weather Agent',
   instructions: \`${instructions}\`,
-  model: ${modelItem},
+  model: ${modelString},
   ${addExampleTool ? 'tools: { weatherTool },' : ''}
   memory: new Memory({
     storage: new LibSQLStore({
