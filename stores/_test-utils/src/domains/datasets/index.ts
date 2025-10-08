@@ -1149,6 +1149,24 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
           expect(targetRow2?.versionId).toBe(batch2.versionId);
           expect(targetRow2?.input.value).toBe('v2');
         });
+
+        it('should not return deleted rows', async () => {
+          const batch1 = await createMultipleRows(storage, dataset.id, 2);
+          const rowId = batch1.rows[0].rowId;
+          const rowId2 = batch1.rows[1].rowId;
+
+          const batch2 = await storage.deleteDatasetRows({
+            datasetId: dataset.id,
+            rowIds: [rowId, rowId2],
+          });
+
+          const snapshot = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId: batch2.versionId,
+          });
+
+          expect(snapshot.rows.length).toBe(0);
+        });
       });
 
       describe('dataset row versions', () => {
