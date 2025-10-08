@@ -1,9 +1,17 @@
 ---
-title: "Tools and MCP | Agents | Mastra Docs"
-description: Learn how to create tools, add them to Mastra agents, and integrate tools from MCP servers.
+title: "Tools and Workflows | Agents | Mastra Docs"
+description: Learn how to extend agents with tools and workflows to perform specialized tasks.
 ---
 
-# Tools and MCP
+# Tools and Workflows
+
+Agents use tools and workflows to extend their capabilities beyond text generation. Tools let agents call APIs, query databases, or run custom logic with structured inputs and outputs. Workflows allow agents to follow defined sequences of steps or decision trees. Together, these features enable agents to perform complex tasks, interact with systems, and produce reliable, goal-directed outcomes.
+
+## OLD ---
+
+# Capabilities (OLD)
+
+Agents can do more than generate text. You can extend them with tools, workflows, memory, guardrails, and context-aware configuration to handle more complex tasks. These capabilities let agents interact with APIs and databases, follow multi-step procedures, store conversation state, enforce custom policies, and adapt their behavior based on request-specific values.
 
 Tools are typed functions that can be executed by agents or workflows to help them carry out specific tasks like sending a message, querying a database, or calling an external API. Each tool defines its expected inputs, contains the logic to perform its operation, and may delegate execution to an MCP client for accessing external systems. They give agents a structured way to move beyond language generation and enable deterministic outcomes through well-defined interfaces.
 
@@ -22,18 +30,23 @@ import { z } from "zod";
 
 export const weatherTool = createTool({
   id: "weather-tool",
-  description: "Fetches the current weather for a given city",
+  description: "Fetches weather for a city",
   inputSchema: z.object({
-    city: z.string(),
+    location: z.string()
+  }),
+  outputSchema: z.object({
+    temperature: z.string(),
+    conditions: z.string()
   }),
   execute: async ({ context }) => {
-    const { city } = context;
-    const response = await fetch(`https://weather.service?city=${city}`);
+    const { location } = context;
 
-    const { temperature, conditions } = await response.json();
+    const response = await fetch(`https://wttr.in/${location}?format=j1`);
+    const { current_condition } = await response.json();
+    const { temp_C, weatherDesc } = current_condition[0];
 
-    return { temperature, conditions };
-  },
+    return { temperature: `${temp_C}℃`, conditions: weatherDesc[0].value };
+  }
 });
 ```
 
@@ -43,20 +56,20 @@ For details on creating and designing tools, see the [Tools Overview](../tools-m
 
 To make a tool available to an agent, add it to the `tools` property in the agent's configuration.
 
-```typescript {3,12} filename="src/mastra/agents/weather-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
+```typescript filename="src/mastra/agents/weather-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
+import { weatherWorkflow } from "../workflows/weather-workflow";
 
 export const weatherAgent = new Agent({
-  name: "Weather Agent",
+  name: "weather-agent",
   instructions: `
-    You are a helpful assistant that provides weather information.
-    When asked about the weather, use the weatherTool to fetch the data.`,
+      You are a helpful weather assistant.
+      Use the weatherTool to fetch weather for a location data.
+`,
   model: openai("gpt-4o-mini"),
-  tools: {
-    weatherTool,
-  },
+  tools: { weatherTool }
 });
 ```
 
@@ -239,3 +252,4 @@ const server = new MCPServer({
 For an agent to be successfully converted into a tool by `MCPServer`, its `description` property must be set to a non-empty string in its constructor configuration. If the description is missing or empty, `MCPServer` will throw an error during initialization.
 
 For more details on setting up and configuring `MCPServer`, refer to the [MCPServer reference documentation](/reference/tools/mcp-server).
+

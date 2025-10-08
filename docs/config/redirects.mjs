@@ -1065,4 +1065,9 @@ export const redirectList = [
     destination: "/:locale/reference/cli/mastra",
     permanent: true,
   },
+  {
+    source: "/:locale/docs/agents/using-tools-and-mcp",
+    destination: "/:locale/docs/agents/tools-and-workflows",
+    permanent: true,
+  },
 ];
