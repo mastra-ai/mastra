@@ -79,6 +79,7 @@
     "@mastra/inngest": "0.15.1"
   },
   "changesets": [
+    "curvy-experts-doubt",
     "little-tigers-open",
     "real-parts-help",
     "tricky-parks-act",
