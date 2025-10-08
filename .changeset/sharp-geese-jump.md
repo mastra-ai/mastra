@@ -20,7 +20,6 @@
 '@mastra/rag': patch
 '@mastra/server': patch
 '@mastra/google-cloud-pubsub': patch
-'@internal/storage-test-utils': patch
 '@mastra/astra': patch
 '@mastra/chroma': patch
 '@mastra/clickhouse': patch
