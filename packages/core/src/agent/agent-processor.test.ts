@@ -1509,34 +1509,13 @@ describe('Input and Output Processors', () => {
           },
         );
 
-        for await (const _chunk of result.fullStream) {
-          // const timestamp = new Date().getTime();
-          // if (!chunk.type.includes('delta')) {
-          //   console.log(timestamp, chunk.type);
-          //   continue;
-          // }
-          // if (chunk.type === 'text-delta') {
-          //   const cyanColorCode = '\x1b[36m';
-          //   const resetColorCode = '\x1b[0m';
-          //   process.stdout.write(cyanColorCode);
-          //   process.stdout.write(chunk.payload.text);
-          //   process.stdout.write(resetColorCode);
-          //   continue;
-          // }
-        }
-
-        console.log('getting text');
         const resultText = await result.text;
-        console.log('getting object');
         const resultObj = await result.object;
-        console.log('got result object', resultObj);
 
-        // Verify we have both natural text AND structured data
         expect(resultText).toBeTruthy();
         expect(resultText).toMatch(/food waste|restaurant|reduce|solution|innovative/i); // Should contain natural language
         expect(resultObj).toBeDefined();
 
-        // Validate structured data
         expect(resultObj).toMatchObject({
           idea: expect.any(String),
           category: expect.stringMatching(/^(technology|business|art|science|other)$/),
@@ -1544,14 +1523,9 @@ describe('Input and Output Processors', () => {
           resources: expect.any(Array),
         });
 
-        // Validate content
-        // expect(resultObj.idea.toLowerCase()).toMatch(/food waste|restaurant|reduce/);
         expect(resultObj.feasibility).toBeGreaterThanOrEqual(1);
         expect(resultObj.feasibility).toBeLessThanOrEqual(10);
         expect(resultObj.resources.length).toBeGreaterThan(0);
-
-        console.log('Natural text:', resultText);
-        console.log('Structured idea data:', resultObj);
       }, 60000);
 
       it('should work with stream with useJsonSchemaPromptInjection', async () => {
@@ -1579,39 +1553,18 @@ describe('Input and Output Processors', () => {
               schema: ideaSchema,
               model,
               errorStrategy: 'strict',
-              useJsonSchemaPromptInjection: true,
+              jsonPromptInjection: true,
             },
           },
         );
 
-        for await (const _chunk of result.fullStream) {
-          // const timestamp = new Date().getTime();
-          // if (!chunk.type.includes('delta')) {
-          //   console.log(timestamp, chunk.type);
-          //   continue;
-          // }
-          // if (chunk.type === 'text-delta') {
-          //   const cyanColorCode = '\x1b[36m';
-          //   const resetColorCode = '\x1b[0m';
-          //   process.stdout.write(cyanColorCode);
-          //   process.stdout.write(chunk.payload.text);
-          //   process.stdout.write(resetColorCode);
-          //   continue;
-          // }
-        }
-
-        console.log('getting text');
         const resultText = await result.text;
-        console.log('getting object');
         const resultObj = await result.object;
-        console.log('got result object', resultObj);
 
-        // Verify we have both natural text AND structured data
         expect(resultText).toBeTruthy();
         expect(resultText).toMatch(/food waste|restaurant|reduce|solution|innovative/i); // Should contain natural language
         expect(resultObj).toBeDefined();
 
-        // Validate structured data
         expect(resultObj).toMatchObject({
           idea: expect.any(String),
           category: expect.stringMatching(/^(technology|business|art|science|other)$/),
@@ -1619,14 +1572,9 @@ describe('Input and Output Processors', () => {
           resources: expect.any(Array),
         });
 
-        // Validate content
-        // expect(resultObj.idea.toLowerCase()).toMatch(/food waste|restaurant|reduce/);
         expect(resultObj.feasibility).toBeGreaterThanOrEqual(1);
         expect(resultObj.feasibility).toBeLessThanOrEqual(10);
         expect(resultObj.resources.length).toBeGreaterThan(0);
-
-        console.log('Natural text:', resultText);
-        console.log('Structured idea data:', resultObj);
       }, 60000);
     });
   }
