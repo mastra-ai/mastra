@@ -1,7 +1,6 @@
 /**
  * THIS FILE IS AUTO-GENERATED - DO NOT EDIT
  * Generated from model gateway providers
- * Generated at: 2025-10-08T21:21:07.373Z
  */
 
 /**
@@ -611,39 +610,39 @@ export type ProviderModelsMap = {
   ];
   readonly cerebras: readonly ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'qwen-3-coder-480b'];
   readonly netlify: readonly [
+    'anthropic/claude-3-5-haiku-20241022',
     'anthropic/claude-3-5-haiku-latest',
-    'anthropic/claude-3-haiku-20240307',
-    'anthropic/claude-sonnet-4-20250514',
+    'anthropic/claude-3-7-sonnet-20250219',
     'anthropic/claude-3-7-sonnet-latest',
+    'anthropic/claude-3-haiku-20240307',
     'anthropic/claude-opus-4-1-20250805',
     'anthropic/claude-opus-4-20250514',
+    'anthropic/claude-sonnet-4-20250514',
     'anthropic/claude-sonnet-4-5-20250929',
-    'anthropic/claude-3-7-sonnet-20250219',
-    'anthropic/claude-3-5-haiku-20241022',
-    'gemini/gemini-2.5-flash',
+    'gemini/gemini-2.0-flash',
     'gemini/gemini-2.0-flash-lite',
+    'gemini/gemini-2.5-flash',
     'gemini/gemini-2.5-flash-image-preview',
+    'gemini/gemini-2.5-flash-lite',
+    'gemini/gemini-2.5-flash-lite-preview-09-2025',
+    'gemini/gemini-2.5-flash-preview-09-2025',
+    'gemini/gemini-2.5-pro',
     'gemini/gemini-flash-latest',
     'gemini/gemini-flash-lite-latest',
-    'gemini/gemini-2.5-flash-lite-preview-09-2025',
-    'gemini/gemini-2.5-flash-lite',
-    'gemini/gemini-2.0-flash',
-    'gemini/gemini-2.5-pro',
-    'gemini/gemini-2.5-flash-preview-09-2025',
-    'openai/gpt-5-mini',
+    'openai/codex-mini-latest',
     'openai/gpt-4.1',
     'openai/gpt-4.1-mini',
     'openai/gpt-4.1-nano',
-    'openai/gpt-4o-mini',
-    'openai/o4-mini',
-    'openai/gpt-5',
-    'openai/gpt-5-nano',
     'openai/gpt-4o',
+    'openai/gpt-4o-mini',
+    'openai/gpt-5',
+    'openai/gpt-5-codex',
+    'openai/gpt-5-mini',
+    'openai/gpt-5-nano',
+    'openai/gpt-5-pro',
     'openai/o3',
     'openai/o3-mini',
-    'openai/codex-mini-latest',
-    'openai/gpt-5-pro',
-    'openai/gpt-5-codex',
+    'openai/o4-mini',
   ];
 };
 

@@ -19,7 +19,8 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
 
       for (const [providerId, config] of Object.entries(providers)) {
         allProviders[providerId] = config;
-        allModels[providerId] = config.models;
+        // Sort models alphabetically for consistent ordering
+        allModels[providerId] = config.models.sort();
       }
     } catch (error) {
       console.error(`Failed to fetch from gateway ${gateway.name}:`, error);
@@ -31,7 +32,6 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
   const registryData = {
     providers: allProviders,
     models: allModels,
-    generatedAt: new Date().toISOString(),
     version: '1.0.0',
   };
 
@@ -66,7 +66,6 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
   const typeContent = `/**
  * THIS FILE IS AUTO-GENERATED - DO NOT EDIT
  * Generated from model gateway providers
- * Generated at: ${new Date().toISOString()}
  */
 
 /**
