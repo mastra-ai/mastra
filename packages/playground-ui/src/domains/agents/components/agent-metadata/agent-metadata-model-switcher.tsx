@@ -38,6 +38,10 @@ export const AgentMetadataModelSwitcher = ({
   updateModel,
   apiUrl = '/api/agents/providers',
 }: AgentMetadataModelSwitcherProps) => {
+  // Store the original values on first mount - these never change
+  const [originalProvider] = useState(defaultProvider);
+  const [originalModel] = useState(defaultModel);
+
   const [selectedModel, setSelectedModel] = useState(defaultModel);
   const [showModelSuggestions, setShowModelSuggestions] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState(defaultProvider || '');
@@ -230,19 +234,19 @@ export const AgentMetadataModelSwitcher = ({
       }
 
       // Check if provider changed but no model selected
-      const providerChanged = currentModelProvider && currentModelProvider !== defaultProvider;
+      const providerChanged = currentModelProvider && currentModelProvider !== originalProvider;
       const modelEmpty = !selectedModel || selectedModel === '';
 
       if (providerChanged && modelEmpty) {
-        // Reset to defaults
-        setSelectedProvider(cleanProviderId(defaultProvider));
-        setSelectedModel(defaultModel);
+        // Reset to original values
+        setSelectedProvider(cleanProviderId(originalProvider));
+        setSelectedModel(originalModel);
 
-        // Update back to default configuration
-        if (defaultProvider && defaultModel) {
+        // Update back to original configuration
+        if (originalProvider && originalModel) {
           updateModel({
-            provider: defaultProvider as UpdateModelParams['provider'],
-            modelId: defaultModel,
+            provider: originalProvider as UpdateModelParams['provider'],
+            modelId: originalModel,
           }).catch(error => {
             console.error('Failed to reset model:', error);
           });
@@ -260,8 +264,8 @@ export const AgentMetadataModelSwitcher = ({
     registerResetFn,
     currentModelProvider,
     selectedModel,
-    defaultProvider,
-    defaultModel,
+    originalProvider,
+    originalModel,
     updateModel,
     showProviderSuggestions,
     showModelSuggestions,
@@ -276,13 +280,10 @@ export const AgentMetadataModelSwitcher = ({
     );
   }
 
-  // Check if model has been changed from default
-  const hasModelChanged = currentModelProvider !== cleanProviderId(defaultProvider) || selectedModel !== defaultModel;
-
-  // Handle reset button click
+  // Handle reset button click - resets to the ORIGINAL values
   const handleReset = async () => {
-    setSelectedProvider(cleanProviderId(defaultProvider));
-    setSelectedModel(defaultModel);
+    setSelectedProvider(cleanProviderId(originalProvider));
+    setSelectedModel(originalModel);
     setProviderSearch('');
     setModelSearch('');
     setIsSearchingProvider(false);
@@ -290,12 +291,12 @@ export const AgentMetadataModelSwitcher = ({
     setShowProviderSuggestions(false);
     setShowModelSuggestions(false);
 
-    // Update the model back to defaults
+    // Update the model back to original values
     try {
       setLoading(true);
       await updateModel({
-        provider: defaultProvider as UpdateModelParams['provider'],
-        modelId: defaultModel,
+        provider: originalProvider as UpdateModelParams['provider'],
+        modelId: originalModel,
       });
     } catch (error) {
       console.error('Failed to reset model:', error);
@@ -698,21 +699,16 @@ export const AgentMetadataModelSwitcher = ({
             </PopoverContent>
           )}
         </Popover>
-
-        {/* Reset button - only show if model has been changed */}
-        {hasModelChanged && (
-          <Button
-            variant="light"
-            size="md"
-            onClick={handleReset}
-            disabled={loading}
-            className="flex items-center gap-1.5 text-xs whitespace-nowrap"
-            title="Reset to original model"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Reset
-          </Button>
-        )}
+        <Button
+          variant="light"
+          size="md"
+          onClick={handleReset}
+          disabled={loading}
+          className="flex items-center gap-1.5 text-xs whitespace-nowrap !border-0"
+          title="Reset to original model"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+        </Button>
       </div>
 
       {/* Show warning if selected provider is not connected */}
