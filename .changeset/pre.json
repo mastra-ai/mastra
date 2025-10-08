@@ -78,5 +78,10 @@
     "@mastra/voice-speechify": "0.11.8",
     "@mastra/inngest": "0.15.1"
   },
-  "changesets": []
+  "changesets": [
+    "little-tigers-open",
+    "real-parts-help",
+    "tricky-parks-act",
+    "wild-brooms-mate"
+  ]
 }

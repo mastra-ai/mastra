@@ -1,5 +1,18 @@
 # @mastra/inngest
 
+## 0.16.0-alpha.0
+
+### Minor Changes
+
+- Update peer dependencies to match core package version bump (0.20.2) ([#8617](https://github.com/mastra-ai/mastra/pull/8617))
+
+### Patch Changes
+
+- Add shouldPersistSnapshot to control when to persist run snapshot ([#8617](https://github.com/mastra-ai/mastra/pull/8617))
+
+- Updated dependencies [[`0d71771`](https://github.com/mastra-ai/mastra/commit/0d71771f5711164c79f8e80919bc84d6bffeb6bc), [`0d6e55e`](https://github.com/mastra-ai/mastra/commit/0d6e55ecc5a2e689cd4fc9c86525e0eb54d82372)]:
+  - @mastra/core@0.20.2-alpha.0
+
 ## 0.15.1
 
 ### Patch Changes
