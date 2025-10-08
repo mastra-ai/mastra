@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import Spinner from '@/components/ui/spinner';
-import { Loader2 } from 'lucide-react';
+import { Loader2, RotateCcw } from 'lucide-react';
 import { ProviderLogo } from './provider-logo';
 import { UpdateModelParams } from '@mastra/client-js';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -10,6 +10,7 @@ import { useModelReset } from '../../context/model-reset-context';
 import { cn } from '@/lib/utils';
 import { cleanProviderId } from './utils';
 import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
+import { Button } from '@/ds/components/Button';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
@@ -274,6 +275,34 @@ export const AgentMetadataModelSwitcher = ({
       </div>
     );
   }
+
+  // Check if model has been changed from default
+  const hasModelChanged = currentModelProvider !== cleanProviderId(defaultProvider) || selectedModel !== defaultModel;
+
+  // Handle reset button click
+  const handleReset = async () => {
+    setSelectedProvider(cleanProviderId(defaultProvider));
+    setSelectedModel(defaultModel);
+    setProviderSearch('');
+    setModelSearch('');
+    setIsSearchingProvider(false);
+    setIsSearchingModel(false);
+    setShowProviderSuggestions(false);
+    setShowModelSuggestions(false);
+
+    // Update the model back to defaults
+    try {
+      setLoading(true);
+      await updateModel({
+        provider: defaultProvider as UpdateModelParams['provider'],
+        modelId: defaultModel,
+      });
+    } catch (error) {
+      console.error('Failed to reset model:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <>
@@ -669,6 +698,21 @@ export const AgentMetadataModelSwitcher = ({
             </PopoverContent>
           )}
         </Popover>
+
+        {/* Reset button - only show if model has been changed */}
+        {hasModelChanged && (
+          <Button
+            variant="light"
+            size="md"
+            onClick={handleReset}
+            disabled={loading}
+            className="flex items-center gap-1.5 text-xs whitespace-nowrap"
+            title="Reset to original model"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Reset
+          </Button>
+        )}
       </div>
 
       {/* Show warning if selected provider is not connected */}
