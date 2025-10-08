@@ -42,7 +42,10 @@ export async function tryStreamWithJsonFallback<
   }
 
   try {
-    return await agent.stream(prompt, options);
+    const result = await agent.stream(prompt, options);
+    const fullOutput = await result.getFullOutput();
+    console.log('fullOutput', fullOutput);
+    return result;
   } catch (error) {
     console.warn('Error in tryStreamWithJsonFallback. Attempting fallback.', error);
     return await agent.stream(prompt, {
