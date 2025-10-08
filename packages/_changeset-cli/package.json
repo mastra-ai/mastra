@@ -25,7 +25,7 @@
     "@inquirer/editor": "^4.2.20",
     "@manypkg/get-packages": "^2.2.2",
     "@manypkg/tools": "^2.1.0",
-    "execa": "^9.5.1",
+    "execa": "^9.6.0",
     "mri": "^1.2.0",
     "picocolors": "^1.1.1",
     "semver": "^7.7.2"
