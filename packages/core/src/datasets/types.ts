@@ -29,7 +29,6 @@ export type DatasetRecord = {
 export type DatasetVersion = {
   id: string;
   datasetId: string;
-  version: string;
   createdAt: Date;
   updatedAt?: Date;
 };

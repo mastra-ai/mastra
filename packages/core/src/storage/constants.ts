@@ -96,7 +96,6 @@ export const DATASET_SCHEMA: Record<string, StorageColumn> = {
 export const DATASET_VERSION_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true }, // Primary identifier - ULID (time-based sortable)
   datasetId: { type: 'text', nullable: false },
-  version: { type: 'text', nullable: false }, // Human-readable version label
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: true },
 };
