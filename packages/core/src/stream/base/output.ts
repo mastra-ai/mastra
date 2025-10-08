@@ -119,7 +119,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     usage: new DelayedPromise<LLMStepResult['usage']>(),
     warnings: new DelayedPromise<LLMStepResult['warnings']>(),
     providerMetadata: new DelayedPromise<LLMStepResult['providerMetadata']>(),
-    response: new DelayedPromise<LLMStepResult['response']>(),
+    response: new DelayedPromise<LLMStepResult<OUTPUT>['response']>(),
     request: new DelayedPromise<LLMStepResult['request']>(),
     text: new DelayedPromise<LLMStepResult['text']>(),
     reasoning: new DelayedPromise<LLMStepResult['reasoning']>(),
@@ -441,7 +441,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                     (chunk.payload.metadata?.modelId as string) || (chunk.payload.metadata?.model as string) || '',
                   ...otherMetadata,
                   messages: chunk.payload.messages?.nonUser || [],
-                  uiMessages: messageList.get.response.aiV5.ui(),
+                  // We have to cast this until messageList can take generics also and type metadata, it was too
+                  // complicated to do this in this PR, it will require a much bigger change.
+                  uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                 },
                 providerMetadata: providerMetadata,
               };
@@ -497,7 +499,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#delayedPromises.usage.resolve(self.#usageCount);
               self.#delayedPromises.warnings.resolve(self.#warnings);
               self.#delayedPromises.providerMetadata.resolve(undefined);
-              self.#delayedPromises.response.resolve({} as LLMStepResult['response']);
+              self.#delayedPromises.response.resolve({} as LLMStepResult<OUTPUT>['response']);
               self.#delayedPromises.request.resolve({});
               self.#delayedPromises.reasoning.resolve([]);
               self.#delayedPromises.reasoningText.resolve(undefined);
@@ -524,14 +526,26 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 self.#finishReason = chunk.payload.stepResult.reason;
               }
 
-              let response = {};
+              // Add structured output to the latest assistant message metadata
+              if (self.#bufferedObject !== undefined) {
+                const responseMessages = messageList.get.response.v2();
+                const lastAssistantMessage = [...responseMessages].reverse().find(m => m.role === 'assistant');
+                if (lastAssistantMessage) {
+                  if (!lastAssistantMessage.content.metadata) {
+                    lastAssistantMessage.content.metadata = {};
+                  }
+                  lastAssistantMessage.content.metadata.structuredOutput = self.#bufferedObject;
+                }
+              }
+
+              let response: LLMStepResult<OUTPUT>['response'] = {};
               if (chunk.payload.metadata) {
                 const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
 
                 response = {
                   ...otherMetadata,
                   messages: messageList.get.response.aiV5.model(),
-                  uiMessages: messageList.get.response.aiV5.ui(),
+                  uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                 };
               }
 
@@ -566,7 +580,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                     response = {
                       ...otherMetadata,
                       messages: messageList.get.response.aiV5.model(),
-                      uiMessages: messageList.get.response.aiV5.ui(),
+                      uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                     };
                   }
                 } else {
@@ -594,7 +608,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#delayedPromises.usage.resolve(self.#usageCount);
               self.#delayedPromises.warnings.resolve(self.#warnings);
               self.#delayedPromises.providerMetadata.resolve(chunk.payload.metadata?.providerMetadata);
-              self.#delayedPromises.response.resolve(response as LLMStepResult['response']);
+              self.#delayedPromises.response.resolve(response as LLMStepResult<OUTPUT>['response']);
               self.#delayedPromises.request.resolve(self.#request || {});
               self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
               const reasoningText =

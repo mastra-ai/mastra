@@ -572,7 +572,7 @@ export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = 
   processorStates?: Map<string, any>;
 };
 
-export type LLMStepResult = {
+export type LLMStepResult<OUTPUT extends OutputSchema = undefined> = {
   stepType?: 'initial' | 'tool-result';
   toolCalls: ToolCallChunk[];
   toolResults: ToolResultChunk[];
@@ -592,7 +592,13 @@ export type LLMStepResult = {
   response: {
     headers?: Record<string, string>;
     messages?: StepResult<ToolSet>['response']['messages'];
-    uiMessages?: UIMessage[];
+    uiMessages?: UIMessage<
+      OUTPUT extends OutputSchema
+        ? {
+            structuredOutput?: InferSchemaOutput<OUTPUT>;
+          } & Record<string, unknown>
+        : unknown
+    >[];
     id?: string;
     timestamp?: Date;
     modelId?: string;

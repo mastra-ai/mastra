@@ -2,11 +2,10 @@ const meta = {
   overview: "Overview",
   "agent-memory": "Agent Memory",
   "using-tools-and-mcp": "Tools and MCP",
-  guardrails: "Guardrails",
-  "adding-voice": "Adding Voice",
   "runtime-context": "Runtime Context",
-  "dynamic-agents": "Dynamic Agents",
+  guardrails: "Guardrails",
   networks: "Networks",
+  "adding-voice": "Adding Voice",
 };
 
 export default meta;

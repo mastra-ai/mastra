@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.20.2-alpha.0
+
+### Patch Changes
+
+- Add structuredOutput data to response message metadata so it will be persisted. ([#8588](https://github.com/mastra-ai/mastra/pull/8588))
+
+- Add shouldPersistSnapshot to control when to persist run snapshot ([#8617](https://github.com/mastra-ai/mastra/pull/8617))
+
 ## 0.20.1
 
 ### Patch Changes
