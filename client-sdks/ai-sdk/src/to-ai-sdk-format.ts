@@ -91,14 +91,14 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>() {
       if (transformedChunk) {
         if (transformedChunk.type === 'tool-agent') {
           const payload = transformedChunk.payload;
-          const agentTransformed = transformAgent<TOutput>(payload as ChunkType<TOutput>, bufferedSteps);
+          const agentTransformed = transformAgent<TOutput>(payload, bufferedSteps);
           if (agentTransformed) controller.enqueue(agentTransformed);
         } else if (transformedChunk.type === 'tool-workflow') {
           const payload = transformedChunk.payload;
-          const workflowChunk = transformWorkflow(payload as ChunkType<TOutput>, bufferedSteps as any);
+          const workflowChunk = transformWorkflow(payload, bufferedSteps);
           if (workflowChunk) controller.enqueue(workflowChunk);
         } else if (transformedChunk.type === 'tool-network') {
-          const payload = transformedChunk.payload as unknown as NetworkChunkType;
+          const payload = transformedChunk.payload;
           const networkChunk = transformNetwork(payload, bufferedSteps);
           if (networkChunk) controller.enqueue(networkChunk);
         } else {
@@ -342,33 +342,156 @@ function transformWorkflow<TOutput extends ZodType<any>>(
   }
 }
 
-function transformNetwork(payload: NetworkChunkType, _bufferedSteps: Map<string, any>) {
+function transformNetwork(
+  payload: NetworkChunkType,
+  bufferedNetworks: Map<string, { name: string; steps: StepResult[] }>,
+) {
   switch (payload.type) {
-    case 'routing-agent-start':
+    case 'routing-agent-start': {
+      bufferedNetworks.set(payload.payload.runId, {
+        name: payload.payload.agentId,
+        steps: [],
+      });
       return {
         type: 'data-network',
-        id: payload.runId!,
-        data: {},
+        id: payload.payload.runId,
+        data: {
+          name: bufferedNetworks.get(payload.payload.runId)!.name,
+          status: 'running',
+          steps: bufferedNetworks.get(payload.payload.runId)!.steps,
+          output: null,
+        },
       } as const;
-    case 'routing-agent-end':
-    case 'agent-execution-start':
+    }
+    case 'agent-execution-start': {
+      const current = bufferedNetworks.get(payload.payload.runId) || { name: '', steps: [] };
+      current.steps.push({
+        name: payload.payload.agentId,
+        status: 'running',
+        input: payload.payload.args || null,
+        output: null,
+      } satisfies StepResult);
+      bufferedNetworks.set(payload.payload.runId, current);
+      return {
+        type: 'data-network',
+        id: payload.payload.runId,
+        data: {
+          name: current.name,
+          status: 'running',
+          steps: current.steps,
+          output: null,
+        },
+      } as const;
+    }
+    case 'workflow-execution-start': {
+      const current = bufferedNetworks.get(payload.payload.runId) || { name: '', steps: [] };
+      current.steps.push({
+        name: payload.payload.name,
+        status: 'running',
+        input: payload.payload.args || null,
+        output: null,
+      } satisfies StepResult);
+      bufferedNetworks.set(payload.payload.runId, current);
+      return {
+        type: 'data-network',
+        id: payload.payload.runId,
+        data: {
+          name: current.name,
+          status: 'running',
+          steps: current.steps,
+          output: null,
+        },
+      } as const;
+    }
+    case 'tool-execution-start': {
+      const current = bufferedNetworks.get(payload.payload.runId) || { name: '', steps: [] };
+      current.steps.push({
+        name: payload.payload.args?.toolName!,
+        status: 'running',
+        input: payload.payload.args?.args || null,
+        output: null,
+      } satisfies StepResult);
+      bufferedNetworks.set(payload.payload.runId, current);
+      return {
+        type: 'data-network',
+        id: payload.payload.runId,
+        data: {
+          name: current.name,
+          status: 'running',
+          steps: current.steps,
+          output: null,
+        },
+      } as const;
+    }
     case 'agent-execution-end':
-    case 'workflow-execution-start':
-    case 'workflow-execution-end':
-    case 'tool-execution-start':
-    case 'tool-execution-end':
-    case 'network-execution-event-step-finish': {
+    case 'tool-execution-end': {
+      const current = bufferedNetworks.get(payload.runId!);
+      if (!current) return null;
       return {
         type: 'data-network',
         id: payload.runId!,
-        data: {},
+        data: {
+          name: current.name,
+          status: 'running',
+          steps: current.steps,
+          output: null,
+        },
+      } as const;
+    }
+    case 'workflow-execution-end': {
+      const current = bufferedNetworks.get(payload.runId!);
+      if (!current) return null;
+      return {
+        type: 'data-network',
+        id: payload.runId!,
+        data: {
+          name: current.name,
+          status: 'running',
+          steps: current.steps,
+          output: null,
+        },
+      } as const;
+    }
+    case 'routing-agent-end': {
+      const current = bufferedNetworks.get(payload.payload.runId);
+      if (!current) return null;
+      return {
+        type: 'data-network',
+        id: payload.payload.runId,
+        data: {
+          name: current.name,
+          status: 'finished',
+          steps: current.steps,
+          output: payload.payload?.result ?? null,
+        },
+      } as const;
+    }
+    case 'network-execution-event-step-finish': {
+      const current = bufferedNetworks.get(payload.payload.runId);
+      if (!current) return null;
+      return {
+        type: 'data-network',
+        id: payload.payload.runId,
+        data: {
+          name: current.name,
+          status: 'finished',
+          ...current.steps,
+          output: payload.payload?.result ?? null,
+        },
       } as const;
     }
     case 'network-execution-event-finish': {
+      const current = bufferedNetworks.get(payload.runId!);
+      if (!current) return null;
       return {
         type: 'data-network',
         id: payload.runId!,
-        data: {},
+        data: {
+          name: current.name,
+          status: 'finished',
+          steps: current.steps,
+          output: payload.payload?.result ?? null,
+        },
       } as const;
     }
     default:
