@@ -181,13 +181,17 @@ export async function POST(req: Request) {
   const body = await req.json();
   const myAgent = mastra.getAgent("weatherAgent");
   const stream = await myAgent.stream(body, {
-    output: z.object({
-      weather: z.string()
-    })
+    structuredOutput: {
+      schema: z.object({
+        weather: z.string()
+      })
+    },
+    maxSteps: 1
   });
 
   return stream.toTextStreamResponse();
 }
+```
 ```
 
 ### Passing additional data with `sendExtraMessageFields`
