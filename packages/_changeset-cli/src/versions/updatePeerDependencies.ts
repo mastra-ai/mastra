@@ -5,7 +5,7 @@ import semver from 'semver';
 import { createCustomChangeset } from '../changeset/createCustomChangeset.js';
 import { corePackage } from '../config.js';
 import { getPackageJson } from '../pkg/getPackageJson.js';
-import { getPublicPackages } from '../pkg/getPublicPackages';
+import { getPublicPackages } from '../pkg/getPublicPackages.js';
 import { updatePackageJson } from '../pkg/updatePackageJson.js';
 import type { VersionBumps, UpdatedPeerDependencies, PackageJson } from '../types.js';
 import { getNewVersionForPackage } from './getNewVersionForPackage.js';
