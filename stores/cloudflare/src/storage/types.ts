@@ -17,9 +17,11 @@ import type {
   TABLE_DATASET_ROWS,
   TABLE_DATASET_VERSIONS,
   TABLE_DATASETS,
+  DatasetVersion,
+  DatasetRow,
+  DatasetRecord,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import type { DatasetRecord, DatasetRow, DatasetVersion } from '../../../../packages/core/dist/datasets/types';
 
 /**
  * Configuration for Cloudflare KV using REST API
