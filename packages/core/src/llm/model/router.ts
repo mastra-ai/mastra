@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import { parseModelRouterId } from './gateway-resolver.js';
 import type { MastraModelGateway } from './gateways/base.js';
 import { findGatewayForModel } from './gateways/index.js';
@@ -60,7 +61,7 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
     // Validate API key and return error stream if validation fails
     let apiKey: string;
     try {
-      apiKey = await this.gateway.getApiKey(this.config.routerId);
+      apiKey = this.config.apiKey || (await this.gateway.getApiKey(this.config.routerId));
     } catch (error) {
       // Return an error stream instead of throwing
       return {
@@ -93,9 +94,22 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
     apiKey: string;
   }): Promise<LanguageModelV2> {
     const key = createHash('sha256')
-      .update(this.gateway.name + modelId + providerId + apiKey)
+      .update(this.gateway.name + modelId + providerId + apiKey + (this.config.url || ''))
       .digest('hex');
     if (ModelRouterLanguageModel.modelInstances.has(key)) return ModelRouterLanguageModel.modelInstances.get(key)!;
+
+    // If custom URL is provided, use it directly with openai-compatible
+    if (this.config.url) {
+      const modelInstance = createOpenAICompatible({
+        name: providerId,
+        apiKey,
+        baseURL: this.config.url,
+        headers: this.config.headers,
+      }).chatModel(modelId);
+      ModelRouterLanguageModel.modelInstances.set(key, modelInstance);
+      return modelInstance;
+    }
+
     const modelInstance = await this.gateway.resolveLanguageModel({ modelId, providerId, apiKey });
     ModelRouterLanguageModel.modelInstances.set(key, modelInstance);
     return modelInstance;
