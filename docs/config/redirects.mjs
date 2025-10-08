@@ -1065,9 +1065,4 @@ export const redirectList = [
     destination: "/:locale/reference/cli/mastra",
     permanent: true,
   },
-  {
-    source: "/:locale/reference/agents/migration-guide",
-    destination: "https://mastra.ai/blog/migration-guide-streaming",
-    permanent: true,
-  },
 ];
