@@ -3,26 +3,30 @@
 import {
   GaugeIcon,
   EyeIcon,
-  PackageIcon,
-  HomeIcon,
   GlobeIcon,
   BookIcon,
-  EarthIcon,
-  CloudUploadIcon,
+  LogsIcon,
+  KeyRound,
+  SettingsIcon,
+  FileJson2Icon,
   MessagesSquareIcon,
+  ChevronRightIcon,
+  BoxIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
 import {
   AgentIcon,
-  GithubIcon,
   McpServerIcon,
   ToolsIcon,
   WorkflowIcon,
   MainSidebar,
   useMainSidebar,
   type NavSection,
+  DeploymentIcon,
+  ApiIcon,
 } from '@mastra/playground-ui';
+import { cn } from '@/lib/utils';
 
 export const LogoWithoutText = (props: { className?: string }) => (
   <svg {...props} xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 21 21" fill="none">
@@ -119,18 +123,8 @@ export const LogoWithoutText = (props: { className?: string }) => (
 
 const mainNavigation: NavSection[] = [
   {
-    key: 'home',
-    links: [
-      {
-        name: 'Welcome',
-        url: '/',
-        icon: <HomeIcon />,
-      },
-    ],
-  },
-  {
     key: 'main',
-    separator: true,
+    title: 'Playground',
     links: [
       {
         name: 'Agents',
@@ -167,23 +161,54 @@ const mainNavigation: NavSection[] = [
   },
   {
     key: 'observability',
-    separator: true,
+    title: 'Observability',
     links: [
       {
-        name: 'Observability',
+        name: 'Traces',
         url: '/observability',
         icon: <EyeIcon />,
       },
     ],
   },
   {
-    key: 'Templates',
-    separator: true,
+    key: 'deployment',
+    title: 'Deployment',
     links: [
       {
-        name: 'Templates',
-        url: '/templates',
-        icon: <PackageIcon />,
+        name: 'Deployments',
+        url: '/deployments',
+        icon: <DeploymentIcon />,
+      },
+      {
+        name: 'Logs',
+        url: '/logs',
+        icon: <LogsIcon />,
+      },
+      {
+        name: 'API',
+        url: '/api',
+        icon: <ApiIcon />,
+      },
+    ],
+  },
+  {
+    key: 'settings',
+    title: 'Project Settings',
+    links: [
+      {
+        name: 'Env Variables',
+        url: '/env',
+        icon: <FileJson2Icon />,
+      },
+      {
+        name: 'Access Tokens',
+        url: '/env',
+        icon: <KeyRound />,
+      },
+      {
+        name: 'Settings',
+        url: '/env',
+        icon: <SettingsIcon />,
       },
     ],
   },
@@ -194,19 +219,9 @@ const secondNavigation: NavSection = {
   title: 'Other links',
   links: [
     {
-      name: 'Mastra APIs',
-      url: 'http://localhost:4111/swagger-ui',
-      icon: <EarthIcon />,
-    },
-    {
       name: 'Documentation',
       url: 'https://mastra.ai/en/docs',
       icon: <BookIcon />,
-    },
-    {
-      name: 'Github',
-      url: 'https://github.com/mastra-ai/mastra',
-      icon: <GithubIcon />,
     },
     {
       name: 'Community',
@@ -227,11 +242,9 @@ export function AppSidebar() {
   const location = useLocation();
   const pathname = location.pathname;
 
-  const hideCloudCta = window?.MASTRA_HIDE_CLOUD_CTA === 'true';
-
   return (
     <MainSidebar>
-      <div className="pt-[.75rem] mb-[1rem] -ml-[.2rem] sticky top-0 bg-surface1 z-10">
+      <div className="pt-[.75rem] pb-[1rem] -ml-[.2rem] sticky top-0 bg-surface1 z-10">
         {state === 'collapsed' ? (
           <LogoWithoutText className="h-[2.5rem] w-[2.5rem] shrink-0 ml-1" />
         ) : (
@@ -239,6 +252,29 @@ export function AppSidebar() {
             <LogoWithoutText className="h-[2.5rem] w-[2.5rem] shrink-0" />
             <span className="font-serif text-sm">Mastra</span>
           </span>
+        )}
+      </div>
+
+      <div
+        className={cn('text-[0.8125rem] text-icon3 px-[0.75rem]  pb-[1rem] sticky top-[4.25rem] bg-surface1 z-10', {
+          //  'w-[15rem]': state !== 'collapsed',
+        })}
+      >
+        {state === 'collapsed' ? (
+          <span className="rounded-full block bg-green-500 w-[.75em] h-[.75em]"></span>
+        ) : (
+          <>
+            <div className="flex items-center gap-[.5rem] text-[0.875rem] text-white mb-[.5rem] [&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:opacity-50">
+              <BoxIcon /> My First Mastra Project
+            </div>
+            <div className="flex items-center gap-[.5rem]">
+              Active <span className="rounded-full block bg-green-500 w-[.75em] h-[.75em]"></span>
+            </div>
+            <div className="flex items-center gap-1 mt-1">
+              Deployed <ChevronRightIcon className="opacity-50 w-[1em] h-[1em]" /> <DeploymentIcon />{' '}
+              <span>1e2c3e40</span>
+            </div>
+          </>
         )}
       </div>
 
@@ -273,17 +309,6 @@ export function AppSidebar() {
               {secondNavigation.links.map(link => {
                 return <MainSidebar.NavLink key={link.name} link={link} state={state} />;
               })}
-              {!hideCloudCta && (
-                <MainSidebar.NavLink
-                  link={{
-                    name: 'Deploy to Mastra Cloud',
-                    url: 'https://mastra.ai/cloud',
-                    icon: <CloudUploadIcon />,
-                    variant: 'featured',
-                  }}
-                  state={state}
-                />
-              )}
             </MainSidebar.NavList>
           </MainSidebar.NavSection>
         </MainSidebar.Nav>
