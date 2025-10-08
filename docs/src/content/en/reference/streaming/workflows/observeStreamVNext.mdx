@@ -1,13 +1,9 @@
 ---
-title: "Reference: Run.resumeStreamVNext() | Workflows | Mastra Docs"
-description: Documentation for the `Run.resumeStreamVNext()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
+title: "Reference: Run.observeStreamVNext() | Workflows | Mastra Docs"
+description: Documentation for the `Run.observeStreamVNext()` method in workflows, which enables reopening the stream of an already active workflow run.
 ---
 
-import { StreamVNextCallout } from "@/components/streamVNext-callout.tsx"
-
-# Run.resumeStreamVNext() (Experimental)
-
-<StreamVNextCallout />
+# Run.observeStreamVNext() (Experimental)
 
 The `.observeStreamVNext()` method opens a new `ReadableStream` to a workflow run that is currently running, allowing you to observe the stream of events if the original stream is no longer available.
 
