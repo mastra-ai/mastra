@@ -18,9 +18,7 @@ run.stream({
   },
 });
 
-
-
-const stream = await run.observeStream();
+const { stream } = await run.observeStream();
 
 for await (const chunk of stream) {
   console.log(chunk);
