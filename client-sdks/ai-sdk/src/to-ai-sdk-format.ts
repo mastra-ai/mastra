@@ -1,5 +1,5 @@
-import type { MastraModelOutput, ChunkType as AgentChunkType, OutputSchema } from '@mastra/core/stream';
-import type { ChunkType, WorkflowRunStatus, WorkflowStepStatus } from '@mastra/core/workflows';
+import type { MastraModelOutput, ChunkType, OutputSchema, NetworkChunkType } from '@mastra/core/stream';
+import type { WorkflowRunStatus, WorkflowStepStatus } from '@mastra/core/workflows';
 import type { InferUIMessageChunk, UIMessage } from 'ai';
 import type { ZodType } from 'zod';
 import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from './helpers';
@@ -29,12 +29,19 @@ export type WorkflowAiSDKType = {
 };
 
 export function WorkflowStreamToAISDKTransformer() {
-  const steps: Record<string, StepResult> = {};
+  const bufferedWorkflows = new Map<
+    string,
+    {
+      name: string;
+      steps: Record<string, StepResult>;
+    }
+  >();
   return new TransformStream<
     ChunkType,
-    {
-      data: string;
-    }
+    | {
+        data: string;
+      }
+    | WorkflowAiSDKType
   >({
     start(controller) {
       controller.enqueue({
@@ -55,76 +62,9 @@ export function WorkflowStreamToAISDKTransformer() {
       });
     },
     transform(chunk, controller) {
-      let workflowName = '';
-      if (chunk.type === 'workflow-start') {
-        // TODO swap with name
-        workflowName = chunk.payload.workflowId;
-        controller.enqueue({
-          data: JSON.stringify({
-            type: 'data-workflow',
-            id: chunk.runId,
-            data: {
-              name: workflowName,
-              status: 'running',
-              steps: {} as Record<string, StepResult>,
-              output: null,
-            },
-          } satisfies WorkflowAiSDKType),
-        });
-      } else if (chunk.type === 'workflow-step-start') {
-        steps[chunk.payload.id] = {
-          // TODO swap with name
-          name: chunk.payload.id,
-          status: chunk.payload.status,
-          input: chunk.payload.payload ?? null,
-          output: null,
-        } satisfies StepResult;
+      const transformed = transformWorkflow<any>(chunk, bufferedWorkflows);
 
-        controller.enqueue({
-          data: JSON.stringify({
-            type: 'data-workflow',
-            id: chunk.runId,
-            data: {
-              name: workflowName,
-              status: 'running',
-              steps,
-              output: null,
-            },
-          } satisfies WorkflowAiSDKType),
-        });
-      } else if (chunk.type === 'workflow-step-result') {
-        steps[chunk.payload.id] = {
-          ...steps[chunk.payload.id]!,
-          status: chunk.payload.status,
-          output: chunk.payload.output ?? null,
-        } satisfies StepResult;
-
-        controller.enqueue({
-          data: JSON.stringify({
-            type: 'data-workflow',
-            id: chunk.runId,
-            data: {
-              name: workflowName,
-              status: 'running',
-              steps,
-              output: null,
-            },
-          } satisfies WorkflowAiSDKType),
-        });
-      } else if (chunk.type === 'workflow-finish') {
-        controller.enqueue({
-          data: JSON.stringify({
-            type: 'data-workflow',
-            id: chunk.runId,
-            data: {
-              name: workflowName,
-              steps,
-              output: chunk.payload.output ?? null,
-              status: chunk.payload.workflowStatus,
-            },
-          } satisfies WorkflowAiSDKType),
-        });
-      }
+      if (transformed) controller.enqueue(transformed);
     },
   });
 }
@@ -132,7 +72,7 @@ export function WorkflowStreamToAISDKTransformer() {
 export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>() {
   let bufferedSteps = new Map<string, any>();
 
-  return new TransformStream<AgentChunkType<TOutput>, object>({
+  return new TransformStream<ChunkType<TOutput>, object>({
     transform(chunk, controller) {
       const part = convertMastraChunkToAISDKv5({ chunk, mode: 'stream' });
 
@@ -149,18 +89,18 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>() {
       });
 
       if (transformedChunk) {
-        // TODO: make this work for networks and workflows
         if (transformedChunk.type === 'tool-agent') {
           const payload = transformedChunk.payload;
-          const agentTransformed = transformAgent<TOutput>(payload as AgentChunkType<TOutput>, bufferedSteps);
+          const agentTransformed = transformAgent<TOutput>(payload as ChunkType<TOutput>, bufferedSteps);
           if (agentTransformed) controller.enqueue(agentTransformed);
-          //  } else if (transformedChunk.type === 'tool-workflow') {
-          //     const workflowChunk = transformWorkflow(payload.payload);
-          //     controller.enqueue(workflowChunk);
-
-          //  } else if (transformedChunk.type === 'tool-network') {
-          //     const networkChunk = transformNetwork(payload.payload);
-          //     controller.enqueue(networkChunk);
+        } else if (transformedChunk.type === 'tool-workflow') {
+          const payload = transformedChunk.payload;
+          const workflowChunk = transformWorkflow(payload as ChunkType<TOutput>, bufferedSteps as any);
+          if (workflowChunk) controller.enqueue(workflowChunk);
+        } else if (transformedChunk.type === 'tool-network') {
+          const payload = transformedChunk.payload as unknown as NetworkChunkType;
+          const networkChunk = transformNetwork(payload, bufferedSteps);
+          if (networkChunk) controller.enqueue(networkChunk);
         } else {
           controller.enqueue(transformedChunk);
         }
@@ -169,10 +109,7 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>() {
   });
 }
 
-function transformAgent<TOutput extends ZodType<any>>(
-  payload: AgentChunkType<TOutput>,
-  bufferedSteps: Map<string, any>,
-) {
+function transformAgent<TOutput extends ZodType<any>>(payload: ChunkType<TOutput>, bufferedSteps: Map<string, any>) {
   let hasChanged = false;
   switch (payload.type) {
     case 'start':
@@ -319,6 +256,124 @@ function transformAgent<TOutput extends ZodType<any>>(
     } as const;
   }
   return null;
+}
+
+function transformWorkflow<TOutput extends ZodType<any>>(
+  payload: ChunkType<TOutput>,
+  bufferedWorkflows: Map<
+    string,
+    {
+      name: string;
+      steps: Record<string, StepResult>;
+    }
+  >,
+) {
+  switch (payload.type) {
+    case 'workflow-start':
+      bufferedWorkflows.set(payload.runId!, {
+        name: payload.payload.workflowId,
+        steps: {},
+      });
+      return {
+        type: 'data-workflow',
+        id: payload.runId,
+        data: {
+          name: bufferedWorkflows.get(payload.runId!)!.name,
+          status: 'running',
+          steps: bufferedWorkflows.get(payload.runId!)!.steps,
+          output: null,
+        },
+      } as const;
+    case 'workflow-step-start': {
+      const current = bufferedWorkflows.get(payload.runId!) || { name: '', steps: {} };
+      current.steps[payload.payload.id] = {
+        name: payload.payload.id,
+        status: payload.payload.status,
+        input: payload.payload.payload ?? null,
+        output: null,
+      } satisfies StepResult;
+      bufferedWorkflows.set(payload.runId!, current);
+      return {
+        type: 'data-workflow',
+        id: payload.runId,
+        data: {
+          name: current.name,
+          status: 'running',
+          steps: current.steps,
+          output: null,
+        },
+      } as const;
+    }
+    case 'workflow-step-result': {
+      const current = bufferedWorkflows.get(payload.runId!);
+      if (!current) return null;
+      current.steps[payload.payload.id] = {
+        ...current.steps[payload.payload.id]!,
+        status: payload.payload.status,
+        output: payload.payload.output ?? null,
+      } satisfies StepResult;
+      return {
+        type: 'data-workflow',
+        id: payload.runId,
+        data: {
+          name: current.name,
+          status: 'running',
+          steps: current.steps,
+          output: null,
+        },
+      } as const;
+    }
+    case 'workflow-finish': {
+      const current = bufferedWorkflows.get(payload.runId!);
+      if (!current) return null;
+      return {
+        type: 'data-workflow',
+        id: payload.runId,
+        data: {
+          name: current.name,
+          steps: current.steps,
+          output: payload.payload.output ?? null,
+          status: payload.payload.workflowStatus,
+        },
+      } as const;
+    }
+    default:
+      return null;
+  }
+}
+
+function transformNetwork(payload: NetworkChunkType, _bufferedSteps: Map<string, any>) {
+  switch (payload.type) {
+    case 'routing-agent-start':
+      return {
+        type: 'data-network',
+        id: payload.runId!,
+        data: {},
+      } as const;
+    case 'routing-agent-end':
+    case 'agent-execution-start':
+    case 'agent-execution-end':
+    case 'workflow-execution-start':
+    case 'workflow-execution-end':
+    case 'tool-execution-start':
+    case 'tool-execution-end':
+    case 'network-execution-event-step-finish': {
+      return {
+        type: 'data-network',
+        id: payload.runId!,
+        data: {},
+      } as const;
+    }
+    case 'network-execution-event-finish': {
+      return {
+        type: 'data-network',
+        id: payload.runId!,
+        data: {},
+      } as const;
+    }
+    default:
+      return null;
+  }
 }
 
 export function toAISdkFormat<TOutput extends OutputSchema>(
