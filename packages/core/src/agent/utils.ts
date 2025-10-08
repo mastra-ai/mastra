@@ -43,8 +43,15 @@ export async function tryStreamWithJsonFallback<
 
   try {
     const result = await agent.stream(prompt, options);
-    const fullOutput = await result.getFullOutput();
-    console.log('fullOutput', fullOutput);
+    const object = await result.object;
+    if (!object) {
+      throw new MastraError({
+        id: 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'structuredOutput object is undefined',
+      });
+    }
     return result;
   } catch (error) {
     console.warn('Error in tryStreamWithJsonFallback. Attempting fallback.', error);
