@@ -16,6 +16,7 @@ export const defaultSettings = () =>
       generateId: mockId({ prefix: 'id' }),
       currentDate: () => new Date(0),
     },
+    agentId: 'agent-id',
     onError: () => {},
   }) as const;
 

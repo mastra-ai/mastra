@@ -96,7 +96,7 @@ describe('ModelsDevGateway', () => {
       // cerebras and fireworks-ai use @ai-sdk/openai-compatible
       expect(providers.cerebras).toBeDefined();
       expect(providers['fireworks-ai']).toBeDefined(); // Provider IDs keep hyphens
-      expect(providers.cerebras.url).toBe('https://api.cerebras.ai/v1/chat/completions');
+      expect(providers.cerebras.url).toBe('https://api.cerebras.ai/v1');
     });
 
     it('should apply OPENAI_COMPATIBLE_OVERRIDES', async () => {
@@ -161,7 +161,7 @@ describe('ModelsDevGateway', () => {
       expect(providers.unknown_provider).toBeUndefined();
     });
 
-    it('should ensure URLs end with /chat/completions', async () => {
+    it('should ensure URLs end with ', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => mockApiResponse,
@@ -169,9 +169,6 @@ describe('ModelsDevGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      // All URLs should end with /chat/completions
-      expect(providers.cerebras.url).toMatch(/\/chat\/completions$/);
-      expect(providers['fireworks-ai'].url).toMatch(/\/chat\/completions$/);
       // Except for directly supported providers
       expect(providers.anthropic.url).not.toMatch(/\/chat\/completions$/);
       expect(providers.openai.url).not.toMatch(/\/chat\/completions$/);
@@ -204,9 +201,9 @@ describe('ModelsDevGateway', () => {
     it('should use custom base URL from env vars', () => {
       const url = gateway.buildUrl('openai/gpt-4', {
         OPENAI_API_KEY: 'sk-test',
-        OPENAI_BASE_URL: 'https://custom.openai.proxy/v1/chat/completions',
+        OPENAI_BASE_URL: 'https://custom.openai.proxy/v1',
       });
-      expect(url).toBe('https://custom.openai.proxy/v1/chat/completions');
+      expect(url).toBe('https://custom.openai.proxy/v1');
     });
 
     it('should return false for invalid model ID format', () => {
@@ -237,7 +234,7 @@ describe('ModelsDevGateway', () => {
       expect(providers.groq).toBeDefined();
 
       const url = gateway.buildUrl('groq/llama-3.1-70b', { GROQ_API_KEY: 'gsk-test' });
-      expect(url).toBe('https://api.groq.com/openai/v1/chat/completions');
+      expect(url).toBe('https://api.groq.com/openai/v1');
     });
 
     it('should correctly identify all major OpenAI-compatible providers', async () => {

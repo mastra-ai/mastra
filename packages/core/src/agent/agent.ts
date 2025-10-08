@@ -417,6 +417,36 @@ export class Agent<
   }
 
   /**
+   * Resolves and returns input processors from agent configuration.
+   * @internal
+   */
+  private async getResolvedInputProcessors(runtimeContext?: RuntimeContext): Promise<InputProcessor[]> {
+    if (!this.#inputProcessors) {
+      return [];
+    }
+
+    if (typeof this.#inputProcessors === 'function') {
+      return await this.#inputProcessors({ runtimeContext: runtimeContext || new RuntimeContext() });
+    }
+
+    return this.#inputProcessors;
+  }
+
+  /**
+   * Returns the input processors for this agent, resolving function-based processors if necessary.
+   */
+  public async getInputProcessors(runtimeContext?: RuntimeContext): Promise<InputProcessor[]> {
+    return this.getResolvedInputProcessors(runtimeContext);
+  }
+
+  /**
+   * Returns the output processors for this agent, resolving function-based processors if necessary.
+   */
+  public async getOutputProcessors(runtimeContext?: RuntimeContext): Promise<OutputProcessor[]> {
+    return this.getResolvedOutputProcessors(runtimeContext);
+  }
+
+  /**
    * Returns whether this agent has its own memory configured.
    *
    * @example
@@ -1221,6 +1251,7 @@ export class Agent<
         runtimeContext,
         tracingContext,
         messageList,
+        agentId: this.id,
       });
 
       text = await result.text;
@@ -3314,6 +3345,7 @@ export class Agent<
       returnScorerData: options.returnScorerData,
       requireToolApproval: options.requireToolApproval,
       resumeContext,
+      agentId: this.id,
     });
 
     const run = await executionWorkflow.createRunAsync();
