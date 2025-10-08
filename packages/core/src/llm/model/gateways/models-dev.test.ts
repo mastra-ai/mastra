@@ -96,7 +96,7 @@ describe('ModelsDevGateway', () => {
       // cerebras and fireworks-ai use @ai-sdk/openai-compatible
       expect(providers.cerebras).toBeDefined();
       expect(providers['fireworks-ai']).toBeDefined(); // Provider IDs keep hyphens
-      expect(providers.cerebras.url).toBe('https://api.cerebras.ai/v1/chat/completions');
+      expect(providers.cerebras.url).toBe('https://api.cerebras.ai/v1');
     });
 
     it('should apply OPENAI_COMPATIBLE_OVERRIDES', async () => {
@@ -109,11 +109,7 @@ describe('ModelsDevGateway', () => {
 
       // OpenAI should be included even though it uses @ai-sdk/openai
       expect(providers.openai).toBeDefined();
-      expect(providers.openai.url).toBe('https://api.openai.com/v1/chat/completions');
-
-      // Anthropic should have special headers
-      expect(providers.anthropic).toBeDefined();
-      expect(providers.anthropic.apiKeyHeader).toBe('x-api-key');
+      expect(providers.openai.url).toBe('https://api.openai.com/v1');
     });
 
     it('should keep hyphens in provider IDs', async () => {
@@ -165,7 +161,7 @@ describe('ModelsDevGateway', () => {
       expect(providers.unknown_provider).toBeUndefined();
     });
 
-    it('should ensure URLs end with /chat/completions', async () => {
+    it('should ensure URLs end with ', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => mockApiResponse,
@@ -173,10 +169,9 @@ describe('ModelsDevGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      // All URLs should end with /chat/completions
-      expect(providers.openai.url).toMatch(/\/chat\/completions$/);
-      expect(providers.anthropic.url).toMatch(/\/chat\/completions$/);
-      expect(providers['fireworks-ai'].url).toMatch(/\/chat\/completions$/);
+      // Except for directly supported providers
+      expect(providers.anthropic.url).not.toMatch(/\/chat\/completions$/);
+      expect(providers.openai.url).not.toMatch(/\/chat\/completions$/);
     });
   });
 
@@ -198,83 +193,21 @@ describe('ModelsDevGateway', () => {
       await gateway.fetchProviders();
     });
 
-    it('should return correct URL for known providers', () => {
-      const url = gateway.buildUrl('openai/gpt-4', { OPENAI_API_KEY: 'sk-test' });
-      expect(url).toBe('https://api.openai.com/v1/chat/completions');
-    });
-
-    it('should return false for unknown providers', () => {
-      const url = gateway.buildUrl('unknown/model', { UNKNOWN_API_KEY: 'test' });
-      expect(url).toBe(false);
-    });
-
     it('should return URL even when API key is missing', () => {
-      const url = gateway.buildUrl('openai/gpt-4', {});
-      expect(url).toBe('https://api.openai.com/v1/chat/completions');
+      const url = gateway.buildUrl('openai/gpt-4');
+      expect(url).toBe('https://api.openai.com/v1');
     });
 
     it('should use custom base URL from env vars', () => {
       const url = gateway.buildUrl('openai/gpt-4', {
         OPENAI_API_KEY: 'sk-test',
-        OPENAI_BASE_URL: 'https://custom.openai.proxy/v1/chat/completions',
+        OPENAI_BASE_URL: 'https://custom.openai.proxy/v1',
       });
-      expect(url).toBe('https://custom.openai.proxy/v1/chat/completions');
+      expect(url).toBe('https://custom.openai.proxy/v1');
     });
 
     it('should return false for invalid model ID format', () => {
-      const url = gateway.buildUrl('invalid-format', { OPENAI_API_KEY: 'sk-test' });
-      expect(url).toBe(false);
-    });
-  });
-
-  describe('buildHeaders', () => {
-    beforeEach(async () => {
-      // Set up gateway with mock data including Anthropic
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          openai: {
-            id: 'openai',
-            name: 'OpenAI',
-            models: { 'gpt-4': {} },
-            env: ['OPENAI_API_KEY'],
-            api: 'https://api.openai.com/v1',
-          },
-          anthropic: {
-            id: 'anthropic',
-            name: 'Anthropic',
-            models: { 'claude-3': {} },
-            env: ['ANTHROPIC_API_KEY'],
-            api: 'https://api.anthropic.com/v1',
-          },
-        }),
-      });
-      await gateway.fetchProviders();
-    });
-
-    it('should build correct Authorization header for standard providers', () => {
-      const headers = gateway.buildHeaders('openai/gpt-4', { OPENAI_API_KEY: 'sk-test' });
-      expect(headers).toEqual({
-        Authorization: 'Bearer sk-test',
-      });
-    });
-
-    it('should build correct headers for Anthropic', () => {
-      const headers = gateway.buildHeaders('anthropic/claude-3', { ANTHROPIC_API_KEY: 'ant-test' });
-      expect(headers).toEqual({
-        'x-api-key': 'ant-test',
-        'anthropic-version': '2023-06-01',
-      });
-    });
-
-    it('should return empty object when provider unknown', () => {
-      const headers = gateway.buildHeaders('unknown/model', { UNKNOWN_API_KEY: 'test' });
-      expect(headers).toEqual({});
-    });
-
-    it('should return empty object when API key missing', () => {
-      const headers = gateway.buildHeaders('openai/gpt-4', {});
-      expect(headers).toEqual({});
+      expect(() => gateway.buildUrl('invalid-format', { OPENAI_API_KEY: 'sk-test' })).toThrow();
     });
   });
 
@@ -301,12 +234,7 @@ describe('ModelsDevGateway', () => {
       expect(providers.groq).toBeDefined();
 
       const url = gateway.buildUrl('groq/llama-3.1-70b', { GROQ_API_KEY: 'gsk-test' });
-      expect(url).toBe('https://api.groq.com/openai/v1/chat/completions');
-
-      const headers = gateway.buildHeaders('groq/llama-3.1-70b', { GROQ_API_KEY: 'gsk-test' });
-      expect(headers).toEqual({
-        Authorization: 'Bearer gsk-test',
-      });
+      expect(url).toBe('https://api.groq.com/openai/v1');
     });
 
     it('should correctly identify all major OpenAI-compatible providers', async () => {

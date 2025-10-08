@@ -163,6 +163,7 @@ export class MastraLLMVNext extends MastraBase {
     messageList,
     requireToolApproval,
     _internal,
+    agentId,
     // ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT | undefined> {
     let stopWhenToUse;
@@ -232,6 +233,7 @@ export class MastraLLMVNext extends MastraBase {
         returnScorerData,
         llmAISpan,
         requireToolApproval,
+        agentId,
         options: {
           ...options,
           onStepFinish: async props => {
