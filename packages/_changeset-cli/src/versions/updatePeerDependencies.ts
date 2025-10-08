@@ -59,7 +59,8 @@ async function validateAndPrepareContext(versionBumps: VersionBumps, spinner: an
   }
 
   const versionWithoutPrerelease = corePackageJson.version.split('-')[0]!;
-  if (nextCoreVersion === versionWithoutPrerelease) {
+  const nextVersionWithoutPrerelease = nextCoreVersion.split('-')[0]!;
+  if (nextVersionWithoutPrerelease === versionWithoutPrerelease) {
     spinner.stop(color.dim('Core package not bumped, skipping peer dependency updates.'));
     return null;
   }
