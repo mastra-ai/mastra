@@ -1,5 +1,5 @@
 import { Agent } from '../../agent';
-import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import { createSimilarityPrompt } from '../relevance-score-provider';
 import type { RelevanceScoreProvider } from '../relevance-score-provider';
 
@@ -7,7 +7,7 @@ import type { RelevanceScoreProvider } from '../relevance-score-provider';
 export class MastraAgentRelevanceScorer implements RelevanceScoreProvider {
   private agent: Agent;
 
-  constructor(name: string, model: MastraLanguageModel) {
+  constructor(name: string, model: MastraModelConfig) {
     this.agent = new Agent({
       name: `Relevance Scorer ${name}`,
       instructions: `You are a specialized agent for evaluating the relevance of text to queries.
@@ -31,10 +31,10 @@ Always return just the number, no explanation.`,
 
     let response: string;
     if (model.specificationVersion === 'v2') {
-      const responseText = await this.agent.generateVNext(prompt);
+      const responseText = await this.agent.generate(prompt);
       response = responseText.text;
     } else {
-      const responseText = await this.agent.generate(prompt);
+      const responseText = await this.agent.generateLegacy(prompt);
       response = responseText.text;
     }
     return parseFloat(response);

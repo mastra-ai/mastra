@@ -15,7 +15,7 @@ import type { DynamicArgument } from '../types';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
-import type { ExecuteFunction, Step } from './step';
+import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } from './step';
 import { getStepResult } from './step';
 import type {
   DefaultEngineType,
@@ -40,6 +40,7 @@ export type ExecutionContext = {
   };
   executionSpan: Span;
   format?: 'aisdk' | 'mastra' | undefined;
+  state: Record<string, any>;
 };
 
 /**
@@ -188,7 +189,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  async execute<TInput, TOutput>(params: {
+  async execute<TState, TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
     resourceId?: string;
@@ -196,6 +197,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     graph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
+    initialState?: TState;
     resume?: {
       // TODO: add execute path
       steps: string[];
@@ -213,8 +215,22 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController: AbortController;
     writableStream?: WritableStream<ChunkType>;
     format?: 'aisdk' | 'mastra' | undefined;
+    outputOptions?: {
+      includeState?: boolean;
+    };
   }): Promise<TOutput> {
-    const { workflowId, runId, resourceId, graph, input, resume, retryConfig, workflowAISpan, disableScorers } = params;
+    const {
+      workflowId,
+      runId,
+      resourceId,
+      graph,
+      input,
+      initialState,
+      resume,
+      retryConfig,
+      workflowAISpan,
+      disableScorers,
+    } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
 
@@ -245,8 +261,20 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     const stepResults: Record<string, any> = resume?.stepResults || { input };
     let lastOutput: any;
+    let lastState: Record<string, any> = initialState ?? {};
     for (let i = startIdx; i < steps.length; i++) {
       const entry = steps[i]!;
+
+      const executionContext: ExecutionContext = {
+        workflowId,
+        runId,
+        executionPath: [i],
+        suspendedPaths: {},
+        retryConfig: { attempts, delay },
+        executionSpan: executionSpan as Span,
+        format: params.format,
+        state: lastState ?? initialState,
+      };
 
       try {
         lastOutput = await this.executeEntry({
@@ -254,19 +282,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           runId,
           resourceId,
           entry,
+          executionContext,
           serializedStepGraph: params.serializedStepGraph,
           prevStep: steps[i - 1]!,
           stepResults,
           resume,
-          executionContext: {
-            workflowId,
-            runId,
-            executionPath: [i],
-            suspendedPaths: {},
-            retryConfig: { attempts, delay },
-            executionSpan: executionSpan as Span,
-            format: params.format,
-          },
           tracingContext: {
             currentSpan: workflowAISpan,
           },
@@ -276,6 +296,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           writableStream: params.writableStream,
           disableScorers,
         });
+
+        if (lastOutput.executionContext?.state) {
+          lastState = lastOutput.executionContext.state;
+        }
 
         // if step result is not success, stop and return
         if (lastOutput.result.status !== 'success') {
@@ -385,6 +409,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       },
     });
 
+    if (params.outputOptions?.includeState) {
+      return { ...result, state: lastState };
+    }
     return result;
   }
 
@@ -441,7 +468,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       type: 'sleep';
       id: string;
       duration?: number;
-      fn?: ExecuteFunction<any, any, any, any, DefaultEngineType>;
+      fn?: ExecuteFunction<any, any, any, any, any, DefaultEngineType>;
     };
     prevStep: StepFlowEntry;
     prevOutput: any;
@@ -479,6 +506,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         mastra: this.mastra!,
         runtimeContext,
         inputData: prevOutput,
+        state: executionContext.state,
+        setState: (state: any) => {
+          executionContext.state = state;
+        },
         runCount: -1,
         tracingContext: {
           currentSpan: sleepSpan,
@@ -542,7 +573,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       type: 'sleepUntil';
       id: string;
       date?: Date;
-      fn?: ExecuteFunction<any, any, any, any, DefaultEngineType>;
+      fn?: ExecuteFunction<any, any, any, any, any, DefaultEngineType>;
     };
     prevStep: StepFlowEntry;
     prevOutput: any;
@@ -581,6 +612,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         mastra: this.mastra!,
         runtimeContext,
         inputData: prevOutput,
+        state: executionContext.state,
+        setState: (state: any) => {
+          executionContext.state = state;
+        },
         runCount: -1,
         tracingContext: {
           currentSpan: sleepUntilSpan,
@@ -697,6 +732,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     disableScorers,
     serializedStepGraph,
     tracingContext,
+    iterationCount,
   }: {
     workflowId: string;
     runId: string;
@@ -717,6 +753,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     disableScorers?: boolean;
     serializedStepGraph: SerializedStepFlowEntry[];
     tracingContext: TracingContext;
+    iterationCount?: number;
   }): Promise<StepResult<any, any, any, any>> {
     const startTime = resume?.steps[0] === step.id ? undefined : Date.now();
     const resumeTime = resume?.steps[0] === step.id ? Date.now() : undefined;
@@ -734,6 +771,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       ...(startTime ? { startedAt: startTime } : {}),
       ...(resumeTime ? { resumedAt: resumeTime } : {}),
       status: 'running',
+      ...(iterationCount ? { metadata: { iterationCount } } : {}),
     };
 
     const stepAISpan = tracingContext.currentSpan?.createChildSpan({
@@ -840,6 +878,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           mastra: this.mastra ? wrapMastra(this.mastra, { currentSpan: stepAISpan }) : undefined,
           runtimeContext,
           inputData,
+          state: executionContext.state,
+          setState: (state: any) => {
+            executionContext.state = state;
+          },
           runCount: this.getOrGenerateRunCount(step.id),
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           tracingContext: { currentSpan: stepAISpan },
@@ -1137,6 +1179,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: executionContext.suspendedPaths,
             retryConfig: executionContext.retryConfig,
             executionSpan: executionContext.executionSpan,
+            state: executionContext.state,
           },
           tracingContext: {
             currentSpan: parallelSpan,
@@ -1211,7 +1254,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     entry: {
       type: 'conditional';
       steps: StepFlowEntry[];
-      conditions: ExecuteFunction<any, any, any, any, DefaultEngineType>[];
+      conditions: ConditionFunction<any, any, any, any, DefaultEngineType>[];
     };
     prevStep: StepFlowEntry;
     prevOutput: any;
@@ -1261,6 +1304,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               mastra: this.mastra!,
               runtimeContext,
               inputData: prevOutput,
+              state: executionContext.state,
+              setState: (state: any) => {
+                executionContext.state = state;
+              },
               runCount: -1,
               tracingContext: {
                 currentSpan: evalSpan,
@@ -1359,6 +1406,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: executionContext.suspendedPaths,
             retryConfig: executionContext.retryConfig,
             executionSpan: executionContext.executionSpan,
+            state: executionContext.state,
           },
           tracingContext: {
             currentSpan: conditionalSpan,
@@ -1454,7 +1502,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     entry: {
       type: 'loop';
       step: Step;
-      condition: ExecuteFunction<any, any, any, any, DefaultEngineType>;
+      condition: LoopConditionFunction<any, any, any, any, DefaultEngineType>;
       loopType: 'dowhile' | 'dountil';
     };
     prevStep: StepFlowEntry;
@@ -1488,7 +1536,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     });
 
     let isTrue = true;
-    let iteration = 0;
+    const prevIterationCount = stepResults[step.id]?.metadata?.iterationCount;
+    let iteration = prevIterationCount ? prevIterationCount - 1 : 0;
     const prevPayload = stepResults[step.id]?.payload;
     let result = { status: 'success', output: prevPayload ?? prevOutput } as unknown as StepResult<any, any, any, any>;
     let currentResume = resume;
@@ -1512,6 +1561,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         writableStream,
         disableScorers,
         serializedStepGraph,
+        iterationCount: iteration + 1,
       });
 
       // Clear resume for next iteration only if the step has completed resuming
@@ -1545,10 +1595,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         mastra: this.mastra!,
         runtimeContext,
         inputData: result.output,
+        state: executionContext.state,
+        setState: (state: any) => {
+          executionContext.state = state;
+        },
         runCount: -1,
         tracingContext: {
           currentSpan: evalSpan,
         },
+        iterationCount: iteration + 1,
         getInitData: () => stepResults?.input as any,
         getStepResult: getStepResult.bind(this, stepResults),
         suspend: async (_suspendPayload: any): Promise<any> => {},
@@ -1877,6 +1932,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     error?: string | Error;
     runtimeContext: RuntimeContext;
   }) {
+    const shouldPersistSnapshot = this.options?.shouldPersistSnapshot?.({ stepResults, workflowStatus });
+
+    if (!shouldPersistSnapshot) {
+      return;
+    }
+
     const runtimeContextObj: Record<string, any> = {};
     runtimeContext.forEach((value, key) => {
       runtimeContextObj[key] = value;
@@ -1889,7 +1950,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       snapshot: {
         runId,
         status: workflowStatus,
-        value: {},
+        value: executionContext.state,
         context: stepResults as any,
         activePaths: [],
         serializedStepGraph,
@@ -1986,6 +2047,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           suspendedPaths: executionContext.suspendedPaths,
           retryConfig: executionContext.retryConfig,
           executionSpan: executionContext.executionSpan,
+          state: executionContext.state,
         },
         tracingContext,
         emitter,
@@ -2425,6 +2487,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           status: 'waiting',
         },
       });
+
+      stepResults[entry.step.id] = {
+        status: 'waiting',
+        payload: prevOutput,
+        startedAt,
+      };
 
       await this.persistStepUpdate({
         workflowId,

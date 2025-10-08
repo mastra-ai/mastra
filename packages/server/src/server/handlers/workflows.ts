@@ -2,7 +2,7 @@ import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { TracingOptions } from '@mastra/core/ai-tracing';
 import type { RuntimeContext } from '@mastra/core/di';
 import type { WorkflowRuns } from '@mastra/core/storage';
-import type { Workflow, WatchEvent, WorkflowInfo, StreamEvent } from '@mastra/core/workflows';
+import type { Workflow, WatchEvent, WorkflowInfo, StreamEvent, ChunkType } from '@mastra/core/workflows';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
@@ -248,7 +248,7 @@ export async function startWorkflowRunHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = await workflow.createRunAsync({ runId });
+    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
     void _run.start({
       inputData,
       runtimeContext,
@@ -290,7 +290,7 @@ export async function watchWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = await workflow.createRunAsync({ runId });
+    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
     let unwatch: () => void;
     let asyncRef: NodeJS.Immediate | null = null;
     const stream = new ReadableStream<string>({
@@ -403,7 +403,7 @@ export async function observeStreamWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = await workflow.createRunAsync({ runId });
+    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
     const serverCache = mastra.getServerCache();
     if (!serverCache) {
       throw new HTTPException(500, { message: 'Server cache not found' });
@@ -457,16 +457,107 @@ export async function streamVNextWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
+    const serverCache = mastra.getServerCache();
+
     const run = await workflow.createRunAsync({ runId });
     const result = run.streamVNext({
       inputData,
       runtimeContext,
       closeOnSuspend,
+      onChunk: async chunk => {
+        if (serverCache) {
+          const cacheKey = runId;
+          await serverCache.listPush(cacheKey, chunk);
+        }
+      },
       tracingOptions,
     });
     return result;
   } catch (error) {
     return handleError(error, 'Error streaming workflow');
+  }
+}
+
+export async function observeStreamVNextWorkflowHandler({
+  mastra,
+  workflowId,
+  runId,
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'>) {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to observe workflow stream' });
+    }
+
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
+
+    if (!workflow) {
+      throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    const run = await workflow.getWorkflowRunById(runId);
+
+    if (!run) {
+      throw new HTTPException(404, { message: 'Workflow run not found' });
+    }
+
+    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
+    const serverCache = mastra.getServerCache();
+    if (!serverCache) {
+      throw new HTTPException(500, { message: 'Server cache not found' });
+    }
+
+    // Get cached chunks first
+    const cachedRunChunks = await serverCache.listFromTo(runId, 0);
+
+    // Create a readable stream that first emits cached chunks, then the live stream
+    const combinedStream = new ReadableStream<ChunkType>({
+      start(controller) {
+        // First, emit all cached chunks
+        const emitCachedChunks = async () => {
+          for (const chunk of cachedRunChunks) {
+            controller.enqueue(chunk as ChunkType);
+          }
+        };
+
+        // Then, pipe the live stream
+        const liveStream = _run.observeStreamVNext();
+        const reader = liveStream.getReader();
+
+        const pump = async () => {
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) {
+                controller.close();
+                break;
+              }
+              controller.enqueue(value);
+            }
+          } catch (error) {
+            controller.error(error);
+          } finally {
+            reader.releaseLock();
+          }
+        };
+
+        // Start with cached chunks, then live stream
+        void emitCachedChunks()
+          .then(() => {
+            void pump();
+          })
+          .catch(error => {
+            controller.error(error);
+          });
+      },
+    });
+
+    return combinedStream;
+  } catch (error) {
+    return handleError(error, 'Error observing workflow stream');
   }
 }
 
@@ -507,7 +598,7 @@ export async function resumeAsyncWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = await workflow.createRunAsync({ runId });
+    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
     const result = await _run.resume({
       step: body.step,
       resumeData: body.resumeData,
@@ -558,7 +649,7 @@ export async function resumeWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = await workflow.createRunAsync({ runId });
+    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
 
     void _run.resume({
       step: body.step,
@@ -610,13 +701,20 @@ export async function resumeStreamWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = await workflow.createRunAsync({ runId });
+    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
+    const serverCache = mastra.getServerCache();
 
-    const stream = await _run.resumeStreamVNext({
+    const stream = _run.resumeStreamVNext({
       step: body.step,
       resumeData: body.resumeData,
       runtimeContext,
       tracingOptions,
+      onChunk: async chunk => {
+        if (serverCache) {
+          const cacheKey = runId;
+          await serverCache.listPush(cacheKey, chunk);
+        }
+      },
     });
 
     return stream;
@@ -687,7 +785,7 @@ export async function cancelWorkflowRunHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = await workflow.createRunAsync({ runId });
+    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
 
     await _run.cancel();
 
@@ -728,7 +826,7 @@ export async function sendWorkflowRunEventHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = await workflow.createRunAsync({ runId });
+    const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
 
     await _run.sendEvent(event, data);
 

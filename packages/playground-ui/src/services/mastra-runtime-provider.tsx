@@ -11,11 +11,11 @@ import { RuntimeContext } from '@mastra/core/di';
 import { ChatProps, Message } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@/lib/file/toBase64';
-import { useMastraClient } from '@mastra/react';
+import { toAssistantUIMessage, useMastraClient } from '@mastra/react';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
-import { MastraModelOutput, ReadonlyJSONObject } from '@mastra/core/stream';
+import { ReadonlyJSONObject } from '@mastra/core/stream';
 
 import { handleNetworkMessageFromMemory } from './agent-network-message';
 import {
@@ -25,10 +25,6 @@ import {
   handleWorkflowChunk,
 } from './stream-chunk-message';
 import { ModelSettings, useChat } from '@mastra/react';
-
-const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
-  return message;
-};
 
 const handleFinishReason = (finishReason: string) => {
   switch (finishReason) {
@@ -173,18 +169,21 @@ export function MastraRuntimeProvider({
   children: ReactNode;
 }> &
   ChatProps) {
-  const [isRunning, setIsRunning] = useState(false);
+  const initializeMessages = () => (memory ? initializeMessageState(initialMessages || []) : []);
+  const [isLegacyRunning, setIsLegacyRunning] = useState(false);
+  const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>(initializeMessages());
 
   const {
-    messages,
     setMessages,
-    streamVNext,
+    messages,
+    generate,
+    stream,
     network,
     cancelRun,
-    isRunning: isRunningStreamVNext,
+    isRunning: isRunningStream,
   } = useChat<ThreadMessageLike>({
     agentId,
-    initializeMessages: () => (memory ? initializeMessageState(initialMessages || []) : []),
+    initializeMessages,
   });
 
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
@@ -200,8 +199,8 @@ export function MastraRuntimeProvider({
     topK,
     topP,
     instructions,
+    chatWithGenerateLegacy,
     chatWithGenerate,
-    chatWithGenerateVNext,
     chatWithNetwork,
     providerOptions,
   } = settings?.modelSettings ?? {};
@@ -226,13 +225,19 @@ export function MastraRuntimeProvider({
 
   const baseClient = useMastraClient();
 
+  const isVNext = modelVersion === 'v2';
+
   const onNew = async (message: AppendMessage) => {
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');
 
     const attachments = await convertToAIAttachments(message.attachments);
 
     const input = message.content[0].text;
-    setMessages(s => [...s, { role: 'user', content: input, attachments: message.attachments }]);
+    if (isVNext) {
+      setMessages(s => [...s, { role: 'user', content: input, attachments: message.attachments }]);
+    } else {
+      setLegacyMessages(s => [...s, { role: 'user', content: input, attachments: message.attachments }]);
+    }
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -247,128 +252,7 @@ export function MastraRuntimeProvider({
     const agent = clientWithAbort.getAgent(agentId);
 
     try {
-      function handleGenerateResponse(generatedResponse: Awaited<ReturnType<MastraModelOutput['getFullOutput']>>) {
-        if (
-          generatedResponse.response &&
-          'messages' in generatedResponse.response &&
-          generatedResponse.response.messages
-        ) {
-          const latestMessage = generatedResponse.response.messages.reduce(
-            (acc: ThreadMessageLike, message) => {
-              const _content = Array.isArray(acc.content) ? acc.content : [];
-
-              if (typeof message.content === 'string') {
-                return {
-                  ...acc,
-                  content: [
-                    ..._content,
-                    ...(generatedResponse.reasoning ? [{ type: 'reasoning', text: generatedResponse.reasoning }] : []),
-                    {
-                      type: 'text',
-                      text: message.content,
-                    },
-                  ],
-                };
-              }
-
-              if (message.role === 'assistant') {
-                const toolCallContent = Array.isArray(message.content)
-                  ? message.content.find(content => content.type === 'tool-call')
-                  : undefined;
-
-                const reasoningContent = Array.isArray(message.content)
-                  ? message.content.find(content => content.type === 'reasoning')
-                  : undefined;
-
-                if (toolCallContent) {
-                  const newContent = message.content.map(c => {
-                    if (c.type === 'tool-call' && c.toolCallId === toolCallContent?.toolCallId) {
-                      return {
-                        ...c,
-                        toolCallId: toolCallContent.toolCallId,
-                        toolName: toolCallContent.toolName,
-                        args: toolCallContent.input,
-                      };
-                    }
-                    return c;
-                  });
-
-                  const containsToolCall = newContent.some(c => c.type === 'tool-call');
-
-                  return {
-                    ...acc,
-                    content: containsToolCall
-                      ? [...(reasoningContent ? [reasoningContent] : []), ...newContent]
-                      : [..._content, ...(reasoningContent ? [reasoningContent] : []), toolCallContent],
-                  };
-                }
-
-                const textContent = Array.isArray(message.content)
-                  ? message.content.find(content => content.type === 'text' && content.text)
-                  : undefined;
-
-                if (textContent) {
-                  return {
-                    ...acc,
-                    content: [..._content, ...(reasoningContent ? [reasoningContent] : []), textContent],
-                  };
-                }
-              }
-
-              if (message.role === 'tool') {
-                const toolResult = Array.isArray(message.content)
-                  ? message.content.find(content => content.type === 'tool-result')
-                  : undefined;
-
-                if (toolResult) {
-                  const newContent = _content.map(c => {
-                    if (c.type === 'tool-call' && c.toolCallId === toolResult?.toolCallId) {
-                      return { ...c, result: toolResult.output?.value };
-                    }
-                    return c;
-                  });
-                  const containsToolCall = newContent.some(c => c.type === 'tool-call');
-
-                  return {
-                    ...acc,
-                    content: containsToolCall
-                      ? newContent
-                      : [
-                          ..._content,
-                          { type: 'tool-result', toolCallId: toolResult.toolCallId, result: toolResult.output?.value },
-                        ],
-                  };
-                }
-
-                return {
-                  ...acc,
-                  content: [..._content, toolResult],
-                };
-              }
-              return acc;
-            },
-            { role: 'assistant', content: [] },
-          );
-
-          setMessages(currentConversation => [
-            ...currentConversation,
-            {
-              ...latestMessage,
-              metadata: {
-                custom: {
-                  modelMetadata: generatedResponse.response.modelMetadata,
-                },
-              },
-            },
-          ]);
-
-          if (generatedResponse.finishReason) {
-            handleFinishReason(generatedResponse.finishReason);
-          }
-        }
-      }
-
-      if (modelVersion === 'v2') {
+      if (isVNext) {
         if (chatWithNetwork) {
           let currentEntityId: string | undefined;
 
@@ -471,37 +355,37 @@ export function MastraRuntimeProvider({
             },
           });
         } else {
-          if (chatWithGenerateVNext) {
-            setIsRunning(true);
-            const response = await agent.generateVNext({
-              messages: [
+          if (chatWithGenerate) {
+            await generate({
+              coreUserMessages: [
                 {
                   role: 'user',
                   content: input,
                 },
                 ...attachments,
               ],
-              runId: agentId,
-              modelSettings: {
-                frequencyPenalty,
-                presencePenalty,
-                maxRetries,
-                temperature,
-                topK,
-                topP,
-                maxOutputTokens: maxTokens,
-              },
-              providerOptions,
-              instructions,
               runtimeContext: runtimeContextInstance,
-              ...(memory ? { threadId, resourceId: agentId } : {}),
+              threadId,
+              modelSettings: modelSettingsArgs,
+              signal: controller.signal,
+              onFinish: ({ messages, tripwireReason }) => {
+                const next = messages.length > 0 ? messages.map(message => toAssistantUIMessage(message)) : [];
+
+                if (tripwireReason) {
+                  next.push({
+                    role: 'assistant',
+                    content: [{ type: 'text', text: tripwireReason }],
+                    metadata: { custom: { status: 'warning' } },
+                  });
+                }
+
+                return next;
+              },
             });
 
-            handleGenerateResponse(response);
-            setIsRunning(false);
             return;
           } else {
-            await streamVNext({
+            await stream({
               coreUserMessages: [
                 {
                   role: 'user',
@@ -534,9 +418,9 @@ export function MastraRuntimeProvider({
           }
         }
       } else {
-        if (chatWithGenerate) {
-          setIsRunning(true);
-          const generateResponse = await agent.generate({
+        if (chatWithGenerateLegacy) {
+          setIsLegacyRunning(true);
+          const generateResponse = await agent.generateLegacy({
             messages: [
               {
                 role: 'user',
@@ -646,12 +530,14 @@ export function MastraRuntimeProvider({
               },
               { role: 'assistant', content: [] },
             );
-            setMessages(currentConversation => [...currentConversation, latestMessage as ThreadMessageLike]);
+            setLegacyMessages(currentConversation => [...currentConversation, latestMessage as ThreadMessageLike]);
             handleFinishReason(generateResponse.finishReason);
           }
+
+          setIsLegacyRunning(false);
         } else {
-          setIsRunning(true);
-          const response = await agent.stream({
+          setIsLegacyRunning(true);
+          const response = await agent.streamLegacy({
             messages: [
               {
                 role: 'user',
@@ -684,7 +570,7 @@ export function MastraRuntimeProvider({
           let assistantToolCallAddedForContent = false;
 
           function updater() {
-            setMessages(currentConversation => {
+            setLegacyMessages(currentConversation => {
               const message: ThreadMessageLike = {
                 role: 'assistant',
                 content: [{ type: 'text', text: content }],
@@ -720,7 +606,7 @@ export function MastraRuntimeProvider({
             },
             async onToolCallPart(value) {
               // Update the messages state
-              setMessages(currentConversation => {
+              setLegacyMessages(currentConversation => {
                 // Get the last message (should be the assistant's message)
                 const lastMessage = currentConversation[currentConversation.length - 1];
 
@@ -780,7 +666,7 @@ export function MastraRuntimeProvider({
             },
             async onToolResultPart(value) {
               // Update the messages state
-              setMessages(currentConversation => {
+              setLegacyMessages(currentConversation => {
                 // Get the last message (should be the assistant's message)
                 const lastMessage = currentConversation[currentConversation.length - 1];
 
@@ -824,7 +710,7 @@ export function MastraRuntimeProvider({
               handleFinishReason(finishReason);
             },
             onReasoningPart(value) {
-              setMessages(currentConversation => {
+              setLegacyMessages(currentConversation => {
                 // Get the last message (should be the assistant's message)
                 const lastMessage = currentConversation[currentConversation.length - 1];
 
@@ -866,15 +752,15 @@ export function MastraRuntimeProvider({
             },
           });
         }
+        setIsLegacyRunning(false);
       }
 
-      setIsRunning(false);
       setTimeout(() => {
         refreshThreadList?.();
       }, 500);
     } catch (error: any) {
       console.error('Error occurred in MastraRuntimeProvider', error);
-      setIsRunning(false);
+      setIsLegacyRunning(false);
 
       // Handle cancellation gracefully
       if (error.name === 'AbortError') {
@@ -882,10 +768,17 @@ export function MastraRuntimeProvider({
         return;
       }
 
-      setMessages(currentConversation => [
-        ...currentConversation,
-        { role: 'assistant', content: [{ type: 'text', text: `${error}` }] },
-      ]);
+      if (isVNext) {
+        setMessages(currentConversation => [
+          ...currentConversation,
+          { role: 'assistant', content: [{ type: 'text', text: `${error}` }] },
+        ]);
+      } else {
+        setLegacyMessages(currentConversation => [
+          ...currentConversation,
+          { role: 'assistant', content: [{ type: 'text', text: `${error}` }] },
+        ]);
+      }
     } finally {
       // Clean up the abort controller reference
       abortControllerRef.current = null;
@@ -896,7 +789,7 @@ export function MastraRuntimeProvider({
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
-      setIsRunning(false);
+      setIsLegacyRunning(false);
       cancelRun?.();
     }
   };
@@ -904,9 +797,9 @@ export function MastraRuntimeProvider({
   const { adapters, isReady } = useAdapters(agentId);
 
   const runtime = useExternalStoreRuntime({
-    isRunning: isRunning || isRunningStreamVNext,
-    messages,
-    convertMessage,
+    isRunning: isLegacyRunning || isRunningStream,
+    messages: isVNext ? messages : legacyMessages,
+    convertMessage: x => x,
     onNew,
     onCancel,
     adapters: isReady ? adapters : undefined,

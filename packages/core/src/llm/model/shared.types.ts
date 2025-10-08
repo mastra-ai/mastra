@@ -22,12 +22,20 @@ export type ScoringProperties = {
   scoringData?: ScoringData;
 };
 
-export type OpenAICompatibleConfig = {
-  id: string; // Model ID like "gpt-4o" or "openai/gpt-4o"
-  url?: string; // Optional custom URL endpoint
-  apiKey?: string; // Optional API key (falls back to env vars)
-  headers?: Record<string, string>; // Additional headers
-};
+export type OpenAICompatibleConfig =
+  | {
+      id: `${string}/${string}`; // Model ID like "openai/gpt-4o" or "custom-provider/my-model"
+      url?: string; // Optional custom URL endpoint
+      apiKey?: string; // Optional API key (falls back to env vars)
+      headers?: Record<string, string>; // Additional headers
+    }
+  | {
+      providerId: string; // Provider ID like "openai" or "custom-provider"
+      modelId: string; // Model ID like "gpt-4o" or "my-model"
+      url?: string; // Optional custom URL endpoint
+      apiKey?: string; // Optional API key (falls back to env vars)
+      headers?: Record<string, string>; // Additional headers
+    };
 
 export type MastraLanguageModel = LanguageModelV1 | LanguageModelV2;
 

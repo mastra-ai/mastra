@@ -1,6 +1,5 @@
 import { noopLogger, type IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
-import nodeResolve from '@rollup/plugin-node-resolve';
 import json from '@rollup/plugin-json';
 import virtual from '@rollup/plugin-virtual';
 import { fileURLToPath } from 'node:url';
@@ -88,6 +87,17 @@ async function captureDependenciesToOptimize(
 ): Promise<Map<string, DependencyMetadata>> {
   const depsToOptimize = new Map<string, DependencyMetadata>();
 
+  if (!output.facadeModuleId) {
+    throw new Error(
+      'Something went wrong, we could not find the package name of the entry file. Please open an issue.',
+    );
+  }
+
+  let entryRootPath = projectRoot;
+  if (!output.facadeModuleId.startsWith('\x00virtual:')) {
+    entryRootPath = (await getPackageRootPath(output.facadeModuleId)) || projectRoot;
+  }
+
   for (const [dependency, bindings] of Object.entries(output.importedBindings)) {
     if (isNodeBuiltin(dependency) || DEPS_TO_IGNORE.includes(dependency)) {
       continue;
@@ -99,7 +109,7 @@ async function captureDependenciesToOptimize(
     let isWorkspace = false;
 
     if (pkgName) {
-      rootPath = await getPackageRootPath(pkgName);
+      rootPath = await getPackageRootPath(dependency, entryRootPath);
       isWorkspace = workspaceMap.has(pkgName);
     }
 

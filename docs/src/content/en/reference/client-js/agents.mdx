@@ -2,7 +2,6 @@
 title: Mastra Client Agents API
 description: Learn how to interact with Mastra AI agents, including generating responses, streaming interactions, and managing agent tools using the client-js SDK.
 ---
-import { StreamVNextCallout } from "@/components/streamVNext-callout.tsx"
 
 # Agents API
 
@@ -161,21 +160,19 @@ const liveEvals = await agent.liveEvals();
 ```
 
 
-### Stream VNext (Experimental)
+### Stream
 
-<StreamVNextCallout />
 
-Stream responses using the enhanced VNext API with improved method signatures.
+Stream responses using the enhanced API with improved method signatures. This method provides enhanced capabilities and format flexibility, with support for Mastra's native format.
 
 ```typescript
-const response = await agent.streamVNext(
+const response = await agent.stream(
   "Tell me a story",
   {
     threadId: "thread-1",
     clientTools: { colorChangeTool },
   }
 );
-
 
 // Process the stream
 response.processDataStream({
@@ -189,12 +186,12 @@ Currently, AI SDK V5 format is not supported in the client SDK.
 For AI SDK v5 compatible format, leverage the `@mastra/ai-sdk` package
 [AI SDK v5 Stream Compatibility](/docs/frameworks/agentic-uis/ai-sdk#enabling-stream-compatibility)
 
-### Generate VNext (Experimental)
+### Generate
 
-Generate a response using the enhanced VNext API with improved method signatures and AI SDK v5 compatibility:
+Generate a response using the enhanced API with improved method signatures and AI SDK v5 compatibility:
 
 ```typescript
-const response = await agent.generateVNext(
+const response = await agent.generate(
   "Hello, how are you?",
   {
     threadId: "thread-1",

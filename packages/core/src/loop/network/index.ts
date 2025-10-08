@@ -239,7 +239,7 @@ export async function createNetworkLoop({
                           }
                       `;
 
-        completionResult = await routingAgent.generateVNext([{ role: 'assistant', content: completionPrompt }], {
+        completionResult = await routingAgent.generate([{ role: 'assistant', content: completionPrompt }], {
           structuredOutput: {
             schema: completionSchema,
           },
@@ -353,7 +353,7 @@ export async function createNetworkLoop({
         ...routingAgentOptions,
       };
 
-      const result = await routingAgent.generateVNext(prompt, options);
+      const result = await routingAgent.generate(prompt, options);
 
       const object = result.object;
 
@@ -428,7 +428,7 @@ export async function createNetworkLoop({
         },
       });
 
-      const result = await agentForStep.streamVNext(inputData.prompt, {
+      const result = await agentForStep.stream(inputData.prompt, {
         // resourceId: inputData.resourceId,
         // threadId: inputData.threadId,
         runtimeContext: runtimeContext,
@@ -871,6 +871,9 @@ export async function createNetworkLoop({
       threadResourceId: z.string().optional(),
       isOneOff: z.boolean(),
     }),
+    options: {
+      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+    },
   });
 
   networkWorkflow
@@ -879,7 +882,7 @@ export async function createNetworkLoop({
       [async ({ inputData }) => !inputData.isComplete && inputData.primitiveType === 'agent', agentStep],
       [async ({ inputData }) => !inputData.isComplete && inputData.primitiveType === 'workflow', workflowStep],
       [async ({ inputData }) => !inputData.isComplete && inputData.primitiveType === 'tool', toolStep],
-      [async ({ inputData }) => inputData.isComplete, finishStep],
+      [async ({ inputData }) => !!inputData.isComplete, finishStep],
     ])
     .map({
       task: {
@@ -1024,6 +1027,9 @@ export async function networkLoop<
       completionReason: z.string().optional(),
       iteration: z.number(),
     }),
+    options: {
+      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+    },
   })
     .dountil(networkWorkflow, async ({ inputData }) => {
       return inputData.isComplete || (maxIterations && inputData.iteration >= maxIterations);

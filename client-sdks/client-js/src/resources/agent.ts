@@ -24,8 +24,8 @@ import type {
   GetToolResponse,
   ClientOptions,
   StreamParams,
+  StreamLegacyParams,
   UpdateModelParams,
-  StreamVNextParams,
   UpdateModelInModelListParams,
   ReorderModelListParams,
   NetworkStreamParams,
@@ -46,13 +46,13 @@ async function executeToolCallAndRespond({
   runtimeContext,
   respondFn,
 }: {
-  params: StreamVNextParams<any>;
+  params: StreamParams<any>;
   response: Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
   runId?: string;
   resourceId?: string;
   threadId?: string;
   runtimeContext?: RuntimeContext<any>;
-  respondFn: Agent['generateVNext'];
+  respondFn: Agent['generate'];
 }) {
   if (response.finishReason === 'tool-calls') {
     const toolCalls = (
@@ -207,31 +207,6 @@ export class Agent extends BaseResource {
    * @param params - Generation parameters including prompt
    * @returns Promise containing the generated response
    */
-  async generate(
-    params: GenerateParams<undefined> & { output?: never; experimental_output?: never },
-  ): Promise<GenerateReturn<any, undefined, undefined>>;
-  async generate<Output extends JSONSchema7 | ZodType>(
-    params: GenerateParams<Output> & { output: Output; experimental_output?: never },
-  ): Promise<GenerateReturn<any, Output, undefined>>;
-  async generate<StructuredOutput extends JSONSchema7 | ZodType>(
-    params: GenerateParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
-  ): Promise<GenerateReturn<any, undefined, StructuredOutput>>;
-  async generate<
-    Output extends JSONSchema7 | ZodType | undefined = undefined,
-    StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
-  >(params: GenerateParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
-    console.warn(
-      "Deprecation NOTICE: Generate method will switch to use generateVNext implementation the week of September 30th, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
-    );
-    // @ts-expect-error - generic type issues
-    return this.generateLegacy(params);
-  }
-
-  /**
-   * Generates a response from the agent
-   * @param params - Generation parameters including prompt
-   * @returns Promise containing the generated response
-   */
   async generateLegacy(
     params: GenerateParams<undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateReturn<any, undefined, undefined>>;
@@ -323,20 +298,20 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async generateVNext<OUTPUT extends OutputSchema = undefined>(
+  async generate<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
-    options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
   // Backward compatibility overload
-  async generateVNext<OUTPUT extends OutputSchema = undefined>(
-    params: StreamVNextParams<OUTPUT>,
+  async generate<OUTPUT extends OutputSchema = undefined>(
+    params: StreamParams<OUTPUT>,
   ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
-  async generateVNext<OUTPUT extends OutputSchema = undefined>(
-    messagesOrParams: MessageListInput | StreamVNextParams<OUTPUT>,
-    options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>,
+  async generate<OUTPUT extends OutputSchema = undefined>(
+    messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
     // Handle both new signature (messages, options) and old signature (single param object)
-    let params: StreamVNextParams<OUTPUT>;
+    let params: StreamParams<OUTPUT>;
     if (typeof messagesOrParams === 'object' && 'messages' in messagesOrParams) {
       // Old signature: single parameter object
       params = messagesOrParams;
@@ -345,7 +320,7 @@ export class Agent extends BaseResource {
       params = {
         messages: messagesOrParams as MessageListInput,
         ...options,
-      } as StreamVNextParams<OUTPUT>;
+      } as StreamParams<OUTPUT>;
     }
     const processedParams = {
       ...params,
@@ -360,10 +335,10 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    const { runId, resourceId, threadId, runtimeContext } = processedParams as StreamVNextParams;
+    const { runId, resourceId, threadId, runtimeContext } = processedParams as StreamParams;
 
     const response = await this.request<ReturnType<MastraModelOutput['getFullOutput']>>(
-      `/api/agents/${this.agentId}/generate/vnext`,
+      `/api/agents/${this.agentId}/generate`,
       {
         method: 'POST',
         body: processedParams,
@@ -378,7 +353,7 @@ export class Agent extends BaseResource {
         resourceId,
         threadId,
         runtimeContext: runtimeContext as RuntimeContext<any>,
-        respondFn: this.generateVNext.bind(this),
+        respondFn: this.generate.bind(this),
       }) as unknown as Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
     }
 
@@ -735,26 +710,8 @@ export class Agent extends BaseResource {
    * @param params - Stream parameters including prompt
    * @returns Promise containing the enhanced Response object with processDataStream method
    */
-  async stream<T extends JSONSchema7 | ZodType | undefined = undefined>(
-    params: StreamParams<T>,
-  ): Promise<
-    Response & {
-      processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
-    }
-  > {
-    console.warn(
-      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation the week of September 30th, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
-    );
-    return this.streamLegacy(params);
-  }
-
-  /**
-   * Streams a response from the agent
-   * @param params - Stream parameters including prompt
-   * @returns Promise containing the enhanced Response object with processDataStream method
-   */
   async streamLegacy<T extends JSONSchema7 | ZodType | undefined = undefined>(
-    params: StreamParams<T>,
+    params: StreamLegacyParams<T>,
   ): Promise<
     Response & {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
@@ -898,6 +855,16 @@ export class Agent extends BaseResource {
       // but this is completely wrong and this fn is probably broken. Remove ":any" and you'll see a bunch of type errors
       onChunk: async (chunk: any) => {
         switch (chunk.type) {
+          case 'tripwire': {
+            message.parts.push({
+              type: 'text',
+              text: chunk.payload.tripwireReason,
+            });
+
+            execUpdate();
+            break;
+          }
+
           case 'step-start': {
             // keep message id stable when we are updating an existing message:
             if (!replaceLastMessage) {
@@ -1139,7 +1106,7 @@ export class Agent extends BaseResource {
   }
 
   async processStreamResponse_vNext(processedParams: any, writable: any) {
-    const response: Response = await this.request(`/api/agents/${this.agentId}/stream/vnext`, {
+    const response: Response = await this.request(`/api/agents/${this.agentId}/stream`, {
       method: 'POST',
       body: processedParams,
       stream: true,
@@ -1156,25 +1123,26 @@ export class Agent extends BaseResource {
       // Use tee() to split the stream into two branches
       const [streamForWritable, streamForProcessing] = response.body.tee();
 
-      // Track the pipe promise so we can wait for it before closing
-      const pipePromise = streamForWritable
+      // Pipe one branch to the writable stream without holding a persistent lock
+
+      streamForWritable
         .pipeTo(
           new WritableStream<Uint8Array>({
             async write(chunk) {
+              let writer;
+
               // Filter out terminal markers so the client stream doesn't end before recursion
               try {
+                writer = writable.getWriter();
                 const text = new TextDecoder().decode(chunk);
-                if (text.includes('[DONE]')) {
-                  return;
-                }
+                const lines = text.split('\n\n');
+                const readableLines = lines.filter(line => line !== '[DONE]').join('\n\n');
+
+                await writer.write(new TextEncoder().encode(readableLines));
               } catch {
-                // If decoding fails, fall back to writing raw chunk
-              }
-              const writer = writable.getWriter();
-              try {
-                await writer.write(chunk);
+                await writer?.write(chunk);
               } finally {
-                writer.releaseLock();
+                writer?.releaseLock();
               }
             },
           }),
@@ -1187,7 +1155,7 @@ export class Agent extends BaseResource {
         });
 
       // Process the other branch for chat response handling
-      await this.processChatResponse_vNext({
+      this.processChatResponse_vNext({
         stream: streamForProcessing as unknown as ReadableStream<Uint8Array>,
         update: ({ message }) => {
           const existingIndex = messages.findIndex(m => m.id === message.id);
@@ -1261,32 +1229,33 @@ export class Agent extends BaseResource {
                 const updatedMessages =
                   lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
 
-                // Wait for current pipe to complete before starting recursive call
-                await pipePromise;
-
                 // Recursively call stream with updated messages
-                await this.processStreamResponse_vNext(
+                this.processStreamResponse_vNext(
                   {
                     ...processedParams,
                     messages: updatedMessages,
                   },
                   writable,
-                );
+                ).catch(error => {
+                  console.error('Error processing stream response:', error);
+                });
               }
             }
 
             if (!shouldExecuteClientTool) {
-              // Wait for pipe to complete before closing
-              await pipePromise;
-              writable.close();
+              setTimeout(() => {
+                writable.close();
+              }, 0);
             }
           } else {
-            // Wait for pipe to complete before closing
-            await pipePromise;
-            writable.close();
+            setTimeout(() => {
+              writable.close();
+            }, 0);
           }
         },
         lastMessage: undefined,
+      }).catch(error => {
+        console.error('Error processing stream response:', error);
       });
     } catch (error) {
       console.error('Error processing stream response:', error);
@@ -1339,10 +1308,9 @@ export class Agent extends BaseResource {
 
     return streamResponse;
   }
-
-  async streamVNext<OUTPUT extends OutputSchema = undefined>(
+  async stream<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
-    options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1353,8 +1321,8 @@ export class Agent extends BaseResource {
     }
   >;
   // Backward compatibility overload
-  async streamVNext<OUTPUT extends OutputSchema = undefined>(
-    params: StreamVNextParams<OUTPUT>,
+  async stream<OUTPUT extends OutputSchema = undefined>(
+    params: StreamParams<OUTPUT>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1364,9 +1332,9 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   >;
-  async streamVNext<OUTPUT extends OutputSchema = undefined>(
-    messagesOrParams: MessageListInput | StreamVNextParams<OUTPUT>,
-    options?: Omit<StreamVNextParams<OUTPUT>, 'messages'>,
+  async stream<OUTPUT extends OutputSchema = undefined>(
+    messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1377,7 +1345,7 @@ export class Agent extends BaseResource {
     }
   > {
     // Handle both new signature (messages, options) and old signature (single param object)
-    let params: StreamVNextParams<OUTPUT>;
+    let params: StreamParams<OUTPUT>;
     if (typeof messagesOrParams === 'object' && 'messages' in messagesOrParams) {
       // Old signature: single parameter object
       params = messagesOrParams;
@@ -1386,7 +1354,7 @@ export class Agent extends BaseResource {
       params = {
         messages: messagesOrParams as MessageListInput,
         ...options,
-      } as StreamVNextParams<OUTPUT>;
+      } as StreamParams<OUTPUT>;
     }
     const processedParams = {
       ...params,
@@ -1662,5 +1630,64 @@ export class Agent extends BaseResource {
       method: 'POST',
       body: params,
     });
+  }
+
+  /**
+   * @deprecated generateVNext has been renamed to generate. Please use generate instead.
+   */
+  async generateVNext<OUTPUT extends OutputSchema = undefined>(
+    messages: MessageListInput,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
+  async generateVNext<OUTPUT extends OutputSchema = undefined>(
+    params: StreamParams<OUTPUT>,
+  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
+  async generateVNext<OUTPUT extends OutputSchema = undefined>(
+    _messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
+    _options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
+    throw new Error('generateVNext has been renamed to generate. Please use generate instead.');
+  }
+
+  /**
+   * @deprecated streamVNext has been renamed to stream. Please use stream instead.
+   */
+  async streamVNext<OUTPUT extends OutputSchema = undefined>(
+    messages: MessageListInput,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  >;
+  // Backward compatibility overload
+  async streamVNext<OUTPUT extends OutputSchema = undefined>(
+    params: StreamParams<OUTPUT>,
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  >;
+  async streamVNext<OUTPUT extends OutputSchema = undefined>(
+    _messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
+    _options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    throw new Error('streamVNext has been renamed to stream. Please use stream instead.');
   }
 }

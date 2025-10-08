@@ -1,4 +1,11 @@
-import type { Emitter, ExecutionGraph, SerializedStepFlowEntry, StepResult, Mastra } from '../..';
+import type {
+  Emitter,
+  ExecutionGraph,
+  SerializedStepFlowEntry,
+  StepResult,
+  Mastra,
+  ExecutionEngineOptions,
+} from '../..';
 import type { RuntimeContext } from '../../di';
 import type { Event } from '../../events/types';
 import { ExecutionEngine } from '../../workflows/execution-engine';
@@ -8,8 +15,16 @@ import { getStep } from './workflow-event-processor/utils';
 export class EventedExecutionEngine extends ExecutionEngine {
   protected eventProcessor: WorkflowEventProcessor;
 
-  constructor({ mastra, eventProcessor }: { mastra?: Mastra; eventProcessor: WorkflowEventProcessor }) {
-    super({ mastra });
+  constructor({
+    mastra,
+    eventProcessor,
+    options,
+  }: {
+    mastra?: Mastra;
+    eventProcessor: WorkflowEventProcessor;
+    options: ExecutionEngineOptions;
+  }) {
+    super({ mastra, options });
     this.eventProcessor = eventProcessor;
   }
 

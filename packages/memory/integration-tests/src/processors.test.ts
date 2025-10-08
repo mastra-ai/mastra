@@ -288,7 +288,7 @@ describe('Memory with Processors', () => {
 
     const userMessage = 'Tell me something interesting about space';
 
-    const res = await agent.generate(
+    const res = await agent.generateLegacy(
       [
         {
           role: 'user',
@@ -312,7 +312,7 @@ describe('Memory with Processors', () => {
 
     const userMessage2 = 'Tell me something else interesting about space';
 
-    const res2 = await agent.generate(
+    const res2 = await agent.generateLegacy(
       [
         {
           role: 'user',
@@ -396,17 +396,17 @@ describe('Memory with Processors', () => {
     });
 
     // First message - use weather tool
-    await agent.generate('What is the weather in Seattle?', {
+    await agent.generateLegacy('What is the weather in Seattle?', {
       threadId,
       resourceId,
     });
     // Second message - use calculator tool
-    await agent.generate('Calculate 123 * 456', {
+    await agent.generateLegacy('Calculate 123 * 456', {
       threadId,
       resourceId,
     });
     // Third message - simple text response
-    await agent.generate('Tell me something interesting about space', {
+    await agent.generateLegacy('Tell me something interesting about space', {
       threadId,
       resourceId,
     });

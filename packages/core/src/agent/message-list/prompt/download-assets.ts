@@ -100,7 +100,7 @@ export async function downloadAssetsFromMessages({
         downloadedFile,
       ): downloadedFile is {
         mediaType: string | undefined;
-        data: Uint8Array;
+        data: Uint8Array<ArrayBuffer>;
       } => downloadedFile?.data != null,
     )
     .map(({ data, mediaType }, index) => [filesToDownload?.[index]?.url.toString(), { data, mediaType }]);

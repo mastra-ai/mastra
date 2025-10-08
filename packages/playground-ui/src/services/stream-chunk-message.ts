@@ -1,5 +1,5 @@
 import { BadgeMessage } from '@/components/assistant-ui/tools/badges/agent-badge';
-import { mapWorkflowStreamChunkToWatchResult } from '@/domains/workflows/utils';
+import { mapWorkflowStreamChunkToWatchResult } from '@mastra/react';
 import { StreamChunk } from '@/types';
 import { ThreadMessageLike } from '@assistant-ui/react';
 import { ChunkType } from '@mastra/core';
@@ -12,6 +12,26 @@ export interface HandleStreamChunkOptions {
 
 export const handleStreamChunk = ({ chunk, conversation }: HandleStreamChunkOptions): ThreadMessageLike[] => {
   switch (chunk.type) {
+    case 'tripwire': {
+      return [
+        ...conversation,
+        {
+          role: 'assistant',
+          metadata: {
+            custom: {
+              status: 'warning',
+            },
+          },
+          content: [
+            {
+              type: 'text',
+              text: chunk.payload.tripwireReason,
+            },
+          ],
+        },
+      ];
+    }
+
     case 'start': {
       const newMessage: ThreadMessageLike = {
         role: 'assistant',

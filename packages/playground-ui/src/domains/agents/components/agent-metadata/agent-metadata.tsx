@@ -10,10 +10,11 @@ import { ReactNode } from 'react';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { useScorers } from '@/domains/scores';
 import { AgentIcon } from '@/ds/icons';
-import { GaugeIcon } from 'lucide-react';
+import { AlertTriangleIcon, GaugeIcon } from 'lucide-react';
 import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './agent-metadata-model-switcher';
 import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
 import { LoadingBadge } from '@/components/assistant-ui/tools/badges/loading-badge';
+import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
 
 export interface AgentMetadataProps {
   agentId: string;
@@ -21,6 +22,7 @@ export interface AgentMetadataProps {
   promptSlot: ReactNode;
   hasMemoryEnabled: boolean;
   modelProviders: string[];
+  modelVersion: string;
   updateModel: AgentMetadataModelSwitcherProps['updateModel'];
   updateModelInModelList: AgentMetadataModelListProps['updateModelInModelList'];
   reorderModelList: AgentMetadataModelListProps['reorderModelList'];
@@ -61,6 +63,7 @@ export const AgentMetadata = ({
   modelProviders,
   updateModelInModelList,
   reorderModelList,
+  modelVersion,
 }: AgentMetadataProps) => {
   const networkAgentsMap = agent.agents ?? {};
   const networkAgents = Object.values(networkAgentsMap);
@@ -83,7 +86,18 @@ export const AgentMetadata = ({
           />
         </AgentMetadataSection>
       ) : (
-        <AgentMetadataSection title="Model">
+        <AgentMetadataSection
+          title={'Model'}
+          hint={
+            modelVersion === 'v2'
+              ? undefined
+              : {
+                  link: 'https://mastra.ai/en/reference/agents/migration-guide',
+                  title: 'You are using a legacy v1 model',
+                  icon: <AlertTriangleIcon fontSize={14} className="mb-0.5" />,
+                }
+          }
+        >
           <AgentMetadataModelSwitcher
             defaultProvider={agent.provider}
             defaultModel={agent.modelId}
@@ -100,9 +114,27 @@ export const AgentMetadata = ({
           title: 'Agent Memory documentation',
         }}
       >
-        <Badge icon={<MemoryIcon />} variant={hasMemoryEnabled ? 'success' : 'error'} className="font-medium">
-          {hasMemoryEnabled ? 'On' : 'Off'}
-        </Badge>
+        {hasMemoryEnabled ? (
+          <Badge icon={<MemoryIcon />} variant="success" className="font-medium">
+            On
+          </Badge>
+        ) : (
+          <Alert variant="warning">
+            <AlertTitle as="h5">Memory not enabled</AlertTitle>
+            <AlertDescription as="p">
+              Thread messages will not be stored. To activate memory, see the{' '}
+              <a
+                href="https://mastra.ai/en/docs/agents/agent-memory"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                documentation
+              </a>
+              .
+            </AlertDescription>
+          </Alert>
+        )}
       </AgentMetadataSection>
 
       {networkAgents.length > 0 && (

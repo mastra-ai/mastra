@@ -5,7 +5,6 @@ import {
   useUpdateAgentModel,
   useUpdateModelInModelList,
 } from '@/hooks/use-agents';
-import { AgentLogs } from './agent-logs';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   AgentSettings,
@@ -73,7 +72,6 @@ export function AgentInformation({ agentId }: { agentId: string }) {
             <Tab value="overview">Overview</Tab>
             <Tab value="model-settings">Model Settings</Tab>
             {memory?.result && <Tab value="memory">Memory</Tab>}
-            <Tab value="logs">Log Drains</Tab>
           </TabList>
           <TabContent value="overview">
             {isLoading && <Skeleton className="h-full" />}
@@ -87,6 +85,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
                 modelProviders={modelProviders || []}
                 hasMemoryEnabled={Boolean(memory?.result)}
                 promptSlot={<AgentPromptEnhancer agentId={agentId} />}
+                modelVersion={agent.modelVersion}
               />
             )}
           </TabContent>
@@ -102,9 +101,6 @@ export function AgentInformation({ agentId }: { agentId: string }) {
           </TabContent>
           <TabContent value="memory">
             {isLoading ? <Skeleton className="h-full" /> : <AgentMemory agentId={agentId} />}
-          </TabContent>
-          <TabContent value="logs">
-            {isLoading ? <Skeleton className="h-full" /> : <AgentLogs agentId={agentId} />}
           </TabContent>
         </PlaygroundTabs>
       </div>
