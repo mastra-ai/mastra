@@ -9,7 +9,7 @@ describe('Provider-executed tools', () => {
       instructions: 'You are a helpful AI assistant with access to web search capabilities.',
       model: openai('gpt-4o-mini'),
       tools: {
-        webSearchPreview: openai.tools.webSearchPreview({ searchContextSize: 'low' }),
+        webSearch: openai.tools.webSearch({ searchContextSize: 'low' }),
       },
     });
 
@@ -20,7 +20,7 @@ describe('Provider-executed tools', () => {
         expect.objectContaining({
           payload: expect.objectContaining({
             providerExecuted: true,
-            toolName: 'web_search_preview',
+            toolName: 'web_search',
             args: {
               action: expect.objectContaining({ query: expect.any(String), type: 'search' }),
             },
@@ -33,7 +33,7 @@ describe('Provider-executed tools', () => {
         expect.objectContaining({
           payload: expect.objectContaining({
             providerExecuted: true,
-            toolName: 'web_search_preview',
+            toolName: 'web_search',
             result: {
               status: 'completed',
             },

@@ -1,3 +1,3 @@
 export * from './model';
-export { OpenAICompatibleModel } from './openai-compatible';
+export { ModelRouterLanguageModel } from './router';
 export { type ModelRouterModelId, type Provider, type ModelForProvider } from './provider-registry.generated';
