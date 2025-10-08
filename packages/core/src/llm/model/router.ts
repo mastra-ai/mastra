@@ -69,6 +69,7 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
       routerId: normalizedConfig.id,
     };
 
+    // Resolve gateway once using the normalized ID
     this.gateway = findGatewayForModel(normalizedConfig.id, gateways);
     // Extract provider from id if present
     const parsed = parseModelRouterId(normalizedConfig.id, this.gateway.prefix);
@@ -81,7 +82,6 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
 
     this.modelId = parsedConfig.id;
     this.config = parsedConfig;
-    this.gateway = findGatewayForModel(parsedConfig.routerId, gateways);
   }
 
   async doGenerate(): Promise<never> {
