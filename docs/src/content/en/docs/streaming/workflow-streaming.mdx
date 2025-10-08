@@ -69,6 +69,29 @@ const stream = await run.stream({
 for await (const chunk of stream) {
   console.log(chunk);
 }
+
+if (result.status === "suspended") {
+  // if the workflow is suspended, we can resume it with the resumeStreamVNext method
+  const resumedStream = await run.resumeStreamVNext({
+    resumeData: { value: "resume data" }
+  });
+
+  for await (const chunk of resumedStream) {
+    console.log(chunk);
+  }
+}
+```
+
+### Resuming an interrupted workflow stream
+
+If a workflow stream is closed or interrupted for any reason, you can resume it with the `observeStreamVNext` method. This will return a new `ReadableStream` that you can use to observe the workflow events.
+
+```typescript showLineNumbers copy
+const newStream = await run.observeStreamVNext();
+
+for await (const chunk of newStream) {
+  console.log(chunk);
+}
 ```
 
 ## Workflow using an agent
