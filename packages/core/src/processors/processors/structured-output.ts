@@ -3,6 +3,7 @@ import { Agent } from '../../agent';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { InternalSpans } from '../../ai-tracing';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import type { TracingContext } from '../../ai-tracing';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
 import type { InferSchemaOutput } from '../../stream/base/schema';
@@ -73,8 +74,9 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
       controller: TransformStreamDefaultController<ChunkType<OUTPUT>>;
     };
     abort: (reason?: string) => never;
+    tracingContext?: TracingContext;
   }): Promise<ChunkType | null | undefined> {
-    const { part, state, streamParts, abort } = args;
+    const { part, state, streamParts, abort, tracingContext } = args;
     const controller = state.controller;
 
     switch (part.type) {
@@ -83,7 +85,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
         // - enqueue the structuring agent stream chunks into the main stream
         // - when the structuring agent stream is finished, enqueue the final chunk into the main stream
 
-        await this.processAndEmitStructuredOutput(streamParts, controller, abort);
+        await this.processAndEmitStructuredOutput(streamParts, controller, abort, tracingContext);
         return part;
 
       default:
@@ -95,6 +97,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
     streamParts: ChunkType[],
     controller: TransformStreamDefaultController<ChunkType<OUTPUT>>,
     abort: (reason?: string) => never,
+    tracingContext?: TracingContext,
   ): Promise<void> {
     if (this.isStructuringAgentStreamStarted) return;
     this.isStructuringAgentStreamStarted = true;
@@ -108,6 +111,8 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
           schema: this.schema as OUTPUT extends OutputSchema ? OUTPUT : never,
           jsonPromptInjection: this.jsonPromptInjection,
         },
+        output: this.schema,
+        tracingContext,
       });
 
       const excludedChunkTypes = [

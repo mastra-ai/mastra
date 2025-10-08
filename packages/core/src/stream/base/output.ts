@@ -248,7 +248,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 }
               }
 
-              const { part: processed, blocked, reason } = await processorRunner.processPart(chunk, processorStates);
+              const {
+                part: processed,
+                blocked,
+                reason,
+              } = await processorRunner.processPart(chunk, processorStates, options.tracingContext);
               if (blocked) {
                 // Emit a tripwire chunk so downstream knows about the abort
                 controller.enqueue({

@@ -610,9 +610,11 @@ IMPORTANT: IF NO PII IS DETECTED, RETURN AN EMPTY OBJECT, DO NOT INCLUDE ANYTHIN
   async processOutputResult({
     messages,
     abort,
+    tracingContext,
   }: {
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
+    tracingContext?: TracingContext;
   }): Promise<MastraMessageV2[]> {
     try {
       if (messages.length === 0) {
@@ -630,7 +632,7 @@ IMPORTANT: IF NO PII IS DETECTED, RETURN AN EMPTY OBJECT, DO NOT INCLUDE ANYTHIN
           continue;
         }
 
-        const detectionResult = await this.detectPII(textContent);
+        const detectionResult = await this.detectPII(textContent, tracingContext);
 
         if (this.isPIIFlagged(detectionResult)) {
           const processedMessage = this.handleDetectedPII(message, detectionResult, this.strategy, abort);

@@ -95,7 +95,7 @@ export class SystemPromptScrubber implements Processor {
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
   }): Promise<ChunkType | null> {
-    const { part, abort } = args;
+    const { part, abort, tracingContext } = args;
 
     // Only process text-delta chunks
     if (part.type !== 'text-delta') {
@@ -108,7 +108,7 @@ export class SystemPromptScrubber implements Processor {
     }
 
     try {
-      const detectionResult = await this.detectSystemPrompts(text);
+      const detectionResult = await this.detectSystemPrompts(text, tracingContext);
 
       if (detectionResult.detections && detectionResult.detections.length > 0) {
         const detectedTypes = detectionResult.detections.map(detection => detection.type);
@@ -159,9 +159,11 @@ export class SystemPromptScrubber implements Processor {
   async processOutputResult({
     messages,
     abort,
+    tracingContext,
   }: {
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
+    tracingContext?: TracingContext;
   }): Promise<MastraMessageV2[]> {
     const processedMessages: MastraMessageV2[] = [];
 
@@ -178,7 +180,7 @@ export class SystemPromptScrubber implements Processor {
       }
 
       try {
-        const detectionResult = await this.detectSystemPrompts(textContent);
+        const detectionResult = await this.detectSystemPrompts(textContent, tracingContext);
 
         if (detectionResult.detections && detectionResult.detections.length > 0) {
           const detectedTypes = detectionResult.detections.map(detection => detection.type);
