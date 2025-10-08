@@ -86,7 +86,7 @@ export const AI_SPAN_SCHEMA: Record<string, StorageColumn> = {
 
 export const DATASET_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
-  name: { type: 'text', nullable: false }, // Unique name for the dataset
+  name: { type: 'text', nullable: false, unique: true }, // Unique name for the dataset
   description: { type: 'text', nullable: true }, // Optional description of what this dataset contains
   metadata: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
