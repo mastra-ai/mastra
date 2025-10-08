@@ -60,7 +60,7 @@ export const create = async (args: {
 
     await init({
       ...result,
-      llmApiKey: result?.llmApiKey as string,
+      llmApiKey: result?.llmApiKey as string | undefined,
       components: ['agents', 'tools', 'workflows'],
       addExample: true,
     });
