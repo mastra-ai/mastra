@@ -84,12 +84,14 @@ export const createMastraProject = async ({
   timeout,
   llmProvider,
   llmApiKey,
+  needsInteractive,
 }: {
   projectName?: string;
   createVersionTag?: string;
   timeout?: number;
   llmProvider?: LLMProvider;
   llmApiKey?: string;
+  needsInteractive?: boolean;
 }) => {
   p.intro(color.inverse(' Mastra Create '));
 
@@ -112,10 +114,14 @@ export const createMastraProject = async ({
     process.exit(0);
   }
 
-  const result = await interactivePrompt({
-    options: { showBanner: false },
-    skip: { llmProvider: llmProvider !== undefined, llmApiKey: llmApiKey !== undefined },
-  });
+  let result;
+
+  if (needsInteractive) {
+    result = await interactivePrompt({
+      options: { showBanner: false },
+      skip: { llmProvider: llmProvider !== undefined, llmApiKey: llmApiKey !== undefined },
+    });
+  }
   const s = p.spinner();
 
   try {

@@ -30,25 +30,23 @@ export const create = async (args: {
     return;
   }
 
+  /**
+   * We need to explicitly check for undefined instead of using the falsy (!) check because the user might have passed args that are explicitly set to false (in this case, no example code) and we need to distinguish between those and the case where the args were not passed at all.
+   */
+  const needsInteractive =
+    args.components === undefined || args.llmProvider === undefined || args.addExample === undefined;
+
   const { projectName, result } = await createMastraProject({
     projectName: args?.projectName,
     createVersionTag: args?.createVersionTag,
     timeout: args?.timeout,
     llmProvider: args?.llmProvider,
     llmApiKey: args?.llmApiKey,
+    needsInteractive,
   });
   const directory = args.directory || 'src/';
 
-  // We need to explicitly check for undefined instead of using the falsy (!)
-  // check because the user might have passed args that are explicitly set
-  // to false (in this case, no example code) and we need to distinguish
-  // between those and the case where the args were not passed at all.
-  if (
-    args.components === undefined ||
-    args.llmProvider === undefined ||
-    args.addExample === undefined ||
-    args.llmApiKey === undefined
-  ) {
+  if (needsInteractive && result) {
     // Track model provider selection from interactive prompt
     const analytics = getAnalytics();
     if (analytics && result?.llmProvider) {
