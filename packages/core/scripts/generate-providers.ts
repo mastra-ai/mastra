@@ -27,103 +27,91 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
     }
   }
 
-  // Generate the TypeScript file
-  const output = `/**
+  // 1. Write JSON file
+  const registryData = {
+    providers: allProviders,
+    models: allModels,
+    generatedAt: new Date().toISOString(),
+    version: '1.0.0',
+  };
+
+  const jsonPath = path.join(__dirname, '..', 'src', 'llm', 'model', 'provider-registry.json');
+  await fs.writeFile(jsonPath, JSON.stringify(registryData, null, 2), 'utf-8');
+
+  console.info(`✅ Generated provider registry JSON at: ${jsonPath}`);
+
+  // 2. Generate provider models as a const object for type inference
+  const providerModelsEntries = Object.entries(allModels)
+    .map(([provider, models]) => {
+      const modelsList = models.map(m => `'${m}'`);
+
+      // Only quote provider key if it contains special characters (like dashes)
+      const needsQuotes = /[^a-zA-Z0-9_$]/.test(provider);
+      const providerKey = needsQuotes ? `'${provider}'` : provider;
+
+      // Format array based on length (prettier printWidth: 120)
+      const singleLine = `  ${providerKey}: [${modelsList.join(', ')}],`;
+
+      // If single line exceeds 120 chars, format as multi-line
+      if (singleLine.length > 120) {
+        const formattedModels = modelsList.map(m => `    ${m},`).join('\n');
+        return `  ${providerKey}: [\n${formattedModels}\n  ],`;
+      }
+
+      return singleLine;
+    })
+    .join('\n');
+
+  const typeContent = `/**
  * THIS FILE IS AUTO-GENERATED - DO NOT EDIT
  * Generated from model gateway providers
+ * Generated at: ${new Date().toISOString()}
  */
-
-import type { ProviderConfig } from './gateways/base';
 
 /**
- * Provider configurations for OpenAI-compatible APIs
+ * Provider models mapping as a const object
+ * This is the source of truth for all providers and their model IDs
  */
-export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = ${JSON.stringify(allProviders, null, 2)} as const;
+export const PROVIDER_MODELS_MAP = {
+${providerModelsEntries}
+} as const;
 
 /**
- * Available models per provider
+ * Union type of all registered provider IDs
+ * Dynamically derived from PROVIDER_MODELS_MAP keys
  */
-export const PROVIDER_MODELS = ${JSON.stringify(allModels, null, 2)} as const;
+export type Provider = keyof typeof PROVIDER_MODELS_MAP;
 
 /**
- * Type definitions for autocomplete support
+ * Provider models mapping interface
  */
-export type ProviderModels = typeof PROVIDER_MODELS;
-export type Provider = keyof ProviderModels;
-export type ModelForProvider<P extends Provider> = ProviderModels[P][number];
+export interface ProviderModels {
+  [key: string]: string[];
+}
 
 /**
  * OpenAI-compatible model ID type
+ * Dynamically derived from PROVIDER_MODELS_MAP
  * Full provider/model paths (e.g., "openai/gpt-4o", "anthropic/claude-3-5-sonnet-20241022")
  */
-export type ModelRouterModelId = {[P in Provider]: \`\${P}/\${ModelForProvider<P>}\`}[Provider] | (string & {});
-
-
-/**
- * Get provider configuration by provider ID
- */
-export function getProviderConfig(providerId: string): ProviderConfig | undefined {
-  return PROVIDER_REGISTRY[providerId as keyof typeof PROVIDER_REGISTRY];
-}
+export type ModelRouterModelId =
+  | {
+      [P in Provider]: \`\${P}/\${(typeof PROVIDER_MODELS_MAP)[P][number]}\`;
+    }[Provider]
+  | (string & {});
 
 /**
- * Check if a provider is registered
+ * Extract the model part from a ModelRouterModelId for a specific provider
+ * Dynamically derived from PROVIDER_MODELS_MAP
+ * Example: ModelForProvider<'openai'> = 'gpt-4o' | 'gpt-4-turbo' | ...
  */
-export function isProviderRegistered(providerId: string): boolean {
-  return providerId in PROVIDER_REGISTRY;
-}
-
-/**
- * Get all registered provider IDs
- */
-export function getRegisteredProviders(): string[] {
-  return Object.keys(PROVIDER_REGISTRY);
-}
-
-/**
- * Parse a model string to extract provider and model ID
- * Examples:
- *   "openai/gpt-4o" -> { provider: "openai", modelId: "gpt-4o" }
- *   "fireworks/accounts/etc/model" -> { provider: "fireworks", modelId: "accounts/etc/model" }
- *   "gpt-4o" -> { provider: null, modelId: "gpt-4o" }
- */
-export function parseModelString(modelString: string): { provider: string | null; modelId: string } {
-  const firstSlashIndex = modelString.indexOf('/');
-  
-  if (firstSlashIndex !== -1) {
-    // Has at least one slash - extract everything before first slash as provider
-    const provider = modelString.substring(0, firstSlashIndex);
-    const modelId = modelString.substring(firstSlashIndex + 1);
-    
-    if (provider && modelId) {
-      return {
-        provider,
-        modelId,
-      };
-    }
-  }
-  
-  // No slash or invalid format
-  return {
-    provider: null,
-    modelId: modelString,
-  };
-}
-
-/**
- * Type guard to check if a string is a valid OpenAI-compatible model ID
- */
-export function isValidModelId(modelId: string): modelId is ModelRouterModelId {
-  const { provider } = parseModelString(modelId);
-  return provider !== null && isProviderRegistered(provider);
-}
+export type ModelForProvider<P extends Provider> = (typeof PROVIDER_MODELS_MAP)[P][number];
 `;
 
-  // Write the generated file
-  const outputPath = path.join(__dirname, '..', 'src', 'llm', 'model', 'provider-registry.generated.ts');
-  await fs.writeFile(outputPath, output, 'utf-8');
+  const typesPath = path.join(__dirname, '..', 'src', 'llm', 'model', 'provider-types.generated.ts');
+  await fs.writeFile(typesPath, typeContent, 'utf-8');
 
-  console.info(`✅ Generated provider registry at: ${outputPath}`);
+  console.info(`✅ Generated provider types at: ${typesPath}`);
   console.info(`\nRegistered providers:`);
 
   for (const [providerId, config] of Object.entries(allProviders)) {

@@ -2,7 +2,6 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants.js';
-import { PROVIDER_REGISTRY } from '../src/llm/model/provider-registry.generated.js';
 
 /**
  * Generate a comment indicating the file was auto-generated
@@ -104,7 +103,13 @@ interface GroupedProviders {
   other: ProviderInfo[];
 }
 
-function parseProviders(): GroupedProviders {
+async function parseProviders(): Promise<GroupedProviders> {
+  // Load provider registry from JSON
+  const registryPath = path.join(__dirname, '../src/llm/model/provider-registry.json');
+  const registryContent = await fs.readFile(registryPath, 'utf-8');
+  const registryData = JSON.parse(registryContent);
+  const PROVIDER_REGISTRY = registryData.providers;
+
   const gateways = new Map<string, ProviderInfo[]>();
   const popular: ProviderInfo[] = [];
   const other: ProviderInfo[] = [];
@@ -189,11 +194,11 @@ async function fetchProviderInfo(providerId: string): Promise<{ models: any[]; p
   }
 }
 
-async function generateProviderPage(provider: ProviderInfo): Promise<string> {
+async function generateProviderPage(provider: ProviderInfo, providerRegistry: Record<string, any>): Promise<string> {
   const modelCount = provider.models.length;
 
   // Get documentation URL if available
-  const rawDocUrl = (PROVIDER_REGISTRY[provider.id] as any).docUrl;
+  const rawDocUrl = (providerRegistry[provider.id] as any).docUrl;
   const docUrl = cleanDocumentationUrl(rawDocUrl);
 
   // Create intro with optional documentation link
@@ -371,7 +376,11 @@ function getLogoComponentJSX(providerId: string): string {
   return `<${componentName} className="inline w-8 h-8 mr-2 align-middle" />`;
 }
 
-function generateGatewayPage(gatewayName: string, providers: ProviderInfo[]): string {
+function generateGatewayPage(
+  gatewayName: string,
+  providers: ProviderInfo[],
+  providerRegistry: Record<string, any>,
+): string {
   const displayName = formatProviderName(gatewayName);
   const totalModels = providers.reduce((sum, p) => sum + p.models.length, 0);
   // Get documentation URL if available
@@ -382,10 +391,10 @@ function generateGatewayPage(gatewayName: string, providers: ProviderInfo[]): st
     rawDocUrl = 'https://ai-sdk.dev/providers/ai-sdk-providers';
   } else if (providers[0] && !providers[0].baseProvider) {
     // For standalone gateways like groq, openrouter, etc.
-    rawDocUrl = (PROVIDER_REGISTRY[providers[0].id] as any).docUrl;
+    rawDocUrl = (providerRegistry[providers[0].id] as any).docUrl;
   } else if (providers[0]) {
     // For prefixed gateways like netlify/openai
-    rawDocUrl = (PROVIDER_REGISTRY[providers[0].id] as any).docUrl;
+    rawDocUrl = (providerRegistry[providers[0].id] as any).docUrl;
   }
 
   const docUrl = cleanDocumentationUrl(rawDocUrl);
@@ -676,7 +685,13 @@ async function generateDocs() {
   await fs.mkdir(providersDir, { recursive: true });
   await fs.mkdir(gatewaysDir, { recursive: true });
 
-  const grouped = parseProviders();
+  // Load provider registry from JSON
+  const registryPath = path.join(__dirname, '../src/llm/model/provider-registry.json');
+  const registryContent = await fs.readFile(registryPath, 'utf-8');
+  const registryData = JSON.parse(registryContent);
+  const providerRegistry = registryData.providers;
+
+  const grouped = await parseProviders();
 
   // Generate index page
   const indexContent = generateIndexPage(grouped);
@@ -705,14 +720,14 @@ async function generateDocs() {
 
   // Generate individual provider pages
   for (const provider of [...grouped.popular, ...grouped.other]) {
-    const content = await generateProviderPage(provider);
+    const content = await generateProviderPage(provider, providerRegistry);
     await fs.writeFile(path.join(providersDir, `${provider.id}.mdx`), content);
     console.info(`✅ Generated providers/${provider.id}.mdx`);
   }
 
   // Generate individual gateway pages
   for (const [gatewayName, providers] of grouped.gateways) {
-    const content = generateGatewayPage(gatewayName, providers);
+    const content = generateGatewayPage(gatewayName, providers, providerRegistry);
     await fs.writeFile(path.join(gatewaysDir, `${gatewayName}.mdx`), content);
     console.info(`✅ Generated gateways/${gatewayName}.mdx`);
   }

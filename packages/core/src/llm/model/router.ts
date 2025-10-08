@@ -6,8 +6,8 @@ import { findGatewayForModel } from './gateways/index.js';
 
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
-import type { ModelRouterModelId } from './provider-registry.generated.js';
-import { PROVIDER_REGISTRY } from './provider-registry.generated.js';
+import type { ModelRouterModelId } from './provider-registry.js';
+import { PROVIDER_REGISTRY } from './provider-registry.js';
 import type { OpenAICompatibleConfig } from './shared.types';
 
 function getStaticProvidersByGateway(name: string) {

@@ -3,6 +3,8 @@ import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsup';
 import type { Options } from 'tsup';
 import treeshakeDecoratorsBabelPlugin from './tools/treeshake-decorators';
+import fs from 'fs';
+import path from 'path';
 
 type Plugin = NonNullable<Options['plugins']>[number];
 
@@ -69,5 +71,14 @@ export default defineConfig({
   sourcemap: true,
   onSuccess: async () => {
     await generateTypes(process.cwd());
+
+    // Copy provider-registry.json to dist folder
+    const srcJson = path.join(process.cwd(), 'src/llm/model/provider-registry.json');
+    const distJson = path.join(process.cwd(), 'dist/provider-registry.json');
+
+    if (fs.existsSync(srcJson)) {
+      fs.copyFileSync(srcJson, distJson);
+      console.log('✓ Copied provider-registry.json to dist/');
+    }
   },
 });
