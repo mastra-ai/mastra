@@ -1,4 +1,4 @@
-import type { Agent, AgentGenerateOptions, AgentModelManagerConfig, AgentStreamOptions } from '@mastra/core/agent';
+import type { Agent, AgentModelManagerConfig } from '@mastra/core/agent';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { SystemMessage } from '@mastra/core/llm';
 import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
@@ -63,8 +63,9 @@ export interface SerializedAgent {
       };
     }
   >;
-  defaultGenerateOptions?: AgentGenerateOptions;
-  defaultStreamOptions?: AgentStreamOptions;
+  // We can't use the true types here because they are not serializable
+  defaultGenerateOptions?: Record<string, unknown>;
+  defaultStreamOptions?: Record<string, unknown>;
 }
 
 export interface SerializedAgentWithId extends SerializedAgent {
