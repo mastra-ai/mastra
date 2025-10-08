@@ -187,7 +187,7 @@ export async function updatePeerDependencies(versionBumps: VersionBumps): Promis
   // Create changeset for indirect updates
   await createChangesetForUpdates(indirectUpdatedPackages, 'patch', context.nextCoreVersion);
 
-  s.stop('Updated peer dependencies');
+  s.stop(`Updated all peer dependencies (core: ${context.coreBump})`);
 
   return {
     directUpdatedPackages: Array.from(directUpdatedPackages.keys()),
