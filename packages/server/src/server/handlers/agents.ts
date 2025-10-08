@@ -1,5 +1,6 @@
-import type { Agent } from '@mastra/core/agent';
-import { PROVIDER_REGISTRY, type SystemMessage } from '@mastra/core/llm';
+import type { Agent, AgentGenerateOptions, AgentModelManagerConfig, AgentStreamOptions } from '@mastra/core/agent';
+import { PROVIDER_REGISTRY } from '@mastra/core/llm';
+import type { SystemMessage } from '@mastra/core/llm';
 import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
@@ -34,7 +35,7 @@ export interface SerializedTool {
   description?: string;
   inputSchema?: string;
   outputSchema?: string;
-  [key: string]: unknown;
+  requireApproval?: boolean;
 }
 
 export interface SerializedWorkflow {
@@ -53,18 +54,17 @@ export interface SerializedAgent {
   provider?: string;
   modelId?: string;
   modelVersion?: string;
-  modelList?: Array<{
-    id: string;
-    enabled: boolean;
-    maxRetries: number;
-    model: {
-      modelId: string;
-      provider: string;
-      modelVersion: string;
-    };
-  }>;
-  defaultGenerateOptions?: Record<string, unknown>;
-  defaultStreamOptions?: Record<string, unknown>;
+  modelList?: Array<
+    Omit<AgentModelManagerConfig, 'model'> & {
+      model: {
+        modelId: string;
+        provider: string;
+        modelVersion: string;
+      };
+    }
+  >;
+  defaultGenerateOptions?: AgentGenerateOptions;
+  defaultStreamOptions?: AgentStreamOptions;
 }
 
 export interface SerializedAgentWithId extends SerializedAgent {
@@ -78,7 +78,6 @@ export async function getSerializedAgentTools(tools: Record<string, unknown>): P
       description?: string;
       inputSchema?: { jsonSchema?: unknown } | unknown;
       outputSchema?: { jsonSchema?: unknown } | unknown;
-      [key: string]: unknown;
     };
 
     const toolId = _tool.id ?? `tool-${key}`;
