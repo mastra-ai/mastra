@@ -9460,7 +9460,14 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       });
 
-      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
+      let shouldPersist = true;
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        options: { shouldPersistSnapshot: () => shouldPersist },
+      });
       workflow.then(step1).then(step2).commit();
 
       new Mastra({
@@ -9478,6 +9485,10 @@ describe('Workflow', () => {
       const run2 = await workflow.createRunAsync();
       await run2.start({ inputData: {} });
 
+      shouldPersist = false;
+      const run3 = await workflow.createRunAsync();
+      await run3.start({ inputData: {} });
+
       const { runs, total } = await workflow.getWorkflowRuns();
       expect(total).toBe(2);
       expect(runs).toHaveLength(2);
@@ -9485,6 +9496,70 @@ describe('Workflow', () => {
       expect(runs[0]?.workflowName).toBe('test-workflow');
       expect(runs[0]?.snapshot).toBeDefined();
       expect(runs[1]?.snapshot).toBeDefined();
+    });
+
+    it('should use shouldPersistSnapshot option', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+      const resumeStep = createStep({
+        id: 'resume-step',
+        execute: async ({ resumeData, suspend }) => {
+          if (!resumeData) {
+            return suspend({});
+          }
+          return { completed: true };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ completed: z.boolean() }),
+        resumeSchema: z.object({ resume: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ completed: z.boolean() }),
+        options: { shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended' },
+      });
+      workflow.then(step1).then(step2).then(resumeStep).commit();
+
+      new Mastra({
+        workflows: {
+          'test-workflow': workflow,
+        },
+        logger: false,
+        storage: testStorage,
+      });
+
+      // Create a few runs
+      const run1 = await workflow.createRunAsync();
+      await run1.start({ inputData: {} });
+
+      const { runs, total } = await workflow.getWorkflowRuns();
+      expect(total).toBe(1);
+      expect(runs).toHaveLength(1);
+
+      await run1.resume({ resumeData: { resume: 'resume' }, step: 'resume-step' });
+
+      const { runs: afterResumeRuns, total: afterResumeTotal } = await workflow.getWorkflowRuns();
+      expect(afterResumeTotal).toBe(1);
+      expect(afterResumeRuns).toHaveLength(1);
+      expect(afterResumeRuns.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId]));
+      expect(afterResumeRuns[0]?.workflowName).toBe('test-workflow');
+      expect(afterResumeRuns[0]?.snapshot).toBeDefined();
+      expect((afterResumeRuns[0]?.snapshot as any).status).toBe('suspended');
     });
 
     it('should get workflow run by id from storage', async () => {
