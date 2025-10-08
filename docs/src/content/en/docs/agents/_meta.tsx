@@ -1,7 +1,7 @@
 const meta = {
   overview: "Overview",
   "agent-memory": "Agent Memory",
-  "using-tools-and-mcp": "Tools and MCP",
+  "using-tools-and-mcp": "Tools & MCP",
   guardrails: "Guardrails",
   "adding-voice": "Adding Voice",
   "runtime-context": "Runtime Context",
