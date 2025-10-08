@@ -58,6 +58,12 @@ async function validateOutput(
     }
   }
 
+  // Always keep Zod external to avoid bundling corruption on Node v24+
+  // When Zod is bundled on Node v24, the bundler transforms it in a way that
+  // corrupts the internal _def.typeName property, breaking zod-to-json-schema.
+  // See: https://github.com/mastra-ai/mastra/issues/8494
+  result.externalDependencies.add('zod');
+
   for (const file of output) {
     if (file.type === 'asset') {
       continue;
