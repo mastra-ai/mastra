@@ -101,8 +101,8 @@ export const DATASET_VERSION_SCHEMA: Record<string, StorageColumn> = {
 };
 
 export const DATASET_ROW_SCHEMA: Record<string, StorageColumn> = {
+  // Composite primary key of rowId and versionId
   rowId: { type: 'text', nullable: false }, // Logical row identifier - stays the same across versions
-  rowVersionId: { type: 'text', nullable: false, primaryKey: true }, // Unique identifier for the row version
   datasetId: { type: 'text', nullable: false }, // Foreign key to datasets.id
   versionId: { type: 'text', nullable: false }, // Foreign key to dataset_versions.id
   input: { type: 'jsonb', nullable: false }, // The input data for this dataset row

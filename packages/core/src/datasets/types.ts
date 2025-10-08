@@ -34,7 +34,6 @@ export type DatasetVersion = {
 };
 
 export type DatasetRow = {
-  rowVersionId: string;
   rowId: string;
   datasetId: string;
   versionId: string;
