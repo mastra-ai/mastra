@@ -1026,6 +1026,11 @@ export const redirectList = [
     permanent: true,
   },
   {
+    source: "/:locale/docs/agents/dynamic-agents",
+    destination: "/:locale/docs/agents/runtime-context",
+    permanent: true,
+  },
+  {
     source: "/:locale/reference/cli/mcp-docs-server",
     destination: "/:locale/docs/getting-started/mcp-docs-server",
     permanent: true,
