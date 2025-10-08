@@ -27,11 +27,12 @@ export function getDefaultUpdatedPeerDependencies(): UpdatedPeerDependencies {
 
 function getCoreBump(currentVersion: string, nextVersion: string): string {
   const versionWithoutPrerelease = currentVersion.split('-')[0]!;
-  if (nextVersion === semver.inc(versionWithoutPrerelease, 'patch')) {
+  const nextVersionWithoutPrerelease = nextVersion.split('-')[0]!;
+  if (nextVersionWithoutPrerelease === semver.inc(versionWithoutPrerelease, 'patch')) {
     return 'patch';
   }
 
-  if (nextVersion === semver.inc(versionWithoutPrerelease, 'minor')) {
+  if (nextVersionWithoutPrerelease === semver.inc(versionWithoutPrerelease, 'minor')) {
     return 'minor';
   }
 
