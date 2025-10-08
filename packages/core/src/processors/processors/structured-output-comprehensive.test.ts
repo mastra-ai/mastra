@@ -722,7 +722,7 @@ async function runStructuredOutputTest(
   }
 }
 
-const realWorldScenarios: SchemaKey[] = [
+const _realWorldScenarios: SchemaKey[] = [
   'ecommerceOrder',
   'userProfileSystem',
   'apiResponse',
