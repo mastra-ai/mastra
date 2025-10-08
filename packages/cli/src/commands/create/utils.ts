@@ -1,3 +1,4 @@
+import fsSync from 'fs';
 import fs from 'fs/promises';
 import child_process from 'node:child_process';
 import util from 'node:util';
@@ -7,6 +8,8 @@ import color from 'picocolors';
 import { DepsService } from '../../services/service.deps.js';
 import { getPackageManagerAddCommand } from '../../utils/package-manager.js';
 import type { PackageManager } from '../../utils/package-manager.js';
+import { interactivePrompt } from '../init/utils.js';
+import type { LLMProvider } from '../init/utils.js';
 import { getPackageManager } from '../utils.js';
 
 const exec = util.promisify(child_process.exec);
@@ -79,10 +82,14 @@ export const createMastraProject = async ({
   projectName: name,
   createVersionTag,
   timeout,
+  llmProvider,
+  llmApiKey,
 }: {
   projectName?: string;
   createVersionTag?: string;
   timeout?: number;
+  llmProvider?: LLMProvider;
+  llmApiKey?: string;
 }) => {
   p.intro(color.inverse(' Mastra Create '));
 
@@ -92,6 +99,12 @@ export const createMastraProject = async ({
       message: 'What do you want to name your project?',
       placeholder: 'my-mastra-app',
       defaultValue: 'my-mastra-app',
+      validate: value => {
+        if (value.length === 0) return 'Project name cannot be empty';
+        if (fsSync.existsSync(value)) {
+          return `A directory named "${value}" already exists. Please choose a different name.`;
+        }
+      },
     }));
 
   if (p.isCancel(projectName)) {
@@ -99,6 +112,10 @@ export const createMastraProject = async ({
     process.exit(0);
   }
 
+  const result = await interactivePrompt({
+    options: { showBanner: false },
+    skip: { llmProvider: llmProvider !== undefined, llmApiKey: llmApiKey !== undefined },
+  });
   const s = p.spinner();
 
   try {
@@ -166,7 +183,7 @@ export const createMastraProject = async ({
 
     s.stop(`${pm} dependencies installed`);
 
-    s.start('Installing mastra');
+    s.start('Installing Mastra CLI');
     const versionTag = createVersionTag ? `@${createVersionTag}` : '@latest';
 
     try {
@@ -174,9 +191,9 @@ export const createMastraProject = async ({
     } catch (error) {
       throw new Error(`Failed to install Mastra CLI: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-    s.stop('mastra installed');
+    s.stop('Mastra CLI installed');
 
-    s.start('Installing dependencies');
+    s.start('Installing Mastra dependencies');
     try {
       await installMastraDependency(pm, '@mastra/core', versionTag, false, timeout);
       await installMastraDependency(pm, '@mastra/libsql', versionTag, false, timeout);
@@ -206,7 +223,7 @@ export const createMastraProject = async ({
     p.outro('Project created successfully');
     console.info('');
 
-    return { projectName };
+    return { projectName, result };
   } catch (error) {
     s.stop();
 

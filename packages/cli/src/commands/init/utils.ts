@@ -531,8 +531,31 @@ export const writeCodeSample = async (
   }
 };
 
-export const interactivePrompt = async () => {
-  p.intro(color.inverse(' Mastra Init '));
+const LLM_PROVIDERS: { value: LLMProvider; label: string; hint?: string }[] = [
+  { value: 'openai', label: 'OpenAI', hint: 'recommended' },
+  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'groq', label: 'Groq' },
+  { value: 'google', label: 'Google' },
+  { value: 'cerebras', label: 'Cerebras' },
+  { value: 'mistral', label: 'Mistral' },
+];
+
+interface InteractivePromptArgs {
+  options?: {
+    showBanner?: boolean;
+  };
+  skip?: {
+    llmProvider?: boolean;
+    llmApiKey?: boolean;
+  };
+}
+
+export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
+  const { skip = {}, options: { showBanner = true } = {} } = args;
+
+  if (showBanner) {
+    p.intro(color.inverse(' Mastra Init '));
+  }
   const mastraProject = await p.group(
     {
       directory: () =>
@@ -542,20 +565,18 @@ export const interactivePrompt = async () => {
           defaultValue: 'src/',
         }),
       llmProvider: () =>
-        p.select({
-          message: 'Select default provider:',
-          options: [
-            { value: 'openai', label: 'OpenAI', hint: 'recommended' },
-            { value: 'anthropic', label: 'Anthropic' },
-            { value: 'groq', label: 'Groq' },
-            { value: 'google', label: 'Google' },
-            { value: 'cerebras', label: 'Cerebras' },
-            { value: 'mistral', label: 'Mistral' },
-          ] satisfies { value: LLMProvider; label: string; hint?: string }[],
-        }),
+        skip?.llmProvider
+          ? undefined
+          : p.select({
+              message: 'Select a default provider',
+              options: LLM_PROVIDERS,
+            }),
       llmApiKey: async ({ results: { llmProvider } }) => {
+        if (skip?.llmApiKey) return undefined;
+
+        const llmName = LLM_PROVIDERS.find(p => p.value === llmProvider)?.label || 'provider';
         const keyChoice = await p.select({
-          message: `Enter your ${llmProvider} API key?`,
+          message: `Enter your ${llmName} API key?`,
           options: [
             { value: 'skip', label: 'Skip for now', hint: 'default' },
             { value: 'enter', label: 'Enter API key' },
@@ -567,6 +588,9 @@ export const interactivePrompt = async () => {
           return p.text({
             message: 'Enter your API key:',
             placeholder: 'sk-...',
+            validate: value => {
+              if (value.length === 0) return 'API key cannot be empty';
+            },
           });
         }
         return undefined;
@@ -577,7 +601,7 @@ export const interactivePrompt = async () => {
         const vscodeIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`vscode`);
 
         const editor = await p.select({
-          message: `Make your AI IDE into a Mastra expert? (installs Mastra docs MCP server)`,
+          message: `Make your IDE into a Mastra expert? (Installs Mastra's MCP server)`,
           options: [
             { value: 'skip', label: 'Skip for now', hint: 'default' },
             {

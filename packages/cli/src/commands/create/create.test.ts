@@ -404,7 +404,15 @@ describe('create command with --template flag', () => {
       const { init } = await import('../init/init');
       const { interactivePrompt } = await import('../init/utils');
 
-      vi.mocked(createMastraProject).mockResolvedValue({ projectName: 'regular-project' });
+      vi.mocked(createMastraProject).mockResolvedValue({
+        projectName: 'regular-project',
+        result: {
+          directory: '/some/path',
+          llmProvider: 'openai',
+          llmApiKey: 'test-key',
+          configureEditorWithDocsMCP: 'cursor',
+        },
+      });
       vi.mocked(interactivePrompt).mockResolvedValue({
         directory: '/some/path',
         llmProvider: 'openai',
