@@ -20,19 +20,19 @@
     "@ai-sdk/anthropic": "^1.2.12",
     "@composio/core": "^0.1.52",
     "@composio/mastra": "^0.1.54",
-    "@mastra/core": "^0.20.0",
+    "@mastra/core": "^0.20.1",
     "@mastra/fastembed": "^0.10.5",
     "@mastra/libsql": "^0.15.1",
     "@mastra/loggers": "^0.10.15",
-    "@mastra/mcp": "^0.13.3",
-    "@mastra/memory": "^0.15.5",
+    "@mastra/mcp": "^0.13.4",
+    "@mastra/memory": "^0.15.6",
     "@openrouter/ai-sdk-provider": "^0.7.5",
     "hono": "^4.9.7",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
-    "mastra": "^0.14.1",
+    "mastra": "^0.15.0",
     "prettier": "^3.6.2",
     "typescript": "^5.9.2"
   }
