@@ -431,6 +431,9 @@ describe('create command with --template flag', () => {
         projectName: 'regular-project',
         createVersionTag: undefined,
         timeout: undefined,
+        llmApiKey: undefined,
+        llmProvider: undefined,
+        needsInteractive: true,
       });
       expect(init).toHaveBeenCalled();
     });
