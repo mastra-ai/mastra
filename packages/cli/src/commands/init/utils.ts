@@ -568,7 +568,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         skip?.llmProvider
           ? undefined
           : p.select({
-              message: 'Select a default provider',
+              message: 'Select a default provider:',
               options: LLM_PROVIDERS,
             }),
       llmApiKey: async ({ results: { llmProvider } }) => {
