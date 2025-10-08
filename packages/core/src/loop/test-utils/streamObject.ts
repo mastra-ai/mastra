@@ -650,6 +650,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 id: expect.any(String),
                 metadata: {
                   __originalContent: '{"content": "Hello, world!"}',
+                  structuredOutput: {
+                    content: 'Hello, world!',
+                  },
                   createdAt: expect.any(Date),
                 },
                 parts: [
