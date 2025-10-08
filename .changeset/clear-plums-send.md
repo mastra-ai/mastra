@@ -9,7 +9,6 @@ All model configuration points now accept the same flexible `MastraModelConfig` 
 - **Scorers**: Judge models now support magic strings, config objects, and dynamic functions
 - **Input/Output Processors**: ModerationProcessor and PIIDetector accept flexible model configs
 - **Relevance Scorers**: MastraAgentRelevanceScorer supports all model config types
-- **Tool Builder**: Tool options accept flexible model configs
 
 This change provides:
 - Consistent API across all components
