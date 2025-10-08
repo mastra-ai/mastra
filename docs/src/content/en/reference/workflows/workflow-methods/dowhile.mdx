@@ -5,11 +5,7 @@ description: Documentation for the `Workflow.dowhile()` method in workflows, whi
 
 # Workflow.dowhile()
 
-The `.dowhile()` method creates a loop that executes a step while a condition is met.
-
-`.dowhile()` always execute the step at least once. It first executes the step and then evaluates the condition. While the condition is met, these actions are repeated.
-
-Because the step is always executed at least once, the first time the condition is evaluated, the value of `iterationCount` will be 1.
+The `.dowhile()` method executes a step while a condition is met. It always runs the step at least once before evaluating the condition. The first time the condition is evaluated, `iterationCount` is `1`.
 
 ## Usage example
 
