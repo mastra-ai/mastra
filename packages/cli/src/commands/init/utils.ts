@@ -487,17 +487,16 @@ export const getAPIKey = async (provider: LLMProvider) => {
   }
 };
 
-export const writeAPIKey = async ({
-  provider,
-  apiKey = 'your-api-key',
-}: {
-  provider: LLMProvider;
-  apiKey?: string;
-}) => {
+export const writeAPIKey = async ({ provider, apiKey }: { provider: LLMProvider; apiKey?: string }) => {
+  /**
+   * If people skip entering an API key (because they e.g. have it in their environment already), we write to .env.example instead of .env so that they can immediately run Mastra without having to delete an .env file with an invalid key.
+   */
+  const envFileName = apiKey ? '.env' : '.env.example';
+
   const key = await getAPIKey(provider);
   const escapedKey = shellQuote.quote([key]);
-  const escapedApiKey = shellQuote.quote([apiKey]);
-  await exec(`echo ${escapedKey}=${escapedApiKey} >> .env`);
+  const escapedApiKey = shellQuote.quote([apiKey ? apiKey : 'your-api-key']);
+  await exec(`echo ${escapedKey}=${escapedApiKey} >> ${envFileName}`);
 };
 export const createMastraDir = async (directory: string): Promise<{ ok: true; dirPath: string } | { ok: false }> => {
   let dir = directory
