@@ -8,43 +8,64 @@ import { NetlifyGateway } from '../src/llm/model/gateways/netlify.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-async function generateProviderRegistry(gateways: MastraModelGateway[]) {
+/**
+ * Fetch provider data from all configured gateways
+ * @param gateways - Array of gateway instances to fetch from
+ * @param maxRetries - Maximum number of retries per gateway (default: 3)
+ * @returns Object containing providers and models
+ */
+export async function fetchProvidersFromGateways(
+  gateways: MastraModelGateway[],
+  maxRetries = 3,
+): Promise<{ providers: Record<string, ProviderConfig>; models: Record<string, string[]> }> {
   const allProviders: Record<string, ProviderConfig> = {};
   const allModels: Record<string, string[]> = {};
 
-  // Fetch from all gateways
   for (const gateway of gateways) {
-    try {
-      const providers = await gateway.fetchProviders();
+    let lastError: Error | null = null;
 
-      for (const [providerId, config] of Object.entries(providers)) {
-        allProviders[providerId] = config;
-        // Sort models alphabetically for consistent ordering
-        allModels[providerId] = config.models.sort();
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.debug(`Fetching from gateway ${gateway.name} (attempt ${attempt}/${maxRetries})...`);
+        const providers = await gateway.fetchProviders();
+
+        for (const [providerId, config] of Object.entries(providers)) {
+          allProviders[providerId] = config;
+          // Sort models alphabetically for consistent ordering
+          allModels[providerId] = config.models.sort();
+        }
+
+        console.debug(`✅ Successfully fetched from gateway ${gateway.name}`);
+        break; // Success, exit retry loop
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        console.debug(`❌ Failed to fetch from gateway ${gateway.name} (attempt ${attempt}/${maxRetries}):`, error);
+
+        if (attempt === maxRetries) {
+          console.error(`Failed to fetch from gateway ${gateway.name} after ${maxRetries} attempts:`, lastError);
+          throw lastError;
+        }
+
+        // Wait before retrying (exponential backoff: 1s, 2s, 4s)
+        const delay = Math.pow(2, attempt - 1) * 1000;
+        console.debug(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
-    } catch (error) {
-      console.error(`Failed to fetch from gateway ${gateway.name}:`, error);
-      throw error; // Fail the whole generation as requested
     }
   }
 
-  // 1. Write JSON file
-  const registryData = {
-    providers: allProviders,
-    models: allModels,
-    version: '1.0.0',
-  };
+  return { providers: allProviders, models: allModels };
+}
 
-  const jsonPath = path.join(__dirname, '..', 'src', 'llm', 'model', 'provider-registry.json');
-  await fs.writeFile(jsonPath, JSON.stringify(registryData, null, 2), 'utf-8');
-
-  console.info(`✅ Generated provider registry JSON at: ${jsonPath}`);
-
-  // 2. Generate .d.ts file with type-only declarations
-  // We generate the literal type from the JSON data structure
-  const providerModelsEntries = Object.entries(allModels)
-    .map(([provider, models]) => {
-      const modelsList = models.map(m => `'${m}'`);
+/**
+ * Generate the content for the .d.ts type file
+ * @param models - Record of provider IDs to model arrays
+ * @returns Generated TypeScript type definitions as a string
+ */
+export function generateTypesContent(models: Record<string, string[]>): string {
+  const providerModelsEntries = Object.entries(models)
+    .map(([provider, modelList]) => {
+      const modelsList = modelList.map(m => `'${m}'`);
 
       // Only quote provider key if it contains special characters (like dashes)
       const needsQuotes = /[^a-zA-Z0-9_$]/.test(provider);
@@ -55,7 +76,7 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
 
       // If single line exceeds 120 chars, format as multi-line
       if (singleLine.length > 120) {
-        const formattedModels = modelsList.map(m => `    ${m},`).join('\n');
+        const formattedModels = modelList.map(m => `    '${m}',`).join('\n');
         return `  readonly ${providerKey}: readonly [\n${formattedModels}\n  ];`;
       }
 
@@ -63,7 +84,7 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
     })
     .join('\n');
 
-  const typeContent = `/**
+  return `/**
  * THIS FILE IS AUTO-GENERATED - DO NOT EDIT
  * Generated from model gateway providers
  */
@@ -106,14 +127,50 @@ export type ModelRouterModelId =
  */
 export type ModelForProvider<P extends Provider> = ProviderModelsMap[P][number];
 `;
+}
 
-  const typesPath = path.join(__dirname, '..', 'src', 'llm', 'model', 'provider-types.generated.d.ts');
+/**
+ * Write registry files to disk (JSON and .d.ts)
+ * @param jsonPath - Path to write the JSON file
+ * @param typesPath - Path to write the .d.ts file
+ * @param providers - Provider configurations
+ * @param models - Model mappings
+ */
+export async function writeRegistryFiles(
+  jsonPath: string,
+  typesPath: string,
+  providers: Record<string, ProviderConfig>,
+  models: Record<string, string[]>,
+): Promise<void> {
+  // 1. Write JSON file
+  const registryData = {
+    providers,
+    models,
+    version: '1.0.0',
+  };
+
+  await fs.writeFile(jsonPath, JSON.stringify(registryData, null, 2), 'utf-8');
+  console.debug(`✅ Generated provider registry JSON at: ${jsonPath}`);
+
+  // 2. Write .d.ts file
+  const typeContent = generateTypesContent(models);
   await fs.writeFile(typesPath, typeContent, 'utf-8');
+  console.debug(`✅ Generated provider types at: ${typesPath}`);
+}
 
-  console.info(`✅ Generated provider types at: ${typesPath}`);
+async function generateProviderRegistry(gateways: MastraModelGateway[]) {
+  // Fetch providers from all gateways
+  const { providers, models } = await fetchProvidersFromGateways(gateways);
+
+  // Write registry files to disk
+  const outputDir = path.join(__dirname, '..', 'src', 'llm', 'model');
+  const jsonPath = path.join(outputDir, 'provider-registry.json');
+  const typesPath = path.join(outputDir, 'provider-types.generated.d.ts');
+  await writeRegistryFiles(jsonPath, typesPath, providers, models);
+
+  // Log summary
   console.info(`\nRegistered providers:`);
-
-  for (const [providerId, config] of Object.entries(allProviders)) {
+  for (const [providerId, config] of Object.entries(providers)) {
     console.info(`  - ${providerId}: ${config.name} (${config.models.length} models)`);
   }
 }
