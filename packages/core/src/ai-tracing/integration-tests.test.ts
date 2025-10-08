@@ -1,5 +1,5 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai/test';
-import { MockLanguageModelV1, simulateReadableStream } from 'ai-v4/test';
+import { MockLanguageModelV1, simulateReadableStream } from 'ai/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -1295,7 +1295,7 @@ describe('AI Tracing Integration Tests', () => {
   );
 
   // Only test VNext methods for structuredOutput
-  describe.each(agentMethods.filter(m => m.name.includes('VNext')))(
+  describe.each(agentMethods.filter(m => m.name === 'generate' || m.name === 'stream'))(
     'should trace agent using structuredOutput format using $name',
     ({ method, model }) => {
       it(`should trace spans correctly`, async () => {
@@ -1311,6 +1311,7 @@ describe('AI Tracing Integration Tests', () => {
 
         const structuredOutput: StructuredOutputOptions<OutputSchema> = {
           schema: outputSchema,
+          model: openai('gpt-4o-mini'),
         };
 
         const mastra = new Mastra({
