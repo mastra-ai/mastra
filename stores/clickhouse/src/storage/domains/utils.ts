@@ -9,6 +9,9 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   safelyParseJSON,
   TABLE_AI_SPANS,
+  TABLE_DATASETS,
+  TABLE_DATASET_VERSIONS,
+  TABLE_DATASET_ROWS,
 } from '@mastra/core/storage';
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
@@ -21,6 +24,9 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_RESOURCES]: `ReplacingMergeTree()`,
   // TODO: verify this is the correct engine for ai spans when implementing clickhouse storage
   [TABLE_AI_SPANS]: `ReplacingMergeTree()`,
+  [TABLE_DATASETS]: `ReplacingMergeTree()`,
+  [TABLE_DATASET_VERSIONS]: `MergeTree()`,
+  [TABLE_DATASET_ROWS]: `ReplacingMergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {

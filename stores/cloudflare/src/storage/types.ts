@@ -14,8 +14,12 @@ import type {
   TABLE_SCORERS,
   TABLE_AI_SPANS,
   AISpanRecord,
+  TABLE_DATASET_ROWS,
+  TABLE_DATASET_VERSIONS,
+  TABLE_DATASETS,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
+import type { DatasetRecord, DatasetRow, DatasetVersion } from '../../../../packages/core/dist/datasets/types';
 
 /**
  * Configuration for Cloudflare KV using REST API
@@ -80,6 +84,9 @@ export type RecordTypes = {
   [TABLE_TRACES]: any;
   [TABLE_RESOURCES]: StorageResourceType;
   [TABLE_AI_SPANS]: AISpanRecord;
+  [TABLE_DATASETS]: DatasetRecord;
+  [TABLE_DATASET_VERSIONS]: DatasetVersion;
+  [TABLE_DATASET_ROWS]: DatasetRow;
 };
 
 export type ListOptions = {
