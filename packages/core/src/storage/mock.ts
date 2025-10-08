@@ -1,5 +1,5 @@
 import type { MastraMessageV2 } from '../agent';
-import type { DatasetRecord, DatasetRow, DatasetVersion } from '../datasets/types';
+
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { ScoreRowData, ScoringSource } from '../scores/types';
 import type { Trace } from '../telemetry';
@@ -7,7 +7,7 @@ import type { StepResult, WorkflowRunState } from '../workflows/types';
 import { MastraStorage } from './base';
 import type { StorageDomains } from './base';
 import type { TABLE_NAMES } from './constants';
-import { MemoryDatasetsStorage } from './domains';
+import { MemoryDatasetsStorage, type DatasetRecord, type DatasetRow, type DatasetVersion } from './domains';
 import { InMemoryLegacyEvals } from './domains/legacy-evals/inmemory';
 import type { InMemoryEvals } from './domains/legacy-evals/inmemory';
 import { InMemoryMemory } from './domains/memory/inmemory';
@@ -486,11 +486,18 @@ export class InMemoryStore extends MastraStorage {
   }
 
   // DATASETS
-  async createDataset(args: { name: string; description?: string; metadata?: Record<string, any> }): Promise<DatasetRecord> {
+  async createDataset(args: {
+    name: string;
+    description?: string;
+    metadata?: Record<string, any>;
+  }): Promise<DatasetRecord> {
     return this.stores.datasets!.createDataset(args);
   }
 
-  async updateDataset(args: { id: string; updates: { name?: string; description?: string; metadata?: Record<string, any> } }): Promise<DatasetRecord> {
+  async updateDataset(args: {
+    id: string;
+    updates: { name?: string; description?: string; metadata?: Record<string, any> };
+  }): Promise<DatasetRecord> {
     return this.stores.datasets!.updateDataset(args);
   }
 

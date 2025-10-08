@@ -1,11 +1,5 @@
 import type { StoreOperations } from '..';
-import type {
-  DatasetRecord,
-  DatasetRow,
-  DatasetVersion,
-  DeleteDatasetRow,
-  UpdateDatasetRow,
-} from '../../../datasets/types';
+import type { DatasetRecord, DatasetRow, DatasetVersion } from './base';
 import type { PaginationInfo, StoragePagination } from '../../types';
 import { DatasetsStorage } from './base';
 import type {

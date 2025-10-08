@@ -31,10 +31,11 @@ import type {
 } from './domains';
 import type {
   AddDatasetRowsPayload,
+  DatasetRow,
+  DatasetVersion,
   DeleteDatasetRowsPayload,
   UpdateDatasetRowsPayload,
 } from './domains/datasets/base';
-import type { DatasetRow, DatasetVersion, DeleteDatasetRow, UpdateDatasetRow } from '../datasets/types';
 import type {
   EvalRow,
   PaginationInfo,
@@ -854,7 +855,7 @@ export abstract class MastraStorage extends MastraBase {
     pagination?: StoragePagination;
   }): Promise<{ datasets: any[]; pagination: PaginationInfo }> {
     if (this.stores?.datasets) {
-      return this.stores.datasets.getDatasets(args || {});
+      return this.stores.datasets.getDatasets(args);
     }
     throw new MastraError({
       id: 'MASTRA_STORAGE_GET_DATASETS_NOT_SUPPORTED',

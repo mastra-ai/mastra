@@ -1,8 +1,39 @@
 import z from 'zod';
 import { MastraBase } from '../../../base';
-import type { DatasetRecord, DatasetRow, DatasetVersion } from '../../../datasets/types';
 import type { PaginationInfo, StoragePagination } from '../../types';
 import { monotonicFactory } from 'ulid';
+import type { RuntimeContext } from '../../../runtime-context';
+
+export type DatasetRecord = {
+  id: string;
+  name: string;
+  description?: string;
+  metadata?: Record<string, any>;
+  createdAt: Date;
+  updatedAt?: Date;
+  currentVersion: DatasetVersion;
+};
+
+export type DatasetVersion = {
+  id: string;
+  datasetId: string;
+  createdAt: Date;
+  updatedAt?: Date;
+};
+
+export type DatasetRow = {
+  rowId: string;
+  datasetId: string;
+  versionId: string;
+  input: any;
+  groundTruth?: any;
+  runtimeContext?: RuntimeContext;
+  deleted: boolean;
+  traceId?: string;
+  spanId?: string;
+  createdAt: Date;
+  updatedAt?: Date;
+};
 
 const createDatasetValidation = z.object({
   name: z.string(),
@@ -92,9 +123,7 @@ export class DatasetsStorage extends MastraBase {
     throw new Error('Not implemented');
   }
 
-  getDatasets({
-    pagination,
-  }: {
+  getDatasets(args?: {
     pagination?: StoragePagination;
   }): Promise<{ datasets: DatasetRecord[]; pagination: PaginationInfo }> {
     throw new Error('Not implemented');
