@@ -516,7 +516,6 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
             pagination: { page: 0, perPage: 0 },
           });
 
-          console.log(`result: ${JSON.stringify(result)}`)
           expect(result.pagination.perPage).toBe(1);
           expect(result.datasets.length).toBe(1);
         });
@@ -1049,20 +1048,106 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
           expect(ids.size).toBe(25);
         });
 
-        it('should only return rows for the specified versionId', async () => {
-          const firstBatch = await createMultipleRows(storage, dataset.id, 5);
-          const secondBatch = await createMultipleRows(storage, dataset.id, 3);
+        it('should return snapshot of rows at specified versionId', async () => {
+          // Version 1: Add 3 rows
+          const batch1 = await createMultipleRows(storage, dataset.id, 3);
+          const row1Id = batch1.rows[0].rowId;
+          const row2Id = batch1.rows[1].rowId;
+          const row3Id = batch1.rows[2].rowId;
 
-          const firstVersionRows = await storage.getDatasetRows({
+          // Version 2: Update row1
+          const batch2 = await storage.updateDatasetRows({
             datasetId: dataset.id,
-            versionId: firstBatch.versionId,
+            updates: [{ rowId: row1Id, input: { value: 'updated' } }],
+          });
+
+          // Version 3: Add 2 more rows
+          const batch3 = await createMultipleRows(storage, dataset.id, 2);
+
+          // Query for version 2 snapshot - should get:
+          // - row1 with version 2 (updated)
+          // - row2 with version 1 (original)
+          // - row3 with version 1 (original)
+          // - NOT the 2 rows added in version 3
+          const version2Rows = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId: batch2.versionId,
             pagination: { page: 0, perPage: 10 },
           });
 
-          expect(firstVersionRows.rows.length).toBe(5);
-          firstVersionRows.rows.forEach(row => {
-            expect(row.versionId).toBe(firstBatch.versionId);
+          expect(version2Rows.rows.length).toBe(3);
+          
+          const row1 = version2Rows.rows.find(r => r.rowId === row1Id);
+          const row2 = version2Rows.rows.find(r => r.rowId === row2Id);
+          const row3 = version2Rows.rows.find(r => r.rowId === row3Id);
+
+          expect(row1).toBeDefined();
+          expect(row1?.versionId).toBe(batch2.versionId); // Updated version
+          expect(row1?.input.value).toBe('updated');
+
+          expect(row2).toBeDefined();
+          expect(row2?.versionId).toBe(batch1.versionId); // Original version
+
+          expect(row3).toBeDefined();
+          expect(row3?.versionId).toBe(batch1.versionId); // Original version
+
+          // Query for version 3 snapshot - should get all 5 rows
+          const version3Rows = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId: batch3.versionId,
+            pagination: { page: 0, perPage: 10 },
           });
+
+          expect(version3Rows.rows.length).toBe(5);
+        });
+
+        it('should return closest earlier version when querying for non-existent version', async () => {
+          // Create rows with version V1
+          const batch1 = await createMultipleRows(storage, dataset.id, 2);
+          const rowId = batch1.rows[0].rowId;
+          const rowId2 = batch1.rows[1].rowId;
+
+          // Update to create version V2
+          const batch2 = await storage.updateDatasetRows({
+            datasetId: dataset.id,
+            updates: [{ rowId, input: { value: 'v2' } }],
+          });
+
+          const batch3 = await storage.updateDatasetRows({
+            datasetId: dataset.id,
+            updates: [{ rowId: rowId2, input: { value: 'v3' } }],
+          });
+
+          // Update again to create version V3
+          const batch4 = await storage.updateDatasetRows({
+            datasetId: dataset.id,
+            updates: [{ rowId, input: { value: 'v4' } }],
+          });
+
+          // Query for future version - should return V3 (closest without going over)
+          const futureSnapshot = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(futureSnapshot.rows.length).toBe(2);
+          const targetRow = futureSnapshot.rows.find(r => r.rowId === rowId);
+          expect(targetRow).toBeDefined();
+          expect(targetRow?.versionId).toBe(batch4.versionId);
+          expect(targetRow?.input.value).toBe('v4');
+
+          // Query for version between V2 and V3 - should return V2
+          const betweenSnapshot = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId: batch3.versionId,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(betweenSnapshot.rows.length).toBe(2);
+          const targetRow2 = betweenSnapshot.rows.find(r => r.rowId === rowId);
+          expect(targetRow2).toBeDefined();
+          expect(targetRow2?.versionId).toBe(batch2.versionId);
+          expect(targetRow2?.input.value).toBe('v2');
         });
       });
 

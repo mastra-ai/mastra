@@ -29,7 +29,11 @@ import type {
   ObservabilityStorage,
   DatasetsStorage,
 } from './domains';
-import type { AddDatasetRowsPayload, DeleteDatasetRowsPayload, UpdateDatasetRowsPayload } from './domains/datasets/base';
+import type {
+  AddDatasetRowsPayload,
+  DeleteDatasetRowsPayload,
+  UpdateDatasetRowsPayload,
+} from './domains/datasets/base';
 import type { DatasetRow, DatasetVersion, DeleteDatasetRow, UpdateDatasetRow } from '../datasets/types';
 import type {
   EvalRow,
@@ -846,9 +850,11 @@ export abstract class MastraStorage extends MastraBase {
    * Retrieves datasets with pagination
    * @throws {MastraError} if not supported by the storage adapter
    */
-  async getDatasets(args: { pagination: StoragePagination }) {
+  async getDatasets(args?: {
+    pagination?: StoragePagination;
+  }): Promise<{ datasets: any[]; pagination: PaginationInfo }> {
     if (this.stores?.datasets) {
-      return this.stores.datasets.getDatasets(args);
+      return this.stores.datasets.getDatasets(args || {});
     }
     throw new MastraError({
       id: 'MASTRA_STORAGE_GET_DATASETS_NOT_SUPPORTED',
@@ -862,7 +868,10 @@ export abstract class MastraStorage extends MastraBase {
    * Retrieves dataset versions with pagination
    * @throws {MastraError} if not supported by the storage adapter
    */
-  async getDatasetVersions(args: { datasetId: string; pagination?: StoragePagination }): Promise<{ versions: DatasetVersion[]; pagination: PaginationInfo }> {
+  async getDatasetVersions(args: {
+    datasetId: string;
+    pagination?: StoragePagination;
+  }): Promise<{ versions: DatasetVersion[]; pagination: PaginationInfo }> {
     if (this.stores?.datasets) {
       return this.stores.datasets.getDatasetVersions(args);
     }
@@ -878,7 +887,7 @@ export abstract class MastraStorage extends MastraBase {
    * Adds rows to a dataset and creates a new dataset version
    * @throws {MastraError} if not supported by the storage adapter
    */
-  async addDatasetRows(args: AddDatasetRowsPayload): Promise<{ rows: DatasetRow[], versionId: string }> {
+  async addDatasetRows(args: AddDatasetRowsPayload): Promise<{ rows: DatasetRow[]; versionId: string }> {
     if (this.stores?.datasets) {
       return this.stores.datasets.addDatasetRows(args);
     }
@@ -910,7 +919,11 @@ export abstract class MastraStorage extends MastraBase {
    * Retrieves dataset rows by version with pagination
    * @throws {MastraError} if not supported by the storage adapter
    */
-  async getDatasetRows(args: { datasetId: string; pagination?: StoragePagination; versionId?: string }): Promise<{ rows: DatasetRow[]; pagination: PaginationInfo }> {
+  async getDatasetRows(args: {
+    datasetId: string;
+    pagination?: StoragePagination;
+    versionId?: string;
+  }): Promise<{ rows: DatasetRow[]; pagination: PaginationInfo }> {
     if (this.stores?.datasets) {
       return this.stores.datasets.getDatasetRows(args);
     }
@@ -926,7 +939,10 @@ export abstract class MastraStorage extends MastraBase {
    * Retrieves all versions of a row by rowId with pagination
    * @throws {MastraError} if not supported by the storage adapter
    */
-  async getDatasetRowVersionsByRowId(args: { rowId: string; pagination?: StoragePagination }): Promise<{ rows: DatasetRow[]; pagination: PaginationInfo }> {
+  async getDatasetRowVersionsByRowId(args: {
+    rowId: string;
+    pagination?: StoragePagination;
+  }): Promise<{ rows: DatasetRow[]; pagination: PaginationInfo }> {
     if (this.stores?.datasets) {
       return this.stores.datasets.getDatasetRowVersionsByRowId(args);
     }
@@ -942,7 +958,7 @@ export abstract class MastraStorage extends MastraBase {
    * Updates dataset rows by rowId with new versions
    * @throws {MastraError} if not supported by the storage adapter
    */
-  async updateDatasetRows(args: UpdateDatasetRowsPayload): Promise<{ rows: DatasetRow[], versionId: string }> {
+  async updateDatasetRows(args: UpdateDatasetRowsPayload): Promise<{ rows: DatasetRow[]; versionId: string }> {
     if (this.stores?.datasets) {
       return this.stores.datasets.updateDatasetRows(args);
     }
@@ -969,6 +985,4 @@ export abstract class MastraStorage extends MastraBase {
       text: `Datasets are not supported by this storage adapter (${this.constructor.name})`,
     });
   }
-
-
 }

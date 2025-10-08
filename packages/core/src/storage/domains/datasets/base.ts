@@ -1,15 +1,8 @@
 import z from 'zod';
 import { MastraBase } from '../../../base';
-import type { Dataset } from '../../../datasets/dataset';
-import type {
-  DatasetRecord,
-  DatasetRow,
-  DatasetVersion,
-  DeleteDatasetRow,
-  UpdateDatasetRow,
-} from '../../../datasets/types';
+import type { DatasetRecord, DatasetRow, DatasetVersion } from '../../../datasets/types';
 import type { PaginationInfo, StoragePagination } from '../../types';
-import { monotonicFactory, ulid } from 'ulid';
+import { monotonicFactory } from 'ulid';
 
 const createDatasetValidation = z.object({
   name: z.string(),
@@ -26,26 +19,30 @@ const updateDatasetValidation = z.object({
 export type UpdateDatasetPayload = z.infer<typeof updateDatasetValidation>;
 
 const addDatasetRowsValidation = z.object({
-  rows: z.array(z.object({
-    input: z.any(),
-    groundTruth: z.any().optional(),
-    runtimeContext: z.record(z.string(), z.any()).optional(),
-    traceId: z.string().optional(),
-    spanId: z.string().optional(),
-  })),
+  rows: z.array(
+    z.object({
+      input: z.any(),
+      groundTruth: z.any().optional(),
+      runtimeContext: z.record(z.string(), z.any()).optional(),
+      traceId: z.string().optional(),
+      spanId: z.string().optional(),
+    }),
+  ),
   datasetId: z.string(),
 });
 export type AddDatasetRowsPayload = z.infer<typeof addDatasetRowsValidation>;
 
 const updateDatasetRowsValidation = z.object({
-  updates: z.array(z.object({
-    rowId: z.string(),
-    input: z.any().optional(),
-    groundTruth: z.any().optional(),
-    runtimeContext: z.record(z.string(), z.any()).optional(),
-    traceId: z.string().optional(),
-    spanId: z.string().optional(),
-  })),
+  updates: z.array(
+    z.object({
+      rowId: z.string(),
+      input: z.any().optional(),
+      groundTruth: z.any().optional(),
+      runtimeContext: z.record(z.string(), z.any()).optional(),
+      traceId: z.string().optional(),
+      spanId: z.string().optional(),
+    }),
+  ),
   datasetId: z.string(),
 });
 export type UpdateDatasetRowsPayload = z.infer<typeof updateDatasetRowsValidation>;
@@ -99,7 +96,7 @@ export class DatasetsStorage extends MastraBase {
     pagination,
   }: {
     pagination?: StoragePagination;
-  }): Promise<{ datasets: DatasetRecord[]; pagination: StoragePagination }> {
+  }): Promise<{ datasets: DatasetRecord[]; pagination: PaginationInfo }> {
     throw new Error('Not implemented');
   }
 
@@ -118,7 +115,7 @@ export class DatasetsStorage extends MastraBase {
   }
 
   // DATASET ROWS
-  addDatasetRows(args: AddDatasetRowsPayload): Promise<{ rows: DatasetRow[], versionId: string }> {
+  addDatasetRows(args: AddDatasetRowsPayload): Promise<{ rows: DatasetRow[]; versionId: string }> {
     throw new Error('Not implemented');
   }
 
@@ -156,7 +153,7 @@ export class DatasetsStorage extends MastraBase {
     throw new Error('Not implemented');
   }
 
-  updateDatasetRows(args: UpdateDatasetRowsPayload): Promise<{ rows: DatasetRow[], versionId: string }> {
+  updateDatasetRows(args: UpdateDatasetRowsPayload): Promise<{ rows: DatasetRow[]; versionId: string }> {
     throw new Error('Not implemented');
   }
 

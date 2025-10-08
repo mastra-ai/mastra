@@ -94,10 +94,9 @@ export class MemoryDatasetsStorage extends DatasetsStorage {
       }
     }
 
-    const datasetRows = Array.from(this.datasetRows.values())
-      .filter(row => row.datasetId === id);
+    const datasetRows = Array.from(this.datasetRows.values()).filter(row => row.datasetId === id);
 
-      for (const row of datasetRows) {
+    for (const row of datasetRows) {
       this.datasetRows.delete(this.generateDatasetRowKey(row.rowId, row.versionId));
     }
 
@@ -135,9 +134,9 @@ export class MemoryDatasetsStorage extends DatasetsStorage {
 
     const allDatasets = Array.from(this.datasets.values());
     const datasetWithVersions = allDatasets.slice(start, end).map(dataset => {
-    const datasetVersions = Array.from(this.datasetVersions.values())
-      .filter(version => version.datasetId === dataset.id)
-      .sort((a, b) => b.id.localeCompare(a.id));
+      const datasetVersions = Array.from(this.datasetVersions.values())
+        .filter(version => version.datasetId === dataset.id)
+        .sort((a, b) => b.id.localeCompare(a.id));
       const currentVersion = datasetVersions[0];
       if (!currentVersion) {
         throw new Error('Current version not found');
@@ -181,7 +180,7 @@ export class MemoryDatasetsStorage extends DatasetsStorage {
   }
 
   // DATASET ROWS
-  addDatasetRows(args: AddDatasetRowsPayload): Promise<{ rows: DatasetRow[], versionId: string }> {
+  addDatasetRows(args: AddDatasetRowsPayload): Promise<{ rows: DatasetRow[]; versionId: string }> {
     const { rows: validatedRows, datasetId } = this.validateAddDatasetRows(args);
     const versionULID = this.generateVersionULID();
     const datasetVersion: DatasetVersion = {
@@ -270,19 +269,33 @@ export class MemoryDatasetsStorage extends DatasetsStorage {
     const perPage = Math.max(1, pagination?.perPage ?? 10);
     const start = page * perPage;
     const end = start + perPage;
-    const rows = Array.from(this.datasetRows.values())
-      .filter(row => row.versionId === versionId && row.datasetId === datasetId)
-      .sort((a, b) => b.versionId.localeCompare(a.versionId))
 
+    // Get all rows for this dataset, sorted by versionId descending
+    const allRows = Array.from(this.datasetRows.values())
+      .filter(row => row.datasetId === datasetId)
+      .sort((a, b) => b.versionId.localeCompare(a.versionId));
+
+    // For each unique rowId, get the latest version that's <= the specified versionId
     const set = new Set<string>();
     const uniqueRows = [];
-    for (const row of rows) {
+    for (const row of allRows) {
       if (set.has(row.rowId)) {
         continue;
       }
 
-      set.add(row.rowId);
-      uniqueRows.push(row);
+      // Include this row if:
+      // 1. No versionId specified (get latest), OR
+      // 2. This row's version <= specified version (snapshot at that point in time)
+      if (!versionId || row.versionId.localeCompare(versionId) <= 0) {
+        // Skip deleted rows
+        if (!row.deleted) {
+          set.add(row.rowId);
+          uniqueRows.push(row);
+        } else {
+          // Mark as seen so we don't include older versions
+          set.add(row.rowId);
+        }
+      }
     }
 
     const total = uniqueRows.length;
@@ -294,7 +307,7 @@ export class MemoryDatasetsStorage extends DatasetsStorage {
     });
   }
 
-  updateDatasetRows(args: UpdateDatasetRowsPayload): Promise<{ rows: DatasetRow[], versionId: string }> {
+  updateDatasetRows(args: UpdateDatasetRowsPayload): Promise<{ rows: DatasetRow[]; versionId: string }> {
     const { updates: validatedUpdates, datasetId } = this.validateUpdateDatasetRows(args);
     const versionULID = this.generateVersionULID();
     const datasetVersion: DatasetVersion = {
@@ -348,18 +361,14 @@ export class MemoryDatasetsStorage extends DatasetsStorage {
       this.datasetRows.set(this.generateDatasetRowKey(rowId, versionULID), {
         rowId,
         datasetId,
-        input: "",
+        input: '',
         createdAt: row.createdAt,
         versionId: versionULID,
         deleted: true,
-        updatedAt: new Date()
+        updatedAt: new Date(),
       });
     }
 
     return Promise.resolve({ versionId: versionULID });
   }
-
-  // rows({ versionId }: { versionId?: string }): Promise<AsyncIterableIterator<DatasetRow>> {
-  //   throw new Error('Not implemented');
-  // }
 }
