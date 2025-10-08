@@ -3,8 +3,8 @@
  * Loads provider data from JSON file and exports typed interfaces
  */
 
-import path from 'path';
 import fs from 'fs';
+import path from 'path';
 import { fileURLToPath } from 'url';
 import type { ProviderConfig } from './gateways/base.js';
 import type { Provider, ModelForProvider, ModelRouterModelId, ProviderModels } from './provider-types.generated.js';
@@ -30,15 +30,23 @@ function loadRegistry(): RegistryData {
     return registryData;
   }
 
-  // Try multiple paths for different environments
+  const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
+
+  // Prioritize production paths (built package)
   const possiblePaths = [
-    // Development: from source
-    path.join(process.cwd(), 'packages/core/src/llm/model/provider-registry.json'),
-    path.join(process.cwd(), 'src/llm/model/provider-registry.json'),
-    // Built: relative to this file
+    // Built: relative to this file (production)
     path.join(__dirname, 'provider-registry.json'),
-    path.join(__dirname, '../../../src/llm/model/provider-registry.json'),
   ];
+
+  // Only check development paths if MASTRA_DEV=1
+  if (isDev) {
+    possiblePaths.push(
+      // Development: from source
+      path.join(process.cwd(), 'packages/core/src/llm/model/provider-registry.json'),
+      path.join(process.cwd(), 'src/llm/model/provider-registry.json'),
+      path.join(__dirname, '../../../src/llm/model/provider-registry.json'),
+    );
+  }
 
   const errors: string[] = [];
 
@@ -60,7 +68,7 @@ function loadRegistry(): RegistryData {
 
 // Export registry data via Proxy for lazy loading
 export const PROVIDER_REGISTRY = new Proxy({} as Record<string, ProviderConfig>, {
-  get(target, prop: string) {
+  get(_target, prop: string) {
     const data = loadRegistry();
     return data.providers[prop];
   },
@@ -68,11 +76,11 @@ export const PROVIDER_REGISTRY = new Proxy({} as Record<string, ProviderConfig>,
     const data = loadRegistry();
     return Object.keys(data.providers);
   },
-  has(target, prop: string) {
+  has(_target, prop: string) {
     const data = loadRegistry();
     return prop in data.providers;
   },
-  getOwnPropertyDescriptor(target, prop) {
+  getOwnPropertyDescriptor(_target, prop) {
     const data = loadRegistry();
     if (prop in data.providers) {
       return {
@@ -85,7 +93,7 @@ export const PROVIDER_REGISTRY = new Proxy({} as Record<string, ProviderConfig>,
 }) as Record<Provider, ProviderConfig>;
 
 export const PROVIDER_MODELS = new Proxy({} as ProviderModels, {
-  get(target, prop: string) {
+  get(_target, prop: string) {
     const data = loadRegistry();
     return data.models[prop];
   },
@@ -93,11 +101,11 @@ export const PROVIDER_MODELS = new Proxy({} as ProviderModels, {
     const data = loadRegistry();
     return Object.keys(data.models);
   },
-  has(target, prop: string) {
+  has(_target, prop: string) {
     const data = loadRegistry();
     return prop in data.models;
   },
-  getOwnPropertyDescriptor(target, prop) {
+  getOwnPropertyDescriptor(_target, prop) {
     const data = loadRegistry();
     if (prop in data.models) {
       return {

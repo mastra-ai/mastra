@@ -80,5 +80,19 @@ export default defineConfig({
       fs.copyFileSync(srcJson, distJson);
       console.log('✓ Copied provider-registry.json to dist/');
     }
+
+    // Copy provider-types.generated.d.ts to dist/llm/model/ folder
+    const srcDts = path.join(process.cwd(), 'src/llm/model/provider-types.generated.d.ts');
+    const distDtsDir = path.join(process.cwd(), 'dist/llm/model');
+    const distDts = path.join(distDtsDir, 'provider-types.generated.d.ts');
+
+    if (fs.existsSync(srcDts)) {
+      // Ensure directory exists
+      if (!fs.existsSync(distDtsDir)) {
+        fs.mkdirSync(distDtsDir, { recursive: true });
+      }
+      fs.copyFileSync(srcDts, distDts);
+      console.log('✓ Copied provider-types.generated.d.ts to dist/llm/model/');
+    }
   },
 });

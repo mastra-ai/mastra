@@ -40,7 +40,8 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
 
   console.info(`✅ Generated provider registry JSON at: ${jsonPath}`);
 
-  // 2. Generate provider models as a const object for type inference
+  // 2. Generate .d.ts file with type-only declarations
+  // We generate the literal type from the JSON data structure
   const providerModelsEntries = Object.entries(allModels)
     .map(([provider, models]) => {
       const modelsList = models.map(m => `'${m}'`);
@@ -50,12 +51,12 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
       const providerKey = needsQuotes ? `'${provider}'` : provider;
 
       // Format array based on length (prettier printWidth: 120)
-      const singleLine = `  ${providerKey}: [${modelsList.join(', ')}],`;
+      const singleLine = `  readonly ${providerKey}: readonly [${modelsList.join(', ')}];`;
 
       // If single line exceeds 120 chars, format as multi-line
       if (singleLine.length > 120) {
         const formattedModels = modelsList.map(m => `    ${m},`).join('\n');
-        return `  ${providerKey}: [\n${formattedModels}\n  ],`;
+        return `  readonly ${providerKey}: readonly [\n${formattedModels}\n  ];`;
       }
 
       return singleLine;
@@ -69,18 +70,17 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
  */
 
 /**
- * Provider models mapping as a const object
- * This is the source of truth for all providers and their model IDs
+ * Provider models mapping type
+ * This is derived from the JSON data and provides type-safe access
  */
-export const PROVIDER_MODELS_MAP = {
+export type ProviderModelsMap = {
 ${providerModelsEntries}
-} as const;
+};
 
 /**
  * Union type of all registered provider IDs
- * Dynamically derived from PROVIDER_MODELS_MAP keys
  */
-export type Provider = keyof typeof PROVIDER_MODELS_MAP;
+export type Provider = keyof ProviderModelsMap;
 
 /**
  * Provider models mapping interface
@@ -91,24 +91,24 @@ export interface ProviderModels {
 
 /**
  * OpenAI-compatible model ID type
- * Dynamically derived from PROVIDER_MODELS_MAP
+ * Dynamically derived from ProviderModelsMap
  * Full provider/model paths (e.g., "openai/gpt-4o", "anthropic/claude-3-5-sonnet-20241022")
  */
 export type ModelRouterModelId =
   | {
-      [P in Provider]: \`\${P}/\${(typeof PROVIDER_MODELS_MAP)[P][number]}\`;
+      [P in Provider]: \`\${P}/\${ProviderModelsMap[P][number]}\`;
     }[Provider]
   | (string & {});
 
 /**
  * Extract the model part from a ModelRouterModelId for a specific provider
- * Dynamically derived from PROVIDER_MODELS_MAP
+ * Dynamically derived from ProviderModelsMap
  * Example: ModelForProvider<'openai'> = 'gpt-4o' | 'gpt-4-turbo' | ...
  */
-export type ModelForProvider<P extends Provider> = (typeof PROVIDER_MODELS_MAP)[P][number];
+export type ModelForProvider<P extends Provider> = ProviderModelsMap[P][number];
 `;
 
-  const typesPath = path.join(__dirname, '..', 'src', 'llm', 'model', 'provider-types.generated.ts');
+  const typesPath = path.join(__dirname, '..', 'src', 'llm', 'model', 'provider-types.generated.d.ts');
   await fs.writeFile(typesPath, typeContent, 'utf-8');
 
   console.info(`✅ Generated provider types at: ${typesPath}`);
