@@ -944,7 +944,7 @@ importers:
         specifier: ^2.1.0
         version: 2.1.0
       execa:
-        specifier: ^9.5.1
+        specifier: ^9.6.0
         version: 9.6.0
       mri:
         specifier: ^1.2.0
