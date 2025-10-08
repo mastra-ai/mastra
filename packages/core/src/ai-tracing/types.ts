@@ -25,6 +25,8 @@ export enum AISpanType {
   LLM_CHUNK = 'llm_chunk',
   /** MCP (Model Context Protocol) tool execution */
   MCP_TOOL_CALL = 'mcp_tool_call',
+  /** Input or Output Processor execution */
+  PROCESSOR_RUN = 'processor_run',
   /** Function/tool execution with inputs, outputs, errors */
   TOOL_CALL = 'tool_call',
   /** Workflow run - root span for workflow processes */
@@ -150,6 +152,16 @@ export interface MCPToolCallAttributes extends AIBaseAttributes {
 }
 
 /**
+ * Processor attributes
+ */
+export interface ProcessorRunAttributes extends AIBaseAttributes {
+  /** Id of the Processor */
+  processorId: string;
+  /** Processor type (input or output) */
+  processorType: 'input' | 'output';
+}
+
+/**
  * Workflow Run attributes
  */
 export interface WorkflowRunAttributes extends AIBaseAttributes {
@@ -251,6 +263,7 @@ export interface AISpanTypeMap {
   [AISpanType.LLM_CHUNK]: LLMChunkAttributes;
   [AISpanType.TOOL_CALL]: ToolCallAttributes;
   [AISpanType.MCP_TOOL_CALL]: MCPToolCallAttributes;
+  [AISpanType.PROCESSOR_RUN]: ProcessorRunAttributes;
   [AISpanType.WORKFLOW_STEP]: WorkflowStepAttributes;
   [AISpanType.WORKFLOW_CONDITIONAL]: WorkflowConditionalAttributes;
   [AISpanType.WORKFLOW_CONDITIONAL_EVAL]: WorkflowConditionalEvalAttributes;

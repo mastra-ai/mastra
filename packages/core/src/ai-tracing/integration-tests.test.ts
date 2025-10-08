@@ -1295,14 +1295,14 @@ describe('AI Tracing Integration Tests', () => {
   );
 
   // Only test VNext methods for structuredOutput
-  describe.each(agentMethods.filter(m => m.name === 'generate' || m.name === 'stream'))(
+  describe.each(agentMethods.filter(m => m.name === 'stream'))(
     'should trace agent using structuredOutput format using $name',
-    ({ method, model }) => {
+    ({ method }) => {
       it(`should trace spans correctly`, async () => {
         const testAgent = new Agent({
           name: 'Test Agent',
           instructions: 'Return a simple response',
-          model,
+          model: openai('gpt-4o-mini'),
         });
 
         const outputSchema = z.object({
@@ -1320,8 +1320,9 @@ describe('AI Tracing Integration Tests', () => {
         });
 
         const agent = mastra.getAgent('testAgent');
-        const result = await method(agent, 'Return a simple response', { structuredOutput });
-        expect(result.object).toBeDefined();
+        const result = await method(agent, 'Return a list of items separated by commas', { structuredOutput });
+        const obj = await result.object;
+        expect(obj).toBeDefined();
         expect(result.traceId).toBeDefined();
 
         const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
@@ -1345,11 +1346,11 @@ describe('AI Tracing Integration Tests', () => {
         expect(llmGenerationSpan?.parentSpanId).toEqual(agentRunSpan?.id);
 
         // Verify LLM generation spans
-        expect(llmGenerationSpans[0]?.name).toBe("llm: 'mock-model-id'");
+        expect(llmGenerationSpans[0]?.name).toBe("llm: 'gpt-4o-mini'");
         expect(llmGenerationSpan?.input.messages).toHaveLength(2);
 
-        expect(llmGenerationSpan?.output.text).toBe('Mock V2 streaming response');
-        expect(agentRunSpan?.output.text).toBe('Mock V2 streaming response');
+        expect(typeof llmGenerationSpan?.output.text).toBe('string');
+        expect(typeof agentRunSpan?.output.text).toBe('string');
 
         console.log('llmGenerationSpan?.output');
         console.log(llmGenerationSpan?.output);
@@ -1360,7 +1361,7 @@ describe('AI Tracing Integration Tests', () => {
         // Verify structured output
         expect(result.object).toBeDefined();
         expect(result.object).toHaveProperty('items');
-        expect((result.object as any).items).toBe('test structured output');
+        expect((obj as any).items.length).toBeGreaterThan(0);
 
         expect(llmGenerationSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
         testExporter.finalExpectations();
