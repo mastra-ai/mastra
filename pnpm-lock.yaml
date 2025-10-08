@@ -963,7 +963,7 @@ importers:
         specifier: ^20.17.57
         version: 20.19.14
       '@types/semver':
-        specifier: ^7.5.8
+        specifier: ^7.7.1
         version: 7.7.1
       eslint:
         specifier: ^9.35.0
