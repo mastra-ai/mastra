@@ -125,6 +125,44 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
+### Useful patterns for loop conditions
+
+#### Condition based on `inputData`
+
+The `inputData` of the loop step is the same as the output of the previous iteration of that step. For that reason, most often what we need to decide if the loop is done or not will be passed as `inputData` to the condition function.
+
+```typescript
+.dountil(nestedWorkflowStep, async ({ inputData: { userResponse } }) => userResponse === "yes")
+```
+
+If the `nestedWorkflowStep` is a workflow that suspends and resumes with a `userResponse` and eventually returns it as the result of the workflow, the condition will have access to it through `inputData`.
+
+#### Maximum iterations with a successful result
+
+The `iterationCount` is the number of times the loop has been executed. This is useful when we need to decide if the loop is done or not based on the number of iterations.
+
+```typescript
+.dountil(nestedWorkflowStep, async ({ inputData: { userResponse, iterationCount } }) => userResponse === "yes" || iterationCount >= 10)
+```
+
+Here, even if the user does not respond with "yes", after 10 iterations the loop will be done and the workflow will continue with the last iteration's result.
+
+
+#### Abort workflow execution when maximum iterations is reached
+
+The `iterationCount` is the number of times the loop has been executed. This is useful when we need to decide if the loop is done or not based on the number of iterations.
+
+```typescript
+.dountil(nestedWorkflowStep, async ({ inputData: { userResponse, iterationCount } }) => {
+  if (iterationCount >= 10) {
+    throw new Error("Maximum iterations reached");
+  }
+  return userResponse === "yes";
+})
+```
+
+Here, if the user does not respond with "yes" within 10 iterations we throw an error which will cause the step to fail and in turn cause the workflow to fail.
+
 ### Repeating with `.foreach()`
 
 Sequentially executes the same step for each item from the `inputSchema`.
