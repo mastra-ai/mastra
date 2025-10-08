@@ -1,11 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { decodeTime, isValid } from 'ulid';
-import {
-  TABLE_DATASET_ROWS,
-  TABLE_DATASET_VERSIONS,
-  TABLE_DATASETS,
-  type MastraStorage,
-} from '@mastra/core/storage';
+import { isValid } from 'ulid';
+import { TABLE_DATASET_ROWS, TABLE_DATASET_VERSIONS, TABLE_DATASETS, type MastraStorage } from '@mastra/core/storage';
+// import type { DatasetRecord, DatasetRow, DatasetVersion } from '@mastra/core/storage/domains';
 
 // Helper functions for pagination tests
 async function createMultipleDatasets(storage: MastraStorage, count: number): Promise<any[]> {
@@ -33,7 +29,11 @@ async function createMultipleVersions(storage: MastraStorage, datasetId: string,
   return versions;
 }
 
-async function createMultipleRows(storage: MastraStorage, datasetId: string, count: number): Promise<{ rows: any[]; versionId: string }> {
+async function createMultipleRows(
+  storage: MastraStorage,
+  datasetId: string,
+  count: number,
+): Promise<{ rows: any[]; versionId: string }> {
   const rowsToAdd: any[] = [];
   for (let i = 0; i < count; i++) {
     rowsToAdd.push({ input: { value: i } });
@@ -49,7 +49,7 @@ async function createMultipleRowVersions(
   storage: MastraStorage,
   datasetId: string,
   rowId: string,
-  count: number
+  count: number,
 ): Promise<any[]> {
   const versions: any[] = [];
   for (let i = 0; i < count; i++) {
@@ -72,7 +72,6 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
 
     describe('dataset management', () => {
       it('should create a dataset and automatically create a version', async () => {
-
         const dataset = await storage.createDataset({
           name: 'test-dataset',
           description: 'test-dataset-description',
@@ -126,7 +125,10 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
         expect(updatedDataset.metadata?.test).toEqual(dataset.metadata?.test);
         expect(updatedDataset.description).toEqual(dataset.description);
         expect(updatedDataset.currentVersion.id).not.toBe(dataset.currentVersion.id);
-        expect(updatedDataset.currentVersion.id.localeCompare(dataset.currentVersion.id) > 0, 'Expected current version version to be greater than the previous version').toBe(true);
+        expect(
+          updatedDataset.currentVersion.id.localeCompare(dataset.currentVersion.id) > 0,
+          'Expected current version version to be greater than the previous version',
+        ).toBe(true);
       });
 
       it('should delete a dataset', async () => {
@@ -148,22 +150,28 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
         });
 
         const resultAddDatasetRows = await storage.addDatasetRows({
-          rows: [
-            { input: { test: 'test' } },
-          ],
+          rows: [{ input: { test: 'test' } }],
           datasetId: dataset.id,
         });
-        
+
         const resultUpdateDatasetRows = await storage.updateDatasetRows({
-          updates: [
-            { rowId: resultAddDatasetRows.rows[0].rowId, input: { test: 'test2' } },
-          ],
+          updates: [{ rowId: resultAddDatasetRows.rows?.[0]?.rowId!, input: { test: 'test2' } }],
           datasetId: dataset.id,
         });
 
         await storage.deleteDataset({ id: dataset.id });
-        await expect(storage.getDatasetRowByRowId({ rowId: resultAddDatasetRows.rows[0].rowId, versionId: resultAddDatasetRows.versionId })).rejects.toThrow();
-        await expect(storage.getDatasetRowByRowId({ rowId: resultUpdateDatasetRows.rows[0].rowId, versionId: resultUpdateDatasetRows.versionId })).rejects.toThrow();
+        await expect(
+          storage.getDatasetRowByRowId({
+            rowId: resultAddDatasetRows.rows?.[0]?.rowId!,
+            versionId: resultAddDatasetRows.versionId,
+          }),
+        ).rejects.toThrow();
+        await expect(
+          storage.getDatasetRowByRowId({
+            rowId: resultUpdateDatasetRows.rows?.[0]?.rowId!,
+            versionId: resultUpdateDatasetRows.versionId,
+          }),
+        ).rejects.toThrow();
       });
 
       it('should get dataset versions', async () => {
@@ -180,25 +188,27 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
           },
         });
 
-        const result = await storage.getDatasetVersions({ datasetId: dataset.id, pagination: { page: 0, perPage: 10 } });
+        const result = await storage.getDatasetVersions({
+          datasetId: dataset.id,
+          pagination: { page: 0, perPage: 10 },
+        });
         const versions = [...result.versions].sort((a, b) => b.id.localeCompare(a.id));
         expect(result.versions.length).toBe(2);
-        expect(result.versions[1].id).toBe(dataset.currentVersion.id);
-        expect(result.versions[0].id).toBe(updatedDataset.currentVersion.id);
-        expect(versions[0].id).toBe(updatedDataset.currentVersion.id);
-        expect(versions[1].id).toBe(dataset.currentVersion.id);
+        expect(result.versions[1]?.id).toBe(dataset.currentVersion.id);
+        expect(result.versions[0]?.id).toBe(updatedDataset.currentVersion.id);
+        expect(versions[0]?.id).toBe(updatedDataset.currentVersion.id);
+        expect(versions[1]?.id).toBe(dataset.currentVersion.id);
       });
-
     });
 
     describe('dataset row management', () => {
-      let dataset
+      let dataset: any;
       beforeEach(async () => {
         dataset = await storage.createDataset({
           name: 'test-dataset-row-management',
-        })
+        });
       });
-  
+
       it('should add a dataset row and automatically create a version', async () => {
         const result = await storage.addDatasetRows({
           rows: [
@@ -209,123 +219,113 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
           datasetId: dataset.id,
         });
         expect(result.rows.length).toBe(1);
-        expect(result.rows[0].input).toEqual({ test: 'test' });
-        expect(result.rows[0].datasetId).toBe(dataset.id);
-        expect(result.rows[0].versionId).toBeDefined();
-  
+        expect(result.rows[0]?.input).toEqual({ test: 'test' });
+        expect(result.rows[0]?.datasetId).toBe(dataset.id);
+        expect(result.rows[0]?.versionId).toBeDefined();
+
         const updatedDatasetVersion = await storage.getDataset({ id: dataset.id });
-        expect(updatedDatasetVersion.currentVersion.id).toBe(result.rows[0].versionId);
+        expect(updatedDatasetVersion.currentVersion.id).toBe(result.rows[0]?.versionId!);
         expect(updatedDatasetVersion.currentVersion.id).not.toBe(dataset.currentVersion.id);
       });
-  
+
       it('should add multiple dataset rows and they all have the same version id', async () => {
         const result = await storage.addDatasetRows({
-          rows: [
-            { input: { test: 'test' } },
-            { input: { test: 'test2' } },
-          ],
+          rows: [{ input: { test: 'test' } }, { input: { test: 'test2' } }],
           datasetId: dataset.id,
         });
         expect(result.rows.length).toBe(2);
-        expect(result.rows[0].versionId).toBe(result.rows[1].versionId);
+        expect(result.rows[0]?.versionId).toBe(result.rows[1]?.versionId!);
       });
-  
+
       it('should get a dataset row by row id', async () => {
         const result = await storage.addDatasetRows({
-          rows: [
-            { input: { test: 'test' } },
-          ],
+          rows: [{ input: { test: 'test' } }],
           datasetId: dataset.id,
         });
-  
-        const row = await storage.getDatasetRowByRowId({ rowId: result.rows[0].rowId, versionId: result.rows[0].versionId });
+
+        const row = await storage.getDatasetRowByRowId({
+          rowId: result.rows[0]?.rowId!,
+          versionId: result.rows[0]?.versionId!,
+        });
         expect(row.input).toEqual({ test: 'test' });
         expect(row.datasetId).toBe(dataset.id);
-        expect(row.versionId).toBe(result.rows[0].versionId);
+        expect(row.versionId).toBe(result.rows[0]?.versionId!);
       });
-  
+
       it('should get dataset row without having to pass in a version id', async () => {
         const result = await storage.addDatasetRows({
-          rows: [
-            { input: { test: 'test' } },
-          ],
+          rows: [{ input: { test: 'test' } }],
           datasetId: dataset.id,
         });
-  
-        const row = await storage.getDatasetRowByRowId({ rowId: result.rows[0].rowId });
+
+        const row = await storage.getDatasetRowByRowId({ rowId: result.rows[0]?.rowId! });
         expect(row.input).toEqual({ test: 'test' });
         expect(row.datasetId).toBe(dataset.id);
-        expect(row.versionId).toBe(result.rows[0].versionId);
+        expect(row.versionId).toBe(result.rows[0]?.versionId!);
       });
-  
+
       it('should update a dataset row', async () => {
         const addRowsResult = await storage.addDatasetRows({
-          rows: [
-            { input: { test: 'test' } },
-          ],
+          rows: [{ input: { test: 'test' } }],
           datasetId: dataset.id,
         });
-  
+
         const updateRowsResult = await storage.updateDatasetRows({
-          updates: [
-            { rowId: addRowsResult.rows[0].rowId, input: { test: 'test2' } },
-          ],
+          updates: [{ rowId: addRowsResult.rows?.[0]?.rowId!, input: { test: 'test2' } }],
           datasetId: dataset.id,
         });
         expect(updateRowsResult.rows.length).toBe(1);
-        expect(updateRowsResult.rows[0].input).toEqual({ test: 'test2' });
-        expect(updateRowsResult.rows[0].datasetId).toBe(dataset.id);
-        expect(updateRowsResult.rows[0].versionId.localeCompare(addRowsResult.rows[0].versionId) > 0, 'Expected current version version to be greater than the previous version').toBe(true);
-        expect(updateRowsResult.versionId).toBe(updateRowsResult.rows[0].versionId);
+        expect(updateRowsResult.rows[0]?.input).toEqual({ test: 'test2' });
+        expect(updateRowsResult.rows[0]?.datasetId).toBe(dataset.id);
+        expect(
+          updateRowsResult.rows[0]!.versionId!.localeCompare(addRowsResult.rows[0]!.versionId!) > 0,
+          'Expected current version version to be greater than the previous version',
+        ).toBe(true);
+        expect(updateRowsResult.versionId).toBe(updateRowsResult.rows[0]?.versionId!);
       });
-  
+
       it('should create a new version when updating a dataset row', async () => {
         const addRowsResult = await storage.addDatasetRows({
-          rows: [
-            { input: { test: 'test' } },
-          ],
+          rows: [{ input: { test: 'test' } }],
           datasetId: dataset.id,
         });
-  
+
         const updateRowsResult = await storage.updateDatasetRows({
-          updates: [
-            { rowId: addRowsResult.rows[0].rowId, input: { test: 'test2' } },
-          ],
+          updates: [{ rowId: addRowsResult.rows?.[0]?.rowId!, input: { test: 'test2' } }],
           datasetId: dataset.id,
         });
-  
+
         const getDatasetResult = await storage.getDataset({ id: dataset.id });
         expect(getDatasetResult.currentVersion.id).not.toBe(dataset.currentVersion.id);
         expect(getDatasetResult.currentVersion.id).toBe(updateRowsResult.versionId);
       });
-  
+
       it('should get dataset row by previous version id', async () => {
         const addRowsResult = await storage.addDatasetRows({
-          rows: [
-            { input: { test: 'test' } },
-          ],
+          rows: [{ input: { test: 'test' } }],
           datasetId: dataset.id,
         });
-  
+
         const updateRowsResult = await storage.updateDatasetRows({
-          updates: [
-            { rowId: addRowsResult.rows[0].rowId, input: { test: 'test2' } },
-          ],
+          updates: [{ rowId: addRowsResult.rows?.[0]?.rowId!, input: { test: 'test2' } }],
           datasetId: dataset.id,
         });
-  
-        const row1 = await storage.getDatasetRowByRowId({ rowId: addRowsResult.rows[0].rowId, versionId: addRowsResult.versionId });
-        const row2 = await storage.getDatasetRowByRowId({ rowId: addRowsResult.rows[0].rowId, versionId: updateRowsResult.versionId });
+
+        const row1 = await storage.getDatasetRowByRowId({
+          rowId: addRowsResult.rows?.[0]?.rowId!,
+          versionId: addRowsResult.versionId,
+        });
+        const row2 = await storage.getDatasetRowByRowId({
+          rowId: addRowsResult.rows?.[0]?.rowId!,
+          versionId: updateRowsResult.versionId,
+        });
         expect(row1.input).toEqual({ test: 'test' });
         expect(row2.input).toEqual({ test: 'test2' });
       });
 
       it('should get dataset row versions by row id', async () => {
         const addRowsResult = await storage.addDatasetRows({
-          rows: [
-            { input: { test: 'test' } },
-            { input: { test: 'something else'}}
-          ],
+          rows: [{ input: { test: 'test' } }, { input: { test: 'something else' } }],
           datasetId: dataset.id,
         });
 
@@ -333,16 +333,12 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
 
         expect(rowToCompare).toBeDefined();
         const updateRowsResult = await storage.updateDatasetRows({
-          updates: [
-            { rowId: rowToCompare.rowId, input: { test: 'test2' } },
-          ],
+          updates: [{ rowId: rowToCompare.rowId, input: { test: 'test2' } }],
           datasetId: dataset.id,
         });
-        
+
         const updateRowsResult2 = await storage.updateDatasetRows({
-          updates: [
-            { rowId: rowToCompare.rowId, input: { test: 'test3' } },
-          ],
+          updates: [{ rowId: rowToCompare.rowId, input: { test: 'test3' } }],
           datasetId: dataset.id,
         });
 
@@ -350,39 +346,45 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
           rowIds: [rowToCompare.rowId],
           datasetId: dataset.id,
         });
-        
+
         const result = await storage.getDatasetRowVersionsByRowId({ rowId: rowToCompare.rowId });
         expect(result.rows.length).toBe(4);
-        expect(result.rows[3].input).toEqual({ test: 'test' });
-        expect(result.rows[2].input).toEqual({ test: 'test2' });
-        expect(result.rows[1].input).toEqual({ test: 'test3' });
-        expect(result.rows[0].deleted).toEqual(true);
+        expect(result.rows[3]?.input).toEqual({ test: 'test' });
+        expect(result.rows[2]?.input).toEqual({ test: 'test2' });
+        expect(result.rows[1]?.input).toEqual({ test: 'test3' });
+        expect(result.rows[0]?.deleted).toEqual(true);
 
-        expect(result.rows[3].versionId).toBe(addRowsResult.versionId);
-        expect(result.rows[2].versionId).toBe(updateRowsResult.versionId);
-        expect(result.rows[1].versionId).toBe(updateRowsResult2.versionId);
-        expect(result.rows[0].versionId).toBe(deleteRowsResult.versionId);
+        expect(result.rows[3]?.versionId).toBe(addRowsResult.versionId);
+        expect(result.rows[2]?.versionId).toBe(updateRowsResult.versionId);
+        expect(result.rows[1]?.versionId).toBe(updateRowsResult2.versionId);
+        expect(result.rows[0]?.versionId).toBe(deleteRowsResult.versionId);
 
-        expect(result.rows.every(row => row.datasetId === dataset.id)).toBe(true);
-        expect(result.rows.every(row => row.rowId === rowToCompare.rowId)).toBe(true);
+        expect(result.rows.every(row => row?.datasetId === dataset.id)).toBe(true);
+        expect(result.rows.every(row => row?.rowId === rowToCompare.rowId)).toBe(true);
       });
-  
+
       it('should soft delete a dataset row', async () => {
         const addRowsResult = await storage.addDatasetRows({
-          rows: [
-            { input: { test: 'test' } },
-          ],
+          rows: [{ input: { test: 'test' } }],
           datasetId: dataset.id,
         });
-  
+
         const deleteRowsResult = await storage.deleteDatasetRows({
-          rowIds: [addRowsResult.rows[0].rowId],
+          rowIds: [addRowsResult.rows?.[0]?.rowId!],
           datasetId: dataset.id,
         });
-  
-        await expect(storage.getDatasetRowByRowId({ rowId: addRowsResult.rows[0].rowId, versionId: deleteRowsResult.versionId })).rejects.toThrow();
-  
-        const getPreviousVersionResult = await storage.getDatasetRowByRowId({ rowId: addRowsResult.rows[0].rowId, versionId: addRowsResult.versionId });
+
+        await expect(
+          storage.getDatasetRowByRowId({
+            rowId: addRowsResult.rows?.[0]?.rowId!,
+            versionId: deleteRowsResult.versionId,
+          }),
+        ).rejects.toThrow();
+
+        const getPreviousVersionResult = await storage.getDatasetRowByRowId({
+          rowId: addRowsResult.rows?.[0]?.rowId!,
+          versionId: addRowsResult.versionId,
+        });
         expect(getPreviousVersionResult.input).toEqual({ test: 'test' });
         expect(getPreviousVersionResult.datasetId).toBe(dataset.id);
         expect(getPreviousVersionResult.versionId).toBe(addRowsResult.versionId);
@@ -604,7 +606,7 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
       });
 
       describe('dataset versions', () => {
-        let dataset;
+        let dataset: any;
 
         beforeEach(async () => {
           dataset = await storage.createDataset({
@@ -637,7 +639,7 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
           });
 
           for (let i = 0; i < result.versions.length - 1; i++) {
-            expect(result.versions[i].id.localeCompare(result.versions[i + 1].id)).toBeGreaterThan(0);
+            expect(result.versions[i]?.id?.localeCompare(result.versions[i + 1]?.id!)).toBeGreaterThan(0);
           }
         });
 
@@ -805,8 +807,8 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
       });
 
       describe('dataset rows', () => {
-        let dataset;
-        let versionId;
+        let dataset: any;
+        let versionId: string;
 
         beforeEach(async () => {
           dataset = await storage.createDataset({
@@ -842,7 +844,9 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
           });
 
           for (let i = 0; i < pageResult.rows.length - 1; i++) {
-            expect(pageResult.rows[i].versionId.localeCompare(pageResult.rows[i + 1].versionId)).toBeGreaterThanOrEqual(0);
+            expect(
+              pageResult.rows[i]?.versionId?.localeCompare(pageResult.rows[i + 1]?.versionId!),
+            ).toBeGreaterThanOrEqual(0);
           }
         });
 
@@ -1076,7 +1080,7 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
           });
 
           expect(version2Rows.rows.length).toBe(3);
-          
+
           const row1 = version2Rows.rows.find(r => r.rowId === row1Id);
           const row2 = version2Rows.rows.find(r => r.rowId === row2Id);
           const row3 = version2Rows.rows.find(r => r.rowId === row3Id);
@@ -1170,7 +1174,7 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
       });
 
       describe('dataset row versions', () => {
-        let dataset;
+        let dataset: any;
         let rowId;
 
         beforeEach(async () => {
@@ -1182,7 +1186,7 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
         it('should return first page with correct row versions when multiple pages exist', async () => {
           const initialRows = await createMultipleRows(storage, dataset.id, 1);
           rowId = initialRows.rows[0].rowId;
-          
+
           // Create 24 more versions (25 total)
           await createMultipleRowVersions(storage, dataset.id, rowId, 24);
 
@@ -1209,7 +1213,7 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
           });
 
           for (let i = 0; i < result.rows.length - 1; i++) {
-            expect(result.rows[i].versionId.localeCompare(result.rows[i + 1].versionId)).toBeGreaterThan(0);
+            expect(result.rows[i]?.versionId?.localeCompare(result.rows[i + 1]?.versionId!)).toBeGreaterThan(0);
           }
         });
 
@@ -1403,10 +1407,10 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
         it('should include deleted versions in results', async () => {
           const initialRows = await createMultipleRows(storage, dataset.id, 1);
           rowId = initialRows.rows[0].rowId;
-          
+
           // Create some updates
           await createMultipleRowVersions(storage, dataset.id, rowId, 3);
-          
+
           // Delete the row
           await storage.deleteDatasetRows({
             datasetId: dataset.id,
@@ -1420,7 +1424,7 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
 
           // Should have: 1 initial + 3 updates + 1 delete = 5 versions
           expect(result.rows.length).toBe(5);
-          expect(result.rows[0].deleted).toBe(true); // Most recent is the delete
+          expect(result.rows[0]?.deleted).toBe(true); // Most recent is the delete
         });
 
         it('should only return versions for the specified rowId', async () => {
@@ -1444,5 +1448,4 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
       });
     });
   });
-
 }
