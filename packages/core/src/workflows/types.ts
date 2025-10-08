@@ -294,6 +294,10 @@ export interface WorkflowRunState {
 export interface WorkflowOptions {
   tracingPolicy?: TracingPolicy;
   validateInputs?: boolean;
+  shouldPersistSnapshot?: (params: {
+    stepResults: Record<string, StepResult<any, any, any, any>>;
+    workflowStatus: WorkflowRunStatus;
+  }) => boolean;
 }
 
 export type WorkflowInfo = {

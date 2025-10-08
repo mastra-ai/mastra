@@ -284,7 +284,15 @@ export function createWorkflow<
   >[],
 >(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
   const eventProcessor = new WorkflowEventProcessor({ mastra: params.mastra! });
-  const executionEngine = new EventedExecutionEngine({ mastra: params.mastra!, eventProcessor });
+  const executionEngine = new EventedExecutionEngine({
+    mastra: params.mastra!,
+    eventProcessor,
+    options: {
+      validateInputs: params.options?.validateInputs ?? false,
+      shouldPersistSnapshot: params.options?.shouldPersistSnapshot ?? (() => true),
+      tracingPolicy: params.options?.tracingPolicy,
+    },
+  });
   return new EventedWorkflow<EventedEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput>({
     ...params,
     executionEngine,
@@ -329,9 +337,14 @@ export class EventedWorkflow<
 
     this.runs.set(runIdToUse, run);
 
+    const shouldPersistSnapshot = this.options?.shouldPersistSnapshot?.({
+      workflowStatus: run.workflowRunStatus,
+      stepResults: {},
+    });
+
     const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
-    if (!workflowSnapshotInStorage) {
+    if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
