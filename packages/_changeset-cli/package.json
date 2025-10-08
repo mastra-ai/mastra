@@ -22,7 +22,7 @@
     "@changesets/types": "^6.1.0",
     "@changesets/write": "^0.4.0",
     "@clack/prompts": "1.0.0-alpha.5",
-    "@inquirer/editor": "^4.2.0",
+    "@inquirer/editor": "^4.2.20",
     "@manypkg/get-packages": "^2.2.2",
     "@manypkg/tools": "^2.1.0",
     "execa": "^9.5.1",

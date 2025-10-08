@@ -811,7 +811,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.35
-        version: 2.0.35(zod@3.25.76)
+        version: 2.0.42(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -866,22 +866,6 @@ importers:
       '@opentelemetry/semantic-conventions':
         specifier: ^1.37.0
         version: 1.37.0
-    optionalDependencies:
-      '@grpc/grpc-js':
-        specifier: ^1.14.0
-        version: 1.14.0
-      '@opentelemetry/exporter-trace-otlp-grpc':
-        specifier: ^0.205.0
-        version: 0.205.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/exporter-trace-otlp-http':
-        specifier: ^0.205.0
-        version: 0.205.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/exporter-trace-otlp-proto':
-        specifier: ^0.205.0
-        version: 0.205.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/exporter-zipkin':
-        specifier: ^2.1.0
-        version: 2.1.0(@opentelemetry/api@1.9.0)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -910,6 +894,22 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.14)(@vitest/ui@3.2.4)(jiti@2.6.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(lightningcss@1.30.1)(msw@2.11.3(@types/node@20.19.14)(typescript@5.8.3))(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)
+    optionalDependencies:
+      '@grpc/grpc-js':
+        specifier: ^1.14.0
+        version: 1.14.0
+      '@opentelemetry/exporter-trace-otlp-grpc':
+        specifier: ^0.205.0
+        version: 0.205.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/exporter-trace-otlp-http':
+        specifier: ^0.205.0
+        version: 0.205.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/exporter-trace-otlp-proto':
+        specifier: ^0.205.0
+        version: 0.205.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/exporter-zipkin':
+        specifier: ^2.1.0
+        version: 2.1.0(@opentelemetry/api@1.9.0)
 
   packages/_changeset-cli:
     dependencies:
@@ -935,8 +935,8 @@ importers:
         specifier: 1.0.0-alpha.5
         version: 1.0.0-alpha.5
       '@inquirer/editor':
-        specifier: ^4.2.0
-        version: 4.2.18(@types/node@20.19.14)
+        specifier: ^4.2.20
+        version: 4.2.20(@types/node@20.19.14)
       '@manypkg/get-packages':
         specifier: ^2.2.2
         version: 2.2.2
@@ -1146,7 +1146,7 @@ importers:
         version: link:../mcp
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
-        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))
+        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.1.0(@opentelemetry/api@1.9.0)
@@ -1364,7 +1364,7 @@ importers:
         version: 1.9.0
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
-        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))
+        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.1.0(@opentelemetry/api@1.9.0)
@@ -4302,12 +4302,6 @@ packages:
     peerDependencies:
       zod: ^3.0.0
 
-  '@ai-sdk/openai@2.0.35':
-    resolution: {integrity: sha512-LelCyotLQtL6lRYAvmtNvLyWirCR4YXr2aE4gXUXtpE+Y43eU1xdI3Jyq3Ugsvv2VhyKEceZRkrSFBmozrt21w==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4
-
   '@ai-sdk/openai@2.0.42':
     resolution: {integrity: sha512-9mM6QS8k0ooH9qMC27nlrYLQmNDnO6Rk0JTmFo/yUxpABEWOcvQhMWNHbp9lFL6Ty5vkdINrujhsAQfWuEleOg==}
     engines: {node: '>=18'}
@@ -6750,6 +6744,10 @@ packages:
     peerDependencies:
       react: '>=18.0.0'
 
+  '@inquirer/ansi@1.0.0':
+    resolution: {integrity: sha512-JWaTfCxI1eTmJ1BIv86vUfjVatOdxwD0DAVKYevY8SazeUUZtW+tNbsdejVO1GYE0GXJW1N1ahmiC3TFd+7wZA==}
+    engines: {node: '>=18'}
+
   '@inquirer/checkbox@4.2.2':
     resolution: {integrity: sha512-E+KExNurKcUJJdxmjglTl141EwxWyAHplvsYJQgSwXf8qiNWkTxTuCCqmhFEmbIXd4zLaGMfQFJ6WrZ7fSeV3g==}
     engines: {node: '>=18'}
@@ -6768,8 +6766,8 @@ packages:
       '@types/node':
         optional: true
 
-  '@inquirer/core@10.2.0':
-    resolution: {integrity: sha512-NyDSjPqhSvpZEMZrLCYUquWNl+XC/moEcVFqS55IEYIYsY0a1cUCevSqk7ctOlnm/RaSBU5psFryNlxcmGrjaA==}
+  '@inquirer/core@10.2.2':
+    resolution: {integrity: sha512-yXq/4QUnk4sHMtmbd7irwiepjB8jXU0kkFRL4nr/aDBA2mDz13cMakEWdDwX3eSCTkk03kwcndD1zfRAIlELxA==}
     engines: {node: '>=18'}
     peerDependencies:
       '@types/node': ^20.17.57
@@ -6777,8 +6775,8 @@ packages:
       '@types/node':
         optional: true
 
-  '@inquirer/editor@4.2.18':
-    resolution: {integrity: sha512-yeQN3AXjCm7+Hmq5L6Dm2wEDeBRdAZuyZ4I7tWSSanbxDzqM0KqzoDbKM7p4ebllAYdoQuPJS6N71/3L281i6w==}
+  '@inquirer/editor@4.2.20':
+    resolution: {integrity: sha512-7omh5y5bK672Q+Brk4HBbnHNowOZwrb/78IFXdrEB9PfdxL3GudQyDk8O9vQ188wj3xrEebS2M9n18BjJoI83g==}
     engines: {node: '>=18'}
     peerDependencies:
       '@types/node': ^20.17.57
@@ -6795,8 +6793,8 @@ packages:
       '@types/node':
         optional: true
 
-  '@inquirer/external-editor@1.0.1':
-    resolution: {integrity: sha512-Oau4yL24d2B5IL4ma4UpbQigkVhzPDXLoqy1ggK4gnHg/stmkffJE4oOXHXF3uz0UEpywG68KcyXsyYpA1Re/Q==}
+  '@inquirer/external-editor@1.0.2':
+    resolution: {integrity: sha512-yy9cOoBnx58TlsPrIxauKIFQTiyH+0MK4e97y4sV9ERbI+zDxw7i2hxHLCIEGIE/8PPvDxGhgzIOTSOWcs6/MQ==}
     engines: {node: '>=18'}
     peerDependencies:
       '@types/node': ^20.17.57
@@ -7017,6 +7015,7 @@ packages:
   '@lancedb/lancedb@0.21.2':
     resolution: {integrity: sha512-3RPsGbdhFbwgy7GisQnlgf+5r6R73N4xIkPNISJfvratJ5kVoQIuswra/jJxAf8N5tKriD9UnrQyUsRbmblwFQ==}
     engines: {node: '>= 18'}
+    cpu: [x64, arm64]
     os: [darwin, linux, win32]
     peerDependencies:
       apache-arrow: '>=15.0.0 <=18.1.0'
@@ -12829,6 +12828,10 @@ packages:
     resolution: {integrity: sha512-4fCk79wshMdzMp2rH06qWrJE4iolqLhCUH+OiuIgU++RB0+94NlDL81atO7GX55uUKueo0txHNtvEyI6D7WdMw==}
     engines: {node: '>=0.10.0'}
 
+  iconv-lite@0.7.0:
+    resolution: {integrity: sha512-cf6L2Ds3h57VVmkZe+Pn+5APsT7FpqJtEhhieDCvrE2MK5Qk9MyffgQyuxQTm6BChfeZNtcOLHp9IcWRVcIcBQ==}
+    engines: {node: '>=0.10.0'}
+
   ieee754@1.2.1:
     resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
 
@@ -13479,6 +13482,7 @@ packages:
 
   libsql@0.5.22:
     resolution: {integrity: sha512-NscWthMQt7fpU8lqd7LXMvT9pi+KhhmTHAJWUB/Lj6MWa0MKFv0F2V4C6WKKpjCVZl0VwcDz4nOI3CyaT1DDiA==}
+    cpu: [x64, arm64, wasm32, arm]
     os: [darwin, linux, win32]
 
   lightningcss-darwin-arm64@1.30.1:
@@ -17221,12 +17225,6 @@ snapshots:
       '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
       zod: 3.25.76
 
-  '@ai-sdk/openai@2.0.35(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.9(zod@3.25.76)
-      zod: 3.25.76
-
   '@ai-sdk/openai@2.0.42(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
@@ -17277,13 +17275,6 @@ snapshots:
       eventsource-parser: 3.0.6
       zod: 3.25.76
       zod-to-json-schema: 3.24.6(zod@3.25.76)
-
-  '@ai-sdk/provider-utils@3.0.9(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 2.0.0
-      '@standard-schema/spec': 1.0.0
-      eventsource-parser: 3.0.6
-      zod: 3.25.76
 
   '@ai-sdk/provider-utils@3.0.9(zod@4.1.9)':
     dependencies:
@@ -19291,7 +19282,7 @@ snapshots:
       '@changesets/should-skip-package': 0.1.2
       '@changesets/types': 6.1.0
       '@changesets/write': 0.4.0
-      '@inquirer/external-editor': 1.0.1(@types/node@20.19.14)
+      '@inquirer/external-editor': 1.0.2(@types/node@20.19.14)
       '@manypkg/get-packages': 1.1.3
       ansi-colors: 4.1.3
       ci-info: 3.9.0
@@ -20402,9 +20393,11 @@ snapshots:
       - supports-color
       - typescript
 
+  '@inquirer/ansi@1.0.0': {}
+
   '@inquirer/checkbox@4.2.2(@types/node@20.19.14)':
     dependencies:
-      '@inquirer/core': 10.2.0(@types/node@20.19.14)
+      '@inquirer/core': 10.2.2(@types/node@20.19.14)
       '@inquirer/figures': 1.0.13
       '@inquirer/type': 3.0.8(@types/node@20.19.14)
       ansi-escapes: 4.3.2
@@ -20414,16 +20407,16 @@ snapshots:
 
   '@inquirer/confirm@5.1.16(@types/node@20.19.14)':
     dependencies:
-      '@inquirer/core': 10.2.0(@types/node@20.19.14)
+      '@inquirer/core': 10.2.2(@types/node@20.19.14)
       '@inquirer/type': 3.0.8(@types/node@20.19.14)
     optionalDependencies:
       '@types/node': 20.19.14
 
-  '@inquirer/core@10.2.0(@types/node@20.19.14)':
+  '@inquirer/core@10.2.2(@types/node@20.19.14)':
     dependencies:
+      '@inquirer/ansi': 1.0.0
       '@inquirer/figures': 1.0.13
       '@inquirer/type': 3.0.8(@types/node@20.19.14)
-      ansi-escapes: 4.3.2
       cli-width: 4.1.0
       mute-stream: 2.0.0
       signal-exit: 4.1.0
@@ -20432,26 +20425,26 @@ snapshots:
     optionalDependencies:
       '@types/node': 20.19.14
 
-  '@inquirer/editor@4.2.18(@types/node@20.19.14)':
+  '@inquirer/editor@4.2.20(@types/node@20.19.14)':
     dependencies:
-      '@inquirer/core': 10.2.0(@types/node@20.19.14)
-      '@inquirer/external-editor': 1.0.1(@types/node@20.19.14)
+      '@inquirer/core': 10.2.2(@types/node@20.19.14)
+      '@inquirer/external-editor': 1.0.2(@types/node@20.19.14)
       '@inquirer/type': 3.0.8(@types/node@20.19.14)
     optionalDependencies:
       '@types/node': 20.19.14
 
   '@inquirer/expand@4.0.18(@types/node@20.19.14)':
     dependencies:
-      '@inquirer/core': 10.2.0(@types/node@20.19.14)
+      '@inquirer/core': 10.2.2(@types/node@20.19.14)
       '@inquirer/type': 3.0.8(@types/node@20.19.14)
       yoctocolors-cjs: 2.1.2
     optionalDependencies:
       '@types/node': 20.19.14
 
-  '@inquirer/external-editor@1.0.1(@types/node@20.19.14)':
+  '@inquirer/external-editor@1.0.2(@types/node@20.19.14)':
     dependencies:
       chardet: 2.1.0
-      iconv-lite: 0.6.3
+      iconv-lite: 0.7.0
     optionalDependencies:
       '@types/node': 20.19.14
 
@@ -20459,21 +20452,21 @@ snapshots:
 
   '@inquirer/input@4.2.2(@types/node@20.19.14)':
     dependencies:
-      '@inquirer/core': 10.2.0(@types/node@20.19.14)
+      '@inquirer/core': 10.2.2(@types/node@20.19.14)
       '@inquirer/type': 3.0.8(@types/node@20.19.14)
     optionalDependencies:
       '@types/node': 20.19.14
 
   '@inquirer/number@3.0.18(@types/node@20.19.14)':
     dependencies:
-      '@inquirer/core': 10.2.0(@types/node@20.19.14)
+      '@inquirer/core': 10.2.2(@types/node@20.19.14)
       '@inquirer/type': 3.0.8(@types/node@20.19.14)
     optionalDependencies:
       '@types/node': 20.19.14
 
   '@inquirer/password@4.0.18(@types/node@20.19.14)':
     dependencies:
-      '@inquirer/core': 10.2.0(@types/node@20.19.14)
+      '@inquirer/core': 10.2.2(@types/node@20.19.14)
       '@inquirer/type': 3.0.8(@types/node@20.19.14)
       ansi-escapes: 4.3.2
     optionalDependencies:
@@ -20483,7 +20476,7 @@ snapshots:
     dependencies:
       '@inquirer/checkbox': 4.2.2(@types/node@20.19.14)
       '@inquirer/confirm': 5.1.16(@types/node@20.19.14)
-      '@inquirer/editor': 4.2.18(@types/node@20.19.14)
+      '@inquirer/editor': 4.2.20(@types/node@20.19.14)
       '@inquirer/expand': 4.0.18(@types/node@20.19.14)
       '@inquirer/input': 4.2.2(@types/node@20.19.14)
       '@inquirer/number': 3.0.18(@types/node@20.19.14)
@@ -20496,7 +20489,7 @@ snapshots:
 
   '@inquirer/rawlist@4.1.6(@types/node@20.19.14)':
     dependencies:
-      '@inquirer/core': 10.2.0(@types/node@20.19.14)
+      '@inquirer/core': 10.2.2(@types/node@20.19.14)
       '@inquirer/type': 3.0.8(@types/node@20.19.14)
       yoctocolors-cjs: 2.1.2
     optionalDependencies:
@@ -20504,7 +20497,7 @@ snapshots:
 
   '@inquirer/search@3.1.1(@types/node@20.19.14)':
     dependencies:
-      '@inquirer/core': 10.2.0(@types/node@20.19.14)
+      '@inquirer/core': 10.2.2(@types/node@20.19.14)
       '@inquirer/figures': 1.0.13
       '@inquirer/type': 3.0.8(@types/node@20.19.14)
       yoctocolors-cjs: 2.1.2
@@ -20513,7 +20506,7 @@ snapshots:
 
   '@inquirer/select@4.3.2(@types/node@20.19.14)':
     dependencies:
-      '@inquirer/core': 10.2.0(@types/node@20.19.14)
+      '@inquirer/core': 10.2.2(@types/node@20.19.14)
       '@inquirer/figures': 1.0.13
       '@inquirer/type': 3.0.8(@types/node@20.19.14)
       ansi-escapes: 4.3.2
@@ -20796,7 +20789,7 @@ snapshots:
       '@isaacs/ttlcache': 1.4.1
       '@mastra/schema-compat': 0.11.4(ai@4.3.19(react@19.1.1)(zod@4.1.9))(zod@4.1.9)
       '@opentelemetry/api': 1.9.0
-      '@opentelemetry/auto-instrumentations-node': 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))
+      '@opentelemetry/auto-instrumentations-node': 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core': 2.1.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-grpc': 0.203.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-http': 0.203.0(@opentelemetry/api@1.9.0)
@@ -21240,7 +21233,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))':
+  '@opentelemetry/auto-instrumentations-node@0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.1.0(@opentelemetry/api@1.9.0)
@@ -21289,7 +21282,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.3.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.10.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.3(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
       '@opentelemetry/resources': 2.1.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.203.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -22448,7 +22441,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.1.0(@opentelemetry/api@1.9.0)
@@ -27836,6 +27829,10 @@ snapshots:
       safer-buffer: 2.1.2
 
   iconv-lite@0.6.3:
+    dependencies:
+      safer-buffer: 2.1.2
+
+  iconv-lite@0.7.0:
     dependencies:
       safer-buffer: 2.1.2
 
