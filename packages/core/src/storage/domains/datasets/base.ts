@@ -9,7 +9,7 @@ import type {
   UpdateDatasetRow,
 } from '../../../datasets/types';
 import type { PaginationInfo, StoragePagination } from '../../types';
-import { monotonicFactory } from 'ulid';
+import { monotonicFactory, ulid } from 'ulid';
 
 const createDatasetValidation = z.object({
   name: z.string(),
@@ -24,6 +24,37 @@ const updateDatasetValidation = z.object({
   metadata: z.record(z.string(), z.any()).optional(),
 });
 export type UpdateDatasetPayload = z.infer<typeof updateDatasetValidation>;
+
+const addDatasetRowsValidation = z.object({
+  rows: z.array(z.object({
+    input: z.any(),
+    groundTruth: z.any().optional(),
+    runtimeContext: z.record(z.string(), z.any()).optional(),
+    traceId: z.string().optional(),
+    spanId: z.string().optional(),
+  })),
+  datasetId: z.string(),
+});
+export type AddDatasetRowsPayload = z.infer<typeof addDatasetRowsValidation>;
+
+const updateDatasetRowsValidation = z.object({
+  updates: z.array(z.object({
+    rowId: z.string(),
+    input: z.any().optional(),
+    groundTruth: z.any().optional(),
+    runtimeContext: z.record(z.string(), z.any()).optional(),
+    traceId: z.string().optional(),
+    spanId: z.string().optional(),
+  })),
+  datasetId: z.string(),
+});
+export type UpdateDatasetRowsPayload = z.infer<typeof updateDatasetRowsValidation>;
+
+const deleteDatasetRowsValidation = z.object({
+  rowIds: z.array(z.string()),
+  datasetId: z.string(),
+});
+export type DeleteDatasetRowsPayload = z.infer<typeof deleteDatasetRowsValidation>;
 
 export class DatasetsStorage extends MastraBase {
   versionULIDGenerator: ReturnType<typeof monotonicFactory>;
@@ -67,54 +98,8 @@ export class DatasetsStorage extends MastraBase {
   getDatasets({
     pagination,
   }: {
-    pagination: StoragePagination;
+    pagination?: StoragePagination;
   }): Promise<{ datasets: DatasetRecord[]; pagination: StoragePagination }> {
-    throw new Error('Not implemented');
-  }
-
-  // DATASET ROWS
-  addDatasetRows(rows: DatasetRow[]): Promise<{ rows: DatasetRow[] }> {
-    throw new Error('Not implemented');
-  }
-
-  getDatasetRowByRowId({ rowId, versionId }: { rowId: string; versionId?: string }): Promise<DatasetRow> {
-    throw new Error('Not implemented');
-  }
-
-  getDatasetRows({
-    pagination,
-    versionId,
-  }: {
-    pagination: StoragePagination;
-    versionId?: string;
-  }): Promise<{ rows: DatasetRow[]; pagination: PaginationInfo }> {
-    throw new Error('Not implemented');
-  }
-
-  getDatasetRowVersionsById({
-    id,
-    pagination,
-  }: {
-    id: string;
-    pagination: StoragePagination;
-  }): Promise<{ rows: DatasetRow[]; pagination: PaginationInfo }> {
-    throw new Error('Not implemented');
-  }
-
-  updateDatasetRows({ updates }: { updates: UpdateDatasetRow[] }): Promise<void> {
-    throw new Error('Not implemented');
-  }
-
-  deleteDatasetRows({ rowIds }: { rowIds: DeleteDatasetRow[] }): Promise<void> {
-    throw new Error('Not implemented');
-  }
-
-  // rows({ versionId }: { versionId?: string }): Promise<AsyncIterableIterator<DatasetRow>> {
-  //   throw new Error('Not implemented');
-  // }
-
-  // DATASET VERSIONS
-  getCurrentDatasetVersion({ datasetId }: { datasetId: string }): Promise<DatasetVersion> {
     throw new Error('Not implemented');
   }
 
@@ -123,8 +108,71 @@ export class DatasetsStorage extends MastraBase {
     pagination,
   }: {
     datasetId: string;
-    pagination: StoragePagination;
+    pagination?: StoragePagination;
   }): Promise<{ versions: DatasetVersion[]; pagination: PaginationInfo }> {
     throw new Error('Not implemented');
   }
+
+  getDatasetVersionByTag({ datasetId, tag }: { datasetId: string; tag: string }): Promise<DatasetVersion> {
+    throw new Error('Not implemented');
+  }
+
+  // DATASET ROWS
+  addDatasetRows(args: AddDatasetRowsPayload): Promise<{ rows: DatasetRow[], versionId: string }> {
+    throw new Error('Not implemented');
+  }
+
+  protected generateDatasetRowId(): string {
+    return crypto.randomUUID();
+  }
+
+  protected validateAddDatasetRows(rows: AddDatasetRowsPayload): AddDatasetRowsPayload {
+    return addDatasetRowsValidation.parse(rows);
+  }
+
+  getDatasetRowByRowId({ rowId, versionId }: { rowId: string; versionId?: string }): Promise<DatasetRow> {
+    throw new Error('Not implemented');
+  }
+
+  getDatasetRows({
+    datasetId,
+    pagination,
+    versionId,
+  }: {
+    datasetId: string;
+    pagination?: StoragePagination;
+    versionId?: string;
+  }): Promise<{ rows: DatasetRow[]; pagination: PaginationInfo }> {
+    throw new Error('Not implemented');
+  }
+
+  getDatasetRowVersionsByRowId({
+    rowId,
+    pagination,
+  }: {
+    rowId: string;
+    pagination?: StoragePagination;
+  }): Promise<{ rows: DatasetRow[]; pagination: PaginationInfo }> {
+    throw new Error('Not implemented');
+  }
+
+  updateDatasetRows(args: UpdateDatasetRowsPayload): Promise<{ rows: DatasetRow[], versionId: string }> {
+    throw new Error('Not implemented');
+  }
+
+  protected validateUpdateDatasetRows(updates: UpdateDatasetRowsPayload): UpdateDatasetRowsPayload {
+    return updateDatasetRowsValidation.parse(updates);
+  }
+
+  deleteDatasetRows(args: DeleteDatasetRowsPayload): Promise<{ versionId: string }> {
+    throw new Error('Not implemented');
+  }
+
+  protected validateDeleteDatasetRows(args: DeleteDatasetRowsPayload): DeleteDatasetRowsPayload {
+    return deleteDatasetRowsValidation.parse(args);
+  }
+
+  // rows({ versionId }: { versionId?: string }): Promise<AsyncIterableIterator<DatasetRow>> {
+  //   throw new Error('Not implemented');
+  // }
 }
