@@ -7,6 +7,61 @@ import {
   type MastraStorage,
 } from '@mastra/core/storage';
 
+// Helper functions for pagination tests
+async function createMultipleDatasets(storage: MastraStorage, count: number): Promise<any[]> {
+  const datasets: any[] = [];
+  for (let i = 0; i < count; i++) {
+    const dataset = await storage.createDataset({
+      name: `dataset-${i}`,
+      description: `Description ${i}`,
+      metadata: { index: i },
+    });
+    datasets.push(dataset);
+  }
+  return datasets;
+}
+
+async function createMultipleVersions(storage: MastraStorage, datasetId: string, count: number): Promise<any[]> {
+  const versions: any[] = [];
+  for (let i = 0; i < count; i++) {
+    const updated = await storage.updateDataset({
+      id: datasetId,
+      updates: { name: `updated-${i}` },
+    });
+    versions.push(updated.currentVersion);
+  }
+  return versions;
+}
+
+async function createMultipleRows(storage: MastraStorage, datasetId: string, count: number): Promise<{ rows: any[]; versionId: string }> {
+  const rowsToAdd: any[] = [];
+  for (let i = 0; i < count; i++) {
+    rowsToAdd.push({ input: { value: i } });
+  }
+  const result = await storage.addDatasetRows({
+    datasetId,
+    rows: rowsToAdd,
+  });
+  return result;
+}
+
+async function createMultipleRowVersions(
+  storage: MastraStorage,
+  datasetId: string,
+  rowId: string,
+  count: number
+): Promise<any[]> {
+  const versions: any[] = [];
+  for (let i = 0; i < count; i++) {
+    const result = await storage.updateDatasetRows({
+      datasetId,
+      updates: [{ rowId, input: { value: `update-${i}` } }],
+    });
+    versions.push(result.rows[0]);
+  }
+  return versions;
+}
+
 export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
   describe.only('Dataset Operations', () => {
     beforeEach(async () => {
@@ -331,6 +386,958 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
         expect(getPreviousVersionResult.input).toEqual({ test: 'test' });
         expect(getPreviousVersionResult.datasetId).toBe(dataset.id);
         expect(getPreviousVersionResult.versionId).toBe(addRowsResult.versionId);
+      });
+    });
+
+    describe('pagination', () => {
+      describe('datasets', () => {
+        it('should return first page with correct items when multiple pages exist', async () => {
+          // Arrange: Create 25 datasets
+          await createMultipleDatasets(storage, 25);
+
+          // Act: Get first page (10 items)
+          const result = await storage.getDatasets({
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          // Assert
+          expect(result.datasets.length).toBe(10);
+          expect(result.pagination.total).toBe(25);
+          expect(result.pagination.hasMore).toBe(true);
+          expect(result.pagination.page).toBe(0);
+          expect(result.pagination.perPage).toBe(10);
+        });
+
+        it('should return second page correctly', async () => {
+          await createMultipleDatasets(storage, 25);
+
+          const result = await storage.getDatasets({
+            pagination: { page: 1, perPage: 10 },
+          });
+
+          expect(result.datasets.length).toBe(10);
+          expect(result.pagination.total).toBe(25);
+          expect(result.pagination.hasMore).toBe(true);
+          expect(result.pagination.page).toBe(1);
+          expect(result.pagination.perPage).toBe(10);
+        });
+
+        it('should return last page with hasMore=false', async () => {
+          await createMultipleDatasets(storage, 25);
+
+          const result = await storage.getDatasets({
+            pagination: { page: 2, perPage: 10 },
+          });
+
+          expect(result.datasets.length).toBe(5);
+          expect(result.pagination.total).toBe(25);
+          expect(result.pagination.hasMore).toBe(false);
+          expect(result.pagination.page).toBe(2);
+          expect(result.pagination.perPage).toBe(10);
+        });
+
+        it('should return empty array when no datasets exist', async () => {
+          const result = await storage.getDatasets({
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result.datasets.length).toBe(0);
+          expect(result.pagination.total).toBe(0);
+          expect(result.pagination.hasMore).toBe(false);
+        });
+
+        it('should handle single dataset correctly', async () => {
+          await createMultipleDatasets(storage, 1);
+
+          const result = await storage.getDatasets({
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result.datasets.length).toBe(1);
+          expect(result.pagination.total).toBe(1);
+          expect(result.pagination.hasMore).toBe(false);
+        });
+
+        it('should handle exact page boundary correctly', async () => {
+          await createMultipleDatasets(storage, 10);
+
+          const result = await storage.getDatasets({
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result.datasets.length).toBe(10);
+          expect(result.pagination.total).toBe(10);
+          expect(result.pagination.hasMore).toBe(false);
+        });
+
+        it('should handle one item over boundary correctly', async () => {
+          await createMultipleDatasets(storage, 11);
+
+          const firstPage = await storage.getDatasets({
+            pagination: { page: 0, perPage: 10 },
+          });
+          const secondPage = await storage.getDatasets({
+            pagination: { page: 1, perPage: 10 },
+          });
+
+          expect(firstPage.datasets.length).toBe(10);
+          expect(firstPage.pagination.hasMore).toBe(true);
+          expect(secondPage.datasets.length).toBe(1);
+          expect(secondPage.pagination.hasMore).toBe(false);
+        });
+
+        it('should handle all results fitting on one page', async () => {
+          await createMultipleDatasets(storage, 5);
+
+          const result = await storage.getDatasets({
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result.datasets.length).toBe(5);
+          expect(result.pagination.total).toBe(5);
+          expect(result.pagination.hasMore).toBe(false);
+        });
+
+        it('should default negative page to 0', async () => {
+          await createMultipleDatasets(storage, 5);
+
+          const result = await storage.getDatasets({
+            pagination: { page: -1, perPage: 10 },
+          });
+
+          expect(result.pagination.page).toBe(0);
+          expect(result.datasets.length).toBe(5);
+        });
+
+        it('should default zero perPage to 1', async () => {
+          await createMultipleDatasets(storage, 5);
+
+          const result = await storage.getDatasets({
+            pagination: { page: 0, perPage: 0 },
+          });
+
+          console.log(`result: ${JSON.stringify(result)}`)
+          expect(result.pagination.perPage).toBe(1);
+          expect(result.datasets.length).toBe(1);
+        });
+
+        it('should default negative perPage to 1', async () => {
+          await createMultipleDatasets(storage, 5);
+
+          const result = await storage.getDatasets({
+            pagination: { page: 0, perPage: -5 },
+          });
+
+          expect(result.pagination.perPage).toBe(1);
+          expect(result.datasets.length).toBe(1);
+        });
+
+        it('should return empty array when page number exceeds available pages', async () => {
+          await createMultipleDatasets(storage, 5);
+
+          const result = await storage.getDatasets({
+            pagination: { page: 10, perPage: 10 },
+          });
+
+          expect(result.datasets.length).toBe(0);
+          expect(result.pagination.hasMore).toBe(false);
+          expect(result.pagination.total).toBe(5);
+        });
+
+        it('should use defaults when pagination parameter is omitted', async () => {
+          await createMultipleDatasets(storage, 15);
+
+          const result = await storage.getDatasets();
+
+          expect(result.datasets.length).toBe(10);
+          expect(result.pagination.page).toBe(0);
+          expect(result.pagination.perPage).toBe(10);
+          expect(result.pagination.hasMore).toBe(true);
+        });
+
+        it('should return datasets with currentVersion attached', async () => {
+          await createMultipleDatasets(storage, 3);
+
+          const result = await storage.getDatasets({
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result.datasets.length).toBe(3);
+          result.datasets.forEach(dataset => {
+            expect(dataset.currentVersion).toBeDefined();
+            expect(dataset.currentVersion.id).toBeDefined();
+            expect(dataset.currentVersion.datasetId).toBe(dataset.id);
+          });
+        });
+
+        it('should not have duplicate datasets across pages', async () => {
+          await createMultipleDatasets(storage, 25);
+
+          const firstPage = await storage.getDatasets({
+            pagination: { page: 0, perPage: 10 },
+          });
+          const secondPage = await storage.getDatasets({
+            pagination: { page: 1, perPage: 10 },
+          });
+
+          const firstPageIds = new Set(firstPage.datasets.map(d => d.id));
+          const secondPageIds = new Set(secondPage.datasets.map(d => d.id));
+
+          const intersection = [...firstPageIds].filter(id => secondPageIds.has(id));
+          expect(intersection.length).toBe(0);
+        });
+
+        it('should return all datasets when fetching all pages', async () => {
+          await createMultipleDatasets(storage, 25);
+
+          const allDatasets: any[] = [];
+          for (let page = 0; page < 3; page++) {
+            const result = await storage.getDatasets({
+              pagination: { page, perPage: 10 },
+            });
+            allDatasets.push(...result.datasets);
+          }
+
+          expect(allDatasets.length).toBe(25);
+          const ids = new Set(allDatasets.map(d => d.id));
+          expect(ids.size).toBe(25);
+        });
+      });
+
+      describe('dataset versions', () => {
+        let dataset;
+
+        beforeEach(async () => {
+          dataset = await storage.createDataset({
+            name: 'test-dataset-versions-pagination',
+          });
+        });
+
+        it('should return first page with correct versions when multiple pages exist', async () => {
+          // Create 24 additional versions (25 total including initial)
+          await createMultipleVersions(storage, dataset.id, 24);
+
+          const result = await storage.getDatasetVersions({
+            datasetId: dataset.id,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result.versions.length).toBe(10);
+          expect(result.pagination.total).toBe(25);
+          expect(result.pagination.hasMore).toBe(true);
+          expect(result.pagination.page).toBe(0);
+          expect(result.pagination.perPage).toBe(10);
+        });
+
+        it('should return versions in descending order by versionId', async () => {
+          await createMultipleVersions(storage, dataset.id, 15);
+
+          const result = await storage.getDatasetVersions({
+            datasetId: dataset.id,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          for (let i = 0; i < result.versions.length - 1; i++) {
+            expect(result.versions[i].id.localeCompare(result.versions[i + 1].id)).toBeGreaterThan(0);
+          }
+        });
+
+        it('should return second page correctly', async () => {
+          await createMultipleVersions(storage, dataset.id, 24);
+
+          const result = await storage.getDatasetVersions({
+            datasetId: dataset.id,
+            pagination: { page: 1, perPage: 10 },
+          });
+
+          expect(result.versions.length).toBe(10);
+          expect(result.pagination.total).toBe(25);
+          expect(result.pagination.hasMore).toBe(true);
+        });
+
+        it('should return last page with hasMore=false', async () => {
+          await createMultipleVersions(storage, dataset.id, 24);
+
+          const result = await storage.getDatasetVersions({
+            datasetId: dataset.id,
+            pagination: { page: 2, perPage: 10 },
+          });
+
+          expect(result.versions.length).toBe(5);
+          expect(result.pagination.hasMore).toBe(false);
+        });
+
+        it('should return single version for newly created dataset', async () => {
+          const result = await storage.getDatasetVersions({
+            datasetId: dataset.id,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result.versions.length).toBe(1);
+          expect(result.pagination.total).toBe(1);
+          expect(result.pagination.hasMore).toBe(false);
+        });
+
+        it('should handle exact page boundary correctly', async () => {
+          await createMultipleVersions(storage, dataset.id, 9);
+
+          const result = await storage.getDatasetVersions({
+            datasetId: dataset.id,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result.versions.length).toBe(10);
+          expect(result.pagination.total).toBe(10);
+          expect(result.pagination.hasMore).toBe(false);
+        });
+
+        it('should handle one item over boundary correctly', async () => {
+          await createMultipleVersions(storage, dataset.id, 10);
+
+          const firstPage = await storage.getDatasetVersions({
+            datasetId: dataset.id,
+            pagination: { page: 0, perPage: 10 },
+          });
+          const secondPage = await storage.getDatasetVersions({
+            datasetId: dataset.id,
+            pagination: { page: 1, perPage: 10 },
+          });
+
+          expect(firstPage.versions.length).toBe(10);
+          expect(firstPage.pagination.hasMore).toBe(true);
+          expect(secondPage.versions.length).toBe(1);
+          expect(secondPage.pagination.hasMore).toBe(false);
+        });
+
+        it('should default negative page to 0', async () => {
+          await createMultipleVersions(storage, dataset.id, 5);
+
+          const result = await storage.getDatasetVersions({
+            datasetId: dataset.id,
+            pagination: { page: -1, perPage: 10 },
+          });
+
+          expect(result.pagination.page).toBe(0);
+        });
+
+        it('should default zero perPage to 1', async () => {
+          await createMultipleVersions(storage, dataset.id, 5);
+
+          const result = await storage.getDatasetVersions({
+            datasetId: dataset.id,
+            pagination: { page: 0, perPage: 0 },
+          });
+
+          expect(result.pagination.perPage).toBe(1);
+          expect(result.versions.length).toBe(1);
+        });
+
+        it('should default negative perPage to 1', async () => {
+          await createMultipleVersions(storage, dataset.id, 5);
+
+          const result = await storage.getDatasetVersions({
+            datasetId: dataset.id,
+            pagination: { page: 0, perPage: -5 },
+          });
+
+          expect(result.pagination.perPage).toBe(1);
+          expect(result.versions.length).toBe(1);
+        });
+
+        it('should return empty array when page number exceeds available pages', async () => {
+          await createMultipleVersions(storage, dataset.id, 5);
+
+          const result = await storage.getDatasetVersions({
+            datasetId: dataset.id,
+            pagination: { page: 10, perPage: 10 },
+          });
+
+          expect(result.versions.length).toBe(0);
+          expect(result.pagination.hasMore).toBe(false);
+        });
+
+        it('should use defaults when pagination parameter is omitted', async () => {
+          await createMultipleVersions(storage, dataset.id, 15);
+
+          const result = await storage.getDatasetVersions({
+            datasetId: dataset.id,
+          });
+
+          expect(result.versions.length).toBe(10);
+          expect(result.pagination.page).toBe(0);
+          expect(result.pagination.perPage).toBe(10);
+        });
+
+        it('should not have duplicate versions across pages', async () => {
+          await createMultipleVersions(storage, dataset.id, 24);
+
+          const firstPage = await storage.getDatasetVersions({
+            datasetId: dataset.id,
+            pagination: { page: 0, perPage: 10 },
+          });
+          const secondPage = await storage.getDatasetVersions({
+            datasetId: dataset.id,
+            pagination: { page: 1, perPage: 10 },
+          });
+
+          const firstPageIds = new Set(firstPage.versions.map(v => v.id));
+          const secondPageIds = new Set(secondPage.versions.map(v => v.id));
+
+          const intersection = [...firstPageIds].filter(id => secondPageIds.has(id));
+          expect(intersection.length).toBe(0);
+        });
+
+        it('should return all versions when fetching all pages', async () => {
+          await createMultipleVersions(storage, dataset.id, 24);
+
+          const allVersions: any[] = [];
+          for (let page = 0; page < 3; page++) {
+            const result = await storage.getDatasetVersions({
+              datasetId: dataset.id,
+              pagination: { page, perPage: 10 },
+            });
+            allVersions.push(...result.versions);
+          }
+
+          expect(allVersions.length).toBe(25);
+          const ids = new Set(allVersions.map(v => v.id));
+          expect(ids.size).toBe(25);
+        });
+      });
+
+      describe('dataset rows', () => {
+        let dataset;
+        let versionId;
+
+        beforeEach(async () => {
+          dataset = await storage.createDataset({
+            name: 'test-dataset-rows-pagination',
+          });
+        });
+
+        it('should return first page with correct rows when multiple pages exist', async () => {
+          const result = await createMultipleRows(storage, dataset.id, 25);
+          versionId = result.versionId;
+
+          const pageResult = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(pageResult.rows.length).toBe(10);
+          expect(pageResult.pagination.total).toBe(25);
+          expect(pageResult.pagination.hasMore).toBe(true);
+          expect(pageResult.pagination.page).toBe(0);
+          expect(pageResult.pagination.perPage).toBe(10);
+        });
+
+        it('should return rows in descending order by versionId', async () => {
+          const result = await createMultipleRows(storage, dataset.id, 15);
+          versionId = result.versionId;
+
+          const pageResult = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          for (let i = 0; i < pageResult.rows.length - 1; i++) {
+            expect(pageResult.rows[i].versionId.localeCompare(pageResult.rows[i + 1].versionId)).toBeGreaterThanOrEqual(0);
+          }
+        });
+
+        it('should return second page correctly', async () => {
+          const result = await createMultipleRows(storage, dataset.id, 25);
+          versionId = result.versionId;
+
+          const pageResult = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId,
+            pagination: { page: 1, perPage: 10 },
+          });
+
+          expect(pageResult.rows.length).toBe(10);
+          expect(pageResult.pagination.total).toBe(25);
+          expect(pageResult.pagination.hasMore).toBe(true);
+        });
+
+        it('should return last page with hasMore=false', async () => {
+          const result = await createMultipleRows(storage, dataset.id, 25);
+          versionId = result.versionId;
+
+          const pageResult = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId,
+            pagination: { page: 2, perPage: 10 },
+          });
+
+          expect(pageResult.rows.length).toBe(5);
+          expect(pageResult.pagination.hasMore).toBe(false);
+        });
+
+        it('should return empty array when no rows exist for version', async () => {
+          const result = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId: dataset.currentVersion.id,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result.rows.length).toBe(0);
+          expect(result.pagination.total).toBe(0);
+          expect(result.pagination.hasMore).toBe(false);
+        });
+
+        it('should handle single row correctly', async () => {
+          const result = await createMultipleRows(storage, dataset.id, 1);
+          versionId = result.versionId;
+
+          const pageResult = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(pageResult.rows.length).toBe(1);
+          expect(pageResult.pagination.total).toBe(1);
+          expect(pageResult.pagination.hasMore).toBe(false);
+        });
+
+        it('should handle exact page boundary correctly', async () => {
+          const result = await createMultipleRows(storage, dataset.id, 10);
+          versionId = result.versionId;
+
+          const pageResult = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(pageResult.rows.length).toBe(10);
+          expect(pageResult.pagination.total).toBe(10);
+          expect(pageResult.pagination.hasMore).toBe(false);
+        });
+
+        it('should handle one item over boundary correctly', async () => {
+          const result = await createMultipleRows(storage, dataset.id, 11);
+          versionId = result.versionId;
+
+          const firstPage = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId,
+            pagination: { page: 0, perPage: 10 },
+          });
+          const secondPage = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId,
+            pagination: { page: 1, perPage: 10 },
+          });
+
+          expect(firstPage.rows.length).toBe(10);
+          expect(firstPage.pagination.hasMore).toBe(true);
+          expect(secondPage.rows.length).toBe(1);
+          expect(secondPage.pagination.hasMore).toBe(false);
+        });
+
+        it('should default negative page to 0', async () => {
+          const result = await createMultipleRows(storage, dataset.id, 5);
+          versionId = result.versionId;
+
+          const pageResult = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId,
+            pagination: { page: -1, perPage: 10 },
+          });
+
+          expect(pageResult.pagination.page).toBe(0);
+        });
+
+        it('should default zero perPage to 1', async () => {
+          const result = await createMultipleRows(storage, dataset.id, 5);
+          versionId = result.versionId;
+
+          const pageResult = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId,
+            pagination: { page: 0, perPage: 0 },
+          });
+
+          expect(pageResult.pagination.perPage).toBe(1);
+          expect(pageResult.rows.length).toBe(1);
+        });
+
+        it('should default negative perPage to 1', async () => {
+          const result = await createMultipleRows(storage, dataset.id, 5);
+          versionId = result.versionId;
+
+          const pageResult = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId,
+            pagination: { page: 0, perPage: -5 },
+          });
+
+          expect(pageResult.pagination.perPage).toBe(1);
+          expect(pageResult.rows.length).toBe(1);
+        });
+
+        it('should return empty array when page number exceeds available pages', async () => {
+          const result = await createMultipleRows(storage, dataset.id, 5);
+          versionId = result.versionId;
+
+          const pageResult = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId,
+            pagination: { page: 10, perPage: 10 },
+          });
+
+          expect(pageResult.rows.length).toBe(0);
+          expect(pageResult.pagination.hasMore).toBe(false);
+        });
+
+        it('should use defaults when pagination parameter is omitted', async () => {
+          const result = await createMultipleRows(storage, dataset.id, 15);
+          versionId = result.versionId;
+
+          const pageResult = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId,
+          });
+
+          expect(pageResult.rows.length).toBe(10);
+          expect(pageResult.pagination.page).toBe(0);
+          expect(pageResult.pagination.perPage).toBe(10);
+        });
+
+        it('should not have duplicate rows across pages', async () => {
+          const result = await createMultipleRows(storage, dataset.id, 25);
+          versionId = result.versionId;
+
+          const firstPage = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId,
+            pagination: { page: 0, perPage: 10 },
+          });
+          const secondPage = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId,
+            pagination: { page: 1, perPage: 10 },
+          });
+
+          const firstPageIds = new Set(firstPage.rows.map(r => r.rowId));
+          const secondPageIds = new Set(secondPage.rows.map(r => r.rowId));
+
+          const intersection = [...firstPageIds].filter(id => secondPageIds.has(id));
+          expect(intersection.length).toBe(0);
+        });
+
+        it('should return all rows when fetching all pages', async () => {
+          const result = await createMultipleRows(storage, dataset.id, 25);
+          versionId = result.versionId;
+
+          const allRows: any[] = [];
+          for (let page = 0; page < 3; page++) {
+            const pageResult = await storage.getDatasetRows({
+              datasetId: dataset.id,
+              versionId,
+              pagination: { page, perPage: 10 },
+            });
+            allRows.push(...pageResult.rows);
+          }
+
+          expect(allRows.length).toBe(25);
+          const ids = new Set(allRows.map(r => r.rowId));
+          expect(ids.size).toBe(25);
+        });
+
+        it('should only return rows for the specified versionId', async () => {
+          const firstBatch = await createMultipleRows(storage, dataset.id, 5);
+          const secondBatch = await createMultipleRows(storage, dataset.id, 3);
+
+          const firstVersionRows = await storage.getDatasetRows({
+            datasetId: dataset.id,
+            versionId: firstBatch.versionId,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(firstVersionRows.rows.length).toBe(5);
+          firstVersionRows.rows.forEach(row => {
+            expect(row.versionId).toBe(firstBatch.versionId);
+          });
+        });
+      });
+
+      describe('dataset row versions', () => {
+        let dataset;
+        let rowId;
+
+        beforeEach(async () => {
+          dataset = await storage.createDataset({
+            name: 'test-dataset-row-versions-pagination',
+          });
+        });
+
+        it('should return first page with correct row versions when multiple pages exist', async () => {
+          const initialRows = await createMultipleRows(storage, dataset.id, 1);
+          rowId = initialRows.rows[0].rowId;
+          
+          // Create 24 more versions (25 total)
+          await createMultipleRowVersions(storage, dataset.id, rowId, 24);
+
+          const result = await storage.getDatasetRowVersionsByRowId({
+            rowId,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result.rows.length).toBe(10);
+          expect(result.pagination.total).toBe(25);
+          expect(result.pagination.hasMore).toBe(true);
+          expect(result.pagination.page).toBe(0);
+          expect(result.pagination.perPage).toBe(10);
+        });
+
+        it('should return row versions in descending order by versionId', async () => {
+          const initialRows = await createMultipleRows(storage, dataset.id, 1);
+          rowId = initialRows.rows[0].rowId;
+          await createMultipleRowVersions(storage, dataset.id, rowId, 15);
+
+          const result = await storage.getDatasetRowVersionsByRowId({
+            rowId,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          for (let i = 0; i < result.rows.length - 1; i++) {
+            expect(result.rows[i].versionId.localeCompare(result.rows[i + 1].versionId)).toBeGreaterThan(0);
+          }
+        });
+
+        it('should return second page correctly', async () => {
+          const initialRows = await createMultipleRows(storage, dataset.id, 1);
+          rowId = initialRows.rows[0].rowId;
+          await createMultipleRowVersions(storage, dataset.id, rowId, 24);
+
+          const result = await storage.getDatasetRowVersionsByRowId({
+            rowId,
+            pagination: { page: 1, perPage: 10 },
+          });
+
+          expect(result.rows.length).toBe(10);
+          expect(result.pagination.total).toBe(25);
+          expect(result.pagination.hasMore).toBe(true);
+        });
+
+        it('should return last page with hasMore=false', async () => {
+          const initialRows = await createMultipleRows(storage, dataset.id, 1);
+          rowId = initialRows.rows[0].rowId;
+          await createMultipleRowVersions(storage, dataset.id, rowId, 24);
+
+          const result = await storage.getDatasetRowVersionsByRowId({
+            rowId,
+            pagination: { page: 2, perPage: 10 },
+          });
+
+          expect(result.rows.length).toBe(5);
+          expect(result.pagination.hasMore).toBe(false);
+        });
+
+        it('should handle single version correctly', async () => {
+          const initialRows = await createMultipleRows(storage, dataset.id, 1);
+          rowId = initialRows.rows[0].rowId;
+
+          const result = await storage.getDatasetRowVersionsByRowId({
+            rowId,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result.rows.length).toBe(1);
+          expect(result.pagination.total).toBe(1);
+          expect(result.pagination.hasMore).toBe(false);
+        });
+
+        it('should handle exact page boundary correctly', async () => {
+          const initialRows = await createMultipleRows(storage, dataset.id, 1);
+          rowId = initialRows.rows[0].rowId;
+          await createMultipleRowVersions(storage, dataset.id, rowId, 9);
+
+          const result = await storage.getDatasetRowVersionsByRowId({
+            rowId,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result.rows.length).toBe(10);
+          expect(result.pagination.total).toBe(10);
+          expect(result.pagination.hasMore).toBe(false);
+        });
+
+        it('should handle one item over boundary correctly', async () => {
+          const initialRows = await createMultipleRows(storage, dataset.id, 1);
+          rowId = initialRows.rows[0].rowId;
+          await createMultipleRowVersions(storage, dataset.id, rowId, 10);
+
+          const firstPage = await storage.getDatasetRowVersionsByRowId({
+            rowId,
+            pagination: { page: 0, perPage: 10 },
+          });
+          const secondPage = await storage.getDatasetRowVersionsByRowId({
+            rowId,
+            pagination: { page: 1, perPage: 10 },
+          });
+
+          expect(firstPage.rows.length).toBe(10);
+          expect(firstPage.pagination.hasMore).toBe(true);
+          expect(secondPage.rows.length).toBe(1);
+          expect(secondPage.pagination.hasMore).toBe(false);
+        });
+
+        it('should default negative page to 0', async () => {
+          const initialRows = await createMultipleRows(storage, dataset.id, 1);
+          rowId = initialRows.rows[0].rowId;
+          await createMultipleRowVersions(storage, dataset.id, rowId, 5);
+
+          const result = await storage.getDatasetRowVersionsByRowId({
+            rowId,
+            pagination: { page: -1, perPage: 10 },
+          });
+
+          expect(result.pagination.page).toBe(0);
+        });
+
+        it('should default zero perPage to 1', async () => {
+          const initialRows = await createMultipleRows(storage, dataset.id, 1);
+          rowId = initialRows.rows[0].rowId;
+          await createMultipleRowVersions(storage, dataset.id, rowId, 5);
+
+          const result = await storage.getDatasetRowVersionsByRowId({
+            rowId,
+            pagination: { page: 0, perPage: 0 },
+          });
+
+          expect(result.pagination.perPage).toBe(1);
+          expect(result.rows.length).toBe(1);
+        });
+
+        it('should default negative perPage to 1', async () => {
+          const initialRows = await createMultipleRows(storage, dataset.id, 1);
+          rowId = initialRows.rows[0].rowId;
+          await createMultipleRowVersions(storage, dataset.id, rowId, 5);
+
+          const result = await storage.getDatasetRowVersionsByRowId({
+            rowId,
+            pagination: { page: 0, perPage: -5 },
+          });
+
+          expect(result.pagination.perPage).toBe(1);
+          expect(result.rows.length).toBe(1);
+        });
+
+        it('should return empty array when page number exceeds available pages', async () => {
+          const initialRows = await createMultipleRows(storage, dataset.id, 1);
+          rowId = initialRows.rows[0].rowId;
+          await createMultipleRowVersions(storage, dataset.id, rowId, 5);
+
+          const result = await storage.getDatasetRowVersionsByRowId({
+            rowId,
+            pagination: { page: 10, perPage: 10 },
+          });
+
+          expect(result.rows.length).toBe(0);
+          expect(result.pagination.hasMore).toBe(false);
+        });
+
+        it('should use defaults when pagination parameter is omitted', async () => {
+          const initialRows = await createMultipleRows(storage, dataset.id, 1);
+          rowId = initialRows.rows[0].rowId;
+          await createMultipleRowVersions(storage, dataset.id, rowId, 15);
+
+          const result = await storage.getDatasetRowVersionsByRowId({
+            rowId,
+          });
+
+          expect(result.rows.length).toBe(10);
+          expect(result.pagination.page).toBe(0);
+          expect(result.pagination.perPage).toBe(10);
+        });
+
+        it('should not have duplicate versions across pages', async () => {
+          const initialRows = await createMultipleRows(storage, dataset.id, 1);
+          rowId = initialRows.rows[0].rowId;
+          await createMultipleRowVersions(storage, dataset.id, rowId, 24);
+
+          const firstPage = await storage.getDatasetRowVersionsByRowId({
+            rowId,
+            pagination: { page: 0, perPage: 10 },
+          });
+          const secondPage = await storage.getDatasetRowVersionsByRowId({
+            rowId,
+            pagination: { page: 1, perPage: 10 },
+          });
+
+          const firstPageVersionIds = new Set(firstPage.rows.map(r => r.versionId));
+          const secondPageVersionIds = new Set(secondPage.rows.map(r => r.versionId));
+
+          const intersection = [...firstPageVersionIds].filter(id => secondPageVersionIds.has(id));
+          expect(intersection.length).toBe(0);
+        });
+
+        it('should return all versions when fetching all pages', async () => {
+          const initialRows = await createMultipleRows(storage, dataset.id, 1);
+          rowId = initialRows.rows[0].rowId;
+          await createMultipleRowVersions(storage, dataset.id, rowId, 24);
+
+          const allVersions: any[] = [];
+          for (let page = 0; page < 3; page++) {
+            const result = await storage.getDatasetRowVersionsByRowId({
+              rowId,
+              pagination: { page, perPage: 10 },
+            });
+            allVersions.push(...result.rows);
+          }
+
+          expect(allVersions.length).toBe(25);
+          const versionIds = new Set(allVersions.map(r => r.versionId));
+          expect(versionIds.size).toBe(25);
+        });
+
+        it('should include deleted versions in results', async () => {
+          const initialRows = await createMultipleRows(storage, dataset.id, 1);
+          rowId = initialRows.rows[0].rowId;
+          
+          // Create some updates
+          await createMultipleRowVersions(storage, dataset.id, rowId, 3);
+          
+          // Delete the row
+          await storage.deleteDatasetRows({
+            datasetId: dataset.id,
+            rowIds: [rowId],
+          });
+
+          const result = await storage.getDatasetRowVersionsByRowId({
+            rowId,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          // Should have: 1 initial + 3 updates + 1 delete = 5 versions
+          expect(result.rows.length).toBe(5);
+          expect(result.rows[0].deleted).toBe(true); // Most recent is the delete
+        });
+
+        it('should only return versions for the specified rowId', async () => {
+          const rows = await createMultipleRows(storage, dataset.id, 2);
+          const rowId1 = rows.rows[0].rowId;
+          const rowId2 = rows.rows[1].rowId;
+
+          await createMultipleRowVersions(storage, dataset.id, rowId1, 5);
+          await createMultipleRowVersions(storage, dataset.id, rowId2, 3);
+
+          const result = await storage.getDatasetRowVersionsByRowId({
+            rowId: rowId1,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result.rows.length).toBe(6); // 1 initial + 5 updates
+          result.rows.forEach(row => {
+            expect(row.rowId).toBe(rowId1);
+          });
+        });
       });
     });
   });
