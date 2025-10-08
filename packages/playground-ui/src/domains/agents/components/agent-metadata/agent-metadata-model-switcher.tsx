@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import Spinner from '@/components/ui/spinner';
-import { Loader2 } from 'lucide-react';
+import { Loader2, RotateCcw } from 'lucide-react';
 import { ProviderLogo } from './provider-logo';
 import { UpdateModelParams } from '@mastra/client-js';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -10,6 +10,7 @@ import { useModelReset } from '../../context/model-reset-context';
 import { cn } from '@/lib/utils';
 import { cleanProviderId } from './utils';
 import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
+import { Button } from '@/ds/components/Button';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
@@ -37,6 +38,10 @@ export const AgentMetadataModelSwitcher = ({
   updateModel,
   apiUrl = '/api/agents/providers',
 }: AgentMetadataModelSwitcherProps) => {
+  // Store the original values on first mount - these never change
+  const [originalProvider] = useState(defaultProvider);
+  const [originalModel] = useState(defaultModel);
+
   const [selectedModel, setSelectedModel] = useState(defaultModel);
   const [showModelSuggestions, setShowModelSuggestions] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState(defaultProvider || '');
@@ -229,19 +234,19 @@ export const AgentMetadataModelSwitcher = ({
       }
 
       // Check if provider changed but no model selected
-      const providerChanged = currentModelProvider && currentModelProvider !== defaultProvider;
+      const providerChanged = currentModelProvider && currentModelProvider !== originalProvider;
       const modelEmpty = !selectedModel || selectedModel === '';
 
       if (providerChanged && modelEmpty) {
-        // Reset to defaults
-        setSelectedProvider(cleanProviderId(defaultProvider));
-        setSelectedModel(defaultModel);
+        // Reset to original values
+        setSelectedProvider(cleanProviderId(originalProvider));
+        setSelectedModel(originalModel);
 
-        // Update back to default configuration
-        if (defaultProvider && defaultModel) {
+        // Update back to original configuration
+        if (originalProvider && originalModel) {
           updateModel({
-            provider: defaultProvider as UpdateModelParams['provider'],
-            modelId: defaultModel,
+            provider: originalProvider as UpdateModelParams['provider'],
+            modelId: originalModel,
           }).catch(error => {
             console.error('Failed to reset model:', error);
           });
@@ -259,8 +264,8 @@ export const AgentMetadataModelSwitcher = ({
     registerResetFn,
     currentModelProvider,
     selectedModel,
-    defaultProvider,
-    defaultModel,
+    originalProvider,
+    originalModel,
     updateModel,
     showProviderSuggestions,
     showModelSuggestions,
@@ -274,6 +279,31 @@ export const AgentMetadataModelSwitcher = ({
       </div>
     );
   }
+
+  // Handle reset button click - resets to the ORIGINAL values
+  const handleReset = async () => {
+    setSelectedProvider(cleanProviderId(originalProvider));
+    setSelectedModel(originalModel);
+    setProviderSearch('');
+    setModelSearch('');
+    setIsSearchingProvider(false);
+    setIsSearchingModel(false);
+    setShowProviderSuggestions(false);
+    setShowModelSuggestions(false);
+
+    // Update the model back to original values
+    try {
+      setLoading(true);
+      await updateModel({
+        provider: originalProvider as UpdateModelParams['provider'],
+        modelId: originalModel,
+      });
+    } catch (error) {
+      console.error('Failed to reset model:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <>
@@ -669,6 +699,16 @@ export const AgentMetadataModelSwitcher = ({
             </PopoverContent>
           )}
         </Popover>
+        <Button
+          variant="light"
+          size="md"
+          onClick={handleReset}
+          disabled={loading}
+          className="flex items-center gap-1.5 text-xs whitespace-nowrap !border-0"
+          title="Reset to original model"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+        </Button>
       </div>
 
       {/* Show warning if selected provider is not connected */}
