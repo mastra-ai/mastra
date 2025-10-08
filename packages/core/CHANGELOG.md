@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.20.2-alpha.1
+
+### Patch Changes
+
+- Pass through input/output processors to the server agent endpoints ([#8546](https://github.com/mastra-ai/mastra/pull/8546))
+
+- moved ai tracing startup logs to debug level ([#8625](https://github.com/mastra-ai/mastra/pull/8625))
+
 ## 0.20.2-alpha.0
 
 ### Patch Changes
