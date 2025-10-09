@@ -63,8 +63,9 @@ describe('Mastra Agent Storage', () => {
       const agentConfig = {
         id: 'test-agent-1',
         name: 'Test Agent 1',
+        description: 'This is a test agent for testing purposes',
         workflowIds: ['workflow-1', 'workflow-2'],
-        agentIds: ['sub-agent-1'],
+        agentIds: [{ agentId: 'sub-agent-1', from: 'CODE' as const }],
         toolIds: ['tool-1', 'tool-2'],
         model: 'gpt-4',
         instructions: 'You are a helpful test agent.',
@@ -77,11 +78,54 @@ describe('Mastra Agent Storage', () => {
       expect(storedAgent).not.toBeNull();
       expect(storedAgent!.id).toBe(agentConfig.id);
       expect(storedAgent!.name).toBe(agentConfig.name);
+      expect(storedAgent!.description).toBe(agentConfig.description);
       expect(storedAgent!.workflowIds).toEqual(agentConfig.workflowIds);
       expect(storedAgent!.agentIds).toEqual(agentConfig.agentIds);
       expect(storedAgent!.toolIds).toEqual(agentConfig.toolIds);
       expect(storedAgent!.model).toBe(agentConfig.model);
       expect(storedAgent!.instructions).toBe(agentConfig.instructions);
+    });
+
+    it('should create an agent without description', async () => {
+      const agentConfig = {
+        id: 'test-agent-no-desc',
+        name: 'Test Agent No Desc',
+        model: 'gpt-4',
+        instructions: 'You are a helpful test agent.',
+      };
+
+      await mastra.createAgent(agentConfig);
+
+      // Verify it was stored without description
+      const storedAgent = await storage.getAgent(agentConfig.id);
+      expect(storedAgent).not.toBeNull();
+      expect(storedAgent!.id).toBe(agentConfig.id);
+      expect(storedAgent!.description).toBeUndefined();
+    });
+
+    it('should create an agent with memory configuration', async () => {
+      const agentConfig = {
+        id: 'test-agent-with-memory',
+        name: 'Test Agent With Memory',
+        model: 'gpt-4',
+        instructions: 'You are a helpful test agent with memory.',
+        memoryConfig: {
+          lastMessages: 10,
+          workingMemory: {
+            enabled: true,
+          },
+        },
+      };
+
+      await mastra.createAgent(agentConfig);
+
+      // Verify it was stored with memory config
+      const storedAgent = await storage.getAgent(agentConfig.id);
+      expect(storedAgent).not.toBeNull();
+      expect(storedAgent!.id).toBe(agentConfig.id);
+      expect(storedAgent!.memoryConfig).toBeDefined();
+      expect(storedAgent!.memoryConfig?.lastMessages).toBe(10);
+      expect(storedAgent!.memoryConfig?.workingMemory?.enabled).toBe(true);
     });
 
     it('should throw error when storage is not configured', async () => {
@@ -91,9 +135,6 @@ describe('Mastra Agent Storage', () => {
         mastraWithoutStorage.createAgent({
           id: 'test-agent',
           name: 'Test Agent',
-          workflowIds: [],
-          agentIds: [],
-          toolIds: [],
           model: 'gpt-4',
           instructions: 'Test',
         }),
@@ -130,6 +171,30 @@ describe('Mastra Agent Storage', () => {
       await expect(mastra.getAgentFromConfig('non-existent-id')).rejects.toThrow('Agent not found');
     });
 
+    it('should retrieve an agent with memory configuration', async () => {
+      const agentConfig = {
+        id: 'memory-agent',
+        name: 'Memory Agent',
+        model: 'gpt-4',
+        instructions: 'You are a test agent with memory.',
+        memoryConfig: {
+          lastMessages: 5,
+          workingMemory: {
+            enabled: true,
+          },
+        },
+      };
+
+      await mastra.createAgent(agentConfig);
+
+      const agent = await mastra.getAgentFromConfig(agentConfig.id);
+      expect(agent).toBeInstanceOf(Agent);
+      expect(agent.name).toBe(agentConfig.name);
+
+      // Verify the agent has memory configured (it will be a function)
+      expect(agent.hasOwnMemory()).toBe(true);
+    });
+
     it('should throw error when storage is not configured', async () => {
       const mastraWithoutStorage = new Mastra({ logger: false });
 
@@ -143,7 +208,6 @@ describe('Mastra Agent Storage', () => {
         id: 'list-agent-1',
         name: 'List Agent 1',
         workflowIds: ['workflow-1'],
-        agentIds: [],
         toolIds: ['tool-1'],
         model: 'gpt-4',
         instructions: 'First list test agent.',
@@ -153,7 +217,7 @@ describe('Mastra Agent Storage', () => {
         id: 'list-agent-2',
         name: 'List Agent 2',
         workflowIds: ['workflow-2'],
-        agentIds: ['sub-agent-1'],
+        agentIds: [{ agentId: 'sub-agent-1', from: 'CODE' as const }],
         toolIds: ['tool-2', 'tool-3'],
         model: 'claude-3',
         instructions: 'Second list test agent.',
@@ -435,6 +499,217 @@ describe('Mastra Agent Storage', () => {
       const tools = await agent.getTools();
       expect(tools).toBeDefined();
       expect(tools.testTool).toBeDefined();
+    });
+  });
+
+  describe('Agent References with CODE and CONFIG', () => {
+    it('should resolve CODE agent references from Mastra registry', async () => {
+      // Register a code agent in Mastra
+      const codeAgent = new Agent({
+        name: 'codeAgent',
+        instructions: 'I am a code agent',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: 'Code agent response',
+          }),
+        }),
+      });
+
+      const mastraWithCodeAgent = new Mastra({
+        storage,
+        logger: false,
+        agents: {
+          codeAgent,
+        },
+      });
+
+      // Create a config agent that references the code agent
+      const parentAgentConfig = {
+        id: 'parent-agent',
+        name: 'Parent Agent',
+        model: 'gpt-4',
+        instructions: 'I can use other agents',
+        agentIds: [{ agentId: 'codeAgent', from: 'CODE' as const }],
+      };
+
+      await mastraWithCodeAgent.createAgent(parentAgentConfig);
+      const parentAgent = await mastraWithCodeAgent.getAgentFromConfig('parent-agent');
+
+      expect(parentAgent).toBeInstanceOf(Agent);
+      const subAgents = await parentAgent.listAgents();
+      expect(subAgents).toBeDefined();
+      expect(subAgents.codeAgent).toBeDefined();
+      expect(subAgents.codeAgent).toBe(codeAgent);
+    });
+
+    it('should resolve CONFIG agent references from storage recursively', async () => {
+      // Create a base config agent
+      const baseAgentConfig = {
+        id: 'base-agent',
+        name: 'Base Agent',
+        model: 'gpt-4',
+        instructions: 'I am a base agent',
+      };
+
+      await mastra.createAgent(baseAgentConfig);
+
+      // Create a parent agent that references the base agent from CONFIG
+      const parentAgentConfig = {
+        id: 'parent-config-agent',
+        name: 'Parent Config Agent',
+        model: 'gpt-4',
+        instructions: 'I use other config agents',
+        agentIds: [{ agentId: 'base-agent', from: 'CONFIG' as const }],
+      };
+
+      await mastra.createAgent(parentAgentConfig);
+      const parentAgent = await mastra.getAgentFromConfig('parent-config-agent');
+
+      expect(parentAgent).toBeInstanceOf(Agent);
+      const subAgents = await parentAgent.listAgents();
+      expect(subAgents).toBeDefined();
+      expect(subAgents['base-agent']).toBeDefined();
+      expect(subAgents['base-agent']).toBeInstanceOf(Agent);
+      // The agent's name comes from the config's name field, which is 'Base Agent'
+      expect(subAgents['base-agent'].name).toBe('Base Agent');
+    });
+
+    it('should handle mixed CODE and CONFIG agent references', async () => {
+      // Register a code agent
+      const codeAgent = new Agent({
+        name: 'mixedCodeAgent',
+        instructions: 'I am from code',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: 'Response',
+          }),
+        }),
+      });
+
+      const mastraWithMixed = new Mastra({
+        storage,
+        logger: false,
+        agents: {
+          mixedCodeAgent: codeAgent,
+        },
+      });
+
+      // Create a config agent
+      const configAgentConfig = {
+        id: 'mixed-config-agent',
+        name: 'Mixed Config Agent',
+        model: 'gpt-4',
+        instructions: 'I am from config',
+      };
+
+      await mastraWithMixed.createAgent(configAgentConfig);
+
+      // Create a parent agent that references both
+      const parentAgentConfig = {
+        id: 'mixed-parent-agent',
+        name: 'Mixed Parent Agent',
+        model: 'gpt-4',
+        instructions: 'I use both code and config agents',
+        agentIds: [
+          { agentId: 'mixedCodeAgent', from: 'CODE' as const },
+          { agentId: 'mixed-config-agent', from: 'CONFIG' as const },
+        ],
+      };
+
+      await mastraWithMixed.createAgent(parentAgentConfig);
+      const parentAgent = await mastraWithMixed.getAgentFromConfig('mixed-parent-agent');
+
+      expect(parentAgent).toBeInstanceOf(Agent);
+      const subAgents = await parentAgent.listAgents();
+      expect(subAgents).toBeDefined();
+      expect(Object.keys(subAgents)).toHaveLength(2);
+      expect(subAgents.mixedCodeAgent).toBe(codeAgent);
+      expect(subAgents['mixed-config-agent']).toBeInstanceOf(Agent);
+    });
+
+    it('should handle deeply nested CONFIG agent references', async () => {
+      // Create level 3 agent
+      await mastra.createAgent({
+        id: 'level-3-agent',
+        name: 'Level 3',
+        model: 'gpt-4',
+        instructions: 'Bottom level',
+      });
+
+      // Create level 2 agent that references level 3
+      await mastra.createAgent({
+        id: 'level-2-agent',
+        name: 'Level 2',
+        model: 'gpt-4',
+        instructions: 'Middle level',
+        agentIds: [{ agentId: 'level-3-agent', from: 'CONFIG' as const }],
+      });
+
+      // Create level 1 agent that references level 2
+      await mastra.createAgent({
+        id: 'level-1-agent',
+        name: 'Level 1',
+        model: 'gpt-4',
+        instructions: 'Top level',
+        agentIds: [{ agentId: 'level-2-agent', from: 'CONFIG' as const }],
+      });
+
+      const level1Agent = await mastra.getAgentFromConfig('level-1-agent');
+      expect(level1Agent).toBeInstanceOf(Agent);
+
+      const level1SubAgents = await level1Agent.listAgents();
+      expect(level1SubAgents['level-2-agent']).toBeDefined();
+
+      const level2Agent = level1SubAgents['level-2-agent'];
+      const level2SubAgents = await level2Agent.listAgents();
+      expect(level2SubAgents['level-3-agent']).toBeDefined();
+      // The agent's name comes from the config's name field, which is 'Level 3'
+      expect(level2SubAgents['level-3-agent'].name).toBe('Level 3');
+    });
+
+    it('should gracefully handle missing CODE agent references', async () => {
+      const parentAgentConfig = {
+        id: 'missing-code-ref-agent',
+        name: 'Missing Code Ref Agent',
+        model: 'gpt-4',
+        instructions: 'I reference a missing code agent',
+        agentIds: [{ agentId: 'non-existent-code-agent', from: 'CODE' as const }],
+      };
+
+      await mastra.createAgent(parentAgentConfig);
+      const parentAgent = await mastra.getAgentFromConfig('missing-code-ref-agent');
+
+      expect(parentAgent).toBeInstanceOf(Agent);
+      const subAgents = await parentAgent.listAgents();
+      // Should be defined but empty since the reference failed
+      expect(subAgents).toBeDefined();
+      expect(subAgents['non-existent-code-agent']).toBeUndefined();
+    });
+
+    it('should gracefully handle missing CONFIG agent references', async () => {
+      const parentAgentConfig = {
+        id: 'missing-config-ref-agent',
+        name: 'Missing Config Ref Agent',
+        model: 'gpt-4',
+        instructions: 'I reference a missing config agent',
+        agentIds: [{ agentId: 'non-existent-config-agent', from: 'CONFIG' as const }],
+      };
+
+      await mastra.createAgent(parentAgentConfig);
+
+      // Should not throw, but log a warning
+      const parentAgent = await mastra.getAgentFromConfig('missing-config-ref-agent');
+
+      expect(parentAgent).toBeInstanceOf(Agent);
+      const subAgents = await parentAgent.listAgents();
+      expect(subAgents).toBeDefined();
+      expect(subAgents['non-existent-config-agent']).toBeUndefined();
     });
   });
 });

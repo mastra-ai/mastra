@@ -1,17 +1,19 @@
 import type { StoreOperations } from '../operations/base';
 import { AgentsStorage } from './base';
-import type { StorageAgentType, CreateAgentConfig } from './base';
+import type { StorageAgentType, CreateAgentConfig, AgentReference } from './base';
 
 export type InMemoryAgents = Map<
   string,
   {
     id: string;
     name: string;
-    workflowIds: string[];
-    agentIds: string[];
-    toolIds: string[];
+    description?: string;
+    workflowIds: string; // JSON string of string[]
+    agentIds: string; // JSON string of AgentReference[]
+    toolIds: string; // JSON string of string[]
     model: string;
     instructions: string;
+    memoryConfig?: string; // JSON string of SerializableMemoryConfig
     createdAt: Date;
     updatedAt: Date;
   }
@@ -31,11 +33,13 @@ export class AgentsInMemory extends AgentsStorage {
     const agentData = {
       id: config.id,
       name: config.name,
-      workflowIds: config.workflowIds ?? [],
-      agentIds: config.agentIds ?? [],
-      toolIds: config.toolIds ?? [],
+      description: config.description,
+      workflowIds: JSON.stringify(config.workflowIds ?? []),
+      agentIds: JSON.stringify(config.agentIds ?? []),
+      toolIds: JSON.stringify(config.toolIds ?? []),
       model: config.model,
       instructions: config.instructions,
+      memoryConfig: config.memoryConfig ? JSON.stringify(config.memoryConfig) : undefined,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -53,11 +57,13 @@ export class AgentsInMemory extends AgentsStorage {
     return {
       id: agentData.id,
       name: agentData.name,
-      workflowIds: agentData.workflowIds,
-      agentIds: agentData.agentIds,
-      toolIds: agentData.toolIds,
+      description: agentData.description,
+      workflowIds: JSON.parse(agentData.workflowIds),
+      agentIds: JSON.parse(agentData.agentIds),
+      toolIds: JSON.parse(agentData.toolIds),
       model: agentData.model,
       instructions: agentData.instructions,
+      memoryConfig: agentData.memoryConfig ? JSON.parse(agentData.memoryConfig) : undefined,
       createdAt: agentData.createdAt,
       updatedAt: agentData.updatedAt,
     };
@@ -70,11 +76,13 @@ export class AgentsInMemory extends AgentsStorage {
       agents.push({
         id: agentData.id,
         name: agentData.name,
-        workflowIds: agentData.workflowIds,
-        agentIds: agentData.agentIds,
-        toolIds: agentData.toolIds,
+        description: agentData.description,
+        workflowIds: JSON.parse(agentData.workflowIds),
+        agentIds: JSON.parse(agentData.agentIds),
+        toolIds: JSON.parse(agentData.toolIds),
         model: agentData.model,
         instructions: agentData.instructions,
+        memoryConfig: agentData.memoryConfig ? JSON.parse(agentData.memoryConfig) : undefined,
         createdAt: agentData.createdAt,
         updatedAt: agentData.updatedAt,
       });
@@ -94,11 +102,18 @@ export class AgentsInMemory extends AgentsStorage {
     const updatedAgent = {
       ...existingAgent,
       name: updates.name ?? existingAgent.name,
-      workflowIds: updates.workflowIds ? updates.workflowIds : existingAgent.workflowIds,
-      agentIds: updates.agentIds ? updates.agentIds : existingAgent.agentIds,
-      toolIds: updates.toolIds ? updates.toolIds : existingAgent.toolIds,
+      description: updates.description !== undefined ? updates.description : existingAgent.description,
+      workflowIds: updates.workflowIds ? JSON.stringify(updates.workflowIds) : existingAgent.workflowIds,
+      agentIds: updates.agentIds ? JSON.stringify(updates.agentIds) : existingAgent.agentIds,
+      toolIds: updates.toolIds ? JSON.stringify(updates.toolIds) : existingAgent.toolIds,
       model: updates.model ?? existingAgent.model,
       instructions: updates.instructions ?? existingAgent.instructions,
+      memoryConfig:
+        updates.memoryConfig !== undefined
+          ? updates.memoryConfig
+            ? JSON.stringify(updates.memoryConfig)
+            : undefined
+          : existingAgent.memoryConfig,
       updatedAt: new Date(),
     };
 
@@ -107,11 +122,13 @@ export class AgentsInMemory extends AgentsStorage {
     return {
       id: updatedAgent.id,
       name: updatedAgent.name,
-      workflowIds: updatedAgent.workflowIds,
-      agentIds: updatedAgent.agentIds,
-      toolIds: updatedAgent.toolIds,
+      description: updatedAgent.description,
+      workflowIds: JSON.parse(updatedAgent.workflowIds),
+      agentIds: JSON.parse(updatedAgent.agentIds),
+      toolIds: JSON.parse(updatedAgent.toolIds),
       model: updatedAgent.model,
       instructions: updatedAgent.instructions,
+      memoryConfig: updatedAgent.memoryConfig ? JSON.parse(updatedAgent.memoryConfig) : undefined,
       createdAt: updatedAgent.createdAt,
       updatedAt: updatedAgent.updatedAt,
     };

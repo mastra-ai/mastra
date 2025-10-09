@@ -30,6 +30,7 @@ import type {
   ObservabilityStorage,
   AgentsStorage,
   StorageAgentType,
+  CreateAgentConfig,
 } from './domains';
 import type {
   EvalRow,
@@ -713,15 +714,7 @@ export abstract class MastraStorage extends MastraBase {
    * AGENTS
    */
 
-  async createAgent(config: {
-    id: string;
-    name: string;
-    workflowIds?: string[];
-    agentIds?: string[];
-    toolIds?: string[];
-    model: string;
-    instructions: string;
-  }): Promise<void> {
+  async createAgent(config: CreateAgentConfig): Promise<void> {
     if (this.stores?.agents) {
       return this.stores.agents.createAgent(config);
     }

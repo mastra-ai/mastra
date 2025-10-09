@@ -19,6 +19,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MastraScorer } from '../scores';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
+import type { CreateAgentConfig } from '../storage/domains/agents';
 import { augmentWithInit } from '../storage/storageWithInit';
 import { InstrumentClass, Telemetry } from '../telemetry';
 import type { OtelConfig } from '../telemetry';
@@ -1006,19 +1007,20 @@ do:
    *   storage: new LibSQLStore({ url: 'file:./data.db' })
    * });
    *
-   * await mastra.createAgent({ id: 'my-agent-id', name: 'My Agent', model: 'gpt-4o' });
+   * await mastra.createAgent({
+   *   id: 'my-agent-id',
+   *   name: 'My Agent',
+   *   model: 'gpt-4o',
+   *   instructions: 'You are a helpful assistant',
+   *   agentIds: [
+   *     { agentId: 'code-agent-1', from: 'CODE' },
+   *     { agentId: 'config-agent-1', from: 'CONFIG' }
+   *   ]
+   * });
    * ```
    */
 
-  async createAgent(config: {
-    id: string;
-    name: string;
-    workflowIds?: string[];
-    agentIds?: string[];
-    toolIds?: string[];
-    model: string;
-    instructions: string;
-  }) {
+  async createAgent(config: CreateAgentConfig) {
     const storage = this.getStorage();
     if (!storage) {
       throw new MastraError({
@@ -1140,17 +1142,29 @@ do:
       }
     }
 
-    // Resolve sub-agents from stored agent IDs
+    // Resolve sub-agents from stored agent references
     const agents: Record<string, Agent> = {};
     if (config.agentIds && config.agentIds.length > 0) {
-      for (const agentId of config.agentIds) {
+      for (const agentRef of config.agentIds) {
         try {
-          const subAgent = this.getAgent(agentId);
+          let subAgent: Agent | null = null;
+
+          if (agentRef.from === 'CODE') {
+            // Get agent from Mastra registry (registered in code)
+            subAgent = this.getAgent(agentRef.agentId);
+          } else if (agentRef.from === 'CONFIG') {
+            // Get agent from storage config (recursively)
+            subAgent = await this.getAgentFromConfig(agentRef.agentId);
+          }
+
           if (subAgent) {
-            agents[agentId] = subAgent;
+            agents[agentRef.agentId] = subAgent;
           }
         } catch (error) {
-          this.#logger?.warn(`Sub-agent "${agentId}" referenced by agent "${id}" not found in Mastra instance`, error);
+          this.#logger?.warn(
+            `Sub-agent "${agentRef.agentId}" (from: ${agentRef.from}) referenced by agent "${id}" not found`,
+            error,
+          );
         }
       }
     }
@@ -1162,12 +1176,39 @@ do:
         try {
           const tool = this.getTool(toolId);
           if (tool) {
-            tools[tool.id] = tool;
+            tools[toolId] = tool;
           }
         } catch (error) {
           this.#logger?.warn(`Tool "${toolId}" referenced by agent "${id}" not found in Mastra instance`, error);
         }
       }
+    }
+
+    // Create memory factory function if memoryConfig is present
+    // The memory will be created lazily when first accessed
+    // This allows the consumer to provide their Memory implementation
+    let memory: ((args: { mastra?: any }) => Promise<MastraMemory>) | undefined = undefined;
+    if (config.memoryConfig) {
+      const memoryConfig = config.memoryConfig;
+      memory = async () => {
+        // Dynamically import Memory from @mastra/memory
+        // This will be resolved by the consumer's package
+        try {
+          // @ts-expect-error - @mastra/memory is an optional peer dependency
+          const { Memory } = await import('@mastra/memory');
+          return new Memory({
+            options: memoryConfig,
+          });
+        } catch (err) {
+          throw new MastraError({
+            id: 'MASTRA_GET_AGENT_MEMORY_IMPORT_FAILED',
+            domain: ErrorDomain.MASTRA,
+            category: ErrorCategory.USER,
+            text: `Failed to import Memory from @mastra/memory. Make sure @mastra/memory is installed.`,
+            details: { error: String(err) },
+          });
+        }
+      };
     }
 
     const agent = new Agent({
@@ -1178,6 +1219,7 @@ do:
       workflows: Object.keys(workflows).length > 0 ? workflows : undefined,
       agents: Object.keys(agents).length > 0 ? agents : undefined,
       tools: Object.keys(tools).length > 0 ? tools : undefined,
+      memory,
     } as AgentConfig);
 
     agent.__registerMastra(this);
