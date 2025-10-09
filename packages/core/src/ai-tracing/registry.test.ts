@@ -791,9 +791,7 @@ describe('AI Tracing Registry', () => {
       const debugSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       // CloudExporter should not throw, but log warning instead
-      const exporter = new CloudExporter({
-        logger,
-      });
+      const exporter = new CloudExporter({ logger });
 
       // Verify combined warning message was logged
       expect(logger.debug).toHaveBeenCalledWith(
