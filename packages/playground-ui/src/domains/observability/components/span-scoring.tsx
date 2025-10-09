@@ -6,7 +6,7 @@ import { Notification, SelectField, TextAndIcon } from '@/components/ui/elements
 import { useEffect, useState } from 'react';
 
 export interface SpanScoringProps {
-  traceId: string;
+  traceId?: string;
   spanId?: string;
   onScorerTriggered: (scorerName: string, traceId: string, spanId?: string) => void;
   entityType?: string;
@@ -45,7 +45,7 @@ export const SpanScoring = ({ traceId, spanId, onScorerTriggered, entityType }: 
     if (selectedScorer) {
       triggerScorer({
         scorerName: selectedScorer,
-        traceId,
+        traceId: traceId || '',
         spanId,
       });
     }

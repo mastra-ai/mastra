@@ -67,7 +67,7 @@ export function SpanTabs({
                 <CircleGaugeIcon /> Scoring
               </Section.Heading>
             </Section.Header>
-            <SpanScoring traceId={trace.traceId} spanId={span?.spanId} onScorerTriggered={onScorerTriggered} />
+            <SpanScoring traceId={trace?.traceId} spanId={span?.spanId} onScorerTriggered={onScorerTriggered} />
           </Section>
           <Section>
             <Section.Header>
@@ -80,7 +80,7 @@ export function SpanTabs({
               onPageChange={onSpanScoresPageChange}
               isLoadingScoresData={isLoadingSpanScoresData}
               initialScoreId={initialScoreId}
-              traceId={trace.traceId}
+              traceId={trace?.traceId}
               spanId={span?.spanId}
             />
           </Section>
