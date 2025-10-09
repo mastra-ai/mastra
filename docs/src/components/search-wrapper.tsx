@@ -150,12 +150,14 @@ export const SearchWrapper = ({
                     />
                   </KapaProvider>
                 ) : isKapaChatbotEnabled ? (
-                  <CustomSearch
-                    placeholder={getSearchPlaceholder(locale)}
-                    searchOptions={searchOptions}
-                    onUseAgent={handleUseAgent}
-                    closeModal={close}
-                  />
+                  <div className="p-[10px]">
+                    <CustomSearch
+                      placeholder={getSearchPlaceholder(locale)}
+                      searchOptions={searchOptions}
+                      onUseAgent={handleUseAgent}
+                      closeModal={close}
+                    />
+                  </div>
                 ) : (
                   <div className="p-[10px]">
                     <CustomSearchWithoutAI
