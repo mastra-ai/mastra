@@ -1509,41 +1509,13 @@ describe('Input and Output Processors', () => {
           },
         );
 
-        for await (const _chunk of result.fullStream) {
-          // const timestamp = new Date().getTime();
-          // if (!chunk.type.includes('delta')) {
-          //   console.log(timestamp, chunk);
-          //   continue;
-          // }
-          // if (chunk.type === 'text-delta') {
-          //   const cyanColorCode = '\x1b[36m';
-          //   const resetColorCode = '\x1b[0m';
-          //   process.stdout.write(cyanColorCode);
-          //   process.stdout.write(chunk.payload.text);
-          //   process.stdout.write(resetColorCode);
-          //   continue;
-          // }
-          // if (chunk.metadata?.from === 'structured-output') {
-          //   const redColorCode = '\x1b[31m';
-          //   const resetColorCode = '\x1b[0m';
-          //   process.stdout.write(redColorCode);
-          //   console.log(timestamp, 'structuring agent chunk in main stream\n', chunk);
-          //   process.stdout.write(resetColorCode);
-          // }
-        }
-
-        console.log('getting text');
         const resultText = await result.text;
-        console.log('getting object');
         const resultObj = await result.object;
-        console.log('got result object', resultObj);
 
-        // Verify we have both natural text AND structured data
         expect(resultText).toBeTruthy();
         expect(resultText).toMatch(/food waste|restaurant|reduce|solution|innovative/i); // Should contain natural language
         expect(resultObj).toBeDefined();
 
-        // Validate structured data
         expect(resultObj).toMatchObject({
           idea: expect.any(String),
           category: expect.stringMatching(/^(technology|business|art|science|other)$/),
@@ -1551,14 +1523,58 @@ describe('Input and Output Processors', () => {
           resources: expect.any(Array),
         });
 
-        // Validate content
-        // expect(resultObj.idea.toLowerCase()).toMatch(/food waste|restaurant|reduce/);
         expect(resultObj.feasibility).toBeGreaterThanOrEqual(1);
         expect(resultObj.feasibility).toBeLessThanOrEqual(10);
         expect(resultObj.resources.length).toBeGreaterThan(0);
+      }, 60000);
 
-        console.log('Natural text:', resultText);
-        console.log('Structured idea data:', resultObj);
+      it('should work with stream with useJsonSchemaPromptInjection', async () => {
+        const ideaSchema = z.object({
+          idea: z.string().describe('The creative idea'),
+          category: z.enum(['technology', 'business', 'art', 'science', 'other']).describe('Category of the idea'),
+          feasibility: z.number().min(1).max(10).describe('How feasible is this idea (1-10)'),
+          resources: z.array(z.string()).describe('Resources needed to implement'),
+        });
+
+        const agent = new Agent({
+          name: 'Creative Thinker',
+          instructions: 'You are a creative thinker who generates innovative ideas and explores possibilities.',
+          model: model,
+        });
+
+        const result = await agent.stream(
+          `
+              Come up with an innovative solution for reducing food waste in restaurants. 
+              Make sure to include an idea, category, feasibility, and resources.
+            `,
+          {
+            format,
+            structuredOutput: {
+              schema: ideaSchema,
+              model,
+              errorStrategy: 'strict',
+              jsonPromptInjection: true,
+            },
+          },
+        );
+
+        const resultText = await result.text;
+        const resultObj = await result.object;
+
+        expect(resultText).toBeTruthy();
+        expect(resultText).toMatch(/food waste|restaurant|reduce|solution|innovative/i); // Should contain natural language
+        expect(resultObj).toBeDefined();
+
+        expect(resultObj).toMatchObject({
+          idea: expect.any(String),
+          category: expect.stringMatching(/^(technology|business|art|science|other)$/),
+          feasibility: expect.any(Number),
+          resources: expect.any(Array),
+        });
+
+        expect(resultObj.feasibility).toBeGreaterThanOrEqual(1);
+        expect(resultObj.feasibility).toBeLessThanOrEqual(10);
+        expect(resultObj.resources.length).toBeGreaterThan(0);
       }, 60000);
     });
   }

@@ -3,6 +3,7 @@ import { asSchema, isDeepEqualData, jsonSchema, parsePartialJson } from 'ai';
 import type { JSONSchema7, Schema } from 'ai';
 import type z3 from 'zod/v3';
 import type z4 from 'zod/v4';
+import type { StructuredOutputOptions } from '../../agent/types';
 import { MastraError } from '../../error';
 import { safeValidateTypes } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
@@ -485,13 +486,13 @@ function createOutputHandler<OUTPUT extends OutputSchema = undefined>({
  */
 export function createObjectStreamTransformer<OUTPUT extends OutputSchema = undefined>({
   isLLMExecutionStep,
-  schema,
+  structuredOutput,
 }: {
   isLLMExecutionStep?: boolean;
-  schema?: OUTPUT;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
 }) {
-  const transformedSchema = getTransformedSchema(schema);
-  const handler = createOutputHandler({ transformedSchema, schema });
+  const transformedSchema = getTransformedSchema(structuredOutput?.schema);
+  const handler = createOutputHandler({ transformedSchema, schema: structuredOutput?.schema });
 
   let accumulatedText = '';
   let previousObject: any = undefined;
@@ -500,7 +501,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
-      if (!isLLMExecutionStep || !schema) {
+      if (!isLLMExecutionStep) {
         // Bypassing processing if we are not in the LLM execution step (inner stream)
         // OR if there is no output schema provided
         controller.enqueue(chunk);
@@ -546,7 +547,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
     async flush(controller) {
       // Bypass final validation if there is no output schema provided
       // or if we are not in the LLM execution step (inner stream)
-      if (!isLLMExecutionStep || !schema) {
+      if (!isLLMExecutionStep) {
         return;
       }
 
