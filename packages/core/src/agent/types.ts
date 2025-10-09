@@ -12,6 +12,7 @@ import type {
   OutputType,
   SystemMessage,
   MastraModelConfig,
+  OpenAICompatibleConfig,
 } from '../llm';
 import type {
   StreamTextOnFinishCallback,
@@ -35,6 +36,7 @@ import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
 import type { SaveQueueManager } from './save-queue';
+import type { ModelRouterModelId } from '../llm/model';
 
 export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
 export type { Message as AiMessageType } from 'ai';
@@ -56,7 +58,7 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   schema: OUTPUT;
 
   /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
-  model?: MastraLanguageModel;
+  model?: MastraModelConfig;
 
   /**
    * Custom instructions for the structuring agent.
@@ -69,6 +71,11 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
    */
   jsonPromptInjection?: boolean;
 } & FallbackFields<OUTPUT>;
+
+export type SerializableStructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = Omit<
+  StructuredOutputOptions<OUTPUT>,
+  'model'
+> & { model?: ModelRouterModelId | OpenAICompatibleConfig };
 
 /**
  * Provide options while creating an agent.
