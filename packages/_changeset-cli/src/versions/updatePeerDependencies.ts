@@ -7,8 +7,8 @@ import { corePackage } from '../config.js';
 import { getPackageJson } from '../pkg/getPackageJson.js';
 import { getPublicPackages } from '../pkg/getPublicPackages.js';
 import { updatePackageJson } from '../pkg/updatePackageJson.js';
-import type { VersionBumps, UpdatedPeerDependencies, PackageJson } from '../types.js';
-import { getNewVersionForPackage } from './getNewVersionForPackage.js';
+import type { VersionBumps, UpdatedPeerDependencies, PackageJson, BumpType } from '../types.js';
+import { getNewVersionForPackage, getReleasePlan } from './getNewVersionForPackage.js';
 
 interface UpdateContext {
   coreBump: string;
@@ -16,6 +16,7 @@ interface UpdateContext {
   nextMajorVersion: string | null;
   packages: Package[];
   packagesByName: Map<string, Package>;
+  versionBumps: VersionBumps;
 }
 
 export function getDefaultUpdatedPeerDependencies(): UpdatedPeerDependencies {
@@ -23,20 +24,6 @@ export function getDefaultUpdatedPeerDependencies(): UpdatedPeerDependencies {
     directUpdatedPackages: [],
     indirectUpdatedPackages: [],
   };
-}
-
-function getCoreBump(currentVersion: string, nextVersion: string): string {
-  const versionWithoutPrerelease = currentVersion.split('-')[0]!;
-  const nextVersionWithoutPrerelease = nextVersion.split('-')[0]!;
-  if (nextVersionWithoutPrerelease === semver.inc(versionWithoutPrerelease, 'patch')) {
-    return 'patch';
-  }
-
-  if (nextVersionWithoutPrerelease === semver.inc(versionWithoutPrerelease, 'minor')) {
-    return 'minor';
-  }
-
-  return 'major';
 }
 
 function getNextMajorVersion(version: string): string | null {
@@ -52,15 +39,35 @@ async function validateAndPrepareContext(versionBumps: VersionBumps, spinner: an
     return null;
   }
 
-  const nextCoreVersion = await getNewVersionForPackage(corePackage);
+  const temporaryChangeset = {
+    id: 'tmp-changeset',
+    releases: Object.entries(versionBumps).map(([name, bump]) => ({
+      name,
+      type: bump,
+    })),
+    summary: 'Update peer dependencies to match core package version bump',
+  };
+  const nextCoreVersion = await getNewVersionForPackage(corePackage, [temporaryChangeset]);
+
   if (!nextCoreVersion) {
     spinner.stop(color.dim('Could not determine next core version.'));
     return null;
   }
 
-  const versionWithoutPrerelease = corePackageJson.version.split('-')[0]!;
-  const nextVersionWithoutPrerelease = nextCoreVersion.split('-')[0]!;
-  if (nextVersionWithoutPrerelease === versionWithoutPrerelease) {
+  const releasePlan = await getReleasePlan([temporaryChangeset]);
+  if (!releasePlan) {
+    spinner.stop(color.dim('Could not determine next versions.'));
+    return null;
+  }
+
+  const bumpsFromRelease: VersionBumps = {};
+  for (const release of releasePlan.releases) {
+    if (release.type !== 'none') {
+      bumpsFromRelease[release.name] = release.type as BumpType;
+    }
+  }
+
+  if (!(corePackage in bumpsFromRelease)) {
     spinner.stop(color.dim('Core package not bumped, skipping peer dependency updates.'));
     return null;
   }
@@ -71,10 +78,22 @@ async function validateAndPrepareContext(versionBumps: VersionBumps, spinner: an
     return null;
   }
 
-  const coreBump = getCoreBump(corePackageJson.version, nextCoreVersion);
+  const coreBump = bumpsFromRelease[corePackage];
+
+  // if core got bumped because of a linked package we don't have to update peer dependencies.
+  if (coreBump === 'patch' && !versionBumps[corePackage]) {
+    spinner.stop(color.dim('Core package not bumped, skipping peer dependency updates.'));
+    return null;
+  }
+
   if (coreBump === 'patch' && Object.keys(versionBumps).length === 1) {
     spinner.stop(color.dim('Only core package bumped, skipping peer dependency updates.'));
     return null;
+  }
+
+  // When core is not bumped, we don't have to update peer dependencies to minor.
+  if (!versionBumps[corePackage]) {
+    versionBumps = {} as VersionBumps;
   }
 
   const packages = await getPublicPackages();
@@ -82,6 +101,7 @@ async function validateAndPrepareContext(versionBumps: VersionBumps, spinner: an
 
   return {
     coreBump,
+    versionBumps: versionBumps,
     nextCoreVersion,
     nextMajorVersion,
     packages,
@@ -101,7 +121,9 @@ function collectDirectUpdates(versionBumps: VersionBumps, context: UpdateContext
     if (pkgInfo.packageJson?.peerDependencies?.[corePackage]) {
       const cloned = JSON.parse(JSON.stringify(pkgInfo.packageJson));
       cloned.peerDependencies[corePackage] = `>=${context.nextCoreVersion}-0 <${context.nextMajorVersion}-0`;
-      directUpdatedPackages.set(name, cloned);
+      if (cloned.peerDependencies[corePackage] !== pkgInfo.packageJson.peerDependencies?.[corePackage]) {
+        directUpdatedPackages.set(name, cloned);
+      }
     }
   }
 
@@ -125,7 +147,10 @@ function collectIndirectUpdates(
       const cloned = JSON.parse(JSON.stringify(pkg.packageJson));
       const [before] = cloned.peerDependencies[corePackage].split(' ');
       cloned.peerDependencies[corePackage] = `${before} <${context.nextMajorVersion}-0`;
-      indirectUpdatedPackages.set(pkg.packageJson.name, cloned);
+
+      if (cloned.peerDependencies[corePackage] !== pkg.packageJson.peerDependencies?.[corePackage]) {
+        indirectUpdatedPackages.set(pkg.packageJson.name, cloned);
+      }
     }
   }
 
@@ -171,7 +196,7 @@ export async function updatePeerDependencies(versionBumps: VersionBumps): Promis
 
   // Collect direct updates
   (s as any).message = 'Updating direct peer dependencies';
-  const directUpdatedPackages = collectDirectUpdates(versionBumps, context);
+  const directUpdatedPackages = collectDirectUpdates(context.versionBumps, context);
 
   // Apply direct updates
   applyUpdatesToFiles(directUpdatedPackages, context.packagesByName);
