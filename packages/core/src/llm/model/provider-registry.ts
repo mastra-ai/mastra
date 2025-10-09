@@ -337,11 +337,12 @@ export class ModelRegistry {
 }
 
 // Auto-start refresh if enabled
-if (process.env.MASTRA_AUTO_REFRESH_PROVIDERS === 'true') {
-  const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
+const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
+const autoRefreshEnabled =
+  process.env.MASTRA_AUTO_REFRESH_PROVIDERS === 'true' ||
+  (process.env.MASTRA_AUTO_REFRESH_PROVIDERS !== 'false' && isDev);
 
-  if (isDev) {
-    console.debug('[ModelRegistry] Auto-refresh enabled (dev mode)');
-    ModelRegistry.getInstance().startAutoRefresh();
-  }
+if (autoRefreshEnabled && isDev) {
+  console.debug('[ModelRegistry] Auto-refresh enabled (dev mode)');
+  ModelRegistry.getInstance().startAutoRefresh();
 }
