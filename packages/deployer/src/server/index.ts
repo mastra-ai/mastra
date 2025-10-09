@@ -35,6 +35,7 @@ import { vectorRouter } from './handlers/routes/vector/router';
 import { workflowsRouter } from './handlers/routes/workflows/router';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
+import { datasetsRoutes } from './handlers/routes/datasets/router';
 
 type Bindings = {};
 
@@ -465,6 +466,8 @@ export async function createHonoServer(
   app.route('/api/tools', toolsRouter(bodyLimitOptions, options.tools));
   // Vector routes
   app.route('/api/vector', vectorRouter(bodyLimitOptions));
+  // Dataset routes
+  app.route('/api/datasets', datasetsRoutes(bodyLimitOptions));
 
   if (options?.isDev || server?.build?.openAPIDocs || server?.build?.swaggerUI) {
     app.get(
