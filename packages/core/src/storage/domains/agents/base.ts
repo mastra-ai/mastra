@@ -3,9 +3,9 @@ import { MastraBase } from '../../../base';
 export interface StorageAgentType {
   id: string;
   name: string;
-  workflowIds: string[];
-  agentIds: string[];
-  toolIds: string[];
+  workflowIds?: string[];
+  agentIds?: string[];
+  toolIds?: string[];
   model: string;
   instructions: string;
   createdAt: Date;
@@ -15,9 +15,9 @@ export interface StorageAgentType {
 export interface CreateAgentConfig {
   id: string;
   name: string;
-  workflowIds: string[];
-  agentIds: string[];
-  toolIds: string[];
+  workflowIds?: string[];
+  agentIds?: string[];
+  toolIds?: string[];
   model: string;
   instructions: string;
 }

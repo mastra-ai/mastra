@@ -29,6 +29,7 @@ import type {
   LegacyEvalsStorage,
   ObservabilityStorage,
   AgentsStorage,
+  StorageAgentType,
 } from './domains';
 import type {
   EvalRow,
@@ -715,9 +716,9 @@ export abstract class MastraStorage extends MastraBase {
   async createAgent(config: {
     id: string;
     name: string;
-    workflowIds: string[];
-    agentIds: string[];
-    toolIds: string[];
+    workflowIds?: string[];
+    agentIds?: string[];
+    toolIds?: string[];
     model: string;
     instructions: string;
   }): Promise<void> {
@@ -730,17 +731,7 @@ export abstract class MastraStorage extends MastraBase {
     );
   }
 
-  async getAgent(id: string): Promise<{
-    id: string;
-    name: string;
-    workflowIds: string[];
-    agentIds: string[];
-    toolIds: string[];
-    model: string;
-    instructions: string;
-    createdAt: Date;
-    updatedAt: Date;
-  } | null> {
+  async getAgent(id: string): Promise<StorageAgentType | null> {
     if (this.stores?.agents) {
       return this.stores.agents.getAgent(id);
     }
@@ -750,19 +741,7 @@ export abstract class MastraStorage extends MastraBase {
     );
   }
 
-  async listAgents(): Promise<
-    {
-      id: string;
-      name: string;
-      workflowIds: string[];
-      agentIds: string[];
-      toolIds: string[];
-      model: string;
-      instructions: string;
-      createdAt: Date;
-      updatedAt: Date;
-    }[]
-  > {
+  async listAgents(): Promise<StorageAgentType[]> {
     if (this.stores?.agents) {
       return this.stores.agents.listAgents();
     }

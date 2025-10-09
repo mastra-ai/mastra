@@ -1,18 +1,45 @@
 import { MockLanguageModelV1 } from 'ai/test';
 import { describe, expect, it, beforeEach } from 'vitest';
+import { z } from 'zod';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
+import { createWorkflow, createStep } from '../workflows';
+import type { Workflow } from '../workflows';
 import { Mastra } from './index';
 
 describe('Mastra Agent Storage', () => {
   let mastra: Mastra;
   let storage: InMemoryStore;
+  let testWorkflow: Workflow<any, any, any, any, any, any>;
 
   beforeEach(() => {
     storage = new InMemoryStore();
+
+    // Create a simple test workflow
+    const step1 = createStep({
+      id: 'step1',
+      execute: async () => {
+        return { result: 'success' };
+      },
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+    });
+
+    testWorkflow = createWorkflow({
+      id: 'testWorkflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+      steps: [step1],
+    });
+
+    testWorkflow.then(step1 as any).commit();
+
     mastra = new Mastra({
       storage,
       logger: false,
+      workflows: {
+        testWorkflow,
+      },
     });
   });
 
@@ -300,6 +327,45 @@ describe('Mastra Agent Storage', () => {
       const agent = await mastra.getAgentFromConfig(agentConfig.id);
       expect(agent).toBeInstanceOf(Agent);
       expect(agent.name).toBe(agentConfig.name);
+    });
+  });
+
+  describe('generate on agent from config', () => {
+    it('should generate on agent from config', async () => {
+      const agentConfig = {
+        id: 'generate-agent',
+        name: 'Generate Agent',
+        model: 'openai/gpt-4o',
+        instructions: 'You are a generate test agent.',
+      };
+
+      await mastra.createAgent(agentConfig);
+      const agent = await mastra.getAgentFromConfig(agentConfig.id);
+      const result = await agent.generate('What is the weather?');
+      expect(result).toBeDefined();
+      console.log(result);
+    });
+
+    it('should resolve workflows when creating agent from config', async () => {
+      const agentConfig = {
+        id: 'workflow-agent',
+        name: 'Workflow Agent',
+        model: 'openai/gpt-4o',
+        instructions: 'You are an agent with workflows.',
+        workflowIds: ['testWorkflow'],
+      };
+
+      await mastra.createAgent(agentConfig);
+      const agent = await mastra.getAgentFromConfig(agentConfig.id);
+
+      expect(agent).toBeInstanceOf(Agent);
+      expect(agent.name).toBe(agentConfig.name);
+
+      // Check that the agent has the workflow
+      const workflows = await agent.getWorkflows();
+      expect(workflows).toBeDefined();
+      expect(workflows.testWorkflow).toBeDefined();
+      expect(workflows.testWorkflow.name).toBe('testWorkflow');
     });
   });
 });

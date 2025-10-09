@@ -7,9 +7,9 @@ export type InMemoryAgents = Map<
   {
     id: string;
     name: string;
-    workflowIds: string; // JSON string
-    agentIds: string; // JSON string
-    toolIds: string; // JSON string
+    workflowIds: string[];
+    agentIds: string[];
+    toolIds: string[];
     model: string;
     instructions: string;
     createdAt: Date;
@@ -31,9 +31,9 @@ export class AgentsInMemory extends AgentsStorage {
     const agentData = {
       id: config.id,
       name: config.name,
-      workflowIds: JSON.stringify(config.workflowIds),
-      agentIds: JSON.stringify(config.agentIds),
-      toolIds: JSON.stringify(config.toolIds),
+      workflowIds: config.workflowIds ?? [],
+      agentIds: config.agentIds ?? [],
+      toolIds: config.toolIds ?? [],
       model: config.model,
       instructions: config.instructions,
       createdAt: new Date(),
@@ -53,9 +53,9 @@ export class AgentsInMemory extends AgentsStorage {
     return {
       id: agentData.id,
       name: agentData.name,
-      workflowIds: JSON.parse(agentData.workflowIds),
-      agentIds: JSON.parse(agentData.agentIds),
-      toolIds: JSON.parse(agentData.toolIds),
+      workflowIds: agentData.workflowIds,
+      agentIds: agentData.agentIds,
+      toolIds: agentData.toolIds,
       model: agentData.model,
       instructions: agentData.instructions,
       createdAt: agentData.createdAt,
@@ -70,9 +70,9 @@ export class AgentsInMemory extends AgentsStorage {
       agents.push({
         id: agentData.id,
         name: agentData.name,
-        workflowIds: JSON.parse(agentData.workflowIds),
-        agentIds: JSON.parse(agentData.agentIds),
-        toolIds: JSON.parse(agentData.toolIds),
+        workflowIds: agentData.workflowIds,
+        agentIds: agentData.agentIds,
+        toolIds: agentData.toolIds,
         model: agentData.model,
         instructions: agentData.instructions,
         createdAt: agentData.createdAt,
@@ -94,9 +94,9 @@ export class AgentsInMemory extends AgentsStorage {
     const updatedAgent = {
       ...existingAgent,
       name: updates.name ?? existingAgent.name,
-      workflowIds: updates.workflowIds ? JSON.stringify(updates.workflowIds) : existingAgent.workflowIds,
-      agentIds: updates.agentIds ? JSON.stringify(updates.agentIds) : existingAgent.agentIds,
-      toolIds: updates.toolIds ? JSON.stringify(updates.toolIds) : existingAgent.toolIds,
+      workflowIds: updates.workflowIds ? updates.workflowIds : existingAgent.workflowIds,
+      agentIds: updates.agentIds ? updates.agentIds : existingAgent.agentIds,
+      toolIds: updates.toolIds ? updates.toolIds : existingAgent.toolIds,
       model: updates.model ?? existingAgent.model,
       instructions: updates.instructions ?? existingAgent.instructions,
       updatedAt: new Date(),
@@ -107,9 +107,9 @@ export class AgentsInMemory extends AgentsStorage {
     return {
       id: updatedAgent.id,
       name: updatedAgent.name,
-      workflowIds: JSON.parse(updatedAgent.workflowIds),
-      agentIds: JSON.parse(updatedAgent.agentIds),
-      toolIds: JSON.parse(updatedAgent.toolIds),
+      workflowIds: updatedAgent.workflowIds,
+      agentIds: updatedAgent.agentIds,
+      toolIds: updatedAgent.toolIds,
       model: updatedAgent.model,
       instructions: updatedAgent.instructions,
       createdAt: updatedAgent.createdAt,

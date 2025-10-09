@@ -974,9 +974,9 @@ do:
   async createAgent(config: {
     id: string;
     name: string;
-    workflowIds: string[];
-    agentIds: string[];
-    toolIds: string[];
+    workflowIds?: string[];
+    agentIds?: string[];
+    toolIds?: string[];
     model: string;
     instructions: string;
   }) {
@@ -1027,6 +1027,38 @@ do:
    * }
    * ```
    */
+  /**
+   * Retrieves a stored agent configuration by its ID and instantiates it as an Agent.
+   *
+   * This method fetches the agent configuration from storage, resolves any referenced
+   * workflows, tools, and sub-agents, and returns a fully configured Agent instance.
+   *
+   * @param id - The unique identifier of the agent to retrieve
+   * @returns An instantiated Agent with resolved dependencies
+   * @throws {MastraError} When storage is not configured or retrieval fails
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   storage: new LibSQLStore({ url: 'file:./data.db' }),
+   *   workflows: { myWorkflow }
+   * });
+   *
+   * // Create agent with workflow reference
+   * await mastra.createAgent({
+   *   id: 'my-agent',
+   *   name: 'My Agent',
+   *   model: 'gpt-4',
+   *   instructions: 'You are a helpful assistant',
+   *   workflowIds: ['myWorkflow']
+   * });
+   *
+   * // Get the agent - workflows will be automatically resolved
+   * const agent = await mastra.getAgentFromConfig('my-agent');
+   * const workflows = await agent.getWorkflows();
+   * console.log(workflows.myWorkflow); // Available!
+   * ```
+   */
   async getAgentFromConfig(id: string) {
     const storage = this.getStorage();
     if (!storage) {
@@ -1049,7 +1081,53 @@ do:
       });
     }
 
-    const agent = new Agent(config as AgentConfig);
+    // Resolve workflows from stored workflow IDs
+    const workflows: Record<string, Workflow<any, any, any, any, any, any>> = {};
+    if (config.workflowIds && config.workflowIds.length > 0) {
+      for (const workflowId of config.workflowIds) {
+        try {
+          const workflow = this.getWorkflow(workflowId);
+          if (workflow) {
+            workflows[workflowId] = workflow;
+          } else {
+            this.#logger?.warn(`Workflow "${workflowId}" referenced by agent "${id}" not found in Mastra instance`);
+          }
+        } catch (error) {
+          this.#logger?.warn(
+            `Workflow "${workflowId}" referenced by agent "${id}" not found in Mastra instance`,
+            error,
+          );
+        }
+      }
+    }
+
+    // Resolve sub-agents from stored agent IDs
+    const agents: Record<string, Agent> = {};
+    if (config.agentIds && config.agentIds.length > 0) {
+      for (const agentId of config.agentIds) {
+        try {
+          const subAgent = this.getAgent(agentId);
+          if (subAgent) {
+            agents[agentId] = subAgent;
+          }
+        } catch (error) {
+          this.#logger?.warn(`Sub-agent "${agentId}" referenced by agent "${id}" not found in Mastra instance`, error);
+        }
+      }
+    }
+
+    // TODO: Resolve tools from stored tool IDs
+    // This will require a tool registry in the Mastra class
+
+    const agent = new Agent({
+      id: config.id,
+      name: config.name,
+      instructions: config.instructions,
+      model: config.model,
+      workflows: Object.keys(workflows).length > 0 ? workflows : undefined,
+      agents: Object.keys(agents).length > 0 ? agents : undefined,
+      // TODO: Add tools once we have a tool registry
+    } as AgentConfig);
 
     agent.__registerMastra(this);
 
