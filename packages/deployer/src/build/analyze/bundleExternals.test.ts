@@ -297,7 +297,36 @@ export { default } from 'full-lib';`,
     expect(result.optimizedDependencyEntries.get('empty-lib')).toBeUndefined();
   });
 
-  it('should handle workspace packages', () => {
+  it('should handle workspace packages (dev)', () => {
+    const depsToOptimize = new Map<string, DependencyMetadata>([
+      [
+        '@workspace/internal-lib',
+        {
+          exports: ['internalUtil', 'default'],
+          rootPath: '/workspace/packages/internal-lib',
+          isWorkspace: true,
+        },
+      ],
+    ]);
+
+    const result = createVirtualDependencies(depsToOptimize, {
+      workspaceRoot: '/workspace',
+      projectRoot: '/workspace/app',
+      outputDir: '/workspace/app/.mastra/.build',
+      bundlerOptions: {
+        isDev: true,
+      },
+    });
+
+    const compiledDepCachePath = `packages/internal-lib/node_modules/.cache/@workspace-internal-lib`;
+    expect(result.fileNameToDependencyMap.get(compiledDepCachePath)).toBe('@workspace/internal-lib');
+    expect(result.optimizedDependencyEntries.get('@workspace/internal-lib')).toEqual({
+      name: compiledDepCachePath,
+      virtual: "export { internalUtil, default } from '@workspace/internal-lib';",
+    });
+  });
+
+  it('should handle workspace packages (build)', () => {
     const depsToOptimize = new Map<string, DependencyMetadata>([
       [
         '@workspace/internal-lib',
@@ -316,9 +345,9 @@ export { default } from 'full-lib';`,
     });
 
     const compiledDepCachePath = `packages/internal-lib/node_modules/.cache/@workspace-internal-lib`;
-    expect(result.fileNameToDependencyMap.get(compiledDepCachePath)).toBe('@workspace/internal-lib');
+    expect(result.fileNameToDependencyMap.get(compiledDepCachePath)).toBe(undefined);
     expect(result.optimizedDependencyEntries.get('@workspace/internal-lib')).toEqual({
-      name: compiledDepCachePath,
+      name: 'app/.mastra/.build/@workspace-internal-lib',
       virtual: "export { internalUtil, default } from '@workspace/internal-lib';",
     });
   });

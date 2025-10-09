@@ -30,11 +30,17 @@ function prepareEntryFileName(name: string, rootDir: string) {
  */
 export function createVirtualDependencies(
   depsToOptimize: Map<string, DependencyMetadata>,
-  { projectRoot, workspaceRoot, outputDir }: { workspaceRoot: string | null; projectRoot: string; outputDir: string },
+  {
+    projectRoot,
+    workspaceRoot,
+    outputDir,
+    bundlerOptions,
+  }: { workspaceRoot: string | null; projectRoot: string; outputDir: string; bundlerOptions?: { isDev?: boolean } },
 ): {
   optimizedDependencyEntries: Map<string, VirtualDependency>;
   fileNameToDependencyMap: Map<string, string>;
 } {
+  const { isDev = false } = bundlerOptions || {};
   const fileNameToDependencyMap = new Map<string, string>();
   const optimizedDependencyEntries = new Map<string, VirtualDependency>();
   const rootDir = workspaceRoot || projectRoot;
@@ -75,25 +81,27 @@ export function createVirtualDependencies(
 
   // For workspace packages, we still want the dependencies to be imported from the original path
   // We rewrite the path to the original folder inside node_modules/.cache
-  for (const [dep, { isWorkspace, rootPath }] of depsToOptimize.entries()) {
-    if (!isWorkspace || !rootPath || !workspaceRoot) {
-      continue;
+  if (isDev) {
+    for (const [dep, { isWorkspace, rootPath }] of depsToOptimize.entries()) {
+      if (!isWorkspace || !rootPath || !workspaceRoot) {
+        continue;
+      }
+
+      const currentDepPath = optimizedDependencyEntries.get(dep);
+
+      if (!currentDepPath) {
+        continue;
+      }
+
+      const fileName = basename(currentDepPath.name);
+      const entryName = prepareEntryFileName(getCompiledDepCachePath(rootPath, fileName), rootDir);
+
+      fileNameToDependencyMap.set(entryName, dep);
+      optimizedDependencyEntries.set(dep, {
+        ...currentDepPath,
+        name: entryName,
+      });
     }
-
-    const currentDepPath = optimizedDependencyEntries.get(dep);
-
-    if (!currentDepPath) {
-      continue;
-    }
-
-    const fileName = basename(currentDepPath.name);
-    const entryName = prepareEntryFileName(getCompiledDepCachePath(rootPath, fileName), rootDir);
-
-    fileNameToDependencyMap.set(entryName, dep);
-    optimizedDependencyEntries.set(dep, {
-      ...currentDepPath,
-      name: entryName,
-    });
   }
 
   return { optimizedDependencyEntries, fileNameToDependencyMap };
@@ -333,6 +341,9 @@ export async function bundleExternals(
     workspaceRoot,
     outputDir,
     projectRoot,
+    bundlerOptions: {
+      isDev,
+    },
   });
 
   const output = await buildExternalDependencies(optimizedDependencyEntries, {
