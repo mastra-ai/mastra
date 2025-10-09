@@ -24,6 +24,8 @@ export const NextraLayout = ({
 }) => {
   const pathname = usePathname();
   const isReference = pathname.includes("/reference");
+  // Ensure Nextra receives locale in the route for search and sidebar highlighting
+  // This relies on Next.js i18n configured in next.config and cookie-based locale
   return (
     <Layout
       search={<SearchWrapper locale={locale} />}

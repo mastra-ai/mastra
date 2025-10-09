@@ -63,6 +63,6 @@
     "eslint-config-next": "^15.2.4",
     "postcss": "^8.5.3",
     "tsx": "^4.19.2",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.3"
   }
 }

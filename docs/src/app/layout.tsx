@@ -6,6 +6,7 @@ import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 import "nextra-theme-docs/style.css";
 import { getPageMap } from "nextra/page-map";
+import { cookies } from "next/headers";
 
 import { PostHogProvider } from "@/analytics/posthog-provider";
 import { CookieConsent } from "@/components/cookie/cookie-consent";
@@ -38,12 +39,15 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Resolve locale from cookie set by Next.js i18n
+  const locale = cookies().get("NEXT_LOCALE")?.value ?? "en";
   let pageMap = await getPageMap();
 
   const stars = await fetchStars();
 
   return (
     <html
+      lang={locale}
       dir="ltr"
       className={cn(
         "antialiased",
@@ -57,7 +61,7 @@ export default async function RootLayout({
 
       <body>
         <PostHogProvider>
-          <NextraLayout stars={stars} pageMap={pageMap}>
+          <NextraLayout stars={stars} pageMap={pageMap} locale={locale}>
             <NuqsAdapter>{children}</NuqsAdapter>
           </NextraLayout>
         </PostHogProvider>
