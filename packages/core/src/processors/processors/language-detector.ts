@@ -262,7 +262,9 @@ export class LanguageDetector implements Processor {
 
       if (model.specificationVersion === 'v2') {
         response = await this.detectionAgent.generate(prompt, {
-          output: schema,
+          structuredOutput: {
+            schema,
+          },
           modelSettings: {
             temperature: 0,
           },

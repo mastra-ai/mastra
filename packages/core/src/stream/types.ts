@@ -13,6 +13,7 @@ import type { FinishReason, LanguageModelRequestMetadata, TelemetrySettings } fr
 import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from 'ai-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
+import type { StructuredOutputOptions } from '../agent/types';
 import type { TracingContext } from '../ai-tracing/types';
 import type { OutputProcessor } from '../processors';
 import type { WorkflowStreamEvent } from '../workflows/types';
@@ -563,7 +564,7 @@ export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = 
   onFinish?: MastraOnFinishCallback;
   onStepFinish?: MastraOnStepFinishCallback;
   includeRawChunks?: boolean;
-  output?: OUTPUT;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
   outputProcessors?: OutputProcessor[];
   isLLMExecutionStep?: boolean;
   returnScorerData?: boolean;
