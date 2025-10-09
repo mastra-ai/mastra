@@ -178,3 +178,170 @@ export function isValidModelId(modelId: string): modelId is ModelRouterModelId {
   const { provider } = parseModelString(modelId);
   return provider !== null && isProviderRegistered(provider);
 }
+
+/**
+ * ModelRegistry - Manages dynamic loading and refreshing of provider data
+ * Singleton class that handles runtime updates to the provider registry
+ */
+export class ModelRegistry {
+  private static instance: ModelRegistry | null = null;
+  private lastRefreshTime: Date | null = null;
+  private refreshInterval: NodeJS.Timeout | null = null;
+  private isRefreshing = false;
+
+  private constructor() {
+    // Private constructor for singleton pattern
+  }
+
+  /**
+   * Get the singleton instance
+   */
+  static getInstance(): ModelRegistry {
+    if (!ModelRegistry.instance) {
+      ModelRegistry.instance = new ModelRegistry();
+    }
+    return ModelRegistry.instance;
+  }
+
+  /**
+   * Sync providers from all gateways
+   * @param forceRefresh - Force refresh even if recently synced
+   */
+  async syncGateways(forceRefresh = false): Promise<void> {
+    if (this.isRefreshing && !forceRefresh) {
+      console.debug('[ModelRegistry] Sync already in progress, skipping...');
+      return;
+    }
+
+    this.isRefreshing = true;
+
+    try {
+      console.debug('[ModelRegistry] Starting gateway sync...');
+
+      // Import gateway classes and generation functions
+      const { ModelsDevGateway } = await import('./gateways/models-dev.js');
+      const { NetlifyGateway } = await import('./gateways/netlify.js');
+      const { fetchProvidersFromGateways, writeRegistryFiles } = await import('./registry-generator.js');
+
+      // Initialize gateways
+      const gateways = [new ModelsDevGateway({}), new NetlifyGateway()];
+
+      // Fetch provider data
+      const { providers, models } = await fetchProvidersFromGateways(gateways);
+
+      // Determine write paths based on environment
+      const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
+
+      // Always write to dist/ (production location)
+      const distDir = path.join(__dirname);
+      const distJsonPath = path.join(distDir, 'provider-registry.json');
+      const distTypesPath = path.join(distDir, 'provider-types.generated.d.ts');
+
+      await writeRegistryFiles(distJsonPath, distTypesPath, providers, models);
+      console.debug(`[ModelRegistry] ✅ Updated registry in dist/`);
+
+      // Also write to src/ when in dev mode
+      if (isDev) {
+        const srcDir = path.join(__dirname, '../../../src/llm/model');
+        const srcJsonPath = path.join(srcDir, 'provider-registry.json');
+        const srcTypesPath = path.join(srcDir, 'provider-types.generated.d.ts');
+
+        await writeRegistryFiles(srcJsonPath, srcTypesPath, providers, models);
+        console.debug(`[ModelRegistry] ✅ Updated registry in src/ (dev mode)`);
+      }
+
+      // Clear the in-memory cache to force reload
+      registryData = null;
+
+      this.lastRefreshTime = new Date();
+      console.debug(`[ModelRegistry] ✅ Gateway sync completed at ${this.lastRefreshTime.toISOString()}`);
+    } catch (error) {
+      console.error('[ModelRegistry] ❌ Gateway sync failed:', error);
+      throw error;
+    } finally {
+      this.isRefreshing = false;
+    }
+  }
+
+  /**
+   * Get the last refresh time
+   */
+  getLastRefreshTime(): Date | null {
+    return this.lastRefreshTime;
+  }
+
+  /**
+   * Start auto-refresh on an interval
+   * @param intervalMs - Interval in milliseconds (default: 1 hour)
+   */
+  startAutoRefresh(intervalMs = 60 * 60 * 1000): void {
+    if (this.refreshInterval) {
+      console.debug('[ModelRegistry] Auto-refresh already running');
+      return;
+    }
+
+    console.debug(`[ModelRegistry] Starting auto-refresh (interval: ${intervalMs}ms)`);
+
+    this.refreshInterval = setInterval(() => {
+      this.syncGateways().catch(err => {
+        console.error('[ModelRegistry] Auto-refresh failed:', err);
+      });
+    }, intervalMs);
+
+    // Prevent the interval from keeping the process alive
+    if (this.refreshInterval.unref) {
+      this.refreshInterval.unref();
+    }
+  }
+
+  /**
+   * Stop auto-refresh
+   */
+  stopAutoRefresh(): void {
+    if (this.refreshInterval) {
+      clearInterval(this.refreshInterval);
+      this.refreshInterval = null;
+      console.debug('[ModelRegistry] Auto-refresh stopped');
+    }
+  }
+
+  /**
+   * Get provider configuration by ID
+   */
+  getProviderConfig(providerId: string): ProviderConfig | undefined {
+    return getProviderConfig(providerId);
+  }
+
+  /**
+   * Check if a provider is registered
+   */
+  isProviderRegistered(providerId: string): boolean {
+    return isProviderRegistered(providerId);
+  }
+
+  /**
+   * Get all registered providers
+   */
+  getProviders(): Record<string, ProviderConfig> {
+    const data = loadRegistry();
+    return data.providers;
+  }
+
+  /**
+   * Get all models
+   */
+  getModels(): Record<string, string[]> {
+    const data = loadRegistry();
+    return data.models;
+  }
+}
+
+// Auto-start refresh if enabled
+if (process.env.MASTRA_AUTO_REFRESH_PROVIDERS === 'true') {
+  const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
+
+  if (isDev) {
+    console.debug('[ModelRegistry] Auto-refresh enabled (dev mode)');
+    ModelRegistry.getInstance().startAutoRefresh();
+  }
+}
