@@ -80,6 +80,7 @@ export type {
 export type { TripwireProperties, MastraModelConfig, OpenAICompatibleConfig } from './model/shared.types';
 export { ModelRouterLanguageModel } from './model/router';
 export { PROVIDER_REGISTRY, parseModelString, getProviderConfig } from './model/provider-registry.generated';
+export { resolveModelConfig } from './model/resolve-model';
 
 export type OutputType = StructuredOutput | ZodSchema | JSONSchema7 | undefined;
 

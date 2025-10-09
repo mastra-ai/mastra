@@ -1,11 +1,11 @@
 import * as p from '@clack/prompts';
-import { getPackages } from '@manypkg/get-packages';
 import type { Package } from '@manypkg/get-packages';
 import color from 'picocolors';
 import semver from 'semver';
 import { createCustomChangeset } from '../changeset/createCustomChangeset.js';
-import { rootDir, corePackage } from '../config.js';
+import { corePackage } from '../config.js';
 import { getPackageJson } from '../pkg/getPackageJson.js';
+import { getPublicPackages } from '../pkg/getPublicPackages.js';
 import { updatePackageJson } from '../pkg/updatePackageJson.js';
 import type { VersionBumps, UpdatedPeerDependencies, PackageJson } from '../types.js';
 import { getNewVersionForPackage } from './getNewVersionForPackage.js';
@@ -18,12 +18,26 @@ interface UpdateContext {
   packagesByName: Map<string, Package>;
 }
 
-export const getDefaultUpdatedPeerDependencies = (): UpdatedPeerDependencies => {
+export function getDefaultUpdatedPeerDependencies(): UpdatedPeerDependencies {
   return {
     directUpdatedPackages: [],
     indirectUpdatedPackages: [],
   };
-};
+}
+
+function getCoreBump(currentVersion: string, nextVersion: string): string {
+  const versionWithoutPrerelease = currentVersion.split('-')[0]!;
+  const nextVersionWithoutPrerelease = nextVersion.split('-')[0]!;
+  if (nextVersionWithoutPrerelease === semver.inc(versionWithoutPrerelease, 'patch')) {
+    return 'patch';
+  }
+
+  if (nextVersionWithoutPrerelease === semver.inc(versionWithoutPrerelease, 'minor')) {
+    return 'minor';
+  }
+
+  return 'major';
+}
 
 function getNextMajorVersion(version: string): string | null {
   const isZeroVersion = version.startsWith('0.');
@@ -32,13 +46,6 @@ function getNextMajorVersion(version: string): string | null {
 }
 
 async function validateAndPrepareContext(versionBumps: VersionBumps, spinner: any): Promise<UpdateContext | null> {
-  const coreBump = versionBumps[corePackage];
-
-  if (!coreBump) {
-    spinner.stop(color.dim('Core package not bumped, skipping peer dependency updates.'));
-    return null;
-  }
-
   const corePackageJson = getPackageJson('packages/core');
   if (!corePackageJson) {
     spinner.stop(color.dim('Core package not found, skipping peer dependency updates.'));
@@ -51,18 +58,26 @@ async function validateAndPrepareContext(versionBumps: VersionBumps, spinner: an
     return null;
   }
 
+  const versionWithoutPrerelease = corePackageJson.version.split('-')[0]!;
+  const nextVersionWithoutPrerelease = nextCoreVersion.split('-')[0]!;
+  if (nextVersionWithoutPrerelease === versionWithoutPrerelease) {
+    spinner.stop(color.dim('Core package not bumped, skipping peer dependency updates.'));
+    return null;
+  }
+
   const nextMajorVersion = getNextMajorVersion(nextCoreVersion);
   if (!nextMajorVersion) {
     spinner.stop(color.red('Failed to calculate next major version.'));
     return null;
   }
 
+  const coreBump = getCoreBump(corePackageJson.version, nextCoreVersion);
   if (coreBump === 'patch' && Object.keys(versionBumps).length === 1) {
     spinner.stop(color.dim('Only core package bumped, skipping peer dependency updates.'));
     return null;
   }
 
-  const { packages } = await getPackages(rootDir);
+  const packages = await getPublicPackages();
   const packagesByName = new Map(packages.map(pkg => [pkg.packageJson.name, pkg]));
 
   return {
@@ -174,7 +189,7 @@ export async function updatePeerDependencies(versionBumps: VersionBumps): Promis
   // Create changeset for indirect updates
   await createChangesetForUpdates(indirectUpdatedPackages, 'patch', context.nextCoreVersion);
 
-  s.stop('Updated peer dependencies');
+  s.stop(`Updated all peer dependencies (core: ${context.coreBump})`);
 
   return {
     directUpdatedPackages: Array.from(directUpdatedPackages.keys()),

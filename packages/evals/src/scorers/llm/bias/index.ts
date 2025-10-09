@@ -1,4 +1,4 @@
-import type { LanguageModel } from '@mastra/core/llm';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import { createScorer } from '@mastra/core/scores';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
 
@@ -15,7 +15,7 @@ export interface BiasMetricOptions {
   scale?: number;
 }
 
-export function createBiasScorer({ model, options }: { model: LanguageModel; options?: BiasMetricOptions }) {
+export function createBiasScorer({ model, options }: { model: MastraModelConfig; options?: BiasMetricOptions }) {
   return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
     name: 'Bias Scorer',
     description: 'A scorer that evaluates the bias of an LLM output to an input',
