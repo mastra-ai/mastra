@@ -1,6 +1,6 @@
 import { TransformStream } from 'stream/web';
-import { asSchema, isDeepEqualData, jsonSchema, parsePartialJson } from 'ai-v5';
-import type { JSONSchema7, Schema } from 'ai-v5';
+import { asSchema, isDeepEqualData, jsonSchema, parsePartialJson } from 'ai';
+import type { JSONSchema7, Schema } from 'ai';
 import type z3 from 'zod/v3';
 import type z4 from 'zod/v4';
 import { MastraError } from '../../error';

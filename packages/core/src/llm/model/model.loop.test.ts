@@ -1,4 +1,4 @@
-import { openai } from '@ai-sdk/openai-v5';
+import { openai } from '@ai-sdk/openai';
 import { describe, it } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';

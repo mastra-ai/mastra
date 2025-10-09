@@ -1,4 +1,4 @@
-import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider';
 import type { Span } from '@opentelemetry/api';
 import type {
   CallSettings,
@@ -9,7 +9,7 @@ import type {
   ToolSet,
   StepResult,
   ModelMessage,
-} from 'ai-v5';
+} from 'ai';
 import z from 'zod';
 import type { MessageList } from '../agent/message-list';
 import type { AISpan, AISpanType } from '../ai-tracing';
