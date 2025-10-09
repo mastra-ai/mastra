@@ -16,6 +16,7 @@ import { SensitiveDataFilter } from './span_processors';
 import { DefaultAITracing, BaseAITracing } from './tracers';
 import type { AISpan, CreateSpanOptions, ConfigSelector, ConfigSelectorOptions, TracingConfig } from './types';
 import { AISpanType, SamplingStrategyType, AITracingEventType } from './types';
+import { ConsoleLogger, LogLevel } from '../logger';
 
 describe('AI Tracing Registry', () => {
   beforeEach(() => {
@@ -785,16 +786,18 @@ describe('AI Tracing Registry', () => {
       vi.unstubAllEnvs(); // Make sure mock is cleared
 
       // Spy on console to check for combined warning message
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const debugSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       // CloudExporter should not throw, but log warning instead
-      const exporter = new CloudExporter();
+      const exporter = new CloudExporter({
+        logger: new ConsoleLogger({ level: LogLevel.DEBUG }),
+      });
 
       // Verify combined warning message was logged
-      expect(warnSpy).toHaveBeenCalledWith(
+      expect(debugSpy).toHaveBeenCalledWith(
         expect.stringContaining('CloudExporter disabled: MASTRA_CLOUD_ACCESS_TOKEN environment variable not set'),
       );
-      expect(warnSpy).toHaveBeenCalledWith(
+      expect(debugSpy).toHaveBeenCalledWith(
         expect.stringContaining('Sign up for Mastra Cloud at https://cloud.mastra.ai'),
       );
 
@@ -818,7 +821,7 @@ describe('AI Tracing Registry', () => {
       await expect(exporter.exportEvent(event)).resolves.not.toThrow();
 
       // Restore mocks
-      warnSpy.mockRestore();
+      debugSpy.mockRestore();
       if (originalToken) {
         process.env.MASTRA_CLOUD_ACCESS_TOKEN = originalToken;
       }
