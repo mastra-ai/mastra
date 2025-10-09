@@ -4,6 +4,7 @@
  */
 
 import fs from 'fs';
+import { createRequire } from 'module';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -263,17 +264,14 @@ export class ModelRegistry {
       const { providers, models } = await fetchProvidersFromGateways(gateways);
 
       // Write to dist/ (the bundled location that gets distributed)
-      // Find the dist root by looking for provider-registry.json
-      let distRoot = __dirname;
-      while (distRoot !== path.dirname(distRoot)) {
-        if (fs.existsSync(path.join(distRoot, 'provider-registry.json'))) {
-          break;
-        }
-        distRoot = path.dirname(distRoot);
-      }
+      // Use createRequire to find the @mastra/core package root reliably
+      const require = createRequire(import.meta.url);
+      const packageJsonPath = require.resolve('@mastra/core/package.json');
+      const packageRoot = path.dirname(packageJsonPath);
 
-      const distJsonPath = path.join(distRoot, 'provider-registry.json');
-      const distTypesPath = path.join(distRoot, 'provider-types.generated.d.ts');
+      // Construct paths relative to package root
+      const distJsonPath = path.join(packageRoot, 'dist', 'provider-registry.json');
+      const distTypesPath = path.join(packageRoot, 'dist', 'llm', 'model', 'provider-types.generated.d.ts');
 
       await writeRegistryFiles(distJsonPath, distTypesPath, providers, models);
       // console.debug(`[ModelRegistry] ✅ Updated registry files in dist/`);
@@ -281,21 +279,8 @@ export class ModelRegistry {
       // Also copy to src/ when in dev mode
       const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
       if (isDev) {
-        // Find the package root by looking for package.json
-        let packageRoot = __dirname;
-        while (packageRoot !== path.dirname(packageRoot)) {
-          if (fs.existsSync(path.join(packageRoot, 'package.json'))) {
-            const pkgJson = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf-8'));
-            if (pkgJson.name === '@mastra/core') {
-              break;
-            }
-          }
-          packageRoot = path.dirname(packageRoot);
-        }
-
-        const srcDir = path.join(packageRoot, 'src/llm/model');
-        const srcJsonPath = path.join(srcDir, 'provider-registry.json');
-        const srcTypesPath = path.join(srcDir, 'provider-types.generated.d.ts');
+        const srcJsonPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-registry.json');
+        const srcTypesPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-types.generated.d.ts');
 
         // Copy the already-generated files
         await fs.promises.copyFile(distJsonPath, srcJsonPath);

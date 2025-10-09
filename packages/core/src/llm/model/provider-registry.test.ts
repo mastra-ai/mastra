@@ -3,6 +3,8 @@ import os from 'os';
 import path from 'path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { ProviderConfig } from './gateways/base.js';
+import { ModelsDevGateway } from './gateways/models-dev.js';
+import { NetlifyGateway } from './gateways/netlify.js';
 import { ModelRegistry } from './provider-registry.js';
 
 describe('ModelRegistry Auto-Refresh', () => {
@@ -428,5 +430,43 @@ describe('ModelRegistry Auto-Refresh', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
 
     // Note: Mocks are automatically restored by vi.restoreAllMocks() in afterEach
+  });
+
+  it('should write .d.ts file to correct dist subdirectory path', async () => {
+    const tmpDir = path.join(os.tmpdir(), `mastra-test-${Date.now()}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+
+    const writtenFiles: string[] = [];
+
+    // Mock fs.promises.writeFile to track where files are written
+    const writeFileSpy = vi.spyOn(fs.promises, 'writeFile').mockImplementation(async (filePath: any) => {
+      writtenFiles.push(filePath.toString());
+      return Promise.resolve();
+    });
+
+    // Mock gateway to return test data
+    vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders').mockResolvedValue({
+      'test-provider': {
+        name: 'Test Provider',
+        models: ['model-a'],
+        apiKeyEnvVar: 'TEST_API_KEY',
+        gateway: 'models-dev',
+      },
+    } as Record<string, ProviderConfig>);
+
+    vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({} as Record<string, ProviderConfig>);
+
+    const registry = ModelRegistry.getInstance();
+    await registry.syncGateways(true);
+
+    // Verify .d.ts file is written to dist/llm/model/ subdirectory, not dist/ root
+    const typesFile = writtenFiles.find(f => f.includes('provider-types.generated.d.ts'));
+    expect(typesFile).toBeDefined();
+    expect(typesFile).toContain('dist/llm/model/provider-types.generated.d.ts');
+    expect(typesFile).not.toContain('dist/provider-types.generated.d.ts');
+
+    // Cleanup
+    writeFileSpy.mockRestore();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
