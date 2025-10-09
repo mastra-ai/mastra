@@ -1,6 +1,6 @@
 import type { MastraMessageV2, MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
-import type { TracingContext } from '../ai-tracing';
+import { AISpanType, type AISpan, type TracingContext } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
 import type { ChunkType, OutputSchema } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
@@ -80,8 +80,19 @@ export class ProcessorRunner {
         continue;
       }
 
+      const processorSpan = tracingContext?.currentSpan?.createChildSpan({
+        type: AISpanType.PROCESSOR_RUN,
+        name: `output processor: ${processor.name}`,
+        attributes: {
+          processorName: processor.name,
+          processorType: 'output',
+          processorIndex: index,
+        },
+        input: processableMessages,
+      });
+
       if (!telemetry) {
-        processableMessages = await processMethod({ messages: processableMessages, abort: ctx.abort, tracingContext });
+        processableMessages = await processMethod({ messages: processableMessages, abort: ctx.abort, tracingContext: {currentSpan: processorSpan } });
       } else {
         await telemetry.traceMethod(
           async () => {
@@ -102,6 +113,7 @@ export class ProcessorRunner {
           },
         )();
       }
+      processorSpan?.end({output: processableMessages});
     }
 
     if (processableMessages.length > 0) {
@@ -129,8 +141,9 @@ export class ProcessorRunner {
 
     try {
       let processedPart: ChunkType<OUTPUT> | null | undefined = part;
+      let processorSpan: AISpan<AISpanType.PROCESSOR_RUN> | undefined;
 
-      for (const processor of this.outputProcessors) {
+      for (const [index, processor] of this.outputProcessors.entries()) {
         try {
           if (processor.processOutputStream && processedPart) {
             // Get or create state for this processor
@@ -143,6 +156,27 @@ export class ProcessorRunner {
             // Add the current part to accumulated text
             state.addPart(processedPart);
 
+            // Question: instead, should we add the processorSpan to the processorState?
+            // and append input & output to the span as it is generated?
+            // and the close the span after all parts of the stream are completed?
+            // then we would have multiple running spans running simultaneously for each processor
+            // probably better than a TON of tiny spans (span per chunk per processor)
+            // potentially even end the spans in runOutputProcessorsForStream?
+            processorSpan = tracingContext?.currentSpan?.createChildSpan({
+              type: AISpanType.PROCESSOR_RUN,
+              name: `output processor: ${processor.name}`,
+              attributes: {
+                processorName: processor.name,
+                processorType: 'output',
+                processorIndex: index,
+              },
+              input: {
+                part: processedPart as ChunkType,
+                streamParts: state.streamParts as ChunkType[],
+                state: state.customState,
+              },
+            });
+
             const result = await processor.processOutputStream({
               part: processedPart as ChunkType,
               streamParts: state.streamParts as ChunkType[],
@@ -150,13 +184,15 @@ export class ProcessorRunner {
               abort: (reason?: string) => {
                 throw new TripWire(reason || `Stream part blocked by ${processor.name}`);
               },
-              tracingContext,
+              tracingContext: {currentSpan: processorSpan },
             });
 
             // If result is null, or undefined, don't emit
             processedPart = result as ChunkType<OUTPUT> | null | undefined;
+            processorSpan?.end({output: processedPart});
           }
         } catch (error) {
+          processorSpan?.error({error: error as Error});
           if (error instanceof TripWire) {
             return { part: null, blocked: true, reason: error.message };
           }
@@ -255,6 +291,17 @@ export class ProcessorRunner {
         continue;
       }
 
+      const processorSpan = tracingContext?.currentSpan?.createChildSpan({
+        type: AISpanType.PROCESSOR_RUN,
+        name: `output processor: ${processor.name}`,
+        attributes: {
+          processorName: processor.name,
+          processorType: 'input',
+          processorIndex: index,
+        },
+        input: processableMessages,
+      });
+
       if (!telemetry) {
         processableMessages = await processMethod({ messages: processableMessages, abort: ctx.abort, tracingContext });
       } else {
@@ -277,6 +324,7 @@ export class ProcessorRunner {
           },
         )();
       }
+      processorSpan?.end({output: processableMessages});
     }
 
     if (processableMessages.length > 0) {

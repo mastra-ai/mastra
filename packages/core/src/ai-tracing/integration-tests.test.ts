@@ -1297,12 +1297,12 @@ describe('AI Tracing Integration Tests', () => {
   // Only test VNext methods for structuredOutput
   describe.each(agentMethods.filter(m => m.name === 'stream'))(
     'should trace agent using structuredOutput format using $name',
-    ({ method }) => {
+    ({ method, model }) => {
       it(`should trace spans correctly`, async () => {
         const testAgent = new Agent({
           name: 'Test Agent',
           instructions: 'Return a simple response',
-          model: openai('gpt-4o-mini'),
+          model,
         });
 
         const outputSchema = z.object({
@@ -1311,7 +1311,7 @@ describe('AI Tracing Integration Tests', () => {
 
         const structuredOutput: StructuredOutputOptions<OutputSchema> = {
           schema: outputSchema,
-          model: openai('gpt-4o-mini'),
+          model,
         };
 
         const mastra = new Mastra({
@@ -1321,49 +1321,71 @@ describe('AI Tracing Integration Tests', () => {
 
         const agent = mastra.getAgent('testAgent');
         const result = await method(agent, 'Return a list of items separated by commas', { structuredOutput });
-        const obj = await result.object;
-        expect(obj).toBeDefined();
+        expect(result.object).toBeDefined();
         expect(result.traceId).toBeDefined();
 
         const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
         const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
+        const processorRunSpans = testExporter.getSpansByType(AISpanType.PROCESSOR_RUN);
         const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
         const workflowSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
         const workflowSteps = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
 
-        expect(agentRunSpans.length).toBe(1); // one agent run
-        expect(llmGenerationSpans.length).toBe(1); // one llm run
+        // Expected span structure:
+        // - Test Agent AGENT_RUN (root)
+        //   - Test Agent LLM_GENERATION (initial model call)
+        //   - PROCESSOR_RUN (structuredOutputProcessor)
+        //     - Internal processor agent AGENT_RUN
+        //       - Internal processor agent LLM_GENERATION
+
+        expect(agentRunSpans.length).toBe(2); // Test Agent + internal processor agent
+        expect(llmGenerationSpans.length).toBe(2); // Test Agent LLM + processor agent LLM
+        expect(processorRunSpans.length).toBe(1); // one processor run for structuredOutput
         expect(toolCallSpans.length).toBe(0); // no tools
         expect(workflowSpans.length).toBe(0); // no workflows
         expect(workflowSteps.length).toBe(0); // no workflows
 
-        const agentRunSpan = agentRunSpans[0];
-        const llmGenerationSpan = llmGenerationSpans[0];
+        // Identify the Test Agent spans vs processor agent spans
+        const testAgentSpan = agentRunSpans.find(span => span.name?.includes('Test Agent'));
+        const processorAgentSpan = agentRunSpans.find(span => span !== testAgentSpan);
+        const processorRunSpan = processorRunSpans[0];
 
-        expect(agentRunSpan?.traceId).toBe(result.traceId);
+        // Identify LLM generation spans
+        const testAgentLlmSpan = llmGenerationSpans.find(span => span.parentSpanId === testAgentSpan?.id);
+        const processorAgentLlmSpan = llmGenerationSpans.find(span => span.parentSpanId === processorAgentSpan?.id);
 
-        // verify span nesting
-        expect(llmGenerationSpan?.parentSpanId).toEqual(agentRunSpan?.id);
+        expect(testAgentSpan).toBeDefined();
+        expect(processorAgentSpan).toBeDefined();
+        expect(processorRunSpan).toBeDefined();
+        expect(testAgentLlmSpan).toBeDefined();
+        expect(processorAgentLlmSpan).toBeDefined();
+
+        expect(testAgentSpan?.traceId).toBe(result.traceId);
+
+        // Verify span nesting
+        expect(testAgentLlmSpan?.parentSpanId).toEqual(testAgentSpan?.id);
+        expect(processorRunSpan?.parentSpanId).toEqual(testAgentSpan?.id);
+        expect(processorAgentSpan?.parentSpanId).toEqual(processorRunSpan?.id);
+        expect(processorAgentLlmSpan?.parentSpanId).toEqual(processorAgentSpan?.id);
 
         // Verify LLM generation spans
-        expect(llmGenerationSpans[0]?.name).toBe("llm: 'gpt-4o-mini'");
-        expect(llmGenerationSpan?.input.messages).toHaveLength(2);
+        expect(testAgentLlmSpan?.name).toBe("llm: 'mock-model-id'");
+        expect(testAgentLlmSpan?.input.messages).toHaveLength(2);
+        expect(testAgentLlmSpan?.output.text).toBe('Mock V2 streaming response');
 
-        expect(typeof llmGenerationSpan?.output.text).toBe('string');
-        expect(typeof agentRunSpan?.output.text).toBe('string');
+        expect(processorAgentLlmSpan?.name).toBe("llm: 'mock-model-id'");
+        expect(processorAgentLlmSpan?.output.text).toBeDefined();
 
-        console.log('llmGenerationSpan?.output');
-        console.log(llmGenerationSpan?.output);
-
-        console.log('agentRunSpan?.output');
-        console.log(agentRunSpan?.output);
+        // Verify Test Agent output
+        expect(testAgentSpan?.output.text).toBe('Mock V2 streaming response');
 
         // Verify structured output
         expect(result.object).toBeDefined();
         expect(result.object).toHaveProperty('items');
-        expect((obj as any).items.length).toBeGreaterThan(0);
+        expect((result.object as any).items).toBe('test structured output');
 
-        expect(llmGenerationSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
+        expect(testAgentLlmSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
+        expect(processorAgentLlmSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
         testExporter.finalExpectations();
       });
     },

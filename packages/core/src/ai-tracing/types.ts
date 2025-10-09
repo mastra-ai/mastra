@@ -155,10 +155,12 @@ export interface MCPToolCallAttributes extends AIBaseAttributes {
  * Processor attributes
  */
 export interface ProcessorRunAttributes extends AIBaseAttributes {
-  /** Id of the Processor */
-  processorId: string;
+  /** Name of the Processor */
+  processorName: string;
   /** Processor type (input or output) */
   processorType: 'input' | 'output';
+  /** Processor index in the agent */
+  processorIndex?: number;
 }
 
 /**
