@@ -135,6 +135,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
   #consumptionStarted = false;
   #returnScorerData = false;
+  #structuredOutputMode: 'direct' | 'processor' | undefined = undefined;
 
   #model: {
     modelId: string | undefined;
@@ -187,6 +188,14 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.#model = _model;
 
     this.messageId = messageId;
+
+    // Determine structured output mode:
+    // - 'direct': LLM generates JSON directly (no model provided), object transformers run in this stream
+    // - 'processor': StructuredOutputProcessor uses internal agent with provided model
+    // - undefined: No structured output
+    if (options.structuredOutput?.schema) {
+      this.#structuredOutputMode = options.structuredOutput.model ? 'processor' : 'direct';
+    }
 
     // Create processor runner if outputProcessors are provided
     if (options.outputProcessors?.length) {
@@ -259,12 +268,16 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       );
     }
 
-    processedStream = processedStream.pipeThrough(
-      createObjectStreamTransformer({
-        isLLMExecutionStep: self.#options.isLLMExecutionStep,
-        schema: self.#options.output,
-      }),
-    );
+    // Only apply object transformer in 'direct' mode (LLM generates JSON directly)
+    // In 'processor' mode, the StructuredOutputProcessor handles object transformation
+    if (self.#structuredOutputMode === 'direct') {
+      processedStream = processedStream.pipeThrough(
+        createObjectStreamTransformer({
+          isLLMExecutionStep: self.#options.isLLMExecutionStep,
+          structuredOutput: self.#options.structuredOutput,
+        }),
+      );
+    }
 
     this.#baseStream = processedStream.pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
@@ -654,7 +667,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                       ? undefined
                       : self.#delayedPromises.object.status.type === 'resolved'
                         ? self.#delayedPromises.object.status.value
-                        : self.#options.output && baseFinishStep.text
+                        : self.#structuredOutputMode === 'direct' && baseFinishStep.text
                           ? (() => {
                               try {
                                 return JSON.parse(baseFinishStep.text);
@@ -778,7 +791,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       messageList,
       options: {
         toolCallStreaming: options?.toolCallStreaming,
-        output: options?.output,
+        structuredOutput: options?.structuredOutput,
         tracingContext: options?.tracingContext,
       },
     });
@@ -1067,7 +1080,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * @example
    * ```typescript
    * const stream = await agent.stream("Extract data", {
-   *   output: z.object({ name: z.string(), age: z.number() })
+   *   structuredOutput: {
+   *     schema: z.object({ name: z.string(), age: z.number() }),
+   *     model: 'gpt-4o-mini' // optional to use a model for structuring json output
+   *   }
    * });
    * // partial json chunks
    * for await (const data of stream.objectStream) {
@@ -1113,10 +1129,13 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * Stream of only text content, filtering out metadata and other chunk types.
    */
   get textStream() {
-    const outputSchema = getTransformedSchema(this.#options.output);
-
-    if (outputSchema?.outputFormat === 'array') {
-      return this.#createEventedStream().pipeThrough(createJsonTextStreamTransformer(this.#options.output));
+    if (this.#structuredOutputMode === 'direct') {
+      const outputSchema = getTransformedSchema(this.#options.structuredOutput?.schema);
+      if (outputSchema?.outputFormat === 'array') {
+        return this.#createEventedStream().pipeThrough(
+          createJsonTextStreamTransformer(this.#options.structuredOutput?.schema),
+        );
+      }
     }
 
     return this.#createEventedStream().pipeThrough(
@@ -1136,14 +1155,21 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * @example
    * ```typescript
    * const stream = await agent.stream("Extract data", {
-   *   output: z.object({ name: z.string(), age: z.number() })
+   *   structuredOutput: {
+   *     schema: z.object({ name: z.string(), age: z.number() }),
+   *     model: 'gpt-4o-mini' // optionally use a model for structuring json output
+   *   }
    * });
    * // final validated json
    * const data = await stream.object // { name: 'John', age: 30 }
    * ```
    */
   get object() {
-    if (!this.processorRunner && !this.#options.output && this.#delayedPromises.object.status.type === 'pending') {
+    if (
+      !this.processorRunner &&
+      !this.#options.structuredOutput?.schema &&
+      this.#delayedPromises.object.status.type === 'pending'
+    ) {
       this.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
     }
 

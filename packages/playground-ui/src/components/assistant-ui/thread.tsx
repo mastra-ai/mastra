@@ -22,19 +22,18 @@ import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { useThreadInput } from '@/domains/conversation';
 
 export interface ThreadProps {
-  ToolFallback?: ToolCallMessagePartComponent;
   agentName?: string;
   agentId?: string;
   hasMemory?: boolean;
   hasModelList?: boolean;
 }
 
-export const Thread = ({ ToolFallback, agentName, agentId, hasMemory, hasModelList }: ThreadProps) => {
+export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
   const WrappedAssistantMessage = (props: MessagePrimitive.Root.Props) => {
-    return <AssistantMessage {...props} ToolFallback={ToolFallback} hasModelList={hasModelList} />;
+    return <AssistantMessage {...props} hasModelList={hasModelList} />;
   };
 
   return (

@@ -3,7 +3,8 @@ import type {
   MultiPrimitiveExecutionOptions,
   AgentGenerateOptions,
   AgentStreamOptions,
-  StructuredOutputOptions,
+  SerializableStructuredOutputOptions,
+  DeprecatedOutputOptions,
   ToolsInput,
   UIMessageWithMetadata,
 } from '@mastra/core/agent';
@@ -32,6 +33,7 @@ import type { OutputSchema } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
 import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
 
+import type { UIMessage } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
@@ -99,7 +101,7 @@ export interface GetAgentResponse {
     | undefined;
 }
 
-export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
+export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   output?: T;
   experimental_output?: T;
@@ -121,27 +123,16 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
 
 export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
   messages: MessageListInput;
-  output?: OUTPUT;
+  structuredOutput?: SerializableStructuredOutputOptions<OUTPUT>;
   runtimeContext?: RuntimeContext | Record<string, any>;
   clientTools?: ToolsInput;
-} & OutputOptions<OUTPUT> &
-  WithoutMethods<
-    Omit<
-      AgentExecutionOptions<OUTPUT>,
-      'output' | 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
-    >
-  >;
-
-type OutputOptions<OUTPUT extends OutputSchema = undefined> =
-  | {
-      output?: OUTPUT;
-      structuredOutput?: never;
-    }
-  | {
-      // Can't serialize the model, so we need to omit it, falls back to agent's model
-      structuredOutput?: Omit<StructuredOutputOptions<OUTPUT>, 'model'>;
-      output?: never;
-    };
+} & WithoutMethods<
+  Omit<
+    AgentExecutionOptions<OUTPUT>,
+    'output' | 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
+  >
+> &
+  DeprecatedOutputOptions<OUTPUT>;
 
 export type UpdateModelParams = {
   modelId: string;
@@ -317,7 +308,8 @@ export type GetMemoryThreadMessagesPaginatedParams = Omit<StorageGetMessagesArg,
 
 export interface GetMemoryThreadMessagesResponse {
   messages: CoreMessage[];
-  uiMessages: AiMessageType[];
+  legacyMessages: AiMessageType[];
+  uiMessages: UIMessage[];
 }
 
 export type GetMemoryThreadMessagesPaginatedResponse = PaginationInfo & {
