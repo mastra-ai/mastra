@@ -177,7 +177,6 @@ export class PIIDetector implements Processor {
       name: 'pii-detector',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
-      options: { tracingPolicy: { internal: InternalSpans.ALL } },
     });
   }
 

@@ -63,7 +63,6 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
       name: 'structured-output-structurer',
       instructions: options.instructions || this.generateInstructions(),
       model: options.model,
-      options: { tracingPolicy: { internal: InternalSpans.ALL } },
     });
   }
 

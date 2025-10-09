@@ -81,7 +81,6 @@ export class SystemPromptScrubber implements Processor {
       name: 'system-prompt-detector',
       model: this.model,
       instructions: this.instructions,
-      options: { tracingPolicy: { internal: InternalSpans.ALL } },
     });
   }
 

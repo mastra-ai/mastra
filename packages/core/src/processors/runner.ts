@@ -13,8 +13,45 @@ export class ProcessorState<OUTPUT extends OutputSchema = undefined> {
   private accumulatedText = '';
   public customState: Record<string, any> = {};
   public streamParts: ChunkType<OUTPUT>[] = [];
+  public span?: AISpan<AISpanType.PROCESSOR_RUN>;
 
-  constructor(_processorName: string) {}
+  constructor(options: {
+    processorName: string;
+    tracingContext?: TracingContext;
+    processorIndex?: number;
+  }) {
+    // Create the PROCESSOR_RUN span if tracing context is provided
+    // Walk up the span tree to find the AGENT_RUN span to attach the processor to
+    const currentSpan = options.tracingContext?.currentSpan;
+    if (!currentSpan) {
+      return;
+    }
+
+    // Walk up to find the AGENT_RUN span
+    // The hierarchy may include nested workflows and LLM spans between currentSpan and AGENT_RUN
+    let agentSpan: typeof currentSpan | undefined = currentSpan;
+    while (agentSpan && agentSpan.type !== AISpanType.AGENT_RUN) {
+      agentSpan = agentSpan.parent;
+    }
+
+    // If we didn't find an AGENT_RUN span, fall back to currentSpan.parent or currentSpan
+    const parentSpan = agentSpan || currentSpan.parent || currentSpan;
+
+    this.span = parentSpan.createChildSpan({
+      type: AISpanType.PROCESSOR_RUN,
+      name: `output processor: ${options.processorName}`,
+      attributes: {
+        processorName: options.processorName,
+        processorType: 'output',
+        processorIndex: options.processorIndex ?? 0,
+      },
+      input: {
+        streamParts: [],
+        state: {},
+        totalChunks: 0,
+      },
+    });
+  }
 
   // Internal methods for the runner
   addPart(part: ChunkType<OUTPUT>): void {
@@ -23,6 +60,15 @@ export class ProcessorState<OUTPUT extends OutputSchema = undefined> {
       this.accumulatedText += part.payload.text;
     }
     this.streamParts.push(part);
+
+    if (this.span) {
+      this.span.input = {
+        streamParts: this.streamParts,
+        state: this.customState,
+        totalChunks: this.streamParts.length,
+        accumulatedText: this.accumulatedText,
+      };
+    }
   }
 }
 
@@ -141,7 +187,7 @@ export class ProcessorRunner {
 
     try {
       let processedPart: ChunkType<OUTPUT> | null | undefined = part;
-      let processorSpan: AISpan<AISpanType.PROCESSOR_RUN> | undefined;
+      const isFinishChunk = part.type === 'finish';
 
       for (const [index, processor] of this.outputProcessors.entries()) {
         try {
@@ -149,33 +195,16 @@ export class ProcessorRunner {
             // Get or create state for this processor
             let state = processorStates.get(processor.name);
             if (!state) {
-              state = new ProcessorState<OUTPUT>(processor.name);
+              state = new ProcessorState<OUTPUT>({
+                processorName: processor.name,
+                tracingContext,
+                processorIndex: index,
+              });
               processorStates.set(processor.name, state);
             }
 
             // Add the current part to accumulated text
             state.addPart(processedPart);
-
-            // Question: instead, should we add the processorSpan to the processorState?
-            // and append input & output to the span as it is generated?
-            // and the close the span after all parts of the stream are completed?
-            // then we would have multiple running spans running simultaneously for each processor
-            // probably better than a TON of tiny spans (span per chunk per processor)
-            // potentially even end the spans in runOutputProcessorsForStream?
-            processorSpan = tracingContext?.currentSpan?.createChildSpan({
-              type: AISpanType.PROCESSOR_RUN,
-              name: `output processor: ${processor.name}`,
-              attributes: {
-                processorName: processor.name,
-                processorType: 'output',
-                processorIndex: index,
-              },
-              input: {
-                part: processedPart as ChunkType,
-                streamParts: state.streamParts as ChunkType[],
-                state: state.customState,
-              },
-            });
 
             const result = await processor.processOutputStream({
               part: processedPart as ChunkType,
@@ -184,26 +213,56 @@ export class ProcessorRunner {
               abort: (reason?: string) => {
                 throw new TripWire(reason || `Stream part blocked by ${processor.name}`);
               },
-              tracingContext: {currentSpan: processorSpan },
+              tracingContext: { currentSpan: state.span },
             });
+
+            // Update output DIRECTLY (no update() call, no event)
+            if (state.span && !state.span.isEvent) {
+              state.span.output = result;
+            }
 
             // If result is null, or undefined, don't emit
             processedPart = result as ChunkType<OUTPUT> | null | undefined;
-            processorSpan?.end({output: processedPart});
           }
         } catch (error) {
-          processorSpan?.error({error: error as Error});
           if (error instanceof TripWire) {
+            // End span with blocked metadata
+            const state = processorStates.get(processor.name);
+            state?.span?.end({
+              metadata: { blocked: true, reason: error.message },
+            });
             return { part: null, blocked: true, reason: error.message };
           }
+          // End span with error
+          const state = processorStates.get(processor.name);
+          state?.span?.error({ error: error as Error, endSpan: true });
           // Log error but continue with original part
           this.logger.error(`[Agent:${this.agentName}] - Output processor ${processor.name} failed:`, error);
+        }
+      }
+
+      // If this was a finish chunk, end all processor spans AFTER processing
+      if (isFinishChunk) {
+        for (const state of processorStates.values()) {
+          if (state.span) {
+            // Preserve the existing output (last processed part) and add metadata
+            const finalOutput = {
+              ...state.span.output,
+              totalChunks: state.streamParts.length,
+              finalState: state.customState,
+            };
+            state.span.end({ output: finalOutput });
+          }
         }
       }
 
       return { part: processedPart, blocked: false };
     } catch (error) {
       this.logger.error(`[Agent:${this.agentName}] - Stream part processing failed:`, error);
+      // End all spans on fatal error
+      for (const state of processorStates.values()) {
+        state.span?.error({ error: error as Error, endSpan: true });
+      }
       return { part, blocked: false };
     }
   }

@@ -174,7 +174,6 @@ export class LanguageDetector implements Processor {
       name: 'language-detector',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
-      options: { tracingPolicy: { internal: InternalSpans.ALL } },
     });
   }
 

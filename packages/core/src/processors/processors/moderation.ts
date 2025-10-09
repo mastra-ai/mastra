@@ -128,7 +128,6 @@ export class ModerationProcessor implements Processor {
       name: 'content-moderator',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
-      options: { tracingPolicy: { internal: InternalSpans.ALL } },
     });
   }
 

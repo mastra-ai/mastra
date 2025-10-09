@@ -237,7 +237,14 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                * Need to update controller on each new LLM execution step since each step has its own TransformStream.
                */
               if (!processorStates.has(STRUCTURED_OUTPUT_PROCESSOR_NAME)) {
-                const structuredOutputProcessorState = new ProcessorState<OUTPUT>(STRUCTURED_OUTPUT_PROCESSOR_NAME);
+                const processorIndex = processorRunner.outputProcessors.findIndex(
+                  p => p.name === STRUCTURED_OUTPUT_PROCESSOR_NAME,
+                );
+                const structuredOutputProcessorState = new ProcessorState<OUTPUT>({
+                  processorName: STRUCTURED_OUTPUT_PROCESSOR_NAME,
+                  tracingContext: options.tracingContext,
+                  processorIndex: processorIndex !== -1 ? processorIndex : 0,
+                });
                 structuredOutputProcessorState.customState = { controller };
                 processorStates.set(STRUCTURED_OUTPUT_PROCESSOR_NAME, structuredOutputProcessorState);
               } else {

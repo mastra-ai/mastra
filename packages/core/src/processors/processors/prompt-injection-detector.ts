@@ -106,7 +106,6 @@ export class PromptInjectionDetector implements Processor {
       name: 'prompt-injection-detector',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
-      options: { tracingPolicy: { internal: InternalSpans.ALL } },
     });
   }
 
