@@ -89,15 +89,21 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private schemaSetupComplete: boolean | undefined = undefined;
   private cacheWarmupPromise: Promise<void> | null = null;
 
-  constructor(config: PgVectorConfig | {
-    connectionString: string;
-    schemaName?: string;
-    pgPoolOptions?: Omit<pg.PoolConfig, 'connectionString'>;
-  }) {
+  constructor(
+    config:
+      | PgVectorConfig
+      | {
+          connectionString: string;
+          schemaName?: string;
+          pgPoolOptions?: Omit<pg.PoolConfig, 'connectionString'>;
+        },
+  ) {
     super();
 
     try {
-      const isLegacyConfig = (cfg: any): cfg is {
+      const isLegacyConfig = (
+        cfg: any,
+      ): cfg is {
         connectionString: string;
         schemaName?: string;
         pgPoolOptions?: Omit<pg.PoolConfig, 'connectionString'>;
@@ -242,7 +248,28 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           },
         }) ?? basePool;
 
-
+      // Warm the created indexes cache in background so we don't need to check if indexes exist every time
+      // Store the promise so we can wait for it during disconnect to avoid "pool already closed" errors
+      this.cacheWarmupPromise = (async () => {
+        try {
+          const existingIndexes = await this.listIndexes();
+          await Promise.all(
+            existingIndexes.map(async indexName => {
+              const info = await this.getIndexInfo({ indexName });
+              const key = await this.getIndexCacheKey({
+                indexName,
+                metric: info.metric,
+                dimension: info.dimension,
+                type: info.type,
+              });
+              this.createdIndexes.set(indexName, key);
+            }),
+          );
+        } catch (error) {
+          // Don't throw - cache warming is optional optimization
+          // If it fails (e.g., pool closed early), just log and continue
+          this.logger?.debug('Cache warming skipped or failed', { error });
+        }
       })();
     } catch (error) {
       throw new MastraError(
