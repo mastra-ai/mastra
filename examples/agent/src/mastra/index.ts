@@ -9,6 +9,7 @@ import { chefModelV2Agent, networkAgent } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/scores';
 import { myWorkflowX } from './workflows/other';
 import { cookingTool, weatherInfo } from './tools';
+import { answerRelevance } from './scorers';
 
 const storage = new LibSQLStore({
   url: 'file:../mastra.db',
@@ -51,6 +52,7 @@ export const mastra = new Mastra({
   ],
   scorers: {
     testScorer,
+    answerRelevance,
   },
   telemetry: {
     enabled: false,

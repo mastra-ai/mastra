@@ -3,6 +3,7 @@ import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
 import type { StoragePagination } from '@mastra/core/storage';
 import type { Context } from '../types';
 import { handleError } from './error';
+import type { Agent } from '@mastra/core/agent';
 
 async function getScorersFromSystem({
   mastra,
@@ -11,6 +12,19 @@ async function getScorersFromSystem({
   runtimeContext: RuntimeContext;
 }) {
   const agents = mastra.getAgents();
+
+  let agentsFromConfig: [string, Agent][] = [];
+  try {
+    const agentsFromConfigRaw = await mastra.listAgentsFromConfig();
+    agentsFromConfig = await Promise.all(
+      agentsFromConfigRaw.map(async agentConf => {
+        return [agentConf.id, await mastra.getAgentFromConfig(agentConf.id)];
+      }),
+    );
+  } catch {
+    // do nothing
+  }
+
   const workflows = mastra.getWorkflows();
 
   const scorersMap = new Map<
@@ -18,7 +32,7 @@ async function getScorersFromSystem({
     MastraScorerEntry & { agentIds: string[]; agentNames: string[]; workflowIds: string[]; isRegistered: boolean }
   >();
 
-  for (const [agentId, agent] of Object.entries(agents)) {
+  for (const [agentId, agent] of [...Object.entries(agents), ...agentsFromConfig]) {
     const scorers =
       (await agent.getScorers({
         runtimeContext,

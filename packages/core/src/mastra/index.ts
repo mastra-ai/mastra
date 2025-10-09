@@ -1221,6 +1221,36 @@ do:
       }
     }
 
+    // Resolve scorers from stored scorer IDs
+    // Scorers need to be in the format { [key]: MastraScorerEntry } where MastraScorerEntry = { scorer: MastraScorer, sampling?: ScoringSamplingConfig }
+    const scorers: Record<string, any> = {};
+    if (config.scorerIds && config.scorerIds.length > 0) {
+      for (const scorerId of config.scorerIds) {
+        try {
+          // Try to get scorer by key first
+          const scorer = this.getScorer(scorerId);
+          if (scorer) {
+            // Wrap the scorer in MastraScorerEntry format
+            scorers[scorerId] = { scorer };
+          }
+        } catch (error) {
+          // If not found by key, try by name
+          try {
+            const scorer = this.getScorerByName(scorerId);
+            if (scorer) {
+              // Wrap the scorer in MastraScorerEntry format
+              scorers[scorerId] = { scorer };
+            }
+          } catch {
+            this.#logger?.warn(
+              `Scorer "${scorerId}" referenced by agent "${id}" not found in Mastra instance (tried both key and name)`,
+              error,
+            );
+          }
+        }
+      }
+    }
+
     // Create memory factory function if memoryConfig is present
     // The memory will be created lazily when first accessed
     // Uses the Memory implementation provided via interfaces.memory
@@ -1248,8 +1278,6 @@ do:
       });
     }
 
-    console.info('memory config ', config.memoryConfig);
-
     const agent = new Agent({
       id: config.id,
       name: config.name,
@@ -1258,6 +1286,7 @@ do:
       workflows: Object.keys(workflows).length > 0 ? workflows : undefined,
       agents: Object.keys(agents).length > 0 ? agents : undefined,
       tools: Object.keys(tools).length > 0 ? tools : undefined,
+      scorers: Object.keys(scorers).length > 0 ? scorers : undefined,
       memory,
     } as AgentConfig);
 

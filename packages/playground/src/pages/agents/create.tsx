@@ -11,6 +11,7 @@ import {
   Txt,
   InputField,
   AgentMetadataModelSwitcher,
+  useScorers,
 } from '@mastra/playground-ui';
 import { useNavigate } from 'react-router';
 import { useState } from 'react';
@@ -28,6 +29,7 @@ function CreateAgent() {
   const { data: workflows } = useWorkflows();
   const { tools } = useTools();
   const { data: modelProviders } = useModelProviders();
+  const { data: scorers } = useScorers();
 
   const [formData, setFormData] = useState({
     id: '',
@@ -39,6 +41,7 @@ function CreateAgent() {
     workflowIds: [] as string[],
     agentIds: [] as Array<{ agentId: string; from: 'CODE' | 'CONFIG' }>,
     toolIds: [] as string[],
+    scorerIds: [] as string[],
     memoryConfig: {
       lastMessages: 10,
       workingMemory: { enabled: false },
@@ -86,6 +89,15 @@ function CreateAgent() {
         };
       }
     });
+  };
+
+  const handleToggleScorer = (scorerId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      scorerIds: prev.scorerIds.includes(scorerId)
+        ? prev.scorerIds.filter(id => id !== scorerId)
+        : [...prev.scorerIds, scorerId],
+    }));
   };
 
   const validateForm = () => {
@@ -142,6 +154,10 @@ function CreateAgent() {
 
       if (formData.toolIds.length > 0) {
         payload.toolIds = formData.toolIds;
+      }
+
+      if (formData.scorerIds.length > 0) {
+        payload.scorerIds = formData.scorerIds;
       }
 
       if (formData.memoryConfig.workingMemory.enabled || formData.memoryConfig.lastMessages > 0) {
@@ -317,6 +333,27 @@ function CreateAgent() {
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            )}
+
+            {/* Scorers */}
+            {scorers && Object.keys(scorers).length > 0 && (
+              <div className="space-y-4">
+                <div className="text-lg font-semibold text-mastra-el-1">Scorers</div>
+                <div className="space-y-2">
+                  {Object.entries(scorers).map(([id, scorerEntry]) => (
+                    <div key={id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`scorer-${id}`}
+                        checked={formData.scorerIds.includes(id)}
+                        onCheckedChange={() => handleToggleScorer(id)}
+                      />
+                      <label htmlFor={`scorer-${id}`} className="text-sm cursor-pointer text-mastra-el-3">
+                        {scorerEntry.scorer?.name || id}
+                      </label>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

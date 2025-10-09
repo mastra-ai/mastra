@@ -11,6 +11,7 @@ export type InMemoryAgents = Map<
     workflowIds: string; // JSON string of string[]
     agentIds: string; // JSON string of AgentReference[]
     toolIds: string; // JSON string of string[]
+    scorerIds: string; // JSON string of string[]
     model: string;
     instructions: string;
     memoryConfig?: string; // JSON string of SerializableMemoryConfig
@@ -37,6 +38,7 @@ export class AgentsInMemory extends AgentsStorage {
       workflowIds: JSON.stringify(config.workflowIds ?? []),
       agentIds: JSON.stringify(config.agentIds ?? []),
       toolIds: JSON.stringify(config.toolIds ?? []),
+      scorerIds: JSON.stringify(config.scorerIds ?? []),
       model: config.model,
       instructions: config.instructions,
       memoryConfig: config.memoryConfig ? JSON.stringify(config.memoryConfig) : undefined,
@@ -61,6 +63,7 @@ export class AgentsInMemory extends AgentsStorage {
       workflowIds: JSON.parse(agentData.workflowIds),
       agentIds: JSON.parse(agentData.agentIds),
       toolIds: JSON.parse(agentData.toolIds),
+      scorerIds: JSON.parse(agentData.scorerIds),
       model: agentData.model,
       instructions: agentData.instructions,
       memoryConfig: agentData.memoryConfig ? JSON.parse(agentData.memoryConfig) : undefined,
@@ -80,6 +83,7 @@ export class AgentsInMemory extends AgentsStorage {
         workflowIds: JSON.parse(agentData.workflowIds),
         agentIds: JSON.parse(agentData.agentIds),
         toolIds: JSON.parse(agentData.toolIds),
+        scorerIds: JSON.parse(agentData.scorerIds),
         model: agentData.model,
         instructions: agentData.instructions,
         memoryConfig: agentData.memoryConfig ? JSON.parse(agentData.memoryConfig) : undefined,
@@ -106,6 +110,7 @@ export class AgentsInMemory extends AgentsStorage {
       workflowIds: updates.workflowIds ? JSON.stringify(updates.workflowIds) : existingAgent.workflowIds,
       agentIds: updates.agentIds ? JSON.stringify(updates.agentIds) : existingAgent.agentIds,
       toolIds: updates.toolIds ? JSON.stringify(updates.toolIds) : existingAgent.toolIds,
+      scorerIds: updates.scorerIds ? JSON.stringify(updates.scorerIds) : existingAgent.scorerIds,
       model: updates.model ?? existingAgent.model,
       instructions: updates.instructions ?? existingAgent.instructions,
       memoryConfig:
@@ -126,6 +131,7 @@ export class AgentsInMemory extends AgentsStorage {
       workflowIds: JSON.parse(updatedAgent.workflowIds),
       agentIds: JSON.parse(updatedAgent.agentIds),
       toolIds: JSON.parse(updatedAgent.toolIds),
+      scorerIds: JSON.parse(updatedAgent.scorerIds),
       model: updatedAgent.model,
       instructions: updatedAgent.instructions,
       memoryConfig: updatedAgent.memoryConfig ? JSON.parse(updatedAgent.memoryConfig) : undefined,

@@ -18,8 +18,8 @@ export class AgentsLibSQL extends AgentsStorage {
 
     await this.client.execute({
       sql: `INSERT INTO ${TABLE_AGENTS} 
-            (id, name, description, workflowIds, agentIds, toolIds, model, instructions, memoryConfig, createdAt, updatedAt) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, name, description, workflowIds, agentIds, toolIds, scorerIds, model, instructions, memoryConfig, createdAt, updatedAt) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         config.id,
         config.name,
@@ -27,6 +27,7 @@ export class AgentsLibSQL extends AgentsStorage {
         JSON.stringify(config.workflowIds ?? []),
         JSON.stringify(config.agentIds ?? []),
         JSON.stringify(config.toolIds ?? []),
+        JSON.stringify(config.scorerIds ?? []),
         config.model,
         config.instructions,
         config.memoryConfig ? JSON.stringify(config.memoryConfig) : null,
@@ -55,6 +56,7 @@ export class AgentsLibSQL extends AgentsStorage {
       workflowIds: JSON.parse(row.workflowIds as string),
       agentIds: JSON.parse(row.agentIds as string),
       toolIds: JSON.parse(row.toolIds as string),
+      scorerIds: JSON.parse(row.scorerIds as string),
       model: row.model as string,
       instructions: row.instructions as string,
       memoryConfig: row.memoryConfig ? JSON.parse(row.memoryConfig as string) : undefined,
@@ -80,6 +82,7 @@ export class AgentsLibSQL extends AgentsStorage {
       workflowIds: JSON.parse(row.workflowIds as string),
       agentIds: JSON.parse(row.agentIds as string),
       toolIds: JSON.parse(row.toolIds as string),
+      scorerIds: JSON.parse(row.scorerIds as string),
       model: row.model as string,
       instructions: row.instructions as string,
       memoryConfig: row.memoryConfig ? JSON.parse(row.memoryConfig as string) : undefined,
@@ -124,6 +127,11 @@ export class AgentsLibSQL extends AgentsStorage {
     if (updates.toolIds !== undefined) {
       setClauses.push('toolIds = ?');
       args.push(JSON.stringify(updates.toolIds));
+    }
+
+    if (updates.scorerIds !== undefined) {
+      setClauses.push('scorerIds = ?');
+      args.push(JSON.stringify(updates.scorerIds));
     }
 
     if (updates.model !== undefined) {

@@ -185,6 +185,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     workflowIds: { type: 'jsonb', nullable: false },
     agentIds: { type: 'jsonb', nullable: false },
     toolIds: { type: 'jsonb', nullable: false },
+    scorerIds: { type: 'jsonb', nullable: false },
     model: { type: 'text', nullable: false },
     instructions: { type: 'text', nullable: false },
     memoryConfig: { type: 'jsonb', nullable: true },

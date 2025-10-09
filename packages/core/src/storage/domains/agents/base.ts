@@ -20,6 +20,7 @@ export interface StorageAgentType {
   workflowIds?: string[];
   agentIds?: AgentReference[];
   toolIds?: string[];
+  scorerIds?: string[];
   model: string;
   instructions: string;
   memoryConfig?: SerializableMemoryConfig;
@@ -34,6 +35,7 @@ export interface CreateAgentConfig {
   workflowIds?: string[];
   agentIds?: AgentReference[];
   toolIds?: string[];
+  scorerIds?: string[];
   model: string;
   instructions: string;
   memoryConfig?: SerializableMemoryConfig;

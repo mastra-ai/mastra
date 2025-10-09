@@ -7,7 +7,7 @@ import { Agent, InputProcessor } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
 import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
-import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
+import { answerRelevance } from '../scorers/index.js';
 
 const memory = new Memory();
 
@@ -196,12 +196,6 @@ export const agentThatHarassesYou = new Agent({
   model: openai('gpt-4o'),
   outputProcessors: [moderationDetector],
 });
-
-const answerRelevance = createAnswerRelevancyScorer({
-  model: openai('gpt-4o'),
-});
-
-console.log(`answerRelevance`, answerRelevance);
 
 export const evalAgent = new Agent({
   name: 'Eval Agent',
