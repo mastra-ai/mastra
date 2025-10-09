@@ -12,6 +12,7 @@ import {
   MCPTool,
   AgentBuilder,
   Observability,
+  Dataset,
 } from './resources';
 import { NetworkMemoryThread } from './resources/network-memory-thread';
 import type {
@@ -47,6 +48,10 @@ import type {
   GetMemoryConfigParams,
   GetMemoryConfigResponse,
   GetMemoryThreadMessagesResponse,
+  CreateDatasetParams,
+  GetDatasetsParams,
+  GetDatasetsResponse,
+  DatasetRecord,
 } from './types';
 import { base64RuntimeContext, parseClientRuntimeContext } from './utils';
 
@@ -666,5 +671,48 @@ export class MastraClient extends BaseResource {
     targets: Array<{ traceId: string; spanId?: string }>;
   }): Promise<{ status: string; message: string }> {
     return this.observability.score(params);
+  }
+
+  /**
+   * Creates a new dataset
+   * @param params - Parameters for creating the dataset
+   * @returns Promise containing the created dataset
+   */
+  public createDataset(params: CreateDatasetParams): Promise<DatasetRecord> {
+    return this.request('/datasets', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Retrieves all available datasets
+   * @param params - Optional parameters for filtering and pagination
+   * @returns Promise containing array of datasets
+   */
+  public getDatasets(params?: GetDatasetsParams): Promise<GetDatasetsResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.name !== undefined) {
+      searchParams.append('name', params.name);
+    }
+    if (params?.page !== undefined) {
+      searchParams.append('page', params.page.toString());
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.append('perPage', params.perPage.toString());
+    }
+
+    const query = searchParams.toString();
+    const url = query ? `/datasets?${query}` : '/datasets';
+    return this.request(url);
+  }
+
+  /**
+   * Gets a dataset instance by ID
+   * @param datasetId - ID of the dataset to retrieve
+   * @returns Dataset instance
+   */
+  public getDataset(datasetId: string) {
+    return new Dataset(this, datasetId);
   }
 }
