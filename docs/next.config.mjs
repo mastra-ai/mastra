@@ -28,6 +28,12 @@ const withNextra = nextra({
 
 export default 
   withNextra({
+    i18n: {
+      locales: ["en", "ja"],
+      defaultLocale: "en",
+      localeDetection: true,
+    },
+    // Use assetPrefix for static hosting under /docs; Nextra rewrites map _next correctly
     assetPrefix: process.env.NODE_ENV === "production" ? "/docs" : "",
     async rewrites() {
       return {
