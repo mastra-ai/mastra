@@ -5,7 +5,7 @@ description: Learn how to create tools, add them to Mastra agents, and integrate
 
 # Tools and MCP
 
-Agents use tools to call APIs, query databases, run custom functions from your codebase, or load additional tools from remote MCP servers. Tools give agents capabilities beyond LLM text generation and offer a structured, deterministic way to access and work with data.
+Agents use tools and workflows to extend their capabilities beyond text generation. Tools let agents call APIs, query databases, or run custom logic with structured inputs and outputs. Workflows allow agents to follow defined sequences of steps or decision trees. Together, these features enable agents to perform complex tasks, interact with systems, and produce reliable, goal-directed outcomes.
 
 ## When to use tools
 
@@ -34,7 +34,6 @@ export const weatherAgent = new Agent({
 ## Creating a tool
 
 This example shows how to create a tool that fetches weather data from an API. Because the tool is defined in the agent’s `tools` configuration, the agent can provide the required `city` input via the tool’s `context` argument. The tool then returns a structured response with `temperature` and `conditions`.
-
 
 ```typescript filename="src/mastra/tools/weather-tool.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
