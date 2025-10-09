@@ -1,6 +1,7 @@
 import { Mastra } from '@mastra/core';
+import { openai } from '@ai-sdk/openai';
 import { PinoLogger } from '@mastra/loggers';
-import { LibSQLStore } from '@mastra/libsql';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
@@ -13,6 +14,10 @@ import { answerRelevance } from './scorers';
 
 const storage = new LibSQLStore({
   url: 'file:../mastra.db',
+});
+
+const vector = new LibSQLVector({
+  connectionUrl: 'file:../vector.db',
 });
 
 const testScorer = createScorer({
@@ -68,5 +73,7 @@ export const mastra = new Mastra({
   },
   interfaces: {
     memory: Memory,
+    embedder: openai.embedding('text-embedding-3-small'),
+    vector: vector,
   },
 });

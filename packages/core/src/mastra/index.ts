@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
+import type { EmbeddingModel } from 'ai';
 import type { AgentConfig } from '../agent';
 import { Agent } from '../agent';
 import { getAllAITracing, setupAITracing, shutdownAITracingRegistry } from '../ai-tracing';
@@ -203,6 +205,8 @@ export interface Config<
    */
   interfaces?: {
     memory?: typeof MastraMemory;
+    embedder?: EmbeddingModel<string> | EmbeddingModelV2<string>;
+    vector?: MastraVector;
   };
 
   /**
@@ -292,6 +296,8 @@ export class Mastra<
   #tools?: TTools;
   #interfaces?: {
     memory?: typeof MastraMemory;
+    embedder?: EmbeddingModel<string> | EmbeddingModelV2<string>;
+    vector?: MastraVector;
   };
   #serverMiddleware: Array<{
     handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
@@ -1272,10 +1278,30 @@ do:
         });
       }
 
+      // Build memory constructor options with embedder and vector if available
+      const memoryOptions: any = {
+        options: memoryConfig,
+      };
+
+      // Add embedder and vector from interfaces if semantic recall is enabled
+      if (memoryConfig.semanticRecall) {
+        if (this.#interfaces?.embedder) {
+          memoryOptions.embedder = this.#interfaces.embedder;
+        }
+        if (this.#interfaces?.vector) {
+          memoryOptions.vector = this.#interfaces.vector;
+        } else {
+          // Fallback to default vector if available
+          try {
+            memoryOptions.vector = this.getVector('default');
+          } catch {
+            // No vector available
+          }
+        }
+      }
+
       // @ts-expect-error - MemoryClass will be a concrete implementation of MastraMemory, not the abstract class
-      memory = new MemoryClass({
-        ...memoryConfig,
-      });
+      memory = new MemoryClass(memoryOptions);
     }
 
     const agent = new Agent({
