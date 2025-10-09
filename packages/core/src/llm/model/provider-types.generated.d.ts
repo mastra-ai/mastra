@@ -193,6 +193,7 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-V3.1-Terminus',
     'deepseek-ai/DeepSeek-V3.1-turbo',
     'deepseek-ai/DeepSeek-V3.1:THINKING',
+    'deepseek-ai/DeepSeek-V3.2-Exp',
     'meituan-longcat/LongCat-Flash-Chat-FP8',
     'moonshotai/Kimi-Dev-72B',
     'moonshotai/Kimi-K2-Instruct-0905',
@@ -205,6 +206,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.5-FP8',
     'zai-org/GLM-4.5-turbo',
     'zai-org/GLM-4.6-FP8',
+    'zai-org/GLM-4.6-turbo',
   ];
   readonly cortecs: readonly [
     'claude-sonnet-4',

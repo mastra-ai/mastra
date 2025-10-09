@@ -23,8 +23,10 @@ interface RegistryData {
 let registryData: RegistryData | null = null;
 
 // Cache file helpers
-const CACHE_DIR = path.join(os.homedir(), '.config', 'mastra');
+const CACHE_DIR = path.join(os.homedir(), '.cache', 'mastra');
 const CACHE_FILE = path.join(CACHE_DIR, 'gateway-refresh-time');
+
+let modelRouterCacheFailed = false;
 
 function getLastRefreshTimeFromDisk(): Date | null {
   try {
@@ -34,7 +36,8 @@ function getLastRefreshTimeFromDisk(): Date | null {
     const timestamp = fs.readFileSync(CACHE_FILE, 'utf-8').trim();
     return new Date(parseInt(timestamp, 10));
   } catch (err) {
-    console.debug('[ModelRegistry] Failed to read cache file:', err);
+    console.warn('[ModelRegistry] Failed to read cache file:', err);
+    modelRouterCacheFailed = true;
     return null;
   }
 }
@@ -46,7 +49,8 @@ function saveLastRefreshTimeToDisk(date: Date): void {
     }
     fs.writeFileSync(CACHE_FILE, date.getTime().toString(), 'utf-8');
   } catch (err) {
-    console.debug('[ModelRegistry] Failed to write cache file:', err);
+    modelRouterCacheFailed = true;
+    console.warn('[ModelRegistry] Failed to write cache file:', err);
   }
 }
 
@@ -238,14 +242,14 @@ export class ModelRegistry {
    */
   async syncGateways(forceRefresh = false): Promise<void> {
     if (this.isRefreshing && !forceRefresh) {
-      console.debug('[ModelRegistry] Sync already in progress, skipping...');
+      // console.debug('[ModelRegistry] Sync already in progress, skipping...');
       return;
     }
 
     this.isRefreshing = true;
 
     try {
-      console.debug('[ModelRegistry] Starting gateway sync...');
+      // console.debug('[ModelRegistry] Starting gateway sync...');
 
       // Import gateway classes and generation functions
       const { ModelsDevGateway } = await import('./gateways/models-dev.js');
@@ -269,10 +273,10 @@ export class ModelRegistry {
       }
 
       const distJsonPath = path.join(distRoot, 'provider-registry.json');
-      const distTypesPath = path.join(distRoot, 'llm/model/provider-types.generated.d.ts');
+      const distTypesPath = path.join(distRoot, 'provider-types.generated.d.ts');
 
       await writeRegistryFiles(distJsonPath, distTypesPath, providers, models);
-      console.debug(`[ModelRegistry] ✅ Updated registry files in dist/`);
+      // console.debug(`[ModelRegistry] ✅ Updated registry files in dist/`);
 
       // Also copy to src/ when in dev mode
       const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
@@ -296,7 +300,7 @@ export class ModelRegistry {
         // Copy the already-generated files
         await fs.promises.copyFile(distJsonPath, srcJsonPath);
         await fs.promises.copyFile(distTypesPath, srcTypesPath);
-        console.debug(`[ModelRegistry] ✅ Copied registry files to src/ (dev mode)`);
+        // console.debug(`[ModelRegistry] ✅ Copied registry files to src/ (dev mode)`);
       }
 
       // Clear the in-memory cache to force reload
@@ -304,7 +308,7 @@ export class ModelRegistry {
 
       this.lastRefreshTime = new Date();
       saveLastRefreshTimeToDisk(this.lastRefreshTime);
-      console.debug(`[ModelRegistry] ✅ Gateway sync completed at ${this.lastRefreshTime.toISOString()}`);
+      // console.debug(`[ModelRegistry] ✅ Gateway sync completed at ${this.lastRefreshTime.toISOString()}`);
     } catch (error) {
       console.error('[ModelRegistry] ❌ Gateway sync failed:', error);
       throw error;
@@ -326,31 +330,35 @@ export class ModelRegistry {
    */
   startAutoRefresh(intervalMs = 60 * 60 * 1000): void {
     if (this.refreshInterval) {
-      console.debug('[ModelRegistry] Auto-refresh already running');
+      // console.debug('[ModelRegistry] Auto-refresh already running');
       return;
     }
 
-    console.debug(`[ModelRegistry] Starting auto-refresh (interval: ${intervalMs}ms)`);
+    // console.debug(`[ModelRegistry] Starting auto-refresh (interval: ${intervalMs}ms)`);
 
     // Check if we need to run an immediate sync
     const lastRefresh = getLastRefreshTimeFromDisk();
     const now = Date.now();
-    const shouldRefresh = !lastRefresh || now - lastRefresh.getTime() > intervalMs;
+    const shouldRefresh = !modelRouterCacheFailed && (!lastRefresh || now - lastRefresh.getTime() > intervalMs);
 
     if (shouldRefresh) {
-      console.debug(
-        `[ModelRegistry] Running immediate sync (last refresh: ${lastRefresh ? lastRefresh.toISOString() : 'never'})`,
-      );
+      // console.debug(
+      //   `[ModelRegistry] Running immediate sync (last refresh: ${lastRefresh ? lastRefresh.toISOString() : 'never'})`,
+      // );
       this.syncGateways().catch(err => {
         console.error('[ModelRegistry] Initial auto-refresh failed:', err);
       });
     } else {
-      console.debug(
-        `[ModelRegistry] Skipping immediate sync (last refresh: ${lastRefresh.toISOString()}, next in ${Math.round((intervalMs - (now - lastRefresh.getTime())) / 1000)}s)`,
-      );
+      // console.debug( `[ModelRegistry] Skipping immediate sync (last refresh: ${lastRefresh.toISOString()}, next in ${Math.round((intervalMs - (now - lastRefresh.getTime())) / 1000)}s)`,
+      // );
     }
 
     this.refreshInterval = setInterval(() => {
+      if (modelRouterCacheFailed && this.refreshInterval) {
+        clearInterval(this.refreshInterval);
+        this.refreshInterval = null;
+        return;
+      }
       this.syncGateways().catch(err => {
         console.error('[ModelRegistry] Auto-refresh failed:', err);
       });
@@ -369,7 +377,7 @@ export class ModelRegistry {
     if (this.refreshInterval) {
       clearInterval(this.refreshInterval);
       this.refreshInterval = null;
-      console.debug('[ModelRegistry] Auto-refresh stopped');
+      // console.debug('[ModelRegistry] Auto-refresh stopped');
     }
   }
 
@@ -411,6 +419,6 @@ const autoRefreshEnabled =
   (process.env.MASTRA_AUTO_REFRESH_PROVIDERS !== 'false' && isDev);
 
 if (autoRefreshEnabled && isDev) {
-  console.debug('[ModelRegistry] Auto-refresh enabled (dev mode)');
+  // console.debug('[ModelRegistry] Auto-refresh enabled (dev mode)');
   ModelRegistry.getInstance().startAutoRefresh();
 }

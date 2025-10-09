@@ -327,6 +327,7 @@
         "deepseek-ai/DeepSeek-V3.1-Terminus",
         "deepseek-ai/DeepSeek-V3.1-turbo",
         "deepseek-ai/DeepSeek-V3.1:THINKING",
+        "deepseek-ai/DeepSeek-V3.2-Exp",
         "meituan-longcat/LongCat-Flash-Chat-FP8",
         "moonshotai/Kimi-Dev-72B",
         "moonshotai/Kimi-K2-Instruct-0905",
@@ -338,7 +339,8 @@
         "zai-org/GLM-4.5-Air",
         "zai-org/GLM-4.5-FP8",
         "zai-org/GLM-4.5-turbo",
-        "zai-org/GLM-4.6-FP8"
+        "zai-org/GLM-4.6-FP8",
+        "zai-org/GLM-4.6-turbo"
       ],
       "docUrl": "https://llm.chutes.ai/v1/models",
       "gateway": "models.dev"
@@ -1263,6 +1265,7 @@
       "deepseek-ai/DeepSeek-V3.1-Terminus",
       "deepseek-ai/DeepSeek-V3.1-turbo",
       "deepseek-ai/DeepSeek-V3.1:THINKING",
+      "deepseek-ai/DeepSeek-V3.2-Exp",
       "meituan-longcat/LongCat-Flash-Chat-FP8",
       "moonshotai/Kimi-Dev-72B",
       "moonshotai/Kimi-K2-Instruct-0905",
@@ -1274,7 +1277,8 @@
       "zai-org/GLM-4.5-Air",
       "zai-org/GLM-4.5-FP8",
       "zai-org/GLM-4.5-turbo",
-      "zai-org/GLM-4.6-FP8"
+      "zai-org/GLM-4.6-FP8",
+      "zai-org/GLM-4.6-turbo"
     ],
     "cortecs": [
       "claude-sonnet-4",
