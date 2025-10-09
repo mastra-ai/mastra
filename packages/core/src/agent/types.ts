@@ -63,6 +63,11 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
    * If not provided, will generate instructions based on the schema.
    */
   instructions?: string;
+
+  /**
+   * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
+   */
+  jsonPromptInjection?: boolean;
 } & FallbackFields<OUTPUT>;
 
 /**

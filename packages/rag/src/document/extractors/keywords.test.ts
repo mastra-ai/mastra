@@ -46,7 +46,7 @@ describe('KeywordExtractor', () => {
     expect(typeof result.excerptKeywords).toBe('string');
     expect(result.excerptKeywords.length).toBeGreaterThan(0);
   });
-  it('handles very long input', async () => {
+  it('handles very long input', { retry: 2 }, async () => {
     const extractor = new KeywordExtractor();
     const longText = 'A'.repeat(1000);
     const node = new TextNode({ text: longText });

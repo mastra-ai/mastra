@@ -1932,6 +1932,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     error?: string | Error;
     runtimeContext: RuntimeContext;
   }) {
+    const shouldPersistSnapshot = this.options?.shouldPersistSnapshot?.({ stepResults, workflowStatus });
+
+    if (!shouldPersistSnapshot) {
+      return;
+    }
+
     const runtimeContextObj: Record<string, any> = {};
     runtimeContext.forEach((value, key) => {
       runtimeContextObj[key] = value;
