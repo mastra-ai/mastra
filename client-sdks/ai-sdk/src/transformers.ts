@@ -7,7 +7,7 @@ type StepResult = {
   name: string;
   status: WorkflowStepStatus;
   input: Record<string, unknown> | null;
-  output: Record<string, unknown> | null;
+  output: any;
 };
 
 export type WorkflowAiSDKType = {
@@ -24,6 +24,17 @@ export type WorkflowAiSDKType = {
         totalTokens: number;
       };
     } | null;
+  };
+};
+
+export type NetworkAiSDKType = {
+  type: 'data-network';
+  id: string;
+  data: {
+    name: string;
+    status: 'running' | 'finished';
+    steps: StepResult[];
+    output: unknown | null;
   };
 };
 
@@ -57,6 +68,34 @@ export function WorkflowStreamToAISDKTransformer() {
     transform(chunk, controller) {
       const transformed = transformWorkflow<any>(chunk, bufferedWorkflows);
 
+      if (transformed) controller.enqueue(transformed);
+    },
+  });
+}
+
+export function AgentNetworkToAISDKTransformer() {
+  const bufferedNetworks = new Map<string, { name: string; steps: StepResult[] }>();
+
+  return new TransformStream<
+    NetworkChunkType,
+    | {
+        data?: string;
+        type?: 'start' | 'finish';
+      }
+    | NetworkAiSDKType
+  >({
+    start(controller) {
+      controller.enqueue({
+        type: 'start',
+      });
+    },
+    flush(controller) {
+      controller.enqueue({
+        type: 'finish',
+      });
+    },
+    transform(chunk, controller) {
+      const transformed = transformNetwork(chunk, bufferedNetworks);
       if (transformed) controller.enqueue(transformed);
     },
   });
@@ -344,10 +383,12 @@ export function transformNetwork(
 ) {
   switch (payload.type) {
     case 'routing-agent-start': {
-      bufferedNetworks.set(payload.payload.runId, {
-        name: payload.payload.agentId,
-        steps: [],
-      });
+      if (!bufferedNetworks.has(payload.payload.runId)) {
+        bufferedNetworks.set(payload.payload.runId, {
+          name: payload.payload.agentId,
+          steps: [],
+        });
+      }
       return {
         type: 'data-network',
         id: payload.payload.runId,
@@ -419,10 +460,15 @@ export function transformNetwork(
         },
       } as const;
     }
-    case 'agent-execution-end':
-    case 'tool-execution-end': {
+    case 'agent-execution-end': {
       const current = bufferedNetworks.get(payload.runId!);
       if (!current) return null;
+      current.steps.push({
+        name: payload.payload.agentId,
+        status: 'success',
+        input: null,
+        output: payload.payload.result,
+      } satisfies StepResult);
       return {
         type: 'data-network',
         id: payload.runId!,
@@ -430,13 +476,39 @@ export function transformNetwork(
           name: current.name,
           status: 'running',
           steps: current.steps,
-          output: null,
+          output: payload.payload.result ?? null,
+        },
+      } as const;
+    }
+    case 'tool-execution-end': {
+      const current = bufferedNetworks.get(payload.runId!);
+      if (!current) return null;
+      current.steps.push({
+        name: payload.payload.toolName,
+        status: 'success',
+        input: null,
+        output: payload.payload.result,
+      } satisfies StepResult);
+      return {
+        type: 'data-network',
+        id: payload.runId!,
+        data: {
+          name: current.name,
+          status: 'running',
+          steps: current.steps,
+          output: payload.payload.result ?? null,
         },
       } as const;
     }
     case 'workflow-execution-end': {
       const current = bufferedNetworks.get(payload.runId!);
       if (!current) return null;
+      current.steps.push({
+        name: payload.payload.name,
+        status: 'success',
+        input: null,
+        output: payload.payload.result,
+      } satisfies StepResult);
       return {
         type: 'data-network',
         id: payload.runId!,
@@ -444,7 +516,7 @@ export function transformNetwork(
           name: current.name,
           status: 'running',
           steps: current.steps,
-          output: null,
+          output: payload.payload.result ?? null,
         },
       } as const;
     }

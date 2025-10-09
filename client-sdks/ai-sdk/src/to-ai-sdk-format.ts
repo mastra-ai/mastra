@@ -2,7 +2,11 @@ import type { MastraModelOutput, ChunkType, OutputSchema, MastraAgentNetworkStre
 import type { MastraWorkflowStream, Step } from '@mastra/core/workflows';
 import type { InferUIMessageChunk, UIMessage } from 'ai';
 import type { ZodObject, ZodType } from 'zod';
-import { AgentStreamToAISDKTransformer, WorkflowStreamToAISDKTransformer } from './transformers';
+import {
+  AgentNetworkToAISDKTransformer,
+  AgentStreamToAISDKTransformer,
+  WorkflowStreamToAISDKTransformer,
+} from './transformers';
 export type { WorkflowAiSDKType } from './transformers';
 
 type ToAISDKFrom = 'agent' | 'network' | 'workflow';
@@ -37,7 +41,7 @@ export function toAISdkFormat(
   }
 
   if (from === 'network') {
-    return (stream as ReadableStream<ChunkType>).pipeThrough(AgentStreamToAISDKTransformer<any>()) as ReadableStream<
+    return (stream as ReadableStream<ChunkType>).pipeThrough(AgentNetworkToAISDKTransformer()) as ReadableStream<
       InferUIMessageChunk<UIMessage>
     >;
   }

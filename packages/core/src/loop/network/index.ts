@@ -499,6 +499,7 @@ export async function createNetworkLoop({
         type: 'agent-execution-end',
         payload: endPayload,
         from: ChunkFrom.NETWORK,
+        runId,
       });
 
       return {
@@ -651,12 +652,14 @@ export async function createNetworkLoop({
         result: finalResult,
         isComplete: false,
         iteration: inputData.iteration,
+        name: wf.name,
       };
 
       await writer?.write({
         type: 'workflow-execution-end',
         payload: endPayload,
         from: ChunkFrom.NETWORK,
+        runId,
       });
 
       return endPayload;
@@ -814,6 +817,7 @@ export async function createNetworkLoop({
         type: 'tool-execution-end',
         payload: endPayload,
         from: ChunkFrom.NETWORK,
+        runId,
       });
 
       return endPayload;
