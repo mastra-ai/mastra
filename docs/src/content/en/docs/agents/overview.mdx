@@ -245,10 +245,13 @@ const response = await testAgent.generate(
     }
   ],
   {
-    output: z.object({
-      summary: z.string(),
-      keywords: z.array(z.string())
-    })
+    structuredOutput: {
+      schema: z.object({
+        summary: z.string(),
+        keywords: z.array(z.string())
+      })
+    },
+    maxSteps: 1
   }
 );
 

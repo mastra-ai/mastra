@@ -149,7 +149,6 @@ export function createMapResultsStep<
       tools: result.tools,
       resourceId: result.resourceId,
       threadId: result.threadId,
-      structuredOutput: result.structuredOutput as any,
       stopWhen: result.stopWhen,
       maxSteps: result.maxSteps,
       providerOptions: result.providerOptions,
@@ -184,7 +183,7 @@ export function createMapResultsStep<
               runId,
               messageList,
               threadExists: memoryData.threadExists,
-              structuredOutput: !!options.output,
+              structuredOutput: !!options.structuredOutput?.schema,
               saveQueueManager,
               overrideScorers: options.scorers,
             });
@@ -210,7 +209,7 @@ export function createMapResultsStep<
         activeTools: options.activeTools,
         abortSignal: options.abortSignal,
       },
-      output: options.output,
+      structuredOutput: options.structuredOutput,
       outputProcessors: effectiveOutputProcessors,
       modelSettings: {
         temperature: 0,

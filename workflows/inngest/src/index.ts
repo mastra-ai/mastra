@@ -530,9 +530,14 @@ export class InngestWorkflow<
 
     this.runs.set(runIdToUse, run);
 
+    const shouldPersistSnapshot = this.options.shouldPersistSnapshot({
+      workflowStatus: run.workflowRunStatus,
+      stepResults: {},
+    });
+
     const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
-    if (!workflowSnapshotInStorage) {
+    if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
@@ -607,7 +612,7 @@ export class InngestWorkflow<
           },
         };
 
-        const engine = new InngestExecutionEngine(this.#mastra, step, attempt);
+        const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options);
         const result = await engine.execute<
           z.infer<TState>,
           z.infer<TInput>,
@@ -971,7 +976,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     mastra: Mastra,
     inngestStep: BaseContext<Inngest>['step'],
     inngestAttempts: number = 0,
-    options?: ExecutionEngineOptions,
+    options: ExecutionEngineOptions,
   ) {
     super({ mastra, options });
     this.inngestStep = inngestStep;
@@ -1912,6 +1917,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     await this.inngestStep.run(
       `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate`,
       async () => {
+        const shouldPersistSnapshot = this.options.shouldPersistSnapshot({ stepResults, workflowStatus });
+
+        if (!shouldPersistSnapshot) {
+          return;
+        }
+
         await this.mastra?.getStorage()?.persistWorkflowSnapshot({
           workflowName: workflowId,
           runId,

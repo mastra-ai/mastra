@@ -708,4 +708,52 @@ describe('Structured Output with Tool Execution', () => {
     expect(typeof result.object.confidence).toBe('number');
     expect(typeof result.object.answer).toBe('string');
   }, 15000);
+
+  it('should add structuredOutput object to response message metadata', async () => {
+    const responseSchema = z.object({
+      answer: z.string(),
+      confidence: z.number(),
+    });
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'You are a helpful assistant. Answer the question.',
+      model: openai('gpt-4o-mini'),
+    });
+
+    const stream = await agent.stream('What is 2+2?', {
+      structuredOutput: {
+        schema: responseSchema,
+        model: openai('gpt-4o-mini'),
+      },
+    });
+
+    // Consume the stream
+    const result = await stream.getFullOutput();
+
+    // Verify the structured output is available on the result
+    expect(result.object).toBeDefined();
+    expect(result.object.answer).toBeDefined();
+    expect(typeof result.object.confidence).toBe('number');
+
+    // Check that the structured output is in response message metadata (untyped v2 format)
+    const responseMessages = stream.messageList.get.response.v2();
+    const lastAssistantMessage = [...responseMessages].reverse().find(m => m.role === 'assistant');
+
+    expect(lastAssistantMessage).toBeDefined();
+    expect(lastAssistantMessage?.content.metadata).toBeDefined();
+    expect(lastAssistantMessage?.content.metadata?.structuredOutput).toBeDefined();
+    expect(lastAssistantMessage?.content.metadata?.structuredOutput).toEqual(result.object);
+
+    // Note: For typed metadata access, use result.response.uiMessages instead (see below)
+
+    // UIMessages from response have properly typed metadata with structuredOutput
+    const uiMessages = (await stream.response).uiMessages;
+    const lastAssistantUIMessage = uiMessages!.find(m => m.role === 'assistant');
+
+    expect(lastAssistantUIMessage).toBeDefined();
+    expect(lastAssistantUIMessage?.metadata).toBeDefined();
+    expect(lastAssistantUIMessage?.metadata?.structuredOutput).toBeDefined();
+    expect(lastAssistantUIMessage?.metadata?.structuredOutput).toEqual(result.object);
+  }, 15000);
 });

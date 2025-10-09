@@ -1070,4 +1070,9 @@ export const redirectList = [
     destination: "/:locale/docs/agents/using-tools",
     permanent: true,
   },
+  {
+    source: "/:locale/reference/agents/migration-guide",
+    destination: "/:locale/guides/migrations/vnext-to-standard-apis",
+    permanent: true,
+  },
 ];
