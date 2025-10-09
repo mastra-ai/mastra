@@ -15,11 +15,7 @@ export class ProcessorState<OUTPUT extends OutputSchema = undefined> {
   public streamParts: ChunkType<OUTPUT>[] = [];
   public span?: AISpan<AISpanType.PROCESSOR_RUN>;
 
-  constructor(options: {
-    processorName: string;
-    tracingContext?: TracingContext;
-    processorIndex?: number;
-  }) {
+  constructor(options: { processorName: string; tracingContext?: TracingContext; processorIndex?: number }) {
     // Create the PROCESSOR_RUN span if tracing context is provided
     // Walk up the span tree to find the AGENT_RUN span to attach the processor to
     const currentSpan = options.tracingContext?.currentSpan;
@@ -95,6 +91,24 @@ export class ProcessorRunner {
     this.agentName = agentName;
   }
 
+  /**
+   * Find the AGENT_RUN span by walking up the parent chain from currentSpan.
+   * This is needed because currentSpan might be a WORKFLOW_STEP or LLM_GENERATION span.
+   * Returns the found AGENT_RUN span, or falls back to currentSpan.parent or currentSpan.
+   */
+  private findAgentSpan(currentSpan: AISpan<any> | undefined): AISpan<any> | undefined {
+    if (!currentSpan) return undefined;
+
+    // Walk up to find the AGENT_RUN span
+    let agentSpan: typeof currentSpan | undefined = currentSpan;
+    while (agentSpan && agentSpan.type !== AISpanType.AGENT_RUN) {
+      agentSpan = agentSpan.parent;
+    }
+
+    // If we didn't find an AGENT_RUN span, fall back to currentSpan.parent or currentSpan
+    return agentSpan || currentSpan.parent || currentSpan;
+  }
+
   async runOutputProcessors(
     messageList: MessageList,
     tracingContext?: TracingContext,
@@ -126,7 +140,8 @@ export class ProcessorRunner {
         continue;
       }
 
-      const processorSpan = tracingContext?.currentSpan?.createChildSpan({
+      const parentSpan = this.findAgentSpan(tracingContext?.currentSpan);
+      const processorSpan = parentSpan?.createChildSpan({
         type: AISpanType.PROCESSOR_RUN,
         name: `output processor: ${processor.name}`,
         attributes: {
@@ -138,7 +153,11 @@ export class ProcessorRunner {
       });
 
       if (!telemetry) {
-        processableMessages = await processMethod({ messages: processableMessages, abort: ctx.abort, tracingContext: {currentSpan: processorSpan } });
+        processableMessages = await processMethod({
+          messages: processableMessages,
+          abort: ctx.abort,
+          tracingContext: { currentSpan: processorSpan },
+        });
       } else {
         await telemetry.traceMethod(
           async () => {
@@ -159,7 +178,7 @@ export class ProcessorRunner {
           },
         )();
       }
-      processorSpan?.end({output: processableMessages});
+      processorSpan?.end({ output: processableMessages });
     }
 
     if (processableMessages.length > 0) {
@@ -350,9 +369,10 @@ export class ProcessorRunner {
         continue;
       }
 
-      const processorSpan = tracingContext?.currentSpan?.createChildSpan({
+      const parentSpan = this.findAgentSpan(tracingContext?.currentSpan);
+      const processorSpan = parentSpan?.createChildSpan({
         type: AISpanType.PROCESSOR_RUN,
-        name: `output processor: ${processor.name}`,
+        name: `input processor: ${processor.name}`,
         attributes: {
           processorName: processor.name,
           processorType: 'input',
@@ -383,7 +403,7 @@ export class ProcessorRunner {
           },
         )();
       }
-      processorSpan?.end({output: processableMessages});
+      processorSpan?.end({ output: processableMessages });
     }
 
     if (processableMessages.length > 0) {

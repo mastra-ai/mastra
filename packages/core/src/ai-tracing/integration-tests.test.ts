@@ -6,7 +6,9 @@ import { z } from 'zod';
 // Core Mastra imports
 import { Agent } from '../agent';
 import type { StructuredOutputOptions } from '../agent';
+import type { MastraMessageV2 } from '../agent/message-list';
 import { Mastra } from '../mastra';
+import type { Processor } from '../processors';
 import { MockStore } from '../storage/mock';
 import type { OutputSchema } from '../stream';
 import type { ToolExecutionContext } from '../tools';
@@ -16,7 +18,7 @@ import { createWorkflow, createStep } from '../workflows';
 // AI Tracing imports
 import { clearAITracingRegistry, shutdownAITracingRegistry } from './registry';
 import { AISpanType, AITracingEventType } from './types';
-import type { AITracingExporter, AITracingEvent, ExportedAISpan, AnyExportedAISpan } from './types';
+import type { AITracingExporter, AITracingEvent, ExportedAISpan, AnyExportedAISpan, TracingContext } from './types';
 
 /**
  * Test exporter for AI tracing events with real-time span lifecycle validation.
@@ -1386,6 +1388,103 @@ describe('AI Tracing Integration Tests', () => {
 
         expect(testAgentLlmSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
         expect(processorAgentLlmSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
+        testExporter.finalExpectations();
+      });
+    },
+  );
+
+  describe.each(agentMethods.filter(m => m.name === 'stream'))(
+    'agent with input and output processors using $name',
+    ({ method, model }) => {
+      it('should trace all processor spans including internal agent spans', async () => {
+        const { UnicodeNormalizer } = await import('../processors/processors');
+
+        // Create a custom output processor that uses an agent internally
+        class SummarizerProcessor implements Processor {
+          readonly name = 'summarizer';
+          private agent: Agent;
+
+          constructor(model: any) {
+            this.agent = new Agent({
+              name: 'summarizer-agent',
+              instructions: 'You summarize text concisely',
+              model,
+            });
+          }
+
+          async processOutputResult(args: {
+            messages: MastraMessageV2[];
+            abort: (reason?: string) => never;
+            tracingContext?: TracingContext;
+          }): Promise<MastraMessageV2[]> {
+            // Call the internal agent to summarize
+            const lastMessage = args.messages[args.messages.length - 1];
+            const text = lastMessage?.content?.content || '';
+
+            await this.agent.generate(`Summarize: ${text}`, {
+              tracingContext: args.tracingContext,
+            });
+
+            // Return original messages
+            return args.messages;
+          }
+        }
+
+        const testAgent = new Agent({
+          name: 'Test Agent',
+          instructions: 'You are a helpful assistant',
+          model,
+          inputProcessors: [new UnicodeNormalizer({ trim: true, collapseWhitespace: true })],
+          outputProcessors: [new SummarizerProcessor(model)],
+        });
+
+        const mastra = new Mastra({
+          ...getBaseMastraConfig(testExporter),
+          agents: { testAgent },
+        });
+
+        const agent = mastra.getAgent('testAgent');
+        const result = await method(agent, '  Hello! How are you?  '); // Extra whitespace to test input processor
+
+        // Verify the result
+        expect(result.text).toBeDefined();
+
+        // Get all spans
+        const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
+        const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
+        const processorRunSpans = testExporter.getSpansByType(AISpanType.PROCESSOR_RUN);
+
+        // Expected span structure:
+        // - Test Agent AGENT_RUN (root)
+        //   - PROCESSOR_RUN (input processor: unicode-normalizer) - no internal agent
+        //   - Test Agent LLM_GENERATION (initial model call)
+        //   - PROCESSOR_RUN (output processor: summarizer) - has internal agent
+        //     - summarizer-agent AGENT_RUN
+        //       - summarizer-agent LLM_GENERATION
+
+        expect(agentRunSpans.length).toBe(2); // Test Agent + summarizer agent
+        expect(llmGenerationSpans.length).toBe(2); // Test Agent LLM + summarizer LLM
+        expect(processorRunSpans.length).toBe(2); // unicode-normalizer + summarizer
+
+        // Find specific spans
+        const testAgentSpan = agentRunSpans.find(s => s.name === "agent run: 'Test Agent'");
+        const inputProcessorSpan = processorRunSpans.find(s => s.name === 'input processor: unicode-normalizer');
+        const summarizerProcessorSpan = processorRunSpans.find(s => s.name === 'output processor: summarizer');
+        const summarizerAgentSpan = agentRunSpans.find(s => s.name?.includes('summarizer-agent'));
+
+        // Verify all expected spans exist
+        expect(testAgentSpan).toBeDefined();
+        expect(inputProcessorSpan).toBeDefined();
+        expect(summarizerProcessorSpan).toBeDefined();
+        expect(summarizerAgentSpan).toBeDefined();
+
+        // Verify span nesting - all processors should be children of Test Agent
+        expect(inputProcessorSpan?.parentSpanId).toEqual(testAgentSpan?.id);
+        expect(summarizerProcessorSpan?.parentSpanId).toEqual(testAgentSpan?.id);
+
+        // Verify internal agent span is child of processor span
+        expect(summarizerAgentSpan?.parentSpanId).toEqual(summarizerProcessorSpan?.id);
+
         testExporter.finalExpectations();
       });
     },
