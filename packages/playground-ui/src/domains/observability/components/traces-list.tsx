@@ -1,4 +1,5 @@
 import { EntryList, getShortId } from '@/components/ui/elements';
+import { AISpanRecord } from '@mastra/core';
 import { format, isToday } from 'date-fns';
 
 export const tracesListColumns = [
@@ -13,7 +14,7 @@ export const tracesListColumns = [
 type TracesListProps = {
   selectedTraceId?: string;
   onTraceClick?: (id: string) => void;
-  traces?: any[];
+  traces?: AISpanRecord[];
   errorMsg?: string;
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   filtersApplied?: boolean;
@@ -67,7 +68,7 @@ export function TracesList({
                       columns={tracesListColumns}
                       onClick={onTraceClick}
                     >
-                      {(tracesListColumns || []).map((col, index) => {
+                      {tracesListColumns.map((col, index) => {
                         const key = `${index}-${trace.traceId}`;
                         return col.name === 'status' ? (
                           <EntryList.EntryStatus key={key} status={entry?.[col.name as keyof typeof entry]} />

@@ -4,12 +4,12 @@ import { EntryListEntry } from './entry-list-entry';
 
 const widths = ['75%', '50%', '65%', '90%', '60%', '80%'];
 
-export type EntryListRowsSkeletonProps = {
+export type EntryListEntriesSkeletonProps = {
   columns?: Column[];
   numberOfRows?: number;
 };
 
-export function EntryListEntriesSkeleton({ columns, numberOfRows = 3 }: EntryListRowsSkeletonProps) {
+export function EntryListEntriesSkeleton({ columns, numberOfRows = 3 }: EntryListEntriesSkeletonProps) {
   const getPseudoRandomWidth = (rowIdx: number, colIdx: number) => {
     const index = (rowIdx + colIdx + (columns?.length || 0) + (numberOfRows || 0)) % widths.length;
     return widths[index];

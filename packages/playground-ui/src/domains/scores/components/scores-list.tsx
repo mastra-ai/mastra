@@ -81,7 +81,7 @@ export function ScoresList({
                       columns={scoresListColumns}
                       onClick={onScoreClick}
                     >
-                      {(scoresListColumns || []).map((col, index) => {
+                      {scoresListColumns.map((col, index) => {
                         const key = `${index}-${score.id}`;
                         return (
                           <EntryList.EntryText key={key}>{entry?.[col.name as keyof typeof entry]}</EntryList.EntryText>

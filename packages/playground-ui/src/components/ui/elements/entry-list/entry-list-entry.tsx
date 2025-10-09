@@ -13,7 +13,7 @@ type EntryListEntryProps = {
 
 export function EntryListEntry({ entry, isSelected, onClick, children, columns }: EntryListEntryProps) {
   const handleClick = () => {
-    return onClick && onClick(entry?.id);
+    onClick?.(entry?.id);
   };
 
   return (

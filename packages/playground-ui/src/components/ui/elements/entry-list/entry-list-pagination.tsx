@@ -26,13 +26,13 @@ export function EntryListPagination({ currentPage, hasMore, onNextPage, onPrevPa
           )}
         >
           {typeof currentPage === 'number' && currentPage > 0 && (
-            <button onClick={onPrevPage} disabled={currentPage === 0}>
+            <button onClick={onPrevPage}>
               <ArrowLeftIcon />
               Previous
             </button>
           )}
           {hasMore && (
-            <button onClick={onNextPage} disabled={!hasMore}>
+            <button onClick={onNextPage}>
               Next
               <ArrowRightIcon />
             </button>
