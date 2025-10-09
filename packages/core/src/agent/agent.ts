@@ -3645,7 +3645,7 @@ export class Agent<
       ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
   > {
-    if (options?.output && options?.structuredOutput?.schema) {
+    if (options?.structuredOutput?.schema && options?.output) {
       throw new MastraError({
         id: 'AGENT_GENERATE_STRUCTURED_OUTPUT_AND_OUTPUT_PROVIDED',
         domain: ErrorDomain.AGENT,
