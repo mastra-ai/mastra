@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Agent } from '../agent';
+import { Agent, type AgentConfig } from '../agent';
 import { getAllAITracing, setupAITracing, shutdownAITracingRegistry } from '../ai-tracing';
 import type { ObservabilityRegistryConfig } from '../ai-tracing';
 import type { BundlerConfig } from '../bundler/types';
@@ -749,7 +749,7 @@ do:
    * ```
    */
   public getAgent<TAgentName extends keyof TAgents>(name: TAgentName): TAgents[TAgentName] {
-    const agent = this.#agents?.[name];
+    let agent = this.#agents?.[name];
     if (!agent) {
       const error = new MastraError({
         id: 'MASTRA_GET_AGENT_BY_NAME_NOT_FOUND',
@@ -765,7 +765,7 @@ do:
       this.#logger?.trackException(error);
       throw error;
     }
-    return this.#agents[name];
+    return agent;
   }
 
   /**
@@ -1038,19 +1038,22 @@ do:
       });
     }
 
-    try {
-      return await storage.getAgent(id);
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MASTRA_GET_AGENT_STORAGE_FAILED',
-          domain: ErrorDomain.MASTRA,
-          category: ErrorCategory.USER,
-          text: 'Failed to get agent',
-        },
-        error,
-      );
+    const config = await storage.getAgent(id);
+
+    if (!config) {
+      throw new MastraError({
+        id: 'MASTRA_GET_AGENT_STORAGE_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Agent not found',
+      });
     }
+
+    const agent = new Agent(config as AgentConfig);
+
+    agent.__registerMastra(this);
+
+    return agent;
   }
 
   /**

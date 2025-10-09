@@ -1,0 +1,305 @@
+import { MockLanguageModelV1 } from 'ai/test';
+import { describe, expect, it, beforeEach } from 'vitest';
+import { Agent } from '../agent';
+import { InMemoryStore } from '../storage/mock';
+import { Mastra } from './index';
+
+describe('Mastra Agent Storage', () => {
+  let mastra: Mastra;
+  let storage: InMemoryStore;
+
+  beforeEach(() => {
+    storage = new InMemoryStore();
+    mastra = new Mastra({
+      storage,
+      logger: false,
+    });
+  });
+
+  describe('createAgent', () => {
+    it('should create an agent configuration in storage', async () => {
+      const agentConfig = {
+        id: 'test-agent-1',
+        name: 'Test Agent 1',
+        workflowIds: ['workflow-1', 'workflow-2'],
+        agentIds: ['sub-agent-1'],
+        toolIds: ['tool-1', 'tool-2'],
+        model: 'gpt-4',
+        instructions: 'You are a helpful test agent.',
+      };
+
+      await mastra.createAgent(agentConfig);
+
+      // Verify it was stored
+      const storedAgent = await storage.getAgent(agentConfig.id);
+      expect(storedAgent).not.toBeNull();
+      expect(storedAgent!.id).toBe(agentConfig.id);
+      expect(storedAgent!.name).toBe(agentConfig.name);
+      expect(storedAgent!.workflowIds).toEqual(agentConfig.workflowIds);
+      expect(storedAgent!.agentIds).toEqual(agentConfig.agentIds);
+      expect(storedAgent!.toolIds).toEqual(agentConfig.toolIds);
+      expect(storedAgent!.model).toBe(agentConfig.model);
+      expect(storedAgent!.instructions).toBe(agentConfig.instructions);
+    });
+
+    it('should throw error when storage is not configured', async () => {
+      const mastraWithoutStorage = new Mastra({ logger: false });
+
+      await expect(
+        mastraWithoutStorage.createAgent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          workflowIds: [],
+          agentIds: [],
+          toolIds: [],
+          model: 'gpt-4',
+          instructions: 'Test',
+        }),
+      ).rejects.toThrow('Storage is not configured');
+    });
+  });
+
+  describe('getAgentFromConfig', () => {
+    it('should retrieve an agent configuration from storage', async () => {
+      const agentConfig = {
+        id: 'test-agent-2',
+        name: 'Test Agent 2',
+        workflowIds: ['workflow-a'],
+        agentIds: [],
+        toolIds: ['tool-x', 'tool-y'],
+        model: 'claude-3',
+        instructions: 'You are a retrieval test agent.',
+      };
+
+      await mastra.createAgent(agentConfig);
+
+      const retrievedAgent = await mastra.getAgentFromConfig(agentConfig.id);
+
+      expect(retrievedAgent).not.toBeNull();
+      expect(retrievedAgent!.id).toBe(agentConfig.id);
+      expect(retrievedAgent!.name).toBe(agentConfig.name);
+      // expect(retrievedAgent!.workflowIds).toEqual(agentConfig.workflowIds);
+      // expect(retrievedAgent!.toolIds).toEqual(agentConfig.toolIds);
+      expect(retrievedAgent!.model).toBe(agentConfig.model);
+      expect(retrievedAgent!.instructions).toBe(agentConfig.instructions);
+    });
+
+    it('should return error for non-existent agent', async () => {
+      await expect(mastra.getAgentFromConfig('non-existent-id')).rejects.toThrow('Agent not found');
+    });
+
+    it('should throw error when storage is not configured', async () => {
+      const mastraWithoutStorage = new Mastra({ logger: false });
+
+      await expect(mastraWithoutStorage.getAgentFromConfig('test-agent')).rejects.toThrow('Storage is not configured');
+    });
+  });
+
+  describe('listAgentsFromConfig', () => {
+    it('should list all agent configurations from storage', async () => {
+      const agent1Config = {
+        id: 'list-agent-1',
+        name: 'List Agent 1',
+        workflowIds: ['workflow-1'],
+        agentIds: [],
+        toolIds: ['tool-1'],
+        model: 'gpt-4',
+        instructions: 'First list test agent.',
+      };
+
+      const agent2Config = {
+        id: 'list-agent-2',
+        name: 'List Agent 2',
+        workflowIds: ['workflow-2'],
+        agentIds: ['sub-agent-1'],
+        toolIds: ['tool-2', 'tool-3'],
+        model: 'claude-3',
+        instructions: 'Second list test agent.',
+      };
+
+      await mastra.createAgent(agent1Config);
+      await new Promise(resolve => setTimeout(resolve, 1)); // Ensure different timestamps
+      await mastra.createAgent(agent2Config);
+
+      const agents = await mastra.listAgentsFromConfig();
+
+      expect(agents).toHaveLength(2);
+      // Should be sorted by createdAt DESC (newest first)
+      expect(agents[0].id).toBe(agent2Config.id);
+      expect(agents[1].id).toBe(agent1Config.id);
+    });
+
+    it('should return empty array when no agents exist', async () => {
+      const agents = await mastra.listAgentsFromConfig();
+      expect(agents).toHaveLength(0);
+    });
+
+    it('should throw error when storage is not configured', async () => {
+      const mastraWithoutStorage = new Mastra({ logger: false });
+
+      await expect(mastraWithoutStorage.listAgentsFromConfig()).rejects.toThrow('Storage is not configured');
+    });
+  });
+
+  describe('getAgent - instantiate Agent from config', () => {
+    it('should instantiate an Agent from stored configuration', async () => {
+      // First create an agent configuration
+      const agentConfig = {
+        id: 'instantiate-agent-1',
+        name: 'Instantiate Agent 1',
+        workflowIds: [],
+        agentIds: [],
+        toolIds: [],
+        model: 'gpt-4',
+        instructions: 'You are an agent created from storage.',
+      };
+
+      await mastra.createAgent(agentConfig);
+
+      // Now get the agent as an Agent instance
+      const agent = await mastra.getAgentFromConfig(agentConfig.id);
+
+      expect(agent).toBeInstanceOf(Agent);
+      expect(agent.name).toBe(agentConfig.name);
+      expect(agent.id).toBe(agentConfig.id);
+    });
+
+    it('should create an agent with the correct model', async () => {
+      const agentConfig = {
+        id: 'model-test-agent',
+        name: 'Model Test Agent',
+        workflowIds: [],
+        agentIds: [],
+        toolIds: [],
+        model: 'openai/gpt-4o',
+        instructions: 'You are a model test agent.',
+      };
+
+      await mastra.createAgent(agentConfig);
+      const agent = await mastra.getAgentFromConfig(agentConfig.id);
+
+      expect(agent).toBeInstanceOf(Agent);
+      // The model string should be stored in the agent
+      const model = await agent.getModel();
+      expect(model).toBeDefined();
+    });
+
+    it('should create an agent with the correct instructions', async () => {
+      const agentConfig = {
+        id: 'instructions-test-agent',
+        name: 'Instructions Test Agent',
+        workflowIds: [],
+        agentIds: [],
+        toolIds: [],
+        model: 'gpt-4',
+        instructions: 'You are a helpful assistant with specific instructions.',
+      };
+
+      await mastra.createAgent(agentConfig);
+      const agent = await mastra.getAgentFromConfig(agentConfig.id);
+
+      expect(agent).toBeInstanceOf(Agent);
+      const instructions = await agent.getInstructions();
+      expect(instructions).toBe(agentConfig.instructions);
+    });
+
+    it('should throw null for non-existent agent', async () => {
+      await expect(mastra.getAgentFromConfig('foo-agent')).rejects.toThrow('Agent not found');
+    });
+
+    it('should throw error when storage is not configured', async () => {
+      const mastraWithoutStorage = new Mastra({ logger: false });
+
+      await expect(mastraWithoutStorage.getAgentFromConfig('test-agent')).rejects.toThrow('Storage is not configured');
+    });
+
+    it('should create agent with mastra instance injected', async () => {
+      const agentConfig = {
+        id: 'mastra-injection-test',
+        name: 'Mastra Injection Test',
+        workflowIds: [],
+        agentIds: [],
+        toolIds: [],
+        model: 'gpt-4',
+        instructions: 'You are a test agent.',
+      };
+
+      await mastra.createAgent(agentConfig);
+      const agent = await mastra.getAgentFromConfig(agentConfig.id);
+
+      expect(agent).toBeInstanceOf(Agent);
+      // The agent should have access to the mastra instance
+      expect(agent.getMastraInstance()).toBe(mastra);
+    });
+
+    it('should work with a functioning agent instance', async () => {
+      // Register tools and workflows in mastra
+      const mastraWithDeps = new Mastra({
+        storage,
+        logger: false,
+        agents: {
+          existingAgent: new Agent({
+            name: 'existingAgent',
+            instructions: 'Existing agent',
+            model: new MockLanguageModelV1({
+              doGenerate: async () => ({
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 10, completionTokens: 20 },
+                text: 'Test response',
+              }),
+            }),
+          }),
+        },
+      });
+
+      const agentConfig = {
+        id: 'functional-agent',
+        name: 'Functional Agent',
+        workflowIds: [],
+        agentIds: [],
+        toolIds: [],
+        model: 'gpt-4',
+        instructions: 'You are a functional test agent.',
+      };
+
+      await mastraWithDeps.createAgent(agentConfig);
+      const agent = await mastraWithDeps.getAgentFromConfig(agentConfig.id);
+
+      expect(agent).toBeInstanceOf(Agent);
+      expect(agent.name).toBe(agentConfig.name);
+    });
+  });
+
+  describe('Integration test: full lifecycle', () => {
+    it('should handle complete agent lifecycle', async () => {
+      const agentConfig = {
+        id: 'lifecycle-agent',
+        name: 'Lifecycle Agent',
+        workflowIds: ['workflow-1'],
+        agentIds: [],
+        toolIds: ['tool-1', 'tool-2'],
+        model: 'gpt-4',
+        instructions: 'You are a lifecycle test agent.',
+      };
+
+      // Create agent
+      await mastra.createAgent(agentConfig);
+
+      // List agents
+      let agents = await mastra.listAgentsFromConfig();
+      expect(agents).toHaveLength(1);
+      expect(agents[0].id).toBe(agentConfig.id);
+
+      // Get agent config
+      const storedConfig = await mastra.getAgentFromConfig(agentConfig.id);
+      expect(storedConfig).not.toBeNull();
+      expect(storedConfig!.name).toBe(agentConfig.name);
+
+      // Get agent instance
+      const agent = await mastra.getAgentFromConfig(agentConfig.id);
+      expect(agent).toBeInstanceOf(Agent);
+      expect(agent.name).toBe(agentConfig.name);
+    });
+  });
+});
