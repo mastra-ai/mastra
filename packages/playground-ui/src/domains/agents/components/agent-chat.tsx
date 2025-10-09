@@ -10,9 +10,11 @@ export const AgentChat = ({
   agentName,
   threadId,
   initialMessages,
+  initialLegacyMessages,
   memory,
   refreshThreadList,
   modelVersion,
+  modelList,
 }: ChatProps) => {
   const { settings } = useAgentSettings();
   const { runtimeContext } = usePlaygroundStore();
@@ -24,12 +26,13 @@ export const AgentChat = ({
       modelVersion={modelVersion}
       threadId={threadId}
       initialMessages={initialMessages}
+      initialLegacyMessages={initialLegacyMessages}
       memory={memory}
       refreshThreadList={refreshThreadList}
       settings={settings}
       runtimeContext={runtimeContext}
     >
-      <Thread agentName={agentName ?? ''} hasMemory={memory} agentId={agentId} />
+      <Thread agentName={agentName ?? ''} hasMemory={memory} agentId={agentId} hasModelList={Boolean(modelList)} />
     </MastraRuntimeProvider>
   );
 };

@@ -1,19 +1,20 @@
 import { Badge } from '@/ds/components/Badge';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
-import { providerMapToIcon } from '../provider-map-icon';
 import { useLinkComponent } from '@/lib/framework';
 import { GetAgentResponse, GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
 import { AgentMetadataSection } from './agent-metadata-section';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
 import { AgentMetadataWrapper } from './agent-metadata-wrapper';
-import { ReactNode, useState } from 'react';
+import { ReactNode } from 'react';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { useScorers } from '@/domains/scores';
-import { AgentIcon, Icon } from '@/ds/icons';
-import { EditIcon, GaugeIcon } from 'lucide-react';
+import { AgentIcon } from '@/ds/icons';
+import { AlertTriangleIcon, GaugeIcon } from 'lucide-react';
 import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './agent-metadata-model-switcher';
+import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
 import { LoadingBadge } from '@/components/assistant-ui/tools/badges/loading-badge';
+import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
 
 export interface AgentMetadataProps {
   agentId: string;
@@ -21,7 +22,10 @@ export interface AgentMetadataProps {
   promptSlot: ReactNode;
   hasMemoryEnabled: boolean;
   modelProviders: string[];
+  modelVersion: string;
   updateModel: AgentMetadataModelSwitcherProps['updateModel'];
+  updateModelInModelList: AgentMetadataModelListProps['updateModelInModelList'];
+  reorderModelList: AgentMetadataModelListProps['reorderModelList'];
 }
 
 export interface AgentMetadataNetworkListProps {
@@ -57,10 +61,10 @@ export const AgentMetadata = ({
   hasMemoryEnabled,
   updateModel,
   modelProviders,
+  updateModelInModelList,
+  reorderModelList,
+  modelVersion,
 }: AgentMetadataProps) => {
-  const [isEditingModel, setIsEditingModel] = useState(false);
-  const providerIcon = providerMapToIcon[(agent.provider || 'openai.chat') as keyof typeof providerMapToIcon];
-
   const networkAgentsMap = agent.agents ?? {};
   const networkAgents = Object.values(networkAgentsMap);
 
@@ -72,33 +76,36 @@ export const AgentMetadata = ({
 
   return (
     <AgentMetadataWrapper>
-      <AgentMetadataSection title="Model">
-        {isEditingModel ? (
+      {agent.modelList ? (
+        <AgentMetadataSection title="Models">
+          <AgentMetadataModelList
+            modelList={agent.modelList}
+            modelProviders={modelProviders}
+            updateModelInModelList={updateModelInModelList}
+            reorderModelList={reorderModelList}
+          />
+        </AgentMetadataSection>
+      ) : (
+        <AgentMetadataSection
+          title={'Model'}
+          hint={
+            modelVersion === 'v2'
+              ? undefined
+              : {
+                  link: 'https://mastra.ai/guides/migrations/vnext-to-standard-apis',
+                  title: 'You are using a legacy v1 model',
+                  icon: <AlertTriangleIcon fontSize={14} className="mb-0.5" />,
+                }
+          }
+        >
           <AgentMetadataModelSwitcher
             defaultProvider={agent.provider}
             defaultModel={agent.modelId}
             updateModel={updateModel}
-            closeEditor={() => setIsEditingModel(false)}
             modelProviders={modelProviders}
           />
-        ) : (
-          <div className="flex items-center gap-2">
-            <Badge icon={providerIcon} className="font-medium">
-              {agent.modelId || 'N/A'}
-            </Badge>
-            <button
-              title="Edit model"
-              type="button"
-              onClick={() => setIsEditingModel(true)}
-              className="text-icon3 hover:text-icon6"
-            >
-              <Icon>
-                <EditIcon />
-              </Icon>
-            </button>
-          </div>
-        )}
-      </AgentMetadataSection>
+        </AgentMetadataSection>
+      )}
 
       <AgentMetadataSection
         title="Memory"
@@ -107,9 +114,27 @@ export const AgentMetadata = ({
           title: 'Agent Memory documentation',
         }}
       >
-        <Badge icon={<MemoryIcon />} variant={hasMemoryEnabled ? 'success' : 'error'} className="font-medium">
-          {hasMemoryEnabled ? 'On' : 'Off'}
-        </Badge>
+        {hasMemoryEnabled ? (
+          <Badge icon={<MemoryIcon />} variant="success" className="font-medium">
+            On
+          </Badge>
+        ) : (
+          <Alert variant="warning">
+            <AlertTitle as="h5">Memory not enabled</AlertTitle>
+            <AlertDescription as="p">
+              Thread messages will not be stored. To activate memory, see the{' '}
+              <a
+                href="https://mastra.ai/en/docs/agents/agent-memory"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                documentation
+              </a>
+              .
+            </AlertDescription>
+          </Alert>
+        )}
       </AgentMetadataSection>
 
       {networkAgents.length > 0 && (
@@ -214,7 +239,7 @@ export const AgentMetadataScorerList = ({ entityId, entityType }: AgentMetadataS
     .filter(scorerKey => {
       const scorer = scorers[scorerKey];
       if (entityType === 'AGENT') {
-        return scorer.agentNames.includes(entityId);
+        return scorer.agentNames?.includes?.(entityId);
       }
 
       return scorer.workflowIds.includes(entityId);

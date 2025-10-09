@@ -5,7 +5,7 @@ const agent = mastra.getAgent('chefAgent');
 const responsesAgent = mastra.getAgent('chefAgentResponses');
 const agentThatHarassesYou = mastra.getAgent('agentThatHarassesYou');
 
-const stream = await agentThatHarassesYou.streamVNext('I want to fight you');
+const stream = await agentThatHarassesYou.stream('I want to fight you');
 
 for await (const chunk of stream.textStream) {
   console.log(`frontend received chunk: ${chunk}`);

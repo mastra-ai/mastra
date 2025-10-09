@@ -3,7 +3,8 @@ import type {
   MultiPrimitiveExecutionOptions,
   AgentGenerateOptions,
   AgentStreamOptions,
-  StructuredOutputOptions,
+  SerializableStructuredOutputOptions,
+  DeprecatedOutputOptions,
   ToolsInput,
   UIMessageWithMetadata,
 } from '@mastra/core/agent';
@@ -23,7 +24,6 @@ import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
 import type {
   AITraceRecord,
   AISpanRecord,
-  LegacyWorkflowRuns,
   StorageGetMessagesArg,
   PaginationInfo,
   WorkflowRun,
@@ -32,11 +32,8 @@ import type {
 import type { OutputSchema } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
 import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
-import type {
-  StepAction,
-  StepGraph,
-  LegacyWorkflowRunResult as CoreLegacyWorkflowRunResult,
-} from '@mastra/core/workflows/legacy';
+
+import type { UIMessage } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
@@ -104,7 +101,7 @@ export interface GetAgentResponse {
     | undefined;
 }
 
-export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
+export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   output?: T;
   experimental_output?: T;
@@ -114,7 +111,7 @@ export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undef
   Omit<AgentGenerateOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
 >;
 
-export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
+export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   output?: T;
   experimental_output?: T;
@@ -124,29 +121,18 @@ export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefin
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
 >;
 
-export type StreamVNextParams<OUTPUT extends OutputSchema = undefined> = {
+export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
   messages: MessageListInput;
-  output?: OUTPUT;
+  structuredOutput?: SerializableStructuredOutputOptions<OUTPUT>;
   runtimeContext?: RuntimeContext | Record<string, any>;
   clientTools?: ToolsInput;
-} & OutputOptions<OUTPUT> &
-  WithoutMethods<
-    Omit<
-      AgentExecutionOptions<OUTPUT>,
-      'output' | 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
-    >
-  >;
-
-type OutputOptions<OUTPUT extends OutputSchema = undefined> =
-  | {
-      output?: OUTPUT;
-      structuredOutput?: never;
-    }
-  | {
-      // Can't serialize the model, so we need to omit it, falls back to agent's model
-      structuredOutput?: Omit<StructuredOutputOptions<OUTPUT>, 'model'>;
-      output?: never;
-    };
+} & WithoutMethods<
+  Omit<
+    AgentExecutionOptions<OUTPUT>,
+    'output' | 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
+  >
+> &
+  DeprecatedOutputOptions<OUTPUT>;
 
 export type UpdateModelParams = {
   modelId: string;
@@ -181,15 +167,6 @@ export interface GetToolResponse {
   outputSchema: string;
 }
 
-export interface GetLegacyWorkflowResponse {
-  name: string;
-  triggerSchema: string;
-  steps: Record<string, StepAction<any, any, any, any>>;
-  stepGraph: StepGraph;
-  stepSubscriberGraph: Record<string, StepGraph>;
-  workflowId?: string;
-}
-
 export interface GetWorkflowRunsParams {
   fromDate?: Date;
   toDate?: Date;
@@ -198,20 +175,11 @@ export interface GetWorkflowRunsParams {
   resourceId?: string;
 }
 
-export type GetLegacyWorkflowRunsResponse = LegacyWorkflowRuns;
-
 export type GetWorkflowRunsResponse = WorkflowRuns;
 
 export type GetWorkflowRunByIdResponse = WorkflowRun;
 
 export type GetWorkflowRunExecutionResultResponse = WatchEvent['payload']['workflowState'];
-
-export type LegacyWorkflowRunResult = {
-  activePaths: Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>;
-  results: CoreLegacyWorkflowRunResult<any, any, any>['results'];
-  timestamp: number;
-  runId: string;
-};
 
 export interface GetWorkflowResponse {
   name: string;
@@ -244,7 +212,7 @@ export interface GetWorkflowResponse {
 
 export type WorkflowWatchResult = WatchEvent & { runId: string };
 
-export type WorkflowRunResult = WorkflowResult<any, any, any>;
+export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
 export interface UpsertVectorParams {
   indexName: string;
   vectors: number[][];
@@ -314,7 +282,7 @@ export interface GetMemoryConfigParams {
   agentId: string;
 }
 
-export type GetMemoryConfigResponse = MemoryConfig;
+export type GetMemoryConfigResponse = { config: MemoryConfig };
 
 export interface GetNetworkMemoryThreadParams {
   resourceId: string;
@@ -340,7 +308,8 @@ export type GetMemoryThreadMessagesPaginatedParams = Omit<StorageGetMessagesArg,
 
 export interface GetMemoryThreadMessagesResponse {
   messages: CoreMessage[];
-  uiMessages: AiMessageType[];
+  legacyMessages: AiMessageType[];
+  uiMessages: UIMessage[];
 }
 
 export type GetMemoryThreadMessagesPaginatedResponse = PaginationInfo & {
@@ -494,7 +463,7 @@ export interface LoopVNextNetworkResponse {
     isComplete?: boolean | undefined;
     completionReason?: string | undefined;
   };
-  steps: WorkflowResult<any, any, any>['steps'];
+  steps: WorkflowResult<any, any, any, any>['steps'];
 }
 
 export interface McpServerListResponse {
@@ -538,6 +507,13 @@ export interface GetScoresByScorerIdParams {
 export interface GetScoresByEntityIdParams {
   entityId: string;
   entityType: string;
+  page?: number;
+  perPage?: number;
+}
+
+export interface GetScoresBySpanParams {
+  traceId: string;
+  spanId: string;
   page?: number;
   perPage?: number;
 }
@@ -592,4 +568,11 @@ export interface GetAITraceResponse {
 export interface GetAITracesResponse {
   spans: AISpanRecord[];
   pagination: PaginationInfo;
+}
+
+export interface StreamVNextChunkType {
+  type: string;
+  payload: any;
+  runId: string;
+  from: 'AGENT' | 'WORKFLOW';
 }

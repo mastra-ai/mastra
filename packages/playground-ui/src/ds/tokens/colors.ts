@@ -9,7 +9,7 @@ export const Colors = {
   accent3: '#267AD2',
   accent4: '#9E57B3',
   accent5: '#4A9DF2',
-  accent6: '#FFF176',
+  accent6: '#ECB047',
   accent1Dark: '#16281f',
   accent2Dark: '#281916',
   accent3Dark: '#161a28',

@@ -1,138 +1,103 @@
 ---
-title: "Runtime context | Agents | Mastra Docs"
+title: "Runtime Context | Agents | Mastra Docs"
 description: Learn how to use Mastra's RuntimeContext to provide dynamic, request-specific configuration to agents.
 ---
 
-# Agent Runtime Context
+# Runtime Context
 
-Mastra provides `RuntimeContext`, a dependency injection system that lets you configure agents with runtime variables. If you find yourself creating multiple agents that perform similar tasks, runtime context allows you to consolidate them into a single, more flexible agent.
+Agents use `RuntimeContext` to access request-specific values sent alongside user messages. These values let a single agent change its behavior, functionality, model, tools, or memory usage based on the needs of each request.
 
-## Overview
+![Agents Runtime Context](/image/agents/agents-runtime-context.jpg)
 
-The dependency injection system allows you to:
+## When to use `RuntimeContext`
 
-1. Pass runtime configuration variables to agents through a type-safe `runtimeContext`
-2. Access these variables within tool execution contexts
-3. Modify agent behavior without changing the underlying code
-4. Share configuration across multiple tools within the same agent
+Use `RuntimeContext` when an agent's behavior should change based on the request or environment. For example, you might switch models or storage providers based on user details, or adjust instructions or tool selection based on the user's language.
 
-## Using `runtimeContext` with agents
+## Configuring agents with `RuntimeContext`
 
-Agents can access `runtimeContext` via the `instructions` parameter, and retrieve variables using `runtimeContext.get()`. This allows agent behavior to adapt dynamically based on user input or external configuration, without changing the underlying implementation.
+You can access the `runtimeContext` argument from any of the agent’s supported parameters. These functions can be sync or `async`, allowing you to use context values to fetch data, apply logic, or adjust behavior at runtime.
 
-```typescript {7-8,15} filename="src/mastra/agents/test-weather-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
-import { testWeatherTool } from "../tools/test-weather-tool";
-
-export const testWeatherAgent = new Agent({
-  name: "test-weather-agent",
+```typescript {3,6,9,12} filename="src/dynamic-agent.ts" showLineNumbers copy
+export const dynamicAgent = new Agent({
+  name: "dynamic-agent",
   instructions: async ({ runtimeContext }) => {
-    const temperatureUnit = runtimeContext.get("temperature-unit");
-
-    return `You are a weather assistant that provides current weather information for any city.
-
-    When a user asks for weather:
-    - Extract the city name from their request
-    - Respond with: temperature, feels-like temperature, humidity, wind speed, and conditions
-    - Use ${temperatureUnit} for all temperature values
-    - If no city is mentioned, ask for a city name
-    `;
+    // ...
   },
-  model: openai("gpt-4o-mini"),
-  tools: { testWeatherTool }
+  model: ({ runtimeContext }) => {
+    // ...
+  },
+  tools: ({ runtimeContext }) => {
+    // ...
+  },
+  memory: ({ runtimeContext }) => {
+    // ...
+  },
 });
 ```
 
-### Example tool
+You can also use `runtimeContext` with other parameters like `agents`, `workflows`, `scorers`, `inputProcessors`, and `outputProcessors`.
 
-This tool exports a `WeatherRuntimeContext` type, which can be used anywhere `RuntimeContext` is used to enable type-safe access to runtime configuration.
+> See [Agent](../../reference/agents/agent.mdx) for a full list of configuration options.
 
-```typescript {4-6} filename="src/mastra/tools/test-weather-tool.ts" showLineNumbers copy
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+## Setting values
 
-export type WeatherRuntimeContext = {
-  "temperature-unit": "celsius" | "fahrenheit";
-};
+To set variables in `runtimeContext`, create a new instance using `new RuntimeContext()` and call `.set()` to define the values you want to include.
 
-export const testWeatherTool = createTool({
-  id: "test-weather-tool",
-  description: "Get weather for a location",
-  inputSchema: z.object({
-    location: z.string()
-  }),
-  outputSchema: z.object({
-    metric: z.string(),
-    temperature: z.number(),
-    weather: z.string()
-  }),
-  execute: async ({ context, runtimeContext }) => {
-    const { location } = context;
-    const unit = runtimeContext.get("temperature-unit") as WeatherRuntimeContext["temperature-unit"];
+The `.set()` method takes two arguments:
 
-    const temperature = 30;
-    const weather = "Sunny";
+1. **key**: The name used to identify the value.
+2. **value**: The data to associate with that key.
 
-    return {
-      metric: unit === "celsius" ? "°C" : "°F",
-      temperature,
-      weather
-    };
-  }
-});
-```
+After setting the values, pass the `runtimeContext` to `.generate()` or `.stream()` to make them available to the agent.
 
-### Example usage
-
-In this example, `temperature-unit` is set using `runtimeContext.set()` to either **celsius** or **fahrenheit**, allowing the agent to respond with temperatures in the appropriate unit.
-
-```typescript {9, 12} filename="src/test-weather-agent.ts" showLineNumbers copy
+```typescript {8,11} filename="src/test-dynamic-agent.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 import { RuntimeContext } from "@mastra/core/runtime-context";
-import { WeatherRuntimeContext } from "./mastra/tools/test-weather-tool";
+import { UserTier } from "./mastra/agents/dynamic-agent"
 
-const agent = mastra.getAgent("testWeatherAgent");
+const agent = mastra.getAgent("dynamicAgent");
 
-const runtimeContext = new RuntimeContext<WeatherRuntimeContext>();
+const runtimeContext = new RuntimeContext<UserTier>();
+runtimeContext.set("user-tier", "enterprise");
 
-runtimeContext.set("temperature-unit", "fahrenheit");
-
-const response = await agent.generate("What's the weather in London?", {
+const response = await agent.generate("Help plan my day.", {
   runtimeContext
 });
-
-console.log(response.text);
 ```
 
-## Accessing `runtimeContext` with server middleware
+## Accessing values
 
-You can populate `runtimeContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
+The example below accesses a `user-tier` value from `runtimeContext` to determine which model and instructions to use. The context is typed to provide safety and autocomplete when working with `.get()` and `.set()`.
 
-```typescript {2,4,9-18} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+```typescript {12,19} filename="src/mastra/agents/dynamic-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 import { RuntimeContext } from "@mastra/core/runtime-context";
-import { testWeatherAgent } from "./agents/test-weather-agent";
-import { WeatherRuntimeContext } from "./mastra/tools/test-weather-tool";
 
-export const mastra = new Mastra({
-  agents: { testWeatherAgent },
-  server: {
-    middleware: [
-      async (context, next) => {
-        const country = context.req.header("CF-IPCountry");
-        const runtimeContext = context.get("runtimeContext") as RuntimeContext<WeatherRuntimeContext>;
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
 
-        runtimeContext.set("temperature-unit", country === "US" ? "fahrenheit" : "celsius");
+export const dynamicAgent = new Agent({
+  name: "dynamic-agent",
+  instructions: async ({ runtimeContext }: { runtimeContext: RuntimeContext<UserTier> }) => {
+    const userTier = runtimeContext.get("user-tier");
 
-        await next();
-      }
-    ]
+    const result = await db.query("SELECT instructions FROM config WHERE tier = ?", [userTier]);
+
+    return result[0].instructions;
+  },
+  model: ({ runtimeContext }: { runtimeContext: RuntimeContext<UserTier> }) => {
+    const userTier = runtimeContext.get("user-tier");
+
+    return userTier === "enterprise"
+      ? openai("gpt-4o-mini")
+      : openai("gpt-4.1-nano");
   }
 });
 ```
 
 ## Related
 
-- [Dynamic Agents](./dynamic-agents.mdx)
 - [Tool Runtime Context](../tools-mcp/runtime-context.mdx)
+- [Server Middleware Runtime Context](../server-db/middleware.mdx)

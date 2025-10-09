@@ -1108,6 +1108,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
         runId,
         messageList,
         models: createTestModels(),
+        agentId: 'agent-id',
         _internal: {
           generateId: mockId({ prefix: 'id' }),
         },
@@ -1185,6 +1186,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
         models: createTestModels({
           stream: convertArrayToReadableStream([{ type: 'error', error: 'error' }]),
         }),
+        agentId: 'agent-id',
         _internal: {
           generateId: mockId({ prefix: 'id' }),
         },
@@ -1214,6 +1216,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
         models: createTestModels({
           stream: convertArrayToReadableStream([{ type: 'error', error: 'error' }]),
         }),
+        agentId: 'agent-id',
         _internal: {
           generateId: mockId({ prefix: 'id' }),
         },
@@ -1245,6 +1248,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
         runId,
         models: createTestModels(),
         messageList,
+        agentId: 'agent-id',
       });
 
       const response = result.aisdk.v5.toTextStreamResponse();
@@ -1290,6 +1294,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
           }),
         }),
         messageList,
+        agentId: 'agent-id',
       });
 
       await expect(result.aisdk.v5.consumeStream()).resolves.not.toThrow();
@@ -1327,6 +1332,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
           }),
         }),
         messageList,
+        agentId: 'agent-id',
       });
 
       await expect(result.aisdk.v5.consumeStream()).resolves.not.toThrow();
@@ -1360,6 +1366,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
           }),
         }),
         messageList,
+        agentId: 'agent-id',
       });
 
       await expect(result.aisdk.v5.consumeStream()).resolves.not.toThrow();
@@ -1394,6 +1401,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
           }),
         }),
         messageList,
+        agentId: 'agent-id',
       });
 
       await expect(result.aisdk.v5.consumeStream({ onError: onErrorCallback })).resolves.not.toThrow();
@@ -1434,6 +1442,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             },
           ]),
         }),
+        agentId: 'agent-id',
         messageList,
         _internal: {
           generateId: mockId({ prefix: 'id' }),
@@ -1490,6 +1499,11 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
                 "headers": undefined,
                 "id": "id-0",
                 "modelId": "mock-model-id",
+                "modelMetadata": {
+                  "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
+                },
                 "timestamp": 1970-01-01T00:00:00.000Z,
               },
               "type": "finish-step",

@@ -25,8 +25,6 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
     return <ChatThreadSkeleton />;
   }
 
-  const reverseThreads = [...threads].reverse();
-
   const newThreadLink =
     resourceType === 'agent' ? paths.agentNewThreadLink(resourceId) : paths.networkNewThreadLink(resourceId);
 
@@ -45,13 +43,13 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
             </ThreadLink>
           </ThreadItem>
 
-          {reverseThreads.length === 0 && (
-            <Txt as="p" variant="ui-sm" className="text-icon3 py-3 px-5 max-w-[12rem]">
+          {threads.length === 0 && (
+            <Txt as="p" variant="ui-sm" className="text-icon3 py-3 px-5">
               Your conversations will appear here once you start chatting!
             </Txt>
           )}
 
-          {reverseThreads.map(thread => {
+          {threads.map(thread => {
             const isActive = thread.id === threadId;
 
             const threadLink =
@@ -137,7 +135,7 @@ function ThreadTitle({ title }: { title?: string }) {
     return <span className="text-muted-foreground">Chat from</span>;
   }
 
-  return <span className="truncate max-w-[14rem]">{title}</span>;
+  return <span className="truncate max-w-[14rem] text-muted-foreground">{title}</span>;
 }
 
 const formatDay = (date: Date) => {

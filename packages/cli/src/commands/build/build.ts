@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { join, posix } from 'node:path';
 
 import { FileService } from '../../services/service.file';
 
@@ -27,10 +27,11 @@ export async function build({
   }
 
   // You cannot express an "include all js/ts except these" in one single string glob pattern so by default an array is passed to negate test files.
-  const defaultToolsPath = join(mastraDir, 'tools/**/*.{js,ts}');
+  const normalizedMastraDir = mastraDir.replaceAll('\\', '/');
+  const defaultToolsPath = posix.join(normalizedMastraDir, 'tools/**/*.{js,ts}');
   const defaultToolsIgnorePaths = [
-    `!${join(mastraDir, 'tools/**/*.{test,spec}.{js,ts}')}`,
-    `!${join(mastraDir, 'tools/**/__tests__/**')}`,
+    `!${posix.join(normalizedMastraDir, 'tools/**/*.{test,spec}.{js,ts}')}`,
+    `!${posix.join(normalizedMastraDir, 'tools/**/__tests__/**')}`,
   ];
   // We pass an array to tinyglobby to allow for the aforementioned negations
   const defaultTools = [defaultToolsPath, ...defaultToolsIgnorePaths];

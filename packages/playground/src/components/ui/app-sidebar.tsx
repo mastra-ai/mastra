@@ -121,14 +121,9 @@ const links = [
     icon: AgentIcon,
   },
   {
-    name: 'Networks',
-    url: '/networks',
-    icon: Network,
-  },
-  {
-    name: 'Tools',
-    url: '/tools',
-    icon: ToolsIcon,
+    name: 'Workflows',
+    url: '/workflows',
+    icon: WorkflowIcon,
   },
   {
     name: 'MCP Servers',
@@ -136,9 +131,9 @@ const links = [
     icon: McpServerIcon,
   },
   {
-    name: 'Workflows',
-    url: '/workflows',
-    icon: WorkflowIcon,
+    name: 'Tools',
+    url: '/tools',
+    icon: ToolsIcon,
   },
   {
     name: 'Scorers',
@@ -162,10 +157,18 @@ const links = [
   },
 ];
 
+declare global {
+  interface Window {
+    MASTRA_HIDE_CLOUD_CTA: string;
+  }
+}
+
 export function AppSidebar() {
   const { state, toggleSidebar } = useSidebar();
   const location = useLocation();
   const pathname = location.pathname;
+
+  const hideCloudCta = window?.MASTRA_HIDE_CLOUD_CTA === 'true';
 
   return (
     <Sidebar collapsible="icon">
@@ -281,22 +284,25 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
-              <SidebarMenuItem>
-                <SidebarMenuButton tooltip="Deploy to Mastra Cloud" asChild>
-                  <a
-                    className={`group/icon bg-accent1 text-black hover:bg-accent1/80 hover:text-black active:bg-accent1/90 active:text-black`}
-                    href="https://mastra.ai/cloud"
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    <Icon>
-                      <Cloudy />
-                    </Icon>
+              {!hideCloudCta && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton tooltip="Deploy to Mastra Cloud" asChild>
+                    <a
+                      className={`group/icon bg-accent1 text-black hover:bg-accent1/80 hover:text-black active:bg-accent1/90 active:text-black`}
+                      href="https://mastra.ai/cloud"
+                      target="_blank"
+                      rel="noopener"
+                      id="deploy-to-mastra-cloud"
+                    >
+                      <Icon>
+                        <Cloudy />
+                      </Icon>
 
-                    <span className="text-[0.8rem] font-normal">Deploy to Mastra Cloud</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                      <span className="text-[0.8rem] font-normal">Deploy your Playground</span>
+                    </a>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

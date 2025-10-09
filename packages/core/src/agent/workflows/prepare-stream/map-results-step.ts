@@ -1,16 +1,14 @@
-import { randomUUID } from 'crypto';
-import type { AISpan, AISpanType } from '../../../ai-tracing';
+import type { AISpan, AISpanType, TracingContext } from '../../../ai-tracing';
 import type { SystemMessage } from '../../../llm';
 import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig } from '../../../memory/types';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { RuntimeContext } from '../../../runtime-context';
-import { ChunkFrom } from '../../../stream';
 import type { OutputSchema } from '../../../stream/base/schema';
-import type { ChunkType } from '../../../stream/types';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
+import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
 
 interface MapResultsStepOptions<
@@ -27,6 +25,7 @@ interface MapResultsStepOptions<
   saveQueueManager: SaveQueueManager;
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
   instructions: SystemMessage;
+  agentId: string;
 }
 
 export function createMapResultsStep<
@@ -43,22 +42,26 @@ export function createMapResultsStep<
   saveQueueManager,
   agentAISpan,
   instructions,
+  agentId,
 }: MapResultsStepOptions<OUTPUT, FORMAT>) {
   return async ({
     inputData,
     bail,
+    tracingContext,
   }: {
     inputData: {
       'prepare-tools-step': PrepareToolsStepOutput;
       'prepare-memory-step': PrepareMemoryStepOutput;
     };
     bail: <T>(value: T) => T;
+    tracingContext: TracingContext;
   }) => {
     const toolsData = inputData['prepare-tools-step'];
     const memoryData = inputData['prepare-memory-step'];
 
     const result = {
       ...options,
+      agentId,
       tools: toolsData.convertedTools,
       runId,
       temperature: options.modelSettings?.temperature,
@@ -102,52 +105,18 @@ export function createMapResultsStep<
 
     // Check for tripwire and return early if triggered
     if (result.tripwire) {
-      const emptyResult = {
-        textStream: (async function* () {
-          // Empty async generator - yields nothing
-        })(),
-        fullStream: new globalThis.ReadableStream<ChunkType>({
-          start(controller) {
-            controller.enqueue({
-              type: 'tripwire',
-              runId: result.runId,
-              from: ChunkFrom.AGENT,
-              payload: {
-                tripwireReason: result.tripwireReason || '',
-              },
-            });
-            controller.close();
-          },
-        }),
-        objectStream: new globalThis.ReadableStream({
-          start(controller) {
-            controller.close();
-          },
-        }),
-        text: Promise.resolve(''),
-        usage: Promise.resolve({ inputTokens: 0, outputTokens: 0, totalTokens: 0 }),
-        finishReason: Promise.resolve('other'),
-        tripwire: true,
-        tripwireReason: result.tripwireReason,
-        response: {
-          id: randomUUID(),
-          timestamp: new Date(),
-          modelId: 'tripwire',
-          messages: [],
-        },
-        toolCalls: Promise.resolve([]),
-        toolResults: Promise.resolve([]),
-        warnings: Promise.resolve(undefined),
-        request: {
-          body: JSON.stringify({ messages: [] }),
-        },
-        object: undefined,
-        experimental_output: undefined,
-        steps: undefined,
-        experimental_providerMetadata: undefined,
-      };
+      const agentModel = await capabilities.getModel({ runtimeContext: result.runtimeContext! });
 
-      return bail(emptyResult);
+      const modelOutput = await getModelOutputForTripwire({
+        tripwireReason: result.tripwireReason!,
+        runId,
+        tracingContext,
+        options,
+        model: agentModel,
+        messageList: memoryData.messageList,
+      });
+
+      return bail(modelOutput);
     }
 
     let effectiveOutputProcessors =
@@ -161,9 +130,9 @@ export function createMapResultsStep<
         : []);
 
     // Handle structuredOutput option by creating an StructuredOutputProcessor
-    if (options.structuredOutput) {
-      const agentModel = await capabilities.getModel({ runtimeContext: result.runtimeContext! });
-      const structuredProcessor = new StructuredOutputProcessor(options.structuredOutput, agentModel);
+    // Only create the processor if a model is explicitly provided
+    if (options.structuredOutput?.model) {
+      const structuredProcessor = new StructuredOutputProcessor(options.structuredOutput);
       effectiveOutputProcessors = effectiveOutputProcessors
         ? [...effectiveOutputProcessors, structuredProcessor]
         : [structuredProcessor];
@@ -172,6 +141,7 @@ export function createMapResultsStep<
     const messageList = memoryData.messageList!;
 
     const loopOptions: ModelLoopStreamArgs<any, OUTPUT> = {
+      agentId,
       runtimeContext: result.runtimeContext!,
       tracingContext: { currentSpan: agentAISpan },
       runId,
@@ -179,7 +149,6 @@ export function createMapResultsStep<
       tools: result.tools,
       resourceId: result.resourceId,
       threadId: result.threadId,
-      structuredOutput: result.structuredOutput as any,
       stopWhen: result.stopWhen,
       maxSteps: result.maxSteps,
       providerOptions: result.providerOptions,
@@ -214,7 +183,7 @@ export function createMapResultsStep<
               runId,
               messageList,
               threadExists: memoryData.threadExists,
-              structuredOutput: !!options.output,
+              structuredOutput: !!options.structuredOutput?.schema,
               saveQueueManager,
               overrideScorers: options.scorers,
             });
@@ -240,7 +209,7 @@ export function createMapResultsStep<
         activeTools: options.activeTools,
         abortSignal: options.abortSignal,
       },
-      output: options.output,
+      structuredOutput: options.structuredOutput,
       outputProcessors: effectiveOutputProcessors,
       modelSettings: {
         temperature: 0,

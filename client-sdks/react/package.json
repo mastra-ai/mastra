@@ -1,0 +1,50 @@
+{
+  "name": "@mastra/react",
+  "version": "0.0.5",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "client-sdks/react"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "homepage": "https://mastra.ai",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.cjs.js",
+  "module": "dist/index.es.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "dependencies": {
+    "@mastra/client-js": "workspace:*",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@ai-sdk/react": "^2.0.57",
+    "@assistant-ui/react": "^0.10.45",
+    "@mastra/core": "workspace:*",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.3",
+    "@vitest/ui": "^3.2.4",
+    "eslint": "^9.36.0",
+    "rollup-plugin-node-externals": "^8.0.1",
+    "typescript": "^5.8.3",
+    "vite": "^7.1.7",
+    "vite-plugin-dts": "^4.5.4",
+    "vitest": "^3.2.4"
+  }
+}

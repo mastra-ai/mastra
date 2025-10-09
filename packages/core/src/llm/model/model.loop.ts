@@ -153,7 +153,7 @@ export class MastraLLMVNext extends MastraBase {
     telemetry_settings,
     threadId,
     resourceId,
-    output,
+    structuredOutput,
     options,
     outputProcessors,
     returnScorerData,
@@ -162,6 +162,7 @@ export class MastraLLMVNext extends MastraBase {
     messageList,
     requireToolApproval,
     _internal,
+    agentId,
     // ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT | undefined> {
     let stopWhenToUse;
@@ -220,11 +221,12 @@ export class MastraLLMVNext extends MastraBase {
           ...telemetry_settings,
         },
         _internal,
-        output,
+        structuredOutput,
         outputProcessors,
         returnScorerData,
         llmAISpan,
         requireToolApproval,
+        agentId,
         options: {
           ...options,
           onStepFinish: async props => {
@@ -237,12 +239,12 @@ export class MastraLLMVNext extends MastraBase {
                   domain: ErrorDomain.LLM,
                   category: ErrorCategory.USER,
                   details: {
-                    modelId: props.model.modelId,
-                    modelProvider: props.model.provider,
+                    modelId: props.model?.modelId as string,
+                    modelProvider: props.model?.provider as string,
                     runId: runId ?? 'unknown',
                     threadId: threadId ?? 'unknown',
                     resourceId: resourceId ?? 'unknown',
-                    finishReason: props?.finishReason,
+                    finishReason: props?.finishReason as string,
                     toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
                     toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
                     usage: props?.usage ? JSON.stringify(props.usage) : '',
@@ -283,12 +285,12 @@ export class MastraLLMVNext extends MastraBase {
                   domain: ErrorDomain.LLM,
                   category: ErrorCategory.USER,
                   details: {
-                    modelId: props.model.modelId,
-                    modelProvider: props.model.provider,
+                    modelId: props.model?.modelId as string,
+                    modelProvider: props.model?.provider as string,
                     runId: runId ?? 'unknown',
                     threadId: threadId ?? 'unknown',
                     resourceId: resourceId ?? 'unknown',
-                    finishReason: props?.finishReason,
+                    finishReason: props?.finishReason as string,
                     toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
                     toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
                     usage: props?.usage ? JSON.stringify(props.usage) : '',
@@ -303,11 +305,12 @@ export class MastraLLMVNext extends MastraBase {
 
             llmAISpan?.end({
               output: {
-                text: props?.text,
+                files: props?.files,
+                object: props?.object,
                 reasoning: props?.reasoning,
                 reasoningText: props?.reasoningText,
-                files: props?.files,
                 sources: props?.sources,
+                text: props?.text,
                 warnings: props?.warnings,
               },
               attributes: {

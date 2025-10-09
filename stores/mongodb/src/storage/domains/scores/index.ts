@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringEntityType, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
 import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsMongoDB } from '../operations';
@@ -73,21 +74,32 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     }
   }
 
+  let metadataValue: any = null;
+  if (row.metadata) {
+    try {
+      metadataValue = typeof row.metadata === 'string' ? safelyParseJSON(row.metadata) : row.metadata;
+    } catch (e) {
+      console.warn('Failed to parse metadata:', e);
+    }
+  }
+
   return {
     id: row.id as string,
     entityId: row.entityId as string,
     entityType: row.entityType as ScoringEntityType,
     scorerId: row.scorerId as string,
     traceId: row.traceId as string,
+    spanId: row.spanId as string,
     runId: row.runId as string,
     scorer: scorerValue,
     preprocessStepResult: preprocessStepResultValue,
+    preprocessPrompt: row.preprocessPrompt as string,
     analyzeStepResult: analyzeStepResultValue,
+    generateScorePrompt: row.generateScorePrompt as string,
     score: row.score as number,
-    reason: row.reason as string,
-    extractPrompt: row.extractPrompt as string,
     analyzePrompt: row.analyzePrompt as string,
     reasonPrompt: row.reasonPrompt as string,
+    metadata: metadataValue,
     input: inputValue,
     output: outputValue,
     additionalContext: row.additionalContext,
@@ -133,42 +145,60 @@ export class ScoresStorageMongoDB extends ScoresStorage {
   }
 
   async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    let validatedScore: ValidatedSaveScorePayload;
+    try {
+      validatedScore = saveScorePayloadSchema.parse(score);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_SAVE_SCORE_VALIDATION_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
     try {
       const now = new Date();
       const scoreId = `score-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       const scoreData = {
         id: scoreId,
-        entityId: score.entityId,
-        entityType: score.entityType,
-        scorerId: score.scorerId,
-        traceId: score.traceId || '',
-        runId: score.runId,
-        scorer: typeof score.scorer === 'string' ? safelyParseJSON(score.scorer) : score.scorer,
+        entityId: validatedScore.entityId,
+        entityType: validatedScore.entityType,
+        scorerId: validatedScore.scorerId,
+        traceId: validatedScore.traceId || '',
+        spanId: validatedScore.spanId || '',
+        runId: validatedScore.runId,
+        scorer:
+          typeof validatedScore.scorer === 'string' ? safelyParseJSON(validatedScore.scorer) : validatedScore.scorer,
         preprocessStepResult:
-          typeof score.preprocessStepResult === 'string'
-            ? safelyParseJSON(score.preprocessStepResult)
-            : score.preprocessStepResult,
+          typeof validatedScore.preprocessStepResult === 'string'
+            ? safelyParseJSON(validatedScore.preprocessStepResult)
+            : validatedScore.preprocessStepResult,
         analyzeStepResult:
-          typeof score.analyzeStepResult === 'string'
-            ? safelyParseJSON(score.analyzeStepResult)
-            : score.analyzeStepResult,
-        score: score.score,
-        reason: score.reason,
-        preprocessPrompt: score.preprocessPrompt,
-        generateScorePrompt: score.generateScorePrompt,
-        generateReasonPrompt: score.generateReasonPrompt,
-        analyzePrompt: score.analyzePrompt,
-        reasonPrompt: score.reasonPrompt,
-        input: typeof score.input === 'string' ? safelyParseJSON(score.input) : score.input,
-        output: typeof score.output === 'string' ? safelyParseJSON(score.output) : score.output,
-        additionalContext: score.additionalContext,
+          typeof validatedScore.analyzeStepResult === 'string'
+            ? safelyParseJSON(validatedScore.analyzeStepResult)
+            : validatedScore.analyzeStepResult,
+        score: validatedScore.score,
+        reason: validatedScore.reason,
+        preprocessPrompt: validatedScore.preprocessPrompt,
+        generateScorePrompt: validatedScore.generateScorePrompt,
+        generateReasonPrompt: validatedScore.generateReasonPrompt,
+        analyzePrompt: validatedScore.analyzePrompt,
+        input: typeof validatedScore.input === 'string' ? safelyParseJSON(validatedScore.input) : validatedScore.input,
+        output:
+          typeof validatedScore.output === 'string' ? safelyParseJSON(validatedScore.output) : validatedScore.output,
+        additionalContext: validatedScore.additionalContext,
         runtimeContext:
-          typeof score.runtimeContext === 'string' ? safelyParseJSON(score.runtimeContext) : score.runtimeContext,
-        entity: typeof score.entity === 'string' ? safelyParseJSON(score.entity) : score.entity,
-        source: score.source,
-        resourceId: score.resourceId || '',
-        threadId: score.threadId || '',
+          typeof validatedScore.runtimeContext === 'string'
+            ? safelyParseJSON(validatedScore.runtimeContext)
+            : validatedScore.runtimeContext,
+        entity:
+          typeof validatedScore.entity === 'string' ? safelyParseJSON(validatedScore.entity) : validatedScore.entity,
+        source: validatedScore.source,
+        resourceId: validatedScore.resourceId || '',
+        threadId: validatedScore.threadId || '',
         createdAt: now,
         updatedAt: now,
       };
@@ -381,6 +411,65 @@ export class ScoresStorageMongoDB extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { entityId, entityType, page: pagination.page, perPage: pagination.perPage },
+        },
+        error,
+      );
+    }
+  }
+
+  async getScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    try {
+      const query = { traceId, spanId };
+      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const total = await collection.countDocuments(query);
+      const currentOffset = pagination.page * pagination.perPage;
+
+      if (total === 0) {
+        return {
+          scores: [],
+          pagination: {
+            total: 0,
+            page: pagination.page,
+            perPage: pagination.perPage,
+            hasMore: false,
+          },
+        };
+      }
+
+      const documents = await collection
+        .find(query)
+        .sort({ createdAt: 'desc' })
+        .skip(currentOffset)
+        .limit(pagination.perPage)
+        .toArray();
+
+      const scores = documents.map(row => transformScoreRow(row));
+      const hasMore = currentOffset + scores.length < total;
+
+      return {
+        scores,
+        pagination: {
+          total,
+          page: pagination.page,
+          perPage: pagination.perPage,
+          hasMore,
+        },
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_GET_SCORES_BY_SPAN_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { traceId, spanId, page: pagination.page, perPage: pagination.perPage },
         },
         error,
       );

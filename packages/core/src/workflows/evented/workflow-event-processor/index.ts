@@ -700,6 +700,8 @@ export class WorkflowEventProcessor extends EventProcessor {
       step: step.step,
       runId,
       stepResults,
+      // TODO: implement state
+      state: {},
       emitter: ee,
       runtimeContext: rc,
       input: (prevResult as any)?.output,
@@ -709,6 +711,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           : undefined,
       runCount,
       foreachIdx: step.type === 'foreach' ? executionPath[1] : undefined,
+      validateInputs: workflow.options.validateInputs,
     });
     runtimeContext = Object.fromEntries(rc.entries());
 

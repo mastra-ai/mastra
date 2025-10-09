@@ -212,4 +212,21 @@ describe('AnswerRelevancyScorer', () => {
     },
     TIMEOUT,
   );
+
+  it(
+    'should work with model router magic string format',
+    async () => {
+      // Test using model router format instead of createOpenAI
+      const modelRouterScorer = createAnswerRelevancyScorer({
+        model: 'openai/gpt-4o-mini',
+      });
+
+      const inputMessages = [createUIMessage({ role: 'user', content: testCases[0].input })];
+      const output = [createUIMessage({ role: 'assistant', content: testCases[0].output })];
+
+      const result = await modelRouterScorer.run(createAgentTestRun({ inputMessages, output }));
+      expect(result.score).toBeCloseTo(testCases[0].expectedResult.score, 1);
+    },
+    TIMEOUT,
+  );
 });

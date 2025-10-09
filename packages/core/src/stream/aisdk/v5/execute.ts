@@ -3,11 +3,12 @@ import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2, LanguageModelV2Prompt, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
 import type { CallSettings, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
+import type { StructuredOutputOptions } from '../../../agent/types';
 import { getResponseFormat } from '../../base/schema';
 import type { OutputSchema } from '../../base/schema';
+import type { LanguageModelV2StreamResult, OnResult } from '../../types';
 import { prepareToolsAndToolChoice } from './compat';
 import { AISDKV5InputStream } from './input';
-import { getModelSupport } from './model-supports';
 
 type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   runId: string;
@@ -24,8 +25,8 @@ type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   telemetry_settings?: TelemetrySettings;
   includeRawChunks?: boolean;
   modelSettings?: CallSettings;
-  onResult: (result: { warnings: any; request: any; rawResponse: any }) => void;
-  output?: OUTPUT;
+  onResult: OnResult;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
   /**
   Additional HTTP headers to be sent with the request.
   Only applicable for HTTP-based providers.
@@ -47,7 +48,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
   telemetry_settings,
   includeRawChunks,
   modelSettings,
-  output,
+  structuredOutput,
   headers,
   shouldThrowError,
 }: ExecutionProps<OUTPUT>) {
@@ -68,12 +69,16 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
     });
   }
 
-  const modelSupports = getModelSupport(model.modelId, model.provider);
-  const modelSupportsResponseFormat = modelSupports?.capabilities.responseFormat?.support === 'full';
-  const responseFormat = output ? getResponseFormat(output) : undefined;
+  const structuredOutputMode = structuredOutput?.schema
+    ? structuredOutput?.model
+      ? 'processor'
+      : 'direct'
+    : undefined;
+
+  const responseFormat = structuredOutput?.schema ? getResponseFormat(structuredOutput?.schema) : undefined;
 
   let prompt = inputMessages;
-  if (output && responseFormat?.type === 'json' && !modelSupportsResponseFormat) {
+  if (structuredOutputMode === 'direct' && responseFormat?.type === 'json' && structuredOutput?.jsonPromptInjection) {
     prompt = injectJsonInstructionIntoMessages({
       messages: inputMessages,
       schema: responseFormat.schema,
@@ -85,17 +90,19 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
     onResult,
     createStream: async () => {
       try {
-        const stream = await model.doStream({
+        const streamResult = await model.doStream({
           ...toolsAndToolChoice,
           prompt,
           providerOptions,
           abortSignal: options?.abortSignal,
           includeRawChunks,
-          responseFormat: modelSupportsResponseFormat ? responseFormat : undefined,
+          responseFormat:
+            structuredOutputMode === 'direct' && !structuredOutput?.jsonPromptInjection ? responseFormat : undefined,
           ...(modelSettings ?? {}),
           headers,
         });
-        return stream as any;
+        // We have to cast this because doStream is missing the warnings property in its return type even though it exists
+        return streamResult as unknown as LanguageModelV2StreamResult;
       } catch (error) {
         console.error('Error creating stream', error);
         if (isAbortError(error) && options?.abortSignal?.aborted) {
