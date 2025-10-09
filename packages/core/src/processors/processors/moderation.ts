@@ -2,7 +2,6 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
-import { InternalSpans } from '../../ai-tracing';
 import type { TracingContext } from '../../ai-tracing';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ChunkType } from '../../stream';

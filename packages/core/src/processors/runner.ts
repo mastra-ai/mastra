@@ -1,6 +1,7 @@
 import type { MastraMessageV2, MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
-import { AISpanType, type AISpan, type TracingContext } from '../ai-tracing';
+import { AISpanType } from '../ai-tracing';
+import type { AISpan, TracingContext } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
 import type { ChunkType, OutputSchema } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
@@ -16,30 +17,18 @@ export class ProcessorState<OUTPUT extends OutputSchema = undefined> {
   public span?: AISpan<AISpanType.PROCESSOR_RUN>;
 
   constructor(options: { processorName: string; tracingContext?: TracingContext; processorIndex?: number }) {
-    // Create the PROCESSOR_RUN span if tracing context is provided
-    // Walk up the span tree to find the AGENT_RUN span to attach the processor to
-    const currentSpan = options.tracingContext?.currentSpan;
-    if (!currentSpan) {
-      return;
-    }
+    const { processorName, tracingContext, processorIndex } = options;
+    const currentSpan = tracingContext?.currentSpan;
 
-    // Walk up to find the AGENT_RUN span
-    // The hierarchy may include nested workflows and LLM spans between currentSpan and AGENT_RUN
-    let agentSpan: typeof currentSpan | undefined = currentSpan;
-    while (agentSpan && agentSpan.type !== AISpanType.AGENT_RUN) {
-      agentSpan = agentSpan.parent;
-    }
-
-    // If we didn't find an AGENT_RUN span, fall back to currentSpan.parent or currentSpan
-    const parentSpan = agentSpan || currentSpan.parent || currentSpan;
-
-    this.span = parentSpan.createChildSpan({
+    // Find the AGENT_RUN span by walking up the parent chain
+    const parentSpan = currentSpan?.findParent(AISpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+    this.span = parentSpan?.createChildSpan({
       type: AISpanType.PROCESSOR_RUN,
-      name: `output processor: ${options.processorName}`,
+      name: `output processor: ${processorName}`,
       attributes: {
-        processorName: options.processorName,
+        processorName: processorName,
         processorType: 'output',
-        processorIndex: options.processorIndex ?? 0,
+        processorIndex: processorIndex ?? 0,
       },
       input: {
         streamParts: [],
@@ -91,24 +80,6 @@ export class ProcessorRunner {
     this.agentName = agentName;
   }
 
-  /**
-   * Find the AGENT_RUN span by walking up the parent chain from currentSpan.
-   * This is needed because currentSpan might be a WORKFLOW_STEP or LLM_GENERATION span.
-   * Returns the found AGENT_RUN span, or falls back to currentSpan.parent or currentSpan.
-   */
-  private findAgentSpan(currentSpan: AISpan<any> | undefined): AISpan<any> | undefined {
-    if (!currentSpan) return undefined;
-
-    // Walk up to find the AGENT_RUN span
-    let agentSpan: typeof currentSpan | undefined = currentSpan;
-    while (agentSpan && agentSpan.type !== AISpanType.AGENT_RUN) {
-      agentSpan = agentSpan.parent;
-    }
-
-    // If we didn't find an AGENT_RUN span, fall back to currentSpan.parent or currentSpan
-    return agentSpan || currentSpan.parent || currentSpan;
-  }
-
   async runOutputProcessors(
     messageList: MessageList,
     tracingContext?: TracingContext,
@@ -140,7 +111,8 @@ export class ProcessorRunner {
         continue;
       }
 
-      const parentSpan = this.findAgentSpan(tracingContext?.currentSpan);
+      const currentSpan = tracingContext?.currentSpan;
+      const parentSpan = currentSpan?.findParent(AISpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
         type: AISpanType.PROCESSOR_RUN,
         name: `output processor: ${processor.name}`,
@@ -235,7 +207,6 @@ export class ProcessorRunner {
               tracingContext: { currentSpan: state.span },
             });
 
-            // Update output DIRECTLY (no update() call, no event)
             if (state.span && !state.span.isEvent) {
               state.span.output = result;
             }
@@ -369,7 +340,8 @@ export class ProcessorRunner {
         continue;
       }
 
-      const parentSpan = this.findAgentSpan(tracingContext?.currentSpan);
+      const currentSpan = tracingContext?.currentSpan;
+      const parentSpan = currentSpan?.findParent(AISpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
         type: AISpanType.PROCESSOR_RUN,
         name: `input processor: ${processor.name}`,

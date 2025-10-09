@@ -357,6 +357,9 @@ export interface AISpan<TType extends AISpanType> extends BaseSpan<TType> {
   /** Get the closest parent spanId that isn't an internal span */
   getParentSpanId(includeInternalSpans?: boolean): string | undefined;
 
+  /** Find the closest parent span of a specific type by walking up the parent chain */
+  findParent<T extends AISpanType>(spanType: T): AISpan<T> | undefined;
+
   /** Returns a lightweight span ready for export */
   exportSpan(includeInternalSpans?: boolean): ExportedAISpan<TType> | undefined;
 }
