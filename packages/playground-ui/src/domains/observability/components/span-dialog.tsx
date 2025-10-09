@@ -39,6 +39,7 @@ type SpanDialogProps = {
   onViewToggle?: () => void;
   defaultActiveTab?: string;
   initialScoreId?: string;
+  computeTraceLink: (traceId: string, spanId?: string) => string;
 };
 
 export function SpanDialog({
@@ -55,6 +56,7 @@ export function SpanDialog({
   spanInfo = [],
   defaultActiveTab = 'details',
   initialScoreId,
+  computeTraceLink,
 }: SpanDialogProps) {
   const { Link } = useLinkComponent();
 
@@ -137,6 +139,7 @@ export function SpanDialog({
                   initialScoreId={initialScoreId}
                   traceId={trace.traceId}
                   spanId={span?.spanId}
+                  computeTraceLink={computeTraceLink}
                 />
               </Section>
             </Sections>

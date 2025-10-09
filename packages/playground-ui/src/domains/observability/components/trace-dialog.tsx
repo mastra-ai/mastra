@@ -44,6 +44,7 @@ type TraceDialogProps = {
   isLoadingSpans?: boolean;
   computeAgentsLink?: () => string;
   computeWorkflowsLink?: () => string;
+  computeTraceLink: (traceId: string, spanId?: string, tab?: string) => string;
   onScorerTriggered: (scorerName: string, traceId: string, spanId?: string) => void;
   initialSpanId?: string;
   initialSpanTab?: string;
@@ -61,7 +62,7 @@ export function TraceDialog({
   isLoadingSpans,
   computeAgentsLink,
   computeWorkflowsLink,
-  onScorerTriggered,
+  computeTraceLink,
   initialSpanId,
   initialSpanTab,
   initialScoreId,
@@ -128,16 +129,23 @@ export function TraceDialog({
     setSelectedSpanId(hierarchicalSpans[0]?.id);
     setSpanDialogDefaultTab('scores');
 
-    navigate(`/observability?traceId=${traceId}&spanId=${hierarchicalSpans?.[0]?.id}&tab=scores`);
+    if (traceId) {
+      navigate(`${computeTraceLink(traceId, hierarchicalSpans?.[0]?.id)}&tab=scores`);
+    }
   };
 
   const handleToLastScore = () => {
     setSelectedSpanId(hierarchicalSpans[0]?.id);
     setSpanDialogDefaultTab('scores');
 
-    navigate(
-      `/observability?traceId=${traceId}&spanId=${hierarchicalSpans?.[0]?.id}&tab=scores&scoreId=${hierarchicalSpans?.[0]?.recentScore?.id}`,
-    );
+    if (traceId) {
+      navigate(
+        `${computeTraceLink(
+          traceId,
+          hierarchicalSpans?.[0]?.id,
+        )}&tab=scores&scoreId=${hierarchicalSpans?.[0]?.recentScore?.id}`,
+      );
+    }
   };
 
   const selectedSpanInfo = getSpanInfo({ span: selectedSpan, withTraceId: !combinedView, withSpanId: combinedView });
@@ -276,7 +284,7 @@ export function TraceDialog({
           isLoadingSpanScoresData={isLoadingSpanScoresData}
           isOpen={Boolean(dialogIsOpen && selectedSpanId && !combinedView)}
           onClose={() => {
-            navigate(`/observability?traceId=${traceId}`);
+            navigate(computeTraceLink(traceId || ''));
             setDialogIsOpen(false);
             setSelectedSpanId(undefined);
           }}
@@ -286,6 +294,7 @@ export function TraceDialog({
           spanInfo={selectedSpanInfo}
           defaultActiveTab={spanDialogDefaultTab}
           initialScoreId={initialScoreId}
+          computeTraceLink={computeTraceLink}
         />
       )}
     </>

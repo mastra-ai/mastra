@@ -26,6 +26,7 @@ type SpanScoreListProps = {
   traceId?: string;
   spanId?: string;
   onPageChange?: (page: number) => void;
+  computeTraceLink: (traceId: string, spanId?: string) => string;
 };
 
 type SelectedScore = ClientScoreRowData | undefined;
@@ -37,6 +38,7 @@ export function SpanScoreList({
   spanId,
   initialScoreId,
   onPageChange,
+  computeTraceLink,
 }: SpanScoreListProps) {
   const { navigate } = useLinkComponent();
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
@@ -128,7 +130,9 @@ export function SpanScoreList({
         score={selectedScore as ClientScoreRowData}
         isOpen={dialogIsOpen}
         onClose={() => {
-          navigate(`/observability?traceId=${traceId}&spanId=${spanId}&tab=scores`);
+          if (traceId) {
+            navigate(`${computeTraceLink(traceId, spanId)}&tab=scores`);
+          }
           setDialogIsOpen(false);
         }}
         dialogLevel={3}

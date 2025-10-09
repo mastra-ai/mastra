@@ -17,6 +17,7 @@ import {
   EntryListSkeleton,
   getToNextEntryFn,
   getToPreviousEntryFn,
+  useLinkComponent,
 } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
@@ -29,6 +30,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router';
 
 export default function Observability() {
   const navigate = useNavigate();
+  const { paths } = useLinkComponent();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedTraceId, setSelectedTraceId] = useState<string | undefined>();
   const [selectedEntityOption, setSelectedEntityOption] = useState<EntityOptions | undefined>({
@@ -41,6 +43,8 @@ export default function Observability() {
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
   const { data: agents, isLoading: isLoadingAgents } = useAgents();
   const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
+
+  console.log({ paths });
 
   const { data: aiTrace, isLoading: isLoadingAiTrace } = useAITrace(selectedTraceId, { enabled: !!selectedTraceId });
 
@@ -228,6 +232,7 @@ export default function Observability() {
           setDialogIsOpen(false);
           navigate(`/scorers/${scorerName}`);
         }}
+        computeTraceLink={(traceId, spanId) => `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`}
       />
     </>
   );
