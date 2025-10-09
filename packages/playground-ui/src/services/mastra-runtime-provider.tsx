@@ -16,7 +16,6 @@ import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-
 import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
 
-import { handleNetworkMessageFromMemory } from './agent-network-message';
 import { ModelSettings, MastraUIMessage, useChat } from '@mastra/react';
 
 const handleFinishReason = (finishReason: string) => {
@@ -78,14 +77,6 @@ const initializeMessageState = (initialMessages: Message[]) => {
   // @ts-expect-error - TODO: fix the ThreadMessageLike type, it's missing some properties like "data" from the role.
   const convertedMessages: ThreadMessageLike[] = initialMessages
     ?.map((message: Message) => {
-      let content;
-      try {
-        content = JSON.parse(message.content);
-        if (content.isNetwork) {
-          return handleNetworkMessageFromMemory(content);
-        }
-      } catch (e) {}
-
       const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
         type: image.contentType.startsWith(`image/`)
           ? 'image'
