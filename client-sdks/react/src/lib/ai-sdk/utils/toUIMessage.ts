@@ -112,6 +112,26 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
   const result = [...conversation];
 
   switch (chunk.type) {
+    case 'tripwire': {
+      // Create a new assistant message
+      const newMessage: MastraUIMessage = {
+        id: `tripwire-${chunk.runId + Date.now()}`,
+        role: 'assistant',
+        parts: [
+          {
+            type: 'text',
+            text: chunk.payload.tripwireReason,
+          },
+        ],
+        metadata: {
+          ...metadata,
+          status: 'warning',
+        },
+      };
+
+      return [...result, newMessage];
+    }
+
     case 'start': {
       // Create a new assistant message
       const newMessage: MastraUIMessage = {
