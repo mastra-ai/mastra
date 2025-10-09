@@ -41,6 +41,7 @@ import type {
   WorkflowOptions,
   WorkflowResult,
   WorkflowRunState,
+  WorkflowRunStatus,
 } from './types';
 
 export function mapVariable<TStep extends Step<string, any, any, any, any, any>>({
@@ -395,7 +396,8 @@ export class Workflow<
   protected serializedStepFlow: SerializedStepFlowEntry[];
   protected executionEngine: ExecutionEngine;
   protected executionGraph: ExecutionGraph;
-  #options: WorkflowOptions;
+  #options: Omit<WorkflowOptions, 'shouldPersistSnapshot' | 'validateInputs'> &
+    Required<Pick<WorkflowOptions, 'shouldPersistSnapshot' | 'validateInputs'>>;
   public retryConfig: {
     attempts?: number;
     delay?: number;
@@ -415,7 +417,7 @@ export class Workflow<
     executionEngine,
     retryConfig,
     steps,
-    options,
+    options = {},
   }: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
@@ -430,13 +432,17 @@ export class Workflow<
     this.#mastra = mastra;
     this.steps = {};
     this.stepDefs = steps;
-    this.#options = options ?? { validateInputs: false };
+    this.#options = {
+      validateInputs: options.validateInputs ?? false,
+      shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
+      tracingPolicy: options.tracingPolicy,
+    };
 
     if (!executionEngine) {
       // TODO: this should be configured using the Mastra class instance that's passed in
       this.executionEngine = new DefaultExecutionEngine({
         mastra: this.#mastra,
-        options: { tracingPolicy: options?.tracingPolicy, validateInputs: options?.validateInputs },
+        options: this.#options,
       });
     } else {
       this.executionEngine = executionEngine;
@@ -1017,9 +1023,14 @@ export class Workflow<
 
     this.#runs.set(runIdToUse, run);
 
+    const shouldPersistSnapshot = this.#options.shouldPersistSnapshot({
+      workflowStatus: run.workflowRunStatus,
+      stepResults: {},
+    });
+
     const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
-    if (!workflowSnapshotInStorage) {
+    if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
@@ -1129,7 +1140,7 @@ export class Workflow<
 
     this.executionEngine.options = {
       ...(this.executionEngine.options || {}),
-      validateInputs,
+      validateInputs: validateInputs ?? false,
     };
 
     const isResume = !!(resume?.steps && resume.steps.length > 0);
@@ -1402,6 +1413,8 @@ export class Run<
 
   readonly workflowSteps: Record<string, StepWithComponent>;
 
+  readonly workflowRunStatus: WorkflowRunStatus;
+
   /**
    * The storage for this run
    */
@@ -1459,6 +1472,7 @@ export class Run<
     this.workflowSteps = params.workflowSteps;
     this.validateInputs = params.validateInputs;
     this.stateSchema = params.stateSchema;
+    this.workflowRunStatus = 'pending';
   }
 
   public get abortController(): AbortController {

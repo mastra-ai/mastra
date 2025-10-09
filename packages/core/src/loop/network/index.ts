@@ -889,6 +889,9 @@ export async function createNetworkLoop({
       threadResourceId: z.string().optional(),
       isOneOff: z.boolean(),
     }),
+    options: {
+      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+    },
   });
 
   networkWorkflow
@@ -1042,6 +1045,9 @@ export async function networkLoop<
       completionReason: z.string().optional(),
       iteration: z.number(),
     }),
+    options: {
+      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+    },
   })
     .dountil(networkWorkflow, async ({ inputData }) => {
       return inputData.isComplete || (maxIterations && inputData.iteration >= maxIterations);
