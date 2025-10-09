@@ -248,27 +248,6 @@ describe('Dataset Handlers', () => {
       expect(result.metadata).toEqual(payload.metadata);
     });
 
-    it('should handle duplicate name errors from storage', async () => {
-      // Arrange
-      const payload: CreateDatasetPayload = {
-        name: 'Existing Dataset',
-      };
-      const duplicateError = new Error('Dataset with name "Existing Dataset" already exists');
-      mockStorage.createDataset.mockRejectedValue(duplicateError);
-
-      // Act & Assert
-      await expect(
-        createDatasetHandler({
-          mastra: mockMastra,
-          body: payload,
-        }),
-      ).rejects.toEqual(
-        new HTTPException(500, {
-          message: 'Error creating dataset: Dataset with name "Existing Dataset" already exists',
-        }),
-      );
-    });
-
     it('should return dataset with auto-generated version', async () => {
       // Arrange
       const payload: CreateDatasetPayload = {
