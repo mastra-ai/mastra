@@ -14,6 +14,7 @@ import type {
   MastraModelConfig,
   OpenAICompatibleConfig,
 } from '../llm';
+import type { ModelRouterModelId } from '../llm/model';
 import type {
   StreamTextOnFinishCallback,
   StreamTextOnStepFinishCallback,
@@ -21,7 +22,7 @@ import type {
 } from '../llm/model/base.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { MastraLanguageModel, MemoryConfig, StorageThreadType } from '../memory/types';
+import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import type { RuntimeContext } from '../runtime-context';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
@@ -36,7 +37,6 @@ import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
 import type { SaveQueueManager } from './save-queue';
-import type { ModelRouterModelId } from '../llm/model';
 
 export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
 export type { Message as AiMessageType } from 'ai';
