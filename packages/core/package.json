@@ -232,7 +232,7 @@
   "devDependencies": {
     "@ai-sdk/anthropic": "^2.0.23",
     "@ai-sdk/google": "^2.0.17",
-    "@ai-sdk/openai": "^2.0.42",
+    "@ai-sdk/openai": "2.0.42",
     "@ai-sdk/openai-compatible": "^1.0.19",
     "@ai-sdk/xai": "^2.0.23",
     "@ai-sdk/anthropic-v4": "npm:@ai-sdk/anthropic@1.2.12",

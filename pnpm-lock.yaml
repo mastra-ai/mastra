@@ -1445,8 +1445,8 @@ importers:
         specifier: npm:@ai-sdk/google@1.2.22
         version: '@ai-sdk/google@1.2.22(zod@3.25.76)'
       '@ai-sdk/openai':
-        specifier: ^2.0.42
-        version: 2.0.46(zod@3.25.76)
+        specifier: 2.0.42
+        version: 2.0.42(zod@3.25.76)
       '@ai-sdk/openai-compatible':
         specifier: ^1.0.19
         version: 1.0.20(zod@3.25.76)
