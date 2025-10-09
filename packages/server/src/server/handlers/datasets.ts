@@ -4,8 +4,8 @@ import type {
   AddDatasetRowsPayload,
   UpdateDatasetRowsPayload,
   DeleteDatasetRowsPayload,
+  StoragePagination,
 } from '@mastra/core/storage';
-import type { StoragePagination } from '@mastra/core/storage';
 
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';

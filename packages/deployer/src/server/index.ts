@@ -24,6 +24,7 @@ import { rootHandler } from './handlers/root';
 import { agentBuilderRouter } from './handlers/routes/agent-builder/router';
 import { getModelProvidersHandler } from './handlers/routes/agents/handlers';
 import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
+import { datasetsRoutes } from './handlers/routes/datasets/router';
 import { logsRouter } from './handlers/routes/logs/router';
 import { mcpRouter } from './handlers/routes/mcp/router';
 import { memoryRoutes } from './handlers/routes/memory/router';
@@ -35,7 +36,6 @@ import { vectorRouter } from './handlers/routes/vector/router';
 import { workflowsRouter } from './handlers/routes/workflows/router';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
-import { datasetsRoutes } from './handlers/routes/datasets/router';
 
 type Bindings = {};
 

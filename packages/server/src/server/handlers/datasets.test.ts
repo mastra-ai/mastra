@@ -1,23 +1,10 @@
-import { Mastra } from '@mastra/core/mastra';
+import type { Mastra } from '@mastra/core/mastra';
 import { MockStore } from '@mastra/core/storage';
 import type { DatasetRecord, CreateDatasetPayload, DatasetVersion } from '@mastra/core/storage';
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
-import {
-  createDatasetHandler,
-  getDatasetsHandler,
-  getDatasetByIdHandler,
-  updateDatasetHandler,
-  deleteDatasetHandler,
-  getDatasetVersionsHandler,
-  addDatasetRowsHandler,
-  getDatasetRowsHandler,
-  updateDatasetRowsHandler,
-  deleteDatasetRowsHandler,
-  getDatasetRowByIdHandler,
-  getDatasetRowVersionsHandler,
-} from './datasets';
+import { createDatasetHandler } from './datasets';
 
 type MockedDatasetFunctions = {
   createDataset: Mock;
