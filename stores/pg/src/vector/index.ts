@@ -201,7 +201,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            schemaName: (config as any).schemaName ?? '',
+            schemaName: 'schemaName' in config ? (config.schemaName ?? '') : '',
           },
         },
         error,
