@@ -1184,6 +1184,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
       "headers": undefined,
       "id": "id-0",
       "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "type": "finish-step",
@@ -1236,6 +1241,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
       "headers": undefined,
       "id": "id-0",
       "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "type": "finish-step",
@@ -1294,6 +1304,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
       "headers": undefined,
       "id": "id-0",
       "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "type": "finish-step",
@@ -1443,13 +1458,6 @@ exports[`Loop Tests > AISDK v5 > result.sources > should contain sources 1`] = `
 `;
 
 exports[`Loop Tests > AISDK v5 > result.text > should resolve with full text 1`] = `"Hello, world!"`;
-
-exports[`Loop Tests > AISDK v5 > result.textStream > should not include reasoning content in textStream 1`] = `
-[
-  "Hi",
-  " there!",
-]
-`;
 
 exports[`Loop Tests > AISDK v5 > result.toUIMessageStream > should mask error messages by default 1`] = `
 [
@@ -1841,6 +1849,11 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
       "headers": undefined,
       "id": "id-0",
       "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "type": "finish-step",

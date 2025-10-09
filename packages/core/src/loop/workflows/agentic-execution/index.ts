@@ -50,12 +50,13 @@ export function createAgenticExecutionWorkflow<
         // VNext execution as internal
         internal: InternalSpans.WORKFLOW,
       },
+      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
     },
   })
     .then(llmExecutionStep)
     .map(
       async ({ inputData }) => {
-        const typedInputData = inputData as LLMIterationData<Tools>;
+        const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
         if (modelStreamSpan && telemetry_settings?.recordOutputs !== false && typedInputData.output.toolCalls?.length) {
           modelStreamSpan.setAttribute(
             'stream.response.toolCalls',

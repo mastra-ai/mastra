@@ -155,16 +155,16 @@ export const ReferenceCards = () => {
             href: "/reference/agents/generate",
           },
           {
-            title: ".generateVNext() (Experimental)",
-            href: "/reference/agents/generateVNext",
+            title: ".generateLegacy() (Legacy)",
+            href: "/reference/agents/generateLegacy",
           },
           {
             title: ".stream()",
             href: "/reference/agents/stream",
           },
           {
-            title: ".streamVNext() (Experimental)",
-            href: "/reference/agents/streamVNext",
+            title: ".streamLegacy() (Legacy)",
+            href: "/reference/agents/streamLegacy",
           },
           {
             title: "MastraModelOutput",
@@ -218,10 +218,6 @@ export const ReferenceCards = () => {
             title: ".getDefaultStreamOptions()",
             href: "/reference/agents/getDefaultStreamOptions",
           },
-          {
-            title: ".getDefaultVNextStreamOptions()",
-            href: "/reference/agents/getDefaultVNextStreamOptions",
-          },
         ],
         Streaming: [
           {
@@ -229,8 +225,8 @@ export const ReferenceCards = () => {
             href: "/reference/streaming/stream",
           },
           {
-            title: ".streamVNext() (Experimental)",
-            href: "/reference/streaming/streamVNext",
+            title: ".streamLegacy() (Legacy)",
+            href: "/reference/streaming/streamLegacy",
           },
           {
             title: "MastraModelOutput",
@@ -345,8 +341,8 @@ export const ReferenceCards = () => {
             href: "/reference/workflows/run-methods/stream",
           },
           {
-            title: ".streamVNext() (Experimental)",
-            href: "/reference/workflows/run-methods/streamVNext",
+            title: ".streamLegacy() (Legacy)",
+            href: "/reference/workflows/run-methods/streamLegacy",
           },
           {
             title: ".watch()",

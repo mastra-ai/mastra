@@ -1,10 +1,11 @@
 import { ReadableStream } from 'stream/web';
 import type z from 'zod';
-import type { Run, Step } from '../workflows';
+import type { Run, Step, WorkflowRunStatus } from '../workflows';
 import type { ChunkType } from './types';
 import { ChunkFrom } from './types';
 
 export class MastraWorkflowStream<
+  TState extends z.ZodObject<any>,
   TInput extends z.ZodType<any>,
   TOutput extends z.ZodType<any>,
   TSteps extends Step<string, any, any>[],
@@ -19,14 +20,14 @@ export class MastraWorkflowStream<
     resolve: (value: void) => void;
     reject: (reason?: any) => void;
   };
-  #run: Run<any, TSteps, TInput, TOutput>;
+  #run: Run<any, TSteps, TState, TInput, TOutput>;
 
   constructor({
     createStream,
     run,
   }: {
     createStream: (writer: WritableStream<ChunkType>) => Promise<ReadableStream<any>> | ReadableStream<any>;
-    run: Run<any, TSteps, TInput, TOutput>;
+    run: Run<any, TSteps, TState, TInput, TOutput>;
   }) {
     const deferredPromise = {
       promise: null,
@@ -58,7 +59,7 @@ export class MastraWorkflowStream<
       if ('inputTokens' in usage) {
         this.#usageCount.inputTokens += parseInt(usage?.inputTokens?.toString() ?? '0', 10);
         this.#usageCount.outputTokens += parseInt(usage?.outputTokens?.toString() ?? '0', 10);
-        // we need to handle both formats because you can use a V1 model inside a streamVNext workflow
+        // we need to handle both formats because you can use a V1 model inside a stream workflow
       } else if ('promptTokens' in usage) {
         this.#usageCount.inputTokens += parseInt(usage?.promptTokens?.toString() ?? '0', 10);
         this.#usageCount.outputTokens += parseInt(usage?.completionTokens?.toString() ?? '0', 10);
@@ -102,7 +103,7 @@ export class MastraWorkflowStream<
 
         const stream: ReadableStream<ChunkType> = await createStream(writer);
 
-        let workflowStatus = 'success';
+        let workflowStatus: WorkflowRunStatus = 'success';
 
         for await (const chunk of stream) {
           // update the usage count
