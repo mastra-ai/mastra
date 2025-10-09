@@ -16,8 +16,6 @@ vi.mock('./utils', () => ({
   createMastraDir: vi.fn(),
   writeCodeSample: vi.fn(),
   checkDependencies: vi.fn(),
-  getAISDKPackage: vi.fn(() => '@ai-sdk/openai'),
-  getAISDKPackageVersion: vi.fn(() => '^1.0.0'),
 }));
 
 vi.mock('../../utils/logger', () => ({

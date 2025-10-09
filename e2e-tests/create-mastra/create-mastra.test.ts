@@ -98,6 +98,7 @@ describe('create mastra', () => {
               "agents": {},
               "defaultGenerateOptions": {},
               "defaultStreamOptions": {},
+              "inputProcessors": [],
               "instructions": "
                 You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
 
@@ -115,7 +116,8 @@ describe('create mastra', () => {
               "modelId": "gpt-4o-mini",
               "modelVersion": "v2",
               "name": "Weather Agent",
-              "provider": "openai.responses",
+              "outputProcessors": [],
+              "provider": "openai",
               "tools": {
                 "weatherTool": {
                   "description": "Get current weather for a location",

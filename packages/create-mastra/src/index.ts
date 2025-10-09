@@ -76,7 +76,7 @@ program
       components: args.components ? args.components.split(',') : [],
       llmProvider: args.llm,
       addExample: args.example,
-      llmApiKey: args['llm-api-key'],
+      llmApiKey: args.llmApiKey,
       createVersionTag,
       timeout,
       projectName,

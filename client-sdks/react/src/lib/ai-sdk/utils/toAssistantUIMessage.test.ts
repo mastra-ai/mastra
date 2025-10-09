@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { toAssistantUIMessage } from './toAssistantUIMessage';
-import { MastraUIMessage } from './toUIMessage';
+import { MastraUIMessage } from '../types';
 
 describe('toAssistantUIMessage', () => {
   describe('Basic message conversion', () => {
@@ -585,8 +585,7 @@ describe('toAssistantUIMessage', () => {
           },
         ],
         metadata: {
-          customField: 'customValue',
-          timestamp: 1234567890,
+          mode: 'stream',
         },
       };
 
@@ -594,8 +593,7 @@ describe('toAssistantUIMessage', () => {
 
       expect(result.metadata).toEqual({
         custom: {
-          customField: 'customValue',
-          timestamp: 1234567890,
+          mode: 'stream',
         },
       });
     });

@@ -1,6 +1,6 @@
 {
   "name": "@internal/changeset-cli",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Custom changeset CLI for Mastra monorepo versioning",
   "type": "module",
   "main": "dist/src/index.js",
@@ -21,11 +21,11 @@
     "@changesets/read": "^0.6.5",
     "@changesets/types": "^6.1.0",
     "@changesets/write": "^0.4.0",
-    "@clack/prompts": "1.0.0-alpha.5",
-    "@inquirer/editor": "^4.2.0",
+    "@clack/prompts": "1.0.0-alpha.6",
+    "@inquirer/editor": "^4.2.20",
     "@manypkg/get-packages": "^2.2.2",
     "@manypkg/tools": "^2.1.0",
-    "execa": "^9.5.1",
+    "execa": "^9.6.0",
     "mri": "^1.2.0",
     "picocolors": "^1.1.1",
     "semver": "^7.7.2"
@@ -33,7 +33,7 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@types/node": "^22.10.5",
-    "@types/semver": "^7.5.8",
+    "@types/semver": "^7.7.1",
     "eslint": "^9.35.0",
     "tsx": "^4.19.2",
     "typescript": "^5.8.3"
