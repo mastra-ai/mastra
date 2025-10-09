@@ -187,6 +187,25 @@ export interface Config<
   tools?: TTools;
 
   /**
+   * Interfaces provide dependency injection for dynamic agent creation from storage.
+   * Register implementations here that will be used when instantiating agents from stored configurations.
+   *
+   * @example
+   * ```typescript
+   * import { Memory } from '@mastra/memory';
+   *
+   * const mastra = new Mastra({
+   *   interfaces: {
+   *     memory: Memory
+   *   }
+   * });
+   * ```
+   */
+  interfaces?: {
+    memory?: typeof MastraMemory;
+  };
+
+  /**
    * Server middleware functions to be applied to API routes
    * Each middleware can specify a path pattern (defaults to '/api/*')
    * @deprecated use server.middleware instead
@@ -271,6 +290,9 @@ export class Mastra<
   #tts?: TTTS;
   #deployer?: MastraDeployer;
   #tools?: TTools;
+  #interfaces?: {
+    memory?: typeof MastraMemory;
+  };
   #serverMiddleware: Array<{
     handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
     path: string;
@@ -613,6 +635,13 @@ do:
     }
 
     /*
+    Interfaces
+    */
+    if (config?.interfaces) {
+      this.#interfaces = config.interfaces;
+    }
+
+    /*
     Agents
     */
     const agents: Record<string, Agent> = {};
@@ -833,12 +862,20 @@ do:
    * const sameAgent = mastra.getAgentById(assistant.id);
    * ```
    */
-  public getAgentById(id: string): Agent {
+  public async getAgentById(id: string): Promise<Agent> {
     let agent = Object.values(this.#agents).find(a => a.id === id);
 
     if (!agent) {
       try {
-        agent = this.getAgent(id as any);
+        agent = this.getAgent(id);
+      } catch {
+        // do nothing
+      }
+    }
+
+    if (!agent) {
+      try {
+        agent = await this.getAgentFromConfig(id);
       } catch {
         // do nothing
       }
@@ -1186,30 +1223,32 @@ do:
 
     // Create memory factory function if memoryConfig is present
     // The memory will be created lazily when first accessed
-    // This allows the consumer to provide their Memory implementation
-    let memory: ((args: { mastra?: any }) => Promise<MastraMemory>) | undefined = undefined;
-    if (config.memoryConfig) {
-      const memoryConfig = config.memoryConfig;
-      memory = async () => {
-        // Dynamically import Memory from @mastra/memory
-        // This will be resolved by the consumer's package
-        try {
-          // @ts-expect-error - @mastra/memory is an optional peer dependency
-          const { Memory } = await import('@mastra/memory');
-          return new Memory({
-            options: memoryConfig,
-          });
-        } catch (err) {
-          throw new MastraError({
-            id: 'MASTRA_GET_AGENT_MEMORY_IMPORT_FAILED',
-            domain: ErrorDomain.MASTRA,
-            category: ErrorCategory.USER,
-            text: `Failed to import Memory from @mastra/memory. Make sure @mastra/memory is installed.`,
-            details: { error: String(err) },
-          });
-        }
-      };
+    // Uses the Memory implementation provided via interfaces.memory
+    let memory: MastraMemory | undefined = undefined;
+    if (Object.keys(config.memoryConfig || {}).length > 0) {
+      const memoryConfig = config.memoryConfig!;
+      const MemoryClass = this.#interfaces?.memory;
+
+      if (!MemoryClass) {
+        throw new MastraError({
+          id: 'MASTRA_GET_AGENT_MEMORY_NOT_CONFIGURED',
+          domain: ErrorDomain.MASTRA,
+          category: ErrorCategory.USER,
+          text: `Memory interface not configured. Please provide a Memory class via interfaces.memory in your Mastra config.`,
+          details: {
+            agentId: id,
+            memoryConfig: JSON.stringify(memoryConfig),
+          },
+        });
+      }
+
+      // @ts-expect-error - MemoryClass will be a concrete implementation of MastraMemory, not the abstract class
+      memory = new MemoryClass({
+        ...memoryConfig,
+      });
     }
+
+    console.info('memory config ', config.memoryConfig);
 
     const agent = new Agent({
       id: config.id,
@@ -1748,6 +1787,32 @@ do:
    */
   public getTools(): TTools {
     return this.#tools || ({} as TTools);
+  }
+
+  /**
+   * Gets the registered interfaces for dynamic agent creation.
+   *
+   * These interfaces are used when instantiating agents from stored configurations,
+   * providing the necessary implementations for features like memory.
+   *
+   * @example
+   * ```typescript
+   * import { Memory } from '@mastra/memory';
+   *
+   * const mastra = new Mastra({
+   *   interfaces: {
+   *     memory: Memory
+   *   }
+   * });
+   *
+   * const interfaces = mastra.getInterfaces();
+   * if (interfaces?.memory) {
+   *   const memoryInstance = new interfaces.memory({ /* config *\/ });
+   * }
+   * ```
+   */
+  public getInterfaces() {
+    return this.#interfaces;
   }
 
   /**

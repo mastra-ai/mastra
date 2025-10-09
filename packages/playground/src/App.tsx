@@ -7,6 +7,7 @@ import { AgentLayout } from '@/domains/agents/agent-layout';
 import Tools from '@/pages/tools';
 
 import Agents from './pages/agents';
+import CreateAgent from './pages/agents/create';
 import Agent from './pages/agents/agent';
 import AgentEvalsPage from './pages/agents/agent/evals';
 import AgentTracesPage from './pages/agents/agent/traces';
@@ -37,6 +38,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
   agentsLink: () => `/agents`,
+  createAgentLink: () => `/agents/create`,
   agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/${uuid()}`,
   agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/chat/${threadId}`,
   workflowsLink: () => `/workflows`,
@@ -111,6 +113,7 @@ function App() {
                   }
                 >
                   <Route path="/agents" element={<Agents />} />
+                  <Route path="/agents/create" element={<CreateAgent />} />
                   <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
                   <Route path="/agents/:agentId/tools/:toolId" element={<AgentTool />} />
                   <Route

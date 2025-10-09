@@ -1,7 +1,7 @@
 import { Mastra } from '@mastra/core';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
-
+import { Memory } from '@mastra/memory';
 import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { myWorkflow } from './workflows';
@@ -10,7 +10,7 @@ import { createScorer } from '@mastra/core/scores';
 import { myWorkflowX } from './workflows/other';
 
 const storage = new LibSQLStore({
-  url: 'file:./mastra.db',
+  url: 'file:../mastra.db',
 });
 
 const testScorer = createScorer({
@@ -58,5 +58,8 @@ export const mastra = new Mastra({
     default: {
       enabled: true,
     },
+  },
+  interfaces: {
+    memory: Memory,
   },
 });

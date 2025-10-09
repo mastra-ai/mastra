@@ -120,7 +120,7 @@ export async function getAgentToolHandler({
   runtimeContext: RuntimeContext;
 }) {
   try {
-    const agent = agentId ? mastra.getAgent(agentId) : null;
+    const agent = agentId ? await mastra.getAgentById(agentId) : null;
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
     }
@@ -157,7 +157,7 @@ export async function executeAgentToolHandler({
   runtimeContext: RuntimeContext;
 }) {
   try {
-    const agent = agentId ? mastra.getAgent(agentId) : null;
+    const agent = agentId ? await mastra.getAgentById(agentId) : null;
     if (!agent) {
       throw new HTTPException(404, { message: 'Tool not found' });
     }

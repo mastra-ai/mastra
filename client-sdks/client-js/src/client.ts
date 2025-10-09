@@ -85,6 +85,28 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Creates a new agent configuration
+   * @param params - Agent configuration parameters
+   * @returns Promise containing the created agent details
+   */
+  public createAgent(params: {
+    id: string;
+    name: string;
+    model: string;
+    instructions: string;
+    description?: string;
+    workflowIds?: string[];
+    agentIds?: Array<{ agentId: string; from: 'CODE' | 'CONFIG' }>;
+    toolIds?: string[];
+    memoryConfig?: {
+      lastMessages?: number;
+      workingMemory?: { enabled?: boolean };
+    };
+  }): Promise<GetAgentResponse> {
+    return this.request('/api/agents/create', { method: 'POST', body: params });
+  }
+
+  /**
    * Retrieves memory threads for a resource
    * @param params - Parameters containing the resource ID
    * @returns Promise containing array of memory threads

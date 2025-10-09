@@ -79,7 +79,7 @@ export async function validateAndSaveScore(storage: MastraStorage, payload: unkn
 async function findScorer(mastra: Mastra, entityId: string, entityType: string, scorerName: string) {
   let scorerToUse;
   if (entityType === 'AGENT') {
-    const scorers = await mastra.getAgentById(entityId).getScorers();
+    const scorers = await (await mastra.getAgentById(entityId)).getScorers();
     for (const [_, scorer] of Object.entries(scorers)) {
       if (scorer.scorer.name === scorerName) {
         scorerToUse = scorer;

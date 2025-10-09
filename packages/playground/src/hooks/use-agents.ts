@@ -71,3 +71,29 @@ export const useUpdateModelInModelList = (agentId: string) => {
     },
   });
 };
+
+export const useCreateAgent = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      id: string;
+      name: string;
+      model: string;
+      instructions: string;
+      description?: string;
+      workflowIds?: string[];
+      agentIds?: Array<{ agentId: string; from: 'CODE' | 'CONFIG' }>;
+      toolIds?: string[];
+      memoryConfig?: {
+        lastMessages?: number;
+        workingMemory?: { enabled?: boolean };
+      };
+    }) => client.createAgent(params),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
+    },
+    onError: err => {
+      console.error('Error creating agent', err);
+    },
+  });
+};

@@ -166,7 +166,7 @@ export async function getScoresByEntityIdHandler({
     let entityIdToUse = entityId;
 
     if (entityType === 'AGENT') {
-      const agent = mastra.getAgentById(entityId);
+      const agent = await mastra.getAgentById(entityId);
       entityIdToUse = agent.id;
     } else if (entityType === 'WORKFLOW') {
       const workflow = mastra.getWorkflowById(entityId);

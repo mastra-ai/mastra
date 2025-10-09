@@ -3,3 +3,4 @@ export * from './agent-metadata-section';
 export * from './agent-metadata-list';
 export * from './agent-metadata-wrapper';
 export * from './agent-metadata-prompt';
+export * from './agent-metadata-model-switcher';

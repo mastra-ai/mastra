@@ -3,6 +3,7 @@ import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { SystemMessage } from '@mastra/core/llm';
 import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import type { CreateAgentConfig } from '@mastra/core/storage';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
 
@@ -15,7 +16,6 @@ import type { Context } from '../types';
 
 import { handleError } from './error';
 import { sanitizeBody, validateBody } from './utils';
-import type { CreateAgentConfig } from '@mastra/core/storage';
 
 type GetBody<
   T extends keyof Agent & { [K in keyof Agent]: Agent[K] extends (...args: any) => any ? K : never }[keyof Agent],
@@ -375,15 +375,18 @@ export async function getAgentByIdHandler({
 }: Context & { isPlayground?: boolean; runtimeContext: RuntimeContext; agentId: string }): Promise<
   SerializedAgent | ReturnType<typeof handleError>
 > {
+  let agent;
   try {
-    const agent = mastra.getAgent(agentId);
-    if (!agent) {
-      throw new HTTPException(404, { message: 'Agent not found' });
-    }
-    return formatAgent({ mastra, agent, runtimeContext, isPlayground });
-  } catch (error) {
-    return handleError(error, 'Error getting agent');
+    agent = await mastra.getAgentById(agentId);
+  } catch {
+    // do nothing
   }
+
+  if (!agent) {
+    throw new HTTPException(404, { message: 'Agent not found' });
+  }
+
+  return formatAgent({ mastra, agent, runtimeContext, isPlayground });
 }
 
 export async function getEvalsByAgentIdHandler({
@@ -392,7 +395,12 @@ export async function getEvalsByAgentIdHandler({
   agentId,
 }: Context & { runtimeContext: RuntimeContext; agentId: string }) {
   try {
-    const agent = mastra.getAgent(agentId);
+    const agent = await mastra.getAgentById(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
     const evals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'test')) || [];
     const instructions = await agent.getInstructions({ runtimeContext });
     return {
@@ -412,7 +420,10 @@ export async function getLiveEvalsByAgentIdHandler({
   agentId,
 }: Context & { runtimeContext: RuntimeContext; agentId: string }) {
   try {
-    const agent = mastra.getAgent(agentId);
+    const agent = await mastra.getAgentById(agentId);
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
     const evals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'live')) || [];
     const instructions = await agent.getInstructions({ runtimeContext });
 
@@ -444,7 +455,7 @@ export async function generateLegacyHandler({
   abortSignal?: AbortSignal;
 }) {
   try {
-    const agent = mastra.getAgent(agentId);
+    const agent = await mastra.getAgentById(agentId);
 
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
@@ -495,7 +506,7 @@ export async function generateHandler({
   abortSignal?: AbortSignal;
 }): Promise<ReturnType<Agent['generate']>> {
   try {
-    const agent = mastra.getAgent(agentId);
+    const agent = await mastra.getAgentById(agentId);
 
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
@@ -544,7 +555,7 @@ export async function streamGenerateLegacyHandler({
   abortSignal?: AbortSignal;
 }): Promise<Response | undefined> {
   try {
-    const agent = mastra.getAgent(agentId);
+    const agent = await mastra.getAgentById(agentId);
 
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
@@ -592,7 +603,7 @@ export async function streamGenerateLegacyHandler({
   }
 }
 
-export function streamGenerateHandler({
+export async function streamGenerateHandler({
   mastra,
   runtimeContext,
   agentId,
@@ -608,7 +619,7 @@ export function streamGenerateHandler({
   abortSignal?: AbortSignal;
 }): ReturnType<Agent['stream']> {
   try {
-    const agent = mastra.getAgent(agentId);
+    const agent = await mastra.getAgentById(agentId);
 
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
@@ -639,7 +650,7 @@ export function streamGenerateHandler({
   }
 }
 
-export function approveToolCallHandler({
+export async function approveToolCallHandler({
   mastra,
   runtimeContext,
   agentId,
@@ -655,7 +666,7 @@ export function approveToolCallHandler({
   abortSignal?: AbortSignal;
 }): ReturnType<Agent['approveToolCall']> {
   try {
-    const agent = mastra.getAgent(agentId);
+    const agent = await mastra.getAgentById(agentId);
 
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
@@ -686,7 +697,7 @@ export function approveToolCallHandler({
   }
 }
 
-export function declineToolCallHandler({
+export async function declineToolCallHandler({
   mastra,
   runtimeContext,
   agentId,
@@ -702,7 +713,7 @@ export function declineToolCallHandler({
   abortSignal?: AbortSignal;
 }): ReturnType<Agent['declineToolCall']> {
   try {
-    const agent = mastra.getAgent(agentId);
+    const agent = await mastra.getAgentById(agentId);
 
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
@@ -733,7 +744,7 @@ export function declineToolCallHandler({
   }
 }
 
-export function streamNetworkHandler({
+export async function streamNetworkHandler({
   mastra,
   runtimeContext,
   agentId,
@@ -749,7 +760,7 @@ export function streamNetworkHandler({
   // abortSignal?: AbortSignal;
 }): ReturnType<Agent['network']> {
   try {
-    const agent = mastra.getAgent(agentId);
+    const agent = await mastra.getAgentById(agentId);
 
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
@@ -800,7 +811,7 @@ export async function streamUIMessageHandler({
   abortSignal?: AbortSignal;
 }): Promise<Response | undefined> {
   try {
-    const agent = mastra.getAgent(agentId);
+    const agent = await mastra.getAgentById(agentId);
 
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
@@ -843,7 +854,7 @@ export async function updateAgentModelHandler({
   };
 }): Promise<{ message: string }> {
   try {
-    const agent = mastra.getAgent(agentId);
+    const agent = await mastra.getAgentById(agentId);
 
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
@@ -873,7 +884,7 @@ export async function reorderAgentModelListHandler({
   };
 }): Promise<{ message: string }> {
   try {
-    const agent = mastra.getAgent(agentId);
+    const agent = await mastra.getAgentById(agentId);
 
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
@@ -910,7 +921,11 @@ export async function updateAgentModelInModelListHandler({
   };
 }): Promise<{ message: string }> {
   try {
-    const agent = mastra.getAgent(agentId);
+    const agent = await mastra.getAgentById(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
 
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });

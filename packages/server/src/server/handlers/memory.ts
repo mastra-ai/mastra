@@ -20,7 +20,7 @@ async function getMemoryFromContext({
   agentId,
   runtimeContext,
 }: Pick<MemoryContext, 'mastra' | 'agentId' | 'runtimeContext'>): Promise<MastraMemory | null | undefined> {
-  const agent = agentId ? mastra.getAgent(agentId) : null;
+  const agent = agentId ? await mastra.getAgentById(agentId) : null;
   if (agentId && !agent) {
     throw new HTTPException(404, { message: 'Agent not found' });
   }

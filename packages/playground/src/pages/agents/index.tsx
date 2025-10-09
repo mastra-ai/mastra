@@ -13,6 +13,7 @@ import {
 import { useAgents } from '@/hooks/use-agents';
 import { AgentsTable } from '@mastra/playground-ui';
 import { AgentIcon } from '@mastra/playground-ui';
+import { Plus } from 'lucide-react';
 
 function Agents() {
   const { Link } = useLinkComponent();
@@ -29,6 +30,12 @@ function Agents() {
         </HeaderTitle>
 
         <HeaderAction>
+          <Button as={Link} to="/agents/create" variant="default">
+            <Icon>
+              <Plus className="h-4 w-4" />
+            </Icon>
+            Create Agent
+          </Button>
           <Button as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
             <Icon>
               <DocsIcon />
