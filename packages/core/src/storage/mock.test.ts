@@ -4,6 +4,7 @@ import { MessageList } from '../agent';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '../memory/types';
 import { deepMerge } from '../utils';
 import { InMemoryStore } from './mock';
+import { StoreOperationsInMemory } from './domains/operations/inmemory';
 
 describe('InMemoryStore - Thread Sorting', () => {
   let store: InMemoryStore;
@@ -387,5 +388,193 @@ describe('InMemoryStore - getMessagesById', () => {
     expect(messages).toHaveLength(thread1Messages.length + resource2Messages.length);
     expect(messages.some(msg => msg.resourceId === threads[0]?.resourceId)).toBe(true);
     expect(messages.some(msg => msg.resourceId === threads[2]?.resourceId)).toBe(true);
+  });
+});
+
+describe('InMemoryStore - Agent Management', () => {
+  let store: InMemoryStore;
+
+  beforeEach(() => {
+    store = new InMemoryStore();
+  });
+
+  it('should create an agent successfully', async () => {
+    const agentConfig = {
+      id: 'test-agent-id',
+      name: 'Test Agent',
+      workflowIds: ['workflow-1', 'workflow-2'],
+      agentIds: ['sub-agent-1'],
+      toolIds: ['tool-1', 'tool-2', 'tool-3'],
+      model: 'gpt-4',
+      instructions: 'You are a helpful assistant.',
+    };
+
+    // Should not throw
+    await expect(store.createAgent(agentConfig)).resolves.toBeUndefined();
+  });
+
+  it('should store agent data correctly in the database', async () => {
+    const agentConfig = {
+      id: 'test-agent-id-2',
+      name: 'Test Agent 2',
+      workflowIds: ['workflow-a', 'workflow-b'],
+      agentIds: [],
+      toolIds: ['tool-x', 'tool-y'],
+      model: 'claude-3',
+      instructions: 'You are a specialized assistant.',
+    };
+
+    await store.createAgent(agentConfig);
+
+    // Access the internal data structure to verify the agent was stored
+    const database = store.stores.operations.getDatabase();
+    const agentsTable = database.mastra_agents;
+
+    expect(agentsTable.has(agentConfig.id)).toBe(true);
+
+    const storedAgent = agentsTable.get(agentConfig.id);
+    expect(storedAgent).toBeDefined();
+    expect(storedAgent.id).toBe(agentConfig.id);
+    expect(storedAgent.name).toBe(agentConfig.name);
+    expect(storedAgent.model).toBe(agentConfig.model);
+    expect(storedAgent.instructions).toBe(agentConfig.instructions);
+
+    // JSON fields should be stored as strings
+    expect(JSON.parse(storedAgent.workflowIds)).toEqual(agentConfig.workflowIds);
+    expect(JSON.parse(storedAgent.agentIds)).toEqual(agentConfig.agentIds);
+    expect(JSON.parse(storedAgent.toolIds)).toEqual(agentConfig.toolIds);
+
+    // Timestamps should be present
+    expect(storedAgent.createdAt).toBeInstanceOf(Date);
+    expect(storedAgent.updatedAt).toBeInstanceOf(Date);
+  });
+
+  it('should handle empty arrays correctly', async () => {
+    const agentConfig = {
+      id: 'test-agent-empty',
+      name: 'Empty Agent',
+      workflowIds: [],
+      agentIds: [],
+      toolIds: [],
+      model: 'gpt-3.5-turbo',
+      instructions: 'Simple agent with no tools.',
+    };
+
+    await store.createAgent(agentConfig);
+
+    const storedAgent = await store.getAgent(agentConfig.id);
+
+    expect(storedAgent?.workflowIds).toEqual([]);
+    expect(storedAgent?.agentIds).toEqual([]);
+    expect(storedAgent?.toolIds).toEqual([]);
+  });
+
+  it('should get an agent by ID', async () => {
+    const agentConfig = {
+      id: 'get-agent-test',
+      name: 'Get Agent Test',
+      workflowIds: ['workflow-1', 'workflow-2'],
+      agentIds: ['sub-agent-1'],
+      toolIds: ['tool-1', 'tool-2'],
+      model: 'gpt-4',
+      instructions: 'You are a test agent.',
+    };
+
+    await store.createAgent(agentConfig);
+
+    const retrievedAgent = await store.getAgent(agentConfig.id);
+
+    expect(retrievedAgent).not.toBeNull();
+    expect(retrievedAgent!.id).toBe(agentConfig.id);
+    expect(retrievedAgent!.name).toBe(agentConfig.name);
+    expect(retrievedAgent!.workflowIds).toEqual(agentConfig.workflowIds);
+    expect(retrievedAgent!.agentIds).toEqual(agentConfig.agentIds);
+    expect(retrievedAgent!.toolIds).toEqual(agentConfig.toolIds);
+    expect(retrievedAgent!.model).toBe(agentConfig.model);
+    expect(retrievedAgent!.instructions).toBe(agentConfig.instructions);
+    expect(retrievedAgent!.createdAt).toBeInstanceOf(Date);
+    expect(retrievedAgent!.updatedAt).toBeInstanceOf(Date);
+  });
+
+  it('should return null for non-existent agent', async () => {
+    const retrievedAgent = await store.getAgent('non-existent-id');
+    expect(retrievedAgent).toBeNull();
+  });
+
+  it('should list all agents', async () => {
+    const agent1Config = {
+      id: 'list-agent-1',
+      name: 'List Agent 1',
+      workflowIds: ['workflow-1'],
+      agentIds: [],
+      toolIds: ['tool-1'],
+      model: 'gpt-4',
+      instructions: 'First test agent.',
+    };
+
+    const agent2Config = {
+      id: 'list-agent-2',
+      name: 'List Agent 2',
+      workflowIds: ['workflow-2'],
+      agentIds: ['sub-agent-1'],
+      toolIds: ['tool-2', 'tool-3'],
+      model: 'claude-3',
+      instructions: 'Second test agent.',
+    };
+
+    await store.createAgent(agent1Config);
+    // Add a small delay to ensure different timestamps
+    await new Promise(resolve => setTimeout(resolve, 1));
+    await store.createAgent(agent2Config);
+
+    const agents = await store.listAgents();
+
+    expect(agents).toHaveLength(2);
+
+    // Should be sorted by createdAt DESC (newest first)
+    expect(agents[0].id).toBe(agent2Config.id);
+    expect(agents[1].id).toBe(agent1Config.id);
+
+    // Verify all fields are correctly parsed
+    expect(agents[0].name).toBe(agent2Config.name);
+    expect(agents[0].workflowIds).toEqual(agent2Config.workflowIds);
+    expect(agents[0].agentIds).toEqual(agent2Config.agentIds);
+    expect(agents[0].toolIds).toEqual(agent2Config.toolIds);
+    expect(agents[0].model).toBe(agent2Config.model);
+    expect(agents[0].instructions).toBe(agent2Config.instructions);
+    expect(agents[0].createdAt).toBeInstanceOf(Date);
+    expect(agents[0].updatedAt).toBeInstanceOf(Date);
+
+    expect(agents[1].name).toBe(agent1Config.name);
+    expect(agents[1].workflowIds).toEqual(agent1Config.workflowIds);
+    expect(agents[1].agentIds).toEqual(agent1Config.agentIds);
+    expect(agents[1].toolIds).toEqual(agent1Config.toolIds);
+    expect(agents[1].model).toBe(agent1Config.model);
+    expect(agents[1].instructions).toBe(agent1Config.instructions);
+  });
+
+  it('should return empty array when no agents exist', async () => {
+    const agents = await store.listAgents();
+    expect(agents).toHaveLength(0);
+  });
+
+  it('should handle agents with empty arrays in listAgents', async () => {
+    const agentConfig = {
+      id: 'empty-arrays-agent',
+      name: 'Empty Arrays Agent',
+      workflowIds: [],
+      agentIds: [],
+      toolIds: [],
+      model: 'gpt-3.5-turbo',
+      instructions: 'Agent with empty arrays.',
+    };
+
+    await store.createAgent(agentConfig);
+
+    const agents = await store.listAgents();
+    expect(agents).toHaveLength(1);
+    expect(agents[0].workflowIds).toEqual([]);
+    expect(agents[0].agentIds).toEqual([]);
+    expect(agents[0].toolIds).toEqual([]);
   });
 });

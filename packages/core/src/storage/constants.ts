@@ -8,6 +8,7 @@ export const TABLE_TRACES = 'mastra_traces';
 export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_AI_SPANS = 'mastra_ai_spans';
+export const TABLE_AGENTS = 'mastra_agents';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -17,7 +18,8 @@ export type TABLE_NAMES =
   | typeof TABLE_TRACES
   | typeof TABLE_RESOURCES
   | typeof TABLE_SCORERS
-  | typeof TABLE_AI_SPANS;
+  | typeof TABLE_AI_SPANS
+  | typeof TABLE_AGENTS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -173,6 +175,17 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     id: { type: 'text', nullable: false, primaryKey: true },
     workingMemory: { type: 'text', nullable: true },
     metadata: { type: 'jsonb', nullable: true },
+    createdAt: { type: 'timestamp', nullable: false },
+    updatedAt: { type: 'timestamp', nullable: false },
+  },
+  [TABLE_AGENTS]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    name: { type: 'text', nullable: false },
+    workflowIds: { type: 'jsonb', nullable: false },
+    agentIds: { type: 'jsonb', nullable: false },
+    toolIds: { type: 'jsonb', nullable: false },
+    model: { type: 'text', nullable: false },
+    instructions: { type: 'text', nullable: false },
     createdAt: { type: 'timestamp', nullable: false },
     updatedAt: { type: 'timestamp', nullable: false },
   },

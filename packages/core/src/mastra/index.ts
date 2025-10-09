@@ -956,6 +956,152 @@ do:
   }
 
   /**
+   * Creates a new agent in the configured storage provider.
+   *
+   * @param config - The configuration for the agent
+   * @throws {MastraError} When storage is not configured or creation fails
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   storage: new LibSQLStore({ url: 'file:./data.db' })
+   * });
+   *
+   * await mastra.createAgent({ id: 'my-agent-id', name: 'My Agent', model: 'gpt-4o' });
+   * ```
+   */
+
+  async createAgent(config: {
+    id: string;
+    name: string;
+    workflowIds: string[];
+    agentIds: string[];
+    toolIds: string[];
+    model: string;
+    instructions: string;
+  }) {
+    const storage = this.getStorage();
+    if (!storage) {
+      throw new MastraError({
+        id: 'MASTRA_CREATE_AGENT_STORAGE_NOT_CONFIGURED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Storage is not configured',
+      });
+    }
+
+    try {
+      await storage.createAgent(config);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_CREATE_AGENT_STORAGE_CREATE_AGENT_FAILED',
+          domain: ErrorDomain.MASTRA,
+          category: ErrorCategory.USER,
+          text: 'Failed to create agent',
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Retrieves a stored agent by its ID from the configured storage provider.
+   *
+   * @param id - The unique identifier of the agent to retrieve
+   * @returns The agent configuration if found, null otherwise
+   * @throws {MastraError} When storage is not configured or retrieval fails
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   storage: new LibSQLStore({ url: 'file:./data.db' })
+   * });
+   *
+   * // Get a stored agent
+   * const agent = await mastra.getAgent('my-agent-id');
+   * if (agent) {
+   *   console.log(`Agent: ${agent.name}`);
+   *   console.log(`Model: ${agent.model}`);
+   *   console.log(`Tools: ${agent.toolIds.join(', ')}`);
+   * }
+   * ```
+   */
+  async getAgentFromConfig(id: string) {
+    const storage = this.getStorage();
+    if (!storage) {
+      throw new MastraError({
+        id: 'MASTRA_GET_AGENT_STORAGE_NOT_CONFIGURED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Storage is not configured',
+      });
+    }
+
+    try {
+      return await storage.getAgent(id);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_GET_AGENT_STORAGE_FAILED',
+          domain: ErrorDomain.MASTRA,
+          category: ErrorCategory.USER,
+          text: 'Failed to get agent',
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Lists all stored agents from the configured storage provider.
+   *
+   * Agents are returned sorted by creation date (newest first).
+   *
+   * @returns An array of all stored agent configurations
+   * @throws {MastraError} When storage is not configured or listing fails
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   storage: new LibSQLStore({ url: 'file:./data.db' })
+   * });
+   *
+   * // List all stored agents
+   * const agents = await mastra.listAgents();
+   * console.log(`Found ${agents.length} agents:`);
+   * agents.forEach(agent => {
+   *   console.log(`- ${agent.name} (${agent.id})`);
+   * });
+   * ```
+   */
+  async listAgentsFromConfig() {
+    const storage = this.getStorage();
+    if (!storage) {
+      throw new MastraError({
+        id: 'MASTRA_LIST_AGENTS_STORAGE_NOT_CONFIGURED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Storage is not configured',
+      });
+    }
+
+    try {
+      return await storage.listAgents();
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_LIST_AGENTS_STORAGE_FAILED',
+          domain: ErrorDomain.MASTRA,
+          category: ErrorCategory.USER,
+          text: 'Failed to list agents',
+        },
+        error,
+      );
+    }
+  }
+
+  /**
    * Retrieves a registered legacy workflow by its ID.
    *
    * Legacy workflows are the previous generation of workflow system in Mastra,

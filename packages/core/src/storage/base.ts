@@ -17,6 +17,7 @@ import {
   TABLE_SCORERS,
   TABLE_SCHEMAS,
   TABLE_AI_SPANS,
+  TABLE_AGENTS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
 import type {
@@ -27,6 +28,7 @@ import type {
   MemoryStorage,
   LegacyEvalsStorage,
   ObservabilityStorage,
+  AgentsStorage,
 } from './domains';
 import type {
   EvalRow,
@@ -59,6 +61,7 @@ export type StorageDomains = {
   traces: TracesStorage;
   memory: MemoryStorage;
   observability?: ObservabilityStorage;
+  agents?: AgentsStorage;
 };
 
 export function ensureDate(date: Date | string | undefined): Date | undefined {
@@ -350,6 +353,11 @@ export abstract class MastraStorage extends MastraBase {
       this.createTable({
         tableName: TABLE_SCORERS,
         schema: TABLE_SCHEMAS[TABLE_SCORERS],
+      }),
+
+      this.createTable({
+        tableName: TABLE_AGENTS,
+        schema: TABLE_SCHEMAS[TABLE_AGENTS],
       }),
     ];
 
@@ -699,6 +707,70 @@ export abstract class MastraStorage extends MastraBase {
    * These methods delegate to the operations store for index management.
    * Storage adapters that support indexes should implement these in their operations class.
    */
+
+  /**
+   * AGENTS
+   */
+
+  async createAgent(config: {
+    id: string;
+    name: string;
+    workflowIds: string[];
+    agentIds: string[];
+    toolIds: string[];
+    model: string;
+    instructions: string;
+  }): Promise<void> {
+    if (this.stores?.agents) {
+      return this.stores.agents.createAgent(config);
+    }
+    throw new Error(
+      `Agent management is not supported by this storage adapter (${this.constructor.name}). ` +
+        `The agents domain needs to be implemented in the storage adapter.`,
+    );
+  }
+
+  async getAgent(id: string): Promise<{
+    id: string;
+    name: string;
+    workflowIds: string[];
+    agentIds: string[];
+    toolIds: string[];
+    model: string;
+    instructions: string;
+    createdAt: Date;
+    updatedAt: Date;
+  } | null> {
+    if (this.stores?.agents) {
+      return this.stores.agents.getAgent(id);
+    }
+    throw new Error(
+      `Agent management is not supported by this storage adapter (${this.constructor.name}). ` +
+        `The agents domain needs to be implemented in the storage adapter.`,
+    );
+  }
+
+  async listAgents(): Promise<
+    {
+      id: string;
+      name: string;
+      workflowIds: string[];
+      agentIds: string[];
+      toolIds: string[];
+      model: string;
+      instructions: string;
+      createdAt: Date;
+      updatedAt: Date;
+    }[]
+  > {
+    if (this.stores?.agents) {
+      return this.stores.agents.listAgents();
+    }
+    throw new Error(
+      `Agent management is not supported by this storage adapter (${this.constructor.name}). ` +
+        `The agents domain needs to be implemented in the storage adapter.`,
+    );
+  }
 
   /**
    * Creates a database index on specified columns
