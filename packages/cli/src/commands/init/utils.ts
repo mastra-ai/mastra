@@ -22,61 +22,24 @@ const exec = util.promisify(child_process.exec);
 export type LLMProvider = 'openai' | 'anthropic' | 'groq' | 'google' | 'cerebras' | 'mistral';
 export type Components = 'agents' | 'workflows' | 'tools';
 
-// TODO: Once the switch to AI SDK v5 is complete, this needs to be updated
-export const getAISDKPackageVersion = (llmProvider: LLMProvider) => {
-  switch (llmProvider) {
-    default:
-      return 'latest';
-  }
-};
-
-export const getAISDKPackage = (llmProvider: LLMProvider) => {
-  switch (llmProvider) {
-    case 'openai':
-      return '@ai-sdk/openai';
-    case 'anthropic':
-      return '@ai-sdk/anthropic';
-    case 'groq':
-      return '@ai-sdk/groq';
-    case 'google':
-      return '@ai-sdk/google';
-    case 'cerebras':
-      return '@ai-sdk/cerebras';
-    case 'mistral':
-      return '@ai-sdk/mistral';
-    default:
-      return '@ai-sdk/openai';
-  }
-};
-
-export const getProviderImportAndModelItem = (llmProvider: LLMProvider) => {
-  let providerImport = '';
-  let modelItem = '';
-
+export const getModelIdentifier = (llmProvider: LLMProvider) => {
   if (llmProvider === 'openai') {
-    providerImport = `import { openai } from '${getAISDKPackage(llmProvider)}';`;
-    modelItem = `openai('gpt-4o-mini')`;
+    return `'openai/gpt-4o-mini'`;
   } else if (llmProvider === 'anthropic') {
-    providerImport = `import { anthropic } from '${getAISDKPackage(llmProvider)}';`;
-    modelItem = `anthropic('claude-3-5-sonnet-20241022')`;
+    return `'anthropic/claude-3-5-sonnet-20241022'`;
   } else if (llmProvider === 'groq') {
-    providerImport = `import { groq } from '${getAISDKPackage(llmProvider)}';`;
-    modelItem = `groq('llama-3.3-70b-versatile')`;
+    return `'groq/llama-3.3-70b-versatile'`;
   } else if (llmProvider === 'google') {
-    providerImport = `import { google } from '${getAISDKPackage(llmProvider)}';`;
-    modelItem = `google('gemini-2.5-pro')`;
+    return `'google/gemini-2.5-pro'`;
   } else if (llmProvider === 'cerebras') {
-    providerImport = `import { cerebras } from '${getAISDKPackage(llmProvider)}';`;
-    modelItem = `cerebras('llama-3.3-70b')`;
+    return `'cerebras/llama-3.3-70b'`;
   } else if (llmProvider === 'mistral') {
-    providerImport = `import { mistral } from '${getAISDKPackage(llmProvider)}';`;
-    modelItem = `mistral('mistral-medium-2508')`;
+    return `'mistral/mistral-medium-2508'`;
   }
-  return { providerImport, modelItem };
 };
 
 export async function writeAgentSample(llmProvider: LLMProvider, destPath: string, addExampleTool: boolean) {
-  const { providerImport, modelItem } = getProviderImportAndModelItem(llmProvider);
+  const modelString = getModelIdentifier(llmProvider);
 
   const instructions = `
       You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
@@ -93,7 +56,6 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
       ${addExampleTool ? 'Use the weatherTool to fetch current weather data.' : ''}
 `;
   const content = `
-${providerImport}
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { LibSQLStore } from '@mastra/libsql';
@@ -102,7 +64,7 @@ ${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
 export const weatherAgent = new Agent({
   name: 'Weather Agent',
   instructions: \`${instructions}\`,
-  model: ${modelItem},
+  model: ${modelString},
   ${addExampleTool ? 'tools: { weatherTool },' : ''}
   memory: new Memory({
     storage: new LibSQLStore({
