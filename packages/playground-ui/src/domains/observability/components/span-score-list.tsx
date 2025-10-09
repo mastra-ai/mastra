@@ -1,9 +1,15 @@
-import { EntryList, getShortId } from '@/components/ui/elements';
-import { ScoreDialog, useScoreById } from '@/domains/scores';
-import { ClientScoreRowData } from '@mastra/client-js';
+import {
+  EntryList,
+  EntryListSkeleton,
+  getShortId,
+  getToNextEntryFn,
+  getToPreviousEntryFn,
+} from '@/components/ui/elements';
+import { ScoreDialog } from '@/domains/scores';
+import { useLinkComponent } from '@/lib/framework';
+import { ClientScoreRowData, GetScoresResponse } from '@mastra/client-js';
 import { isToday, format } from 'date-fns';
 import { useEffect, useState } from 'react';
-import { set } from 'zod';
 
 export const traceScoresListColumns = [
   { name: 'shortId', label: 'ID', size: '1fr' },
@@ -13,81 +19,87 @@ export const traceScoresListColumns = [
   { name: 'scorer', label: 'Scorer', size: '1fr' },
 ];
 
-type ScoreLink = {
-  // type: string;
-  scoreId: string;
-  scorerName: string;
-  score: number;
-  createdAt: string;
-};
-
 type SpanScoreListProps = {
-  scores: Array<ScoreLink>;
+  scoresData?: GetScoresResponse | null;
+  isLoadingScoresData?: boolean;
+  initialScoreId?: string;
+  traceId?: string;
+  spanId?: string;
+  onPageChange?: (page: number) => void;
 };
 
-type SelectedScore = (ScoreLink & Partial<ClientScoreRowData>) | undefined;
+type SelectedScore = ClientScoreRowData | undefined;
 
-export function SpanScoreList({ scores }: SpanScoreListProps) {
+export function SpanScoreList({
+  scoresData,
+  isLoadingScoresData,
+  traceId,
+  spanId,
+  initialScoreId,
+  onPageChange,
+}: SpanScoreListProps) {
+  const { navigate } = useLinkComponent();
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
   const [selectedScore, setSelectedScore] = useState<SelectedScore | undefined>();
-  const [selectedScoreId, setSelectedScoreId] = useState<string | undefined>();
-
-  const { score: scoreDetails, isLoading: isLoadingScoreDetails } = useScoreById(selectedScoreId || '');
-
-  const orderedScores = (scores || []).sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
 
   useEffect(() => {
-    if (scoreDetails) {
-      if (scoreDetails?.id === selectedScore?.scoreId && !selectedScore?.input) {
-        setSelectedScore(prev => {
-          return { ...prev, ...scoreDetails } as SelectedScore;
-        });
-      }
+    if (initialScoreId) {
+      handleOnScore(initialScoreId);
     }
-  }, [scoreDetails, selectedScoreId]);
+  }, [initialScoreId]);
 
   const handleOnScore = (scoreId: string) => {
-    setSelectedScoreId(scoreId);
-
-    if (selectedScore?.scoreId !== scoreId) {
-      const simplifiedScore = scores.find(s => s.scoreId === scoreId);
-
-      if (simplifiedScore) {
-        setSelectedScore(simplifiedScore);
-      }
-    }
-
+    const score = scoresData?.scores?.find(s => s?.id === scoreId);
+    setSelectedScore(score);
     setDialogIsOpen(true);
   };
+
+  if (isLoadingScoresData) {
+    return <EntryListSkeleton columns={traceScoresListColumns} />;
+  }
+
+  const updateSelectedScore = (scoreId: string) => {
+    const score = scoresData?.scores?.find(s => s?.id === scoreId);
+    setSelectedScore(score);
+  };
+
+  const toNextScore = getToNextEntryFn({
+    entries: scoresData?.scores || [],
+    id: selectedScore?.id,
+    update: updateSelectedScore,
+  });
+
+  const toPreviousScore = getToPreviousEntryFn({
+    entries: scoresData?.scores || [],
+    id: selectedScore?.id,
+    update: updateSelectedScore,
+  });
 
   return (
     <>
       <EntryList>
         <EntryList.Trim>
           <EntryList.Header columns={traceScoresListColumns} />
-          {orderedScores.length > 0 ? (
+          {scoresData?.scores && scoresData.scores.length > 0 ? (
             <EntryList.Entries>
-              {orderedScores?.map(score => {
+              {scoresData?.scores?.map(score => {
                 const createdAtDate = new Date(score.createdAt);
                 const isTodayDate = isToday(createdAtDate);
 
                 const entry = {
-                  id: score?.scoreId,
-                  shortId: getShortId(score?.scoreId) || 'n/a',
+                  id: score?.id,
+                  shortId: getShortId(score?.id) || 'n/a',
                   date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
                   time: format(createdAtDate, 'h:mm:ss aaa'),
                   score: score?.score,
-                  scorer: score?.scorerName,
+                  scorer: score?.scorer?.name,
                 };
 
                 return (
                   <EntryList.Entry
-                    key={score.scoreId}
+                    key={score.id}
                     columns={traceScoresListColumns}
-                    //  onClick={() => onScore(score.scorerName)}
-                    onClick={() => handleOnScore(score.scoreId)}
+                    onClick={() => handleOnScore(score.id)}
                     entry={entry}
                   >
                     {(traceScoresListColumns || []).map(col => {
@@ -104,16 +116,26 @@ export function SpanScoreList({ scores }: SpanScoreListProps) {
             <EntryList.Message message="No scores found" type="info" />
           )}
         </EntryList.Trim>
+        <EntryList.Pagination
+          currentPage={scoresData?.pagination?.page || 0}
+          hasMore={scoresData?.pagination?.hasMore}
+          onNextPage={() => onPageChange && onPageChange((scoresData?.pagination?.page || 0) + 1)}
+          onPrevPage={() => onPageChange && onPageChange((scoresData?.pagination?.page || 0) - 1)}
+        />
       </EntryList>
       <ScoreDialog
-        scorerName={selectedScore?.scorerName || ''}
+        scorerName={selectedScore?.scorer?.name || ''}
         score={selectedScore as ClientScoreRowData}
         isOpen={dialogIsOpen}
-        onClose={() => setDialogIsOpen(false)}
-        dialogLevel={2}
-        //    onNext={toNextScore}
-        //    onPrevious={toPreviousScore}
+        onClose={() => {
+          navigate(`/observability?traceId=${traceId}&spanId=${spanId}&tab=scores`);
+          setDialogIsOpen(false);
+        }}
+        dialogLevel={3}
+        onNext={toNextScore}
+        onPrevious={toPreviousScore}
         computeTraceLink={(traceId, spanId) => `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`}
+        usageContext="aiSpanDialog"
       />
     </>
   );

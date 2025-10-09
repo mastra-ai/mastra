@@ -19,12 +19,11 @@ import { AISpanRecord } from '@mastra/core';
 import { useLinkComponent } from '@/lib/framework';
 import { Tabs } from '@/components/ui/elements/tabs/tabs';
 import { Sections } from '@/components/ui/containers';
-import { TraceScoreList } from './trace-score-list';
+import { SpanScoreList } from './span-score-list';
 import { SpanScoring } from './span-scoring';
 import { TraceSpanUsage } from './trace-span-usage';
 import { GetScoresResponse } from '@mastra/client-js';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
-import { Button } from '@/components/ui/elements/buttons';
 
 type SpanDialogProps = {
   trace: AISpanRecord;
@@ -138,7 +137,7 @@ export function SpanDialog({
                     <GaugeIcon /> Scores
                   </Section.Heading>
                 </Section.Header>
-                <TraceScoreList
+                <SpanScoreList
                   scoresData={spanScoresData}
                   onPageChange={onSpanScoresPageChange}
                   isLoadingScoresData={isLoadingSpanScoresData}

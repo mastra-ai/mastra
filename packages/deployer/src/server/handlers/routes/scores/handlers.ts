@@ -5,7 +5,6 @@ import {
   getScoresByRunIdHandler as getOriginalScoresByRunIdHandler,
   getScoresByScorerIdHandler as getOriginalScoresByScorerIdHandler,
   getScoresByEntityIdHandler as getOriginalScoresByEntityIdHandler,
-  getScoreByIdHandler as getOriginalScoreByIdHandler,
   saveScoreHandler as getOriginalSaveScoreHandler,
   getScorerHandler as getOriginalScorerHandler,
 } from '@mastra/server/handlers/scores';
@@ -102,26 +101,6 @@ export async function getScoresByEntityIdHandler(c: Context) {
     return c.json(scores);
   } catch (error) {
     return handleError(error, 'Error getting scores by entity id');
-  }
-}
-
-export async function getScoreByIdHandler(c: Context) {
-  const mastra = c.get('mastra');
-  const id = c.req.param('id');
-
-  try {
-    const score = await getOriginalScoreByIdHandler({
-      mastra,
-      id,
-    });
-
-    if (!score) {
-      return c.json({ error: 'Score not found' }, 404);
-    }
-
-    return c.json(score);
-  } catch (error) {
-    return handleError(error, 'Error getting score by id');
   }
 }
 

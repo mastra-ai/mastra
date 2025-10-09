@@ -25,16 +25,12 @@ import { useLinkComponent } from '@/lib/framework';
 import { AISpanRecord } from '@mastra/core';
 import { getSpanInfo, useTraceInfo } from './helpers';
 import { SpanDialog } from './span-dialog';
-import { SpanDetails } from './span-details';
 import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
 import { UISpan } from '../types';
-import { TraceScoreList } from './trace-score-list';
-import { Tabs } from '@/components/ui/elements/tabs/tabs';
 import { TraceTimelineLegend } from './trace-timeline-legend';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
 import { Button } from '@/components/ui/elements/buttons';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
-import { SpanScoring } from './span-scoring';
 import { SpanTabs } from './span-tabs';
 
 type TraceDialogProps = {
@@ -263,52 +259,6 @@ export function TraceDialog({
                     initialScoreId={initialScoreId}
                     isOpen={Boolean(dialogIsOpen && selectedSpanId && combinedView)}
                   />
-                  {/* <Tabs defaultTab={spanDialogDefaultTab}>
-                    <Tabs.List>
-                      <Tabs.Tab value="details">Details</Tabs.Tab>
-                      <Tabs.Tab value="scores">
-                        Scoring {spanScoresData?.pagination && `(${spanScoresData.pagination.total || 0})`}
-                      </Tabs.Tab>
-                    </Tabs.List>
-
-                    <Tabs.Content value="details">
-                      <SpanDetails span={selectedSpan} onScorerTriggered={onScorerTriggered} />
-                    </Tabs.Content>
-                    <Tabs.Content value="scores">
-                      <Sections>
-                        <Section>
-                          <Section.Header>
-                            <Section.Heading>
-                              <CircleGaugeIcon /> Scoring{' '}
-                            </Section.Heading>
-                          </Section.Header>
-
-                          <SpanScoring
-                            traceId={traceId || ''}
-                            spanId={selectedSpanId}
-                            onScorerTriggered={onScorerTriggered}
-                            // entityType={traceDetails?}
-                          />
-                        </Section>
-
-                        <Section>
-                          <Section.Header>
-                            <Section.Heading>
-                              <GaugeIcon /> Scores
-                            </Section.Heading>
-                          </Section.Header>
-                          <TraceScoreList
-                            scoresData={spanScoresData}
-                            onPageChange={setSpanScoresPage}
-                            isLoadingScoresData={isLoadingSpanScoresData}
-                            initialScoreId={initialScoreId}
-                            traceId={traceId}
-                            spanId={selectedSpanId}
-                          />
-                        </Section>
-                      </Sections>
-                    </Tabs.Content>
-                  </Tabs> */}
                 </div>
               </div>
             </div>
@@ -341,11 +291,3 @@ export function TraceDialog({
     </>
   );
 }
-
-/*
-
-
- <div className="grid grid-cols-[20rem_1fr] gap-[1rem] overflow-y-auto border border-red-500">
-
-
- */

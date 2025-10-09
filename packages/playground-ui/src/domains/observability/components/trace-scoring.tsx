@@ -43,15 +43,12 @@ export const TraceScoring = ({ trace, spanId, onScorerTriggered, entityType }: T
   const isWaiting = isPending || isLoading;
 
   const handleStartScoring = () => {
-    console.log('______+++++', { selectedScorer, trace, spanId });
-
     if (selectedScorer) {
       triggerScorer({
         scorerName: selectedScorer,
         traceId: '1f5cedb1ee7693de9e815fe0f496f43a',
         spanId: '663d1ec243406b79',
       });
-      //  setSelectedScorer(null);
     }
   };
 
