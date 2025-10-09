@@ -154,10 +154,12 @@ export function TraceDialog({
         onClose={onClose}
         level={1}
       >
-        <SideDialog.Top onNext={onNext} onPrevious={onPrevious} showInnerNav={true}>
+        <SideDialog.Top>
           <TextAndIcon>
             <EyeIcon /> {getShortId(traceId)}
           </TextAndIcon>
+          |
+          <SideDialog.Nav onNext={onNext} onPrevious={onPrevious} />
         </SideDialog.Top>
 
         <div

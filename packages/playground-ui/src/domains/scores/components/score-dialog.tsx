@@ -48,7 +48,7 @@ export function ScoreDialog({
       onClose={onClose}
       level={dialogLevel}
     >
-      <SideDialog.Top onNext={onNext} onPrevious={onPrevious} showInnerNav={true}>
+      <SideDialog.Top>
         {usageContext === 'scorerPage' && (
           <TextAndIcon>
             <GaugeIcon /> {scorerName}
@@ -75,6 +75,8 @@ export function ScoreDialog({
           <CalculatorIcon />
           {getShortId(score?.id)}
         </TextAndIcon>
+        |
+        <SideDialog.Nav onNext={onNext} onPrevious={onPrevious} />
       </SideDialog.Top>
 
       <SideDialog.Content>
