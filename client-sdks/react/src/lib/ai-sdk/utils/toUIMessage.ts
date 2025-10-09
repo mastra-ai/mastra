@@ -115,7 +115,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
     case 'tripwire': {
       // Create a new assistant message
       const newMessage: MastraUIMessage = {
-        id: `tripewire-${chunk.runId + Date.now()}`,
+        id: `tripwire-${chunk.runId + Date.now()}`,
         role: 'assistant',
         parts: [
           {
