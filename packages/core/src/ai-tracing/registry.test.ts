@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ConsoleLogger, LogLevel } from '../logger';
 import { CloudExporter, DefaultExporter } from './exporters';
 import {
   clearAITracingRegistry,
@@ -16,7 +17,6 @@ import { SensitiveDataFilter } from './span_processors';
 import { DefaultAITracing, BaseAITracing } from './tracers';
 import type { AISpan, CreateSpanOptions, ConfigSelector, ConfigSelectorOptions, TracingConfig } from './types';
 import { AISpanType, SamplingStrategyType, AITracingEventType } from './types';
-import { ConsoleLogger, LogLevel } from '../logger';
 
 describe('AI Tracing Registry', () => {
   beforeEach(() => {
