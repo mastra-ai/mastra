@@ -493,6 +493,7 @@ export type TypedChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'step-output'; payload: StepOutputPayload })
   | (BaseChunkType & { type: 'workflow-step-output'; payload: StepOutputPayload })
   | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
+  | (BaseChunkType & { type: 'watch-v2'; payload: WatchPayload })
   | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload })
   | (BaseChunkType & WorkflowStreamEvent)
   | NetworkChunkType;

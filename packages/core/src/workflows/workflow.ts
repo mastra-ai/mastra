@@ -37,6 +37,7 @@ import type {
   StreamEvent,
   SubsetOf,
   WatchEvent,
+  WatchEventV2,
   WorkflowConfig,
   WorkflowOptions,
   WorkflowResult,
@@ -267,8 +268,7 @@ export function createStep<
 
     return {
       // TODO: tool probably should have strong id type
-      // @ts-ignore
-      id: params.id,
+      id: params.id as TStepId,
       description: params.description,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
@@ -1854,16 +1854,15 @@ export class Run<
       setImmediate(tryWrite);
     };
 
-    // TODO: fix this, watch-v2 doesn't have a type
-    // @ts-ignore
-    const unwatch = this.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
+    const unwatch = this.watch(async (event: WatchEvent | WatchEventV2) => {
       buffer.push({
-        type,
+        type: event.type,
         runId: this.runId,
-        from,
+        from: event.from ?? ChunkFrom.WORKFLOW,
         payload: {
-          stepName: (payload as unknown as { id: string }).id,
-          ...payload,
+          stepName:
+            event.type === 'watch' ? event.payload?.currentStep?.id : `${event.workflowId}.${event.payload?.id}`,
+          ...event.payload,
         },
       });
 
@@ -1957,16 +1956,15 @@ export class Run<
           setImmediate(tryWrite);
         };
 
-        // TODO: fix this, watch-v2 doesn't have a type
-        // @ts-ignore
-        const unwatch = this.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
+        const unwatch = this.watch(async event => {
           buffer.push({
-            type,
+            type: event.type,
             runId: this.runId,
-            from,
+            from: event.from ?? ChunkFrom.WORKFLOW,
             payload: {
-              stepName: (payload as unknown as { id: string }).id,
-              ...payload,
+              stepName:
+                event.type === 'watch' ? event.payload?.currentStep?.id : `${event.workflowId}.${event.payload?.id}`,
+              ...event.payload,
             },
           });
 
@@ -2077,16 +2075,15 @@ export class Run<
           setImmediate(tryWrite);
         };
 
-        // TODO: fix this, watch-v2 doesn't have a type
-        // @ts-ignore
-        const unwatch = this.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
+        const unwatch = this.watch(async (event: WatchEvent | WatchEventV2) => {
           buffer.push({
-            type,
+            type: event.type,
             runId: this.runId,
-            from,
+            from: event.from ?? ChunkFrom.WORKFLOW,
             payload: {
-              stepName: (payload as unknown as { id: string }).id,
-              ...payload,
+              stepName:
+                event.type === 'watch' ? event.payload?.currentStep?.id : `${event.workflowId}.${event.payload?.id}`,
+              ...event.payload,
             },
           });
 
@@ -2130,10 +2127,10 @@ export class Run<
     return this.activeStream;
   }
 
-  watch(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): () => void {
+  watch(cb: (event: WatchEvent | WatchEventV2) => void, type: 'watch' | 'watch-v2' = 'watch'): () => void {
     const watchCb = (event: WatchEvent) => {
       this.updateState(event.payload);
-      cb({ type: event.type, payload: this.getState() as any, eventTimestamp: event.eventTimestamp });
+      cb({ type: event.type, payload: this.getState() as any, eventTimestamp: event.eventTimestamp } as WatchEvent);
     };
 
     const nestedWatchCb = ({ event, workflowId }: { event: WatchEvent; workflowId: string }) => {
@@ -2155,19 +2152,13 @@ export class Run<
           },
         };
         this.updateState(newPayload);
-        cb({ type, payload: this.getState() as any, eventTimestamp: eventTimestamp });
+        cb({ type, payload: this.getState() as any, eventTimestamp: eventTimestamp } as WatchEvent);
       } catch (e) {
         console.error(e);
       }
     };
 
-    const nestedWatchV2Cb = ({
-      event,
-      workflowId,
-    }: {
-      event: { type: string; payload: { id: string } & Record<string, unknown> };
-      workflowId: string;
-    }) => {
+    const nestedWatchV2Cb = ({ event, workflowId }: { event: WatchEventV2; workflowId: string }) => {
       this.emitter.emit('watch-v2', {
         ...event,
         ...(event.payload?.id ? { payload: { ...event.payload, id: `${workflowId}.${event.payload.id}` } } : {}),
@@ -2193,7 +2184,10 @@ export class Run<
     };
   }
 
-  async watchAsync(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): Promise<() => void> {
+  async watchAsync(
+    cb: (event: WatchEvent | WatchEventV2) => void,
+    type: 'watch' | 'watch-v2' = 'watch',
+  ): Promise<() => void> {
     return this.watch(cb, type);
   }
 

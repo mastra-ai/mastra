@@ -2,6 +2,7 @@ import type { TextStreamPart } from 'ai';
 import type { z } from 'zod';
 import type { TracingPolicy, TracingProperties } from '../ai-tracing';
 import type { Mastra } from '../mastra';
+import type { ChunkFrom, ChunkType } from '../stream';
 import type { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } from './step';
 
@@ -259,6 +260,17 @@ export type WatchEvent = {
     };
   };
   eventTimestamp: Date;
+  from?: ChunkFrom;
+};
+
+export type WatchEventV2 = {
+  type: 'watch-v2';
+  from: ChunkFrom;
+  payload?: {
+    output?: ChunkType;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
 };
 
 // Type to get the inferred type at a specific path in a Zod schema
