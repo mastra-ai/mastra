@@ -153,7 +153,7 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
 
       const uiMessageStream = createUIMessageStream({
         execute: async ({ writer }) => {
-          for await (const part of toAISdkFormat(result)!) {
+          for await (const part of toAISdkFormat(result, { from: 'agent' })!) {
             writer.write(part);
           }
         },

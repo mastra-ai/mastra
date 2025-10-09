@@ -1,6 +1,9 @@
 export { chatRoute } from './chat-route';
 export type { chatRouteOptions } from './chat-route';
 
+export { workflowRoute } from './workflow-route';
+export type { WorkflowRouteOptions } from './workflow-route';
+
 export { toAISdkFormat } from './to-ai-sdk-format';
 export { WorkflowStreamToAISDKTransformer } from './to-ai-sdk-format';
 export type { WorkflowAiSDKType } from './to-ai-sdk-format';

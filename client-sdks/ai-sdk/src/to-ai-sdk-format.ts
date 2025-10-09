@@ -1,7 +1,8 @@
-import type { MastraModelOutput, ChunkType, OutputSchema, NetworkChunkType } from '@mastra/core/stream';
-import type { WorkflowRunStatus, WorkflowStepStatus } from '@mastra/core/workflows';
+import type { MastraModelOutput, ChunkType, NetworkChunkType, OutputSchema } from '@mastra/core/stream';
+import type { MastraWorkflowStream, Step, WorkflowRunStatus, WorkflowStepStatus } from '@mastra/core/workflows';
 import type { InferUIMessageChunk, UIMessage } from 'ai';
-import type { ZodType } from 'zod';
+import type { ZodObject, ZodType } from 'zod';
+import type { MastraAgentNetworkStream } from '../../../packages/core/dist/stream/MastraAgentNetworkStream';
 import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from './helpers';
 
 type StepResult = {
@@ -39,26 +40,20 @@ export function WorkflowStreamToAISDKTransformer() {
   return new TransformStream<
     ChunkType,
     | {
-        data: string;
+        data?: string;
+        type?: 'start' | 'finish';
       }
     | WorkflowAiSDKType
+    | ChunkType
   >({
     start(controller) {
       controller.enqueue({
-        data: JSON.stringify({
-          type: 'start',
-          messageId: '1',
-        }),
+        type: 'start',
       });
     },
     flush(controller) {
       controller.enqueue({
-        data: JSON.stringify({
-          type: 'finish',
-        }),
-      });
-      controller.enqueue({
-        data: '[DONE]',
+        type: 'finish',
       });
     },
     transform(chunk, controller) {
@@ -499,10 +494,46 @@ function transformNetwork(
   }
 }
 
+type ToAISDKFrom = 'agent' | 'network' | 'workflow';
+
+export function toAISdkFormat<
+  TOutput extends ZodType<any>,
+  TInput extends ZodType<any>,
+  TSteps extends Step<string, any, any, any, any, any>[],
+  TState extends ZodObject<any>,
+>(
+  stream: MastraWorkflowStream<TState, TInput, TOutput, TSteps>,
+  options: { from: 'workflow' },
+): ReadableStream<InferUIMessageChunk<UIMessage>>;
+export function toAISdkFormat(
+  stream: MastraAgentNetworkStream,
+  options: { from: 'network' },
+): ReadableStream<InferUIMessageChunk<UIMessage>>;
 export function toAISdkFormat<TOutput extends OutputSchema>(
   stream: MastraModelOutput<TOutput>,
+  options: { from: 'agent' },
+): ReadableStream<InferUIMessageChunk<UIMessage>>;
+export function toAISdkFormat(
+  stream: MastraAgentNetworkStream | MastraWorkflowStream<any, any, any, any> | MastraModelOutput,
+  options: { from: ToAISDKFrom } = { from: 'agent' },
 ): ReadableStream<InferUIMessageChunk<UIMessage>> {
-  return stream.fullStream.pipeThrough(AgentStreamToAISDKTransformer<any>()) as ReadableStream<
+  const from = options?.from;
+
+  if (from === 'workflow') {
+    return (stream as ReadableStream<ChunkType>).pipeThrough(WorkflowStreamToAISDKTransformer()) as ReadableStream<
+      InferUIMessageChunk<UIMessage>
+    >;
+  }
+
+  if (from === 'network') {
+    return (stream as ReadableStream<ChunkType>).pipeThrough(AgentStreamToAISDKTransformer<any>()) as ReadableStream<
+      InferUIMessageChunk<UIMessage>
+    >;
+  }
+
+  const agentReadable =
+    'fullStream' in (stream as any) ? (stream as MastraModelOutput).fullStream : (stream as ReadableStream<ChunkType>);
+  return agentReadable.pipeThrough(AgentStreamToAISDKTransformer<any>()) as ReadableStream<
     InferUIMessageChunk<UIMessage>
   >;
 }
