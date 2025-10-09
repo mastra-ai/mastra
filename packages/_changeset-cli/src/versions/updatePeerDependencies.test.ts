@@ -1,18 +1,3 @@
-// import * as p from '@clack/prompts';
-// import type { Package } from '@manypkg/get-packages';
-// import color from 'picocolors';
-// import semver from 'semver';
-// import { describe, it, expect, vi } from 'vitest';
-// import { createCustomChangeset } from '../changeset/createCustomChangeset.js';
-// import { corePackage } from '../config.js';
-// import { getPackageJson } from '../pkg/getPackageJson.js';
-// import { getPublicPackages } from '../pkg/getPublicPackages.js';
-// import { updatePackageJson } from '../pkg/updatePackageJson.js';
-// import type { VersionBumps, UpdatedPeerDependencies, PackageJson, BumpType } from '../types.js';
-// import { getNewVersionForPackage, getReleasePlan } from './getNewVersionForPackage.js';
-// import { updatePeerDependencies } from './updatePeerDependencies.js';
-
-import fs from 'fs';
 import { PnpmTool } from '@manypkg/tools';
 import { describe, it, expect, vi } from 'vitest';
 import type { VersionBumps } from '../types.js';
