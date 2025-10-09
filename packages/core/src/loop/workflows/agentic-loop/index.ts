@@ -64,6 +64,9 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         // VNext execution as internal
         internal: InternalSpans.WORKFLOW,
       },
+      shouldPersistSnapshot: params => {
+        return params.workflowStatus === 'suspended';
+      },
     },
   })
     .dowhile(agenticExecutionWorkflow, async ({ inputData }) => {

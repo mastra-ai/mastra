@@ -81,12 +81,15 @@ const gatherCandidateInfo = createStep({
 "${resumeText}"`;
 
     const res = await recruiter.generate(prompt, {
-      output: z.object({
-        candidateName: z.string(),
-        isTechnical: z.boolean(),
-        specialty: z.string(),
-        resumeText: z.string(),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          candidateName: z.string(),
+          isTechnical: z.boolean(),
+          specialty: z.string(),
+          resumeText: z.string(),
+        })
+      },
+      maxSteps: 1
     });
 
     return res.object;
