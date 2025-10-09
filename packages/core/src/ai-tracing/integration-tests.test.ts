@@ -586,8 +586,13 @@ const mockModelV2 = new MockLanguageModelV2({
 
     // Return structured JSON for both the initial call and the structuring agent call
     if (isStructuringCall || (options as any).schemaName || (options as any).schemaDescription) {
+      // Return schema-appropriate output based on the prompt
+      let structuredData = { items: 'test structured output' };
+      if (isStructuringCall && prompt.includes('summary') && prompt.includes('sentiment')) {
+        structuredData = { summary: 'A test summary', sentiment: 'positive' } as any;
+      }
       return {
-        content: [{ type: 'text', text: JSON.stringify({ items: 'test structured output' }) }],
+        content: [{ type: 'text', text: JSON.stringify(structuredData) }],
         finishReason: 'stop',
         usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 },
         warnings: [],
@@ -626,7 +631,12 @@ const mockModelV2 = new MockLanguageModelV2({
 
     // Return structured JSON for both the initial call and the structuring agent call
     if (isStructuringCall || (options as any).schemaName || (options as any).schemaDescription) {
-      const structuredOutput = JSON.stringify({ items: 'test structured output' });
+      // Return schema-appropriate output based on the prompt
+      let structuredData = { items: 'test structured output' };
+      if (isStructuringCall && prompt.includes('summary') && prompt.includes('sentiment')) {
+        structuredData = { summary: 'A test summary', sentiment: 'positive' } as any;
+      }
+      const structuredOutput = JSON.stringify(structuredData);
       return {
         stream: convertArrayToReadableStream([
           { type: 'text-delta', id: '1', delta: structuredOutput },
@@ -1443,10 +1453,24 @@ describe('AI Tracing Integration Tests', () => {
           agents: { testAgent },
         });
 
-        const agent = mastra.getAgent('testAgent');
-        const result = await method(agent, '  Hello! How are you?  '); // Extra whitespace to test input processor
+        const outputSchema = z.object({
+          summary: z.string().describe('A brief summary'),
+          sentiment: z.string().describe('The sentiment of the message'),
+        });
 
-        // Verify the result
+        const structuredOutput: StructuredOutputOptions<typeof outputSchema> = {
+          schema: outputSchema,
+          model,
+        };
+
+        const agent = mastra.getAgent('testAgent');
+        const result = await method(
+          agent,
+          '  Hello! How are you?  ', // Extra whitespace to test input processor
+          { structuredOutput },
+        );
+
+        // Verify the result has text (structured output may fail with mock model)
         expect(result.text).toBeDefined();
 
         // Get all spans
@@ -1458,32 +1482,43 @@ describe('AI Tracing Integration Tests', () => {
         // - Test Agent AGENT_RUN (root)
         //   - PROCESSOR_RUN (input processor: unicode-normalizer) - no internal agent
         //   - Test Agent LLM_GENERATION (initial model call)
+        //   - PROCESSOR_RUN (output processor: structured-output) - has internal agent
+        //     - structured-output-structurer AGENT_RUN
+        //       - structured-output-structurer LLM_GENERATION
         //   - PROCESSOR_RUN (output processor: summarizer) - has internal agent
         //     - summarizer-agent AGENT_RUN
         //       - summarizer-agent LLM_GENERATION
 
-        expect(agentRunSpans.length).toBe(2); // Test Agent + summarizer agent
-        expect(llmGenerationSpans.length).toBe(2); // Test Agent LLM + summarizer LLM
-        expect(processorRunSpans.length).toBe(2); // unicode-normalizer + summarizer
+        expect(agentRunSpans.length).toBe(3); // Test Agent + structured-output agent + summarizer agent
+        expect(llmGenerationSpans.length).toBe(3); // Test Agent LLM + structured-output LLM + summarizer LLM
+        expect(processorRunSpans.length).toBe(3); // unicode-normalizer + structured-output + summarizer
 
         // Find specific spans
         const testAgentSpan = agentRunSpans.find(s => s.name === "agent run: 'Test Agent'");
         const inputProcessorSpan = processorRunSpans.find(s => s.name === 'input processor: unicode-normalizer');
         const summarizerProcessorSpan = processorRunSpans.find(s => s.name === 'output processor: summarizer');
+        const structuredOutputProcessorSpan = processorRunSpans.find(
+          s => s.name === 'output processor: structured-output',
+        );
         const summarizerAgentSpan = agentRunSpans.find(s => s.name?.includes('summarizer-agent'));
+        const structuredOutputAgentSpan = agentRunSpans.find(s => s.name?.includes('structured-output-structurer'));
 
         // Verify all expected spans exist
         expect(testAgentSpan).toBeDefined();
         expect(inputProcessorSpan).toBeDefined();
         expect(summarizerProcessorSpan).toBeDefined();
+        expect(structuredOutputProcessorSpan).toBeDefined();
         expect(summarizerAgentSpan).toBeDefined();
+        expect(structuredOutputAgentSpan).toBeDefined();
 
         // Verify span nesting - all processors should be children of Test Agent
         expect(inputProcessorSpan?.parentSpanId).toEqual(testAgentSpan?.id);
         expect(summarizerProcessorSpan?.parentSpanId).toEqual(testAgentSpan?.id);
+        expect(structuredOutputProcessorSpan?.parentSpanId).toEqual(testAgentSpan?.id);
 
-        // Verify internal agent span is child of processor span
+        // Verify internal agent spans are children of their processor spans
         expect(summarizerAgentSpan?.parentSpanId).toEqual(summarizerProcessorSpan?.id);
+        expect(structuredOutputAgentSpan?.parentSpanId).toEqual(structuredOutputProcessorSpan?.id);
 
         testExporter.finalExpectations();
       });
