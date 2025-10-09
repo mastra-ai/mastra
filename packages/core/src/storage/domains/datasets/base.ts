@@ -99,6 +99,10 @@ export class DatasetsStorage extends MastraBase {
     throw new Error('Not implemented');
   }
 
+  protected generateDatasetId(): string {
+    return crypto.randomUUID();
+  }
+
   protected validateCreateDataset(dataset: CreateDatasetPayload): CreateDatasetPayload {
     return createDatasetValidation.parse(dataset);
   }
@@ -124,6 +128,9 @@ export class DatasetsStorage extends MastraBase {
   }
 
   getDatasets(args?: {
+    filter?: {
+      name?: string;
+    };
     pagination?: StoragePagination;
   }): Promise<{ datasets: DatasetRecord[]; pagination: PaginationInfo }> {
     throw new Error('Not implemented');
@@ -146,6 +153,14 @@ export class DatasetsStorage extends MastraBase {
   // DATASET ROWS
   addDatasetRows(args: AddDatasetRowsPayload): Promise<{ rows: DatasetRow[]; versionId: string }> {
     throw new Error('Not implemented');
+  }
+
+  protected generateDatasetVersionPayload({ datasetId }: { datasetId: string }): DatasetVersion {
+    return {
+      id: this.generateVersionULID(),
+      datasetId,
+      createdAt: new Date(),
+    };
   }
 
   protected generateDatasetRowId(): string {

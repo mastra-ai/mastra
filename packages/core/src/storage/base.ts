@@ -17,6 +17,9 @@ import {
   TABLE_SCORERS,
   TABLE_SCHEMAS,
   TABLE_AI_SPANS,
+  TABLE_DATASETS,
+  TABLE_DATASET_VERSIONS,
+  TABLE_DATASET_ROWS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
 import type {
@@ -379,6 +382,27 @@ export abstract class MastraStorage extends MastraBase {
         this.createTable({
           tableName: TABLE_AI_SPANS,
           schema: TABLE_SCHEMAS[TABLE_AI_SPANS],
+        }),
+      );
+    }
+
+    if (this.supports.datasets) {
+      tableCreationTasks.push(
+        this.createTable({
+          tableName: TABLE_DATASETS,
+          schema: TABLE_SCHEMAS[TABLE_DATASETS],
+        }),
+      );
+      tableCreationTasks.push(
+        this.createTable({
+          tableName: TABLE_DATASET_VERSIONS,
+          schema: TABLE_SCHEMAS[TABLE_DATASET_VERSIONS],
+        }),
+      );
+      tableCreationTasks.push(
+        this.createTable({
+          tableName: TABLE_DATASET_ROWS,
+          schema: TABLE_SCHEMAS[TABLE_DATASET_ROWS],
         }),
       );
     }
@@ -852,6 +876,9 @@ export abstract class MastraStorage extends MastraBase {
    * @throws {MastraError} if not supported by the storage adapter
    */
   async getDatasets(args?: {
+    filter?: {
+      name?: string;
+    };
     pagination?: StoragePagination;
   }): Promise<{ datasets: any[]; pagination: PaginationInfo }> {
     if (this.stores?.datasets) {

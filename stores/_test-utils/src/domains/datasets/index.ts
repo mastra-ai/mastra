@@ -556,6 +556,17 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
           expect(result.pagination.hasMore).toBe(true);
         });
 
+        it('should return datasets with name filter', async () => {
+          await createMultipleDatasets(storage, 15);
+
+          const result = await storage.getDatasets({
+            filter: { name: 'dataset-1' },
+          });
+
+          expect(result.datasets.length).toBe(1);
+          expect(result.datasets[0].name).toBe('dataset-1');
+        });
+
         it('should return datasets with currentVersion attached', async () => {
           await createMultipleDatasets(storage, 3);
 

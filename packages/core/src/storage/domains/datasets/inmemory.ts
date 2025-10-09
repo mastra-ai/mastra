@@ -116,17 +116,23 @@ export class MemoryDatasetsStorage extends DatasetsStorage {
     return Promise.resolve({ ...dataset, currentVersion });
   }
 
-  getDatasets({
-    pagination,
-  }: {
+  getDatasets(args: {
+    filter?: {
+      name?: string;
+    };
     pagination?: StoragePagination;
   }): Promise<{ datasets: DatasetRecord[]; pagination: PaginationInfo }> {
+    const { filter, pagination } = args ?? {};
     const page = Math.max(0, pagination?.page ?? 0);
     const perPage = Math.max(1, pagination?.perPage ?? 10);
     const start = page * perPage;
     const end = start + perPage;
 
-    const allDatasets = Array.from(this.datasets.values());
+    let allDatasets = Array.from(this.datasets.values());
+    if (filter?.name) {
+      console.log('filtering by name', filter.name);
+      allDatasets = allDatasets.filter(dataset => dataset.name === filter.name);
+    }
     const datasetWithVersions = allDatasets.slice(start, end).map(dataset => {
       const datasetVersions = Array.from(this.datasetVersions.values())
         .filter(version => version.datasetId === dataset.id)
