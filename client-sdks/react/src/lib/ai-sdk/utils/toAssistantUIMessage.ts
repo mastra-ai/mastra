@@ -1,14 +1,6 @@
-import {
-  ThreadMessageLike,
-  MessageStatus,
-  CompleteAttachment,
-  TextMessagePart,
-  ReasoningMessagePart,
-  SourceMessagePart,
-  FileMessagePart,
-  ToolCallMessagePart,
-} from '@assistant-ui/react';
-import { MastraUIMessage } from './toUIMessage';
+import { ThreadMessageLike, MessageStatus, CompleteAttachment } from '@assistant-ui/react';
+import { MastraUIMessage } from '../types';
+import { ReadonlyJSONObject } from '@mastra/core/stream';
 
 /**
  * Extended type for MastraUIMessage that may include additional properties
@@ -19,6 +11,13 @@ type ExtendedMastraUIMessage = MastraUIMessage & {
   metadata?: Record<string, unknown>;
   experimental_attachments?: readonly CompleteAttachment[];
 };
+
+type ContentPart = { metadata?: Record<string, unknown> } & (Exclude<
+  ThreadMessageLike['content'],
+  string
+> extends readonly (infer T)[]
+  ? T
+  : never);
 
 /**
  * Converts a Mastra UIMessage (from AI SDK) to a ThreadMessageLike format compatible with @assistant-ui/react.
@@ -35,7 +34,6 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
   const extendedMessage = message as ExtendedMastraUIMessage;
 
   // Convert parts array to content array
-  type ContentPart = Exclude<ThreadMessageLike['content'], string> extends readonly (infer T)[] ? T : never;
 
   const content: ThreadMessageLike['content'] = message.parts.map((part): ContentPart => {
     // Handle text parts
@@ -43,6 +41,7 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
       return {
         type: 'text',
         text: part.text,
+        metadata: message.metadata,
       };
     }
 
@@ -51,6 +50,7 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
       return {
         type: 'reasoning',
         text: part.text,
+        metadata: message.metadata,
       };
     }
 
@@ -62,6 +62,7 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
         id: part.sourceId,
         url: part.url,
         title: part.title,
+        metadata: message.metadata,
       };
     }
 
@@ -73,6 +74,7 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
         filename: part.filename,
         mimeType: part.mediaType,
         data: '', // Source documents don't have inline data
+        metadata: message.metadata,
       };
     }
 
@@ -82,38 +84,45 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
         type: 'file',
         mimeType: part.mediaType,
         data: part.url, // Use URL as data source
+        metadata: message.metadata,
       };
     }
 
     // Handle dynamic-tool parts (tool calls)
     if (part.type === 'dynamic-tool') {
       // Build the tool call matching the inline type from ThreadMessageLike
-      const baseToolCall = {
+      const baseToolCall: ContentPart = {
         type: 'tool-call' as const,
         toolCallId: part.toolCallId,
         toolName: part.toolName,
         argsText: JSON.stringify(part.input),
+        args: part.input as ReadonlyJSONObject,
+        metadata: message.metadata,
       };
 
-      // Only add result and isError if the tool has completed
-      if (part.state === 'output-available' && 'output' in part) {
-        return { ...baseToolCall, result: part.output };
-      } else if (part.state === 'output-error' && 'errorText' in part) {
+      if (part.state === 'output-error' && 'errorText' in part) {
         return { ...baseToolCall, result: part.errorText, isError: true };
+      }
+
+      // Only add result and isError if the tool has completed
+      if ('output' in part) {
+        return { ...baseToolCall, result: part.output };
       }
 
       return baseToolCall;
     }
 
     // Handle typed tool parts (tool-{NAME} pattern from AI SDK)
-    if (part.type.startsWith('tool-')) {
+    if (part.type.startsWith('tool-') && (part as any).state !== 'input-available') {
       const toolName = 'toolName' in part && typeof part.toolName === 'string' ? part.toolName : part.type.substring(5);
 
-      const baseToolCall = {
+      const baseToolCall: ContentPart = {
         type: 'tool-call' as const,
         toolCallId: 'toolCallId' in part && typeof part.toolCallId === 'string' ? part.toolCallId : '',
         toolName,
         argsText: 'input' in part ? JSON.stringify(part.input) : '{}',
+        args: 'input' in part ? part.input : {},
+        metadata: message.metadata,
       };
 
       // Add result if available
@@ -131,6 +140,7 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
     return {
       type: 'text',
       text: '',
+      metadata: message.metadata,
     };
   });
 
@@ -169,13 +179,6 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
     }
   }
 
-  // Build metadata if present
-  const metadata = extendedMessage.metadata
-    ? {
-        custom: extendedMessage.metadata,
-      }
-    : undefined;
-
   // Build the ThreadMessageLike object
   const threadMessage: ThreadMessageLike = {
     role: message.role,
@@ -183,7 +186,6 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
     id: message.id,
     createdAt: extendedMessage.createdAt,
     status,
-    metadata,
     attachments: extendedMessage.experimental_attachments,
   };
 

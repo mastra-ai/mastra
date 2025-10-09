@@ -49,6 +49,7 @@ jobs:
           permission-security-events: write
           permission-statuses: write
           permission-contents: write
+          permission-workflows: write
 
       - name: Get GitHub App User ID
         id: get-user-id
