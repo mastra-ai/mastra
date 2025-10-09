@@ -4,6 +4,7 @@
  */
 
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import type { ProviderConfig } from './gateways/base.js';
@@ -20,6 +21,34 @@ interface RegistryData {
 }
 
 let registryData: RegistryData | null = null;
+
+// Cache file helpers
+const CACHE_DIR = path.join(os.homedir(), '.config', 'mastra');
+const CACHE_FILE = path.join(CACHE_DIR, 'gateway-refresh-time');
+
+function getLastRefreshTimeFromDisk(): Date | null {
+  try {
+    if (!fs.existsSync(CACHE_FILE)) {
+      return null;
+    }
+    const timestamp = fs.readFileSync(CACHE_FILE, 'utf-8').trim();
+    return new Date(parseInt(timestamp, 10));
+  } catch (err) {
+    console.debug('[ModelRegistry] Failed to read cache file:', err);
+    return null;
+  }
+}
+
+function saveLastRefreshTimeToDisk(date: Date): void {
+  try {
+    if (!fs.existsSync(CACHE_DIR)) {
+      fs.mkdirSync(CACHE_DIR, { recursive: true });
+    }
+    fs.writeFileSync(CACHE_FILE, date.getTime().toString(), 'utf-8');
+  } catch (err) {
+    console.debug('[ModelRegistry] Failed to write cache file:', err);
+  }
+}
 
 // Get __dirname equivalent in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -229,31 +258,52 @@ export class ModelRegistry {
       // Fetch provider data
       const { providers, models } = await fetchProvidersFromGateways(gateways);
 
-      // Determine write paths based on environment
-      const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
+      // Write to dist/ (the bundled location that gets distributed)
+      // Find the dist root by looking for provider-registry.json
+      let distRoot = __dirname;
+      while (distRoot !== path.dirname(distRoot)) {
+        if (fs.existsSync(path.join(distRoot, 'provider-registry.json'))) {
+          break;
+        }
+        distRoot = path.dirname(distRoot);
+      }
 
-      // Always write to dist/ (production location)
-      const distDir = path.join(__dirname);
-      const distJsonPath = path.join(distDir, 'provider-registry.json');
-      const distTypesPath = path.join(distDir, 'provider-types.generated.d.ts');
+      const distJsonPath = path.join(distRoot, 'provider-registry.json');
+      const distTypesPath = path.join(distRoot, 'llm/model/provider-types.generated.d.ts');
 
       await writeRegistryFiles(distJsonPath, distTypesPath, providers, models);
-      console.debug(`[ModelRegistry] ✅ Updated registry in dist/`);
+      console.debug(`[ModelRegistry] ✅ Updated registry files in dist/`);
 
-      // Also write to src/ when in dev mode
+      // Also copy to src/ when in dev mode
+      const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
       if (isDev) {
-        const srcDir = path.join(__dirname, '../../../src/llm/model');
+        // Find the package root by looking for package.json
+        let packageRoot = __dirname;
+        while (packageRoot !== path.dirname(packageRoot)) {
+          if (fs.existsSync(path.join(packageRoot, 'package.json'))) {
+            const pkgJson = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf-8'));
+            if (pkgJson.name === '@mastra/core') {
+              break;
+            }
+          }
+          packageRoot = path.dirname(packageRoot);
+        }
+
+        const srcDir = path.join(packageRoot, 'src/llm/model');
         const srcJsonPath = path.join(srcDir, 'provider-registry.json');
         const srcTypesPath = path.join(srcDir, 'provider-types.generated.d.ts');
 
-        await writeRegistryFiles(srcJsonPath, srcTypesPath, providers, models);
-        console.debug(`[ModelRegistry] ✅ Updated registry in src/ (dev mode)`);
+        // Copy the already-generated files
+        await fs.promises.copyFile(distJsonPath, srcJsonPath);
+        await fs.promises.copyFile(distTypesPath, srcTypesPath);
+        console.debug(`[ModelRegistry] ✅ Copied registry files to src/ (dev mode)`);
       }
 
       // Clear the in-memory cache to force reload
       registryData = null;
 
       this.lastRefreshTime = new Date();
+      saveLastRefreshTimeToDisk(this.lastRefreshTime);
       console.debug(`[ModelRegistry] ✅ Gateway sync completed at ${this.lastRefreshTime.toISOString()}`);
     } catch (error) {
       console.error('[ModelRegistry] ❌ Gateway sync failed:', error);
@@ -264,10 +314,10 @@ export class ModelRegistry {
   }
 
   /**
-   * Get the last refresh time
+   * Get the last refresh time (from memory or disk cache)
    */
   getLastRefreshTime(): Date | null {
-    return this.lastRefreshTime;
+    return this.lastRefreshTime || getLastRefreshTimeFromDisk();
   }
 
   /**
@@ -281,6 +331,24 @@ export class ModelRegistry {
     }
 
     console.debug(`[ModelRegistry] Starting auto-refresh (interval: ${intervalMs}ms)`);
+
+    // Check if we need to run an immediate sync
+    const lastRefresh = getLastRefreshTimeFromDisk();
+    const now = Date.now();
+    const shouldRefresh = !lastRefresh || now - lastRefresh.getTime() > intervalMs;
+
+    if (shouldRefresh) {
+      console.debug(
+        `[ModelRegistry] Running immediate sync (last refresh: ${lastRefresh ? lastRefresh.toISOString() : 'never'})`,
+      );
+      this.syncGateways().catch(err => {
+        console.error('[ModelRegistry] Initial auto-refresh failed:', err);
+      });
+    } else {
+      console.debug(
+        `[ModelRegistry] Skipping immediate sync (last refresh: ${lastRefresh.toISOString()}, next in ${Math.round((intervalMs - (now - lastRefresh.getTime())) / 1000)}s)`,
+      );
+    }
 
     this.refreshInterval = setInterval(() => {
       this.syncGateways().catch(err => {
