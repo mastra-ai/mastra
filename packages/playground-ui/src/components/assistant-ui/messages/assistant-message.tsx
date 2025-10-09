@@ -1,5 +1,5 @@
 import { ActionBarPrimitive, MessagePrimitive, useMessage } from '@assistant-ui/react';
-import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon, TriangleAlert } from 'lucide-react';
+import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
 
 import { ErrorAwareText } from './error-aware-text';
 import { TooltipIconButton } from '../tooltip-icon-button';
@@ -11,10 +11,6 @@ import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provide
 export interface AssistantMessageProps {
   hasModelList?: boolean;
 }
-
-const statusClasses = {
-  warning: 'bg-yellow-900/20 border-sm border-yellow-200 text-yellow-200 rounded-lg px-4 py-2 flex gap-4 items-center',
-};
 
 export const AssistantMessage = ({ hasModelList }: AssistantMessageProps) => {
   const data = useMessage();
