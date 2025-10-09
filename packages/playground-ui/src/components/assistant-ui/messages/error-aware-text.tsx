@@ -22,6 +22,15 @@ export const ErrorAwareText = () => {
     );
   }
 
+  if (metadata?.status === 'error') {
+    return (
+      <Alert variant="destructive">
+        <AlertTitle as="h5">Error</AlertTitle>
+        <AlertDescription as="p">{text}</AlertDescription>
+      </Alert>
+    );
+  }
+
   try {
     // Check if this is an error message (trim whitespace first)
     const trimmedText = text.trim();
