@@ -779,7 +779,7 @@ describe('AI Tracing Registry', () => {
       expect(getSelectedAITracing(customOptions)).toBe(getAITracing('custom'));
     });
 
-    it.only('should handle CloudExporter gracefully when token is missing', async () => {
+    it('should handle CloudExporter gracefully when token is missing', async () => {
       // Clear the token environment variable
       const originalToken = process.env.MASTRA_CLOUD_ACCESS_TOKEN;
       delete process.env.MASTRA_CLOUD_ACCESS_TOKEN;
