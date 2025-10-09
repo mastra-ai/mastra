@@ -2,6 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import type { ProviderConfig } from './gateways/base.js';
 import { ModelRegistry } from './provider-registry.js';
 
 describe('ModelRegistry Auto-Refresh', () => {
@@ -320,58 +321,48 @@ describe('ModelRegistry Auto-Refresh', () => {
     const { ModelsDevGateway } = await import('./gateways/models-dev.js');
     const { NetlifyGateway } = await import('./gateways/netlify.js');
 
-    // Save original methods
-    const originalModelsDevFetch = ModelsDevGateway.prototype.fetchProviders;
-    const originalNetlifyFetch = NetlifyGateway.prototype.fetchProviders;
-
     let modelsDevCallCount = 0;
-    ModelsDevGateway.prototype.fetchProviders = vi.fn(async function () {
+
+    // Use vi.spyOn for proper mocking (automatically restored by vi.restoreAllMocks)
+    vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders').mockImplementation(async function (): Promise<
+      Record<string, ProviderConfig>
+    > {
       modelsDevCallCount++;
       if (modelsDevCallCount === 1) {
         return {
           'test-provider': {
-            id: 'test-provider',
             name: 'Test Provider',
-            baseURL: 'https://test.com/v1',
-            apiKeySource: 'TEST_API_KEY',
+            url: 'https://test.com/v1',
+            apiKeyEnvVar: 'TEST_API_KEY',
             models: ['model-a', 'model-b'],
-            supportsStreaming: true,
-            supportsToolCalls: true,
-            supportsSystemMessages: true,
-            supportsObjectGeneration: false,
+            gateway: 'models.dev',
           },
         };
       } else {
         // Second call - add a new model and a new provider
         return {
           'test-provider': {
-            id: 'test-provider',
             name: 'Test Provider',
-            baseURL: 'https://test.com/v1',
-            apiKeySource: 'TEST_API_KEY',
+            url: 'https://test.com/v1',
+            apiKeyEnvVar: 'TEST_API_KEY',
             models: ['model-a', 'model-b', 'model-c'], // Added model-c
-            supportsStreaming: true,
-            supportsToolCalls: true,
-            supportsSystemMessages: true,
-            supportsObjectGeneration: false,
+            gateway: 'models.dev',
           },
           'new-provider': {
-            id: 'new-provider',
             name: 'New Provider',
-            baseURL: 'https://new.com/v1',
-            apiKeySource: 'NEW_API_KEY',
+            url: 'https://new.com/v1',
+            apiKeyEnvVar: 'NEW_API_KEY',
             models: ['new-model-1', 'new-model-2'],
-            supportsStreaming: false,
-            supportsToolCalls: false,
-            supportsSystemMessages: true,
-            supportsObjectGeneration: true,
+            gateway: 'models.dev',
           },
         };
       }
     });
 
     // Mock Netlify to return empty
-    NetlifyGateway.prototype.fetchProviders = vi.fn(async function () {
+    vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockImplementation(async function (): Promise<
+      Record<string, ProviderConfig>
+    > {
       return {};
     });
 
@@ -433,12 +424,9 @@ describe('ModelRegistry Auto-Refresh', () => {
     expect(secondTypes).toContain('export type ModelRouterModelId');
     expect(secondTypes).toContain('ProviderModelsMap[P][number]');
 
-    // Restore original functions
-    ModelsDevGateway.prototype.fetchProviders = originalModelsDevFetch;
-    NetlifyGateway.prototype.fetchProviders = originalNetlifyFetch;
-    fs.writeFileSync = originalWriteFileSync;
-
     // Clean up temp directory
     fs.rmSync(tempDir, { recursive: true, force: true });
+
+    // Note: Mocks are automatically restored by vi.restoreAllMocks() in afterEach
   });
 });
