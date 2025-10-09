@@ -4,10 +4,9 @@ import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 
 interface SpanDetailsProps {
   span?: AISpanRecord;
-  onScorerTriggered: (scorerName: string, traceId: string, spanId?: string) => void;
 }
 
-export function SpanDetails({ span, onScorerTriggered }: SpanDetailsProps) {
+export function SpanDetails({ span }: SpanDetailsProps) {
   if (!span) {
     return null;
   }

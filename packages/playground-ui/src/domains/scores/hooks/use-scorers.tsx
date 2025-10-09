@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { GetScorerResponse, GetScoresResponse, ClientScoreRowData } from '@mastra/client-js';
+import { GetScorerResponse, GetScoresResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 

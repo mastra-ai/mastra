@@ -254,7 +254,6 @@ export function TraceDialog({
                     onSpanScoresPageChange={setSpanScoresPage}
                     isLoadingSpanScoresData={isLoadingSpanScoresData}
                     spanInfo={selectedSpanInfo}
-                    onScorerTriggered={onScorerTriggered}
                     defaultActiveTab={spanDialogDefaultTab}
                     initialScoreId={initialScoreId}
                     isOpen={Boolean(dialogIsOpen && selectedSpanId && combinedView)}
@@ -283,7 +282,6 @@ export function TraceDialog({
           onPrevious={toPreviousSpan}
           onViewToggle={() => setCombinedView(!combinedView)}
           spanInfo={selectedSpanInfo}
-          onScorerTriggered={onScorerTriggered}
           defaultActiveTab={spanDialogDefaultTab}
           initialScoreId={initialScoreId}
         />

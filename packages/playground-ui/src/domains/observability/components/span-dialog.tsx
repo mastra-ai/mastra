@@ -37,7 +37,6 @@ type SpanDialogProps = {
   onNext?: () => void;
   onPrevious?: () => void;
   onViewToggle?: () => void;
-  onScorerTriggered: (scorerName: string, traceId: string, spanId?: string) => void;
   defaultActiveTab?: string;
   initialScoreId?: string;
 };
@@ -54,7 +53,6 @@ export function SpanDialog({
   onPrevious,
   onViewToggle,
   spanInfo = [],
-  onScorerTriggered,
   defaultActiveTab = 'details',
   initialScoreId,
 }: SpanDialogProps) {
@@ -113,7 +111,7 @@ export function SpanDialog({
             <Sections>
               {span?.attributes?.usage && <TraceSpanUsage spanUsage={span.attributes.usage} />}
               <KeyValueList data={spanInfo} LinkComponent={Link} />
-              <SpanDetails span={span} onScorerTriggered={onScorerTriggered} />
+              <SpanDetails span={span} />
             </Sections>
           </Tabs.Content>
           <Tabs.Content value="scores">
@@ -124,12 +122,7 @@ export function SpanDialog({
                     <CircleGaugeIcon /> Scoring
                   </Section.Heading>
                 </Section.Header>
-                <SpanScoring
-                  traceId={trace.traceId}
-                  spanId={span?.spanId}
-                  onScorerTriggered={onScorerTriggered}
-                  entityType={entityType}
-                />
+                <SpanScoring traceId={trace.traceId} spanId={span?.spanId} entityType={entityType} />
               </Section>
               <Section>
                 <Section.Header>

@@ -8,14 +8,13 @@ import { useEffect, useState } from 'react';
 export interface SpanScoringProps {
   traceId?: string;
   spanId?: string;
-  onScorerTriggered: (scorerName: string, traceId: string, spanId?: string) => void;
   entityType?: string;
 }
 
-export const SpanScoring = ({ traceId, spanId, onScorerTriggered, entityType }: SpanScoringProps) => {
+export const SpanScoring = ({ traceId, spanId, entityType }: SpanScoringProps) => {
   const { data: scorers = {}, isLoading } = useScorers();
   const [selectedScorer, setSelectedScorer] = useState<string | null>(null);
-  const { mutate: triggerScorer, isPending, isSuccess } = useTriggerScorer(onScorerTriggered);
+  const { mutate: triggerScorer, isPending, isSuccess } = useTriggerScorer();
   const [notificationIsVisible, setNotificationIsVisible] = useState(false);
 
   useEffect(() => {

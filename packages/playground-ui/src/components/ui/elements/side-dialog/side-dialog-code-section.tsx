@@ -7,7 +7,7 @@ import { tags as t } from '@lezer/highlight';
 import { Button } from '@/components/ui/elements/buttons';
 import { AlignJustifyIcon, AlignLeftIcon } from 'lucide-react';
 import { Buttons } from '@/components/ui/containers';
-import { Section } from '../section';
+import { Section } from '@/components/ui/elements/section';
 
 const useCodemirrorTheme = () => {
   return useMemo(

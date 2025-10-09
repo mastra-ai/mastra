@@ -1,4 +1,3 @@
-import { Dropdown } from '@/components/ui/dropdown-menu';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { Button } from '@/components/ui/elements/buttons';
 import { InfoIcon } from 'lucide-react';
@@ -17,7 +16,7 @@ export interface ScorersDropdownProps {
 export const ScorersDropdown = ({ trace, spanId, onScorerTriggered, entityType }: ScorersDropdownProps) => {
   const { data: scorers = {}, isLoading } = useScorers();
   const [selectedScorer, setSelectedScorer] = useState<string | null>(null);
-  const { mutate: triggerScorer, isPending, isSuccess, isError, error } = useTriggerScorer(onScorerTriggered);
+  const { mutate: triggerScorer, isPending, isSuccess, isError, error } = useTriggerScorer();
 
   let scorerList = Object.entries(scorers)
     .map(([key, scorer]) => ({

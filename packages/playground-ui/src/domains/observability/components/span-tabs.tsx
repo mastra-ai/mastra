@@ -26,7 +26,6 @@ type SpanTabsProps = {
   onNext?: () => void;
   onPrevious?: () => void;
   onViewToggle?: () => void;
-  onScorerTriggered: (scorerName: string, traceId: string, spanId?: string) => void;
   defaultActiveTab?: string;
   initialScoreId?: string;
 };
@@ -38,7 +37,6 @@ export function SpanTabs({
   onSpanScoresPageChange,
   isLoadingSpanScoresData,
   spanInfo = [],
-  onScorerTriggered,
   defaultActiveTab = 'details',
   initialScoreId,
 }: SpanTabsProps) {
@@ -56,7 +54,7 @@ export function SpanTabs({
         <Sections>
           {span?.attributes?.usage && <TraceSpanUsage spanUsage={span.attributes.usage} />}
           <KeyValueList data={spanInfo} LinkComponent={Link} />
-          <SpanDetails span={span} onScorerTriggered={onScorerTriggered} />
+          <SpanDetails span={span} />
         </Sections>
       </Tabs.Content>
       <Tabs.Content value="scores">
@@ -67,7 +65,7 @@ export function SpanTabs({
                 <CircleGaugeIcon /> Scoring
               </Section.Heading>
             </Section.Header>
-            <SpanScoring traceId={trace?.traceId} spanId={span?.spanId} onScorerTriggered={onScorerTriggered} />
+            <SpanScoring traceId={trace?.traceId} spanId={span?.spanId} />
           </Section>
           <Section>
             <Section.Header>

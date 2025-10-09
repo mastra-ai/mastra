@@ -10,7 +10,6 @@ export const useAITrace = (traceId: string | null | undefined, options?: { enabl
       }
 
       const res = await client.getAITrace(traceId);
-
       return res;
     },
     enabled: !!traceId,
