@@ -32,6 +32,7 @@ import { StoreOperationsLibSQL } from './domains/operations';
 import { ScoresLibSQL } from './domains/scores';
 import { TracesLibSQL } from './domains/traces';
 import { WorkflowsLibSQL } from './domains/workflows';
+import { LibSQLDatasetsStorage } from './domains/datasets';
 
 export type LibSQLConfig =
   | {
@@ -106,6 +107,7 @@ export class LibSQLStore extends MastraStorage {
     const memory = new MemoryLibSQL({ client: this.client, operations });
     const legacyEvals = new LegacyEvalsLibSQL({ client: this.client });
     const observability = new ObservabilityLibSQL({ operations });
+    const datasets = new LibSQLDatasetsStorage({ client: this.client, operations });
 
     this.stores = {
       operations,
@@ -115,6 +117,7 @@ export class LibSQLStore extends MastraStorage {
       memory,
       legacyEvals,
       observability,
+      datasets,
     };
   }
 
@@ -127,6 +130,7 @@ export class LibSQLStore extends MastraStorage {
       deleteMessages: true,
       aiTracing: true,
       getScoresBySpan: true,
+      datasets: true,
     };
   }
 
