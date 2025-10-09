@@ -72,4 +72,4 @@ jobs:
         with:
           title: 'chore: version packages'
           commit: 'chore: version packages'
-          version: pnpm changeset version
+          version: pnpm changeset-cli version

@@ -32,6 +32,7 @@ import type { OutputSchema } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
 import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
 
+import type { UIMessage } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
@@ -221,7 +222,7 @@ export interface GetWorkflowResponse {
 
 export type WorkflowWatchResult = WatchEvent & { runId: string };
 
-export type WorkflowRunResult = WorkflowResult<any, any, any>;
+export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
 export interface UpsertVectorParams {
   indexName: string;
   vectors: number[][];
@@ -317,7 +318,8 @@ export type GetMemoryThreadMessagesPaginatedParams = Omit<StorageGetMessagesArg,
 
 export interface GetMemoryThreadMessagesResponse {
   messages: CoreMessage[];
-  uiMessages: AiMessageType[];
+  legacyMessages: AiMessageType[];
+  uiMessages: UIMessage[];
 }
 
 export type GetMemoryThreadMessagesPaginatedResponse = PaginationInfo & {
@@ -471,7 +473,7 @@ export interface LoopVNextNetworkResponse {
     isComplete?: boolean | undefined;
     completionReason?: string | undefined;
   };
-  steps: WorkflowResult<any, any, any>['steps'];
+  steps: WorkflowResult<any, any, any, any>['steps'];
 }
 
 export interface McpServerListResponse {

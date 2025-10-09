@@ -1,6 +1,8 @@
 import type { AgentExecutionOptions } from '@mastra/core/agent';
 import { registerApiRoute } from '@mastra/core/server';
 import type { OutputSchema } from '@mastra/core/stream';
+import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
+import { toAISdkFormat } from './to-ai-sdk-format';
 
 export type chatRouteOptions<OUTPUT extends OutputSchema = undefined> = {
   defaultOptions?: AgentExecutionOptions<OUTPUT, 'aisdk'>;
@@ -144,13 +146,22 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
         throw new Error(`Agent ${agentToUse} not found`);
       }
 
-      const result = await agentObj.stream<OUTPUT, 'aisdk'>(messages, {
+      const result = await agentObj.stream<OUTPUT, 'mastra'>(messages, {
         ...defaultOptions,
         ...rest,
-        format: 'aisdk',
       });
 
-      return result.toUIMessageStreamResponse();
+      const uiMessageStream = createUIMessageStream({
+        execute: async ({ writer }) => {
+          for await (const part of toAISdkFormat(result)!) {
+            writer.write(part);
+          }
+        },
+      });
+
+      return createUIMessageStreamResponse({
+        stream: uiMessageStream,
+      });
     },
   });
 }

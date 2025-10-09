@@ -1,4 +1,4 @@
-import type { MastraLanguageModel } from '@mastra/core/agent';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import { createScorer } from '@mastra/core/scores';
 import { z } from 'zod';
 import { roundToTwoDecimals } from '../../../metrics/llm/utils';
@@ -30,7 +30,7 @@ export function createAnswerRelevancyScorer({
   model,
   options = DEFAULT_OPTIONS,
 }: {
-  model: MastraLanguageModel;
+  model: MastraModelConfig;
   options?: Record<'uncertaintyWeight' | 'scale', number>;
 }) {
   return createScorer({

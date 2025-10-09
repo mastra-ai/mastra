@@ -944,6 +944,16 @@ export const redirectList = [
     destination: "/:locale/reference/observability/otel-tracing/providers",
     permanent: true,
   },
+  {
+    source: "/:locale/docs/agents/input-processors",
+    destination: "/:locale/docs/agents/guardrails",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/agents/output-processors",
+    destination: "/:locale/docs/agents/guardrails",
+    permanent: true,
+  },
   // Vector store reference redirects (moved from RAG to Vectors)
   {
     source: "/:locale/reference/rag/astra",
@@ -1013,6 +1023,46 @@ export const redirectList = [
   {
     source: "/:locale/reference/rag/upstash",
     destination: "/:locale/reference/vectors/upstash",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/agents/dynamic-agents",
+    destination: "/:locale/docs/agents/runtime-context",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/cli/mcp-docs-server",
+    destination: "/:locale/docs/getting-started/mcp-docs-server",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/cli/init",
+    destination: "/:locale/reference/cli/mastra",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/cli/dev",
+    destination: "/:locale/reference/cli/mastra",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/cli/build",
+    destination: "/:locale/reference/cli/mastra",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/cli/start",
+    destination: "/:locale/reference/cli/mastra",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/cli/lint",
+    destination: "/:locale/reference/cli/mastra",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/cli/scorers",
+    destination: "/:locale/reference/cli/mastra",
     permanent: true,
   },
 ];
