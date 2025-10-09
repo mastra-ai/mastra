@@ -26,7 +26,7 @@ export const createProject = async (projectNameArg: any, args: any) => {
         components: args.components ? args.components.split(',') : [],
         llmProvider: args.llm,
         addExample: args.example,
-        llmApiKey: args['llm-api-key'],
+        llmApiKey: args.llmApiKey,
         timeout,
         projectName,
         directory: args.dir,

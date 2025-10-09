@@ -48,13 +48,13 @@ describe('ModelsDevGateway - Real API Integration', () => {
     }
 
     if (providers.groq) {
-      expect(providers.groq.url).toBe('https://api.groq.com/openai/v1/chat/completions');
+      expect(providers.groq.url).toBe('https://api.groq.com/openai/v1');
       expect(providers.groq.apiKeyEnvVar).toBe('GROQ_API_KEY');
       expect(providers.groq.apiKeyHeader).toBe('Authorization');
     }
 
     if (providers.vercel) {
-      expect(providers.vercel.url).toBe('https://ai-gateway.vercel.sh/v1/chat/completions');
+      expect(providers.vercel.url).toBe('https://ai-gateway.vercel.sh/v1');
       expect(providers.vercel.apiKeyEnvVar).toBe('AI_GATEWAY_API_KEY');
       expect(providers.vercel.apiKeyHeader).toBe('Authorization');
       // Vercel should have models like deepseek/deepseek-r1

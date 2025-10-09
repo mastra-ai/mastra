@@ -32,28 +32,25 @@ interface ModelsDevResponse {
 // At runtime, buildUrl() and buildHeaders() use the pre-generated PROVIDER_REGISTRY instead.
 const OPENAI_COMPATIBLE_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
   cerebras: {
-    url: 'https://api.cerebras.ai/v1/chat/completions',
-  },
-  xai: {
-    url: 'https://api.x.ai/v1/chat/completions',
+    url: 'https://api.cerebras.ai/v1',
   },
   mistral: {
-    url: 'https://api.mistral.ai/v1/chat/completions',
+    url: 'https://api.mistral.ai/v1',
   },
   groq: {
-    url: 'https://api.groq.com/openai/v1/chat/completions',
+    url: 'https://api.groq.com/openai/v1',
   },
   togetherai: {
-    url: 'https://api.together.xyz/v1/chat/completions',
+    url: 'https://api.together.xyz/v1',
   },
   deepinfra: {
-    url: 'https://api.deepinfra.com/v1/openai/chat/completions',
+    url: 'https://api.deepinfra.com/v1/openai',
   },
   perplexity: {
-    url: 'https://api.perplexity.ai/chat/completions',
+    url: 'https://api.perplexity.ai',
   },
   vercel: {
-    url: 'https://ai-gateway.vercel.sh/v1/chat/completions',
+    url: 'https://ai-gateway.vercel.sh/v1',
     apiKeyEnvVar: 'AI_GATEWAY_API_KEY',
   },
 };
@@ -107,12 +104,7 @@ export class ModelsDevGateway extends MastraModelGateway {
         const modelIds = Object.keys(providerInfo.models).sort();
 
         // Get the API URL from the provider info or overrides
-        let url = providerInfo.api || OPENAI_COMPATIBLE_OVERRIDES[normalizedId]?.url;
-
-        // Ensure the URL ends with /chat/completions if it doesn't already
-        if (!hasInstalledPackage && url && !url.includes('/chat/completions') && !url.includes('/messages')) {
-          url = url.replace(/\/$/, '') + '/chat/completions';
-        }
+        const url = providerInfo.api || OPENAI_COMPATIBLE_OVERRIDES[normalizedId]?.url;
 
         // Skip if we don't have a URL
         if (!hasInstalledPackage && !url) {

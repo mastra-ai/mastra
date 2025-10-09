@@ -1,6 +1,6 @@
 {
   "name": "@mastra/react",
-  "version": "0.0.4-alpha.2",
+  "version": "0.0.5",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
@@ -40,7 +40,7 @@
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.3",
     "@vitest/ui": "^3.2.4",
-    "eslint": "^9.35.0",
+    "eslint": "^9.36.0",
     "rollup-plugin-node-externals": "^8.0.1",
     "typescript": "^5.8.3",
     "vite": "^7.1.7",

@@ -26,6 +26,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   returnScorerData,
   llmAISpan,
   requireToolApproval,
+  agentId,
   ...rest
 }: LoopOptions<Tools, OUTPUT>) {
   let loggerToUse =
@@ -121,6 +122,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     outputProcessors,
     llmAISpan,
     messageId: messageId!,
+    agentId,
     requireToolApproval,
     streamState: {
       serialize: serializeStreamState,
@@ -149,7 +151,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       onFinish: rest.options?.onFinish,
       onStepFinish: rest.options?.onStepFinish,
       includeRawChunks: !!includeRawChunks,
-      output: rest.output,
+      structuredOutput: rest.structuredOutput,
       outputProcessors,
       returnScorerData,
       tracingContext: { currentSpan: llmAISpan },

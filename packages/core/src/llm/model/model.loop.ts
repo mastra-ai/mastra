@@ -153,7 +153,6 @@ export class MastraLLMVNext extends MastraBase {
     telemetry_settings,
     threadId,
     resourceId,
-    output,
     structuredOutput,
     options,
     outputProcessors,
@@ -163,6 +162,7 @@ export class MastraLLMVNext extends MastraBase {
     messageList,
     requireToolApproval,
     _internal,
+    agentId,
     // ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT | undefined> {
     let stopWhenToUse;
@@ -171,12 +171,6 @@ export class MastraLLMVNext extends MastraBase {
       stopWhenToUse = stepCountIs(maxSteps);
     } else {
       stopWhenToUse = stopWhen;
-    }
-
-    // If structuredOutput is provided without a model, extract the schema to use native structured output
-    let effectiveOutput = output;
-    if (structuredOutput && !structuredOutput.model) {
-      effectiveOutput = structuredOutput.schema as OUTPUT;
     }
 
     const messages = messageList.get.all.aiV5.model();
@@ -227,11 +221,12 @@ export class MastraLLMVNext extends MastraBase {
           ...telemetry_settings,
         },
         _internal,
-        output: effectiveOutput,
+        structuredOutput,
         outputProcessors,
         returnScorerData,
         llmAISpan,
         requireToolApproval,
+        agentId,
         options: {
           ...options,
           onStepFinish: async props => {
