@@ -570,11 +570,11 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
-      const run = await wf.createRunAsync();
+      const run = await wf.createRunAsync({ runId });
       const toolData = {
         name: wf.name,
         args: inputData,
-        runId: run.runId,
+        runId: runId,
       };
 
       await writer?.write({

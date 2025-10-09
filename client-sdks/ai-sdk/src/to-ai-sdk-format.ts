@@ -475,7 +475,7 @@ function transformNetwork(
         data: {
           name: current.name,
           status: 'finished',
-          ...current.steps,
+          steps: current.steps,
           output: payload.payload?.result ?? null,
         },
       } as const;
