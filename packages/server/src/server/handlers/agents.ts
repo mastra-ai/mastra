@@ -240,13 +240,32 @@ export async function getAgentsHandler({
   try {
     const agents = mastra.getAgents();
 
+    let agentsFromConfigRaw;
+
+    try {
+      agentsFromConfigRaw = await mastra.listAgentsFromConfig();
+    } catch {
+      // do nothing
+    }
+
+    let agentsFromConfig: SerializedAgentWithId[] = [];
+
+    if (!!agentsFromConfigRaw && agentsFromConfigRaw.length > 0) {
+      agentsFromConfig = await Promise.all(
+        agentsFromConfigRaw.map(async agentConf => {
+          const agent = await mastra.getAgentFromConfig(agentConf.id);
+          return formatAgentList({ id: agentConf.id, mastra, agent, runtimeContext });
+        }),
+      );
+    }
+
     const serializedAgentsMap = await Promise.all(
       Object.entries(agents).map(async ([id, agent]) => {
         return formatAgentList({ id, mastra, agent, runtimeContext });
       }),
     );
 
-    const serializedAgents = serializedAgentsMap.reduce<
+    const serializedAgents = [...serializedAgentsMap, ...agentsFromConfig].reduce<
       Record<string, Omit<(typeof serializedAgentsMap)[number], 'id'>>
     >((acc, { id, ...rest }) => {
       acc[id] = rest;

@@ -8,6 +8,7 @@ import { myWorkflow } from './workflows';
 import { chefModelV2Agent, networkAgent } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/scores';
 import { myWorkflowX } from './workflows/other';
+import { cookingTool, weatherInfo } from './tools';
 
 const storage = new LibSQLStore({
   url: 'file:../mastra.db',
@@ -58,6 +59,10 @@ export const mastra = new Mastra({
     default: {
       enabled: true,
     },
+  },
+  tools: {
+    weatherInfo,
+    cookingTool,
   },
   interfaces: {
     memory: Memory,
