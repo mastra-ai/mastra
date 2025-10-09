@@ -181,11 +181,13 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_AGENTS]: {
     id: { type: 'text', nullable: false, primaryKey: true },
     name: { type: 'text', nullable: false },
+    description: { type: 'text', nullable: true },
     workflowIds: { type: 'jsonb', nullable: false },
     agentIds: { type: 'jsonb', nullable: false },
     toolIds: { type: 'jsonb', nullable: false },
     model: { type: 'text', nullable: false },
     instructions: { type: 'text', nullable: false },
+    memoryConfig: { type: 'jsonb', nullable: true },
     createdAt: { type: 'timestamp', nullable: false },
     updatedAt: { type: 'timestamp', nullable: false },
   },

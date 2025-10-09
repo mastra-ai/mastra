@@ -14,6 +14,8 @@ import type {
   TABLE_SCORERS,
   TABLE_AI_SPANS,
   AISpanRecord,
+  TABLE_AGENTS,
+  StorageAgentType,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 
@@ -80,6 +82,7 @@ export type RecordTypes = {
   [TABLE_TRACES]: any;
   [TABLE_RESOURCES]: StorageResourceType;
   [TABLE_AI_SPANS]: AISpanRecord;
+  [TABLE_AGENTS]: StorageAgentType;
 };
 
 export type ListOptions = {

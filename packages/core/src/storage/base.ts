@@ -744,6 +744,26 @@ export abstract class MastraStorage extends MastraBase {
     );
   }
 
+  async updateAgent(id: string, updates: Partial<Omit<CreateAgentConfig, 'id'>>): Promise<StorageAgentType | null> {
+    if (this.stores?.agents) {
+      return this.stores.agents.updateAgent(id, updates);
+    }
+    throw new Error(
+      `Agent management is not supported by this storage adapter (${this.constructor.name}). ` +
+        `The agents domain needs to be implemented in the storage adapter.`,
+    );
+  }
+
+  async deleteAgent(id: string): Promise<void> {
+    if (this.stores?.agents) {
+      return this.stores.agents.deleteAgent(id);
+    }
+    throw new Error(
+      `Agent management is not supported by this storage adapter (${this.constructor.name}). ` +
+        `The agents domain needs to be implemented in the storage adapter.`,
+    );
+  }
+
   /**
    * Creates a database index on specified columns
    * @throws {MastraError} if not supported by the storage adapter

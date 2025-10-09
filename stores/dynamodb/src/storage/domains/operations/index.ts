@@ -11,6 +11,7 @@ import {
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_AGENTS,
 } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
@@ -51,6 +52,7 @@ export class StoreOperationsDynamoDB extends StoreOperations {
       [TABLE_TRACES]: 'trace',
       [TABLE_RESOURCES]: 'resource',
       [TABLE_AI_SPANS]: 'ai_span',
+      [TABLE_AGENTS]: 'agent',
     };
     return mapping[tableName] || null;
   }

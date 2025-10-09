@@ -9,6 +9,7 @@ import {
   TABLE_SCORERS,
   TABLE_TRACES,
   TABLE_AI_SPANS,
+  TABLE_AGENTS,
 } from '@mastra/core/storage';
 import { createScoresTest } from './domains/scores';
 import { createMemoryTest } from './domains/memory';
@@ -17,6 +18,7 @@ import { createTraceTests } from './domains/traces';
 import { createEvalsTests } from './domains/evals';
 import { createOperationsTests } from './domains/operations';
 import { createObservabilityTests } from './domains/observability';
+import { createAgentsTest } from './domains/agents';
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
 export * from './domains/evals/data';
@@ -44,6 +46,7 @@ export function createTestSuite(storage: MastraStorage) {
         storage.clearTable({ tableName: TABLE_RESOURCES }),
         storage.clearTable({ tableName: TABLE_SCORERS }),
         storage.clearTable({ tableName: TABLE_TRACES }),
+        storage.clearTable({ tableName: TABLE_AGENTS }),
         storage.supports.aiTracing && storage.clearTable({ tableName: TABLE_AI_SPANS }),
       ]);
     });
@@ -59,6 +62,8 @@ export function createTestSuite(storage: MastraStorage) {
     createMemoryTest({ storage });
 
     createScoresTest({ storage });
+
+    createAgentsTest({ storage });
 
     if (storage.supports.aiTracing) {
       createObservabilityTests({ storage });

@@ -25,6 +25,7 @@ import type {
 
 import type { Trace } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import { AgentsLibSQL } from './domains/agents';
 import { LegacyEvalsLibSQL } from './domains/legacy-evals';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
@@ -106,6 +107,7 @@ export class LibSQLStore extends MastraStorage {
     const memory = new MemoryLibSQL({ client: this.client, operations });
     const legacyEvals = new LegacyEvalsLibSQL({ client: this.client });
     const observability = new ObservabilityLibSQL({ operations });
+    const agents = new AgentsLibSQL({ client: this.client, operations });
 
     this.stores = {
       operations,
@@ -115,6 +117,7 @@ export class LibSQLStore extends MastraStorage {
       memory,
       legacyEvals,
       observability,
+      agents,
     };
   }
 
