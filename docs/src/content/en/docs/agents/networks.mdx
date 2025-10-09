@@ -60,9 +60,12 @@ const agentStep1 = createStep({
   }),
   execute: async ({ inputData }) => {
     const resp = await agent1.generate(inputData.city, {
-      output: z.object({
-        text: z.string(),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          text: z.string(),
+        })
+      },
+      maxSteps: 1
     });
 
     return { text: resp.object.text };
@@ -80,9 +83,12 @@ const agentStep2 = createStep({
   }),
   execute: async ({ inputData }) => {
     const resp = await agent2.generate(inputData.text, {
-      output: z.object({
-        text: z.string(),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          text: z.string(),
+        })
+      },
+      maxSteps: 1
     });
 
     return { text: resp.object.text };

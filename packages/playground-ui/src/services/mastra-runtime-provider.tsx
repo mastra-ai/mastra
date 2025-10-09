@@ -221,6 +221,7 @@ export function MastraRuntimeProvider({
     maxTokens,
     instructions,
     providerOptions,
+    maxSteps,
   };
 
   const baseClient = useMastraClient();

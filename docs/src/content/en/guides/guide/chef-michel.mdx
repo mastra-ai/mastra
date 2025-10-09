@@ -168,7 +168,12 @@ async function main() {
 
   const response = await chefAgent.generate(
     [{ role: "user", content: query }],
-    { output: schema },
+    { 
+      structuredOutput: {
+        schema
+      },
+      maxSteps: 1
+    },
   );
   console.log("\n👨‍🍳 Chef Michel:", response.object);
 }
