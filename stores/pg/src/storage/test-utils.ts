@@ -2,8 +2,8 @@ import { createSampleThread } from '@internal/storage-test-utils';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import pgPromise from 'pg-promise';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { PostgresStore } from '.';
 import type { PostgresStoreConfig } from '../shared/config';
+import { PostgresStore } from '.';
 
 export const TEST_CONFIG: PostgresStoreConfig = {
   host: process.env.POSTGRES_HOST || 'localhost',

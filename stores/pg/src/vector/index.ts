@@ -16,13 +16,12 @@ import { Mutex } from 'async-mutex';
 import * as pg from 'pg';
 import xxhash from 'xxhash-wasm';
 
+import { isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
+import type { PgVectorConfig } from '../shared/config';
 import { PGFilterTranslator } from './filter';
 import type { PGVectorFilter } from './filter';
 import { buildFilterQuery } from './sql-builder';
 import type { IndexConfig, IndexType } from './types';
-
-import { isCloudSqlConfig, isConnectionStringConfig, isHostConfig, isLegacyConfig } from '../shared/config';
-import type { LegacyConfig, PgVectorConfig } from '../shared/config';
 
 export interface PGIndexStats extends IndexStats {
   type: IndexType;
@@ -72,46 +71,26 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private schemaSetupComplete: boolean | undefined = undefined;
   private cacheWarmupPromise: Promise<void> | null = null;
 
-  constructor(config: PgVectorConfig | LegacyConfig) {
+  constructor(config: PgVectorConfig) {
     super();
 
     try {
-      let postgresConfig: PgVectorConfig;
-      let legacyPoolOptions: Omit<pg.PoolConfig, 'connectionString'> | undefined;
-
-      if (isLegacyConfig(config)) {
-        if (!config.connectionString || config.connectionString.trim() === '') {
-          throw new Error(
-            'PgVector: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.',
-          );
-        }
-        postgresConfig = {
-          connectionString: config.connectionString,
-          schemaName: config.schemaName,
-          max: config.pgPoolOptions?.max ?? undefined,
-          idleTimeoutMillis: config.pgPoolOptions?.idleTimeoutMillis ?? undefined,
-        };
-        legacyPoolOptions = config.pgPoolOptions;
-      } else {
-        postgresConfig = config as PgVectorConfig;
-      }
-
-      if (isConnectionStringConfig(postgresConfig)) {
+      if (isConnectionStringConfig(config)) {
         if (
-          !postgresConfig.connectionString ||
-          typeof postgresConfig.connectionString !== 'string' ||
-          postgresConfig.connectionString.trim() === ''
+          !config.connectionString ||
+          typeof config.connectionString !== 'string' ||
+          config.connectionString.trim() === ''
         ) {
           throw new Error(
             'PgVector: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.',
           );
         }
-      } else if (isCloudSqlConfig(postgresConfig)) {
+      } else if (isCloudSqlConfig(config)) {
         // valid connector config; no-op
-      } else if (isHostConfig(postgresConfig)) {
+      } else if (isHostConfig(config)) {
         const required = ['host', 'database', 'user', 'password'] as const;
         for (const key of required) {
-          if (!postgresConfig[key] || typeof postgresConfig[key] !== 'string' || postgresConfig[key].trim() === '') {
+          if (!config[key] || typeof config[key] !== 'string' || config[key].trim() === '') {
             throw new Error(
               `PgVector: ${key} must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.`,
             );
@@ -123,37 +102,39 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         );
       }
 
-      this.schema = postgresConfig.schemaName;
+      this.schema = config.schemaName;
 
       let poolConfig: pg.PoolConfig;
 
-      if (isConnectionStringConfig(postgresConfig)) {
+      if (isConnectionStringConfig(config)) {
         poolConfig = {
-          connectionString: postgresConfig.connectionString,
-          ssl: postgresConfig.ssl,
-          max: postgresConfig.max ?? 20,
-          idleTimeoutMillis: postgresConfig.idleTimeoutMillis ?? 30000,
+          connectionString: config.connectionString,
+          ssl: config.ssl,
+          max: config.max ?? 20,
+          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
           connectionTimeoutMillis: 2000,
-          ...legacyPoolOptions,
+          ...config.pgPoolOptions,
         };
-      } else if (isCloudSqlConfig(postgresConfig)) {
+      } else if (isCloudSqlConfig(config)) {
         poolConfig = {
-          ...postgresConfig,
-          max: postgresConfig.max ?? 20,
-          idleTimeoutMillis: postgresConfig.idleTimeoutMillis ?? 30000,
+          ...config,
+          max: config.max ?? 20,
+          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
           connectionTimeoutMillis: 2000,
+          ...config.pgPoolOptions,
         } as pg.PoolConfig;
-      } else if (isHostConfig(postgresConfig)) {
+      } else if (isHostConfig(config)) {
         poolConfig = {
-          host: postgresConfig.host,
-          port: postgresConfig.port,
-          database: postgresConfig.database,
-          user: postgresConfig.user,
-          password: postgresConfig.password,
-          ssl: postgresConfig.ssl,
-          max: postgresConfig.max ?? 20,
-          idleTimeoutMillis: postgresConfig.idleTimeoutMillis ?? 30000,
+          host: config.host,
+          port: config.port,
+          database: config.database,
+          user: config.user,
+          password: config.password,
+          ssl: config.ssl,
+          max: config.max ?? 20,
+          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
           connectionTimeoutMillis: 2000,
+          ...config.pgPoolOptions,
         };
       } else {
         throw new Error('PgVector: invalid configuration provided');

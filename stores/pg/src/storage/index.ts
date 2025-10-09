@@ -25,6 +25,8 @@ import type {
 import type { Trace } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
+import { isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
+import type { PostgresStoreConfig } from '../shared/config';
 import { LegacyEvalsPG } from './domains/legacy-evals';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
@@ -32,8 +34,6 @@ import { StoreOperationsPG } from './domains/operations';
 import { ScoresPG } from './domains/scores';
 import { TracesPG } from './domains/traces';
 import { WorkflowsPG } from './domains/workflows';
-import { isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
-import type { PostgresStoreConfig } from '../shared/config';
 
 export type { CreateIndexOptions, IndexInfo } from '@mastra/core/storage';
 

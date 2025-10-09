@@ -3,7 +3,8 @@ import type { QueryResult } from '@mastra/core/vector';
 import * as pg from 'pg';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 
-import { PgVector, type PgVectorConfig } from '.';
+import type { PgVectorConfig } from '../shared/config';
+import { PgVector } from '.';
 
 describe('PgVector', () => {
   let vectorDB: PgVector;
@@ -2773,7 +2774,6 @@ describe('PgVector', () => {
             port: 5434,
             database: 'mastra',
             user: 'postgres',
-          
           } as any);
         }).toThrow('invalid config');
       });
@@ -2792,7 +2792,7 @@ describe('PgVector', () => {
           idleTimeoutMillis: 10000,
         };
         const db = new PgVector(config);
-        
+
         try {
           // Test basic operations
           await db.createIndex({

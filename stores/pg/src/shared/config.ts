@@ -1,8 +1,7 @@
-import type { ClientConfig } from 'pg';
-import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
-
-import * as pg from 'pg';
 import type { ConnectionOptions } from 'tls';
+import type { ClientConfig } from 'pg';
+import type * as pg from 'pg';
+import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
 
 /**
  * Generic PostgreSQL configuration type.
@@ -37,11 +36,7 @@ export type PostgresStoreConfig = PostgresConfig<ISSLConfig>;
 /**
  * PostgreSQL configuration for PgVector (uses pg with ConnectionOptions)
  */
-export type PgVectorConfig = PostgresConfig<ConnectionOptions>;
-
-export type LegacyConfig = {
-  connectionString: string;
-  schemaName?: string;
+export type PgVectorConfig = PostgresConfig<ConnectionOptions> & {
   pgPoolOptions?: Omit<pg.PoolConfig, 'connectionString'>;
 };
 
@@ -68,8 +63,4 @@ export const isCloudSqlConfig = <SSLType>(
   cfg: PostgresConfig<SSLType>,
 ): cfg is PostgresConfig<SSLType> & ClientConfig => {
   return 'stream' in cfg || ('password' in cfg && typeof cfg.password === 'function');
-};
-
-export const isLegacyConfig = (cfg: any): cfg is LegacyConfig => {
-  return 'connectionString' in cfg && 'pgPoolOptions' in cfg;
 };
