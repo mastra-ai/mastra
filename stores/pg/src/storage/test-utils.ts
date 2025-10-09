@@ -3,9 +3,9 @@ import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import pgPromise from 'pg-promise';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PostgresStore } from '.';
-import type { PostgresConfig } from '.';
+import type { PostgresStoreConfig } from '../shared/config';
 
-export const TEST_CONFIG: PostgresConfig = {
+export const TEST_CONFIG: PostgresStoreConfig = {
   host: process.env.POSTGRES_HOST || 'localhost',
   port: Number(process.env.POSTGRES_PORT) || 5434,
   database: process.env.POSTGRES_DB || 'postgres',

@@ -14,7 +14,6 @@ import type {
 } from '@mastra/core/vector';
 import { Mutex } from 'async-mutex';
 import * as pg from 'pg';
-import type { ClientConfig } from 'pg';
 import xxhash from 'xxhash-wasm';
 
 import { PGFilterTranslator } from './filter';
@@ -22,24 +21,8 @@ import type { PGVectorFilter } from './filter';
 import { buildFilterQuery } from './sql-builder';
 import type { IndexConfig, IndexType } from './types';
 
-export type PgVectorConfig = {
-  schemaName?: string;
-  max?: number;
-  idleTimeoutMillis?: number;
-} & (
-  | {
-      host: string;
-      port: number;
-      database: string;
-      user: string;
-      password: string;
-      ssl?: boolean | any;
-    }
-  | {
-      connectionString: string;
-    }
-  | ClientConfig
-);
+import { isCloudSqlConfig, isConnectionStringConfig, isHostConfig, isLegacyConfig } from '../shared/config';
+import type { LegacyConfig, PgVectorConfig } from '../shared/config';
 
 export interface PGIndexStats extends IndexStats {
   type: IndexType;
@@ -89,48 +72,12 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private schemaSetupComplete: boolean | undefined = undefined;
   private cacheWarmupPromise: Promise<void> | null = null;
 
-  constructor(
-    config:
-      | PgVectorConfig
-      | {
-          connectionString: string;
-          schemaName?: string;
-          pgPoolOptions?: Omit<pg.PoolConfig, 'connectionString'>;
-        },
-  ) {
+  constructor(config: PgVectorConfig | LegacyConfig) {
     super();
 
     try {
-      const isLegacyConfig = (
-        cfg: any,
-      ): cfg is {
-        connectionString: string;
-        schemaName?: string;
-        pgPoolOptions?: Omit<pg.PoolConfig, 'connectionString'>;
-      } => {
-        return 'connectionString' in cfg && !('host' in cfg);
-      };
-
-      const isConnectionStringConfig = (cfg: PgVectorConfig): cfg is PgVectorConfig & { connectionString: string } => {
-        return 'connectionString' in cfg;
-      };
-
-      const isHostConfig = (
-        cfg: PgVectorConfig,
-      ): cfg is PgVectorConfig & {
-        host: string;
-        port: number;
-        database: string;
-        user: string;
-        password: string;
-        ssl?: boolean | any;
-      } => {
-        return 'host' in cfg && 'database' in cfg && 'user' in cfg && 'password' in cfg;
-      };
-
-      const isCloudSqlConfig = (cfg: PgVectorConfig): cfg is PgVectorConfig & ClientConfig => {
-        return 'stream' in cfg || ('password' in cfg && typeof cfg.password === 'function');
-      };
+      let postgresConfig: PgVectorConfig;
+      let legacyPoolOptions: Omit<pg.PoolConfig, 'connectionString'> | undefined;
 
       if (isLegacyConfig(config)) {
         if (!config.connectionString || config.connectionString.trim() === '') {
@@ -138,44 +85,17 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             'PgVector: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.',
           );
         }
-
-        this.schema = config.schemaName;
-
-        const basePool = new pg.Pool({
+        postgresConfig = {
           connectionString: config.connectionString,
-          max: 20,
-          idleTimeoutMillis: 30000,
-          connectionTimeoutMillis: 2000,
-          ...config.pgPoolOptions,
-        });
-
-        const telemetry = this.__getTelemetry();
-
-        this.pool =
-          telemetry?.traceClass(basePool, {
-            spanNamePrefix: 'pg-vector',
-            attributes: {
-              'vector.type': 'postgres',
-            },
-          }) ?? basePool;
-
-        void (async () => {
-          const existingIndexes = await this.listIndexes();
-          void existingIndexes.map(async indexName => {
-            const info = await this.getIndexInfo({ indexName });
-            const key = await this.getIndexCacheKey({
-              indexName,
-              metric: info.metric,
-              dimension: info.dimension,
-              type: info.type,
-            });
-            this.createdIndexes.set(indexName, key);
-          });
-        })();
-        return;
+          schemaName: config.schemaName,
+          max: config.pgPoolOptions?.max ?? undefined,
+          idleTimeoutMillis: config.pgPoolOptions?.idleTimeoutMillis ?? undefined,
+        };
+        legacyPoolOptions = config.pgPoolOptions;
+      } else {
+        postgresConfig = config as PgVectorConfig;
       }
 
-      const postgresConfig = config as PgVectorConfig;
       if (isConnectionStringConfig(postgresConfig)) {
         if (
           !postgresConfig.connectionString ||
@@ -187,6 +107,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           );
         }
       } else if (isCloudSqlConfig(postgresConfig)) {
+        // valid connector config; no-op
       } else if (isHostConfig(postgresConfig)) {
         const required = ['host', 'database', 'user', 'password'] as const;
         for (const key of required) {
@@ -209,9 +130,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       if (isConnectionStringConfig(postgresConfig)) {
         poolConfig = {
           connectionString: postgresConfig.connectionString,
+          ssl: postgresConfig.ssl,
           max: postgresConfig.max ?? 20,
           idleTimeoutMillis: postgresConfig.idleTimeoutMillis ?? 30000,
           connectionTimeoutMillis: 2000,
+          ...legacyPoolOptions,
         };
       } else if (isCloudSqlConfig(postgresConfig)) {
         poolConfig = {
