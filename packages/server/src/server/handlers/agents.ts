@@ -15,6 +15,7 @@ import type { Context } from '../types';
 
 import { handleError } from './error';
 import { sanitizeBody, validateBody } from './utils';
+import type { CreateAgentConfig } from '@mastra/core/storage';
 
 type GetBody<
   T extends keyof Agent & { [K in keyof Agent]: Agent[K] extends (...args: any) => any ? K : never }[keyof Agent],
@@ -965,5 +966,24 @@ export async function getProvidersHandler() {
     return { providers };
   } catch (error) {
     return handleError(error, 'error fetching providers');
+  }
+}
+
+export async function createAgentHandler({
+  mastra,
+  body,
+  runtimeContext,
+  isPlayground = false,
+}: Context & {
+  body: CreateAgentConfig;
+  runtimeContext: RuntimeContext;
+  isPlayground?: boolean;
+}) {
+  try {
+    await mastra.createAgent(body);
+    const agentFromConfig = await mastra.getAgentFromConfig(body.id);
+    return formatAgent({ mastra, agent: agentFromConfig, runtimeContext, isPlayground });
+  } catch (error) {
+    return handleError(error, 'error creating agent');
   }
 }

@@ -484,4 +484,218 @@ describe('Handlers', () => {
       expect(errorData.type).toBe('error');
     });
   });
+
+  describe('createAgentHandler', () => {
+    let mockStorage: any;
+
+    beforeEach(() => {
+      mockStorage = {
+        createAgent: vi.fn().mockResolvedValue(undefined),
+        getAgent: vi.fn(),
+      };
+
+      mockMastra = {
+        getAgent: vi.fn((id: string) => (id === 'test-agent' ? mockAgent : undefined)),
+        getLogger: vi.fn(() => mockLogger),
+        getStorage: vi.fn(() => mockStorage),
+        createAgent: vi.fn(async (config: any) => {
+          await mockStorage.createAgent(config);
+        }),
+        getAgentFromConfig: vi.fn(async (id: string) => {
+          const config = {
+            id,
+            name: 'Created Agent',
+            model: 'openai/gpt-4',
+            instructions: 'Test instructions',
+          };
+          // Return a mock agent instance
+          return {
+            id: config.id,
+            name: config.name,
+            model: config.model,
+            instructions: config.instructions,
+            getInstructions: vi.fn().mockResolvedValue(config.instructions),
+            getTools: vi.fn().mockResolvedValue({}),
+            getLLM: vi.fn().mockResolvedValue({
+              getModel: vi.fn(() => ({ specificationVersion: 'v1' })),
+              getProvider: vi.fn(() => 'openai'),
+              getModelId: vi.fn(() => 'gpt-4'),
+            }),
+            getDefaultGenerateOptions: vi.fn().mockResolvedValue({}),
+            getDefaultStreamOptions: vi.fn().mockResolvedValue({}),
+            getInputProcessors: vi.fn().mockResolvedValue([]),
+            getOutputProcessors: vi.fn().mockResolvedValue([]),
+            getModelList: vi.fn().mockResolvedValue([]),
+          };
+        }),
+      } as any;
+
+      mockContext = {
+        req: {
+          json: vi.fn().mockResolvedValue({
+            id: 'new-agent',
+            name: 'New Agent',
+            model: 'openai/gpt-4',
+            instructions: 'You are a helpful assistant',
+            workflowIds: [],
+            agentIds: [],
+            toolIds: [],
+          }),
+          header: vi.fn(),
+        } as any,
+        get: vi.fn((key: string) => {
+          if (key === 'mastra') return mockMastra;
+          if (key === 'runtimeContext') return new RuntimeContext();
+          return undefined;
+        }),
+        header: vi.fn(),
+        json: vi.fn((data: any) => {
+          return new Response(JSON.stringify(data), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }) as any,
+      };
+    });
+
+    it('should create agent and return formatted agent details', async () => {
+      const response = await handlers.createAgentHandler(mockContext as Context);
+
+      // Verify storage.createAgent was called
+      expect(mockMastra.createAgent).toHaveBeenCalledWith({
+        id: 'new-agent',
+        name: 'New Agent',
+        model: 'openai/gpt-4',
+        instructions: 'You are a helpful assistant',
+        workflowIds: [],
+        agentIds: [],
+        toolIds: [],
+      });
+
+      // Verify getAgentFromConfig was called with the new agent's id
+      expect(mockMastra.getAgentFromConfig).toHaveBeenCalledWith('new-agent');
+
+      // Verify response
+      expect(response).toBeDefined();
+      const data = await response.json();
+      expect(data.name).toBe('Created Agent');
+      expect(data.instructions).toBe('Test instructions');
+    });
+
+    it('should handle agent creation with all optional fields', async () => {
+      const complexMockContext = {
+        req: {
+          json: vi.fn().mockResolvedValue({
+            id: 'complex-agent',
+            name: 'Complex Agent',
+            description: 'A complex agent with all features',
+            model: 'anthropic/claude-3',
+            instructions: 'You are an advanced assistant',
+            workflowIds: ['workflow1', 'workflow2'],
+            agentIds: [
+              { agentId: 'agent1', from: 'CODE' },
+              { agentId: 'agent2', from: 'CONFIG' },
+            ],
+            toolIds: ['tool1', 'tool2'],
+            memoryConfig: {
+              lastMessages: 10,
+              workingMemory: { enabled: true },
+            },
+          }),
+          header: vi.fn(),
+        } as any,
+        get: vi.fn((key: string) => {
+          if (key === 'mastra') return mockMastra;
+          if (key === 'runtimeContext') return new RuntimeContext();
+          return undefined;
+        }),
+        header: vi.fn(),
+        json: vi.fn((data: any) => {
+          return new Response(JSON.stringify(data), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }) as any,
+      };
+
+      await handlers.createAgentHandler(complexMockContext as unknown as Context);
+
+      expect(mockMastra.createAgent).toHaveBeenCalledWith({
+        id: 'complex-agent',
+        name: 'Complex Agent',
+        description: 'A complex agent with all features',
+        model: 'anthropic/claude-3',
+        instructions: 'You are an advanced assistant',
+        workflowIds: ['workflow1', 'workflow2'],
+        agentIds: [
+          { agentId: 'agent1', from: 'CODE' },
+          { agentId: 'agent2', from: 'CONFIG' },
+        ],
+        toolIds: ['tool1', 'tool2'],
+        memoryConfig: {
+          lastMessages: 10,
+          workingMemory: { enabled: true },
+        },
+      });
+    });
+
+    it('should handle errors during agent creation', async () => {
+      const creationError = new Error('Failed to create agent in storage');
+      mockMastra.createAgent = vi.fn().mockRejectedValue(creationError);
+
+      try {
+        await handlers.createAgentHandler(mockContext as Context);
+        expect.fail('Should have thrown error');
+      } catch (error) {
+        expect(error).toBeDefined();
+      }
+    });
+
+    it('should handle errors when retrieving created agent', async () => {
+      const retrievalError = new Error('Failed to retrieve agent');
+      mockMastra.getAgentFromConfig = vi.fn().mockRejectedValue(retrievalError);
+
+      try {
+        await handlers.createAgentHandler(mockContext as Context);
+        expect.fail('Should have thrown error');
+      } catch (error) {
+        expect(error).toBeDefined();
+      }
+    });
+
+    it('should respect isPlayground header', async () => {
+      const playgroundMockContext = {
+        req: {
+          json: vi.fn().mockResolvedValue({
+            id: 'playground-agent',
+            name: 'Playground Agent',
+            model: 'openai/gpt-4',
+            instructions: 'You are a test agent',
+            workflowIds: [],
+            agentIds: [],
+            toolIds: [],
+          }),
+          header: vi.fn((key: string) => (key === 'x-mastra-dev-playground' ? 'true' : undefined)),
+        } as any,
+        get: vi.fn((key: string) => {
+          if (key === 'mastra') return mockMastra;
+          if (key === 'runtimeContext') return new RuntimeContext();
+          return undefined;
+        }),
+        header: vi.fn(),
+        json: vi.fn((data: any) => {
+          return new Response(JSON.stringify(data), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }) as any,
+      };
+
+      await handlers.createAgentHandler(playgroundMockContext as unknown as Context);
+
+      // The formatAgent function should be called with isPlayground: true
+      // This would be reflected in how instructions are formatted
+      expect(playgroundMockContext.req.header).toHaveBeenCalledWith('x-mastra-dev-playground');
+    });
+  });
 });

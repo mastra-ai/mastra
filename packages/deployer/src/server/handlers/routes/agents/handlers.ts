@@ -20,6 +20,7 @@ import {
   streamNetworkHandler as getOriginalStreamNetworkHandler,
   approveToolCallHandler as getOriginalApproveToolCallHandler,
   declineToolCallHandler as getOriginalDeclineToolCallHandler,
+  createAgentHandler as getOriginalCreateAgentHandler,
 } from '@mastra/server/handlers/agents';
 import type { Context } from 'hono';
 
@@ -690,5 +691,25 @@ export async function reorderAgentModelListHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error reordering agent model list');
+  }
+}
+
+export async function createAgentHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const body = await c.req.json();
+    const isPlayground = c.req.header('x-mastra-dev-playground') === 'true';
+
+    const result = await getOriginalCreateAgentHandler({
+      mastra,
+      runtimeContext,
+      body,
+      isPlayground,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error creating agent');
   }
 }

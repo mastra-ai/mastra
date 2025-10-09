@@ -25,6 +25,7 @@ import {
   sharedBodyOptions,
   approveToolCallHandler,
   declineToolCallHandler,
+  createAgentHandler,
 } from './handlers';
 import { getListenerHandler, getSpeakersHandler, speakHandler, listenHandler } from './voice';
 
@@ -57,6 +58,66 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     getProvidersHandler,
+  );
+
+  router.post(
+    '/create',
+    describeRoute({
+      description: 'Create a new agent configuration',
+      tags: ['agents'],
+      requestBody: {
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['id', 'name', 'model', 'instructions'],
+              properties: {
+                id: { type: 'string', description: 'Unique identifier for the agent' },
+                name: { type: 'string', description: 'Display name for the agent' },
+                description: { type: 'string', description: 'Optional description of the agent' },
+                model: { type: 'string', description: 'Model identifier (e.g., "openai/gpt-4")' },
+                instructions: { type: 'string', description: 'System instructions for the agent' },
+                workflowIds: { type: 'array', items: { type: 'string' }, description: 'IDs of workflows to attach' },
+                agentIds: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      agentId: { type: 'string' },
+                      from: { type: 'string', enum: ['CODE', 'CONFIG'] },
+                    },
+                  },
+                  description: 'References to sub-agents',
+                },
+                toolIds: { type: 'array', items: { type: 'string' }, description: 'IDs of tools to attach' },
+                memoryConfig: {
+                  type: 'object',
+                  description: 'Memory configuration for the agent',
+                  properties: {
+                    lastMessages: { type: 'number' },
+                    workingMemory: {
+                      type: 'object',
+                      properties: {
+                        enabled: { type: 'boolean' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Agent created successfully with serialized agent details',
+        },
+        400: {
+          description: 'Invalid request body',
+        },
+      },
+    }),
+    createAgentHandler,
   );
 
   router.get(
