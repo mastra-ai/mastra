@@ -1,9 +1,6 @@
 import { ChunkType } from '@mastra/core/stream';
-import { type UIMessage } from '@ai-sdk/react';
-import { WorkflowStreamResult, WorkflowStreamEvent, StepResult } from '@mastra/core/workflows';
-import { WorkflowWatchResult } from '@mastra/client-js';
-
-export type MastraUIMessage = UIMessage<any, any, any>;
+import { MastraUIMessage, MastraUIMessageMetadata } from '../types';
+import { WorkflowStreamResult, StepResult } from '@mastra/core/workflows';
 
 type StreamChunk = {
   type: string;
@@ -104,13 +101,13 @@ export const mapWorkflowStreamChunkToWatchResult = (
   return prev;
 };
 
-export const toUIMessage = ({
-  chunk,
-  conversation,
-}: {
+export interface ToUIMessageArgs {
   chunk: ChunkType;
-  conversation: UIMessage[];
-}): MastraUIMessage[] => {
+  conversation: MastraUIMessage[];
+  metadata: MastraUIMessageMetadata;
+}
+
+export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs): MastraUIMessage[] => {
   // Always return a new array reference for React
   const result = [...conversation];
 
@@ -118,9 +115,10 @@ export const toUIMessage = ({
     case 'start': {
       // Create a new assistant message
       const newMessage: MastraUIMessage = {
-        id: chunk.runId,
+        id: `start-${chunk.runId + Date.now()}`,
         role: 'assistant',
         parts: [],
+        metadata,
       };
 
       return [...result, newMessage];
@@ -180,7 +178,7 @@ export const toUIMessage = ({
       if (!lastMessage || lastMessage.role !== 'assistant') {
         // Create new message if none exists
         const newMessage: MastraUIMessage = {
-          id: chunk.runId,
+          id: `reasoning-${chunk.runId + Date.now()}`,
           role: 'assistant',
           parts: [
             {
@@ -190,6 +188,7 @@ export const toUIMessage = ({
               providerMetadata: chunk.payload.providerMetadata,
             },
           ],
+          metadata,
         };
         return [...result, newMessage];
       }
@@ -230,7 +229,7 @@ export const toUIMessage = ({
       if (!lastMessage || lastMessage.role !== 'assistant') {
         // Create new message if none exists
         const newMessage: MastraUIMessage = {
-          id: chunk.runId,
+          id: `tool-call-${chunk.runId + Date.now()}`,
           role: 'assistant',
           parts: [
             {
@@ -242,6 +241,7 @@ export const toUIMessage = ({
               callProviderMetadata: chunk.payload.providerMetadata,
             },
           ],
+          metadata,
         };
         return [...result, newMessage];
       }
@@ -278,6 +278,7 @@ export const toUIMessage = ({
 
       if (toolPartIndex !== -1) {
         const toolPart = parts[toolPartIndex];
+
         if (toolPart.type === 'dynamic-tool') {
           if (chunk.payload.isError) {
             parts[toolPartIndex] = {
@@ -290,13 +291,14 @@ export const toUIMessage = ({
               callProviderMetadata: chunk.payload.providerMetadata,
             };
           } else {
+            const isWorkflow = Boolean((chunk.payload.result as any)?.result?.steps);
             parts[toolPartIndex] = {
               type: 'dynamic-tool',
               toolName: toolPart.toolName,
               toolCallId: toolPart.toolCallId,
               state: 'output-available',
               input: toolPart.input,
-              output: toolPart.output,
+              output: isWorkflow ? (chunk.payload.result as any)?.result : chunk.payload.result,
               callProviderMetadata: chunk.payload.providerMetadata,
             };
           }
