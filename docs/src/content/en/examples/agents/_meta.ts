@@ -6,7 +6,7 @@ const meta = {
   "supervisor-agent": "Supervisor Agent",
   "image-analysis": "Image Analysis",
   "adding-voice-capabilities": "Using Voice",
-  "dynamic-agents": "Dynamic Context",
+  "runtime-context": "Runtime Context",
   "deploying-mcp-server": "Deploying an MCPServer",
   "ai-sdk-v5-integration": "AI SDK v5 Integration",
   "whatsapp-chat-bot": "WhatsApp Chat Bot",
