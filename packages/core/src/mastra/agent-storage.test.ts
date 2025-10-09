@@ -3,6 +3,7 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
+import { createTool } from '../tools';
 import { createWorkflow, createStep } from '../workflows';
 import type { Workflow } from '../workflows';
 import { Mastra } from './index';
@@ -34,11 +35,25 @@ describe('Mastra Agent Storage', () => {
 
     testWorkflow.then(step1 as any).commit();
 
+    // Create a simple test tool
+    const testTool = createTool({
+      id: 'testTool',
+      description: 'A test tool that returns a greeting',
+      inputSchema: z.object({ name: z.string() }),
+      outputSchema: z.object({ greeting: z.string() }),
+      execute: async ({ context }) => {
+        return { greeting: `Hello, ${context.name}!` };
+      },
+    });
+
     mastra = new Mastra({
       storage,
       logger: false,
       workflows: {
         testWorkflow,
+      },
+      tools: {
+        testTool,
       },
     });
   });
@@ -366,6 +381,60 @@ describe('Mastra Agent Storage', () => {
       expect(workflows).toBeDefined();
       expect(workflows.testWorkflow).toBeDefined();
       expect(workflows.testWorkflow.name).toBe('testWorkflow');
+    });
+
+    it('should resolve tools when creating agent from config', async () => {
+      const agentConfig = {
+        id: 'tool-agent',
+        name: 'Tool Agent',
+        model: 'openai/gpt-4o',
+        instructions: 'You are an agent with tools.',
+        toolIds: ['testTool'],
+      };
+
+      await mastra.createAgent(agentConfig);
+      const agent = await mastra.getAgentFromConfig(agentConfig.id);
+
+      expect(agent).toBeInstanceOf(Agent);
+      expect(agent.name).toBe(agentConfig.name);
+
+      // Check that the agent has the tool
+      const tools = await agent.getTools();
+      console.log('Tools returned:', tools, 'Type:', typeof tools, 'IsArray:', Array.isArray(tools));
+      expect(tools).toBeDefined();
+      // Tools are passed as an array, but getTools() may convert them
+      if (Array.isArray(tools)) {
+        expect(tools.length).toBeGreaterThan(0);
+      } else {
+        // If it's an object/record, check it has keys
+        expect(Object.keys(tools).length).toBeGreaterThan(0);
+      }
+    });
+
+    it('should resolve both workflows and tools when creating agent from config', async () => {
+      const agentConfig = {
+        id: 'combined-agent',
+        name: 'Combined Agent',
+        model: 'openai/gpt-4o',
+        instructions: 'You are an agent with workflows and tools.',
+        workflowIds: ['testWorkflow'],
+        toolIds: ['testTool'],
+      };
+
+      await mastra.createAgent(agentConfig);
+      const agent = await mastra.getAgentFromConfig(agentConfig.id);
+
+      expect(agent).toBeInstanceOf(Agent);
+
+      // Check workflows
+      const workflows = await agent.getWorkflows();
+      expect(workflows).toBeDefined();
+      expect(workflows.testWorkflow).toBeDefined();
+
+      // Check tools
+      const tools = await agent.getTools();
+      expect(tools).toBeDefined();
+      expect(tools.testTool).toBeDefined();
     });
   });
 });

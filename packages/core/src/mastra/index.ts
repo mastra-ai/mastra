@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { Agent, type AgentConfig } from '../agent';
+import type { AgentConfig } from '../agent';
+import { Agent } from '../agent';
 import { getAllAITracing, setupAITracing, shutdownAITracingRegistry } from '../ai-tracing';
 import type { ObservabilityRegistryConfig } from '../ai-tracing';
 import type { BundlerConfig } from '../bundler/types';
@@ -21,6 +22,7 @@ import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import { InstrumentClass, Telemetry } from '../telemetry';
 import type { OtelConfig } from '../telemetry';
+import type { Tool } from '../tools';
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator } from '../types';
 import type { MastraVector } from '../vector';
@@ -72,6 +74,7 @@ export interface Config<
   TLogger extends IMastraLogger = IMastraLogger,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
   TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
+  TTools extends Record<string, Tool<any, any, any, any, any>> = Record<string, Tool<any, any, any, any, any>>,
 > {
   /**
    * Agents are autonomous systems that can make decisions and take actions.
@@ -163,6 +166,26 @@ export interface Config<
   scorers?: TScorers;
 
   /**
+   * Tools that agents can use to perform specific actions.
+   * Tools registered here can be automatically resolved when creating agents from stored configurations.
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   tools: {
+   *     getWeather: createTool({
+   *       id: 'get-weather',
+   *       description: 'Get weather for a location',
+   *       inputSchema: z.object({ location: z.string() }),
+   *       execute: async ({ context }) => fetchWeather(context.location)
+   *     })
+   *   }
+   * });
+   * ```
+   */
+  tools?: TTools;
+
+  /**
    * Server middleware functions to be applied to API routes
    * Each middleware can specify a path pattern (defaults to '/api/*')
    * @deprecated use server.middleware instead
@@ -206,6 +229,7 @@ export interface Config<
  * @template TVNextNetworks - Record of next-generation agent network instances
  * @template TMCPServers - Record of Model Context Protocol server instances
  * @template TScorers - Record of evaluation scorer instances for measuring AI performance
+ * @template TTools - Record of tool instances for agent actions
  *
  * @example
  * ```typescript
@@ -236,6 +260,7 @@ export class Mastra<
   TLogger extends IMastraLogger = IMastraLogger,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
   TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
+  TTools extends Record<string, Tool<any, any, any, any, any>> = Record<string, Tool<any, any, any, any, any>>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -244,6 +269,7 @@ export class Mastra<
   #workflows: TWorkflows;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
+  #tools?: TTools;
   #serverMiddleware: Array<{
     handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
     path: string;
@@ -384,7 +410,9 @@ export class Mastra<
    * });
    * ```
    */
-  constructor(config?: Config<TAgents, TLegacyWorkflows, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers>) {
+  constructor(
+    config?: Config<TAgents, TLegacyWorkflows, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers, TTools>,
+  ) {
     // Store server middleware with default path
     if (config?.serverMiddleware) {
       this.#serverMiddleware = config.serverMiddleware.map(m => ({
@@ -569,6 +597,17 @@ do:
             this.#tts[key].__setTelemetry(this.#telemetry);
           }
         }
+      });
+    }
+
+    /*
+    Tools
+    */
+    if (config?.tools) {
+      this.#tools = config.tools;
+      // Register mastra instance with each tool
+      Object.values(this.#tools).forEach(tool => {
+        tool.mastra = this;
       });
     }
 
@@ -1116,8 +1155,20 @@ do:
       }
     }
 
-    // TODO: Resolve tools from stored tool IDs
-    // This will require a tool registry in the Mastra class
+    // Resolve tools from stored tool IDs
+    const tools: Record<string, Tool<any, any, any, any, any>> = {};
+    if (config.toolIds && config.toolIds.length > 0) {
+      for (const toolId of config.toolIds) {
+        try {
+          const tool = this.getTool(toolId);
+          if (tool) {
+            tools[tool.id] = tool;
+          }
+        } catch (error) {
+          this.#logger?.warn(`Tool "${toolId}" referenced by agent "${id}" not found in Mastra instance`, error);
+        }
+      }
+    }
 
     const agent = new Agent({
       id: config.id,
@@ -1126,7 +1177,7 @@ do:
       model: config.model,
       workflows: Object.keys(workflows).length > 0 ? workflows : undefined,
       agents: Object.keys(agents).length > 0 ? agents : undefined,
-      // TODO: Add tools once we have a tool registry
+      tools: Object.keys(tools).length > 0 ? tools : undefined,
     } as AgentConfig);
 
     agent.__registerMastra(this);
@@ -1572,6 +1623,89 @@ do:
       }, {});
     }
     return this.#workflows;
+  }
+
+  /**
+   * Retrieves a registered tool by its ID.
+   *
+   * Tools must be registered during Mastra initialization through the `tools` config option.
+   * This method provides type-safe access to registered tools.
+   *
+   * @template TToolId - The ID of the tool to retrieve (type-safe key from TTools)
+   * @param id - The unique identifier of the tool
+   * @returns The tool instance
+   * @throws {MastraError} When the tool with the given ID is not found
+   *
+   * @example
+   * ```typescript
+   * const weatherTool = createTool({
+   *   id: 'get-weather',
+   *   description: 'Get weather for a location',
+   *   inputSchema: z.object({ location: z.string() }),
+   *   execute: async ({ context }) => fetchWeather(context.location)
+   * });
+   *
+   * const mastra = new Mastra({
+   *   tools: {
+   *     getWeather: weatherTool
+   *   }
+   * });
+   *
+   * // Type-safe tool retrieval
+   * const tool = mastra.getTool('getWeather');
+   * const result = await tool.execute({ context: { location: 'San Francisco' } });
+   * ```
+   */
+  public getTool<TToolId extends keyof TTools>(id: TToolId): TTools[TToolId] {
+    const tool = this.#tools?.[id];
+    if (!tool) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_TOOL_BY_ID_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Tool with ID ${String(id)} not found`,
+        details: {
+          toolId: String(id),
+          availableTools: Object.keys(this.#tools || {}).join(', '),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    return tool;
+  }
+
+  /**
+   * Retrieves all registered tools.
+   *
+   * Returns a record of all tools that were registered during Mastra initialization.
+   * This is useful for inspecting available tools, iterating over them, or passing
+   * them to agents dynamically.
+   *
+   * @returns Record of all tools keyed by their IDs
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   tools: {
+   *     getWeather: weatherTool,
+   *     sendEmail: emailTool,
+   *     searchDocs: searchTool
+   *   }
+   * });
+   *
+   * const allTools = mastra.getTools();
+   * console.log(Object.keys(allTools)); // ['getWeather', 'sendEmail', 'searchDocs']
+   *
+   * // Use all tools with an agent
+   * for (const [id, tool] of Object.entries(allTools)) {
+   *   console.log(`Tool ${id}:`, tool.description);
+   * }
+   * ```
+   */
+  public getTools(): TTools {
+    return this.#tools || ({} as TTools);
   }
 
   /**
