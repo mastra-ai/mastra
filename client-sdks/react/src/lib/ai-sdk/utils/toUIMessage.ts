@@ -112,6 +112,26 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
   const result = [...conversation];
 
   switch (chunk.type) {
+    case 'tripwire': {
+      // Create a new assistant message
+      const newMessage: MastraUIMessage = {
+        id: `tripwire-${chunk.runId + Date.now()}`,
+        role: 'assistant',
+        parts: [
+          {
+            type: 'text',
+            text: chunk.payload.tripwireReason,
+          },
+        ],
+        metadata: {
+          ...metadata,
+          status: 'warning',
+        },
+      };
+
+      return [...result, newMessage];
+    }
+
     case 'start': {
       // Create a new assistant message
       const newMessage: MastraUIMessage = {
@@ -460,10 +480,22 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
     }
 
     case 'error': {
-      // For error cases, we might want to add an error indicator
-      // but since UIMessage doesn't have explicit error parts,
-      // we'll just return the conversation as-is
-      return result;
+      const newMessage: MastraUIMessage = {
+        id: `error-${chunk.runId + Date.now()}`,
+        role: 'assistant',
+        parts: [
+          {
+            type: 'text',
+            text: chunk.payload.error as string,
+          },
+        ],
+        metadata: {
+          ...metadata,
+          status: 'error',
+        },
+      };
+
+      return [...result, newMessage];
     }
 
     // For all other chunk types, return conversation unchanged

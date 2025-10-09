@@ -1,6 +1,8 @@
 import { UIMessage } from '@ai-sdk/react';
 
-export type MastraUIMessageMetadata =
+export type MastraUIMessageMetadata = {
+  status?: 'warning' | 'error';
+} & (
   | {
       mode: 'generate';
     }
@@ -12,6 +14,7 @@ export type MastraUIMessageMetadata =
       from?: 'AGENT' | 'WORKFLOW';
       selectionReason?: string;
       agentInput?: string | object | Array<object>;
-    };
+    }
+);
 
 export type MastraUIMessage = UIMessage<MastraUIMessageMetadata, any, any>;
