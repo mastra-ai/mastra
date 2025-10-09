@@ -79,6 +79,11 @@ Only support **AI SDK v5** models (`specificationVersion: 'v2'`)
 - `.streamLegacy()`
   Returns: `StreamTextResult` or `StreamObjectResult`
 
+See the following API references for more information:
+
+- [Agent.generateLegacy()](../../reference/agents/generateLegacy.mdx)
+- [Agent.streamLegacy()](../../reference/streaming/agents/streamLegacy.mdx)
+
 **Standard APIs**
 
 - `.generate()`
@@ -89,6 +94,11 @@ Only support **AI SDK v5** models (`specificationVersion: 'v2'`)
 - `.stream()`
   - `format: 'mastra'` (default): Returns `MastraModelOutput<OUTPUT>`
   - `format: 'aisdk'`: Returns `AISDKV5OutputStream<OUTPUT>`
+
+See the following API references for more information:
+
+- [Agent.generate()](../../reference/agents/generate.mdx)
+- [Agent.stream()](../../reference/streaming/agents/stream.mdx)
 
 ### 3. Format control
 
@@ -134,9 +144,11 @@ const result = await agent.stream(messages, {
 ```
 
 - `structuredOutput` - Enhanced structured output with model override and custom options.
-
-- If no model is added it will use the agent's default model.
-- Error strategy when the object does not conform to the schema is warn (log a warning), error (throw an error), or fallback (return a default fallback value of your choice).
+  - `model` - If no model is added it will use the agent's default model.
+  -  `errorStrategy` - Determines what happens when the output doesn’t match the schema:
+      - warn' - log a warning
+      - 'error' - throw an error
+      - 'fallback' - return a fallback value you provide
 
 ```typescript showLineNumbers copy
 const result = await agent.generate(messages, {
@@ -244,7 +256,7 @@ const result = await agent.stream(messages, {
 
 ### 5. Legacy options that moved
 
-- temperature and Other Model Settings.
+- `temperature` and other `modelSettings`.
 
 Unified in `modelSettings`
 
@@ -322,6 +334,11 @@ const result = await agent.generate(messages, {
 
 - `CoreMessage[]`
 
+See the following API references for more information:
+
+- [Agent.generateLegacy()](../../reference/agents/generateLegacy.mdx)
+- [Agent.streamLegacy()](../../reference/streaming/agents/streamLegacy.mdx)
+
 **Standard APIs**
 
 - `ModelMessage[]`
@@ -334,3 +351,8 @@ type ToolChoice<TOOLS extends Record<string, unknown>> = 'auto' | 'none' | 'requ
     toolName: Extract<keyof TOOLS, string>;
 };
 ```
+
+See the following API references for more information:
+
+- [Agent.generate()](../../reference/agents/generate.mdx)
+- [Agent.stream()](../../reference/streaming/agents/stream.mdx)
