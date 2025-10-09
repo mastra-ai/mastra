@@ -1,3 +1,3 @@
-export * from './toUIMessage';
-export * from './toNetworkUIMessage';
-export * from './toAssistantUIMessage';
+export * from './types';
+export * from './utils/toUIMessage';
+export * from './utils/toAssistantUIMessage';
