@@ -4,7 +4,7 @@ import type { DependencyMetadata } from '../types';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { ensureDir, remove, pathExists } from 'fs-extra';
+import { ensureDir, remove, pathExists, writeFile } from 'fs-extra';
 
 // Mock the utilities that bundleExternals depends on
 vi.mock('../utils', async importOriginal => {
@@ -376,6 +376,18 @@ describe('bundleExternals', () => {
     }
   });
 
+  async function createWorkspacePackageJson(packagePath: string, packageName: string) {
+    await ensureDir(packagePath);
+    await writeFile(
+      join(packagePath, 'package.json'),
+      JSON.stringify({
+        name: packageName,
+        version: '1.0.0',
+        main: 'index.js',
+      }),
+    );
+  }
+
   it('should bundle dependencies and return correct structure', async () => {
     const depsToOptimize = new Map<string, DependencyMetadata>([
       [
@@ -413,6 +425,15 @@ describe('bundleExternals', () => {
   });
 
   it('should handle different bundler options configurations', async () => {
+    await writeFile(
+      join(testDir, 'package.json'),
+      JSON.stringify({
+        name: 'react',
+        version: '18.0.0',
+        main: 'index.js',
+      }),
+    );
+
     const depsToOptimize = new Map<string, DependencyMetadata>([
       [
         'react',
@@ -525,6 +546,16 @@ describe('bundleExternals', () => {
   });
 
   it('should handle workspace packages correctly', async () => {
+    await createWorkspacePackageJson(join(testDir, 'packages', 'utils'), '@workspace/utils');
+    await writeFile(
+      join(testDir, 'package.json'),
+      JSON.stringify({
+        name: 'lodash',
+        version: '4.17.21',
+        main: 'index.js',
+      }),
+    );
+
     const workspaceMap = new Map<string, WorkspacePackageInfo>([
       [
         '@workspace/utils',

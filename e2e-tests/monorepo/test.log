@@ -1,8 +1,0 @@
-
-> pkg-outputs@0.0.1 test /Users/ward/projects/mastra/mastra-oss/e2e-tests/monorepo
-> vitest run
-
-
- RUN  v3.2.4 /Users/ward/projects/mastra/mastra-oss/e2e-tests/monorepo
-
-Storing changes into SAVEPOINT.
