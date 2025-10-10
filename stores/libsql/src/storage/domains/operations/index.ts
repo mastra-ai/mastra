@@ -103,14 +103,16 @@ export class StoreOperationsLibSQL extends StoreOperations {
     if (tableName === TABLE_DATASET_VERSIONS) {
       const datasetTableName = parseSqlIdentifier(TABLE_DATASETS, 'table_name');
 
-      const stmt = `CREATE TABLE  ${parsedTableName} (
+      const stmt = `CREATE TABLE IF NOT EXISTS ${parsedTableName} (
           ${columns.join(',\n')},
           FOREIGN KEY (datasetId) REFERENCES ${datasetTableName}(id) ON DELETE CASCADE
           )`;
       return stmt;
     }
 
-    return `CREATE TABLE IF NOT EXISTS ${parsedTableName} (${columns.join(', ')})`;
+    const stmt = `CREATE TABLE IF NOT EXISTS ${parsedTableName} (${columns.join(', ')})`;
+    console.log('stmt', stmt);
+    return stmt;
   }
 
   async createTable({

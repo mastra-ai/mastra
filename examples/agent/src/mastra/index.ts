@@ -8,13 +8,13 @@ import { myWorkflow } from './workflows';
 import { chefModelV2Agent, networkAgent } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/scores';
 import { myWorkflowX } from './workflows/other';
-import { InMemoryStore } from '@mastra/core/storage';
+// import { InMemoryStore } from '@mastra/core/storage';
 
 const storage = new LibSQLStore({
   url: 'file:./mastra.db',
 });
 
-const memStorage = new InMemoryStore();
+// const memStorage = new InMemoryStore();
 
 const testScorer = createScorer({
   name: 'scorer1',
@@ -34,7 +34,7 @@ export const mastra = new Mastra({
     networkAgent,
   },
   logger: new PinoLogger({ name: 'Chef', level: 'debug' }),
-  storage: memStorage,
+  storage: storage,
   mcpServers: {
     myMcpServer,
     myMcpServerTwo,
