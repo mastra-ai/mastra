@@ -54,7 +54,7 @@ await weatherTool.execute({
 
 ## Accessing values with agents
 
-You can access the `runtimeContext` argument from any supported configuration parameter in agents. These functions can be sync or `async`. Use the `.get()` method to read values from `runtimeContext`.
+You can access the `runtimeContext` argument from any supported configuration options in agents. These functions can be sync or `async`. Use the `.get()` method to read values from `runtimeContext`.
 
 ```typescript {7-8,15,18,21} filename="src/mastra/agents/weather-agent.ts" showLineNumbers
 export type UserTier = {
@@ -83,7 +83,7 @@ export const weatherAgent = new Agent({
 });
 ```
 
-You can also use `runtimeContext` with other parameters like `agents`, `workflows`, `scorers`, `inputProcessors`, and `outputProcessors`.
+You can also use `runtimeContext` with other options like `agents`, `workflows`, `scorers`, `inputProcessors`, and `outputProcessors`.
 
 > See [Agent](../../reference/agents/agent.mdx) for a full list of configuration options.
 
@@ -137,5 +137,6 @@ export const weatherTool = createTool({
 
 ## Related
 
+- [RuntimeContext Example](../../examples/agents/runtime-context.mdx)
 - [Tool Runtime Context](../tools-mcp/runtime-context.mdx)
 - [Server Middleware Runtime Context](../server-db/middleware.mdx)
