@@ -3,10 +3,7 @@ import { fileURLToPath } from 'url';
 import type { MastraModelGateway } from '../src/llm/model/gateways/index.js';
 import { ModelsDevGateway } from '../src/llm/model/gateways/models-dev.js';
 import { NetlifyGateway } from '../src/llm/model/gateways/netlify.js';
-import {
-  fetchProvidersFromGateways,
-  writeRegistryFiles,
-} from '../src/llm/model/registry-generator.js';
+import { fetchProvidersFromGateways, writeRegistryFiles } from '../src/llm/model/registry-generator.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
