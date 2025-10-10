@@ -1,4 +1,4 @@
-import type { ToolCallOptions } from '@ai-sdk/provider-utils-v5';
+import type { ToolCallOptions } from '@ai-sdk/provider-utils';
 import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
@@ -9,7 +9,7 @@ import {
   applyCompatLayer,
   convertZodSchemaToAISDKSchema,
 } from '@mastra/schema-compat';
-import type { ToolExecutionOptions } from 'ai';
+import type { ToolExecutionOptions } from 'ai-v4';
 import { z } from 'zod';
 import { AISpanType, wrapMastra } from '../../ai-tracing';
 import { MastraBase } from '../../base';
