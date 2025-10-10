@@ -1,5 +1,5 @@
-import type { ModelMessage, ToolChoice } from 'ai';
-import type { TelemetrySettings } from 'ai-v4';
+import type { TelemetrySettings } from 'ai';
+import type { ModelMessage, ToolChoice } from 'ai-v5';
 import type { TracingContext, TracingOptions } from '../ai-tracing';
 import type { SystemMessage } from '../llm';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';

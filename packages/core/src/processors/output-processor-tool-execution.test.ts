@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import type { Processor } from './index';

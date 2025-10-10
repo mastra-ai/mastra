@@ -1,5 +1,5 @@
-import type { EmbeddingModelV2 } from '@ai-sdk/provider';
-import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 'ai-v4';
+import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
+import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 'ai';
 import { MessageList } from '../agent/message-list';
 import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-list';
 import { MastraBase } from '../base';
