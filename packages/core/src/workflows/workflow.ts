@@ -177,7 +177,6 @@ export function createStep<
       }),
       execute: async ({
         inputData,
-        [EMITTER_SYMBOL]: emitter,
         [STREAM_FORMAT_SYMBOL]: streamFormat,
         runtimeContext,
         abortSignal,
@@ -194,10 +193,6 @@ export function createStep<
           streamPromise.resolve = resolve;
           streamPromise.reject = reject;
         });
-        const toolData = {
-          name: params.name,
-          args: inputData,
-        };
 
         let stream: ReadableStream<any>;
 
@@ -224,25 +219,7 @@ export function createStep<
           stream = modelOutput.fullStream;
         }
 
-        if (streamFormat === 'aisdk') {
-          await emitter.emit('watch-v2', {
-            type: 'tool-call-streaming-start',
-            ...(toolData ?? {}),
-          });
-          for await (const chunk of stream) {
-            if (chunk.type === 'text-delta') {
-              await emitter.emit('watch-v2', {
-                type: 'tool-call-delta',
-                ...(toolData ?? {}),
-                argsTextDelta: chunk.textDelta,
-              });
-            }
-          }
-          await emitter.emit('watch-v2', {
-            type: 'tool-call-streaming-finish',
-            ...(toolData ?? {}),
-          });
-        } else {
+        if (streamFormat !== 'aisdk') {
           for await (const chunk of stream) {
             await writer.write(chunk as any);
           }
