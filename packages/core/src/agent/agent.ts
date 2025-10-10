@@ -1867,7 +1867,6 @@ export class Agent<
     runtimeContext,
     tracingContext,
     methodType,
-    format,
   }: {
     runId?: string;
     threadId?: string;
@@ -1875,7 +1874,6 @@ export class Agent<
     runtimeContext: RuntimeContext;
     tracingContext?: TracingContext;
     methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
-    format?: 'mastra' | 'aisdk';
   }) {
     const convertedWorkflowTools: Record<string, CoreTool> = {};
     const workflows = await this.getWorkflows({ runtimeContext });
@@ -1931,7 +1929,6 @@ export class Agent<
                   inputData: context,
                   runtimeContext,
                   tracingContext: innerTracingContext,
-                  format,
                 });
 
                 if (writer) {
@@ -2066,7 +2063,6 @@ export class Agent<
       threadId,
       runtimeContext,
       methodType,
-      format,
       tracingContext,
     });
 

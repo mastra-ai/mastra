@@ -39,7 +39,7 @@ export type ExecutionContext = {
     delay: number;
   };
   executionSpan: Span;
-  format?: 'aisdk' | 'mastra' | undefined;
+  format?: 'legacy' | 'vnext' | undefined;
   state: Record<string, any>;
 };
 
@@ -214,7 +214,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     workflowAISpan?: AISpan<AISpanType.WORKFLOW_RUN>;
     abortController: AbortController;
     writableStream?: WritableStream<ChunkType>;
-    format?: 'aisdk' | 'mastra' | undefined;
+    format?: 'legacy' | 'vnext' | undefined;
     outputOptions?: {
       includeState?: boolean;
     };
