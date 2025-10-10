@@ -24,8 +24,6 @@ export async function fetchProvidersFromGateways(
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.debug(`Fetching from gateway ${gateway.name} (attempt ${attempt}/${maxRetries})...`);
-
         const providers = await gateway.fetchProviders();
 
         for (const [providerId, config] of Object.entries(providers)) {
@@ -34,17 +32,14 @@ export async function fetchProvidersFromGateways(
           allModels[providerId] = config.models.sort();
         }
 
-        console.debug(`✅ Successfully fetched from gateway ${gateway.name}`);
         lastError = null;
         break; // Success, exit retry loop
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
-        console.debug(`❌ Attempt ${attempt}/${maxRetries} failed for gateway ${gateway.name}:`, lastError.message);
 
         if (attempt < maxRetries) {
           // Wait before retrying (exponential backoff)
           const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-          console.debug(`⏳ Retrying in ${delayMs}ms...`);
           await new Promise(resolve => setTimeout(resolve, delayMs));
         }
       }
@@ -52,7 +47,6 @@ export async function fetchProvidersFromGateways(
 
     // If all retries failed, throw the last error
     if (lastError) {
-      console.error(`Failed to fetch from gateway ${gateway.name} after ${maxRetries} attempts:`, lastError);
       throw lastError;
     }
   }
@@ -153,10 +147,8 @@ export async function writeRegistryFiles(
   };
 
   await fs.writeFile(jsonPath, JSON.stringify(registryData, null, 2), 'utf-8');
-  console.debug(`✅ Generated provider registry JSON at: ${jsonPath}`);
 
   // 2. Generate .d.ts file with type-only declarations
   const typeContent = generateTypesContent(models);
   await fs.writeFile(typesPath, typeContent, 'utf-8');
-  console.debug(`✅ Generated provider types at: ${typesPath}`);
 }
