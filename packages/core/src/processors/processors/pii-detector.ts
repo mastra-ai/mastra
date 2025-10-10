@@ -272,7 +272,9 @@ export class PIIDetector implements Processor {
       let response;
       if (model.specificationVersion === 'v2') {
         response = await this.detectionAgent.generate(prompt, {
-          output: schema,
+          structuredOutput: {
+            schema,
+          },
           modelSettings: {
             temperature: 0,
           },

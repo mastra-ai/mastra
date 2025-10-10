@@ -15,7 +15,7 @@ global.fetch = vi.fn();
 class TestAgent extends Agent {
   public lastProcessedParams: StreamParams<any> | null = null;
 
-  public async processStreamResponse_vNext(
+  public async processStreamResponse(
     params: StreamParams<any>,
     writable: WritableStream<Uint8Array>,
   ): Promise<Response> {
@@ -50,6 +50,20 @@ describe('Agent.stream', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  it('should transform params.structuredOutput.schema using zodToJsonSchema when provided', async () => {
+    const outputSchema = z.object({
+      name: z.string(),
+      age: z.number(),
+    });
+    const jsonSchema = zodToJsonSchema(outputSchema);
+    const params: StreamParams<typeof outputSchema> = {
+      messages: [] as any,
+      structuredOutput: { schema: outputSchema },
+    };
+    await agent.stream(params);
+    expect(agent.lastProcessedParams?.structuredOutput).toEqual({ schema: jsonSchema });
   });
 
   it('should transform params.output using zodToJsonSchema when provided', async () => {

@@ -1,7 +1,7 @@
 import z from 'zod';
 import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
-import { Agent } from '../../agent/index';
+import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
 import type { MastraMessageV2, MessageListInput } from '../../agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
@@ -243,7 +243,7 @@ export async function createNetworkLoop({
                           }
                       `;
 
-        completionResult = await routingAgent.generate([{ role: 'assistant', content: completionPrompt }], {
+        completionResult = await tryGenerateWithJsonFallback(routingAgent, completionPrompt, {
           structuredOutput: {
             schema: completionSchema,
           },
@@ -359,7 +359,7 @@ export async function createNetworkLoop({
         ...routingAgentOptions,
       };
 
-      const result = await routingAgent.generate(prompt, options);
+      const result = await tryGenerateWithJsonFallback(routingAgent, prompt, options);
 
       const object = result.object;
 
