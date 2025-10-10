@@ -28,7 +28,6 @@ The `writer` argument is passed to a workflow step's `execute` function and can 
 You must `await` the call to `writer.write(...)` or else you will lock the stream and get a `WritableStream is locked` error.
 </Callout>
 
-
 ```typescript {5,8,15} showLineNumbers copy
 import { createStep } from "@mastra/core/workflows";
 
