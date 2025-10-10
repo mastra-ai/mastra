@@ -208,7 +208,13 @@ export const AgentMetadataModelSwitcher = ({
       setHighlightedModelIndex(0);
     }
 
-    // Don't auto-focus - let user navigate with Tab or Enter as they prefer
+    // Auto-focus model input if provider is connected
+    if (provider.connected) {
+      setTimeout(() => {
+        modelInputRef.current?.focus();
+        modelInputRef.current?.click();
+      }, 100);
+    }
   };
 
   // Get the model reset context
@@ -648,7 +654,20 @@ export const AgentMetadataModelSwitcher = ({
                         setIsSearchingModel(false);
                         handleModelSelect(model.model);
                         modelInputRef.current?.blur();
-                        // Don't auto-focus chat input on mouse click - only on Enter key
+
+                        // Focus chat input after selection
+                        setTimeout(() => {
+                          const chatInput = document.querySelector('textarea[data-chat-input]') as HTMLTextAreaElement;
+                          if (chatInput) {
+                            chatInput.focus();
+                          } else {
+                            // Fallback to any textarea if data-chat-input not found
+                            const anyTextarea = document.querySelector('textarea') as HTMLTextAreaElement;
+                            if (anyTextarea) {
+                              anyTextarea.focus();
+                            }
+                          }
+                        }, 0);
                       }}
                     >
                       {model.model}
