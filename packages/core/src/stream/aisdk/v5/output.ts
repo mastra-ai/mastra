@@ -1,3 +1,4 @@
+import type { ServerResponse } from 'node:http';
 import type { ReadableStream } from 'stream/web';
 import { TransformStream } from 'stream/web';
 import { getErrorMessage } from '@ai-sdk/provider';
@@ -13,6 +14,7 @@ import type { OutputSchema } from '../../base/schema';
 import type { ChunkType } from '../../types';
 import type { ConsumeStreamOptions } from './compat';
 import { getResponseUIMessageId, convertFullStreamChunkToUIMessageStream } from './compat';
+import { pipeUIMessageStreamToResponse as pipeUIMessageStreamToResponseHelper } from './pipe-ui-message-stream-to-response';
 import { convertMastraChunkToAISDKv5 } from './transform';
 import type { OutputChunkType } from './transform';
 
@@ -151,6 +153,63 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
           }
         }
       },
+    });
+  }
+
+  /**
+   * Pipes the UI message stream to a Node.js ServerResponse (Express/NestJS compatible).
+   * Converts the stream to Server-Sent Events (SSE) format for Node.js environments.
+   *
+   * This method provides Node.js/Express equivalent functionality to `toUIMessageStreamResponse`
+   * which returns a Web Response object.
+   *
+   * @param response - Node.js ServerResponse object (e.g., Express res object)
+   * @param uiOptions - Options for UI message stream generation
+   * @param status - HTTP status code (default: 200)
+   * @param statusText - HTTP status message (optional)
+   * @param headers - Additional headers to merge with default SSE headers
+   * @param consumeSseStream - Optional callback to consume a copy of the SSE stream (non-blocking)
+   *
+   * @example
+   * ```typescript
+   * Express route
+   * app.get('/chat', async (req, res) => {
+   *   const output = await agent.generate({ prompt: 'Hello' });
+   *   output.pipeUIMessageStreamToResponse({
+   *     response: res,
+   *     uiOptions: { sendReasoning: true, sendSources: false },
+   *     headers: { 'X-Custom': 'value' }
+   *   });
+   * });
+   *
+   * NestJS controller
+   * @Get('chat')
+   * stream(@Res() res: Response) {
+   *   const output = this.agent.generate({ prompt: 'Hello' });
+   *   output.pipeUIMessageStreamToResponse({
+   *     response: res,
+   *     uiOptions: { sendReasoning: true }
+   *   });
+   * }
+   * ```
+   */
+  pipeUIMessageStreamToResponse<UI_MESSAGE extends UIMessage>({
+    response,
+    uiOptions,
+    ...init
+  }: {
+    response: ServerResponse;
+    uiOptions?: UIMessageStreamOptions<UI_MESSAGE>;
+    status?: number;
+    statusText?: string;
+    headers?: Record<string, string>;
+    consumeSseStream?: (args: { stream: globalThis.ReadableStream<string> }) => void | Promise<void>;
+  }): void {
+    const uiStream = this.toUIMessageStream<UI_MESSAGE>(uiOptions);
+    pipeUIMessageStreamToResponseHelper({
+      response,
+      stream: uiStream as unknown as ReadableStream<unknown>,
+      ...init,
     });
   }
 

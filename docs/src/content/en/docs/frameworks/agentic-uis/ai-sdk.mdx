@@ -410,6 +410,62 @@ This guide covers only the Mastra-specific aspects of the migration.
 - **Data compatibility**: New data stored in v5 format will no longer work if you downgrade from v5 to v4
 - **Backup recommendation**: Keep DB backups from before you upgrade to v5
 
+### Node.js Streaming (Express/NestJS)
+
+For Node.js environments like Express or NestJS, use `pipeUIMessageStreamToResponse()` to stream UI messages to a `ServerResponse` object via Server-Sent Events.
+
+#### Express
+
+```typescript filename="app.ts" showLineNumbers copy
+import express from 'express';
+import { mastra } from './mastra';
+
+const app = express();
+
+app.get('/api/chat', async (req, res) => {
+  const myAgent = mastra.getAgent('weatherAgent');
+  const stream = await myAgent.stream([
+    { role: 'user', content: 'What is the weather?' }
+  ], { format: 'aisdk' });
+
+  stream.pipeUIMessageStreamToResponse({
+    response: res,
+    uiOptions: {
+      sendReasoning: true,
+      sendSources: false,
+    },
+  });
+});
+```
+
+#### NestJS
+
+```typescript filename="chat.controller.ts" showLineNumbers copy
+import { Controller, Get, Res } from '@nestjs/common';
+import { Response } from 'express';
+import { MastraService } from './mastra.service';
+
+@Controller('chat')
+export class ChatController {
+  constructor(private mastraService: MastraService) {}
+
+  @Get('stream')
+  async stream(@Res() res: Response) {
+    const myAgent = this.mastraService.getAgent('weatherAgent');
+    const stream = await myAgent.stream([
+      { role: 'user', content: 'What is the weather?' }
+    ], { format: 'aisdk' });
+
+    stream.pipeUIMessageStreamToResponse({
+      response: res,
+      uiOptions: { sendReasoning: true },
+    });
+  }
+}
+```
+
+The method accepts the same `uiOptions` as `toUIMessageStreamResponse()`, along with Node.js-specific parameters like `status`, `statusText`, and `headers`.
+
 ### Memory and Storage
 
 Mastra automatically handles AI SDK v4 data using its internal `MessageList` class, which manages format conversion—including v4 to v5. No database migrations are required; your existing messages are translated on the fly and continue working after you upgrade.
