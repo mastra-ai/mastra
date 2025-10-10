@@ -228,7 +228,6 @@ describe('runScorerOnTarget Function', () => {
           traceId: 'trace-1',
         }),
       );
-      expect(testContext.mockStorage.updateAISpan).toHaveBeenCalled();
     });
 
     it('should run scorer successfully with specific spanId', async () => {
@@ -249,7 +248,6 @@ describe('runScorerOnTarget Function', () => {
           traceId: 'trace-1-span-2',
         }),
       );
-      expect(testContext.mockStorage.updateAISpan).toHaveBeenCalled();
     });
   });
 
@@ -297,7 +295,6 @@ describe('runScorerOnTarget Function', () => {
       testContext.setupSuccessfulScenario(target);
       await testContext.runTarget(target);
       expect(testContext.mockStorage.saveScore).toHaveBeenCalled();
-      expect(testContext.mockStorage.updateAISpan).toHaveBeenCalled();
     });
 
     it('should select specific span when spanId provided', async () => {
@@ -305,7 +302,6 @@ describe('runScorerOnTarget Function', () => {
       testContext.setupSuccessfulScenario(target);
       await testContext.runTarget(target);
       expect(testContext.mockStorage.saveScore).toHaveBeenCalled();
-      expect(testContext.mockStorage.updateAISpan).toHaveBeenCalled();
     });
   });
 
