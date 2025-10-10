@@ -31,7 +31,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
     process.env = originalEnv;
 
     // Stop any running intervals
-    const registry = GatewayRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
     registry.stopAutoRefresh();
 
     // Clean up cache file
@@ -48,7 +48,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
   });
 
   it('should create cache file on first sync', async () => {
-    const registry = GatewayRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
     expect(fs.existsSync(CACHE_FILE)).toBe(false);
 
@@ -64,7 +64,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
   }, 60000);
 
   it('should read last refresh time from disk cache', async () => {
-    const registry = GatewayRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
     // Manually create cache file with a known timestamp
     const testTime = new Date('2024-01-01T12:00:00Z');
@@ -87,7 +87,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
     }
     fs.writeFileSync(CACHE_FILE, now.getTime().toString(), 'utf-8');
 
-    const registry = GatewayRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
     // Spy on syncGateways
     const syncSpy = vi.spyOn(registry, 'syncGateways');
@@ -112,7 +112,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
     }
     fs.writeFileSync(CACHE_FILE, twoHoursAgo.getTime().toString(), 'utf-8');
 
-    const registry = GatewayRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
     // Mock syncGateways to avoid actual network calls
     const syncSpy = vi.spyOn(registry, 'syncGateways').mockResolvedValue(undefined);
@@ -132,7 +132,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
   it('should run immediate sync if cache file does not exist', async () => {
     expect(fs.existsSync(CACHE_FILE)).toBe(false);
 
-    const registry = GatewayRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
     // Mock syncGateways to avoid actual network calls
     const syncSpy = vi.spyOn(registry, 'syncGateways').mockResolvedValue(undefined);
@@ -150,7 +150,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
   });
 
   it('should auto-refresh on interval', async () => {
-    const registry = GatewayRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
     // Mock syncGateways to avoid actual network calls
     const syncSpy = vi.spyOn(registry, 'syncGateways').mockResolvedValue(undefined);
@@ -170,7 +170,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
   it('should enable auto-refresh by default when MASTRA_DEV=true', () => {
     process.env.MASTRA_DEV = 'true';
 
-    const registry = GatewayRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
     // Mock syncGateways to avoid actual network calls
     vi.spyOn(registry, 'syncGateways').mockResolvedValue(undefined);
@@ -192,7 +192,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
     // @ts-expect-error - accessing private property for testing
     GatewayRegistry['instance'] = undefined;
 
-    const registry = GatewayRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
     // Auto-refresh should NOT start automatically
     // @ts-expect-error - accessing private property for testing
@@ -207,7 +207,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
     // @ts-expect-error - accessing private property for testing
     GatewayRegistry['instance'] = undefined;
 
-    const registry = GatewayRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
     // Mock syncGateways to avoid actual network calls
     vi.spyOn(registry, 'syncGateways').mockResolvedValue(undefined);
@@ -227,7 +227,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
     // @ts-expect-error - accessing private property for testing
     GatewayRegistry['instance'] = undefined;
 
-    const registry = GatewayRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
     // Auto-refresh should NOT start (explicit override)
     // @ts-expect-error - accessing private property for testing
@@ -237,7 +237,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
   it('should stop auto-refresh if cache operations fail', async () => {
     // This test verifies that auto-refresh stops when cache operations fail persistently
 
-    const registry = GatewayRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
     // Stop any existing auto-refresh
     registry.stopAutoRefresh();
@@ -306,7 +306,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
   it('should update registry files when provider models change', async () => {
     // This test verifies that .d.ts and .json files are correctly updated when gateway data changes
 
-    const registry = GatewayRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
     // Stop any existing auto-refresh
     registry.stopAutoRefresh();
@@ -433,7 +433,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
   });
 
   it('should write to src/ when writeToSrc flag is true', async () => {
-    const registry = GatewayRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
     const tmpDir = path.join(os.tmpdir(), `mastra-test-${Date.now()}`);
     fs.mkdirSync(tmpDir, { recursive: true });
 
@@ -502,7 +502,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
 
     vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({} as Record<string, ProviderConfig>);
 
-    const registry = GatewayRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
     await registry.syncGateways(true);
 
     // Verify .d.ts file is written to dist/llm/model/ subdirectory, not dist/ root
