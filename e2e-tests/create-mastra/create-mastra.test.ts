@@ -117,7 +117,7 @@ describe('create mastra', () => {
               "modelVersion": "v2",
               "name": "Weather Agent",
               "outputProcessors": [],
-              "provider": "openai.responses",
+              "provider": "openai",
               "tools": {
                 "weatherTool": {
                   "description": "Get current weather for a location",

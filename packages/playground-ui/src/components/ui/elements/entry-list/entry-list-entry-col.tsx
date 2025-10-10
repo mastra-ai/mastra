@@ -1,24 +1,11 @@
 import { cn } from '@/lib/utils';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
-import { useEffect, useState } from 'react';
 
-export function EntryListTextCell({ children, isLoading }: { children: React.ReactNode; isLoading?: boolean }) {
-  const [randomWidth, setRandomWidth] = useState<number | undefined>(undefined);
-
-  // Generate random width once per component render
-  useEffect(() => {
-    setRandomWidth(Math.floor(Math.random() * (90 - 50 + 1)) + 50);
-  }, []);
-
-  if (!randomWidth) return null;
-
+export function EntryListEntryTextCol({ children, isLoading }: { children: React.ReactNode; isLoading?: boolean }) {
   return (
     <div className="text-icon4 text-[0.875rem] truncate ">
       {isLoading ? (
-        <div
-          className="bg-surface4 rounded-md animate-pulse text-transparent h-[1rem] select-none"
-          style={{ width: `${randomWidth}%` }}
-        ></div>
+        <div className="bg-surface4 rounded-md animate-pulse text-transparent h-[1rem] select-none"></div>
       ) : (
         children
       )}
@@ -26,7 +13,7 @@ export function EntryListTextCell({ children, isLoading }: { children: React.Rea
   );
 }
 
-export function EntryListStatusCell({ status }: { status?: 'success' | 'failed' }) {
+export function EntryListEntryStatusCol({ status }: { status?: 'success' | 'failed' }) {
   return (
     <div className={cn('flex justify-center items-center w-full relative')}>
       {status ? (
