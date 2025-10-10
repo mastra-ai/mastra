@@ -26,9 +26,10 @@ interface SharedArgs {
 }
 
 export type SendMessageArgs = { message: string; coreUserMessages?: CoreUserMessage[] } & (
-  | ({ mode: 'generate' } & GenerateArgs)
-  | ({ mode: 'stream' } & StreamArgs)
-  | ({ mode: 'network' } & NetworkArgs)
+  | ({ mode: 'generate' } & Omit<GenerateArgs, 'coreUserMessages'>)
+  | ({ mode: 'stream' } & Omit<StreamArgs, 'coreUserMessages'>)
+  | ({ mode: 'network' } & Omit<NetworkArgs, 'coreUserMessages'>)
+  | ({ mode?: undefined } & Omit<StreamArgs, 'coreUserMessages'>)
 );
 
 export type GenerateArgs = SharedArgs & { onFinish?: (messages: UIMessage[]) => Promise<void> };
@@ -231,17 +232,17 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
     setIsRunning(false);
   };
 
-  const sendMessage = async (args: SendMessageArgs) => {
+  const sendMessage = async ({ mode = 'stream', ...args }: SendMessageArgs) => {
     const nextMessage: Omit<CoreUserMessage, 'id'> = { role: 'user', content: [{ type: 'text', text: args.message }] };
     const messages = args.coreUserMessages ? [nextMessage, ...args.coreUserMessages] : [nextMessage];
 
     setMessages(s => [...s, { role: 'user', parts: [{ type: 'text', text: args.message }] }] as MastraUIMessage[]);
 
-    if (args.mode === 'generate') {
+    if (mode === 'generate') {
       await generate({ ...args, coreUserMessages: messages });
-    } else if (args.mode === 'stream') {
+    } else if (mode === 'stream') {
       await stream({ ...args, coreUserMessages: messages });
-    } else if (args.mode === 'network') {
+    } else if (mode === 'network') {
       await network({ ...args, coreUserMessages: messages });
     }
   };
