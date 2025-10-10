@@ -240,8 +240,9 @@ export class ModelRegistry {
   /**
    * Sync providers from all gateways
    * @param forceRefresh - Force refresh even if recently synced
+   * @param writeToSrc - Write to src/ directory in addition to dist/ (useful for manual generation in repo)
    */
-  async syncGateways(forceRefresh = false): Promise<void> {
+  async syncGateways(forceRefresh = false, writeToSrc = false): Promise<void> {
     if (this.isRefreshing && !forceRefresh) {
       // console.debug('[ModelRegistry] Sync already in progress, skipping...');
       return;
@@ -276,16 +277,16 @@ export class ModelRegistry {
       await writeRegistryFiles(distJsonPath, distTypesPath, providers, models);
       // console.debug(`[ModelRegistry] ✅ Updated registry files in dist/`);
 
-      // Also copy to src/ when in dev mode
+      // Also copy to src/ when explicitly requested or in dev mode
       const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
-      if (isDev) {
+      if (writeToSrc || isDev) {
         const srcJsonPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-registry.json');
         const srcTypesPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-types.generated.d.ts');
 
         // Copy the already-generated files
         await fs.promises.copyFile(distJsonPath, srcJsonPath);
         await fs.promises.copyFile(distTypesPath, srcTypesPath);
-        // console.debug(`[ModelRegistry] ✅ Copied registry files to src/ (dev mode)`);
+        // console.debug(`[ModelRegistry] ✅ Copied registry files to src/ (${writeToSrc ? 'manual' : 'dev mode'})`);
       }
 
       // Clear the in-memory cache to force reload

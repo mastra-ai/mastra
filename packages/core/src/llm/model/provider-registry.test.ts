@@ -432,6 +432,52 @@ describe('ModelRegistry Auto-Refresh', () => {
     // Note: Mocks are automatically restored by vi.restoreAllMocks() in afterEach
   });
 
+  it('should write to src/ when writeToSrc flag is true', async () => {
+    const registry = ModelRegistry.getInstance();
+    const tmpDir = path.join(os.tmpdir(), `mastra-test-${Date.now()}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+
+    const writtenFiles: string[] = [];
+    const copiedFiles: { src: string; dest: string }[] = [];
+
+    // Mock fs.promises.writeFile to track where files are written
+    vi.spyOn(fs.promises, 'writeFile').mockImplementation(async (filePath: any) => {
+      writtenFiles.push(filePath.toString());
+      return Promise.resolve();
+    });
+
+    // Mock fs.promises.copyFile to track file copies
+    vi.spyOn(fs.promises, 'copyFile').mockImplementation(async (src: any, dest: any) => {
+      copiedFiles.push({ src: src.toString(), dest: dest.toString() });
+      return Promise.resolve();
+    });
+
+    // Mock gateway to return test data
+    vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders').mockResolvedValue({
+      'test-provider': {
+        name: 'Test Provider',
+        models: ['model-a'],
+        apiKeyEnvVar: 'TEST_API_KEY',
+        gateway: 'models-dev',
+      } as ProviderConfig,
+    });
+
+    vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({});
+
+    // Call syncGateways with writeToSrc=true
+    await registry.syncGateways(true, true);
+
+    // Verify files were written to dist/
+    expect(writtenFiles.some(f => f.includes('dist/provider-registry.json'))).toBe(true);
+    expect(writtenFiles.some(f => f.includes('dist/llm/model/provider-types.generated.d.ts'))).toBe(true);
+
+    // Verify files were copied to src/
+    expect(copiedFiles.some(c => c.dest.includes('src/llm/model/provider-registry.json'))).toBe(true);
+    expect(copiedFiles.some(c => c.dest.includes('src/llm/model/provider-types.generated.d.ts'))).toBe(true);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   it('should write .d.ts file to correct dist subdirectory path', async () => {
     const tmpDir = path.join(os.tmpdir(), `mastra-test-${Date.now()}`);
     fs.mkdirSync(tmpDir, { recursive: true });
