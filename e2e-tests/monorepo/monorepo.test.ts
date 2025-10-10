@@ -33,14 +33,21 @@ process.once('SIGTERM', async () => {
 describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
   let fixturePath: string;
 
+  async function runBuild(path: string) {
+    await execa(pkgManager, ['build'], {
+      cwd: join(path, 'apps', 'custom'),
+      stdio: 'inherit',
+      env: process.env,
+    });
+  }
+
   beforeAll(
     async () => {
-      const tag = inject('tag');
       const registry = inject('registry');
 
       fixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-test-${pkgManager}-`));
       process.env.npm_config_registry = registry;
-      await setupMonorepo(fixturePath, tag, pkgManager);
+      await setupMonorepo(fixturePath, pkgManager);
     },
     10 * 60 * 1000,
   );
@@ -51,17 +58,6 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         force: true,
       });
     } catch {}
-  });
-
-  describe('tsconfig paths', { timeout: 60 * 1000 }, () => {
-    it('should resolve paths', async () => {
-      const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
-      const content = await readFile(inputFile, 'utf-8');
-
-      const hasMappedPkg = content.includes('@/agents');
-
-      expect(hasMappedPkg).toBeFalsy();
-    });
   });
 
   function runApiTests(port: number) {
@@ -146,6 +142,8 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     const cancelSignal = controller.signal;
 
     beforeAll(async () => {
+      await runBuild(fixturePath);
+
       const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
       proc = execaNode('index.mjs', {
         cwd: inputFile,
@@ -167,6 +165,15 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         });
       });
     }, timeout);
+
+    it('should resolve tsconfig paths', async () => {
+      const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
+      const content = await readFile(inputFile, 'utf-8');
+
+      const hasMappedPkg = content.includes('@/agents');
+
+      expect(hasMappedPkg).toBeFalsy();
+    });
 
     afterAll(async () => {
       if (proc) {
@@ -192,6 +199,8 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     const cancelSignal = controller.signal;
 
     beforeAll(async () => {
+      await runBuild(fixturePath);
+
       const inputFile = join(fixturePath, 'apps', 'custom');
 
       console.log('started proc', port);
