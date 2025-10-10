@@ -1994,7 +1994,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
             options: {
               onFinish: async event => {
-                console.log('onFinishResult1', event);
                 onFinishResult = event as unknown as typeof onFinishResult;
               },
             },
