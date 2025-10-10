@@ -1,4 +1,4 @@
-import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2StreamPart } from '@ai-sdk/provider';
 import { MastraBase } from '../../base';
 import type { ChunkType, CreateStream, OnResult } from '../types';
 
