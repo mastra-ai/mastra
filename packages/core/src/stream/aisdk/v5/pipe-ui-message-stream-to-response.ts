@@ -1,5 +1,4 @@
 import type { ServerResponse } from 'node:http';
-import { TextEncoder } from 'node:util';
 import type { ReadableStream } from 'stream/web';
 import { TransformStream } from 'stream/web';
 
@@ -93,7 +92,6 @@ export function pipeUIMessageStreamToResponse({
   // @ts-ignore - flushHeaders is present on Express Response
   response.flushHeaders?.();
 
-  const encoder = new TextEncoder();
   const reader = sseStream.getReader();
 
   void (async () => {
@@ -101,8 +99,8 @@ export function pipeUIMessageStreamToResponse({
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-        // value is string (from JsonToSseTransformStream); encode for Node write
-        response.write(Buffer.from(encoder.encode(value as string)));
+        // value is string (from JsonToSseTransformStream); write directly
+        response.write(value as string);
       }
     } catch (err) {
       try {
