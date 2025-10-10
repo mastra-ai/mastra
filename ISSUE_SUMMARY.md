@@ -2,49 +2,52 @@
 
 ## Problem
 
-AWS Bedrock agents fail with MCP tools when building on Node.js v24+ but work on Node v20-v22.
+AWS Bedrock agents fail with MCP tools when building with **pnpm** on Node.js v24.
 
 **Error**: `The value at toolConfig.tools.0.toolSpec.inputSchema.json.type must be one of the following: object.`
 
-**Affected**: Building on Node.js v24+  
-**Working**: Building on Node.js v20, v21, v22
+**Affected**: Building with **pnpm** on Node.js v24  
+**Working**: Building with **npm** on Node.js v24, or **pnpm** on Node v20-v22
 
 ---
 
 ## Root Cause
 
-**When `mastra build` runs on Node v24, the bundler corrupts Zod schemas during bundling.**
+**When `mastra build` runs with pnpm on Node v24, and MCP tools are enabled, the bundler corrupts Zod schemas during bundling.**
 
 ### Critical Finding
 
-The Node version used to **BUILD** the project matters, NOT the runtime version:
+This is a **pnpm-specific issue** on Node v24 when MCP tools are used:
 
-- ✅ Build with Node v22, run on Node v24 → **WORKS**
-- ❌ Build with Node v24, run on Node v24 → **FAILS**
-- ❌ Build with Node v24, run on Node v22 → **FAILS**
+- ✅ **pnpm + Node v24 + NO MCP** → **WORKS**
+- ❌ **pnpm + Node v24 + WITH MCP** → **FAILS** (Zod schemas corrupted)
+- ✅ **npm + Node v24 + WITH MCP** → **WORKS**
+- ✅ **pnpm + Node v22 + WITH MCP** → **WORKS**
 
-This proves it's a **build-time bundling issue**, not a runtime issue.
+### Test Matrix
+
+| Package Manager | Node | Zod | MCP Tools | Result                                |
+| --------------- | ---- | --- | --------- | ------------------------------------- |
+| pnpm            | v24  | v3  | ✅ YES    | ❌ FAILS (53 keys, schema corruption) |
+| pnpm            | v24  | v4  | ✅ YES    | ❌ FAILS (53 keys, schema corruption) |
+| pnpm            | v24  | v3  | ❌ NO     | ✅ WORKS                              |
+| pnpm            | v24  | v4  | ❌ NO     | ✅ WORKS                              |
+| npm             | v24  | v3  | ✅ YES    | ✅ WORKS (29 keys, correct)           |
+| npm             | v24  | v3  | ❌ NO     | ✅ WORKS                              |
+
+**Key Insights:**
+
+- Zod version (v3 or v4) does not affect the issue
+- Local workspace packages vs published packages does not affect the issue
+- The issue ONLY occurs with pnpm + Node v24 + MCP tools enabled
 
 ---
 
 ## What Happens During Bundling
 
-When Zod is **bundled** (not external) on Node v24, the bundler transforms it incorrectly:
+When pnpm builds on Node v24 with MCP tools enabled, Zod schemas are corrupted:
 
-### Unbundled Zod (Correct - Direct Import)
-
-```
-Total keys: 29
-First 5 keys: spa, _def, parse, safeParse, parseAsync
-~standard position: 25
-
-_def structure:
-  _def.typeName: ZodObject ✅
-  _def.type: undefined
-  _def keys: shape, unknownKeys, catchall, typeName
-```
-
-### Bundled on Node v22 (Correct)
+### Correct Schema (npm or pnpm without MCP)
 
 ```
 Total keys: 29
@@ -59,7 +62,7 @@ _def structure:
 Result: type: object, has properties: true ✅
 ```
 
-### Bundled on Node v24 (CORRUPTED)
+### Corrupted Schema (pnpm + Node v24 + MCP)
 
 ```
 Total keys: 53 (24 EXTRA!)
@@ -77,7 +80,7 @@ Empty schema: { "$schema": "..." }
 
 ### Complete Key Comparison
 
-#### Node v22 Bundled (All 29 keys)
+#### Correct (29 keys)
 
 ```
 spa, _def, parse, safeParse, parseAsync, safeParseAsync, refine, refinement,
@@ -86,7 +89,7 @@ brand, default, catch, describe, pipe, readonly, isNullable, isOptional,
 ~standard, _cached, nonstrict, augment
 ```
 
-#### Node v24 Bundled (All 53 keys)
+#### Corrupted (53 keys)
 
 ```
 ~standard, def, type, check, clone, brand, register, parse, safeParse,
@@ -98,7 +101,7 @@ isNullable, keyof, catchall, passthrough, loose, strict, strip, extend,
 safeExtend, merge, pick, omit, partial, required
 ```
 
-#### Keys Only in Node v24 (24 extra)
+#### Keys Only in Corrupted Version (24 extra)
 
 ```
 def, type, check, clone, register, encode, decode, encodeAsync, decodeAsync,
@@ -107,11 +110,9 @@ nonoptional, prefault, meta, keyof, catchall, passthrough, loose, strict,
 strip, safeExtend
 ```
 
-**Note**: Some of these are valid Zod methods (keyof, catchall, passthrough, strict, strip, extend, merge, pick, omit, partial, required), but many are completely fake (encode, decode, safeEncode, etc.)
-
 ### The Corruption
 
-When bundled on Node v24, the bundler:
+When pnpm builds with MCP tools on Node v24, the bundler:
 
 1. **Adds 24 extra properties** - some valid Zod methods exposed, many completely fake
 2. **Reorders keys** - moves `~standard` from position 25 to position 0
@@ -122,11 +123,11 @@ When bundled on Node v24, the bundler:
 #### \_def Internal Comparison
 
 ```
-Node v22: shape, unknownKeys, catchall, typeName
-Node v24: type, shape, catchall
+Correct: shape, unknownKeys, catchall, typeName
+Corrupted: type, shape, catchall
 
-Missing in v24: unknownKeys, typeName
-Added in v24: type (wrong property name!)
+Missing in corrupted: unknownKeys, typeName
+Added in corrupted: type (wrong property name!)
 ```
 
 ### Why zod-to-json-schema Fails
@@ -136,24 +137,26 @@ The `zod-to-json-schema@3.24.6` library expects `_def.typeName` to exist:
 - It uses this in the `selectParser()` function to determine schema type
 - When `_def.typeName` is undefined, it can't identify the schema
 - Returns empty schema: `{ "$schema": "..." }`
+- AWS Bedrock rejects the schema because `type` is missing
 
 ---
 
 ## What We Ruled Out
 
-1. ❌ Double-wrapping of schemas
-2. ❌ `zod-to-json-schema` library bug on Node v24 (works fine with unbundled Zod)
-3. ❌ `$refStrategy` or `target` configuration issue (all combinations work on v24)
-4. ❌ Runtime Node version incompatibility
-5. ❌ esbuild `target` setting (changing from `node20` to `node24` doesn't fix it)
+1. ❌ Zod version (tested v3 and v4 - both fail with pnpm + Node v24 + MCP)
+2. ❌ Local workspace packages vs published packages (both fail)
+3. ❌ `zod-to-json-schema` library bug (works fine with npm)
+4. ❌ `$refStrategy` or `target` configuration issue
+5. ❌ esbuild `target` setting
+6. ❌ General Node v24 incompatibility (npm works fine)
 
 ### What We Confirmed
 
-1. ✅ `zod-to-json-schema` works perfectly on Node v24 when Zod is NOT bundled
-2. ✅ All `$refStrategy` and `target` combinations work on Node v24
-3. ✅ The issue ONLY happens when `mastra build` bundles Zod into the output
-4. ✅ Changing esbuild `target` doesn't help
-5. ✅ The Node version running the BUILD matters, not the runtime
+1. ✅ The issue is **pnpm-specific** on Node v24
+2. ✅ npm works correctly on Node v24 with MCP tools
+3. ✅ The issue ONLY manifests when **MCP tools are enabled**
+4. ✅ Without MCP tools, pnpm + Node v24 works fine
+5. ✅ The corruption happens during the **build/bundle process**
 
 ---
 
@@ -171,7 +174,7 @@ Rollup + rollup-plugin-esbuild (packages/deployer/src/build/bundler.ts)
 esbuild (transforms TypeScript/JavaScript)
 ```
 
-When running on Node v24, esbuild's transformation behavior changes, corrupting Zod's internal structure.
+When pnpm runs the build on Node v24 with MCP tools, the bundler corrupts Zod's internal structure.
 
 ### Key Bundler Files
 
@@ -181,32 +184,44 @@ When running on Node v24, esbuild's transformation behavior changes, corrupting 
 
 ---
 
-## Temporary Workaround
+## Workaround: Use npm Instead of pnpm
 
-### Making Zod External
+**Immediate Solution**: When building on Node v24 with MCP tools, use **npm** instead of **pnpm**.
 
-One approach that fixes the issue: prevent Zod from being bundled.
+```bash
+# Instead of:
+pnpm install
+pnpm build
+
+# Use:
+npm install
+npm run build
+```
+
+This completely avoids the issue while maintaining full functionality.
+
+---
+
+## Alternative Workaround: Making Zod External
+
+If you must use pnpm, you can prevent Zod from being bundled.
 
 **File**: `packages/deployer/src/build/analyze.ts` (around line 59)
 
 ```typescript
-// Always keep Zod external to avoid bundling corruption on Node v24+
-// When Zod is bundled on Node v24, the bundler transforms it in a way that
+// Always keep Zod external to avoid bundling corruption on Node v24+ with pnpm
+// When Zod is bundled with pnpm on Node v24, the bundler transforms it in a way that
 // corrupts the internal _def.typeName property, breaking zod-to-json-schema.
 result.externalDependencies.add('zod');
 ```
 
-**Testing**: After this change, building on Node v24 works correctly.
-
 **Tradeoffs**:
 
-- ✅ Fixes Node v24 build issue
+- ✅ Fixes pnpm + Node v24 build issue
 - ✅ Smaller bundle size
-- ✅ Works on all Node versions
+- ✅ Works on all Node versions and package managers
 - ❌ Zod becomes a runtime dependency (must be in deployed `package.json`)
 - ❌ Users need to ensure Zod is installed in production
-
-**Note**: This is a temporary workaround. There may be better solutions.
 
 ---
 
@@ -221,18 +236,9 @@ These can be removed once a permanent fix is implemented.
 
 ---
 
-## Key Learnings
-
-1. **Bundler behavior varies by Node version** - Not just runtime, but build-time transformation
-2. **esbuild's `target` setting doesn't control transformation behavior** - Only output features
-3. **Symbols (`~standard`) cause issues** - Node v24 handles Symbol properties differently during bundling
-4. **Testing methodology matters**: Must test with clean node_modules on each Node version
-
----
-
 ## Test Commands
 
-### Manual Testing Flow
+### Manual Testing Flow (pnpm)
 
 ```bash
 # 1. Clean
@@ -242,15 +248,11 @@ rm -rf .mastra node_modules pnpm-lock.yaml
 # 2. Switch Node version
 nvm use 24
 
-# 3. Install & Build
+# 3. Install & Build with pnpm
 pnpm install
 pnpm build
 
-# 4. Check if Zod is external (if fix applied)
-cat .mastra/output/package.json | grep zod
-# Should see zod in dependencies if external
-
-# 5. Start & Test
+# 4. Start & Test
 pnpm start &
 sleep 10
 curl -X POST http://localhost:4111/api/agents/awsAgent/generate \
@@ -258,26 +260,38 @@ curl -X POST http://localhost:4111/api/agents/awsAgent/generate \
   -d '{"messages":[{"role":"user","content":"hello"}]}'
 ```
 
-### Testing Different Node Versions
+### Manual Testing Flow (npm - working)
 
 ```bash
-# Build with v22, run with v24
-nvm use 22 && pnpm build
-nvm use 24 && pnpm start
+# 1. Clean
+cd /path/to/test-project
+rm -rf .mastra node_modules package-lock.json
 
-# Build with v24, run with v24
-nvm use 24 && pnpm build && pnpm start
+# 2. Switch Node version
+nvm use 24
+
+# 3. Install & Build with npm
+npm install
+npm run build
+
+# 4. Start & Test
+npm start &
+sleep 10
+curl -X POST http://localhost:4111/api/agents/awsAgent/generate \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"hello"}]}'
 ```
 
 ---
 
-## Possible Solutions to Explore
+## Possible Solutions
 
-1. **Keep Zod external** (current workaround) - Prevents bundling corruption
-2. **Fix bundler configuration** - Adjust Rollup/esbuild settings to preserve Zod structure
-3. **Custom Zod-to-JSON converter** - Bypass zod-to-json-schema entirely
-4. **Pin build to Node v22** - Document that builds must use v22 LTS
-5. **Investigate esbuild/rollup** - May be worth reporting upstream
+1. **Use npm instead of pnpm** (recommended immediate fix)
+2. **Keep Zod external** (workaround if pnpm is required) - Prevents bundling corruption
+3. **Pin builds to Node v22** - Document that pnpm builds must use v22 LTS
+4. **Investigate pnpm bundling behavior** - May be worth reporting upstream to pnpm
+5. **Custom Zod-to-JSON converter** - Bypass zod-to-json-schema entirely
+6. **Fix bundler configuration** - Adjust Rollup/esbuild settings to preserve Zod structure
 
 ---
 
