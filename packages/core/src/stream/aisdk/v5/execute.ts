@@ -3,7 +3,6 @@ import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils';
 import { isAbortError } from '@ai-sdk/provider-utils-v4';
 import type { Span } from '@opentelemetry/api';
 import type { CallSettings, TelemetrySettings, ToolChoice, ToolSet } from 'ai';
-import { omit } from 'lodash-es';
 import pRetry from 'p-retry';
 import type { StructuredOutputOptions } from '../../../agent/types';
 import { getResponseFormat } from '../../base/schema';
@@ -11,6 +10,14 @@ import type { OutputSchema } from '../../base/schema';
 import type { LanguageModelV2StreamResult, OnResult } from '../../types';
 import { prepareToolsAndToolChoice } from './compat';
 import { AISDKV5InputStream } from './input';
+
+function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {
+  const newObj = { ...obj };
+  for (const key of keys) {
+    delete newObj[key];
+  }
+  return newObj;
+}
 
 type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   runId: string;
