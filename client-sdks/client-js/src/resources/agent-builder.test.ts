@@ -130,3 +130,116 @@ describe('AgentBuilder.runs', () => {
     expect(params.get('resourceId')).toBe('test-resource-456');
   });
 });
+
+describe('AgentBuilder.startAsync', () => {
+  let server: Server;
+  let baseUrl: string;
+  let agentBuilder: AgentBuilder;
+  let lastRequest: { method?: string; url?: string; body?: any } = {};
+
+  const minimalParams = () => ({
+    runtimeContext: {},
+    input: 'test input',
+  });
+
+  beforeAll(async () => {
+    server = createServer((req: IncomingMessage, res) => {
+      lastRequest.method = req.method;
+      lastRequest.url = req.url;
+
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk.toString();
+      });
+
+      req.on('end', () => {
+        if (body) {
+          lastRequest.body = JSON.parse(body);
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end('{}');
+      });
+    });
+
+    await new Promise<void>(resolve => {
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+    const address = server.address() as AddressInfo;
+    baseUrl = `http://127.0.0.1:${address.port}`;
+  });
+
+  beforeEach(() => {
+    lastRequest = {};
+    agentBuilder = new AgentBuilder({ baseUrl }, 'test-action-id');
+  });
+
+  afterAll(() => {
+    server.close();
+  });
+
+  it('should include runId in URL when provided', async () => {
+    // Arrange: Create action request params and runId
+    const params = {
+      runtimeContext: {},
+      input: 'test input',
+    };
+    const testRunId = 'test-run-123';
+
+    // Act: Call startAsync with params and runId
+    await agentBuilder.startAsync(params, testRunId);
+
+    // Assert: Verify URL structure
+    expect(lastRequest.url).toContain('/api/agent-builder/test-action-id/start-async');
+    expect(lastRequest.url).toContain('runId=test-run-123');
+  });
+
+  it('should structure request body correctly with actionParams and runtimeContext', async () => {
+    // Arrange: Create action request params with runtimeContext
+    const params = {
+      runtimeContext: {
+        env: 'test',
+        version: '1.0',
+      },
+      input: 'test input',
+      options: {
+        flag: true,
+      },
+    };
+
+    // Act: Call startAsync with params
+    await agentBuilder.startAsync(params);
+
+    // Assert: Verify request body structure
+    expect(lastRequest.body).toEqual({
+      input: 'test input',
+      options: {
+        flag: true,
+      },
+      runtimeContext: {
+        env: 'test',
+        version: '1.0',
+      },
+    });
+    // Verify the original runtimeContext field is not present
+    expect(lastRequest.body).not.toHaveProperty('runtimeContext.runtimeContext');
+  });
+
+  it('should not include query parameters in URL when runId is not provided', async () => {
+    // Act: Call startAsync without runId
+    await agentBuilder.startAsync(minimalParams());
+
+    // Assert: Verify URL format
+    expect(lastRequest.url).toBe(
+      '/api/agent-builder/test-action-id/start-async',
+      'URL should not contain any query parameters when runId is not provided',
+    );
+  });
+
+  it('should use POST method for the API request', async () => {
+    // Act: Call startAsync
+    await agentBuilder.startAsync(minimalParams());
+
+    // Assert: Verify HTTP method
+    expect(lastRequest.method).toBe('POST', 'Request should use POST method');
+  });
+});
