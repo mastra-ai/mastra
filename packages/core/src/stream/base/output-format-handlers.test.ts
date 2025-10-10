@@ -379,43 +379,33 @@ describe('output-format-handlers', () => {
         structuredOutput: { schema },
       });
 
-      const chunks: ChunkType<typeof schema>[] = [];
-      const writer = transformer.writable.getWriter();
-      const reader = transformer.readable.getReader();
-
-      const readPromise = (async () => {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-        }
-      })();
-
-      await writer.write({
-        from: ChunkFrom.AGENT,
-        runId: 'test-run',
-        type: 'text-delta',
-        payload: { id: '1', text: '{"email":"notanemail","score":150}' },
-      });
-
-      await writer.write({
-        from: ChunkFrom.AGENT,
-        runId: 'test-run',
-        type: 'finish',
-        payload: {
-          stepResult: { reason: 'stop' },
-          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
-          metadata: {},
-          messages: { all: [], user: [], nonUser: [] },
+      const streamParts: ChunkType<typeof schema>[] = [
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1', text: '{"email":"notanemail","score":150}' },
         },
-      });
+        {
+          type: 'finish',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        },
+      ];
 
-      await writer.close();
-      await readPromise;
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
 
-      const errorChunk = chunks.find(c => c.type === 'error');
+      const errorChunk = chunks.find(c => c?.type === 'error');
       expect(errorChunk).toBeDefined();
-      expect((errorChunk?.payload?.error as Error)?.message).toContain('Structured output validation failed');
+      expect((errorChunk?.payload?.error as Error).message).toContain('Structured output validation failed');
     });
 
     it('should successfully validate zod v4 schema', async () => {
@@ -429,41 +419,31 @@ describe('output-format-handlers', () => {
         structuredOutput: { schema },
       });
 
-      const chunks: ChunkType<typeof schema>[] = [];
-      const writer = transformer.writable.getWriter();
-      const reader = transformer.readable.getReader();
-
-      const readPromise = (async () => {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-        }
-      })();
-
-      await writer.write({
-        from: ChunkFrom.AGENT,
-        runId: 'test-run',
-        type: 'text-delta',
-        payload: { id: '1', text: '{"username":"bob","active":true}' },
-      });
-
-      await writer.write({
-        from: ChunkFrom.AGENT,
-        runId: 'test-run',
-        type: 'finish',
-        payload: {
-          stepResult: { reason: 'stop' },
-          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
-          metadata: {},
-          messages: { all: [], user: [], nonUser: [] },
+      const streamParts: ChunkType<typeof schema>[] = [
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1', text: '{"username":"bob","active":true}' },
         },
-      });
+        {
+          type: 'finish',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        },
+      ];
 
-      await writer.close();
-      await readPromise;
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
 
-      const objectResultChunk = chunks.find(c => c.type === 'object-result');
+      const objectResultChunk = chunks.find(c => c?.type === 'object-result');
       expect(objectResultChunk).toBeDefined();
       expect(objectResultChunk?.object).toEqual({ username: 'bob', active: true });
     });
@@ -480,44 +460,34 @@ describe('output-format-handlers', () => {
 
       const transformer = createObjectStreamTransformer({
         isLLMExecutionStep: true,
-        structuredOutput: { schema: aiSdkSchema as any },
+        structuredOutput: { schema: aiSdkSchema },
       });
 
-      const chunks: any[] = [];
-      const writer = transformer.writable.getWriter();
-      const reader = transformer.readable.getReader();
-
-      const readPromise = (async () => {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-        }
-      })();
-
-      await writer.write({
-        from: ChunkFrom.AGENT,
-        runId: 'test-run',
-        type: 'text-delta',
-        payload: { id: '1', text: '{"id":"abc","value":42}' },
-      });
-
-      await writer.write({
-        from: ChunkFrom.AGENT,
-        runId: 'test-run',
-        type: 'finish',
-        payload: {
-          stepResult: { reason: 'stop' },
-          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
-          metadata: {},
-          messages: { all: [], user: [], nonUser: [] },
+      const streamParts: any[] = [
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1', text: '{"id":"abc","value":42}' },
         },
-      });
+        {
+          type: 'finish',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        },
+      ];
 
-      await writer.close();
-      await readPromise;
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
 
-      const objectResultChunk = chunks.find(c => c.type === 'object-result');
+      const objectResultChunk = chunks.find(c => c?.type === 'object-result');
       expect(objectResultChunk).toBeDefined();
       expect(objectResultChunk?.object).toEqual({ id: 'abc', value: 42 });
     });
@@ -539,41 +509,31 @@ describe('output-format-handlers', () => {
         structuredOutput: { schema },
       });
 
-      const chunks: any[] = [];
-      const writer = transformer.writable.getWriter();
-      const reader = transformer.readable.getReader();
-
-      const readPromise = (async () => {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-        }
-      })();
-
-      await writer.write({
-        from: ChunkFrom.AGENT,
-        runId: 'test-run',
-        type: 'text-delta',
-        payload: { id: '1', text: '{"title":"Product","price":29.99}' },
-      });
-
-      await writer.write({
-        from: ChunkFrom.AGENT,
-        runId: 'test-run',
-        type: 'finish',
-        payload: {
-          stepResult: { reason: 'stop' },
-          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
-          metadata: {},
-          messages: { all: [], user: [], nonUser: [] },
+      const streamParts: any[] = [
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1', text: '{"title":"Product","price":29.99}' },
         },
-      });
+        {
+          type: 'finish',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        },
+      ];
 
-      await writer.close();
-      await readPromise;
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
 
-      const objectResultChunk = chunks.find(c => c.type === 'object-result');
+      const objectResultChunk = chunks.find(c => c?.type === 'object-result');
       expect(objectResultChunk).toBeDefined();
       expect(objectResultChunk?.object).toEqual({ title: 'Product', price: 29.99 });
     });
@@ -593,41 +553,31 @@ describe('output-format-handlers', () => {
         structuredOutput: { schema },
       });
 
-      const chunks: any[] = [];
-      const writer = transformer.writable.getWriter();
-      const reader = transformer.readable.getReader();
-
-      const readPromise = (async () => {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-        }
-      })();
-
-      await writer.write({
-        from: ChunkFrom.AGENT,
-        runId: 'test-run',
-        type: 'text-delta',
-        payload: { id: '1', text: '{"id":123}' },
-      });
-
-      await writer.write({
-        from: ChunkFrom.AGENT,
-        runId: 'test-run',
-        type: 'finish',
-        payload: {
-          stepResult: { reason: 'stop' },
-          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
-          metadata: {},
-          messages: { all: [], user: [], nonUser: [] },
+      const streamParts: any[] = [
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1', text: '{"id":123}' },
         },
-      });
+        {
+          type: 'finish',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        },
+      ];
 
-      await writer.close();
-      await readPromise;
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
 
-      const objectResultChunk = chunks.find(c => c.type === 'object-result');
+      const objectResultChunk = chunks.find(c => c?.type === 'object-result');
       expect(objectResultChunk).toBeDefined();
       expect(objectResultChunk?.object).toEqual({ id: 123 });
     });
