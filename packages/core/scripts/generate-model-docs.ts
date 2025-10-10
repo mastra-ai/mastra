@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import type { ProviderConfig } from '../src/index.js';
 import { PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants.js';
 
 /**
@@ -112,7 +113,7 @@ async function parseProviders(): Promise<GroupedProviders> {
   const popular: ProviderInfo[] = [];
   const other: ProviderInfo[] = [];
 
-  for (const [id, config] of Object.entries(PROVIDER_REGISTRY)) {
+  for (const [id, config] of Object.entries<ProviderConfig>(PROVIDER_REGISTRY)) {
     // Check if it's a standalone gateway (like vercel, netlify, etc.)
     const isGateway = GATEWAY_PROVIDERS.includes(id);
 
@@ -192,7 +193,10 @@ async function fetchProviderInfo(providerId: string): Promise<{ models: any[]; p
   }
 }
 
-async function generateProviderPage(provider: ProviderInfo, providerRegistry: Record<string, any>): Promise<string> {
+async function generateProviderPage(
+  provider: ProviderInfo,
+  providerRegistry: Record<string, ProviderConfig>,
+): Promise<string> {
   const modelCount = provider.models.length;
 
   // Get documentation URL if available
