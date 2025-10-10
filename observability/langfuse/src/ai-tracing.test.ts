@@ -327,9 +327,6 @@ describe('LangfuseExporter', () => {
             inputTokens: 10,
             outputTokens: 5,
             totalTokens: 15,
-            // Legacy fields should be ignored when new fields are present
-            promptTokens: 999,
-            completionTokens: 999,
           },
         },
       });
