@@ -1,3 +1,4 @@
+import { convertMessages } from '@mastra/core/agent';
 import type { RuntimeContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { StorageGetMessagesArg, ThreadSortOptions } from '@mastra/core/storage';
@@ -370,7 +371,8 @@ export async function getMessagesHandler({
       threadId: threadId!,
       ...(limit && { selectBy: { last: limit } }),
     });
-    return { messages: result.messages, uiMessages: result.uiMessages };
+    const uiMessages = convertMessages(result.messages).to('AIV5.UI');
+    return { messages: result.messages, uiMessages, legacyMessages: result.uiMessages };
   } catch (error) {
     return handleError(error, 'Error getting messages');
   }

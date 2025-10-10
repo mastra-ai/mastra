@@ -1,7 +1,7 @@
 import type { ReadableStream } from 'stream/web';
-import { isAbortError } from '@ai-sdk/provider-utils-v5';
-import type { LanguageModelV2, LanguageModelV2Usage } from '@ai-sdk/provider-v5';
-import type { ToolSet } from 'ai-v5';
+import type { LanguageModelV2, LanguageModelV2Usage } from '@ai-sdk/provider';
+import { isAbortError } from '@ai-sdk/provider-utils';
+import type { ToolSet } from 'ai';
 import { MessageList } from '../../../agent/message-list';
 import { safeParseErrorObject } from '../../../error/utils.js';
 import { execute } from '../../../stream/aisdk/v5/execute';
@@ -435,7 +435,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   options,
   toolCallStreaming,
   controller,
-  output,
+  structuredOutput,
   outputProcessors,
   headers,
   downloadRetries,
@@ -531,7 +531,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
               modelSettings,
               telemetry_settings,
               includeRawChunks,
-              output,
+              structuredOutput,
               headers,
               onResult: ({
                 warnings: warningsFromStream,
@@ -584,7 +584,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
             toolCallStreaming,
             telemetry_settings,
             includeRawChunks,
-            output,
+            structuredOutput,
             outputProcessors,
             isLLMExecutionStep: true,
             tracingContext,

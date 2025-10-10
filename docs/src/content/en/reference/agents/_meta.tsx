@@ -4,7 +4,6 @@ const meta = {
   agent: "Agent",
   generate: ".generate()",
   generateLegacy: ".generateLegacy() (Legacy)",
-  "migration-guide": "Migration Guide",
   network: <Tag text="experimental">.network()</Tag>,
   listAgents: ".listAgents()",
   getWorkflows: ".getWorkflows()",
