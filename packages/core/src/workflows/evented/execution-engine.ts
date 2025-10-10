@@ -58,7 +58,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       delay?: number;
     };
     abortController: AbortController;
-    format?: 'aisdk' | 'mastra' | undefined;
+    format?: 'legacy' | 'vnext' | undefined;
   }): Promise<TOutput> {
     const pubsub = this.mastra?.pubsub;
     if (!pubsub) {
