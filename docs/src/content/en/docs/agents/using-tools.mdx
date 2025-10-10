@@ -72,7 +72,9 @@ const result = await agent.generate("What's the weather in London?");
 
 ## Using multiple tools
 
-An agent can use multiple tools to accomplish more complex tasks by delegating specific parts to individual tools. Tools are called in parallel, and the agent combines their responses into a single reply.
+An agent can use multiple tools to handle more complex tasks by delegating specific parts to individual tools. The agent decides which tools to use based on the user’s message, the agent’s instructions, and the tool descriptions and schemas.
+
+When multiple tools are available, the agent may choose to use one, several, or none, depending on what’s needed to answer the query.
 
 ```typescript {6} filename="src/mastra/agents/weather-agent.ts" showLineNumbers copy
 import { weatherTool } from "../tools/weather-tool";
