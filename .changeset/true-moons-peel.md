@@ -11,12 +11,12 @@
 '@mastra/agent-builder': patch
 'mastra': patch
 '@mastra/cloud': patch
-'@mastra/deployer': patch
 '@mastra/evals': patch
 '@mastra/loggers': patch
 '@mastra/mcp': patch
 '@mastra/mcp-registry-registry': patch
 '@mastra/memory': patch
+'@mastra/playground-ui': patch
 '@mastra/rag': patch
 '@mastra/server': patch
 '@mastra/google-cloud-pubsub': patch
