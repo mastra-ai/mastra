@@ -19,6 +19,7 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { IDatabase } from 'pg-promise';
+import type { TableMapConfig } from '../utils';
 import { getSchemaName, getTableName } from '../utils';
 
 // Re-export the types for convenience
@@ -27,13 +28,15 @@ export type { CreateIndexOptions, IndexInfo, StorageIndexStats };
 export class StoreOperationsPG extends StoreOperations {
   public client: IDatabase<{}>;
   public schemaName?: string;
+  public tableMap: TableMapConfig;
   private setupSchemaPromise: Promise<void> | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
 
-  constructor({ client, schemaName }: { client: IDatabase<{}>; schemaName?: string }) {
+  constructor({ client, schemaName, tableMap }: { client: IDatabase<{}>; schemaName?: string; tableMap?: TableMapConfig }) {
     super();
     this.client = client;
     this.schemaName = schemaName;
+    this.tableMap = tableMap || {};
   }
 
   async hasColumn(table: string, column: string): Promise<boolean> {
@@ -154,7 +157,7 @@ export class StoreOperationsPG extends StoreOperations {
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
 
       await this.client.none(
-        `INSERT INTO ${getTableName({ indexName: tableName, schemaName })} (${columns.map(c => `"${c}"`).join(', ')}) VALUES (${placeholders})`,
+        `INSERT INTO ${getTableName({ indexName: tableName, schemaName, tableMap: this.tableMap })} (${columns.map(c => `"${c}"`).join(', ')}) VALUES (${placeholders})`,
         values,
       );
     } catch (error) {
@@ -175,7 +178,7 @@ export class StoreOperationsPG extends StoreOperations {
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
       const schemaName = getSchemaName(this.schemaName);
-      const tableNameWithSchema = getTableName({ indexName: tableName, schemaName });
+      const tableNameWithSchema = getTableName({ indexName: tableName, schemaName, tableMap: this.tableMap });
       await this.client.none(`TRUNCATE TABLE ${tableNameWithSchema} CASCADE`);
     } catch (error) {
       throw new MastraError(
@@ -240,7 +243,7 @@ export class StoreOperationsPG extends StoreOperations {
       // Constraints are global to a database, ensure schemas do not conflict with each other
       const constraintPrefix = this.schemaName ? `${this.schemaName}_` : '';
       const sql = `
-            CREATE TABLE IF NOT EXISTS ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} (
+            CREATE TABLE IF NOT EXISTS ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName), tableMap: this.tableMap })} (
               ${finalColumns}
             );
             ${
@@ -252,7 +255,7 @@ export class StoreOperationsPG extends StoreOperations {
               ) AND NOT EXISTS (
                 SELECT 1 FROM pg_indexes WHERE indexname = '${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key'
               ) THEN
-                ALTER TABLE ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })}
+                ALTER TABLE ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName), tableMap: this.tableMap })}
                 ADD CONSTRAINT ${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key
                 UNIQUE (workflow_name, run_id);
               END IF;
@@ -293,7 +296,7 @@ export class StoreOperationsPG extends StoreOperations {
    * Set up timestamp triggers for a table to automatically manage createdAt/updatedAt
    */
   private async setupTimestampTriggers(tableName: TABLE_NAMES): Promise<void> {
-    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName), tableMap: this.tableMap });
 
     try {
       const triggerSQL = `
@@ -350,7 +353,7 @@ export class StoreOperationsPG extends StoreOperations {
     schema: Record<string, StorageColumn>;
     ifNotExists: string[];
   }): Promise<void> {
-    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName), tableMap: this.tableMap });
 
     try {
       for (const columnName of ifNotExists) {
@@ -396,7 +399,7 @@ export class StoreOperationsPG extends StoreOperations {
       const values = keyEntries.map(([_, value]) => value);
 
       const result = await this.client.oneOrNone<R>(
-        `SELECT * FROM ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} WHERE ${conditions} ORDER BY "createdAt" DESC LIMIT 1`,
+        `SELECT * FROM ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName), tableMap: this.tableMap })} WHERE ${conditions} ORDER BY "createdAt" DESC LIMIT 1`,
         values,
       );
 
@@ -456,7 +459,7 @@ export class StoreOperationsPG extends StoreOperations {
   async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
       const schemaName = getSchemaName(this.schemaName);
-      const tableNameWithSchema = getTableName({ indexName: tableName, schemaName });
+      const tableNameWithSchema = getTableName({ indexName: tableName, schemaName, tableMap: this.tableMap });
       await this.client.none(`DROP TABLE IF EXISTS ${tableNameWithSchema}`);
     } catch (error) {
       throw new MastraError(
@@ -495,6 +498,7 @@ export class StoreOperationsPG extends StoreOperations {
       const fullTableName = getTableName({
         indexName: table as TABLE_NAMES,
         schemaName: getSchemaName(this.schemaName),
+        tableMap: this.tableMap,
       });
 
       // Check if index already exists
