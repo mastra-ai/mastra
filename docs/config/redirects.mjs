@@ -1070,4 +1070,9 @@ export const redirectList = [
     destination: "/:locale/guides/migrations/vnext-to-standard-apis",
     permanent: true,
   },
+  {
+    source: "/:locale/docs/agents/runtime-context",
+    destination: "/:locale/docs/server-db/runtime-context",
+    permanent: true,
+  },
 ];
