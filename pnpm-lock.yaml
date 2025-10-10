@@ -1368,12 +1368,18 @@ importers:
       '@ai-sdk/ui-utils':
         specifier: ^1.2.11
         version: 1.2.11(zod@3.25.76)
+      '@ai-sdk/xai-v5':
+        specifier: npm:@ai-sdk/xai@2.0.23
+        version: '@ai-sdk/xai@2.0.23(zod@3.25.76)'
       '@isaacs/ttlcache':
         specifier: ^1.4.1
         version: 1.4.1
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../schema-compat
+      '@openrouter/ai-sdk-provider-v5':
+        specifier: npm:@openrouter/ai-sdk-provider@1.2.0
+        version: '@openrouter/ai-sdk-provider@1.2.0(ai@5.0.64(zod@3.25.76))(zod@3.25.76)'
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
@@ -16798,6 +16804,12 @@ snapshots:
       '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
       zod: 3.25.76
 
+  '@ai-sdk/openai-compatible@1.0.19(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.10(zod@3.25.76)
+      zod: 3.25.76
+
   '@ai-sdk/openai-compatible@1.0.19(zod@4.1.12)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
@@ -16947,6 +16959,13 @@ snapshots:
       '@ai-sdk/openai-compatible': 0.2.16(zod@3.25.76)
       '@ai-sdk/provider': 1.1.3
       '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
+      zod: 3.25.76
+
+  '@ai-sdk/xai@2.0.23(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/openai-compatible': 1.0.19(zod@3.25.76)
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.10(zod@3.25.76)
       zod: 3.25.76
 
   '@ai-sdk/xai@2.0.23(zod@4.1.12)':
@@ -30813,6 +30832,8 @@ snapshots:
   ufo@1.6.1: {}
 
   uint8array-extras@1.5.0: {}
+
+  ulid@3.0.1: {}
 
   unbox-primitive@1.1.0:
     dependencies:
