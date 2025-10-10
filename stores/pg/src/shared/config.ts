@@ -64,3 +64,32 @@ export const isCloudSqlConfig = <SSLType>(
 ): cfg is PostgresConfig<SSLType> & ClientConfig => {
   return 'stream' in cfg || ('password' in cfg && typeof cfg.password === 'function');
 };
+
+export const checkConfig = (name: string, config: PostgresConfig<ISSLConfig | ConnectionOptions>) => {
+  if (isConnectionStringConfig(config)) {
+    if (
+      !config.connectionString ||
+      typeof config.connectionString !== 'string' ||
+      config.connectionString.trim() === ''
+    ) {
+      throw new Error(
+        `${name}: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.`,
+      );
+    }
+  } else if (isCloudSqlConfig(config)) {
+    // valid connector config; no-op
+  } else if (isHostConfig(config)) {
+    const required = ['host', 'database', 'user', 'password'] as const;
+    for (const key of required) {
+      if (!config[key] || typeof config[key] !== 'string' || config[key].trim() === '') {
+        throw new Error(
+          `${name}: ${key} must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.`,
+        );
+      }
+    }
+  } else {
+    throw new Error(
+      `${name}: invalid config. Provide either {connectionString}, {host,port,database,user,password}, or a pg ClientConfig (e.g., Cloud SQL connector with \`stream\`).`,
+    );
+  }
+};
