@@ -7,6 +7,7 @@ import type {
   DeprecatedOutputOptions,
   ToolsInput,
   UIMessageWithMetadata,
+  AgentInstructions,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { CoreMessage } from '@mastra/core/llm';
@@ -21,6 +22,7 @@ import type {
 } from '@mastra/core/memory';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
+
 import type {
   AITraceRecord,
   AISpanRecord,
@@ -78,7 +80,7 @@ export type NetworkStreamParams = {
 } & MultiPrimitiveExecutionOptions;
 export interface GetAgentResponse {
   name: string;
-  instructions: string;
+  instructions: AgentInstructions;
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;
   agents: Record<string, { id: string; name: string }>;
