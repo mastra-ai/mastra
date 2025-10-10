@@ -24,6 +24,7 @@ export enum ChunkFrom {
   USER = 'USER',
   SYSTEM = 'SYSTEM',
   WORKFLOW = 'WORKFLOW',
+  NETWORK = 'NETWORK',
 }
 
 interface BaseChunkType {
@@ -308,6 +309,8 @@ interface TripwirePayload {
 
 // Network-specific payload interfaces
 interface RoutingAgentStartPayload {
+  agentId: string;
+  runId: string;
   inputData: {
     task: string;
     primitiveId: string;
@@ -330,6 +333,7 @@ interface RoutingAgentEndPayload {
   isComplete?: boolean;
   selectionReason: string;
   iteration: number;
+  runId: string;
 }
 
 interface AgentExecutionStartPayload {
@@ -408,6 +412,7 @@ interface NetworkStepFinishPayload {
   result: string;
   isComplete: boolean;
   iteration: number;
+  runId: string;
 }
 
 interface NetworkFinishPayload {
