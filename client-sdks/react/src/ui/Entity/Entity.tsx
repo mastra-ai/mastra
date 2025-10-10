@@ -12,7 +12,6 @@ export interface EntityProps extends React.ComponentPropsWithoutRef<'div'> {
   disabled?: boolean;
 }
 
-export const EntityClass = twMerge('mastra:space-y-2');
 export const Entity = ({
   className,
   variant = 'initial',
@@ -24,7 +23,7 @@ export const Entity = ({
 
   return (
     <EntityProvider value={{ expanded, setExpanded, variant, disabled }}>
-      <div className={className || EntityClass} {...props} />
+      <div className={className} {...props} />
     </EntityProvider>
   );
 };

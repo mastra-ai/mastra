@@ -1,7 +1,7 @@
 import { twMerge } from 'tailwind-merge';
 
 export const ToolApprovalClass = twMerge(
-  'mastra:rounded-lg mastra:border mastra:border-border1 mastra:max-w-1/2',
+  'mastra:rounded-lg mastra:border mastra:border-border1 mastra:max-w-1/2 mastra:mt-2',
   'mastra:bg-surface3 mastra:text-text6',
 );
 
