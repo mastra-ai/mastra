@@ -11,26 +11,31 @@ import type {
 } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
+import type { TableMapConfig } from '../utils';
 import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
 export class ObservabilityPG extends ObservabilityStorage {
   public client: IDatabase<{}>;
   private operations: StoreOperationsPG;
   private schema?: string;
+  private tableMap: TableMapConfig;
 
   constructor({
     client,
     operations,
     schema,
+    tableMap,
   }: {
     client: IDatabase<{}>;
     operations: StoreOperationsPG;
     schema?: string;
+    tableMap?: TableMapConfig;
   }) {
     super();
     this.client = client;
     this.operations = operations;
     this.schema = schema;
+    this.tableMap = tableMap || {};
   }
 
   public override get aiTracingStrategy(): {
@@ -81,6 +86,7 @@ export class ObservabilityPG extends ObservabilityStorage {
       const tableName = getTableName({
         indexName: TABLE_AI_SPANS,
         schemaName: getSchemaName(this.schema),
+        tableMap: this.tableMap,
       });
 
       const spans = await this.client.manyOrNone<AISpanRecord>(
@@ -361,6 +367,7 @@ export class ObservabilityPG extends ObservabilityStorage {
       const tableName = getTableName({
         indexName: TABLE_AI_SPANS,
         schemaName: getSchemaName(this.schema),
+        tableMap: this.tableMap,
       });
 
       const placeholders = args.traceIds.map((_, i) => `$${i + 1}`).join(', ');

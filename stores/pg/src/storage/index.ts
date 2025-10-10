@@ -35,12 +35,15 @@ import { ScoresPG } from './domains/scores';
 import { TracesPG } from './domains/traces';
 import { WorkflowsPG } from './domains/workflows';
 
-export type { CreateIndexOptions, IndexInfo } from '@mastra/core/storage';
+export type { CreateIndexOptions, IndexInfo, TABLE_NAMES } from '@mastra/core/storage';
+
+export type TableMapConfig = Partial<Record<TABLE_NAMES, string>>;
 
 export type PostgresConfig = {
   schemaName?: string;
   max?: number;
   idleTimeoutMillis?: number;
+  tableMap?: TableMapConfig;
 } & (
   | {
       host: string;
@@ -64,6 +67,7 @@ export class PostgresStore extends MastraStorage {
   #config: PostgresConfig;
   private schema: string;
   private isConnected: boolean = false;
+  private tableMap: TableMapConfig;
 
   stores: StorageDomains;
 
@@ -122,12 +126,14 @@ export class PostgresStore extends MastraStorage {
       }
       super({ name: 'PostgresStore' });
       this.schema = config.schemaName || 'public';
+      this.tableMap = config.tableMap || {};
       if (isConnectionStringConfig(config)) {
         this.#config = {
           connectionString: config.connectionString,
           max: config.max,
           idleTimeoutMillis: config.idleTimeoutMillis,
           ssl: config.ssl,
+          tableMap: config.tableMap,
         };
       } else if (isCloudSqlConfig(config)) {
         // Cloud SQL connector config
@@ -135,6 +141,7 @@ export class PostgresStore extends MastraStorage {
           ...config,
           max: config.max,
           idleTimeoutMillis: config.idleTimeoutMillis,
+          tableMap: config.tableMap,
         };
       } else if (isHostConfig(config)) {
         this.#config = {
@@ -146,6 +153,7 @@ export class PostgresStore extends MastraStorage {
           ssl: config.ssl,
           max: config.max,
           idleTimeoutMillis: config.idleTimeoutMillis,
+          tableMap: config.tableMap,
         };
       } else {
         // This should never happen due to validation above, but included for completeness
@@ -176,13 +184,13 @@ export class PostgresStore extends MastraStorage {
       this.#pgp = pgPromise();
       this.#db = this.#pgp(this.#config as any);
 
-      const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema });
-      const scores = new ScoresPG({ client: this.#db, operations, schema: this.schema });
-      const traces = new TracesPG({ client: this.#db, operations, schema: this.schema });
-      const workflows = new WorkflowsPG({ client: this.#db, operations, schema: this.schema });
-      const legacyEvals = new LegacyEvalsPG({ client: this.#db, schema: this.schema });
-      const memory = new MemoryPG({ client: this.#db, schema: this.schema, operations });
-      const observability = new ObservabilityPG({ client: this.#db, operations, schema: this.schema });
+      const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema, tableMap: this.tableMap });
+      const scores = new ScoresPG({ client: this.#db, operations, schema: this.schema, tableMap: this.tableMap });
+      const traces = new TracesPG({ client: this.#db, operations, schema: this.schema, tableMap: this.tableMap });
+      const workflows = new WorkflowsPG({ client: this.#db, operations, schema: this.schema, tableMap: this.tableMap });
+      const legacyEvals = new LegacyEvalsPG({ client: this.#db, schema: this.schema, tableMap: this.tableMap });
+      const memory = new MemoryPG({ client: this.#db, schema: this.schema, operations, tableMap: this.tableMap });
+      const observability = new ObservabilityPG({ client: this.#db, operations, schema: this.schema, tableMap: this.tableMap });
 
       this.stores = {
         operations,

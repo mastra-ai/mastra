@@ -3,6 +3,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
+import type { TableMapConfig } from '../utils';
 import { getTableName } from '../utils';
 
 function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
@@ -29,20 +30,24 @@ export class WorkflowsPG extends WorkflowsStorage {
   public client: IDatabase<{}>;
   private operations: StoreOperationsPG;
   private schema: string;
+  private tableMap: TableMapConfig;
 
   constructor({
     client,
     operations,
     schema,
+    tableMap,
   }: {
     client: IDatabase<{}>;
     operations: StoreOperationsPG;
     schema: string;
+    tableMap?: TableMapConfig;
   }) {
     super();
     this.client = client;
     this.operations = operations;
     this.schema = schema;
+    this.tableMap = tableMap || {};
   }
 
   updateWorkflowResults(
@@ -96,7 +101,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     try {
       const now = new Date().toISOString();
       await this.client.none(
-        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
+        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema, tableMap: this.tableMap })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
                  SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
@@ -168,7 +173,7 @@ export class WorkflowsPG extends WorkflowsStorage {
 
       // Get results
       const query = `
-          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })}
+          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema, tableMap: this.tableMap })}
           ${whereClause}
           ORDER BY "createdAt" DESC LIMIT 1
         `;
@@ -252,7 +257,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       // Only get total count when using pagination
       if (limit !== undefined && offset !== undefined) {
         const countResult = await this.client.one(
-          `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} ${whereClause}`,
+          `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema, tableMap: this.tableMap })} ${whereClause}`,
           values,
         );
         total = Number(countResult.count);
@@ -260,7 +265,7 @@ export class WorkflowsPG extends WorkflowsStorage {
 
       // Get results
       const query = `
-          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })}
+          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema, tableMap: this.tableMap })}
           ${whereClause}
           ORDER BY "createdAt" DESC
           ${limit !== undefined && offset !== undefined ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}

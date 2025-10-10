@@ -2,12 +2,23 @@ import type { PaginationArgs, StorageColumn, TABLE_NAMES } from '@mastra/core/st
 import { TABLE_SCHEMAS } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
+export type TableMapConfig = Partial<Record<TABLE_NAMES, string>>;
+
 export function getSchemaName(schema?: string) {
   return schema ? `"${parseSqlIdentifier(schema, 'schema name')}"` : undefined;
 }
 
-export function getTableName({ indexName, schemaName }: { indexName: string; schemaName?: string }) {
-  const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+export function getTableName({
+  indexName,
+  schemaName,
+  tableMap,
+}: {
+  indexName: string;
+  schemaName?: string;
+  tableMap?: TableMapConfig;
+}) {
+  const actualTableName = tableMap?.[indexName as TABLE_NAMES] || indexName;
+  const parsedIndexName = parseSqlIdentifier(actualTableName, 'index name');
   const quotedIndexName = `"${parsedIndexName}"`;
   const quotedSchemaName = schemaName;
   return quotedSchemaName ? `${quotedSchemaName}.${quotedIndexName}` : quotedIndexName;
