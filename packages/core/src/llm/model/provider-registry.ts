@@ -404,7 +404,7 @@ const autoRefreshEnabled =
   process.env.MASTRA_AUTO_REFRESH_PROVIDERS === 'true' ||
   (process.env.MASTRA_AUTO_REFRESH_PROVIDERS !== 'false' && isDev);
 
-if (autoRefreshEnabled && isDev) {
+if (autoRefreshEnabled) {
   // console.debug('[GatewayRegistry] Auto-refresh enabled (dev mode)');
   GatewayRegistry.getInstance().startAutoRefresh();
 }
