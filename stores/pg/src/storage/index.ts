@@ -24,9 +24,9 @@ import type {
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import type { ClientConfig } from 'pg';
 import pgPromise from 'pg-promise';
-import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
+import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
+import type { PostgresStoreConfig } from '../shared/config';
 import { LegacyEvalsPG } from './domains/legacy-evals';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
@@ -37,89 +37,19 @@ import { WorkflowsPG } from './domains/workflows';
 
 export type { CreateIndexOptions, IndexInfo } from '@mastra/core/storage';
 
-export type PostgresConfig = {
-  schemaName?: string;
-  max?: number;
-  idleTimeoutMillis?: number;
-} & (
-  | {
-      host: string;
-      port: number;
-      database: string;
-      user: string;
-      password: string;
-      ssl?: boolean | ISSLConfig;
-    }
-  | {
-      connectionString: string;
-      ssl?: boolean | ISSLConfig;
-    }
-  // Support Cloud SQL Connector & pg ClientConfig
-  | ClientConfig
-);
-
 export class PostgresStore extends MastraStorage {
   #db?: pgPromise.IDatabase<{}>;
   #pgp?: pgPromise.IMain;
-  #config: PostgresConfig;
+  #config: PostgresStoreConfig;
   private schema: string;
   private isConnected: boolean = false;
 
   stores: StorageDomains;
 
-  constructor(config: PostgresConfig) {
-    // Type guards for better type safety
-    const isConnectionStringConfig = (
-      cfg: PostgresConfig,
-    ): cfg is PostgresConfig & { connectionString: string; ssl?: boolean | ISSLConfig } => {
-      return 'connectionString' in cfg;
-    };
-
-    const isHostConfig = (
-      cfg: PostgresConfig,
-    ): cfg is PostgresConfig & {
-      host: string;
-      port: number;
-      database: string;
-      user: string;
-      password: string;
-      ssl?: boolean | ISSLConfig;
-    } => {
-      return 'host' in cfg && 'database' in cfg && 'user' in cfg && 'password' in cfg;
-    };
-
-    const isCloudSqlConfig = (cfg: PostgresConfig): cfg is PostgresConfig & ClientConfig => {
-      return 'stream' in cfg || ('password' in cfg && typeof cfg.password === 'function');
-    };
-
+  constructor(config: PostgresStoreConfig) {
     // Validation: connectionString or host/database/user/password must not be empty
     try {
-      if (isConnectionStringConfig(config)) {
-        if (
-          !config.connectionString ||
-          typeof config.connectionString !== 'string' ||
-          config.connectionString.trim() === ''
-        ) {
-          throw new Error(
-            'PostgresStore: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.',
-          );
-        }
-      } else if (isCloudSqlConfig(config)) {
-        // valid connector config; no-op
-      } else if (isHostConfig(config)) {
-        const required = ['host', 'database', 'user', 'password'] as const;
-        for (const key of required) {
-          if (!config[key] || typeof config[key] !== 'string' || config[key].trim() === '') {
-            throw new Error(
-              `PostgresStore: ${key} must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.`,
-            );
-          }
-        }
-      } else {
-        throw new Error(
-          'PostgresStore: invalid config. Provide either {connectionString}, {host,port,database,user,password}, or a pg ClientConfig (e.g., Cloud SQL connector with `stream`).',
-        );
-      }
+      validateConfig('PostgresStore', config);
       super({ name: 'PostgresStore' });
       this.schema = config.schemaName || 'public';
       if (isConnectionStringConfig(config)) {
