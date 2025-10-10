@@ -1306,8 +1306,7 @@ describe('AI Tracing Integration Tests', () => {
     },
   );
 
-  // Only test VNext methods for structuredOutput
-  describe.each(agentMethods.filter(m => m.name === 'stream'))(
+  describe.each(agentMethods.filter(m => m.name === 'stream' || m.name === 'generate'))(
     'should trace agent using structuredOutput format using $name',
     ({ method, model }) => {
       it(`should trace spans correctly`, async () => {
@@ -1403,7 +1402,7 @@ describe('AI Tracing Integration Tests', () => {
     },
   );
 
-  describe.each(agentMethods.filter(m => m.name === 'stream'))(
+  describe.each(agentMethods.filter(m => m.name === 'stream' || m.name === 'generate'))(
     'agent with input and output processors using $name',
     ({ method, model }) => {
       it('should trace all processor spans including internal agent spans', async () => {
