@@ -31,23 +31,58 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
   private gateway: MastraModelGateway;
 
   constructor(config: ModelRouterModelId | OpenAICompatibleConfig) {
-    if (typeof config === `string`) config = { id: config };
+    // Normalize config to always have an 'id' field for routing
+    let normalizedConfig: {
+      id: `${string}/${string}`;
+      url?: string;
+      apiKey?: string;
+      headers?: Record<string, string>;
+    };
 
-    const parsedConfig: OpenAICompatibleConfig & { routerId: string } = { ...config, routerId: config.id };
+    if (typeof config === 'string') {
+      normalizedConfig = { id: config as `${string}/${string}` };
+    } else if ('providerId' in config && 'modelId' in config) {
+      // Convert providerId/modelId to id format
+      normalizedConfig = {
+        id: `${config.providerId}/${config.modelId}` as `${string}/${string}`,
+        url: config.url,
+        apiKey: config.apiKey,
+        headers: config.headers,
+      };
+    } else {
+      // config has 'id' field
+      normalizedConfig = {
+        id: config.id,
+        url: config.url,
+        apiKey: config.apiKey,
+        headers: config.headers,
+      };
+    }
 
-    this.gateway = findGatewayForModel(config.id, gateways);
+    const parsedConfig: {
+      id: `${string}/${string}`;
+      routerId: string;
+      url?: string;
+      apiKey?: string;
+      headers?: Record<string, string>;
+    } = {
+      ...normalizedConfig,
+      routerId: normalizedConfig.id,
+    };
+
+    // Resolve gateway once using the normalized ID
+    this.gateway = findGatewayForModel(normalizedConfig.id, gateways);
     // Extract provider from id if present
-    const parsed = parseModelRouterId(config.id, this.gateway.prefix);
+    const parsed = parseModelRouterId(normalizedConfig.id, this.gateway.prefix);
 
     this.provider = parsed.providerId || 'openai-compatible';
 
-    if (parsed.providerId && parsed.modelId !== config.id) {
-      parsedConfig.id = parsed.modelId;
+    if (parsed.providerId && parsed.modelId !== normalizedConfig.id) {
+      parsedConfig.id = parsed.modelId as `${string}/${string}`;
     }
 
     this.modelId = parsedConfig.id;
     this.config = parsedConfig;
-    this.gateway = findGatewayForModel(parsedConfig.routerId, gateways);
   }
 
   async doGenerate(): Promise<never> {

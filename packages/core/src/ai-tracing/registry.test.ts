@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ConsoleLogger, LogLevel } from '../logger';
 import { CloudExporter, DefaultExporter } from './exporters';
 import {
   clearAITracingRegistry,
@@ -784,11 +785,13 @@ describe('AI Tracing Registry', () => {
       delete process.env.MASTRA_CLOUD_ACCESS_TOKEN;
       vi.unstubAllEnvs(); // Make sure mock is cleared
 
+      const logger = new ConsoleLogger({ level: LogLevel.DEBUG });
+
       // Spy on console to check for combined warning message
-      const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+      const debugSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       // CloudExporter should not throw, but log warning instead
-      const exporter = new CloudExporter();
+      const exporter = new CloudExporter({ logger });
 
       // Verify combined warning message was logged
       expect(debugSpy).toHaveBeenCalledWith(
@@ -818,7 +821,7 @@ describe('AI Tracing Registry', () => {
       await expect(exporter.exportEvent(event)).resolves.not.toThrow();
 
       // Restore mocks
-      warnSpy.mockRestore();
+      debugSpy.mockRestore();
       if (originalToken) {
         process.env.MASTRA_CLOUD_ACCESS_TOKEN = originalToken;
       }
