@@ -219,7 +219,7 @@ export class AzureVoice extends MastraVoice {
       const chunkSize = 4096;
       for (let i = 0; i < audioData.length; i += chunkSize) {
         const chunk = audioData.slice(i, i + chunkSize);
-        pushStream.write(chunk);
+        pushStream.write(chunk.buffer);
       }
       pushStream.close();
 
