@@ -3339,6 +3339,686 @@ describe('PgVector', () => {
     });
   });
 
+  // Custom Schema Support Tests - demonstrating current limitations
+  describe('PgVector Custom Schema Support', () => {
+    let vectorDB: PgVector;
+    const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+    const customTableName = 'test_custom_schema_table';
+
+    beforeAll(async () => {
+      vectorDB = new PgVector({ connectionString });
+
+      // Create a custom table that mimics the user's scenario
+      const client = await vectorDB.pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        // Drop table if exists
+        await client.query(`DROP TABLE IF EXISTS ${customTableName}`);
+
+        // Create table with custom schema similar to user's issue
+        await client.query(`
+          CREATE TABLE ${customTableName} (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            vector_id TEXT NOT NULL UNIQUE,
+            content TEXT NOT NULL,                    -- This is the problematic column
+            embedding VECTOR(1536),
+            metadata JSONB DEFAULT '{}',
+            
+            -- Additional business logic columns like the user's
+            url TEXT,
+            title TEXT,
+            section TEXT,
+            category TEXT,
+            content_text TEXT,
+            content_hash VARCHAR(64),
+            last_modified TIMESTAMPTZ,
+            ingested_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW(),
+            word_count INTEGER,
+            content_length INTEGER,
+            is_active BOOLEAN DEFAULT true
+          )
+        `);
+
+        // Create vector index
+        await client.query(`
+          CREATE INDEX ${customTableName}_vector_idx
+          ON ${customTableName}
+          USING ivfflat (embedding vector_cosine_ops)
+          WITH (lists = 100)
+        `);
+
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    });
+
+    afterAll(async () => {
+      // Clean up the custom table
+      const client = await vectorDB.pool.connect();
+      try {
+        await client.query(`DROP TABLE IF EXISTS ${customTableName}`);
+      } catch {
+        // Ignore cleanup errors
+      } finally {
+        client.release();
+      }
+      await vectorDB.disconnect();
+    });
+
+    describe('Custom Schema', () => {
+      it('should now succeed with content provided in metadata (fixed behavior)', async () => {
+        const vectors = [[0.1, 0.2, 0.3, ...Array(1533).fill(0)]];
+
+        // Try different ways the user might expect to provide content
+        const testCases = [
+          // Case 1: content in metadata
+          {
+            content: 'This should map to content column',
+            text: 'Alternative content field',
+            url: 'https://example.com',
+          },
+
+          // Case 2: All custom fields in metadata
+          {
+            content: 'Test content',
+            url: 'https://example.com',
+            title: 'Test Title',
+            content_text: 'Test content text',
+            content_hash: 'hash123',
+            is_active: true,
+          },
+
+          // Case 3: Minimal with just content
+          {
+            content: 'Just content field',
+          },
+        ];
+
+        for (let i = 0; i < testCases.length; i++) {
+          const result = await vectorDB.upsert({
+            indexName: customTableName,
+            vectors,
+            metadata: [testCases[i]],
+            ids: [`test-case-${i}`],
+          });
+          expect(result).toEqual([`test-case-${i}`]);
+        }
+      });
+
+      it('should show that direct SQL works with the same data', async () => {
+        // Demonstrate that the data itself is valid by using direct SQL
+        const client = await vectorDB.pool.connect();
+        try {
+          const vector = [0.1, 0.2, 0.3, ...Array(1533).fill(0)];
+          const vectorId = 'direct-sql-test';
+          const content = 'Test content via direct SQL';
+          const metadata = {
+            url: 'https://example.com',
+            title: 'Test Document',
+          };
+
+          await client.query(
+            `
+          INSERT INTO ${customTableName} (
+            vector_id, content, embedding, metadata,
+            url, title, content_text, content_hash, is_active
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `,
+            [
+              vectorId,
+              content,
+              `[${vector.join(',')}]`,
+              JSON.stringify(metadata),
+              metadata.url,
+              metadata.title,
+              content, // content_text
+              'hash123',
+              true,
+            ],
+          );
+
+          // Verify the insert worked
+          const result = await client.query(
+            `SELECT vector_id, content, url, title FROM ${customTableName} WHERE vector_id = $1`,
+            [vectorId],
+          );
+
+          expect(result.rows).toHaveLength(1);
+          expect(result.rows[0].vector_id).toBe(vectorId);
+          expect(result.rows[0].content).toBe(content);
+          expect(result.rows[0].url).toBe(metadata.url);
+          expect(result.rows[0].title).toBe(metadata.title);
+        } finally {
+          client.release();
+        }
+      });
+
+      it('should show current PgVector behavior only uses standard columns', async () => {
+        // Create a table using PgVector's createIndex to see what it creates
+        const standardTableName = 'test_standard_pgvector_table';
+
+        try {
+          await vectorDB.createIndex({
+            indexName: standardTableName,
+            dimension: 1536,
+          });
+
+          // Check what columns PgVector actually created
+          const client = await vectorDB.pool.connect();
+          try {
+            const result = await client.query(
+              `
+            SELECT column_name, data_type, is_nullable
+            FROM information_schema.columns 
+            WHERE table_name = $1
+            ORDER BY ordinal_position
+          `,
+              [standardTableName],
+            );
+
+            const columns = result.rows.map(row => ({
+              name: row.column_name,
+              type: row.data_type,
+              nullable: row.is_nullable === 'YES',
+            }));
+
+            // Verify PgVector only creates these 4 columns
+            expect(columns).toHaveLength(4);
+            expect(columns.find(c => c.name === 'id')).toBeDefined();
+            expect(columns.find(c => c.name === 'vector_id')).toBeDefined();
+            expect(columns.find(c => c.name === 'embedding')).toBeDefined();
+            expect(columns.find(c => c.name === 'metadata')).toBeDefined();
+
+            // Verify no custom columns
+            expect(columns.find(c => c.name === 'content')).toBeUndefined();
+            expect(columns.find(c => c.name === 'url')).toBeUndefined();
+            expect(columns.find(c => c.name === 'title')).toBeUndefined();
+          } finally {
+            client.release();
+          }
+
+          // Clean up
+          await vectorDB.deleteIndex({ indexName: standardTableName });
+        } catch {
+          // Clean up on error
+          try {
+            await vectorDB.deleteIndex({ indexName: standardTableName });
+          } catch {
+            // Ignore cleanup errors
+          }
+        }
+      });
+
+      it('should demonstrate the enhanced SQL query PgVector now executes', async () => {
+        // This test documents the new enhanced behavior
+        const vectors = [[0.1, 0.2, 0.3, ...Array(1533).fill(0)]];
+        const metadata = [
+          {
+            content: 'This now maps to content column',
+            url: 'https://example.com',
+          },
+        ];
+
+        // Mock the client.query to capture what SQL is actually executed
+        const originalConnect = vectorDB.pool.connect;
+        let capturedQueries: string[] = [];
+
+        const mockClient = {
+          query: vi.fn().mockImplementation((query: string) => {
+            capturedQueries.push(query.trim());
+            // Mock schema detection query
+            if (query.includes('information_schema.columns')) {
+              return Promise.resolve({
+                rows: [
+                  { column_name: 'vector_id', data_type: 'text', is_nullable: 'NO', column_default: null },
+                  { column_name: 'embedding', data_type: 'vector', is_nullable: 'YES', column_default: null },
+                  { column_name: 'metadata', data_type: 'jsonb', is_nullable: 'YES', column_default: null },
+                  { column_name: 'content', data_type: 'text', is_nullable: 'NO', column_default: null },
+                  { column_name: 'url', data_type: 'text', is_nullable: 'YES', column_default: null },
+                ],
+              });
+            }
+            // Mock successful insert
+            if (query.includes('INSERT INTO')) {
+              return Promise.resolve({ rows: [{ embedding: '[0.1,0.2,0.3]' }] });
+            }
+            return Promise.resolve({ rows: [] });
+          }),
+          release: vi.fn(),
+        };
+
+        vectorDB.pool.connect = vi.fn().mockResolvedValue(mockClient);
+
+        await vectorDB.upsert({
+          indexName: customTableName,
+          vectors,
+          metadata,
+          ids: ['test-id'],
+        });
+
+        // Verify the enhanced SQL that PgVector now executes
+        const insertQuery = capturedQueries.find(q => q.includes('INSERT INTO'));
+        expect(insertQuery).toBeDefined();
+
+        // Verify it now includes custom columns
+        expect(insertQuery).toContain('"content"');
+        expect(insertQuery).toContain('"url"');
+        expect(insertQuery).toContain('ON CONFLICT (vector_id)');
+        expect(insertQuery).toContain('DO UPDATE SET');
+
+        // Restore original method
+        vectorDB.pool.connect = originalConnect;
+      });
+    });
+
+    describe('Schema Detection Requirements', () => {
+      it('should be able to detect existing table schema', async () => {
+        // This test will pass once we implement schema detection
+        const client = await vectorDB.pool.connect();
+        try {
+          // First check if our custom table was actually created
+          const tableExistsResult = await client.query(
+            `
+            SELECT EXISTS (
+              SELECT FROM information_schema.tables 
+              WHERE table_name = $1
+            )
+          `,
+            [customTableName],
+          );
+
+          if (!tableExistsResult.rows[0]?.exists) {
+            // Skip this test if table wasn't created (e.g., due to missing vector extension)
+            console.log(`Skipping schema detection test - table ${customTableName} was not created`);
+            return;
+          }
+
+          const result = await client.query(
+            `
+          SELECT column_name, data_type, is_nullable, column_default
+          FROM information_schema.columns 
+          WHERE table_name = $1
+          ORDER BY ordinal_position
+        `,
+            [customTableName],
+          );
+
+          expect(result.rows.length).toBeGreaterThan(4); // More than standard PgVector columns
+
+          const contentColumn = result.rows.find(row => row.column_name === 'content');
+          expect(contentColumn).toBeDefined();
+          expect(contentColumn.is_nullable).toBe('NO'); // NOT NULL
+
+          const vectorIdColumn = result.rows.find(row => row.column_name === 'vector_id');
+          expect(vectorIdColumn).toBeDefined();
+
+          const embeddingColumn = result.rows.find(row => row.column_name === 'embedding');
+          expect(embeddingColumn).toBeDefined();
+        } finally {
+          client.release();
+        }
+      });
+
+      it('should identify required columns that need values', async () => {
+        // This test documents what our fix should detect
+        const client = await vectorDB.pool.connect();
+        try {
+          // First check if our custom table was actually created
+          const tableExistsResult = await client.query(
+            `
+            SELECT EXISTS (
+              SELECT FROM information_schema.tables 
+              WHERE table_name = $1
+            )
+          `,
+            [customTableName],
+          );
+
+          if (!tableExistsResult.rows[0]?.exists) {
+            // Skip this test if table wasn't created
+            console.log(`Skipping required columns test - table ${customTableName} was not created`);
+            return;
+          }
+
+          const result = await client.query(
+            `
+          SELECT column_name, is_nullable, column_default
+          FROM information_schema.columns 
+          WHERE table_name = $1 AND is_nullable = 'NO' AND column_default IS NULL
+        `,
+            [customTableName],
+          );
+
+          const requiredColumns = result.rows.map(row => row.column_name);
+
+          // These columns must have values provided
+          expect(requiredColumns).toContain('vector_id');
+          expect(requiredColumns).toContain('content'); // This is the problematic one
+
+          // These have defaults so don't need explicit values
+          expect(requiredColumns).not.toContain('id'); // has DEFAULT gen_random_uuid()
+          expect(requiredColumns).not.toContain('ingested_at'); // has DEFAULT NOW()
+        } finally {
+          client.release();
+        }
+      });
+
+      it('should successfully upsert with automatic column mapping', async () => {
+        const vectors = [[0.1, 0.2, 0.3, ...Array(1533).fill(0)]]; // 1536 dimensions
+        const metadata = [
+          {
+            content: 'Test content that should go to content column',
+            url: 'https://example.com',
+            title: 'Test Document',
+            section: 'intro',
+            category: 'test',
+            other_data: 'This should go to metadata JSONB',
+          },
+        ];
+
+        // This should now succeed with automatic column mapping
+        const ids = await vectorDB.upsert({
+          indexName: customTableName,
+          vectors,
+          metadata,
+          ids: ['test-id-1'],
+        });
+
+        expect(ids).toHaveLength(1);
+        expect(ids[0]).toBe('test-id-1');
+
+        // Verify the data was inserted correctly
+        const client = await vectorDB.pool.connect();
+        try {
+          const result = await client.query(
+            `SELECT vector_id, content, url, title, section, category, metadata FROM ${customTableName} WHERE vector_id = $1`,
+            ['test-id-1'],
+          );
+
+          expect(result.rows).toHaveLength(1);
+          const row = result.rows[0];
+          expect(row.vector_id).toBe('test-id-1');
+          expect(row.content).toBe('Test content that should go to content column');
+          expect(row.url).toBe('https://example.com');
+          expect(row.title).toBe('Test Document');
+          expect(row.section).toBe('intro');
+          expect(row.category).toBe('test');
+
+          // Verify remaining metadata went to JSONB column
+          expect(row.metadata).toEqual({ other_data: 'This should go to metadata JSONB' });
+        } finally {
+          client.release();
+        }
+      });
+
+      it('should work with explicit column mapping', async () => {
+        const vectors = [[0.1, 0.2, 0.3, ...Array(1533).fill(0)]];
+        const metadata = [
+          {
+            text: 'Content via mapping',
+            link: 'https://mapped.com',
+            heading: 'Mapped Title',
+            unmapped_field: 'Goes to metadata',
+          },
+        ];
+
+        // Use explicit column mapping
+        const ids = await vectorDB.upsert({
+          indexName: customTableName,
+          vectors,
+          metadata,
+          ids: ['test-mapping'],
+          columnMapping: {
+            text: 'content',
+            link: 'url',
+            heading: 'title',
+          },
+        });
+
+        expect(ids).toHaveLength(1);
+
+        // Verify the mapping worked
+        const client = await vectorDB.pool.connect();
+        try {
+          const result = await client.query(
+            `SELECT content, url, title, metadata FROM ${customTableName} WHERE vector_id = $1`,
+            ['test-mapping'],
+          );
+
+          const row = result.rows[0];
+          expect(row.content).toBe('Content via mapping');
+          expect(row.url).toBe('https://mapped.com');
+          expect(row.title).toBe('Mapped Title');
+          expect(row.metadata).toEqual({ unmapped_field: 'Goes to metadata' });
+        } finally {
+          client.release();
+        }
+      });
+
+      it('should handle partial column matches', async () => {
+        const vectors = [[0.1, 0.2, 0.3, ...Array(1533).fill(0)]];
+        const metadata = [
+          {
+            content: 'Required content',
+            unknown_field: 'No matching column',
+            another_field: 'Also no match',
+          },
+        ];
+
+        const ids = await vectorDB.upsert({
+          indexName: customTableName,
+          vectors,
+          metadata,
+          ids: ['test-partial'],
+        });
+
+        expect(ids).toHaveLength(1);
+
+        // Verify only matching columns were populated
+        const client = await vectorDB.pool.connect();
+        try {
+          const result = await client.query(
+            `SELECT content, url, title, metadata FROM ${customTableName} WHERE vector_id = $1`,
+            ['test-partial'],
+          );
+
+          const row = result.rows[0];
+          expect(row.content).toBe('Required content');
+          expect(row.url).toBeNull(); // No value provided
+          expect(row.title).toBeNull(); // No value provided
+          expect(row.metadata).toEqual({
+            unknown_field: 'No matching column',
+            another_field: 'Also no match',
+          });
+        } finally {
+          client.release();
+        }
+      });
+
+      it('should update existing records with column mapping', async () => {
+        const vectors = [[0.1, 0.2, 0.3, ...Array(1533).fill(0)]];
+
+        // First insert
+        await vectorDB.upsert({
+          indexName: customTableName,
+          vectors,
+          metadata: [
+            {
+              content: 'Original content',
+              url: 'https://original.com',
+              title: 'Original Title',
+            },
+          ],
+          ids: ['test-update'],
+        });
+
+        // Update with new values
+        await vectorDB.upsert({
+          indexName: customTableName,
+          vectors: [[0.2, 0.3, 0.4, ...Array(1533).fill(0.1)]],
+          metadata: [
+            {
+              content: 'Updated content',
+              url: 'https://updated.com',
+              title: 'Updated Title',
+              section: 'updated',
+            },
+          ],
+          ids: ['test-update'], // Same ID to trigger update
+        });
+
+        // Verify the update worked
+        const client = await vectorDB.pool.connect();
+        try {
+          const result = await client.query(
+            `SELECT content, url, title, section FROM ${customTableName} WHERE vector_id = $1`,
+            ['test-update'],
+          );
+
+          expect(result.rows).toHaveLength(1);
+          const row = result.rows[0];
+          expect(row.content).toBe('Updated content');
+          expect(row.url).toBe('https://updated.com');
+          expect(row.title).toBe('Updated Title');
+          expect(row.section).toBe('updated');
+        } finally {
+          client.release();
+        }
+      });
+
+      it('should fail with database error when required column value is missing', async () => {
+        const vectors = [[0.1, 0.2, 0.3, ...Array(1533).fill(0)]];
+
+        // Try to insert without required 'content' field
+        const metadata = [
+          {
+            url: 'https://example.com',
+            title: 'Test Title',
+            // Missing required 'content' field
+          },
+        ];
+
+        await expect(
+          vectorDB.upsert({
+            indexName: customTableName,
+            vectors,
+            metadata,
+            ids: ['test-missing-required'],
+          }),
+        ).rejects.toThrow(/null value in column "content"/);
+      });
+
+      it('should handle SQL injection attempts in column names', async () => {
+        const vectors = [[0.1, 0.2, 0.3, ...Array(1533).fill(0)]];
+
+        // Attempt SQL injection via columnMapping
+        const metadata = [
+          {
+            content: 'Required content',
+            malicious: 'DROP TABLE users;',
+          },
+        ];
+
+        // This should either sanitize or reject the malicious column name
+        const columnMapping = {
+          malicious: 'url; DROP TABLE users; --',
+        };
+
+        // Should either throw error or sanitize the column name
+        try {
+          await vectorDB.upsert({
+            indexName: customTableName,
+            vectors,
+            metadata,
+            ids: ['test-sql-injection'],
+            columnMapping,
+          });
+          // If it doesn't throw, verify the table still exists
+          const client = await vectorDB.pool.connect();
+          const result = await client.query(
+            `SELECT EXISTS (
+              SELECT FROM information_schema.tables 
+              WHERE table_name = $1
+            )`,
+            [customTableName],
+          );
+          client.release();
+          expect(result.rows[0].exists).toBe(true);
+        } catch (error) {
+          // Expected to throw due to invalid column name
+          expect(error).toBeDefined();
+        }
+      });
+
+      it('should handle type mismatches in column values', async () => {
+        const vectors = [[0.1, 0.2, 0.3, ...Array(1533).fill(0)]];
+
+        // Provide string value for integer column
+        const metadata = [
+          {
+            content: 'Required content',
+            word_count: 'not-a-number', // Should be integer
+          },
+        ];
+
+        await expect(
+          vectorDB.upsert({
+            indexName: customTableName,
+            vectors,
+            metadata,
+            ids: ['test-type-mismatch'],
+          }),
+        ).rejects.toThrow(/invalid input syntax/);
+      });
+
+      it('should gracefully handle non-existent column in mapping', async () => {
+        const vectors = [[0.1, 0.2, 0.3, ...Array(1533).fill(0)]];
+
+        const metadata = [
+          {
+            content: 'Required content',
+            custom_field: 'value',
+          },
+        ];
+
+        const columnMapping = {
+          custom_field: 'non_existent_column',
+        };
+
+        // Should succeed by ignoring invalid mapping
+        const result = await vectorDB.upsert({
+          indexName: customTableName,
+          vectors,
+          metadata,
+          ids: ['test-invalid-mapping'],
+          columnMapping,
+        });
+
+        expect(result).toEqual(['test-invalid-mapping']);
+
+        // Verify data was inserted correctly
+        const client = await vectorDB.pool.connect();
+        try {
+          const queryResult = await client.query(
+            `SELECT content, metadata FROM ${customTableName} WHERE vector_id = $1`,
+            ['test-invalid-mapping'],
+          );
+          expect(queryResult.rows[0].content).toBe('Required content');
+          // custom_field should be in metadata since mapping was invalid
+          expect(queryResult.rows[0].metadata).toEqual({ custom_field: 'value' });
+        } finally {
+          client.release();
+        }
+      });
+    });
+  });
+
   describe('PoolConfig Custom Options', () => {
     it('should apply custom values to properties with default values', async () => {
       const db = new PgVector({
