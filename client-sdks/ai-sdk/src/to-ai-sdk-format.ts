@@ -46,8 +46,8 @@ export function toAISdkFormat(
     >;
   }
 
-  const agentReadable =
-    'fullStream' in (stream as any) ? (stream as MastraModelOutput).fullStream : (stream as ReadableStream<ChunkType>);
+  const agentReadable: ReadableStream<ChunkType> =
+    'fullStream' in stream ? (stream as MastraModelOutput).fullStream : (stream as ReadableStream<ChunkType>);
   return agentReadable.pipeThrough(AgentStreamToAISDKTransformer<any>()) as ReadableStream<
     InferUIMessageChunk<UIMessage>
   >;
