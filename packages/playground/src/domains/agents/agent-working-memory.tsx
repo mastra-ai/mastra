@@ -20,10 +20,10 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
     useWorkingMemory();
 
   // Get memory config to check if working memory is enabled
-  const { data: config } = useMemoryConfig(agentId);
-
+  const { data } = useMemoryConfig(agentId);
+  const config = data?.config;
   // Check if working memory is enabled
-  const isWorkingMemoryEnabled = config?.workingMemory?.enabled;
+  const isWorkingMemoryEnabled = Boolean(config?.workingMemory?.enabled);
 
   const { isCopied, handleCopy } = useCopyToClipboard({
     text: workingMemoryData ?? '',

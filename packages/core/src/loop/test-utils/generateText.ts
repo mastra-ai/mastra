@@ -45,6 +45,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         );
 
         const result = await generateText({
+          agentId: 'agent-id',
           models: createTestModels({
             stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
               { type: 'text-start', id: '1' },
@@ -162,6 +163,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     describe('result.text', () => {
       it('should generate text', async () => {
         const result = await generateText({
+          agentId: 'agent-id',
           models: createTestModels(),
           messageList: new MessageList(),
         });
@@ -174,6 +176,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     describe('result.reasoningText', () => {
       it('should contain reasoning string from model response', async () => {
         const result = await generateText({
+          agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
           messageList: new MessageList(),
         });
@@ -187,6 +190,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     describe('result.sources', () => {
       it('should contain sources', async () => {
         const result = await generateText({
+          agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
           messageList: new MessageList(),
         });
@@ -198,6 +202,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     describe('result.files', () => {
       it.todo('should contain files', async () => {
         const result = await generateText({
+          agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
           messageList: new MessageList(),
         });
@@ -290,6 +295,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
       it.todo('should add the reasoning from the model response to the step result', async () => {
         const result = await generateText({
+          agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
           messageList: new MessageList(),
           _internal: {
@@ -303,6 +309,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
       it.todo('should contain sources', async () => {
         const result = await generateText({
+          agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
           messageList: new MessageList(),
           _internal: {
@@ -318,6 +325,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
       // https://github.com/vercel/ai/blob/53569b8e0e5c958db0186009b83ce941a5bc91c1/packages/ai/src/generate-text/generate-text.ts#L540
       it.todo('should contain files', async () => {
         const result = await generateText({
+          agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
           messageList: new MessageList(),
           _internal: {
@@ -341,6 +349,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           'input',
         );
         const result = await generateText({
+          agentId: 'agent-id',
           models: [
             {
               maxRetries: 0,
@@ -448,6 +457,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           'input',
         );
         const result = await generateText({
+          agentId: 'agent-id',
           models: [
             {
               maxRetries: 0,
@@ -541,6 +551,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           'input',
         );
         const result = await generateText({
+          agentId: 'agent-id',
           models: [
             {
               maxRetries: 0,
@@ -583,6 +594,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         );
 
         const result = await generateText({
+          agentId: 'agent-id',
           models: [
             {
               maxRetries: 0,
@@ -616,6 +628,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           'input',
         );
         const result = await generateText({
+          agentId: 'agent-id',
           models: [
             {
               maxRetries: 0,
@@ -663,6 +676,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           'input',
         );
         const result = await generateText({
+          agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
           messageList,
         });
@@ -674,6 +688,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     describe('result.request', () => {
       it('should contain request body', async () => {
         const result = await generateText({
+          agentId: 'agent-id',
           models: [
             {
               maxRetries: 0,
@@ -706,6 +721,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     describe('result.response', () => {
       it('should contain response body and headers', async () => {
         const result = await generateText({
+          agentId: 'agent-id',
           models: [
             {
               maxRetries: 0,
@@ -757,6 +773,11 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               },
             ],
             "modelId": "test-response-model-id",
+            "modelMetadata": {
+              "modelId": "mock-model-id",
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
+            },
             "modelProvider": "mock-provider",
             "modelVersion": "v2",
             "timestamp": 1970-01-01T00:00:10.000Z,
@@ -797,6 +818,11 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               },
             ],
             "modelId": "test-response-model-id",
+            "modelMetadata": {
+              "modelId": "mock-model-id",
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
+            },
             "modelProvider": "mock-provider",
             "modelVersion": "v2",
             "timestamp": 1970-01-01T00:00:10.000Z,
@@ -2071,6 +2097,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         'user',
       );
       await generateText({
+        agentId: 'agent-id',
         models: [
           {
             id: 'test-model',

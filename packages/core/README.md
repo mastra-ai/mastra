@@ -116,6 +116,9 @@ const logger = new PinoLogger({
 
 ### Telemetry (`/telemetry`)
 
+Note: Telemetry is deprecated and will be removed on the Nov 4th release. Instead use AI Tracing.
+More info can be found here: https://github.com/mastra-ai/mastra/issues/8577 and here: https://mastra.ai/en/docs/observability/ai-tracing/overview
+
 Telemetry provides OpenTelemetry (Otel) integration for comprehensive monitoring of your AI systems. Track latency, success rates, and system health with distributed tracing and metrics collection.
 
 ```typescript

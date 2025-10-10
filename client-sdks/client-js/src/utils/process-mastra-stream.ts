@@ -35,6 +35,7 @@ async function sharedProcessMastraStream({
 
           try {
             const json = JSON.parse(data);
+
             await onChunk(json);
           } catch (error) {
             console.error('❌ JSON parse error:', error, 'Data:', data);

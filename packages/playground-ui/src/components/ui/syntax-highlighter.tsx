@@ -36,7 +36,7 @@ export const SyntaxHighlighter = ({
 
   return (
     <div className={clsx('rounded-md bg-surface4 p-1 font-mono relative', className)}>
-      <CopyButton content={formattedCode} className="absolute top-2 right-2 z-[9999]" />
+      <CopyButton content={formattedCode} className="absolute top-2 right-2 z-20" />
       <CodeMirror value={formattedCode} theme={theme} extensions={[jsonLanguage]} />
     </div>
   );

@@ -5,7 +5,7 @@ import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import { InternalSpans } from '../../ai-tracing';
 import type { TracingContext } from '../../ai-tracing';
-import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
@@ -74,8 +74,11 @@ export interface PIIDetectionResult {
  * Configuration options for PIIDetector
  */
 export interface PIIDetectorOptions {
-  /** Model configuration for the detection agent */
-  model: MastraLanguageModel;
+  /**
+   * Model configuration for the detection agent
+   * Supports magic strings like "openai/gpt-4o", config objects, or direct LanguageModel instances
+   */
+  model: MastraModelConfig;
 
   /**
    * PII types to detect.
@@ -268,15 +271,17 @@ export class PIIDetector implements Processor {
       const model = await this.detectionAgent.getModel();
       let response;
       if (model.specificationVersion === 'v2') {
-        response = await this.detectionAgent.generateVNext(prompt, {
-          output: schema,
+        response = await this.detectionAgent.generate(prompt, {
+          structuredOutput: {
+            schema,
+          },
           modelSettings: {
             temperature: 0,
           },
           tracingContext,
         });
       } else {
-        response = await this.detectionAgent.generate(prompt, {
+        response = await this.detectionAgent.generateLegacy(prompt, {
           output: schema,
           temperature: 0,
           tracingContext,

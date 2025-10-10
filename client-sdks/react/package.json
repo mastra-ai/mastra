@@ -1,7 +1,16 @@
 {
   "name": "@mastra/react",
-  "version": "0.0.1-alpha.1",
-  "private": true,
+  "version": "0.0.5",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "client-sdks/react"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "homepage": "https://mastra.ai",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.cjs.js",
   "module": "dist/index.es.js",
@@ -15,7 +24,8 @@
     "test:coverage": "vitest --coverage"
   },
   "files": [
-    "src"
+    "dist",
+    "CHANGELOG.md"
   ],
   "dependencies": {
     "@mastra/client-js": "workspace:*",
@@ -30,7 +40,7 @@
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.3",
     "@vitest/ui": "^3.2.4",
-    "eslint": "^9.35.0",
+    "eslint": "^9.36.0",
     "rollup-plugin-node-externals": "^8.0.1",
     "typescript": "^5.8.3",
     "vite": "^7.1.7",

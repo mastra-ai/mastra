@@ -74,7 +74,7 @@ if (result.status === "保留") {
     },
     {
       name: "stream.result",
-      type: "Promise<WorkflowResult<TOutput, TSteps>>",
+      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
       description: "最終的なワークフロー結果を返す Promise",
     },
     {

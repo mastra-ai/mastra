@@ -134,7 +134,9 @@ export async function getInputOptions(
         platform,
         define: env,
       }),
-      optimizeLodashImports(),
+      optimizeLodashImports({
+        include: '**/*.{js,ts,mjs,cjs}',
+      }),
       commonjs({
         extensions: ['.js', '.ts'],
         transformMixedEsModules: true,

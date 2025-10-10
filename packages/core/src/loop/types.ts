@@ -12,10 +12,11 @@ import type {
 } from 'ai-v5';
 import z from 'zod';
 import type { MessageList } from '../agent/message-list';
+import type { StructuredOutputOptions } from '../agent/types';
 import type { AISpan, AISpanType } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { OutputProcessor } from '../processors';
+import type { OutputProcessor, ProcessorState } from '../processors';
 import type { OutputSchema } from '../stream/base/schema';
 import type {
   ChunkType,
@@ -46,8 +47,8 @@ export type PrepareStepFunction<TOOLS extends ToolSet = ToolSet> = (options: {
   messages: Array<ModelMessage>;
 }) => PromiseLike<PrepareStepResult<TOOLS> | undefined> | PrepareStepResult<TOOLS> | undefined;
 
-export type LoopConfig = {
-  onChunk?: (chunk: ChunkType) => Promise<void> | void;
+export type LoopConfig<OUTPUT extends OutputSchema = undefined> = {
+  onChunk?: (chunk: ChunkType<OUTPUT>) => Promise<void> | void;
   onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
   onFinish?: MastraOnFinishCallback;
   onStepFinish?: MastraOnStepFinishCallback;
@@ -73,7 +74,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   modelSettings?: CallSettings;
   headers?: Record<string, string>;
   toolChoice?: ToolChoice<any>;
-  options?: LoopConfig;
+  options?: LoopConfig<OUTPUT>;
   providerOptions?: SharedV2ProviderOptions;
   tools?: Tools;
   outputProcessors?: OutputProcessor[];
@@ -81,12 +82,13 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   stopWhen?: StopCondition<NoInfer<Tools>> | Array<StopCondition<NoInfer<Tools>>>;
   maxSteps?: number;
   _internal?: StreamInternal;
-  output?: OUTPUT;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
   returnScorerData?: boolean;
   downloadRetries?: number;
   downloadConcurrency?: number;
   llmAISpan?: AISpan<AISpanType.LLM_GENERATION>;
   requireToolApproval?: boolean;
+  agentId: string;
 };
 
 export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = LoopOptions<
@@ -102,12 +104,13 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema
     serialize: () => any;
     deserialize: (state: any) => void;
   };
+  processorStates?: Map<string, ProcessorState<OUTPUT>>;
 };
 
 export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = {
   messageId: string;
-  controller: ReadableStreamDefaultController<ChunkType>;
-  writer: WritableStream<ChunkType>;
+  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
+  writer: WritableStream<ChunkType<OUTPUT>>;
   requireToolApproval?: boolean;
 } & LoopRun<Tools, OUTPUT>;
 

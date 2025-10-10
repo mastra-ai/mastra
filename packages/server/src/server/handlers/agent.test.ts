@@ -4,7 +4,9 @@ import type { AgentConfig } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
+import { UnicodeNormalizer, TokenLimiterProcessor } from '@mastra/core/processors';
 import type { EvalRow, MastraStorage } from '@mastra/core/storage';
+import type { AISDKV5OutputStream } from '@mastra/core/stream';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
@@ -15,10 +17,11 @@ import {
   getEvalsByAgentIdHandler,
   getLiveEvalsByAgentIdHandler,
   generateHandler,
-  streamGenerateHandler,
   updateAgentModelHandler,
   reorderAgentModelListHandler,
   updateAgentModelInModelListHandler,
+  streamGenerateLegacyHandler,
+  streamGenerateHandler,
 } from './agents';
 
 const mockEvals = [
@@ -117,6 +120,8 @@ describe('Agent Handlers', () => {
           tools: {},
           agents: {},
           workflows: {},
+          inputProcessors: [],
+          outputProcessors: [],
           provider: 'openai.chat',
           modelId: 'gpt-4o',
           modelVersion: 'v1',
@@ -130,6 +135,8 @@ describe('Agent Handlers', () => {
           tools: {},
           agents: {},
           workflows: {},
+          inputProcessors: [],
+          outputProcessors: [],
           provider: 'openai.responses',
           modelId: 'gpt-4o-mini',
           modelVersion: 'v2',
@@ -156,6 +163,39 @@ describe('Agent Handlers', () => {
             },
           ],
         },
+      });
+    });
+
+    it('should return agents with serialized processors', async () => {
+      const unicodeNormalizer = new UnicodeNormalizer();
+      const tokenLimiter = new TokenLimiterProcessor({ limit: 1000 });
+
+      const agentWithCoreProcessors = makeMockAgent({
+        name: 'agent-with-core-processors',
+        inputProcessors: [unicodeNormalizer],
+        outputProcessors: [tokenLimiter],
+      });
+
+      const mastraWithCoreProcessors = makeMastraMock({
+        agents: {
+          'agent-with-core-processors': agentWithCoreProcessors,
+        },
+      });
+
+      const result = await getAgentsHandler({ mastra: mastraWithCoreProcessors, runtimeContext });
+
+      expect(result['agent-with-core-processors']).toMatchObject({
+        name: 'agent-with-core-processors',
+        inputProcessors: [
+          {
+            name: 'unicode-normalizer',
+          },
+        ],
+        outputProcessors: [
+          {
+            name: 'token-limiter',
+          },
+        ],
       });
     });
   });
@@ -214,6 +254,8 @@ describe('Agent Handlers', () => {
             },
           },
         },
+        inputProcessors: [],
+        outputProcessors: [],
         provider: 'openai.chat',
         modelId: 'gpt-4o',
         modelVersion: 'v1',
@@ -353,7 +395,7 @@ describe('Agent Handlers', () => {
       };
       (mockAgent.stream as any).mockResolvedValue(mockStreamResult);
 
-      const result = await streamGenerateHandler({
+      const result = await streamGenerateLegacyHandler({
         mastra: mockMastra,
         agentId: 'test-agent',
         body: {
@@ -376,7 +418,7 @@ describe('Agent Handlers', () => {
 
     it('should throw 404 when agent not found', async () => {
       await expect(
-        streamGenerateHandler({
+        streamGenerateLegacyHandler({
           mastra: mockMastra,
           agentId: 'non-existing',
           body: {
@@ -438,7 +480,7 @@ describe('Agent Handlers', () => {
         runtimeContext: new RuntimeContext(),
       });
 
-      expect(result).toBeInstanceOf(Response);
+      expect((result as AISDKV5OutputStream<any>).toTextStreamResponse()).toBeInstanceOf(Response);
     });
   });
 

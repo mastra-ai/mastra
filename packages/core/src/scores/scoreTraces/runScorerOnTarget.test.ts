@@ -6,8 +6,7 @@ import type { AISpanRecord, AITraceRecord, MastraStorage } from '../../storage';
 import type { MastraScorer } from '../base';
 
 vi.mock('./utils', () => ({
-  transformTraceToScorerInput: vi.fn().mockReturnValue({ transformedInput: 'test' }),
-  transformTraceToScorerOutput: vi.fn().mockReturnValue({ transformedOutput: 'test' }),
+  transformTraceToScorerInputAndOutput: vi.fn(() => ({ input: 'test', output: 'test' })),
 }));
 
 import { runScorerOnTarget } from './scoreTracesWorkflow';

@@ -54,6 +54,7 @@ export function textStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
           },
         ],
         messageList,
+        agentId: 'agent-id',
       });
 
       expect(await convertAsyncIterableToArray(result.textStream)).toStrictEqual(['Hello', ', ', 'world!']);

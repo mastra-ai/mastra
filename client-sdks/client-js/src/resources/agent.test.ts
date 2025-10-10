@@ -5,7 +5,7 @@ import { createTool } from '@mastra/core/tools';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { MastraClient } from '../client';
-import type { ClientOptions, StreamVNextParams } from '../types';
+import type { StreamParams, ClientOptions } from '../types';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { Agent } from './agent';
 
@@ -13,10 +13,10 @@ import { Agent } from './agent';
 global.fetch = vi.fn();
 
 class TestAgent extends Agent {
-  public lastProcessedParams: StreamVNextParams<any> | null = null;
+  public lastProcessedParams: StreamParams<any> | null = null;
 
-  public async processStreamResponse_vNext(
-    params: StreamVNextParams<any>,
+  public async processStreamResponse(
+    params: StreamParams<any>,
     writable: WritableStream<Uint8Array>,
   ): Promise<Response> {
     this.lastProcessedParams = params;
@@ -33,7 +33,7 @@ class TestAgent extends Agent {
   }
 }
 
-describe('Agent.streamVNext', () => {
+describe('Agent.stream', () => {
   let agent: TestAgent;
 
   beforeEach(() => {
@@ -52,6 +52,20 @@ describe('Agent.streamVNext', () => {
     vi.resetAllMocks();
   });
 
+  it('should transform params.structuredOutput.schema using zodToJsonSchema when provided', async () => {
+    const outputSchema = z.object({
+      name: z.string(),
+      age: z.number(),
+    });
+    const jsonSchema = zodToJsonSchema(outputSchema);
+    const params: StreamParams<typeof outputSchema> = {
+      messages: [] as any,
+      structuredOutput: { schema: outputSchema },
+    };
+    await agent.stream(params);
+    expect(agent.lastProcessedParams?.structuredOutput).toEqual({ schema: jsonSchema });
+  });
+
   it('should transform params.output using zodToJsonSchema when provided', async () => {
     // Arrange: Create a sample Zod schema and params
     const outputSchema = z.object({
@@ -59,13 +73,13 @@ describe('Agent.streamVNext', () => {
       age: z.number(),
     });
 
-    const params: StreamVNextParams<typeof outputSchema> = {
+    const params: StreamParams<typeof outputSchema> = {
       messages: [] as any,
       output: outputSchema,
     };
 
-    // Act: Call streamVNext with the params
-    await agent.streamVNext(params);
+    // Act: Call stream with the params
+    await agent.stream(params);
 
     // Assert: Verify output schema transformation
     const expectedSchema = zodToJsonSchema(outputSchema);
@@ -74,12 +88,12 @@ describe('Agent.streamVNext', () => {
 
   it('should set processedParams.output to undefined when params.output is not provided', async () => {
     // Arrange: Create params without output schema
-    const params: StreamVNextParams<undefined> = {
+    const params: StreamParams<undefined> = {
       messages: [] as any,
     };
 
-    // Act: Call streamVNext with the params
-    await agent.streamVNext(params);
+    // Act: Call stream with the params
+    await agent.stream(params);
 
     // Assert: Verify output is undefined
     expect(agent.lastProcessedParams?.output).toBeUndefined();
@@ -98,13 +112,13 @@ describe('Agent.streamVNext', () => {
     // Ensure instanceof RuntimeContext succeeds so parseClientRuntimeContext converts it
     Object.setPrototypeOf(runtimeContext, RuntimeContextClass.prototype);
 
-    const params: StreamVNextParams<undefined> = {
+    const params: StreamParams<undefined> = {
       messages: [] as any,
       runtimeContext,
     };
 
-    // Act: Call streamVNext with the params
-    await agent.streamVNext(params);
+    // Act: Call stream with the params
+    await agent.stream(params);
 
     // Assert: Verify runtimeContext was converted to plain object
     expect(agent.lastProcessedParams?.runtimeContext).toEqual({
@@ -131,13 +145,13 @@ describe('Agent.streamVNext', () => {
       },
     };
 
-    const params: StreamVNextParams<undefined> = {
+    const params: StreamParams<undefined> = {
       messages: [] as any,
       clientTools,
     };
 
-    // Act: Call streamVNext with the params
-    await agent.streamVNext(params);
+    // Act: Call stream with the params
+    await agent.stream(params);
 
     // Assert: Verify schemas were converted while preserving other properties
     expect(agent.lastProcessedParams?.clientTools).toEqual({
@@ -152,12 +166,12 @@ describe('Agent.streamVNext', () => {
 
   it('should return a Response object with processDataStream method', async () => {
     // Arrange: Create minimal params
-    const params: StreamVNextParams<undefined> = {
+    const params: StreamParams<undefined> = {
       messages: [],
     };
 
-    // Act: Call streamVNext
-    const response = await agent.streamVNext(params);
+    // Act: Call stream
+    const response = await agent.stream(params);
 
     // Assert: Verify response structure
     expect(response).toBeInstanceOf(Response);
@@ -169,12 +183,12 @@ describe('Agent.streamVNext', () => {
   it('should invoke onChunk callback when processing stream data', async () => {
     // Arrange: Create callback and params
     const onChunk = vi.fn();
-    const params: StreamVNextParams<undefined> = {
+    const params: StreamParams<undefined> = {
       messages: [],
     };
 
     // Act: Process the stream
-    const response = await agent.streamVNext(params);
+    const response = await agent.stream(params);
     await response.processDataStream({ onChunk });
 
     // Assert: Verify callback execution
@@ -514,7 +528,7 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
       },
     });
 
-    await agent.generateVNext(initialMessage, {
+    await agent.generate(initialMessage, {
       clientTools: { clientTool },
     });
 
@@ -594,7 +608,7 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
       },
     });
 
-    await agent.generateVNext(initialMessage, {
+    await agent.generate(initialMessage, {
       clientTools: { clientTool },
     });
 
