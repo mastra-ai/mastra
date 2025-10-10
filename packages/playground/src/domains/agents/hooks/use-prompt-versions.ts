@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
 
-import type { EvalResult, PromptVersion } from '../types';
 import { usePlaygroundStore } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 
 export function usePromptVersions(agentId: string, instructions?: string) {
-  const [versions, setVersions] = useState<PromptVersion[]>([]);
+  const [versions, setVersions] = useState<any[]>([]);
   const [copiedVersions, setCopiedVersions] = useState<Record<number, boolean>>({});
   const [isUpdating, setIsUpdating] = useState(false);
   const [versionToDelete, setVersionToDelete] = useState<number | null>(null);
@@ -13,7 +12,7 @@ export function usePromptVersions(agentId: string, instructions?: string) {
   const { runtimeContext } = usePlaygroundStore();
 
   // Fetch eval results for a version
-  const fetchEvalResults = async (): Promise<EvalResult[]> => {
+  const fetchEvalResults = async (): Promise<any[]> => {
     try {
       const response = await client.getAgent(agentId).liveEvals(runtimeContext);
       return response?.evals;
@@ -37,7 +36,7 @@ export function usePromptVersions(agentId: string, instructions?: string) {
           // If instructions changed, reset version history with new original version
           const originalEvals = evals?.filter(m => m.meta.instructions === instructions);
 
-          const newVersions: PromptVersion[] = [
+          const newVersions: any[] = [
             {
               content: instructions,
               timestamp: new Date(),
@@ -68,7 +67,7 @@ export function usePromptVersions(agentId: string, instructions?: string) {
           setVersions(updatedVersions);
         }
       } else if (instructions) {
-        const initialVersions: PromptVersion[] = [
+        const initialVersions: any[] = [
           {
             content: instructions,
             timestamp: new Date(),
@@ -112,7 +111,7 @@ export function usePromptVersions(agentId: string, instructions?: string) {
     return () => clearTimeout(timer);
   };
 
-  const setVersionActive = async (version: PromptVersion, index: number) => {
+  const setVersionActive = async (version: any, index: number) => {
     setIsUpdating(true);
     try {
       const response = await fetch(`/api/agents/${agentId}/instructions`, {
@@ -149,7 +148,7 @@ export function usePromptVersions(agentId: string, instructions?: string) {
     setVersionToDelete(null);
   };
 
-  const updateVersion = async (index: number, updates: Partial<PromptVersion>) => {
+  const updateVersion = async (index: number, updates: Partial<any>) => {
     const updatedVersion = {
       ...versions[index],
       ...updates,

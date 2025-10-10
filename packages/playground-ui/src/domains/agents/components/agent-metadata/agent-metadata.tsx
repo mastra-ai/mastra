@@ -92,7 +92,7 @@ export const AgentMetadata = ({
             modelVersion === 'v2'
               ? undefined
               : {
-                  link: 'https://mastra.ai/en/reference/agents/migration-guide',
+                  link: 'https://mastra.ai/guides/migrations/vnext-to-standard-apis',
                   title: 'You are using a legacy v1 model',
                   icon: <AlertTriangleIcon fontSize={14} className="mb-0.5" />,
                 }

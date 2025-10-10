@@ -13,6 +13,7 @@ import type { FinishReason, LanguageModelRequestMetadata, TelemetrySettings } fr
 import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from 'ai-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
+import type { StructuredOutputOptions } from '../agent/types';
 import type { TracingContext } from '../ai-tracing/types';
 import type { OutputProcessor } from '../processors';
 import type { WorkflowStreamEvent } from '../workflows/types';
@@ -23,6 +24,7 @@ export enum ChunkFrom {
   USER = 'USER',
   SYSTEM = 'SYSTEM',
   WORKFLOW = 'WORKFLOW',
+  NETWORK = 'NETWORK',
 }
 
 interface BaseChunkType {
@@ -307,6 +309,8 @@ interface TripwirePayload {
 
 // Network-specific payload interfaces
 interface RoutingAgentStartPayload {
+  agentId: string;
+  runId: string;
   inputData: {
     task: string;
     primitiveId: string;
@@ -329,6 +333,7 @@ interface RoutingAgentEndPayload {
   isComplete?: boolean;
   selectionReason: string;
   iteration: number;
+  runId: string;
 }
 
 interface AgentExecutionStartPayload {
@@ -407,6 +412,7 @@ interface NetworkStepFinishPayload {
   result: string;
   isComplete: boolean;
   iteration: number;
+  runId: string;
 }
 
 interface NetworkFinishPayload {
@@ -563,7 +569,7 @@ export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = 
   onFinish?: MastraOnFinishCallback;
   onStepFinish?: MastraOnStepFinishCallback;
   includeRawChunks?: boolean;
-  output?: OUTPUT;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
   outputProcessors?: OutputProcessor[];
   isLLMExecutionStep?: boolean;
   returnScorerData?: boolean;

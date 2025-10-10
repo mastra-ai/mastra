@@ -257,7 +257,9 @@ export class ModerationProcessor implements Processor {
       let response;
       if (model.specificationVersion === 'v2') {
         response = await this.moderationAgent.generate(prompt, {
-          output: schema,
+          structuredOutput: {
+            schema,
+          },
           modelSettings: {
             temperature: 0,
           },
