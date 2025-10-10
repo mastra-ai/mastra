@@ -25,7 +25,7 @@ import type {
 import type { Trace } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
-import { checkConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
+import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
 import type { PostgresStoreConfig } from '../shared/config';
 import { LegacyEvalsPG } from './domains/legacy-evals';
 import { MemoryPG } from './domains/memory';
@@ -49,7 +49,7 @@ export class PostgresStore extends MastraStorage {
   constructor(config: PostgresStoreConfig) {
     // Validation: connectionString or host/database/user/password must not be empty
     try {
-      checkConfig('PostgresStore', config);
+      validateConfig('PostgresStore', config);
       super({ name: 'PostgresStore' });
       this.schema = config.schemaName || 'public';
       if (isConnectionStringConfig(config)) {

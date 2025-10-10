@@ -65,7 +65,7 @@ export const isCloudSqlConfig = <SSLType>(
   return 'stream' in cfg || ('password' in cfg && typeof cfg.password === 'function');
 };
 
-export const checkConfig = (name: string, config: PostgresConfig<ISSLConfig | ConnectionOptions>) => {
+export const validateConfig = (name: string, config: PostgresConfig<ISSLConfig | ConnectionOptions>) => {
   if (isConnectionStringConfig(config)) {
     if (
       !config.connectionString ||

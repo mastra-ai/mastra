@@ -16,7 +16,7 @@ import { Mutex } from 'async-mutex';
 import * as pg from 'pg';
 import xxhash from 'xxhash-wasm';
 
-import { checkConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
+import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
 import type { PgVectorConfig } from '../shared/config';
 import { PGFilterTranslator } from './filter';
 import type { PGVectorFilter } from './filter';
@@ -73,7 +73,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
   constructor(config: PgVectorConfig) {
     try {
-      checkConfig('PgVector', config);
+      validateConfig('PgVector', config);
       super();
 
       this.schema = config.schemaName;
