@@ -41,6 +41,7 @@ export type PostgresConfig = {
   schemaName?: string;
   max?: number;
   idleTimeoutMillis?: number;
+  tableMap?: Partial<Record<TABLE_NAMES, string>>;
 } & (
   | {
       host: string;
@@ -63,6 +64,7 @@ export class PostgresStore extends MastraStorage {
   #pgp?: pgPromise.IMain;
   #config: PostgresConfig;
   private schema: string;
+  private tableMap: Partial<Record<TABLE_NAMES, string>> | undefined;
   private isConnected: boolean = false;
 
   stores: StorageDomains;
@@ -122,6 +124,7 @@ export class PostgresStore extends MastraStorage {
       }
       super({ name: 'PostgresStore' });
       this.schema = config.schemaName || 'public';
+      this.tableMap = config.tableMap;
       if (isConnectionStringConfig(config)) {
         this.#config = {
           connectionString: config.connectionString,
@@ -176,11 +179,11 @@ export class PostgresStore extends MastraStorage {
       this.#pgp = pgPromise();
       this.#db = this.#pgp(this.#config as any);
 
-      const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema });
+      const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema, tableMap: this.tableMap });
       const scores = new ScoresPG({ client: this.#db, operations, schema: this.schema });
       const traces = new TracesPG({ client: this.#db, operations, schema: this.schema });
       const workflows = new WorkflowsPG({ client: this.#db, operations, schema: this.schema });
-      const legacyEvals = new LegacyEvalsPG({ client: this.#db, schema: this.schema });
+      const legacyEvals = new LegacyEvalsPG({ client: this.#db, operations, schema: this.schema });
       const memory = new MemoryPG({ client: this.#db, schema: this.schema, operations });
       const observability = new ObservabilityPG({ client: this.#db, operations, schema: this.schema });
 

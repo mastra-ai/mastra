@@ -5,7 +5,6 @@ import type { Trace } from '@mastra/core/telemetry';
 import { parseFieldKey } from '@mastra/core/utils';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
-import { getSchemaName, getTableName } from '../utils';
 
 export class TracesPG extends TracesStorage {
   public client: IDatabase<{}>;
@@ -94,7 +93,7 @@ export class TracesPG extends TracesStorage {
 
     try {
       const countResult = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_TRACES, schemaName: getSchemaName(this.schema) })} ${whereClause}`,
+        `SELECT COUNT(*) FROM ${this.operations.getQualifiedTableName(TABLE_TRACES)} ${whereClause}`,
         queryParams,
       );
       const total = Number(countResult?.count ?? 0);
@@ -110,7 +109,7 @@ export class TracesPG extends TracesStorage {
       }
 
       const dataResult = await this.client.manyOrNone<Record<string, any>>(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_TRACES, schemaName: getSchemaName(this.schema) })} ${whereClause} ORDER BY "startTime" DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+        `SELECT * FROM ${this.operations.getQualifiedTableName(TABLE_TRACES)} ${whereClause} ORDER BY "startTime" DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
         [...queryParams, perPage, currentOffset],
       );
 

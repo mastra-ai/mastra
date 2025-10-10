@@ -29,20 +29,48 @@ export class StoreOperationsPG extends StoreOperations {
   public schemaName?: string;
   private setupSchemaPromise: Promise<void> | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
+  private tableMap?: Partial<Record<TABLE_NAMES, string>>;
 
-  constructor({ client, schemaName }: { client: IDatabase<{}>; schemaName?: string }) {
+  constructor({ client, schemaName, tableMap }: { client: IDatabase<{}>; schemaName?: string; tableMap?: Partial<Record<TABLE_NAMES, string>> }) {
     super();
     this.client = client;
     this.schemaName = schemaName;
+    this.tableMap = tableMap;
+  }
+
+  private resolveTableName(indexName: TABLE_NAMES): string {
+    return (this.tableMap && this.tableMap[indexName]) || indexName;
+  }
+
+  public getQualifiedTableName(indexName: TABLE_NAMES): string {
+    const physical = this.resolveTableName(indexName);
+    return getTableName({ indexName: physical, schemaName: getSchemaName(this.schemaName) });
+  }
+
+  private mapLogicalToPhysicalTableName(name: string): string {
+    // If name matches a logical key, map to physical
+    if (this.tableMap && (name as TABLE_NAMES) in this.tableMap) {
+      const mapped = this.tableMap[name as TABLE_NAMES];
+      if (mapped) return mapped;
+    }
+    return name;
+  }
+
+  private mapPhysicalToLogicalTableName(name: string): string {
+    if (!this.tableMap) return name;
+    for (const [logical, physical] of Object.entries(this.tableMap)) {
+      if (physical === name) return logical;
+    }
+    return name;
   }
 
   async hasColumn(table: string, column: string): Promise<boolean> {
     // Use this.schema to scope the check
     const schema = this.schemaName || 'public';
-
+    const physicalTable = this.resolveTableName(table as TABLE_NAMES);
     const result = await this.client.oneOrNone(
       `SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4)`,
-      [schema, table, column, column.toLowerCase()],
+      [schema, physicalTable, column, column.toLowerCase()],
     );
 
     return !!result;
@@ -148,13 +176,12 @@ export class StoreOperationsPG extends StoreOperations {
     try {
       this.addTimestampZColumns(record);
 
-      const schemaName = getSchemaName(this.schemaName);
       const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
       const values = this.prepareValuesForInsert(record, tableName);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
 
       await this.client.none(
-        `INSERT INTO ${getTableName({ indexName: tableName, schemaName })} (${columns.map(c => `"${c}"`).join(', ')}) VALUES (${placeholders})`,
+        `INSERT INTO ${this.getQualifiedTableName(tableName)} (${columns.map(c => `"${c}"`).join(', ')}) VALUES (${placeholders})`,
         values,
       );
     } catch (error) {
@@ -174,8 +201,7 @@ export class StoreOperationsPG extends StoreOperations {
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
-      const schemaName = getSchemaName(this.schemaName);
-      const tableNameWithSchema = getTableName({ indexName: tableName, schemaName });
+      const tableNameWithSchema = this.getQualifiedTableName(tableName);
       await this.client.none(`TRUNCATE TABLE ${tableNameWithSchema} CASCADE`);
     } catch (error) {
       throw new MastraError(
@@ -240,7 +266,7 @@ export class StoreOperationsPG extends StoreOperations {
       // Constraints are global to a database, ensure schemas do not conflict with each other
       const constraintPrefix = this.schemaName ? `${this.schemaName}_` : '';
       const sql = `
-            CREATE TABLE IF NOT EXISTS ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} (
+            CREATE TABLE IF NOT EXISTS ${this.getQualifiedTableName(tableName)} (
               ${finalColumns}
             );
             ${
@@ -252,7 +278,7 @@ export class StoreOperationsPG extends StoreOperations {
               ) AND NOT EXISTS (
                 SELECT 1 FROM pg_indexes WHERE indexname = '${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key'
               ) THEN
-                ALTER TABLE ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })}
+                ALTER TABLE ${this.getQualifiedTableName(tableName)}
                 ADD CONSTRAINT ${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key
                 UNIQUE (workflow_name, run_id);
               END IF;
@@ -293,7 +319,7 @@ export class StoreOperationsPG extends StoreOperations {
    * Set up timestamp triggers for a table to automatically manage createdAt/updatedAt
    */
   private async setupTimestampTriggers(tableName: TABLE_NAMES): Promise<void> {
-    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+    const fullTableName = this.getQualifiedTableName(tableName);
 
     try {
       const triggerSQL = `
@@ -350,7 +376,7 @@ export class StoreOperationsPG extends StoreOperations {
     schema: Record<string, StorageColumn>;
     ifNotExists: string[];
   }): Promise<void> {
-    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+    const fullTableName = this.getQualifiedTableName(tableName);
 
     try {
       for (const columnName of ifNotExists) {
@@ -396,7 +422,7 @@ export class StoreOperationsPG extends StoreOperations {
       const values = keyEntries.map(([_, value]) => value);
 
       const result = await this.client.oneOrNone<R>(
-        `SELECT * FROM ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} WHERE ${conditions} ORDER BY "createdAt" DESC LIMIT 1`,
+        `SELECT * FROM ${this.getQualifiedTableName(tableName)} WHERE ${conditions} ORDER BY "createdAt" DESC LIMIT 1`,
         values,
       );
 
@@ -455,8 +481,7 @@ export class StoreOperationsPG extends StoreOperations {
 
   async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
-      const schemaName = getSchemaName(this.schemaName);
-      const tableNameWithSchema = getTableName({ indexName: tableName, schemaName });
+      const tableNameWithSchema = this.getQualifiedTableName(tableName);
       await this.client.none(`DROP TABLE IF EXISTS ${tableNameWithSchema}`);
     } catch (error) {
       throw new MastraError(
@@ -492,10 +517,7 @@ export class StoreOperationsPG extends StoreOperations {
       } = options;
 
       const schemaName = this.schemaName || 'public';
-      const fullTableName = getTableName({
-        indexName: table as TABLE_NAMES,
-        schemaName: getSchemaName(this.schemaName),
-      });
+      const fullTableName = this.getQualifiedTableName(table as TABLE_NAMES);
 
       // Check if index already exists
       const indexExists = await this.client.oneOrNone(
@@ -617,6 +639,7 @@ export class StoreOperationsPG extends StoreOperations {
       let params: any[];
 
       if (tableName) {
+        const physicalTable = this.mapLogicalToPhysicalTableName(tableName);
         query = `
           SELECT
             i.indexname as name,
@@ -633,7 +656,7 @@ export class StoreOperationsPG extends StoreOperations {
           AND i.tablename = $2
           GROUP BY i.indexname, i.tablename, i.indexdef, ix.indisunique, c.oid
         `;
-        params = [schemaName, tableName];
+        params = [schemaName, physicalTable];
       } else {
         query = `
           SELECT
@@ -668,7 +691,7 @@ export class StoreOperationsPG extends StoreOperations {
 
         return {
           name: row.name,
-          table: row.table,
+          table: this.mapPhysicalToLogicalTableName(row.table),
           columns,
           unique: row.is_unique || false,
           size: row.size || '0',
@@ -702,52 +725,52 @@ export class StoreOperationsPG extends StoreOperations {
       // Composite index for threads (filter + sort)
       {
         name: `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
-        table: TABLE_THREADS,
+        table: this.resolveTableName(TABLE_THREADS),
         columns: ['resourceId', 'createdAt DESC'],
       },
       // Composite index for messages (filter + sort)
       {
         name: `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
-        table: TABLE_MESSAGES,
+        table: this.resolveTableName(TABLE_MESSAGES),
         columns: ['thread_id', 'createdAt DESC'],
       },
       // Composite index for traces (filter + sort)
       {
         name: `${schemaPrefix}mastra_traces_name_starttime_idx`,
-        table: TABLE_TRACES,
+        table: this.resolveTableName(TABLE_TRACES),
         columns: ['name', 'startTime DESC'],
       },
       // Composite index for evals (filter + sort)
       {
         name: `${schemaPrefix}mastra_evals_agent_name_created_at_idx`,
-        table: TABLE_EVALS,
+        table: this.resolveTableName(TABLE_EVALS),
         columns: ['agent_name', 'created_at DESC'],
       },
       // Composite index for scores (filter + sort)
       {
         name: `${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`,
-        table: TABLE_SCORERS,
+        table: this.resolveTableName(TABLE_SCORERS),
         columns: ['traceId', 'spanId', 'createdAt DESC'],
       },
       // AI Spans indexes for optimal trace querying
       {
         name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
-        table: TABLE_AI_SPANS,
+        table: this.resolveTableName(TABLE_AI_SPANS),
         columns: ['traceId', 'startedAt DESC'],
       },
       {
         name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
-        table: TABLE_AI_SPANS,
+        table: this.resolveTableName(TABLE_AI_SPANS),
         columns: ['parentSpanId', 'startedAt DESC'],
       },
       {
         name: `${schemaPrefix}mastra_ai_spans_name_idx`,
-        table: TABLE_AI_SPANS,
+        table: this.resolveTableName(TABLE_AI_SPANS),
         columns: ['name'],
       },
       {
         name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
-        table: TABLE_AI_SPANS,
+        table: this.resolveTableName(TABLE_AI_SPANS),
         columns: ['spanType', 'startedAt DESC'],
       },
     ];
@@ -829,7 +852,7 @@ export class StoreOperationsPG extends StoreOperations {
 
       return {
         name: result.name,
-        table: result.table,
+        table: this.mapPhysicalToLogicalTableName(result.table),
         columns,
         unique: result.is_unique || false,
         size: result.size || '0',
@@ -888,10 +911,7 @@ export class StoreOperationsPG extends StoreOperations {
         whereValues.push(this.prepareValue(value));
       });
 
-      const tableName_ = getTableName({
-        indexName: tableName,
-        schemaName: getSchemaName(this.schemaName),
-      });
+      const tableName_ = this.getQualifiedTableName(tableName);
 
       const sql = `UPDATE ${tableName_} SET ${setColumns.join(', ')} WHERE ${whereConditions.join(' AND ')}`;
       const values = [...setValues, ...whereValues];
@@ -957,10 +977,7 @@ export class StoreOperationsPG extends StoreOperations {
         return;
       }
 
-      const tableName_ = getTableName({
-        indexName: tableName,
-        schemaName: getSchemaName(this.schemaName),
-      });
+      const tableName_ = this.getQualifiedTableName(tableName);
 
       await this.client.tx(async t => {
         for (const keySet of keys) {
