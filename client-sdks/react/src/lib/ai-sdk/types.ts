@@ -1,7 +1,7 @@
 import { UIMessage } from '@ai-sdk/react';
 
 export type MastraUIMessageMetadata = {
-  status?: 'warning';
+  status?: 'warning' | 'error';
 } & (
   | {
       mode: 'generate';
