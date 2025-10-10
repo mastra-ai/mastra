@@ -1,18 +1,15 @@
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
-import { Button } from '@/components/ui/button';
 import { CodeDisplay } from '@/components/ui/code-display';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
-import type { PromptVersion } from '../types';
-
 import { VersionActions } from './version-actions';
 
 interface VersionItemProps {
-  version: PromptVersion;
+  version: any;
   index: number;
   isExpanded: boolean;
   isAnalysisExpanded: number | null;
@@ -21,7 +18,7 @@ interface VersionItemProps {
   onToggleExpand: () => void;
   onToggleAnalysis: () => void;
   onCopy: (content: string, key: string | number) => Promise<void>;
-  onSetActive: (version: PromptVersion, index: number) => Promise<void>;
+  onSetActive: (version: any, index: number) => Promise<void>;
   onDelete: (index: number) => void;
 }
 
