@@ -1407,7 +1407,36 @@ describe('AI Tracing Integration Tests', () => {
     'agent with input and output processors using $name',
     ({ method, model }) => {
       it('should trace all processor spans including internal agent spans', async () => {
-        const { UnicodeNormalizer } = await import('../processors/processors');
+        // Create a custom input processor that uses an agent internally
+        class ValidatorProcessor implements Processor {
+          readonly name = 'validator';
+          private agent: Agent;
+
+          constructor(model: any) {
+            this.agent = new Agent({
+              name: 'validator-agent',
+              instructions: 'You validate input messages',
+              model,
+            });
+          }
+
+          async processInput(args: {
+            messages: MastraMessageV2[];
+            abort: (reason?: string) => never;
+            tracingContext?: TracingContext;
+          }): Promise<MastraMessageV2[]> {
+            // Call the internal agent to validate
+            const lastMessage = args.messages[args.messages.length - 1];
+            const text = lastMessage?.content?.content || '';
+
+            await this.agent.generate(`Validate: ${text}`, {
+              tracingContext: args.tracingContext,
+            });
+
+            // Return original messages
+            return args.messages;
+          }
+        }
 
         // Create a custom output processor that uses an agent internally
         class SummarizerProcessor implements Processor {
@@ -1444,7 +1473,7 @@ describe('AI Tracing Integration Tests', () => {
           name: 'Test Agent',
           instructions: 'You are a helpful assistant',
           model,
-          inputProcessors: [new UnicodeNormalizer({ trim: true, collapseWhitespace: true })],
+          inputProcessors: [new ValidatorProcessor(model)],
           outputProcessors: [new SummarizerProcessor(model)],
         });
 
@@ -1453,21 +1482,10 @@ describe('AI Tracing Integration Tests', () => {
           agents: { testAgent },
         });
 
-        const outputSchema = z.object({
-          summary: z.string().describe('A brief summary'),
-          sentiment: z.string().describe('The sentiment of the message'),
-        });
-
-        const structuredOutput: StructuredOutputOptions<typeof outputSchema> = {
-          schema: outputSchema,
-          model,
-        };
-
         const agent = mastra.getAgent('testAgent');
         const result = await method(
           agent,
           '  Hello! How are you?  ', // Extra whitespace to test input processor
-          { structuredOutput },
         );
 
         // Verify the result has text (structured output may fail with mock model)
@@ -1480,45 +1498,38 @@ describe('AI Tracing Integration Tests', () => {
 
         // Expected span structure:
         // - Test Agent AGENT_RUN (root)
-        //   - PROCESSOR_RUN (input processor: unicode-normalizer) - no internal agent
+        //   - PROCESSOR_RUN (input processor: validator) - has internal agent
+        //     - validator-agent AGENT_RUN
+        //       - validator-agent LLM_GENERATION
         //   - Test Agent LLM_GENERATION (initial model call)
-        //   - PROCESSOR_RUN (output processor: structured-output) - has internal agent
-        //     - structured-output-structurer AGENT_RUN
-        //       - structured-output-structurer LLM_GENERATION
         //   - PROCESSOR_RUN (output processor: summarizer) - has internal agent
         //     - summarizer-agent AGENT_RUN
         //       - summarizer-agent LLM_GENERATION
 
-        expect(agentRunSpans.length).toBe(3); // Test Agent + structured-output agent + summarizer agent
-        expect(llmGenerationSpans.length).toBe(3); // Test Agent LLM + structured-output LLM + summarizer LLM
-        expect(processorRunSpans.length).toBe(3); // unicode-normalizer + structured-output + summarizer
+        expect(agentRunSpans.length).toBe(3); // Test Agent + validator agent + summarizer agent
+        expect(llmGenerationSpans.length).toBe(3); // Test Agent LLM + validator LLM + summarizer LLM
+        expect(processorRunSpans.length).toBe(2); // validator + summarizer
 
         // Find specific spans
         const testAgentSpan = agentRunSpans.find(s => s.name === "agent run: 'Test Agent'");
-        const inputProcessorSpan = processorRunSpans.find(s => s.name === 'input processor: unicode-normalizer');
+        const inputProcessorSpan = processorRunSpans.find(s => s.name === 'input processor: validator');
         const summarizerProcessorSpan = processorRunSpans.find(s => s.name === 'output processor: summarizer');
-        const structuredOutputProcessorSpan = processorRunSpans.find(
-          s => s.name === 'output processor: structured-output',
-        );
+        const validatorAgentSpan = agentRunSpans.find(s => s.name?.includes('validator-agent'));
         const summarizerAgentSpan = agentRunSpans.find(s => s.name?.includes('summarizer-agent'));
-        const structuredOutputAgentSpan = agentRunSpans.find(s => s.name?.includes('structured-output-structurer'));
 
         // Verify all expected spans exist
         expect(testAgentSpan).toBeDefined();
         expect(inputProcessorSpan).toBeDefined();
         expect(summarizerProcessorSpan).toBeDefined();
-        expect(structuredOutputProcessorSpan).toBeDefined();
+        expect(validatorAgentSpan).toBeDefined();
         expect(summarizerAgentSpan).toBeDefined();
-        expect(structuredOutputAgentSpan).toBeDefined();
 
         // Verify span nesting - all processors should be children of Test Agent
         expect(inputProcessorSpan?.parentSpanId).toEqual(testAgentSpan?.id);
         expect(summarizerProcessorSpan?.parentSpanId).toEqual(testAgentSpan?.id);
-        expect(structuredOutputProcessorSpan?.parentSpanId).toEqual(testAgentSpan?.id);
 
-        // Verify internal agent spans are children of their processor spans
+        expect(validatorAgentSpan?.parentSpanId).toEqual(inputProcessorSpan?.id);
         expect(summarizerAgentSpan?.parentSpanId).toEqual(summarizerProcessorSpan?.id);
-        expect(structuredOutputAgentSpan?.parentSpanId).toEqual(structuredOutputProcessorSpan?.id);
 
         testExporter.finalExpectations();
       });

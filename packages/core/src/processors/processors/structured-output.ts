@@ -109,7 +109,6 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
           schema: this.schema as OUTPUT extends OutputSchema ? OUTPUT : never,
           jsonPromptInjection: this.jsonPromptInjection,
         },
-        output: this.schema,
         tracingContext,
       });
 

@@ -136,7 +136,7 @@ export class ProcessorRunner {
             processableMessages = await processMethod({
               messages: processableMessages,
               abort: ctx.abort,
-              tracingContext,
+              tracingContext: { currentSpan: processorSpan },
             });
             return processableMessages;
           },
@@ -354,14 +354,18 @@ export class ProcessorRunner {
       });
 
       if (!telemetry) {
-        processableMessages = await processMethod({ messages: processableMessages, abort: ctx.abort, tracingContext });
+        processableMessages = await processMethod({
+          messages: processableMessages,
+          abort: ctx.abort,
+          tracingContext: { currentSpan: processorSpan },
+        });
       } else {
         await telemetry.traceMethod(
           async () => {
             processableMessages = await processMethod({
               messages: processableMessages,
               abort: ctx.abort,
-              tracingContext,
+              tracingContext: { currentSpan: processorSpan },
             });
             return processableMessages;
           },
