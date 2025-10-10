@@ -1846,7 +1846,7 @@ export class Run<
     stream: ReadableStream<StreamEvent>;
   } {
     console.warn(
-      "Deprecation NOTICE:\observeStream method will switch to use observeStreamVNext implementation October 21st, 2025. Please use observeStreamLegacy if you don't want to upgrade just yet.",
+      "Deprecation NOTICE: observeStream method will switch to use observeStreamVNext implementation October 21st, 2025. Please use observeStreamLegacy if you don't want to upgrade just yet.",
     );
     return this.observeStreamLegacy();
   }
