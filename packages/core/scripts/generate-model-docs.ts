@@ -486,6 +486,7 @@ description: "Access ${totalProviders}+ AI providers and ${totalModels}+ models 
 ${getGeneratedComment()}
 
 import { CardGrid, CardGridItem } from "@/components/cards/card-grid";
+import { Callout } from "nextra/components";
 
 # Model Providers
 
@@ -502,6 +503,10 @@ const agent = new Agent({
 \`\`\`
 
 Comes with environment variable detection to handle authentication, and full TypeScript support to autocomplete models directly in your editor.
+
+<Callout type="info">
+**Auto-Refresh**: The model registry automatically refreshes every hour during development. To disable, set ${String.fromCharCode(96)}MASTRA_AUTO_REFRESH_PROVIDERS=false${String.fromCharCode(96)}. Auto-refresh is disabled by default in production.
+</Callout>
 
 <CardGrid>
     <CardGridItem
