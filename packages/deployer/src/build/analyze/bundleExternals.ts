@@ -13,8 +13,8 @@ import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS, DEPRECATED_EXTERNALS } from './constants';
 import * as resolve from 'resolve.exports';
-import { getPackageInfo } from 'local-pkg';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
+import { readFile } from 'node:fs/promises';
 
 type VirtualDependency = {
   name: string;
@@ -88,7 +88,6 @@ export function createVirtualDependencies(
       }
 
       const currentDepPath = optimizedDependencyEntries.get(dep);
-
       if (!currentDepPath) {
         continue;
       }
@@ -170,18 +169,21 @@ async function getInputPlugins(
             }
 
             const info = virtualDependencies.get(id)!;
-            const pkgJson = await getPackageInfo(path.join(rootDir, info.name));
+            // go from ./node_modules/.cache/index.js to ./pkg
+            const packageRootPath = path.join(rootDir, path.dirname(path.dirname(path.dirname(info.name))));
+            const pkgJsonBuffer = await readFile(path.join(packageRootPath, 'package.json'), 'utf-8');
+            const pkgJson = JSON.parse(pkgJsonBuffer);
             if (!pkgJson) {
               return null;
             }
 
-            const pkgName = pkgJson.packageJson.name || '';
-            let resolvedPath: string | undefined = resolve.exports(pkgJson.packageJson, id.replace(pkgName, '.'))?.[0];
+            const pkgName = pkgJson.name || '';
+            let resolvedPath: string | undefined = resolve.exports(pkgJson, id.replace(pkgName, '.'))?.[0];
             if (!resolvedPath) {
-              resolvedPath = pkgJson!.packageJson.main ?? 'index.js';
+              resolvedPath = pkgJson!.main ?? 'index.js';
             }
 
-            return await this.resolve(path.posix.join(pkgJson!.rootPath, resolvedPath), importer, options);
+            return await this.resolve(path.posix.join(packageRootPath, resolvedPath!), importer, options);
           },
         } satisfies Plugin)
       : null,
