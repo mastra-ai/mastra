@@ -1,10 +1,12 @@
+import fs from 'fs';
+import path from 'path';
+
 import babel from '@babel/core';
 import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsup';
 import type { Options } from 'tsup';
+
 import treeshakeDecoratorsBabelPlugin from './tools/treeshake-decorators';
-import fs from 'fs';
-import path from 'path';
 
 type Plugin = NonNullable<Options['plugins']>[number];
 
@@ -78,7 +80,7 @@ export default defineConfig({
 
     if (fs.existsSync(srcJson)) {
       fs.copyFileSync(srcJson, distJson);
-      console.log('✓ Copied provider-registry.json to dist/');
+      console.info('✓ Copied provider-registry.json to dist/');
     }
 
     // Copy provider-types.generated.d.ts to dist/llm/model/ folder
@@ -92,7 +94,7 @@ export default defineConfig({
         fs.mkdirSync(distDtsDir, { recursive: true });
       }
       fs.copyFileSync(srcDts, distDts);
-      console.log('✓ Copied provider-types.generated.d.ts to dist/llm/model/');
+      console.info('✓ Copied provider-types.generated.d.ts to dist/llm/model/');
     }
   },
 });
