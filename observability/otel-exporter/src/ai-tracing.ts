@@ -147,10 +147,10 @@ export class OtelExporter implements AITracingExporter {
       [ATTR_TELEMETRY_SDK_LANGUAGE]: 'nodejs',
     });
 
-    if (this.tracingConfig?.resourceAttributes) {
+    if (this.config.resourceAttributes) {
       resource = resource.merge(
-        // Duplicate attributes from tracingConfig will override defaults above
-        resourceFromAttributes(this.tracingConfig.resourceAttributes),
+        // Duplicate attributes from config will override defaults above
+        resourceFromAttributes(this.config.resourceAttributes),
       );
     }
 
