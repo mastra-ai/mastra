@@ -282,10 +282,6 @@ const response = await testAgent.generate([
 console.log(response.text);
 ```
 
-## Multi-step tool use
-
-Agents can be enhanced with tools, functions that extend their capabilities beyond text generation. Tools allow agents to perform calculations, access external systems, and process data. Agents not only decide whether to call tools they're given, they determine the parameters that should be given to that tool.
-
 For a detailed guide to creating and configuring tools, see the [Tools Overview](../tools-mcp/overview.mdx) page.
 
 ### Using `maxSteps`
@@ -313,6 +309,12 @@ const response = await testAgent.generate("Help me organize my day", {
   }
 });
 ```
+
+## Using tools
+
+Agents can use tools to go beyond language generation, enabling structured interactions with external APIs and services. Tools allow agents to access data and perform clearly defined operations in a reliable, repeatable way.
+
+See the [using tools](./using-tools.mdx) section for more information.
 
 ## Testing agents locally
 There are two ways to run and test agents.
@@ -353,7 +355,7 @@ npx tsx src/test-agent.ts
 
 ## Related
 
+- [Using Tools](./using-tools.mdx)
 - [Agent Memory](./agent-memory.mdx)
-- [Dynamic Agents](./dynamic-agents.mdx)
-- [Agent Tools and MCP](./using-tools-and-mcp.mdx)
+- [Runtime Context](./runtime-context.mdx)
 - [Calling Agents](../../examples/agents/calling-agents.mdx)
