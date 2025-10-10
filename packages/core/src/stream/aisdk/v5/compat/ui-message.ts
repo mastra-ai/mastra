@@ -1,4 +1,4 @@
-import type { InferUIMessageChunk, TextStreamPart, ToolSet, UIMessage, IdGenerator } from 'ai-v5';
+import type { InferUIMessageChunk, TextStreamPart, ToolSet, UIMessage, IdGenerator } from 'ai';
 
 export function getResponseUIMessageId({
   originalMessages,

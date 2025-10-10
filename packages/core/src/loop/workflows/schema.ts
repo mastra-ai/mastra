@@ -1,12 +1,11 @@
-import type { LanguageModelV1LogProbs } from '@ai-sdk/provider';
-import type { ReasoningPart } from '@ai-sdk/provider-utils-v5';
 import type {
   LanguageModelV2FinishReason,
   LanguageModelV2CallWarning,
   SharedV2ProviderMetadata,
   LanguageModelV2Source,
-} from '@ai-sdk/provider-v5';
-import type { LanguageModelRequestMetadata } from 'ai';
+} from '@ai-sdk/provider';
+import type { ReasoningPart } from '@ai-sdk/provider-utils';
+import type { LanguageModelV1LogProbs } from '@ai-sdk/provider-v4';
 import type {
   StepResult,
   ModelMessage,
@@ -19,7 +18,8 @@ import type {
   DynamicToolCall,
   DynamicToolResult,
   GeneratedFile,
-} from 'ai-v5';
+} from 'ai';
+import type { LanguageModelRequestMetadata } from 'ai-v4';
 import z from 'zod';
 import type { InferSchemaOutput, OutputSchema } from '../../stream/base/schema';
 

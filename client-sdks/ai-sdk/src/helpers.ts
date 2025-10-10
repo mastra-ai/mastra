@@ -10,6 +10,8 @@ export type OutputChunkType<OUTPUT extends OutputSchema = undefined> =
   | undefined;
 
 export type ToolAgentChunkType = { type: 'tool-agent'; toolCallId: string; payload: any };
+export type ToolWorkflowChunkType = { type: 'tool-workflow'; toolCallId: string; payload: any };
+export type ToolNetworkChunkType = { type: 'tool-network'; toolCallId: string; payload: any };
 
 export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefined>({
   chunk,
@@ -239,6 +241,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   sendFinish,
   responseMessageId,
 }: {
+  // tool-output is a custom mastra chunk type used in ToolStream
   part: TextStreamPart<ToolSet> | { type: 'tool-output'; toolCallId: string; output: any };
   messageMetadataValue?: unknown;
   sendReasoning?: boolean;
@@ -247,7 +250,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   sendStart?: boolean;
   sendFinish?: boolean;
   responseMessageId?: string;
-}): InferUIMessageChunk<UI_MESSAGE> | ToolAgentChunkType | undefined {
+}): InferUIMessageChunk<UI_MESSAGE> | ToolAgentChunkType | ToolWorkflowChunkType | ToolNetworkChunkType | undefined {
   const partType = part.type;
 
   switch (partType) {
@@ -380,6 +383,18 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
       if (part.output.from === 'AGENT') {
         return {
           type: 'tool-agent',
+          toolCallId: part.toolCallId,
+          payload: part.output,
+        };
+      } else if (part.output.from === 'WORKFLOW') {
+        return {
+          type: 'tool-workflow',
+          toolCallId: part.toolCallId,
+          payload: part.output,
+        };
+      } else if (part.output.from === 'NETWORK') {
+        return {
+          type: 'tool-network',
           toolCallId: part.toolCallId,
           payload: part.output,
         };

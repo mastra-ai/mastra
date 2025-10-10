@@ -1,7 +1,7 @@
-import { spawnSync } from 'node:child_process';
 import { cp, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execa } from 'execa';
 
 /**
  *
@@ -21,18 +21,15 @@ export async function setupMonorepo(pathToStoreFiles, tag, pkgManager) {
 
   console.log('Directory:', newPath);
   console.log('Installing dependencies...');
-  spawnSync(pkgManager, ['install'], {
+  await execa(pkgManager, ['install'], {
     cwd: newPath,
     stdio: 'inherit',
-    shell: true,
     env: process.env,
   });
 
-  console.log('building mastra...');
-  spawnSync(pkgManager, ['build'], {
+  await execa(pkgManager, ['build'], {
     cwd: join(newPath, 'apps', 'custom'),
     stdio: 'inherit',
-    shell: true,
     env: process.env,
   });
 }

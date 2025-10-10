@@ -1,8 +1,8 @@
 import { randomUUID } from 'crypto';
-import type { LanguageModelV1Message } from '@ai-sdk/provider';
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import * as AIV4 from 'ai';
-import * as AIV5 from 'ai-v5';
+import type { LanguageModelV2Prompt } from '@ai-sdk/provider';
+import type { LanguageModelV1Message } from '@ai-sdk/provider-v4';
+import * as AIV5 from 'ai';
+import * as AIV4 from 'ai-v4';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { DefaultGeneratedFileWithType } from '../../stream/aisdk/v5/file';
