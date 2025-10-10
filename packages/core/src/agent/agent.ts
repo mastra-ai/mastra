@@ -3645,6 +3645,14 @@ export class Agent<
       ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
   > {
+    if (options?.structuredOutput?.schema && options?.output) {
+      throw new MastraError({
+        id: 'AGENT_GENERATE_STRUCTURED_OUTPUT_AND_OUTPUT_PROVIDED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'structuredOutput and output cannot be provided at the same time to agent.generate',
+      });
+    }
     // Deprecated `output` option now just maps to structuredOutput.schema
     // Create a new options object to avoid mutating the input parameter
     const normalizedOptions = options?.output
@@ -3694,13 +3702,12 @@ export class Agent<
     const defaultStreamOptions = await this.getDefaultVNextStreamOptions<OUTPUT>({
       runtimeContext: streamOptions?.runtimeContext,
     });
-
-    if (streamOptions?.structuredOutput && streamOptions.output) {
+    if (streamOptions?.structuredOutput?.schema && streamOptions?.output) {
       throw new MastraError({
         id: 'AGENT_STREAM_STRUCTURED_OUTPUT_AND_OUTPUT_PROVIDED',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: 'structuredOutput and output cannot be provided at the same time',
+        text: 'structuredOutput and output cannot be provided at the same time to agent.stream',
       });
     }
 

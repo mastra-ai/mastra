@@ -3,9 +3,11 @@ import type {
   MultiPrimitiveExecutionOptions,
   AgentGenerateOptions,
   AgentStreamOptions,
-  StructuredOutputOptions,
+  SerializableStructuredOutputOptions,
+  DeprecatedOutputOptions,
   ToolsInput,
   UIMessageWithMetadata,
+  AgentInstructions,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { CoreMessage } from '@mastra/core/llm';
@@ -20,6 +22,7 @@ import type {
 } from '@mastra/core/memory';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
+
 import type {
   AITraceRecord,
   AISpanRecord,
@@ -77,7 +80,7 @@ export type NetworkStreamParams = {
 } & MultiPrimitiveExecutionOptions;
 export interface GetAgentResponse {
   name: string;
-  instructions: string;
+  instructions: AgentInstructions;
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;
   agents: Record<string, { id: string; name: string }>;
@@ -100,7 +103,7 @@ export interface GetAgentResponse {
     | undefined;
 }
 
-export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
+export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   output?: T;
   experimental_output?: T;
@@ -122,27 +125,16 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
 
 export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
   messages: MessageListInput;
-  output?: OUTPUT;
+  structuredOutput?: SerializableStructuredOutputOptions<OUTPUT>;
   runtimeContext?: RuntimeContext | Record<string, any>;
   clientTools?: ToolsInput;
-} & OutputOptions<OUTPUT> &
-  WithoutMethods<
-    Omit<
-      AgentExecutionOptions<OUTPUT>,
-      'output' | 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
-    >
-  >;
-
-type OutputOptions<OUTPUT extends OutputSchema = undefined> =
-  | {
-      output?: OUTPUT;
-      structuredOutput?: never;
-    }
-  | {
-      // Can't serialize the model, so we need to omit it, falls back to agent's model
-      structuredOutput?: Omit<StructuredOutputOptions<OUTPUT>, 'model'>;
-      output?: never;
-    };
+} & WithoutMethods<
+  Omit<
+    AgentExecutionOptions<OUTPUT>,
+    'output' | 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
+  >
+> &
+  DeprecatedOutputOptions<OUTPUT>;
 
 export type UpdateModelParams = {
   modelId: string;
