@@ -224,7 +224,7 @@ export function createStep<
           stream = modelOutput.fullStream;
         }
 
-        if (streamFormat === 'aisdk') {
+        if (streamFormat === 'legacy') {
           await emitter.emit('watch-v2', {
             type: 'tool-call-streaming-start',
             ...(toolData ?? {}),
@@ -1590,7 +1590,7 @@ export class Run<
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
-    format?: 'aisdk' | 'mastra' | undefined;
+    format?: 'legacy' | 'vnext' | undefined;
     outputOptions?: {
       includeState?: boolean;
     };
@@ -1689,7 +1689,7 @@ export class Run<
       writableStream,
       tracingContext,
       tracingOptions,
-      format: 'aisdk',
+      format: 'legacy',
       outputOptions,
     });
   }
@@ -1764,7 +1764,7 @@ export class Run<
     this.executionResults = this._start({
       inputData,
       runtimeContext,
-      format: 'aisdk',
+      format: 'legacy',
       tracingContext,
       tracingOptions,
     }).then(result => {
@@ -1902,7 +1902,6 @@ export class Run<
     runtimeContext,
     tracingContext,
     tracingOptions,
-    format,
     closeOnSuspend = true,
     onChunk,
   }: {
@@ -1910,7 +1909,6 @@ export class Run<
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
-    format?: 'aisdk' | 'mastra' | undefined;
     closeOnSuspend?: boolean;
     onChunk?: (chunk: ChunkType) => Promise<unknown>;
   } = {}): MastraWorkflowStream<TState, TInput, TOutput, TSteps> {
@@ -1991,7 +1989,6 @@ export class Run<
           tracingContext,
           tracingOptions,
           writableStream: writable,
-          format,
         }).then(result => {
           if (closeOnSuspend) {
             // always close stream, even if the workflow is suspended
@@ -2023,7 +2020,6 @@ export class Run<
     runtimeContext,
     tracingContext,
     tracingOptions,
-    format,
     onChunk,
   }: {
     resumeData?: z.input<TInput>;
@@ -2035,7 +2031,6 @@ export class Run<
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
-    format?: 'aisdk' | 'mastra' | undefined;
     onChunk?: (chunk: ChunkType) => Promise<unknown>;
   } = {}) {
     this.closeStreamAction = async () => {};
@@ -2112,7 +2107,6 @@ export class Run<
           tracingContext,
           tracingOptions,
           writableStream: writable,
-          format,
           isVNext: true,
         }).then(result => {
           // always close stream, even if the workflow is suspended
@@ -2234,7 +2228,7 @@ export class Run<
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     writableStream?: WritableStream<ChunkType>;
-    format?: 'aisdk' | 'mastra' | undefined;
+    format?: 'legacy' | 'vnext' | undefined;
     isVNext?: boolean;
     outputOptions?: {
       includeState?: boolean;
