@@ -12,11 +12,16 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
   // Fetch providers from all gateways
   const { providers, models } = await fetchProvidersFromGateways(gateways);
 
-  // Write registry files to disk
-  const outputDir = path.join(__dirname, '..', 'src', 'llm', 'model');
-  const jsonPath = path.join(outputDir, 'provider-registry.json');
-  const typesPath = path.join(outputDir, 'provider-types.generated.d.ts');
-  await writeRegistryFiles(jsonPath, typesPath, providers, models);
+  // Write registry files to src/ (for version control)
+  const srcDir = path.join(__dirname, '..', 'src', 'llm', 'model');
+  const srcJsonPath = path.join(srcDir, 'provider-registry.json');
+  const srcTypesPath = path.join(srcDir, 'provider-types.generated.d.ts');
+  await writeRegistryFiles(srcJsonPath, srcTypesPath, providers, models);
+
+  // Write registry files to dist/ (for build output)
+  const distJsonPath = path.join(__dirname, '..', 'dist', 'provider-registry.json');
+  const distTypesPath = path.join(__dirname, '..', 'dist', 'llm', 'model', 'provider-types.generated.d.ts');
+  await writeRegistryFiles(distJsonPath, distTypesPath, providers, models);
 
   // Log summary
   console.info(`\nRegistered providers:`);
