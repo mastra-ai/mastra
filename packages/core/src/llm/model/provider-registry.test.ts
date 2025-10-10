@@ -5,9 +5,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { ProviderConfig } from './gateways/base.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
-import { ModelRegistry } from './provider-registry.js';
+import { GatewayRegistry } from './provider-registry.js';
 
-describe('ModelRegistry Auto-Refresh', () => {
+describe('GatewayRegistry Auto-Refresh', () => {
   const CACHE_DIR = path.join(os.homedir(), '.cache', 'mastra');
   const CACHE_FILE = path.join(CACHE_DIR, 'gateway-refresh-time');
   let originalEnv: NodeJS.ProcessEnv;
@@ -23,7 +23,7 @@ describe('ModelRegistry Auto-Refresh', () => {
 
     // Reset the singleton instance
     // @ts-expect-error - accessing private property for testing
-    ModelRegistry['instance'] = undefined;
+    GatewayRegistry['instance'] = undefined;
   });
 
   afterEach(() => {
@@ -31,7 +31,7 @@ describe('ModelRegistry Auto-Refresh', () => {
     process.env = originalEnv;
 
     // Stop any running intervals
-    const registry = ModelRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance();
     registry.stopAutoRefresh();
 
     // Clean up cache file
@@ -48,7 +48,7 @@ describe('ModelRegistry Auto-Refresh', () => {
   });
 
   it('should create cache file on first sync', async () => {
-    const registry = ModelRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance();
 
     expect(fs.existsSync(CACHE_FILE)).toBe(false);
 
@@ -64,7 +64,7 @@ describe('ModelRegistry Auto-Refresh', () => {
   }, 60000);
 
   it('should read last refresh time from disk cache', async () => {
-    const registry = ModelRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance();
 
     // Manually create cache file with a known timestamp
     const testTime = new Date('2024-01-01T12:00:00Z');
@@ -87,7 +87,7 @@ describe('ModelRegistry Auto-Refresh', () => {
     }
     fs.writeFileSync(CACHE_FILE, now.getTime().toString(), 'utf-8');
 
-    const registry = ModelRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance();
 
     // Spy on syncGateways
     const syncSpy = vi.spyOn(registry, 'syncGateways');
@@ -112,7 +112,7 @@ describe('ModelRegistry Auto-Refresh', () => {
     }
     fs.writeFileSync(CACHE_FILE, twoHoursAgo.getTime().toString(), 'utf-8');
 
-    const registry = ModelRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance();
 
     // Mock syncGateways to avoid actual network calls
     const syncSpy = vi.spyOn(registry, 'syncGateways').mockResolvedValue(undefined);
@@ -132,7 +132,7 @@ describe('ModelRegistry Auto-Refresh', () => {
   it('should run immediate sync if cache file does not exist', async () => {
     expect(fs.existsSync(CACHE_FILE)).toBe(false);
 
-    const registry = ModelRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance();
 
     // Mock syncGateways to avoid actual network calls
     const syncSpy = vi.spyOn(registry, 'syncGateways').mockResolvedValue(undefined);
@@ -150,7 +150,7 @@ describe('ModelRegistry Auto-Refresh', () => {
   });
 
   it('should auto-refresh on interval', async () => {
-    const registry = ModelRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance();
 
     // Mock syncGateways to avoid actual network calls
     const syncSpy = vi.spyOn(registry, 'syncGateways').mockResolvedValue(undefined);
@@ -170,7 +170,7 @@ describe('ModelRegistry Auto-Refresh', () => {
   it('should enable auto-refresh by default when MASTRA_DEV=true', () => {
     process.env.MASTRA_DEV = 'true';
 
-    const registry = ModelRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance();
 
     // Mock syncGateways to avoid actual network calls
     vi.spyOn(registry, 'syncGateways').mockResolvedValue(undefined);
@@ -190,9 +190,9 @@ describe('ModelRegistry Auto-Refresh', () => {
 
     // Reset singleton to pick up new env
     // @ts-expect-error - accessing private property for testing
-    ModelRegistry['instance'] = undefined;
+    GatewayRegistry['instance'] = undefined;
 
-    const registry = ModelRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance();
 
     // Auto-refresh should NOT start automatically
     // @ts-expect-error - accessing private property for testing
@@ -205,9 +205,9 @@ describe('ModelRegistry Auto-Refresh', () => {
 
     // Reset singleton to pick up new env
     // @ts-expect-error - accessing private property for testing
-    ModelRegistry['instance'] = undefined;
+    GatewayRegistry['instance'] = undefined;
 
-    const registry = ModelRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance();
 
     // Mock syncGateways to avoid actual network calls
     vi.spyOn(registry, 'syncGateways').mockResolvedValue(undefined);
@@ -225,9 +225,9 @@ describe('ModelRegistry Auto-Refresh', () => {
 
     // Reset singleton to pick up new env
     // @ts-expect-error - accessing private property for testing
-    ModelRegistry['instance'] = undefined;
+    GatewayRegistry['instance'] = undefined;
 
-    const registry = ModelRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance();
 
     // Auto-refresh should NOT start (explicit override)
     // @ts-expect-error - accessing private property for testing
@@ -237,7 +237,7 @@ describe('ModelRegistry Auto-Refresh', () => {
   it('should stop auto-refresh if cache operations fail', async () => {
     // This test verifies that auto-refresh stops when cache operations fail persistently
 
-    const registry = ModelRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance();
 
     // Stop any existing auto-refresh
     registry.stopAutoRefresh();
@@ -306,7 +306,7 @@ describe('ModelRegistry Auto-Refresh', () => {
   it('should update registry files when provider models change', async () => {
     // This test verifies that .d.ts and .json files are correctly updated when gateway data changes
 
-    const registry = ModelRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance();
 
     // Stop any existing auto-refresh
     registry.stopAutoRefresh();
@@ -433,7 +433,7 @@ describe('ModelRegistry Auto-Refresh', () => {
   });
 
   it('should write to src/ when writeToSrc flag is true', async () => {
-    const registry = ModelRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance();
     const tmpDir = path.join(os.tmpdir(), `mastra-test-${Date.now()}`);
     fs.mkdirSync(tmpDir, { recursive: true });
 
@@ -502,7 +502,7 @@ describe('ModelRegistry Auto-Refresh', () => {
 
     vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({} as Record<string, ProviderConfig>);
 
-    const registry = ModelRegistry.getInstance();
+    const registry = GatewayRegistry.getInstance();
     await registry.syncGateways(true);
 
     // Verify .d.ts file is written to dist/llm/model/ subdirectory, not dist/ root
