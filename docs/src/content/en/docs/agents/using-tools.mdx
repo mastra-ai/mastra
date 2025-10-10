@@ -5,12 +5,7 @@ description: Learn how to create tools and add them to agents to extend capabili
 
 # Using Tools
 
-Agents use tools to call APIs, query databases, or run custom functions from your codebase. Tools give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote MCP servers to expand an agent’s capabilities.
-
-You can learn more about tools and MCP on the following links:
-
-- [Tools overview](../tools-mcp/overview.mdx)
-- [MCP Overview](../tools-mcp/mcp-overview.mdx)
+Agents use tools to call APIs, query databases, or run custom functions from your codebase. [Tools](../tools-mcp/overview.mdx) give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](../tools-mcp/mcp-overview.mdx) to expand an agent’s capabilities.
 
 ## When to use tools
 
@@ -20,7 +15,7 @@ Use tools when an agent needs additional context or information from remote reso
 
 This example shows how to create a tool that fetches weather data from an API. When the agent calls the tool, it provides the required input as defined by the tool’s `inputSchema`. The tool accesses this data through its `context` argument, which in this example includes the `location` used in the weather API query.
 
-```typescript {14} filename="src/mastra/tools/weather-tool.ts" showLineNumbers copy
+```typescript {14,16} filename="src/mastra/tools/weather-tool.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -44,11 +39,9 @@ export const weatherTool = createTool({
 });
 ```
 
-> This example uses the [wttr.in](https://github.com/chubin/wttr.in) API.
-
 ## Adding tools to an agent
 
-To make a tool available to an agent, add it to the `tools` parameter and reference it by name in the agent’s instructions.
+To make a tool available to an agent, add it to the `tools` option and reference it by name in the agent’s instructions.
 
 ```typescript {9,11} filename="src/mastra/agents/weather-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -67,7 +60,7 @@ export const weatherAgent = new Agent({
 
 ## Calling an agent
 
-When the agent receives a message that includes a location, in this example London, it makes that data available to the tool's context.
+The agent uses the tool’s `inputSchema` to infer what data the tool expects. In this case, it extracts `London` as the `location` from the message and makes it available to the tool’s context.
 
 ```typescript {5} filename="src/test-tool.ts" showLineNumbers copy
 import { mastra } from "./mastra";
