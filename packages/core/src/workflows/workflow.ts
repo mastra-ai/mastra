@@ -1796,7 +1796,7 @@ export class Run<
     } = {},
   ): ReturnType<typeof this.streamLegacy> {
     console.warn(
-      "Deprecation NOTICE:\stream method will switch to use streamVNext implementation October 21st, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
+      "Deprecation NOTICE: stream method will switch to use streamVNext implementation October 21st, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
     );
     return this.streamLegacy(args);
   }
