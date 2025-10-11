@@ -1,6 +1,6 @@
 'use client';
 
-import { Network, Globe, ArrowLeftFromLine, Book, Earth, GaugeIcon, Cloudy, EyeIcon, PackageIcon } from 'lucide-react';
+import { Network, Globe, ArrowLeftFromLine, Book, Earth, GaugeIcon, Cloudy, EyeIcon, PackageIcon, Database } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
 
 import {
@@ -144,6 +144,11 @@ const links = [
     name: 'Observability',
     url: '/observability',
     icon: EyeIcon,
+  },
+  {
+    name: 'Storage',
+    url: '/storage',
+    icon: Database,
   },
   {
     name: 'Runtime Context',

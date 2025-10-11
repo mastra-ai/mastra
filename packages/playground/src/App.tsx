@@ -31,6 +31,7 @@ import Scorer from './pages/scorers/scorer';
 import Observability from './pages/observability';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
+import StorageExplorer from './pages/storage';
 import { MastraReactProvider } from '@mastra/react';
 
 const paths: LinkComponentProviderProps['paths'] = {
@@ -102,6 +103,15 @@ function App() {
                   }
                 >
                   <Route path="/observability" element={<Observability />} />
+                </Route>
+                <Route
+                  element={
+                    <Layout>
+                      <Outlet />
+                    </Layout>
+                  }
+                >
+                  <Route path="/storage" element={<StorageExplorer />} />
                 </Route>
                 <Route
                   element={

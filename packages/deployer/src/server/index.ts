@@ -29,6 +29,7 @@ import { mcpRouter } from './handlers/routes/mcp/router';
 import { memoryRoutes } from './handlers/routes/memory/router';
 import { observabilityRouter } from './handlers/routes/observability/router';
 import { scoresRouter } from './handlers/routes/scores/router';
+import { storageRoutes } from './handlers/routes/storage/router';
 import { telemetryRouter } from './handlers/routes/telemetry/router';
 import { toolsRouter } from './handlers/routes/tools/router';
 import { vectorRouter } from './handlers/routes/vector/router';
@@ -465,6 +466,8 @@ export async function createHonoServer(
   app.route('/api/tools', toolsRouter(bodyLimitOptions, options.tools));
   // Vector routes
   app.route('/api/vector', vectorRouter(bodyLimitOptions));
+  // Storage routes
+  app.route('/api/storage', storageRoutes(bodyLimitOptions));
 
   if (options?.isDev || server?.build?.openAPIDocs || server?.build?.swaggerUI) {
     app.get(

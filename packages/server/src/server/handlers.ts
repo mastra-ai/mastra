@@ -6,6 +6,7 @@ export * as logs from './handlers/logs';
 export * as memory from './handlers/memory';
 export * as observability from './handlers/observability';
 export * as scores from './handlers/scores';
+export * as storage from './handlers/storage';
 export * as telemetry from './handlers/telemetry';
 export * as tools from './handlers/tools';
 export * as vector from './handlers/vector';
