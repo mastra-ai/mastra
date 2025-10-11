@@ -1,4 +1,4 @@
-import type { ToolSet } from 'ai-v5';
+import type { ToolSet } from 'ai';
 import { InternalSpans } from '../../../ai-tracing';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createWorkflow } from '../../../workflows';
@@ -50,6 +50,7 @@ export function createAgenticExecutionWorkflow<
         // VNext execution as internal
         internal: InternalSpans.WORKFLOW,
       },
+      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
     },
   })
     .then(llmExecutionStep)

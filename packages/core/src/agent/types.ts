@@ -1,4 +1,4 @@
-import type { GenerateTextOnStepFinishCallback, TelemetrySettings, ToolSet } from 'ai';
+import type { GenerateTextOnStepFinishCallback, TelemetrySettings, ToolSet } from 'ai-v4';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
@@ -12,7 +12,9 @@ import type {
   OutputType,
   SystemMessage,
   MastraModelConfig,
+  OpenAICompatibleConfig,
 } from '../llm';
+import type { ModelRouterModelId } from '../llm/model';
 import type {
   StreamTextOnFinishCallback,
   StreamTextOnStepFinishCallback,
@@ -20,7 +22,7 @@ import type {
 } from '../llm/model/base.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { MastraLanguageModel, MemoryConfig, StorageThreadType } from '../memory/types';
+import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import type { RuntimeContext } from '../runtime-context';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
@@ -38,7 +40,7 @@ import type { SaveQueueManager } from './save-queue';
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 
 export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
-export type { Message as AiMessageType } from 'ai';
+export type { Message as AiMessageType } from 'ai-v4';
 export type { LLMStepResult } from '../stream/types';
 
 export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5>;
@@ -57,7 +59,7 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   schema: OUTPUT;
 
   /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
-  model?: MastraLanguageModel;
+  model?: MastraModelConfig;
 
   /**
    * Custom instructions for the structuring agent.
@@ -71,7 +73,15 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
    * Useful for controlling thinking models to reduce latency and token usage
    */
   providerOptions?: SharedV2ProviderOptions;
+   * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
+   */
+  jsonPromptInjection?: boolean;
 } & FallbackFields<OUTPUT>;
+
+export type SerializableStructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = Omit<
+  StructuredOutputOptions<OUTPUT>,
+  'model'
+> & { model?: ModelRouterModelId | OpenAICompatibleConfig };
 
 /**
  * Provide options while creating an agent.

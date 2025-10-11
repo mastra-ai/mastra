@@ -1,4 +1,4 @@
-import type { StepResult, ToolSet } from 'ai-v5';
+import type { StepResult, ToolSet } from 'ai';
 import { InternalSpans } from '../../../ai-tracing';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type { ChunkType } from '../../../stream/types';
@@ -63,6 +63,9 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         // mark all workflow spans related to the
         // VNext execution as internal
         internal: InternalSpans.WORKFLOW,
+      },
+      shouldPersistSnapshot: params => {
+        return params.workflowStatus === 'suspended';
       },
     },
   })

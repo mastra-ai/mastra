@@ -2,7 +2,6 @@ import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import { z } from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
-import { InternalSpans } from '../../ai-tracing';
 import type { TracingContext } from '../../ai-tracing';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { ChunkType } from '../../stream';
@@ -90,7 +89,6 @@ export class SystemPromptScrubber implements Processor {
       name: 'system-prompt-detector',
       model: this.model,
       instructions: this.instructions,
-      options: { tracingPolicy: { internal: InternalSpans.ALL } },
     });
   }
 
@@ -104,7 +102,7 @@ export class SystemPromptScrubber implements Processor {
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
   }): Promise<ChunkType | null> {
-    const { part, abort } = args;
+    const { part, abort, tracingContext } = args;
 
     // Only process text-delta chunks
     if (part.type !== 'text-delta') {
@@ -117,7 +115,7 @@ export class SystemPromptScrubber implements Processor {
     }
 
     try {
-      const detectionResult = await this.detectSystemPrompts(text);
+      const detectionResult = await this.detectSystemPrompts(text, tracingContext);
 
       if (detectionResult.detections && detectionResult.detections.length > 0) {
         const detectedTypes = detectionResult.detections.map(detection => detection.type);
@@ -168,9 +166,11 @@ export class SystemPromptScrubber implements Processor {
   async processOutputResult({
     messages,
     abort,
+    tracingContext,
   }: {
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
+    tracingContext?: TracingContext;
   }): Promise<MastraMessageV2[]> {
     const processedMessages: MastraMessageV2[] = [];
 
@@ -187,7 +187,7 @@ export class SystemPromptScrubber implements Processor {
       }
 
       try {
-        const detectionResult = await this.detectSystemPrompts(textContent);
+        const detectionResult = await this.detectSystemPrompts(textContent, tracingContext);
 
         if (detectionResult.detections && detectionResult.detections.length > 0) {
           const detectedTypes = detectionResult.detections.map(detection => detection.type);
@@ -264,6 +264,9 @@ export class SystemPromptScrubber implements Processor {
         result = await this.detectionAgent.generate(text, {
           output: schema,
           providerOptions: this.providerOptions,
+          structuredOutput: {
+            schema,
+          },
           tracingContext,
         });
       } else {

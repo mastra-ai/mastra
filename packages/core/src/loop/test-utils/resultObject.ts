@@ -1,5 +1,5 @@
-import { tool } from 'ai-v5';
-import { convertArrayToReadableStream } from 'ai-v5/test';
+import { tool } from 'ai';
+import { convertArrayToReadableStream } from 'ai/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { MessageList } from '../../agent/message-list';
@@ -32,6 +32,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           warnings: [{ type: 'other', message: 'test-warning' }],
         }),
         messageList,
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -66,6 +67,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           ]),
         }),
         messageList,
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -106,6 +108,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           ]),
         }),
         messageList,
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -143,6 +146,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           ]),
         }),
         messageList,
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -162,6 +166,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         messageList,
         ...defaultSettings(),
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -261,6 +266,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           ]),
           request: { body: 'test body' },
         }),
+        agentId: 'agent-id',
         messageList,
       });
 
@@ -355,6 +361,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         models: createTestModels(),
         messageList: new MessageList(),
         ...defaultSettings(),
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -370,6 +377,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         messageList: new MessageList(),
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         ...defaultSettings(),
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -657,6 +665,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         messageList: new MessageList(),
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
         ...defaultSettings(),
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -836,6 +845,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             inputSchema: z.object({ value: z.string() }),
           }),
         },
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -892,6 +902,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             execute: async ({ value }: { value: string }) => `${value}-result`,
           },
         },
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();

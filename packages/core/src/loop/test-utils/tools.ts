@@ -1,12 +1,12 @@
-import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils/test';
-import { dynamicTool, jsonSchema, stepCountIs } from 'ai-v5';
+import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v4/test';
+import { dynamicTool, jsonSchema, stepCountIs } from 'ai';
 import {
   convertArrayToReadableStream,
   convertReadableStreamToArray,
   MockLanguageModelV2,
   mockValues,
   mockId,
-} from 'ai-v5/test';
+} from 'ai/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
@@ -543,6 +543,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
 
       const result = await loopFn({
         runId,
+        agentId: 'agent-id',
         models: createTestModels({
           stream: convertArrayToReadableStream([
             {
@@ -827,6 +828,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       );
       const result = await loopFn({
         runId,
+        agentId: 'agent-id',
         models: [
           {
             maxRetries: 0,

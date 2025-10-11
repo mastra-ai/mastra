@@ -1,10 +1,11 @@
 import type { ReadableStream } from 'stream/web';
 import { TransformStream } from 'stream/web';
-import { getErrorMessage } from '@ai-sdk/provider-v5';
-import { createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse, generateId } from 'ai-v5';
-import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
+import { getErrorMessage } from '@ai-sdk/provider';
+import { createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse, generateId } from 'ai';
+import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai';
 import type z from 'zod';
 import type { MessageList } from '../../../agent/message-list';
+import type { StructuredOutputOptions } from '../../../agent/types';
 import { getValidTraceId } from '../../../ai-tracing';
 import type { TracingContext } from '../../../ai-tracing';
 import type { MastraModelOutput } from '../../base/output';
@@ -18,7 +19,7 @@ import type { OutputChunkType } from './transform';
 type AISDKV5OutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   toolCallStreaming?: boolean;
   includeRawChunks?: boolean;
-  output?: OUTPUT;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
   tracingContext?: TracingContext;
 };
 

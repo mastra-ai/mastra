@@ -1,5 +1,94 @@
 # @mastra/react-hooks
 
+## 0.0.6-alpha.0
+
+### Patch Changes
+
+- Gracefully fix errors in react-sdk when error is an object ([#8703](https://github.com/mastra-ai/mastra/pull/8703))
+
+- Prepares some basic set of homemade components ([#8619](https://github.com/mastra-ai/mastra/pull/8619))
+
+- Fix back the tripwire verification inside the new react system ([#8674](https://github.com/mastra-ai/mastra/pull/8674))
+
+- handle error case in react sdk ([#8676](https://github.com/mastra-ai/mastra/pull/8676))
+
+- fix maxSteps model settings not being passed to generate and stream endpoints ([#8627](https://github.com/mastra-ai/mastra/pull/8627))
+
+- Updated dependencies [[`7b1ef57`](https://github.com/mastra-ai/mastra/commit/7b1ef57fc071c2aa2a2e32905b18cd88719c5a39), [`78cfb6b`](https://github.com/mastra-ai/mastra/commit/78cfb6b66fe88bc848105fccb6459fd75413ec87)]:
+  - @mastra/client-js@0.16.0-alpha.0
+
+## 0.0.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mastra/client-js@0.15.2
+
+## 0.0.5-alpha.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mastra/client-js@0.15.2-alpha.1
+
+## 0.0.5-alpha.0
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mastra/client-js@0.15.2-alpha.0
+
+## 0.0.4
+
+### Patch Changes
+
+- Mutable shared workflow run state ([#8545](https://github.com/mastra-ai/mastra/pull/8545))
+
+- add tripwire reason in playground ([#8568](https://github.com/mastra-ai/mastra/pull/8568))
+
+- type fixes and missing changeset ([#8545](https://github.com/mastra-ai/mastra/pull/8545))
+
+- Convert WorkflowWatchResult to WorkflowResult in workflow graph ([#8541](https://github.com/mastra-ai/mastra/pull/8541))
+
+- Updated dependencies [[`4783b30`](https://github.com/mastra-ai/mastra/commit/4783b3063efea887825514b783ba27f67912c26d), [`2aee9e7`](https://github.com/mastra-ai/mastra/commit/2aee9e7d188b8b256a4ddc203ccefb366b4867fa)]:
+  - @mastra/client-js@0.15.1
+
+## 0.0.4-alpha.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mastra/client-js@0.15.1-alpha.4
+
+## 0.0.4-alpha.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mastra/client-js@0.15.1-alpha.3
+
+## 0.0.4-alpha.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mastra/client-js@0.15.1-alpha.2
+
+## 0.0.4-alpha.1
+
+### Patch Changes
+
+- Mutable shared workflow run state ([#8545](https://github.com/mastra-ai/mastra/pull/8545))
+
+- add tripwire reason in playground ([#8568](https://github.com/mastra-ai/mastra/pull/8568))
+
+- type fixes and missing changeset ([#8545](https://github.com/mastra-ai/mastra/pull/8545))
+
+- Convert WorkflowWatchResult to WorkflowResult in workflow graph ([#8541](https://github.com/mastra-ai/mastra/pull/8541))
+
+- Updated dependencies [[`4783b30`](https://github.com/mastra-ai/mastra/commit/4783b3063efea887825514b783ba27f67912c26d), [`2aee9e7`](https://github.com/mastra-ai/mastra/commit/2aee9e7d188b8b256a4ddc203ccefb366b4867fa)]:
+  - @mastra/client-js@0.15.1-alpha.1
+
 ## 0.0.4-alpha.0
 
 ### Patch Changes

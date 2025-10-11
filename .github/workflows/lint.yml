@@ -198,9 +198,6 @@ jobs:
       - name: Run peerdeps validator
         run: node ./scripts/validate-peerdeps.mjs
 
-      - name: Run update perdeps
-        run: node ./scripts/update-peerdeps.mjs
-
       - name: Check for git changes
         run: |
           if ! git diff --quiet --ignore-space-at-eol -- ':!package.json' || ! git diff --cached --quiet --ignore-space-at-eol -- ':!package.json'; then

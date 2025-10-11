@@ -1,7 +1,6 @@
-import { ActionBarPrimitive, MessagePrimitive, ToolCallMessagePartComponent, useMessage } from '@assistant-ui/react';
-import { AudioLinesIcon, BrainIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
+import { ActionBarPrimitive, MessagePrimitive, useMessage } from '@assistant-ui/react';
+import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
 
-import { MarkdownText } from './markdown-text';
 import { ErrorAwareText } from './error-aware-text';
 import { TooltipIconButton } from '../tooltip-icon-button';
 import { ToolFallback } from '@/components/assistant-ui/tools/tool-fallback';
@@ -10,11 +9,10 @@ import { cn } from '@/lib/utils';
 import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provider-logo';
 
 export interface AssistantMessageProps {
-  ToolFallback?: ToolCallMessagePartComponent;
   hasModelList?: boolean;
 }
 
-export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom, hasModelList }: AssistantMessageProps) => {
+export const AssistantMessage = ({ hasModelList }: AssistantMessageProps) => {
   const data = useMessage();
   const messageId = data.id;
 
@@ -30,7 +28,7 @@ export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom, hasModelLis
         <MessagePrimitive.Parts
           components={{
             Text: ErrorAwareText,
-            tools: { Fallback: ToolFallbackCustom || ToolFallback },
+            tools: { Fallback: ToolFallback },
             Reasoning: Reasoning,
           }}
         />

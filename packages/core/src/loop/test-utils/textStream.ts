@@ -1,5 +1,5 @@
 import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils/test';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai/test';
 import { describe, expect, it } from 'vitest';
 import { MessageList } from '../../agent/message-list';
 import { testUsage } from '../../stream/aisdk/v5/test-utils';
@@ -54,6 +54,7 @@ export function textStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
           },
         ],
         messageList,
+        agentId: 'agent-id',
       });
 
       expect(await convertAsyncIterableToArray(result.textStream)).toStrictEqual(['Hello', ', ', 'world!']);

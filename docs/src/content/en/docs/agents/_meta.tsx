@@ -1,13 +1,10 @@
 const meta = {
   overview: "Overview",
+  "using-tools": "Using Tools",
   "agent-memory": "Agent Memory",
-  "using-tools-and-mcp": "Tools and MCP",
-  "input-processors": "Input Processors",
-  "output-processors": "Output Processors",
-  "adding-voice": "Adding Voice",
-  "runtime-context": "Runtime Context",
-  "dynamic-agents": "Dynamic Agents",
+  guardrails: "Guardrails",
   networks: "Networks",
+  "adding-voice": "Adding Voice",
 };
 
 export default meta;

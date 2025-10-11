@@ -1,11 +1,12 @@
 import z from 'zod';
 import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
-import { Agent } from '../../agent/index';
+import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
 import type { MastraMessageV2, MessageListInput } from '../../agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { RuntimeContext } from '../../runtime-context';
+import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
 import { createStep, createWorkflow } from '../../workflows';
@@ -213,11 +214,14 @@ export async function createNetworkLoop({
       await writer.write({
         type: 'routing-agent-start',
         payload: {
+          agentId: routingAgent.id,
+          runId: runId,
           inputData: {
             ...inputData,
             iteration: iterationCount,
           },
         },
+        from: ChunkFrom.NETWORK,
       });
 
       if (inputData.primitiveType !== 'none' && inputData?.result) {
@@ -239,7 +243,7 @@ export async function createNetworkLoop({
                           }
                       `;
 
-        completionResult = await routingAgent.generate([{ role: 'assistant', content: completionPrompt }], {
+        completionResult = await tryGenerateWithJsonFallback(routingAgent, completionPrompt, {
           structuredOutput: {
             schema: completionSchema,
           },
@@ -263,11 +267,13 @@ export async function createNetworkLoop({
             isComplete: true,
             selectionReason: completionResult.object.completionReason || '',
             iteration: iterationCount,
+            runId: runId,
           };
 
           await writer.write({
             type: 'routing-agent-end',
             payload: endPayload,
+            from: ChunkFrom.NETWORK,
           });
 
           const memory = await agent.getMemory({ runtimeContext: runtimeContext });
@@ -353,7 +359,7 @@ export async function createNetworkLoop({
         ...routingAgentOptions,
       };
 
-      const result = await routingAgent.generate(prompt, options);
+      const result = await tryGenerateWithJsonFallback(routingAgent, prompt, options);
 
       const object = result.object;
 
@@ -366,11 +372,13 @@ export async function createNetworkLoop({
         isComplete: object.primitiveId === 'none' && object.primitiveType === 'none',
         selectionReason: object.selectionReason,
         iteration: iterationCount,
+        runId: runId,
       };
 
       await writer.write({
         type: 'routing-agent-end',
         payload: endPayload,
+        from: ChunkFrom.NETWORK,
       });
 
       return endPayload;
@@ -426,6 +434,7 @@ export async function createNetworkLoop({
           args: inputData,
           runId,
         },
+        from: ChunkFrom.NETWORK,
       });
 
       const result = await agentForStep.stream(inputData.prompt, {
@@ -439,6 +448,7 @@ export async function createNetworkLoop({
         await writer.write({
           type: `agent-execution-event-${chunk.type}`,
           payload: chunk,
+          from: ChunkFrom.NETWORK,
         });
       }
 
@@ -488,6 +498,7 @@ export async function createNetworkLoop({
       await writer.write({
         type: 'agent-execution-end',
         payload: endPayload,
+        from: ChunkFrom.NETWORK,
       });
 
       return {
@@ -559,16 +570,17 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
-      const run = await wf.createRunAsync();
+      const run = await wf.createRunAsync({ runId });
       const toolData = {
         name: wf.name,
         args: inputData,
-        runId: run.runId,
+        runId: runId,
       };
 
       await writer?.write({
         type: 'workflow-execution-start',
         payload: toolData,
+        from: ChunkFrom.NETWORK,
       });
 
       // await emitter.emit('watch-v2', {
@@ -589,6 +601,7 @@ export async function createNetworkLoop({
         await writer?.write({
           type: `workflow-execution-event-${chunk.type}`,
           payload: chunk,
+          from: ChunkFrom.NETWORK,
         });
       }
 
@@ -643,6 +656,7 @@ export async function createNetworkLoop({
       await writer?.write({
         type: 'workflow-execution-end',
         payload: endPayload,
+        from: ChunkFrom.NETWORK,
       });
 
       return endPayload;
@@ -736,6 +750,7 @@ export async function createNetworkLoop({
           },
           runId,
         },
+        from: ChunkFrom.NETWORK,
       });
 
       const finalResult = await tool.execute(
@@ -798,6 +813,7 @@ export async function createNetworkLoop({
       await writer?.write({
         type: 'tool-execution-end',
         payload: endPayload,
+        from: ChunkFrom.NETWORK,
       });
 
       return endPayload;
@@ -834,11 +850,13 @@ export async function createNetworkLoop({
         result: endResult,
         isComplete: !!inputData.isComplete,
         iteration: inputData.iteration,
+        runId: runId,
       };
 
       await writer?.write({
         type: 'network-execution-event-step-finish',
         payload: endPayload,
+        from: ChunkFrom.NETWORK,
       });
 
       return endPayload;
@@ -871,6 +889,9 @@ export async function createNetworkLoop({
       threadResourceId: z.string().optional(),
       isOneOff: z.boolean(),
     }),
+    options: {
+      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+    },
   });
 
   networkWorkflow
@@ -879,7 +900,7 @@ export async function createNetworkLoop({
       [async ({ inputData }) => !inputData.isComplete && inputData.primitiveType === 'agent', agentStep],
       [async ({ inputData }) => !inputData.isComplete && inputData.primitiveType === 'workflow', workflowStep],
       [async ({ inputData }) => !inputData.isComplete && inputData.primitiveType === 'tool', toolStep],
-      [async ({ inputData }) => inputData.isComplete, finishStep],
+      [async ({ inputData }) => !!inputData.isComplete, finishStep],
     ])
     .map({
       task: {
@@ -1024,6 +1045,9 @@ export async function networkLoop<
       completionReason: z.string().optional(),
       iteration: z.number(),
     }),
+    options: {
+      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+    },
   })
     .dountil(networkWorkflow, async ({ inputData }) => {
       return inputData.isComplete || (maxIterations && inputData.iteration >= maxIterations);

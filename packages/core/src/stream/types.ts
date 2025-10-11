@@ -1,4 +1,3 @@
-import type { LanguageModelV1LogProbs } from '@ai-sdk/provider';
 import type {
   LanguageModelV2FinishReason,
   LanguageModelV2Usage,
@@ -7,12 +6,14 @@ import type {
   LanguageModelV2ResponseMetadata,
   LanguageModelV2,
   LanguageModelV2StreamPart,
-} from '@ai-sdk/provider-v5';
+} from '@ai-sdk/provider';
+import type { LanguageModelV1LogProbs } from '@ai-sdk/provider-v4';
 import type { Span } from '@opentelemetry/api';
-import type { FinishReason, LanguageModelRequestMetadata, TelemetrySettings } from 'ai';
-import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from 'ai-v5';
+import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from 'ai';
+import type { FinishReason, LanguageModelRequestMetadata, TelemetrySettings } from 'ai-v4';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
+import type { StructuredOutputOptions } from '../agent/types';
 import type { TracingContext } from '../ai-tracing/types';
 import type { OutputProcessor } from '../processors';
 import type { WorkflowStreamEvent } from '../workflows/types';
@@ -23,6 +24,7 @@ export enum ChunkFrom {
   USER = 'USER',
   SYSTEM = 'SYSTEM',
   WORKFLOW = 'WORKFLOW',
+  NETWORK = 'NETWORK',
 }
 
 interface BaseChunkType {
@@ -307,6 +309,8 @@ interface TripwirePayload {
 
 // Network-specific payload interfaces
 interface RoutingAgentStartPayload {
+  agentId: string;
+  runId: string;
   inputData: {
     task: string;
     primitiveId: string;
@@ -329,6 +333,7 @@ interface RoutingAgentEndPayload {
   isComplete?: boolean;
   selectionReason: string;
   iteration: number;
+  runId: string;
 }
 
 interface AgentExecutionStartPayload {
@@ -407,6 +412,7 @@ interface NetworkStepFinishPayload {
   result: string;
   isComplete: boolean;
   iteration: number;
+  runId: string;
 }
 
 interface NetworkFinishPayload {
@@ -563,7 +569,7 @@ export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = 
   onFinish?: MastraOnFinishCallback;
   onStepFinish?: MastraOnStepFinishCallback;
   includeRawChunks?: boolean;
-  output?: OUTPUT;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
   outputProcessors?: OutputProcessor[];
   isLLMExecutionStep?: boolean;
   returnScorerData?: boolean;
@@ -571,7 +577,7 @@ export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = 
   processorStates?: Map<string, any>;
 };
 
-export type LLMStepResult = {
+export type LLMStepResult<OUTPUT extends OutputSchema = undefined> = {
   stepType?: 'initial' | 'tool-result';
   toolCalls: ToolCallChunk[];
   toolResults: ToolResultChunk[];
@@ -591,7 +597,13 @@ export type LLMStepResult = {
   response: {
     headers?: Record<string, string>;
     messages?: StepResult<ToolSet>['response']['messages'];
-    uiMessages?: UIMessage[];
+    uiMessages?: UIMessage<
+      OUTPUT extends OutputSchema
+        ? {
+            structuredOutput?: InferSchemaOutput<OUTPUT>;
+          } & Record<string, unknown>
+        : unknown
+    >[];
     id?: string;
     timestamp?: Date;
     modelId?: string;

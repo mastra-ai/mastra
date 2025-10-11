@@ -1,5 +1,5 @@
 import { ReadableStream } from 'stream/web';
-import type { ToolSet } from 'ai-v5';
+import type { ToolSet } from 'ai';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
@@ -40,6 +40,7 @@ export function workflowLoopStream<
   messageList,
   startTimestamp,
   streamState,
+  agentId,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType<OUTPUT>>({
@@ -74,6 +75,7 @@ export function workflowLoopStream<
         messageList,
         startTimestamp,
         streamState,
+        agentId,
         ...rest,
       });
 
@@ -117,7 +119,9 @@ export function workflowLoopStream<
           type: 'start',
           runId,
           from: ChunkFrom.AGENT,
-          payload: {},
+          payload: {
+            id: agentId,
+          },
         });
       }
 

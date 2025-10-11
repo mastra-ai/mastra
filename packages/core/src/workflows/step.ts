@@ -39,7 +39,7 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
     resumePayload: any;
   };
   [EMITTER_SYMBOL]: Emitter;
-  [STREAM_FORMAT_SYMBOL]: 'aisdk' | 'mastra' | undefined;
+  [STREAM_FORMAT_SYMBOL]: 'legacy' | 'vnext' | undefined;
   engine: EngineType;
   abortSignal: AbortSignal;
   writer: ToolStream<ChunkType>;
@@ -49,6 +49,16 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
 export type ExecuteFunction<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
   params: ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
 ) => Promise<TStepOutput>;
+
+export type ConditionFunction<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = (
+  params: ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
+) => Promise<boolean>;
+
+export type LoopConditionFunction<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = (
+  params: ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> & {
+    iterationCount: number;
+  },
+) => Promise<boolean>;
 
 // Define a Step interface
 export interface Step<

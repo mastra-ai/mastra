@@ -2,7 +2,7 @@ import { Slider } from '@/components/ui/slider';
 
 import { Label } from '@/components/ui/label';
 
-import { AlertTriangleIcon, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
@@ -15,23 +15,11 @@ import { Txt } from '@/ds/components/Txt/Txt';
 import { AgentAdvancedSettings } from './agent-advanced-settings';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import clsx from 'clsx';
-import { AgentMetadataSection } from './agent-metadata';
-import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata/agent-metadata-model-list';
-import {
-  AgentMetadataModelSwitcher,
-  AgentMetadataModelSwitcherProps,
-} from './agent-metadata/agent-metadata-model-switcher';
-import { GetAgentResponse } from '@mastra/client-js';
 
 export interface AgentSettingsProps {
-  agent: GetAgentResponse;
   modelVersion: string;
   hasMemory?: boolean;
   hasSubAgents?: boolean;
-  modelProviders: string[];
-  updateModel: AgentMetadataModelSwitcherProps['updateModel'];
-  updateModelInModelList: AgentMetadataModelListProps['updateModelInModelList'];
-  reorderModelList: AgentMetadataModelListProps['reorderModelList'];
 }
 
 const NetworkCheckbox = ({ hasMemory, hasSubAgents }: { hasMemory: boolean; hasSubAgents: boolean }) => {
@@ -71,16 +59,7 @@ const NetworkCheckbox = ({ hasMemory, hasSubAgents }: { hasMemory: boolean; hasS
   );
 };
 
-export const AgentSettings = ({
-  agent,
-  modelVersion,
-  hasMemory = false,
-  hasSubAgents = false,
-  updateModel,
-  modelProviders,
-  updateModelInModelList,
-  reorderModelList,
-}: AgentSettingsProps) => {
+export const AgentSettings = ({ modelVersion, hasMemory = false, hasSubAgents = false }: AgentSettingsProps) => {
   const { settings, setSettings, resetAll } = useAgentSettings();
 
   let radioValue;
@@ -97,37 +76,6 @@ export const AgentSettings = ({
 
   return (
     <div className="px-5 text-xs py-2 pb-4">
-      {agent.modelList ? (
-        <AgentMetadataSection title="Models">
-          <AgentMetadataModelList
-            modelList={agent.modelList}
-            modelProviders={modelProviders}
-            updateModelInModelList={updateModelInModelList}
-            reorderModelList={reorderModelList}
-          />
-        </AgentMetadataSection>
-      ) : (
-        <AgentMetadataSection
-          title={'Model'}
-          hint={
-            modelVersion === 'v2'
-              ? undefined
-              : {
-                  link: 'https://mastra.ai/en/reference/agents/migration-guide',
-                  title: 'You are using a legacy v1 model',
-                  icon: <AlertTriangleIcon fontSize={14} className="mb-0.5" />,
-                }
-          }
-        >
-          <AgentMetadataModelSwitcher
-            defaultProvider={agent.provider}
-            defaultModel={agent.modelId}
-            updateModel={updateModel}
-            modelProviders={modelProviders}
-          />
-        </AgentMetadataSection>
-      )}
-
       <section className="space-y-7">
         <Entry label="Chat Method">
           <RadioGroup
