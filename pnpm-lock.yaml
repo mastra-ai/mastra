@@ -366,7 +366,7 @@ importers:
         specifier: ^19.1.9
         version: 19.2.1(@types/react@19.2.2)
       '@vitejs/plugin-react':
-        specifier: ^5.0.3
+        specifier: ^5.0.4
         version: 5.0.4(vite@7.1.9(@types/node@20.19.19)(jiti@2.6.1)(lightningcss@1.30.1)(tsx@4.20.6)(yaml@2.8.1))
       '@vitest/ui':
         specifier: ^3.2.4
@@ -841,7 +841,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.35
-        version: 2.0.46(zod@3.25.76)
+        version: 2.0.42(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -1179,7 +1179,7 @@ importers:
         version: link:../mcp
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
-        version: 0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))
+        version: 0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.1.0(@opentelemetry/api@1.9.0)
@@ -1379,7 +1379,7 @@ importers:
         version: 1.9.0
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
-        version: 0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))
+        version: 0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.1.0(@opentelemetry/api@1.9.0)
@@ -2385,8 +2385,8 @@ importers:
         specifier: ^19.1.7
         version: 19.2.1(@types/react@19.2.2)
       '@vitejs/plugin-react':
-        specifier: ^4.6.0
-        version: 4.7.0(vite@6.3.6(@types/node@20.19.19)(jiti@1.21.7)(lightningcss@1.30.1)(tsx@4.20.6)(yaml@2.8.1))
+        specifier: ^5.0.4
+        version: 5.0.4(vite@6.3.6(@types/node@20.19.19)(jiti@1.21.7)(lightningcss@1.30.1)(tsx@4.20.6)(yaml@2.8.1))
       autoprefixer:
         specifier: ^10.4.21
         version: 10.4.21(postcss@8.5.6)
@@ -2641,8 +2641,8 @@ importers:
         specifier: ^19.1.7
         version: 19.2.1(@types/react@19.2.2)
       '@vitejs/plugin-react':
-        specifier: ^4.6.0
-        version: 4.7.0(vite@6.3.6(@types/node@20.19.19)(jiti@2.6.1)(lightningcss@1.30.1)(tsx@4.20.6)(yaml@2.8.1))
+        specifier: ^5.0.4
+        version: 5.0.4(vite@6.3.6(@types/node@20.19.19)(jiti@2.6.1)(lightningcss@1.30.1)(tsx@4.20.6)(yaml@2.8.1))
       autoprefixer:
         specifier: ^10.4.21
         version: 10.4.21(postcss@8.5.6)
@@ -3903,7 +3903,7 @@ importers:
     dependencies:
       '@google/genai':
         specifier: latest
-        version: 1.23.0(@modelcontextprotocol/sdk@1.19.1)(encoding@0.1.13)
+        version: 1.24.0(@modelcontextprotocol/sdk@1.19.1)(encoding@0.1.13)
       google-auth-library:
         specifier: ^10.2.1
         version: 10.4.0
@@ -4361,12 +4361,6 @@ packages:
 
   '@ai-sdk/openai@2.0.42':
     resolution: {integrity: sha512-9mM6QS8k0ooH9qMC27nlrYLQmNDnO6Rk0JTmFo/yUxpABEWOcvQhMWNHbp9lFL6Ty5vkdINrujhsAQfWuEleOg==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
-  '@ai-sdk/openai@2.0.46':
-    resolution: {integrity: sha512-3FHZdiTLbjnHw0rbu1yOPW8FruHrzN6SlJYsaLSQgbxYfE5y+60Nj4Xp8/k7rtD3FmrjkKcp/XTMSbAJWfoJig==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -6364,8 +6358,8 @@ packages:
     resolution: {integrity: sha512-Yy3+vKYFs1/oGWWDQoonvaUc8beDObcZFl+HCMjSu5+Okld2Bk8gjNekv37f5posRlQSN65xF7h5m8r2jmXJZg==}
     engines: {node: '>=18'}
 
-  '@google/genai@1.23.0':
-    resolution: {integrity: sha512-d/rMD0GP3lXlR03qk2feLbBes2YVGhbPNxZsnUdZCn6AfOKXaOKfEtVWpyQrMMxRRYtLtN3UXmDUH+OfRN4F4A==}
+  '@google/genai@1.24.0':
+    resolution: {integrity: sha512-e3jZF9Dx3dDaDCzygdMuYByHI2xJZ0PaD3r2fRgHZe2IOwBnmJ/Tu5Lt/nefTCxqr1ZnbcbQK9T13d8U/9UMWg==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': ^1.11.4
@@ -8907,9 +8901,6 @@ packages:
     peerDependencies:
       '@redis/client': ^5.8.3
 
-  '@rolldown/pluginutils@1.0.0-beta.27':
-    resolution: {integrity: sha512-+d0F4MKMCbeVUJwG96uQ4SgAznZNSq93I3V+9NHA4OpvqG8mRCpGdKmK8l/dl02h2CCDHwW2FqilnTyDcAnqjA==}
-
   '@rolldown/pluginutils@1.0.0-beta.38':
     resolution: {integrity: sha512-N/ICGKleNhA5nc9XXQG/kkKHJ7S55u0x0XUJbbkmdCnFuoRkM1Il12q9q0eX19+M7KKUEPw/daUPIRnxhcxAIw==}
 
@@ -10109,12 +10100,6 @@ packages:
   '@vercel/oidc@3.0.2':
     resolution: {integrity: sha512-JekxQ0RApo4gS4un/iMGsIL1/k4KUBe3HmnGcDvzHuFBdQdudEJgTqcsJC7y6Ul4Yw5CeykgvQbX2XeEJd0+DA==}
     engines: {node: '>= 20'}
-
-  '@vitejs/plugin-react@4.7.0':
-    resolution: {integrity: sha512-gUu9hwfWvvEDBBmgtAowQCojwZmJ5mcLn3aufeCsitijs3+f2NsrPtlAWIR6OPiqljl96GVCUbLe0HyqIpVaoA==}
-    engines: {node: ^14.18.0 || >=16.0.0}
-    peerDependencies:
-      vite: ^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0
 
   '@vitejs/plugin-react@5.0.4':
     resolution: {integrity: sha512-La0KD0vGkVkSk6K+piWDKRUyg8Rl5iAIKRMH0vMJI0Eg47bq1eOxmoObAaQG37WMW9MSyk7Cs8EIWwJC1PtzKA==}
@@ -16824,12 +16809,6 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.10(zod@4.1.12)
       zod: 4.1.12
 
-  '@ai-sdk/openai@2.0.46(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.11(zod@3.25.76)
-      zod: 3.25.76
-
   '@ai-sdk/provider-utils@2.2.8(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
@@ -19304,7 +19283,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google/genai@1.23.0(@modelcontextprotocol/sdk@1.19.1)(encoding@0.1.13)':
+  '@google/genai@1.24.0(@modelcontextprotocol/sdk@1.19.1)(encoding@0.1.13)':
     dependencies:
       google-auth-library: 9.15.1(encoding@0.1.13)
       ws: 8.18.3
@@ -19907,7 +19886,7 @@ snapshots:
       '@mastra/schema-compat': 0.11.4(ai@4.3.19(react@19.2.0)(zod@4.1.12))(zod@4.1.12)
       '@openrouter/ai-sdk-provider-v5': '@openrouter/ai-sdk-provider@1.2.0(ai@4.3.19(react@19.2.0)(zod@4.1.12))(zod@4.1.12)'
       '@opentelemetry/api': 1.9.0
-      '@opentelemetry/auto-instrumentations-node': 0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))
+      '@opentelemetry/auto-instrumentations-node': 0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core': 2.1.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-grpc': 0.203.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-http': 0.203.0(@opentelemetry/api@1.9.0)
@@ -20328,7 +20307,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))':
+  '@opentelemetry/auto-instrumentations-node@0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.1.0(@opentelemetry/api@1.9.0)
@@ -20377,7 +20356,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.6.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.10.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.9(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
       '@opentelemetry/resources': 2.1.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.203.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -21529,7 +21508,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.1.0(@opentelemetry/api@1.9.0)
@@ -22396,8 +22375,6 @@ snapshots:
   '@redis/time-series@5.8.3(@redis/client@5.8.3)':
     dependencies:
       '@redis/client': 5.8.3
-
-  '@rolldown/pluginutils@1.0.0-beta.27': {}
 
   '@rolldown/pluginutils@1.0.0-beta.38': {}
 
@@ -23837,24 +23814,24 @@ snapshots:
 
   '@vercel/oidc@3.0.2': {}
 
-  '@vitejs/plugin-react@4.7.0(vite@6.3.6(@types/node@20.19.19)(jiti@1.21.7)(lightningcss@1.30.1)(tsx@4.20.6)(yaml@2.8.1))':
+  '@vitejs/plugin-react@5.0.4(vite@6.3.6(@types/node@20.19.19)(jiti@1.21.7)(lightningcss@1.30.1)(tsx@4.20.6)(yaml@2.8.1))':
     dependencies:
       '@babel/core': 7.28.4
       '@babel/plugin-transform-react-jsx-self': 7.27.1(@babel/core@7.28.4)
       '@babel/plugin-transform-react-jsx-source': 7.27.1(@babel/core@7.28.4)
-      '@rolldown/pluginutils': 1.0.0-beta.27
+      '@rolldown/pluginutils': 1.0.0-beta.38
       '@types/babel__core': 7.20.5
       react-refresh: 0.17.0
       vite: 6.3.6(@types/node@20.19.19)(jiti@1.21.7)(lightningcss@1.30.1)(tsx@4.20.6)(yaml@2.8.1)
     transitivePeerDependencies:
       - supports-color
 
-  '@vitejs/plugin-react@4.7.0(vite@6.3.6(@types/node@20.19.19)(jiti@2.6.1)(lightningcss@1.30.1)(tsx@4.20.6)(yaml@2.8.1))':
+  '@vitejs/plugin-react@5.0.4(vite@6.3.6(@types/node@20.19.19)(jiti@2.6.1)(lightningcss@1.30.1)(tsx@4.20.6)(yaml@2.8.1))':
     dependencies:
       '@babel/core': 7.28.4
       '@babel/plugin-transform-react-jsx-self': 7.27.1(@babel/core@7.28.4)
       '@babel/plugin-transform-react-jsx-source': 7.27.1(@babel/core@7.28.4)
-      '@rolldown/pluginutils': 1.0.0-beta.27
+      '@rolldown/pluginutils': 1.0.0-beta.38
       '@types/babel__core': 7.20.5
       react-refresh: 0.17.0
       vite: 6.3.6(@types/node@20.19.19)(jiti@2.6.1)(lightningcss@1.30.1)(tsx@4.20.6)(yaml@2.8.1)
