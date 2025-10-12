@@ -62,7 +62,7 @@ LLM コンテキスト: この Tabs コンポーネントは、MacOS/Linux 上�
 各タブには、その IDE の MCP 設定に必要な正確な JSON 構造とファイルパスが記載されています。
 */}
 
-<Tabs items={["Cursor", "Windsurf", "VSCode", "Claude Code"]}>
+<Tabs items={["Cursor", "Windsurf", "VSCode", "Claude Code", "Codex"]}>
   <Tabs.Tab>
 ```json
 {
@@ -105,6 +105,11 @@ LLM コンテキスト: この Tabs コンポーネントは、MacOS/Linux 上�
 claude mcp add mastra -- npx -y @mastra/mcp-docs-server
 ```
   </Tabs.Tab>
+  <Tabs.Tab>
+```bash
+codex mcp add mastra-docs -- npx -y @mastra/mcp-docs-server@latest
+```
+  </Tabs.Tab>
 </Tabs>
 
 ### Windows
@@ -117,7 +122,7 @@ LLM コンテキスト: この Tabs コンポーネントは、Windows 上の複
 最新の Windsurf と Cursor では直接の npx コマンドが機能しますが、VSCode で修正済みかどうかは未確認です。
 */}
 
-<Tabs items={["Cursor", "Windsurf", "VSCode", "Claude Code"]}>
+<Tabs items={["Cursor", "Windsurf", "VSCode", "Claude Code", "Codex"]}>
   <Tabs.Tab>
 ```json
 {
@@ -158,6 +163,11 @@ LLM コンテキスト: この Tabs コンポーネントは、Windows 上の複
   <Tabs.Tab>
 ```bash
 claude mcp add mastra -- npx -y @mastra/mcp-docs-server
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash
+codex mcp add mastra-docs -- npx -y @mastra/mcp-docs-server@latest
 ```
   </Tabs.Tab>
 </Tabs>
