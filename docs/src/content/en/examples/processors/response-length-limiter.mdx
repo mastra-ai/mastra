@@ -3,8 +3,6 @@ title: "Example: Response Length Limiter | Processors | Mastra Docs"
 description: Example of creating a custom output processor that limits AI response length during streaming to prevent excessively long outputs.
 ---
 
-import { GithubLink } from "@/components/github-link";
-
 # Response Length Limiter
 
 This example shows how to create a custom output processor that monitors and limits the length of AI responses during streaming. This processor tracks cumulative response length and aborts generation when a specified character limit is reached, helping control costs and response quality.
@@ -257,27 +255,32 @@ Reason: Response too long: 101 characters (max: 100)
 When using `ResponseLengthLimiter`, the processor:
 
 ### Successful processing
+
 - **Within limits**: Responses under the character limit stream normally to completion
 - **Real-time tracking**: Monitors length incrementally as text deltas are generated
 - **State persistence**: Maintains cumulative count across all stream parts
 
 ### Blocked processing
+
 - **Exceeded limits**: Generation stops immediately when limit is reached
 - **Tripwire flag**: `result.tripwire = true` or stream emits `tripwire` chunk
 - **Partial content**: Users receive content generated up to the block point
 - **No exceptions**: Check `result.tripwire` or handle `tripwire` chunks in streams
 
 ### Stream behavior
+
 - **Text-delta counting**: Only text content counts toward the limit
 - **Other parts ignored**: Non-text parts (like function calls) don't affect the counter
 - **Immediate termination**: No additional content is generated after abort
 
 ### Configuration options
+
 - **maxLength**: Set the character limit (default: 1000)
 - **Per-agent limits**: Different agents can have different response limits
 - **Runtime overrides**: Can be overridden per-call if needed
 
 ### Best practices
+
 - Set limits based on your use case (summaries vs. detailed explanations)
 - Consider user experience when responses are truncated
 - Combine with input processors for comprehensive length control
@@ -285,6 +288,7 @@ When using `ResponseLengthLimiter`, the processor:
 - Implement graceful handling of aborted responses in your UI
 
 ### Use cases
+
 - **Cost control**: Prevent unexpectedly expensive long responses
 - **UI constraints**: Ensure responses fit within specific display areas
 - **Quality control**: Encourage concise, focused answers
@@ -292,3 +296,4 @@ When using `ResponseLengthLimiter`, the processor:
 - **Rate limiting**: Control resource usage across multiple concurrent requests
 
 This processor is particularly valuable for applications that need predictable response lengths, whether for cost management, user interface constraints, or maintaining consistent response quality.
+

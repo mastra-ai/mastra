@@ -3,8 +3,6 @@ title: "Example: Message Length Limiter | Processors | Mastra Docs"
 description: Example of creating a custom input processor that limits message length before sending to the language model.
 ---
 
-import { GithubLink } from "@/components/github-link";
-
 # Message Length Limiter
 
 This example shows how to create a custom input processor that validates and limits the total length of messages before they are sent to the language model. This processor helps prevent expensive API calls and ensures consistent input constraints across your application.
@@ -263,29 +261,35 @@ Request blocked: Message too long: 412 characters (max: 100)
 When using `MessageLengthLimiter`, the processor:
 
 ### Successful processing
+
 - **Within limits**: Messages under the character limit process normally
 - **Character counting**: Only counts text content from message parts
 - **Multi-message support**: Counts total length across all messages in the thread
 
 ### Blocked processing
+
 - **Exceeded limits**: Messages over the limit set `result.tripwire = true`
 - **Error details**: `result.tripwireReason` includes actual length and configured maximum
 - **Immediate blocking**: Processing stops before reaching the language model
 - **No exceptions**: Check `result.tripwire` instead of using try/catch blocks
 
 ### Configuration options
+
 - **maxLength**: Set the character limit (default: 1000)
 - **Custom limits**: Different agents can have different length requirements
 - **Runtime overrides**: Can be overridden per-call if needed
 
 ### Best practices
+
 - Set realistic limits based on your model's context window
 - Consider the cumulative length of conversation history
 - Use shorter limits for cost-sensitive applications
 - Implement user feedback for blocked messages in production
 
 This processor is particularly useful for:
+
 - Controlling API costs by preventing oversized requests
 - Ensuring consistent input validation across your application
 - Protecting against accidentally large inputs that could cause timeouts
 - Implementing tiered access controls based on user permissions
+
