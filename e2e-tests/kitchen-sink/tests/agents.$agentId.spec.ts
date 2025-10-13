@@ -21,7 +21,9 @@ test('overall layout information', async ({ page }) => {
   await expect(agentCrumb).toHaveAttribute('href', '/agents/weatherAgent');
 
   // Thread history (with memory)
-  await expect(page.locator('text=New Chat')).toBeVisible();
+  const newChatButton = await page.locator('text=New Chat');
+  await expect(newChatButton).toBeVisible();
+  await expect(newChatButton).toHaveAttribute('href', /agents\/weatherAgent\/chat\/new.*/);
   await expect(page.locator('text=Your conversations will appear here once you start chatting!')).toBeVisible();
 
   // Information side panel
