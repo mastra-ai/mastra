@@ -85,7 +85,7 @@ When calling `.generate()` or `.stream()`, include a `memory` object with both `
 These fields tell the agent where to store and retrieve context, enabling persistent, thread-aware memory across interactions.
 
 ```typescript {3-4}
-const response = await testAgent.generate("Remember my favorite color is blue.", {
+const response = await memoryAgent.generate("Remember my favorite color is blue.", {
   memory: {
     thread: "user-123",
     resource: "test-123"
@@ -96,7 +96,7 @@ const response = await testAgent.generate("Remember my favorite color is blue.",
 To recall information stored in memory, call the agent with the same `resource` and `thread` values used in the original interaction.
 
 ```typescript {3-4}
-const response = await testAgent.generate("What's my favorite color?", {
+const response = await memoryAgent.generate("What's my favorite color?", {
   memory: {
     thread: "user-123",
     resource: "test-123"
