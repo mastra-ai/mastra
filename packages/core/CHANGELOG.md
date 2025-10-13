@@ -1,5 +1,70 @@
 # @mastra/core
 
+## 0.21.0-alpha.0
+
+### Minor Changes
+
+- Standardize model configuration across all Mastra components ([#8626](https://github.com/mastra-ai/mastra/pull/8626))
+
+  All model configuration points now accept the same flexible `MastraModelConfig` type as the `Agent` class:
+  - **Scorers**: Judge models now support magic strings, config objects, and dynamic functions
+  - **Input/Output Processors**: ModerationProcessor and PIIDetector accept flexible model configs
+  - **Relevance Scorers**: MastraAgentRelevanceScorer supports all model config types
+
+  This change provides:
+  - Consistent API across all components
+  - Support for magic strings (e.g., `"openai/gpt-4o"`)
+  - Support for OpenAI-compatible configs with custom URLs
+  - Support for dynamic model resolution functions
+  - Full backward compatibility with existing code
+
+  Example:
+
+  ```typescript
+  // All of these now work everywhere models are accepted
+  const scorer = createScorer({
+    judge: { model: 'openai/gpt-4o' }, // Magic string
+  });
+
+  const processor = new ModerationProcessor({
+    model: { id: 'custom/model', url: 'https://...' }, // Custom config
+  });
+
+  const relevanceScorer = new MastraAgentRelevanceScorer(
+    async ctx => ctx.getModel(), // Dynamic function
+  );
+  ```
+
+- support model router in structured output and client-js ([#8686](https://github.com/mastra-ai/mastra/pull/8686))
+
+- Update structuredOutput to use response format by default with an opt in to json prompt injection. ([#8557](https://github.com/mastra-ai/mastra/pull/8557))
+  Replaced internal usage of output with structuredOutput.
+
+- Standardize model configuration across all components to support flexible model resolution ([#8626](https://github.com/mastra-ai/mastra/pull/8626))
+
+  All model configuration points now accept `MastraModelConfig`, enabling consistent model specification across:
+  - Scorers (`createScorer` and all built-in scorers)
+  - Input/Output Processors (`ModerationProcessor`, `PIIDetector`)
+  - Relevance Scorers (`MastraAgentRelevanceScorer`)
+
+  **Supported formats:**
+  - Magic strings: `'openai/gpt-4o-mini'`
+  - Config objects: `{ id: 'openai/gpt-4o-mini' }` or `{ providerId: 'openai', modelId: 'gpt-4o-mini' }`
+  - Custom endpoints: `{ id: 'custom/model', url: 'https://...', apiKey: '...' }`
+  - Dynamic resolution: `(ctx) => 'openai/gpt-4o-mini'`
+
+  This change provides a unified model configuration experience matching the `Agent` class, making it easier to switch models and use custom providers across all Mastra components.
+
+### Patch Changes
+
+- Refactor EntryList component and Scorer and Observability pages ([#8652](https://github.com/mastra-ai/mastra/pull/8652))
+
+- Add support for exporting scores for external observability providers ([#8335](https://github.com/mastra-ai/mastra/pull/8335))
+
+- nested ai-sdk workflows and networks streaming support ([#8614](https://github.com/mastra-ai/mastra/pull/8614))
+
+- Rename internal ai-sdk packages to have ai-v5 versions as default and ai-v4 versions as npm namespaced. Also moves ai-sdk provider packages to devDeps. ([#8687](https://github.com/mastra-ai/mastra/pull/8687))
+
 ## 0.20.2
 
 ### Patch Changes

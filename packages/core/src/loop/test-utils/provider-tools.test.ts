@@ -1,4 +1,4 @@
-import { openai } from '@ai-sdk/openai-v5';
+import { openai } from '@ai-sdk/openai';
 import { describe, it, expect } from 'vitest';
 import { Agent } from '../../agent/index.js';
 

@@ -1,5 +1,5 @@
-import { generateId } from 'ai-v5';
-import type { ToolSet } from 'ai-v5';
+import { generateId } from 'ai';
+import type { ToolSet } from 'ai';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { ConsoleLogger } from '../logger';
 import type { ProcessorState } from '../processors';
@@ -151,7 +151,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       onFinish: rest.options?.onFinish,
       onStepFinish: rest.options?.onStepFinish,
       includeRawChunks: !!includeRawChunks,
-      output: rest.output,
+      structuredOutput: rest.structuredOutput,
       outputProcessors,
       returnScorerData,
       tracingContext: { currentSpan: llmAISpan },

@@ -1,5 +1,5 @@
-import type { TelemetrySettings } from 'ai';
-import type { ModelMessage, ToolChoice } from 'ai-v5';
+import type { ModelMessage, ToolChoice } from 'ai';
+import type { TelemetrySettings } from 'ai-v4';
 import type { TracingContext, TracingOptions } from '../ai-tracing';
 import type { SystemMessage } from '../llm';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
@@ -127,22 +127,17 @@ export type AgentExecutionOptions<
 
   /** Require approval for all tool calls */
   requireToolApproval?: boolean;
-} & OutputOptions<OUTPUT>;
 
-type OutputOptions<OUTPUT extends OutputSchema = undefined> =
-  | {
-      /**
-       * Schema for structured output generation (Zod schema or JSON Schema)
-       * @deprecated Use `structuredOutput` instead. The `output` property will be removed in a future version.
-       */
-      output?: OUTPUT;
-      structuredOutput?: never;
-    }
-  | {
-      /** Structured output generation with enhanced developer experience  */
-      structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
-      output?: never;
-    };
+  /** Structured output generation with enhanced developer experience  */
+  structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
+};
+
+export type DeprecatedOutputOptions<OUTPUT extends OutputSchema = undefined> = {
+  /** Schema for structured output generation (Zod schema or JSON Schema)
+   * @deprecated Use `structuredOutput.schema` instead. The `output` property will be removed in a future version.
+   */
+  output?: OUTPUT;
+};
 
 export type InnerAgentExecutionOptions<
   OUTPUT extends OutputSchema = undefined,

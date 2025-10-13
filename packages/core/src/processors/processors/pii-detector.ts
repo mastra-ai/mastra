@@ -3,7 +3,6 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
-import { InternalSpans } from '../../ai-tracing';
 import type { TracingContext } from '../../ai-tracing';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ChunkType } from '../../stream';
@@ -177,7 +176,6 @@ export class PIIDetector implements Processor {
       name: 'pii-detector',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
-      options: { tracingPolicy: { internal: InternalSpans.ALL } },
     });
   }
 
@@ -272,7 +270,9 @@ export class PIIDetector implements Processor {
       let response;
       if (model.specificationVersion === 'v2') {
         response = await this.detectionAgent.generate(prompt, {
-          output: schema,
+          structuredOutput: {
+            schema,
+          },
           modelSettings: {
             temperature: 0,
           },
@@ -608,9 +608,11 @@ IMPORTANT: IF NO PII IS DETECTED, RETURN AN EMPTY OBJECT, DO NOT INCLUDE ANYTHIN
   async processOutputResult({
     messages,
     abort,
+    tracingContext,
   }: {
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
+    tracingContext?: TracingContext;
   }): Promise<MastraMessageV2[]> {
     try {
       if (messages.length === 0) {
@@ -628,7 +630,7 @@ IMPORTANT: IF NO PII IS DETECTED, RETURN AN EMPTY OBJECT, DO NOT INCLUDE ANYTHIN
           continue;
         }
 
-        const detectionResult = await this.detectPII(textContent);
+        const detectionResult = await this.detectPII(textContent, tracingContext);
 
         if (this.isPIIFlagged(detectionResult)) {
           const processedMessage = this.handleDetectedPII(message, detectionResult, this.strategy, abort);
