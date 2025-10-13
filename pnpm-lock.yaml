@@ -841,7 +841,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.35
-        version: 2.0.46(zod@3.25.76)
+        version: 2.0.42(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -3018,7 +3018,7 @@ importers:
         version: 4.5.0(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20251004.0
+        specifier: ^4.20251008.0
         version: 4.20251008.0
       '@internal/lint':
         specifier: workspace:*
@@ -3045,7 +3045,7 @@ importers:
         specifier: ^9.36.0
         version: 9.37.0(jiti@2.6.1)
       miniflare:
-        specifier: ^4.20251001.0
+        specifier: ^4.20251008.0
         version: 4.20251008.0
       tsup:
         specifier: ^8.5.0
@@ -3064,7 +3064,7 @@ importers:
         version: 4.5.0(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20251004.0
+        specifier: ^4.20251008.0
         version: 4.20251008.0
       '@internal/lint':
         specifier: workspace:*
@@ -3091,7 +3091,7 @@ importers:
         specifier: ^9.36.0
         version: 9.37.0(jiti@2.6.1)
       miniflare:
-        specifier: ^4.20251001.0
+        specifier: ^4.20251008.0
         version: 4.20251008.0
       tsup:
         specifier: ^8.5.0
@@ -3719,7 +3719,7 @@ importers:
         version: 4.5.0(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20251004.0
+        specifier: ^4.20251008.0
         version: 4.20251008.0
       '@internal/lint':
         specifier: workspace:*
@@ -3903,7 +3903,7 @@ importers:
     dependencies:
       '@google/genai':
         specifier: latest
-        version: 1.23.0(@modelcontextprotocol/sdk@1.19.1)(encoding@0.1.13)
+        version: 1.24.0(@modelcontextprotocol/sdk@1.19.1)(encoding@0.1.13)
       google-auth-library:
         specifier: ^10.2.1
         version: 10.4.0
@@ -4361,12 +4361,6 @@ packages:
 
   '@ai-sdk/openai@2.0.42':
     resolution: {integrity: sha512-9mM6QS8k0ooH9qMC27nlrYLQmNDnO6Rk0JTmFo/yUxpABEWOcvQhMWNHbp9lFL6Ty5vkdINrujhsAQfWuEleOg==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
-  '@ai-sdk/openai@2.0.46':
-    resolution: {integrity: sha512-3FHZdiTLbjnHw0rbu1yOPW8FruHrzN6SlJYsaLSQgbxYfE5y+60Nj4Xp8/k7rtD3FmrjkKcp/XTMSbAJWfoJig==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -6364,8 +6358,8 @@ packages:
     resolution: {integrity: sha512-Yy3+vKYFs1/oGWWDQoonvaUc8beDObcZFl+HCMjSu5+Okld2Bk8gjNekv37f5posRlQSN65xF7h5m8r2jmXJZg==}
     engines: {node: '>=18'}
 
-  '@google/genai@1.23.0':
-    resolution: {integrity: sha512-d/rMD0GP3lXlR03qk2feLbBes2YVGhbPNxZsnUdZCn6AfOKXaOKfEtVWpyQrMMxRRYtLtN3UXmDUH+OfRN4F4A==}
+  '@google/genai@1.24.0':
+    resolution: {integrity: sha512-e3jZF9Dx3dDaDCzygdMuYByHI2xJZ0PaD3r2fRgHZe2IOwBnmJ/Tu5Lt/nefTCxqr1ZnbcbQK9T13d8U/9UMWg==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': ^1.11.4
@@ -16824,12 +16818,6 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.10(zod@4.1.12)
       zod: 4.1.12
 
-  '@ai-sdk/openai@2.0.46(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.11(zod@3.25.76)
-      zod: 3.25.76
-
   '@ai-sdk/provider-utils@2.2.8(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
@@ -19304,7 +19292,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google/genai@1.23.0(@modelcontextprotocol/sdk@1.19.1)(encoding@0.1.13)':
+  '@google/genai@1.24.0(@modelcontextprotocol/sdk@1.19.1)(encoding@0.1.13)':
     dependencies:
       google-auth-library: 9.15.1(encoding@0.1.13)
       ws: 8.18.3
