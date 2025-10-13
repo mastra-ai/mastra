@@ -2,7 +2,18 @@ import { analytics, origin } from '../..';
 import { logger } from '../../utils/logger';
 import { dev } from '../dev/dev';
 
-export const startDevServer = async (args: any) => {
+interface DevArgs {
+  dir?: string;
+  root?: string;
+  tools?: string;
+  env?: string;
+  inspect?: boolean;
+  inspectBrk?: boolean;
+  customArgs?: string;
+  https?: boolean;
+}
+
+export const startDevServer = async (args: DevArgs) => {
   analytics.trackCommand({
     command: 'dev',
     origin,
