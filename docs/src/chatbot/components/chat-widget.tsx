@@ -190,6 +190,43 @@ export function KapaChat({
             )}
           </div>
         </form>
+
+        {/* Compliance text */}
+        <div className="mt-2 px-2 text-center">
+          <p className="text-[10px] text-icons-2 dark:text-icons-2">
+            Powered by{" "}
+            <a
+              href="https://kapa.ai"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-accent-green dark:hover:text-accent-green"
+            >
+              kapa.ai
+            </a>
+          </p>
+          {/* Required disclaimer text */}
+          <p className="recaptcha-disclaimer text-[10px] text-icons-2 dark:text-icons-2 mt-1">
+            This site is protected by reCAPTCHA and the Google{" "}
+            <a
+              href="https://policies.google.com/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-accent-green dark:hover:text-accent-green"
+            >
+              Privacy Policy
+            </a>{" "}
+            and{" "}
+            <a
+              href="https://policies.google.com/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-accent-green dark:hover:text-accent-green"
+            >
+              Terms of Service
+            </a>{" "}
+            apply.
+          </p>
+        </div>
       </div>
     </div>
   );
