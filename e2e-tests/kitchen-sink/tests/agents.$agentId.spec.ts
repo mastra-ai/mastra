@@ -51,6 +51,10 @@ test.describe('agent panels', () => {
       await expect(searchModelInput).toHaveAttribute('value', 'gpt-4o-mini');
 
       await expect(page.locator('text=Memory is enabled')).toBeDefined();
+      const toolBadge = await page.locator('[data-testid="tool-badge"]');
+      await expect(toolBadge).toBeVisible();
+      await expect(toolBadge).toHaveText('get-weather');
+      expect(toolBadge).toHaveAttribute('href', '/agents/weatherAgent/tools/get-weather');
     });
   });
 
