@@ -15,6 +15,8 @@ import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS, DEPRECATED_EXTERNALS } from './consta
 import * as resolve from 'resolve.exports';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import { readFile } from 'node:fs/promises';
+import { getPackageInfo } from 'local-pkg';
+import { ErrorCategory, ErrorDomain, MastraBaseError } from '@mastra/core/error';
 
 type VirtualDependency = {
   name: string;
@@ -200,6 +202,44 @@ async function getInputPlugins(
     // hono is imported from deployer, so we need to resolve from here instead of the project root
     aliasHono(),
     json(),
+    {
+      name: 'not-found-resolver',
+      resolveId: {
+        order: 'post',
+        async handler(id, importer, options) {
+          if (!importer) {
+            return null;
+          }
+
+          if (!id.endsWith('.node')) {
+            return null;
+          }
+
+          const pkgInfo = await getPackageInfo(importer);
+          const packageName = pkgInfo?.packageJson?.name || id;
+          throw new MastraBaseError({
+            id: 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD',
+            domain: ErrorDomain.DEPLOYER,
+            category: ErrorCategory.USER,
+            details: {
+              importFile: importer,
+              packageName,
+            },
+            text: `We've found a binary dependency in your bundle. Please add \`${packageName}\` to your externals.
+  
+  \`\`\`
+  export const new Mastra({
+    // other config
+    server: {
+      externals: ["${packageName}"],
+    }
+  })
+  \`\`\`
+              `,
+          });
+        },
+      },
+    } satisfies Plugin,
   ].filter(Boolean);
 }
 

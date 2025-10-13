@@ -11,6 +11,8 @@ import { getWorkspaceInformation, type WorkspacePackageInfo } from '../bundler/w
 import type { DependencyMetadata } from './types';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
+import { getPackageInfo } from 'local-pkg';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 
 /**
  * Validates the bundled output by attempting to import each generated module.
@@ -63,8 +65,47 @@ async function validateOutput(
       continue;
     }
 
-    if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
-      result.dependencies.set(reverseVirtualReferenceMap.get(file.name)!, file.fileName);
+    try {
+      logger.debug(`Validating if ${file.fileName} is a valid module.`);
+      if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
+        result.dependencies.set(reverseVirtualReferenceMap.get(file.name)!, file.fileName);
+      }
+
+      if (!file.isDynamicEntry && file.isEntry) {
+        // validate if the chunk is actually valid, a failsafe to make sure bundling didn't make any mistakes
+        await validate(join(projectRoot, file.fileName));
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('Error: No native build was found for ')) {
+        const moduleName = file.moduleIds[file.moduleIds.length - 2];
+        const pkgInfo = await getPackageInfo(moduleName as string);
+        const packageName = pkgInfo?.packageJson?.name;
+
+        if (moduleName && packageName) {
+          throw new MastraError({
+            id: 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD',
+            domain: ErrorDomain.DEPLOYER,
+            category: ErrorCategory.USER,
+            details: {
+              importFile: moduleName,
+              packageName: packageName,
+            },
+            text: `We've found a binary dependency in your bundle. Please add \`${packageName}\` to your externals.
+
+\`\`\`
+export const new Mastra({
+  // other config
+  server: {
+    externals: ["${packageName}"],
+  }
+})
+\`\`\`
+            `,
+          });
+        }
+      }
+      // @ts-ignore
+      console.log('mssage:', err.message);
     }
   }
 
