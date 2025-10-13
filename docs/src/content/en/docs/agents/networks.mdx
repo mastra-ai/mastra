@@ -3,6 +3,119 @@ title: "Handling Complex LLM Operations | Networks | Mastra"
 description: "Networks in Mastra help you execute individual or multiple Mastra primitives in a non-deterministic way using a single API."
 ---
 
+# Networks
+
+Agent networks coordinate multiple agents, tools, and workflows to handle complex tasks that aren't clearly defined upfront. They allow decisions to be made at runtime about which primitives to call, in what order, and with what data, based on the user message or context.
+
+## When to use networks
+
+Use agent networks when a single agent isn’t enough. They’re designed for tasks that span multiple agents, workflows, or tools and require coordination. Unlike workflows, which follow a fixed sequence of steps, networks use LLMs to decide how to complete a task by selecting what to run and when to run it.
+
+## Core principles
+
+- Memory is required when using `.network()`. It stores task history and is used to decide which primitives to call.
+- Primitives are selected based on their descriptions. Clear, specific descriptions improve routing. For workflows, the input schema helps determine the right inputs at runtime.
+- If multiple primitives have overlapping functionality, the agent favors the more specific one, using a combination of schema and descriptions to decide which to run.
+
+
+## Creating an agent network
+
+...
+
+```typescript {22-23,26,29} filename="src/mastra/agents/network-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+
+import { researchAgent } from "./research-agent";
+import { writingAgent } from "./writing-agent";
+
+import { cityWorkflow } from "../workflows/city-workflow";
+import { weatherTool } from "../tools/weather-tool";
+
+export const networkAgent = new Agent({
+  name: "network-agent",
+  instructions: `
+    You are a network of writers and researchers.
+    The user will ask you to research a topic.
+    Always respond with a complete report—no bullet points.
+    Write in full paragraphs, like a blog post.
+    Do not answer with incomplete or uncertain information.`,
+  model: openai("gpt-4o-mini"),
+  agents: {
+    researchAgent,
+    writingAgent
+  },
+  workflows: {
+    cityWorkflow
+  },
+  tools: {
+    weatherTool
+  },
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:../mastra.db"
+    })
+  })
+});
+```
+
+## Generating responses
+
+Call an agent network using `.network()` just like `.generate()` or `.stream()`. Pass a user message as input and stream the response.
+
+In this example the network would call the `researchAgent` and `writingAgent` agent...
+
+```typescript showLineNumbers copy
+const result = await agent.network("Tell me three cool ways to use Mastra");
+
+for await (const chunk of result) {
+  console.log(chunk;
+}
+```
+
+If the message includes something the network can act on, such as a city name, it may call a specific primitive. In this example, the network uses `cityWorkflow` to return historical facts about London.
+
+```typescript showLineNumbers copy
+const result = await agent.network("Tell me some historical facts about London");
+
+for await (const chunk of result) {
+  console.log(chunk.type);
+}
+```
+
+When a user message includes a weather request, the network selects and calls the `weatherTool` to find the relevant information.
+
+```typescript showLineNumbers copy
+const result = await agent.network("What's the weather in Paris?");
+
+for await (const chunk of result) {
+  console.log(chunk.type);
+}
+```
+
+
+### Network events (TODO)
+
+The agent `.network()` call is similar to `.stream()` and will stream responses and events back from the agent including:
+
+- routing-agent-start
+- routing-agent-end
+- agent-execution-start
+- agent-execution-event-start
+- agent-execution-event-step-start
+- agent-execution-event-text-delta
+- agent-execution-event-text-end
+- agent-execution-event-step-finish
+- agent-execution-event-finish
+- agent-execution-end
+- routing-agent-start
+- routing-agent-end
+- network-execution-event-step-finish
+
+## ---- OLD
+
 # Agent.network()
 
 `Agent.network()` introduces a flexible, composable and non-deterministic way to orchestrate multiple specialized agents and workflows, enabling complex, reasoning and task completion.
