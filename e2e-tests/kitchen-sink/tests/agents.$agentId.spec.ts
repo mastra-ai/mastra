@@ -63,10 +63,28 @@ test.describe('agent panels', () => {
   });
 
   test.describe('model settings', () => {
-    test('verfied persistent model settings', async ({ page }) => {
-      // Arrange
+    test.beforeEach(async ({ page }) => {
       await page.goto('http://localhost:4111/agents/weatherAgent/chat/new');
       await page.click('text=Model settings');
+    });
+
+    test('model trigger modes', async ({ page }) => {
+      const generateRadio = page.getByLabel('Generate');
+      await page.click('text=Model settings');
+
+      await expect(generateRadio).toBeVisible();
+      await expect(generateRadio).toHaveAttribute('aria-checked', 'false');
+      const streamRadio = page.getByLabel('Stream');
+      await expect(streamRadio).toBeVisible();
+      await expect(streamRadio).toHaveAttribute('aria-checked', 'true');
+
+      const networkRadio = page.getByLabel('Network');
+      await expect(networkRadio).toBeVisible();
+      await expect(networkRadio).toBeDisabled();
+    });
+
+    test('verfied persistent model settings', async ({ page }) => {
+      // Arrange
       await page.isVisible('text=Chat Method');
       await page.click('text=Generate');
       await page.click('text=Advanced Settings');
@@ -93,8 +111,6 @@ test.describe('agent panels', () => {
 
     test('resets the form values when pressing "reset" button', async ({ page }) => {
       // Arrange
-      await page.goto('http://localhost:4111/agents/weatherAgent/chat/new');
-      await page.click('text=Model settings');
       await page.isVisible('text=Chat Method');
       await page.click('text=Generate');
       await page.click('text=Advanced Settings');
