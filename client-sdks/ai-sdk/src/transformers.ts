@@ -7,10 +7,10 @@ type StepResult = {
   name: string;
   status: WorkflowStepStatus;
   input: Record<string, unknown> | null;
-  output: any;
+  output: unknown | null;
 };
 
-export type WorkflowAiSDKType = {
+export type WorkflowDataPart = {
   type: 'data-workflow';
   id: string;
   data: {
@@ -27,7 +27,7 @@ export type WorkflowAiSDKType = {
   };
 };
 
-export type NetworkAiSDKType = {
+export type NetworkDataPart = {
   type: 'data-network';
   id: string;
   data: {
@@ -52,7 +52,7 @@ export function WorkflowStreamToAISDKTransformer() {
         data?: string;
         type?: 'start' | 'finish';
       }
-    | WorkflowAiSDKType
+    | WorkflowDataPart
     | ChunkType
   >({
     start(controller) {
@@ -82,7 +82,7 @@ export function AgentNetworkToAISDKTransformer() {
         data?: string;
         type?: 'start' | 'finish';
       }
-    | NetworkAiSDKType
+    | NetworkDataPart
   >({
     start(controller) {
       controller.enqueue({

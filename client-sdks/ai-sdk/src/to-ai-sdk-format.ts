@@ -7,7 +7,6 @@ import {
   AgentStreamToAISDKTransformer,
   WorkflowStreamToAISDKTransformer,
 } from './transformers';
-export type { WorkflowAiSDKType } from './transformers';
 
 type ToAISDKFrom = 'agent' | 'network' | 'workflow';
 
