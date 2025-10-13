@@ -135,7 +135,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     runApiTests(port);
   });
 
-  describe.only.sequential('build', async () => {
+  describe.sequential('build', async () => {
     let port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;
     const controller = new AbortController();
