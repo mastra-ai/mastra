@@ -10,21 +10,14 @@ export async function build({
   dir,
   tools,
   root,
-  env,
 }: {
   dir?: string;
   tools?: string[];
   root?: string;
-  env?: string;
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(rootDir, dir)) : join(rootDir, 'src', 'mastra');
   const outputDirectory = join(rootDir, '.mastra');
-
-  if (env) {
-    logger.warn(`The --env flag is deprecated. To start the build output with a custom env use the mastra start --env <env> command instead.
-      `);
-  }
 
   // You cannot express an "include all js/ts except these" in one single string glob pattern so by default an array is passed to negate test files.
   const normalizedMastraDir = mastraDir.replaceAll('\\', '/');
