@@ -55,7 +55,7 @@ test.describe('agent panels', () => {
       const toolBadge = await page.locator('[data-testid="tool-badge"]');
       await expect(toolBadge).toBeVisible();
       await expect(toolBadge).toHaveText('get-weather');
-      expect(toolBadge).toHaveAttribute('href', '/agents/weatherAgent/tools/get-weather');
+      await expect(toolBadge).toHaveAttribute('href', '/agents/weatherAgent/tools/get-weather');
 
       await expect(page.locator('text=No workflows')).toBeVisible();
       await expect(page.locator('text=No scorers')).toBeVisible();
