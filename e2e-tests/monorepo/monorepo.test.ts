@@ -89,7 +89,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     });
   }
 
-  describe.sequential('dev', async () => {
+  describe.only('dev', async () => {
     let port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;
     const controller = new AbortController();
