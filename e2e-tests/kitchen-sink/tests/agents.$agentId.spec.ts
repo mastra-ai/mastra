@@ -49,6 +49,8 @@ test.describe('agent panels', () => {
       const searchModelInput = await page.locator('input[aria-label="Search models"]');
       await expect(searchModelInput).toBeVisible();
       await expect(searchModelInput).toHaveAttribute('value', 'gpt-4o-mini');
+
+      await expect(page.locator('text=Memory is enabled')).toBeDefined();
     });
   });
 

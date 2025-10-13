@@ -116,7 +116,8 @@ export const AgentMetadata = ({
       >
         {hasMemoryEnabled ? (
           <Badge icon={<MemoryIcon />} variant="success" className="font-medium">
-            On
+            <span className="sr-only">Memory is enabled</span>
+            <span aria-hidden="true">On</span>
           </Badge>
         ) : (
           <Alert variant="warning">
