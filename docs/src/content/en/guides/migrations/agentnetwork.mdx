@@ -82,6 +82,8 @@ After:
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 
+const memory = new Memory();
+
 const agent = new Agent({
   name: 'agent-network',
   agents: { agent1, agent2 },
