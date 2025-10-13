@@ -1867,7 +1867,6 @@ export class Agent<
     runtimeContext,
     tracingContext,
     methodType,
-    format,
   }: {
     runId?: string;
     threadId?: string;
@@ -1875,7 +1874,6 @@ export class Agent<
     runtimeContext: RuntimeContext;
     tracingContext?: TracingContext;
     methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
-    format?: 'mastra' | 'aisdk';
   }) {
     const convertedWorkflowTools: Record<string, CoreTool> = {};
     const workflows = await this.getWorkflows({ runtimeContext });
@@ -1931,7 +1929,6 @@ export class Agent<
                   inputData: context,
                   runtimeContext,
                   tracingContext: innerTracingContext,
-                  format,
                 });
 
                 if (writer) {
@@ -2001,7 +1998,6 @@ export class Agent<
     tracingContext,
     writableStream,
     methodType,
-    format,
   }: {
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
@@ -2012,7 +2008,6 @@ export class Agent<
     tracingContext?: TracingContext;
     writableStream?: WritableStream<ChunkType>;
     methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
-    format?: 'mastra' | 'aisdk';
   }): Promise<Record<string, CoreTool>> {
     let mastraProxy = undefined;
     const logger = this.logger;
@@ -2066,7 +2061,6 @@ export class Agent<
       threadId,
       runtimeContext,
       methodType,
-      format,
       tracingContext,
     });
 
@@ -3763,15 +3757,15 @@ export class Agent<
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
-        throw new MastraError({
-          id: 'AGENT_STREAM_FAILED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: result.error.message,
-          details: {
-            error: result.error.message,
+        throw new MastraError(
+          {
+            id: 'AGENT_STREAM_FAILED',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
           },
-        });
+          // pass original error to preserve stack trace
+          result.error,
+        );
       }
       throw new MastraError({
         id: 'AGENT_STREAM_UNKNOWN_ERROR',
@@ -3836,15 +3830,15 @@ export class Agent<
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
-        throw new MastraError({
-          id: 'AGENT_STREAM_VNEXT_FAILED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: result.error.message,
-          details: {
-            error: result.error.message,
+        throw new MastraError(
+          {
+            id: 'AGENT_STREAM_VNEXT_FAILED',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
           },
-        });
+          // pass original error to preserve stack trace
+          result.error,
+        );
       }
       throw new MastraError({
         id: 'AGENT_STREAM_VNEXT_UNKNOWN_ERROR',

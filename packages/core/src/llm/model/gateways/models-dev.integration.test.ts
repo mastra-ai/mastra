@@ -88,7 +88,7 @@ describe('ModelsDevGateway - Real API Integration', () => {
     const providers = await gateway.fetchProviders();
 
     // Read our generated registry to compare
-    const { PROVIDER_REGISTRY } = await import('../provider-registry.generated.js');
+    const { PROVIDER_REGISTRY } = await import('../provider-registry.js');
 
     // Check that all providers in our registry exist in the real API
     for (const providerId of Object.keys(PROVIDER_REGISTRY)) {

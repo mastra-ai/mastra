@@ -39,7 +39,7 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
     resumePayload: any;
   };
   [EMITTER_SYMBOL]: Emitter;
-  [STREAM_FORMAT_SYMBOL]: 'aisdk' | 'mastra' | undefined;
+  [STREAM_FORMAT_SYMBOL]: 'legacy' | 'vnext' | undefined;
   engine: EngineType;
   abortSignal: AbortSignal;
   writer: ToolStream<ChunkType>;

@@ -18,6 +18,10 @@ By combining writable workflow streams with agent streaming, you gain fine-grain
 
 ### Using the `writer` argument
 
+<Callout type="warning">
+The writer is only available when using `streamVNext`.
+</Callout>
+
 The `writer` argument is passed to a workflow step's `execute` function and can be used to emit custom events, data, or values into the active stream. This enables workflow steps to provide intermediate results or status updates while execution is still in progress.
 
 <Callout type="warning">
@@ -60,7 +64,7 @@ const testWorkflow = mastra.getWorkflow("testWorkflow");
 
 const run = await testWorkflow.createRunAsync();
 
-const stream = await run.stream({
+const stream = await run.streamVNext({
   inputData: {
     value: "initial data"
   }

@@ -13,7 +13,7 @@
   "description": "",
   "packageManager": "pnpm@10.12.4",
   "dependencies": {
-    "@ai-sdk/openai": "^2.0.42",
+    "@ai-sdk/openai": "^2.0.44",
     "@mastra/core": "commonjs-e2e-test",
     "@mastra/loggers": "commonjs-e2e-test",
     "zod": "^3.25.76"

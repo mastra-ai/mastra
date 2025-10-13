@@ -171,6 +171,29 @@ export const mastra = new Mastra({
 });
 ```
 
+## Using `RuntimeContext`
+
+Use `RuntimeContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+const stepOne = createStep({
+  // ...
+  execute: async ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+
+    const maxResults = userTier === "enterprise"
+      ? 1000
+      : 50;
+
+    return { maxResults };
+  }
+});
+```
+
 ## Testing workflows locally
 There are two ways to run and test workflows.
 

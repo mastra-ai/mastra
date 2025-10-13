@@ -17,6 +17,7 @@ import {
   EntryListSkeleton,
   getToNextEntryFn,
   getToPreviousEntryFn,
+  useLinkComponent,
 } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
@@ -29,6 +30,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router';
 
 export default function Observability() {
   const navigate = useNavigate();
+  const { paths } = useLinkComponent();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedTraceId, setSelectedTraceId] = useState<string | undefined>();
   const [selectedEntityOption, setSelectedEntityOption] = useState<EntityOptions | undefined>({
@@ -46,6 +48,8 @@ export default function Observability() {
 
   const traceId = searchParams.get('traceId');
   const spanId = searchParams.get('spanId');
+  const spanTab = searchParams.get('tab');
+  const scoreId = searchParams.get('scoreId');
 
   const {
     data: aiTraces = [],
@@ -211,9 +215,14 @@ export default function Observability() {
         traceSpans={aiTrace?.spans}
         traceId={selectedTraceId}
         initialSpanId={spanId || undefined}
+        initialSpanTab={spanTab === 'scores' ? 'scores' : 'details'}
+        initialScoreId={scoreId || undefined}
         traceDetails={aiTraces.find(t => t.traceId === selectedTraceId)}
         isOpen={dialogIsOpen}
-        onClose={() => setDialogIsOpen(false)}
+        onClose={() => {
+          navigate(`/observability`);
+          setDialogIsOpen(false);
+        }}
         onNext={toNextTrace}
         onPrevious={toPreviousTrace}
         isLoadingSpans={isLoadingAiTrace}
@@ -221,6 +230,7 @@ export default function Observability() {
           setDialogIsOpen(false);
           navigate(`/scorers/${scorerName}`);
         }}
+        computeTraceLink={(traceId, spanId) => `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`}
       />
     </>
   );
