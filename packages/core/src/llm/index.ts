@@ -1,3 +1,4 @@
+import type { SystemModelMessage } from 'ai';
 import type {
   CoreAssistantMessage as AiCoreAssistantMessage,
   CoreMessage as AiCoreMessage,
@@ -14,8 +15,7 @@ import type {
   UIMessage,
   StreamTextOnFinishCallback,
   StreamObjectOnFinishCallback,
-} from 'ai';
-import type { SystemModelMessage } from 'ai-v5';
+} from 'ai-v4';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
@@ -79,7 +79,7 @@ export type {
 } from './model/base.types';
 export type { TripwireProperties, MastraModelConfig, OpenAICompatibleConfig } from './model/shared.types';
 export { ModelRouterLanguageModel } from './model/router';
-export { PROVIDER_REGISTRY, parseModelString, getProviderConfig } from './model/provider-registry.generated';
+export { PROVIDER_REGISTRY, parseModelString, getProviderConfig } from './model/provider-registry.js';
 export { resolveModelConfig } from './model/resolve-model';
 
 export type OutputType = StructuredOutput | ZodSchema | JSONSchema7 | undefined;
