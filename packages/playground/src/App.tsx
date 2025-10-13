@@ -15,8 +15,6 @@ import Tool from './pages/tools/tool';
 import Workflows from './pages/workflows';
 import { Workflow } from './pages/workflows/workflow';
 import WorkflowTracesPage from './pages/workflows/workflow/traces';
-import Networks from './pages/networks';
-import { NetworkLayout } from './domains/networks/network-layout';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
 import RuntimeContext from './pages/runtime-context';
@@ -26,7 +24,6 @@ import MCPServerToolExecutor from './pages/mcps/tool';
 import { McpServerPage } from './pages/mcps/[serverId]';
 
 import { LinkComponentProvider, LinkComponentProviderProps, PlaygroundQueryClient } from '@mastra/playground-ui';
-import VNextNetwork from './pages/networks/network/v-next';
 import { NavigateTo } from './lib/react-router';
 import { Link } from './lib/framework';
 import Scorers from './pages/scorers';
@@ -34,7 +31,7 @@ import Scorer from './pages/scorers/scorer';
 import Observability from './pages/observability';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
-import { MastraReactProvider } from '@mastra/react-hooks';
+import { MastraReactProvider } from '@mastra/react';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
@@ -49,6 +46,8 @@ const paths: LinkComponentProviderProps['paths'] = {
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   toolLink: (toolId: string) => `/tools/all/${toolId}`,
+  mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
+  workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
 };
 
 const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
@@ -104,32 +103,6 @@ function App() {
                 >
                   <Route path="/observability" element={<Observability />} />
                 </Route>
-                <Route
-                  element={
-                    <Layout>
-                      <Outlet />
-                    </Layout>
-                  }
-                >
-                  <Route path="/networks" element={<Networks />} />
-                  <Route
-                    path="/networks/v-next/:networkId"
-                    element={<NavigateTo to="/networks/v-next/:networkId/chat" />}
-                  />
-                  <Route
-                    path="/networks/v-next/:networkId"
-                    element={
-                      <NetworkLayout>
-                        <Outlet />
-                      </NetworkLayout>
-                    }
-                  >
-                    <Route path="chat" element={<VNextNetwork />} />
-                    <Route path="chat/:threadId" element={<VNextNetwork />} />
-                  </Route>
-                  <Route path="/networks/:networkId" element={<NavigateTo to="/networks/:networkId/chat" />} />
-                </Route>
-
                 <Route
                   element={
                     <Layout>

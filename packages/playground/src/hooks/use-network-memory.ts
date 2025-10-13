@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMastraClient } from '@mastra/react-hooks';
+import { useMastraClient } from '@mastra/react';
 
 export const useNetworkMemory = (networkId?: string) => {
   const client = useMastraClient();

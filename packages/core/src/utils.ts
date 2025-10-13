@@ -1,14 +1,15 @@
 import { createHash } from 'crypto';
 import type { WritableStream } from 'stream/web';
-import type { CoreMessage } from 'ai';
+import type { CoreMessage } from 'ai-v4';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
 import type { TracingContext, TracingPolicy } from './ai-tracing';
+import type { MastraLanguageModel } from './llm/model/shared.types';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
-import type { AiMessageType, MastraLanguageModel, MastraMemory } from './memory';
+import type { AiMessageType, MastraMemory } from './memory';
 import type { RuntimeContext } from './runtime-context';
 import type { ChunkType } from './stream/types';
 import type { CoreTool, VercelTool, VercelToolV5 } from './tools';

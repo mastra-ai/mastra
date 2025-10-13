@@ -1,3 +1,5 @@
+import tailwindcss from '@tailwindcss/vite';
+
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 import { defineConfig } from 'vite';
@@ -6,6 +8,7 @@ import nodeExternals from 'rollup-plugin-node-externals';
 
 export default defineConfig({
   plugins: [
+    tailwindcss(),
     react(),
     dts({
       insertTypesEntry: true,
@@ -24,7 +27,11 @@ export default defineConfig({
       },
       formats: ['es', 'cjs'],
       fileName: (format, entryName) => {
-        return `${entryName}.${format}.js`;
+        if (format === 'cjs') {
+          return `${entryName}.cjs`;
+        }
+
+        return `${entryName}.js`;
       },
     },
     sourcemap: true,

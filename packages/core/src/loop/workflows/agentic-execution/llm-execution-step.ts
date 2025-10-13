@@ -1,8 +1,9 @@
 import type { ReadableStream } from 'stream/web';
-import { isAbortError } from '@ai-sdk/provider-utils-v5';
-import type { LanguageModelV2, LanguageModelV2Usage } from '@ai-sdk/provider-v5';
-import type { ToolSet } from 'ai-v5';
+import type { LanguageModelV2, LanguageModelV2Usage } from '@ai-sdk/provider';
+import { isAbortError } from '@ai-sdk/provider-utils';
+import type { ToolSet } from 'ai';
 import { MessageList } from '../../../agent/message-list';
+import { safeParseErrorObject } from '../../../error/utils.js';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
@@ -30,8 +31,8 @@ type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   messageList: MessageList;
   outputStream: MastraModelOutput<OUTPUT>;
   runState: AgenticRunState;
-  options?: LoopConfig;
-  controller: ReadableStreamDefaultController<ChunkType>;
+  options?: LoopConfig<OUTPUT>;
+  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
   responseFromModel: {
     warnings: any;
     request: any;
@@ -50,13 +51,13 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
   responseFromModel,
   includeRawChunks,
 }: ProcessOutputStreamOptions<OUTPUT>) {
-  for await (const chunk of outputStream.fullStream) {
+  for await (const chunk of outputStream._getBaseStream()) {
     if (!chunk) {
       continue;
     }
 
-    if (chunk.type == 'object') {
-      // controller.enqueue(chunk);
+    if (chunk.type == 'object' || chunk.type == 'object-result') {
+      controller.enqueue(chunk);
       continue;
     }
 
@@ -334,7 +335,8 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
 
         let e = chunk.payload.error as any;
         if (typeof e === 'object') {
-          e = new Error(e?.message || 'Unknown error');
+          const errorMessage = safeParseErrorObject(e);
+          e = new Error(errorMessage);
           Object.assign(e, chunk.payload.error);
         }
 
@@ -362,7 +364,6 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       const transformedChunk = convertMastraChunkToAISDKv5({
         chunk,
       });
-
       if (chunk.type === 'raw' && !includeRawChunks) {
         return;
       }
@@ -379,7 +380,8 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
 function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): ExecuteStreamModelManager<T> {
   return async callback => {
     let index = 0;
-    let finalResult: any;
+    let finalResult: T | undefined;
+
     let done = false;
     for (const modelConfig of models) {
       index++;
@@ -409,7 +411,10 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
         }
       }
     }
-
+    if (typeof finalResult === 'undefined') {
+      console.error('Exhausted all fallback models and reached the maximum number of retries.');
+      throw new Error('Exhausted all fallback models and reached the maximum number of retries.');
+    }
     return finalResult;
   };
 }
@@ -430,11 +435,12 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   options,
   toolCallStreaming,
   controller,
-  output,
+  structuredOutput,
   outputProcessors,
   headers,
   downloadRetries,
   downloadConcurrency,
+  processorStates,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'llm-execution',
@@ -525,7 +531,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
               modelSettings,
               telemetry_settings,
               includeRawChunks,
-              output,
+              structuredOutput,
               headers,
               onResult: ({
                 warnings: warningsFromStream,
@@ -578,10 +584,11 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
             toolCallStreaming,
             telemetry_settings,
             includeRawChunks,
-            output,
+            structuredOutput,
             outputProcessors,
-            outputProcessorRunnerMode: 'stream',
+            isLLMExecutionStep: true,
             tracingContext,
+            processorStates,
           },
         });
 
@@ -656,6 +663,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
           metadata: {
             providerMetadata: runState.state.providerOptions,
             ...responseMetadata,
+            modelMetadata: runState.state.modelMetadata,
             headers: rawResponse?.headers,
             request,
           },
@@ -718,7 +726,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
       const usage = outputStream._getImmediateUsage();
       const responseMetadata = runState.state.responseMetadata;
       const text = outputStream._getImmediateText();
-
+      const object = outputStream._getImmediateObject();
       // Check if tripwire was triggered
       const tripwireTriggered = outputStream.tripwire;
 
@@ -761,6 +769,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
           providerMetadata: runState.state.providerOptions,
           ...responseMetadata,
           ...rawResponse,
+          modelMetadata: runState.state.modelMetadata,
           headers: rawResponse?.headers,
           request,
         },
@@ -769,6 +778,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
           toolCalls,
           usage: usage ?? inputData.output?.usage,
           steps,
+          ...(object ? { object } : {}),
         },
         messages,
       };

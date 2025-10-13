@@ -1,4 +1,3 @@
-import type { LanguageModelV1LogProbs } from '@ai-sdk/provider';
 import type {
   LanguageModelV2FinishReason,
   LanguageModelV2Usage,
@@ -7,15 +6,16 @@ import type {
   LanguageModelV2ResponseMetadata,
   LanguageModelV2,
   LanguageModelV2StreamPart,
-} from '@ai-sdk/provider-v5';
+} from '@ai-sdk/provider';
+import type { LanguageModelV1LogProbs } from '@ai-sdk/provider-v4';
 import type { Span } from '@opentelemetry/api';
-import type { FinishReason, LanguageModelRequestMetadata, TelemetrySettings } from 'ai';
-import type { ModelMessage, StepResult, ToolSet, UIMessage } from 'ai-v5';
+import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from 'ai';
+import type { FinishReason, LanguageModelRequestMetadata, TelemetrySettings } from 'ai-v4';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
+import type { StructuredOutputOptions } from '../agent/types';
 import type { TracingContext } from '../ai-tracing/types';
 import type { OutputProcessor } from '../processors';
-import type { ProcessorRunnerMode } from '../processors/runner';
 import type { WorkflowStreamEvent } from '../workflows/types';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './base/schema';
 
@@ -24,11 +24,13 @@ export enum ChunkFrom {
   USER = 'USER',
   SYSTEM = 'SYSTEM',
   WORKFLOW = 'WORKFLOW',
+  NETWORK = 'NETWORK',
 }
 
 interface BaseChunkType {
   runId: string;
   from: ChunkFrom;
+  metadata?: Record<string, any>;
 }
 
 interface ResponseMetadataPayload {
@@ -213,7 +215,7 @@ interface StepStartPayload {
   [key: string]: unknown;
 }
 
-export interface StepFinishPayload {
+export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
   id?: string;
   providerMetadata?: SharedV2ProviderMetadata;
   totalUsage?: LanguageModelV2Usage;
@@ -226,7 +228,11 @@ export interface StepFinishPayload {
     reason: LanguageModelV2FinishReason;
   };
   output: {
+    text?: string;
+    toolCalls?: TypedToolCall<Tools>[];
     usage: LanguageModelV2Usage;
+    steps?: StepResult<Tools>[];
+    object?: OUTPUT extends undefined ? unknown : InferSchemaOutput<OUTPUT>;
   };
   metadata: {
     request?: LanguageModelRequestMetadata;
@@ -303,6 +309,8 @@ interface TripwirePayload {
 
 // Network-specific payload interfaces
 interface RoutingAgentStartPayload {
+  agentId: string;
+  runId: string;
   inputData: {
     task: string;
     primitiveId: string;
@@ -325,6 +333,7 @@ interface RoutingAgentEndPayload {
   isComplete?: boolean;
   selectionReason: string;
   iteration: number;
+  runId: string;
 }
 
 interface AgentExecutionStartPayload {
@@ -366,6 +375,7 @@ interface WorkflowExecutionStartPayload {
 }
 
 interface WorkflowExecutionEndPayload {
+  name: string;
   task: string;
   primitiveId: string;
   primitiveType: string;
@@ -403,6 +413,7 @@ interface NetworkStepFinishPayload {
   result: string;
   isComplete: boolean;
   iteration: number;
+  runId: string;
 }
 
 interface NetworkFinishPayload {
@@ -470,12 +481,19 @@ export type TypedChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'raw'; payload: RawPayload })
   | (BaseChunkType & { type: 'start'; payload: StartPayload })
   | (BaseChunkType & { type: 'step-start'; payload: StepStartPayload })
-  | (BaseChunkType & { type: 'step-finish'; payload: StepFinishPayload })
+  | (BaseChunkType & { type: 'step-finish'; payload: StepFinishPayload<ToolSet, OUTPUT> })
   | (BaseChunkType & { type: 'tool-error'; payload: ToolErrorPayload })
   | (BaseChunkType & { type: 'abort'; payload: AbortPayload })
   | (BaseChunkType & {
       type: 'object';
       object: PartialSchemaOutput<OUTPUT>;
+    })
+  | (BaseChunkType & {
+      /**
+       * The object promise is resolved with the object from the object-result chunk
+       */
+      type: 'object-result';
+      object: InferSchemaOutput<OUTPUT>;
     })
   | (BaseChunkType & { type: 'tool-output'; payload: DynamicToolOutputPayload })
   | (BaseChunkType & { type: 'step-output'; payload: StepOutputPayload })
@@ -552,14 +570,15 @@ export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = 
   onFinish?: MastraOnFinishCallback;
   onStepFinish?: MastraOnStepFinishCallback;
   includeRawChunks?: boolean;
-  output?: OUTPUT;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
   outputProcessors?: OutputProcessor[];
-  outputProcessorRunnerMode?: ProcessorRunnerMode;
+  isLLMExecutionStep?: boolean;
   returnScorerData?: boolean;
   tracingContext?: TracingContext;
+  processorStates?: Map<string, any>;
 };
 
-export type LLMStepResult = {
+export type LLMStepResult<OUTPUT extends OutputSchema = undefined> = {
   stepType?: 'initial' | 'tool-result';
   toolCalls: ToolCallChunk[];
   toolResults: ToolResultChunk[];
@@ -579,7 +598,13 @@ export type LLMStepResult = {
   response: {
     headers?: Record<string, string>;
     messages?: StepResult<ToolSet>['response']['messages'];
-    uiMessages?: UIMessage[];
+    uiMessages?: UIMessage<
+      OUTPUT extends OutputSchema
+        ? {
+            structuredOutput?: InferSchemaOutput<OUTPUT>;
+          } & Record<string, unknown>
+        : unknown
+    >[];
     id?: string;
     timestamp?: Date;
     modelId?: string;

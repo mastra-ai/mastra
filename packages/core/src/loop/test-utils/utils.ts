@@ -1,9 +1,5 @@
-import type {
-  LanguageModelV2CallWarning,
-  LanguageModelV2StreamPart,
-  SharedV2ProviderMetadata,
-} from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream, mockId } from 'ai-v5/test';
+import type { LanguageModelV2CallWarning, LanguageModelV2StreamPart, SharedV2ProviderMetadata } from '@ai-sdk/provider';
+import { MockLanguageModelV2, convertArrayToReadableStream, mockId } from 'ai/test';
 import type { ModelManagerModelConfig } from '../../stream/types';
 
 export const mockDate = new Date('2024-01-01T00:00:00Z');
@@ -16,6 +12,7 @@ export const defaultSettings = () =>
       generateId: mockId({ prefix: 'id' }),
       currentDate: () => new Date(0),
     },
+    agentId: 'agent-id',
     onError: () => {},
   }) as const;
 

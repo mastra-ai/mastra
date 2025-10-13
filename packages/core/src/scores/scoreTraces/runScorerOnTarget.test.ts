@@ -6,8 +6,7 @@ import type { AISpanRecord, AITraceRecord, MastraStorage } from '../../storage';
 import type { MastraScorer } from '../base';
 
 vi.mock('./utils', () => ({
-  transformTraceToScorerInput: vi.fn().mockReturnValue({ transformedInput: 'test' }),
-  transformTraceToScorerOutput: vi.fn().mockReturnValue({ transformedOutput: 'test' }),
+  transformTraceToScorerInputAndOutput: vi.fn(() => ({ input: 'test', output: 'test' })),
 }));
 
 import { runScorerOnTarget } from './scoreTracesWorkflow';
@@ -231,27 +230,6 @@ describe('runScorerOnTarget Function', () => {
       );
       expect(testContext.mockStorage.updateAISpan).toHaveBeenCalled();
     });
-
-    it('should run scorer successfully with specific spanId', async () => {
-      const target = { traceId: 'trace-1', spanId: 'span-2' };
-      testContext.setupSuccessfulScenario(target);
-
-      await testContext.runTarget(target);
-
-      expect(testContext.mockStorage.getAITrace).toHaveBeenCalledWith('trace-1');
-      expect(testContext.mockScorer.run).toHaveBeenCalled();
-      expect(testContext.mockStorage.saveScore).toHaveBeenCalledWith(
-        expect.objectContaining({
-          runId: 'run-123',
-          scorerId: 'test-scorer',
-          entityId: 'child-span',
-          entityType: AISpanType.LLM_GENERATION,
-          source: 'TEST',
-          traceId: 'trace-1-span-2',
-        }),
-      );
-      expect(testContext.mockStorage.updateAISpan).toHaveBeenCalled();
-    });
   });
 
   describe('Error handling', () => {
@@ -367,7 +345,8 @@ describe('runScorerOnTarget Function', () => {
             name: 'test-scorer',
             description: 'Test scorer for unit tests',
           },
-          traceId: 'trace-1-span-2', // With spanId suffix
+          traceId: 'trace-1',
+          spanId: 'span-2',
           entityId: 'child-span',
           entityType: AISpanType.LLM_GENERATION,
           entity: { traceId: 'trace-1', spanId: 'span-2' },

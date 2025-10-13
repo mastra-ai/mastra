@@ -8,7 +8,7 @@ import { createStep, createWorkflow } from '../../workflows/evented';
 import type { MastraScorer, ScorerRun } from '../base';
 import type { ScoreRowData } from '../types';
 import { saveScorePayloadSchema } from '../types';
-import { transformTraceToScorerInput, transformTraceToScorerOutput } from './utils';
+import { transformTraceToScorerInputAndOutput } from './utils';
 
 const getTraceStep = createStep({
   id: '__process-trace-scoring',
@@ -134,7 +134,6 @@ export async function runScorerOnTarget({
   });
 
   const result = await scorer.run(scorerRun);
-  const traceId = `${target.traceId}${target.spanId ? `-${target.spanId}` : ''}`;
   const scorerResult = {
     ...result,
     scorer: {
@@ -142,7 +141,8 @@ export async function runScorerOnTarget({
       name: scorer.name,
       description: scorer.description,
     },
-    traceId,
+    traceId: target.traceId,
+    spanId: target.spanId,
     entityId: span.name,
     entityType: span.spanType,
     entity: { traceId: span.traceId, spanId: span.spanId },
@@ -173,9 +173,10 @@ function buildScorerRun({
 }) {
   let runPayload: ScorerRun;
   if (scorerType === 'agent') {
+    const { input, output } = transformTraceToScorerInputAndOutput(trace);
     runPayload = {
-      input: transformTraceToScorerInput(trace as any),
-      output: transformTraceToScorerOutput(trace as any),
+      input,
+      output,
     };
   } else {
     runPayload = { input: targetSpan.input, output: targetSpan.output };

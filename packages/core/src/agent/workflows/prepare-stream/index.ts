@@ -27,7 +27,7 @@ interface CreatePrepareStreamWorkflowOptions<
   runId: string;
   runtimeContext: RuntimeContext;
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
-  methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
+  methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   format?: FORMAT;
   instructions: SystemMessage;
   memoryConfig?: MemoryConfig;
@@ -36,6 +36,7 @@ interface CreatePrepareStreamWorkflowOptions<
   returnScorerData?: boolean;
   requireToolApproval?: boolean;
   resumeContext?: any;
+  agentId: string;
 }
 
 export function createPrepareStreamWorkflow<
@@ -58,6 +59,7 @@ export function createPrepareStreamWorkflow<
   returnScorerData,
   requireToolApproval,
   resumeContext,
+  agentId,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -68,7 +70,6 @@ export function createPrepareStreamWorkflow<
     runtimeContext,
     agentAISpan,
     methodType,
-    format,
     memory,
   });
 
@@ -94,6 +95,7 @@ export function createPrepareStreamWorkflow<
     format,
     requireToolApproval,
     resumeContext,
+    agentId,
   });
 
   const mapResultsStep = createMapResultsStep({
@@ -107,6 +109,7 @@ export function createPrepareStreamWorkflow<
     saveQueueManager,
     agentAISpan,
     instructions,
+    agentId,
   });
 
   return createWorkflow({

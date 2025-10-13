@@ -1,6 +1,6 @@
-import type { CoreMessage as AIV4CoreMessage, UIMessage as AIV4UIMessage } from 'ai';
-import { isToolUIPart } from 'ai-v5';
-import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from 'ai-v5';
+import { isToolUIPart } from 'ai';
+import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from 'ai';
+import type { CoreMessage as AIV4CoreMessage, UIMessage as AIV4UIMessage } from 'ai-v4';
 import { describe, expect, it } from 'vitest';
 import type { MastraMessageV2 } from '../index';
 import { MessageList } from '../index';
@@ -936,7 +936,7 @@ describe('MessageList V5 Support', () => {
       const messageList = new MessageList();
       const imageUrl = 'https://httpbin.org/image/png';
 
-      // This mimics what happens when the user passes messages to streamVNext
+      // This mimics what happens when the user passes messages to stream
       // with format: 'aisdk' containing file parts with URLs
       const v2Message: MastraMessageV2 = {
         id: 'test-msg-1',

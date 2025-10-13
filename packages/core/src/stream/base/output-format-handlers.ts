@@ -1,12 +1,14 @@
 import { TransformStream } from 'stream/web';
-import { asSchema, isDeepEqualData, jsonSchema, parsePartialJson } from 'ai-v5';
-import type { JSONSchema7, Schema } from 'ai-v5';
+import { asSchema, isDeepEqualData, jsonSchema, parsePartialJson } from 'ai';
+import type { JSONSchema7, Schema } from 'ai';
 import type z3 from 'zod/v3';
 import type z4 from 'zod/v4';
+import type { StructuredOutputOptions } from '../../agent/types';
+import { MastraError } from '../../error';
 import { safeValidateTypes } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
 import type { ChunkType } from '../types';
-import { getTransformedSchema, getResponseFormat } from './schema';
+import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput, ZodLikePartialSchema } from './schema';
 
 interface ProcessPartialChunkParams {
@@ -483,19 +485,14 @@ function createOutputHandler<OUTPUT extends OutputSchema = undefined>({
  * - Always passes through original chunks for downstream processing
  */
 export function createObjectStreamTransformer<OUTPUT extends OutputSchema = undefined>({
-  schema,
-  onFinish,
+  isLLMExecutionStep,
+  structuredOutput,
 }: {
-  schema?: OUTPUT;
-  /**
-   * Callback to be called when the stream finishes.
-   * @param data The final parsed object / array
-   */
-  onFinish: (data: InferSchemaOutput<OUTPUT>) => void;
+  isLLMExecutionStep?: boolean;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
 }) {
-  const responseFormat = getResponseFormat(schema);
-  const transformedSchema = getTransformedSchema(schema);
-  const handler = createOutputHandler({ transformedSchema, schema });
+  const transformedSchema = getTransformedSchema(structuredOutput?.schema);
+  const handler = createOutputHandler({ transformedSchema, schema: structuredOutput?.schema });
 
   let accumulatedText = '';
   let previousObject: any = undefined;
@@ -504,18 +501,20 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
+      if (!isLLMExecutionStep) {
+        // Bypassing processing if we are not in the LLM execution step (inner stream)
+        // OR if there is no output schema provided
+        controller.enqueue(chunk);
+        return;
+      }
+
       if (chunk.runId) {
+        // save runId to use in error chunks
         currentRunId = chunk.runId;
       }
 
       if (chunk.type === 'finish') {
         finishReason = chunk.payload.stepResult.reason;
-        controller.enqueue(chunk);
-        return;
-      }
-
-      if (responseFormat?.type !== 'json') {
-        // Not JSON mode - pass through original chunks and exit
         controller.enqueue(chunk);
         return;
       }
@@ -530,12 +529,14 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
 
         if (result.shouldEmit) {
           previousObject = result.newPreviousResult ?? previousObject;
-          controller.enqueue({
+          const chunkData = {
             from: chunk.from,
             runId: chunk.runId,
             type: 'object',
             object: result.emitValue as PartialSchemaOutput<OUTPUT>, // TODO: handle partial runtime type validation of json chunks
-          });
+          };
+
+          controller.enqueue(chunkData as ChunkType<OUTPUT>);
         }
       }
 
@@ -544,13 +545,22 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
     },
 
     async flush(controller) {
-      if (responseFormat?.type !== 'json') {
-        // Not JSON mode, no final validation needed - exit
+      // Bypass final validation if there is no output schema provided
+      // or if we are not in the LLM execution step (inner stream)
+      if (!isLLMExecutionStep) {
         return;
       }
 
       if (['tool-calls'].includes(finishReason ?? '')) {
-        onFinish(undefined as InferSchemaOutput<OUTPUT>);
+        // TODO: this breaks object output when tools are called.
+        // The reason we did this was to be able to work with client-side tool calls. We need the object to resolve in that case
+        // but this will
+        // controller.enqueue({
+        //   from: ChunkFrom.AGENT,
+        //   runId: currentRunId ?? '',
+        //   type: 'object-result',
+        //   object: undefined as InferSchemaOutput<OUTPUT>,
+        // });
         return;
       }
 
@@ -561,12 +571,28 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
           from: ChunkFrom.AGENT,
           runId: currentRunId ?? '',
           type: 'error',
-          payload: { error: finalResult.error ?? new Error('Validation failed') },
+          payload: {
+            error: new MastraError(
+              {
+                domain: 'AGENT',
+                category: 'SYSTEM',
+                id: 'OUTPUT_SCHEMA_VALIDATION_FAILED',
+                text: finalResult.error.message,
+              },
+              { cause: finalResult.error },
+            ),
+          },
         });
         return;
       }
 
-      onFinish(finalResult.value);
+      controller.enqueue({
+        from: ChunkFrom.AGENT,
+        runId: currentRunId ?? '',
+        type: 'object-result',
+        object: finalResult.value,
+      });
+      return;
     },
   });
 }

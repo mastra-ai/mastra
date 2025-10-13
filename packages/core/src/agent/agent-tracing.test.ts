@@ -1,6 +1,6 @@
 import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV1 } from 'ai-v4/test';
 import { config } from 'dotenv';
 import { describe, expect, it } from 'vitest';
 
@@ -45,7 +45,7 @@ describe('agent telemetry', () => {
     });
     const agentOne = mastra.getAgent('electionAgent');
 
-    await agentOne.generate('Who won the 2016 US presidential election?', {
+    await agentOne.generateLegacy('Who won the 2016 US presidential election?', {
       telemetry: { functionId: 'test-function-id', metadata: { test: 'test' } },
     });
 

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { simulateReadableStream } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import { simulateReadableStream } from 'ai-v4';
+import { MockLanguageModelV1 } from 'ai-v4/test';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createTool, Mastra, Telemetry } from '../..';
@@ -6257,7 +6257,7 @@ describe('Workflow', () => {
             outputSchema: z.object({ text: z.string() }),
             execute: async ({ inputData, mastra }) => {
               const agent = mastra.getAgent('test-agent-1');
-              const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
+              const result = await agent.generateLegacy([{ role: 'user', content: inputData.prompt }]);
               return { text: result.text };
             },
           }),
@@ -6275,7 +6275,7 @@ describe('Workflow', () => {
             outputSchema: z.object({ text: z.string() }),
             execute: async ({ inputData, mastra }) => {
               const agent = mastra.getAgent('test-agent-2');
-              const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
+              const result = await agent.generateLegacy([{ role: 'user', content: inputData.prompt }]);
               return { text: result.text };
             },
           }),
@@ -6360,7 +6360,7 @@ describe('Workflow', () => {
         outputSchema: z.object({ text: z.string() }),
         execute: async ({ inputData, mastra }) => {
           const agent = mastra.getAgent(inputData.agentName);
-          const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
+          const result = await agent.generateLegacy([{ role: 'user', content: inputData.prompt }]);
           return { text: result.text };
         },
       });

@@ -7,8 +7,8 @@ import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
 } from '@mastra/schema-compat';
-import { stepCountIs } from 'ai-v5';
-import type { Schema, ModelMessage, ToolSet } from 'ai-v5';
+import { stepCountIs } from 'ai';
+import type { Schema, ModelMessage, ToolSet } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MastraPrimitives } from '../../action';
@@ -153,7 +153,7 @@ export class MastraLLMVNext extends MastraBase {
     telemetry_settings,
     threadId,
     resourceId,
-    output,
+    structuredOutput,
     options,
     outputProcessors,
     returnScorerData,
@@ -162,6 +162,7 @@ export class MastraLLMVNext extends MastraBase {
     messageList,
     requireToolApproval,
     _internal,
+    agentId,
     // ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT | undefined> {
     let stopWhenToUse;
@@ -220,11 +221,12 @@ export class MastraLLMVNext extends MastraBase {
           ...telemetry_settings,
         },
         _internal,
-        output,
+        structuredOutput,
         outputProcessors,
         returnScorerData,
         llmAISpan,
         requireToolApproval,
+        agentId,
         options: {
           ...options,
           onStepFinish: async props => {
@@ -303,11 +305,12 @@ export class MastraLLMVNext extends MastraBase {
 
             llmAISpan?.end({
               output: {
-                text: props?.text,
+                files: props?.files,
+                object: props?.object,
                 reasoning: props?.reasoning,
                 reasoningText: props?.reasoningText,
-                files: props?.files,
                 sources: props?.sources,
+                text: props?.text,
                 warnings: props?.warnings,
               },
               attributes: {
