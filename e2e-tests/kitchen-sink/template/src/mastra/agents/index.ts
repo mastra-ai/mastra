@@ -1,7 +1,10 @@
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { weatherTool } from '../tools';
+import { simulateReadableStream } from 'ai';
+import * as aiTest from 'ai/test';
+import { fixtures } from '../../../fixtures';
+import { Fixtures } from '../../../types';
 
 const memory = new Memory();
 
@@ -17,7 +20,17 @@ export const weatherAgent = new Agent({
       - Include relevant details like humidity, wind conditions, and precipitation
       - Keep responses concise but informative
 `,
-  model: openai('gpt-4o-mini'),
+  model: ({ runtimeContext }) => {
+    const fixture = runtimeContext.get('fixture') as Fixtures;
+
+    return new aiTest.MockLanguageModelV2({
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          chunks: fixtures[fixture],
+        }),
+      }),
+    });
+  },
   tools: { weatherTool },
   memory,
 });

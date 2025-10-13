@@ -15,7 +15,6 @@ test('has overall information', async ({ page }) => {
   await expect(firstRow.locator('text=1 tool')).toBeVisible();
   await expect(firstRow.locator('text=0 workflow')).toBeVisible();
   await expect(firstRow.locator('text=0 agent')).toBeVisible();
-  await expect(firstRow.locator('text=gpt-4o-mini')).toBeVisible();
   await expect(firstRow.locator('text=Weather Agent')).toHaveAttribute('href', '/agents/weatherAgent');
 });
 
