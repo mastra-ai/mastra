@@ -10,15 +10,7 @@ test('overall layout information', async ({ page }) => {
     'https://mastra.ai/en/docs/agents/overview',
   );
   const breadcrumb = page.locator('header>nav');
-  const agentsCrumb = breadcrumb.locator('li:nth-child(1)>a');
-  const separatorCrumb = breadcrumb.locator('li:nth-child(2)');
-  const agentCrumb = breadcrumb.locator('li:nth-child(3)>a');
-
-  await expect(agentsCrumb).toHaveText('Agents');
-  await expect(agentsCrumb).toHaveAttribute('href', '/agents');
-  await expect(separatorCrumb).toHaveRole('separator');
-  await expect(agentCrumb).toHaveText('Weather Agent');
-  await expect(agentCrumb).toHaveAttribute('href', '/agents/weatherAgent');
+  expect(breadcrumb).toMatchAriaSnapshot();
 
   // Thread history (with memory)
   const newChatButton = await page.locator('a:has-text("New Chat")');
