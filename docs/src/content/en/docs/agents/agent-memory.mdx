@@ -1,39 +1,79 @@
 ---
-title: "Using Agent Memory | Agents | Mastra Docs"
-description: Documentation on how agents in Mastra use memory to store conversation history and contextual information.
+title: "Agent Memory | Agents | Mastra Docs"
+description: Learn how to add memory to agents to store conversation history and maintain context across interactions.
 ---
+
+import { Callout } from "nextra/components";
 
 # Agent Memory
 
-Agents in Mastra can leverage a powerful memory system to store conversation history, recall relevant information, and maintain persistent context across interactions. This allows agents to have more natural, stateful conversations.
+Agents can use memory to store conversation history, recall relevant information, and maintain context across interactions. This enables more natural, stateful conversations throughout a user’s session.
 
-## Enabling memory for an agent
+## When to use memory
 
-To enable memory, instantiate the `Memory` class and pass it to your agent's configuration using the `memory` parameter. You also need to install the memory package and a storage adapter:
+Use memory when an agent needs to retain information across multiple user interactions. This includes recalling user-specific details, facts, or tool calls and their results. Without memory, the agent handles each request in isolation, with no awareness of previous messages or responses.
+
+For more information about the different ways memory works in Mastra see the following pages.
+
+- [Working Memory](../memory/working-memory.mdx)
+- [Semantic Recall](../memory/semantic-recall.mdx)
+
+## Prerequisites
+
+Memory requires a storage provider to persist conversation history, including user messages and agent responses. You can use **shared storage** to define a single provider for all agents, or **dedicated storage** to configure separate providers for individual agents.
+
+Install `@mastra/memory` and a storage provider.
 
 ```bash npm2yarn copy
 npm install @mastra/memory@latest @mastra/libsql@latest
 ```
 
-```typescript {2-3, 10-14} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+### Storage providers
+
+Mastra supports multiple storage providers. Popular options include:
+
+- [LibSQL](../../reference/storage/libsql.mdx)
+- [PostgreSQL](../../reference/storage/postgresql.mdx)
+- [Cloudflare D1](../../reference/storage/cloudflare-d1.mdx)
+
+<Callout type="warning">
+`LibSQLStore` works well for local development and when deploying to [Mastra Cloud](../mastra-cloud/overview.mdx), but may not be supported by some [serverless platforms](../deployment/serverless-platforms/index.mdx) or [cloud providers](../deployment/cloud-providers/index.mdx).
+</Callout>
+
+### Shared storage
+
+Use shared storage for a simple, centralized setup across agents. Add the storage adapter to your main Mastra instance to make it available to all agents by default.
+
+```typescript {6-8} filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  // ..
+  storage: new LibSQLStore({
+    url: ":memory:"
+  }),
+});
+```
+
+### Dedicated storage
+
+Use dedicated storage when agents need to keep data separate, use different providers, or tailor storage requirements for specific users. Add the storage adapter directly to the agent’s `memory` configuration option.
+
+```typescript {7-10} filename="src/mastra/agents/memory-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
-import { openai } from "@ai-sdk/openai";
 
-export const testAgent = new Agent({
-  name: "test-agent",
-  instructions: "You are a helpful assistant with memory.",
-  model: openai("gpt-4o"),
+export const memoryAgent = new Agent({
+  // ...
   memory: new Memory({
     storage: new LibSQLStore({
-      url: "file:../../memory.db"
+      url: "file:../../memory-agent.db"
     })
   })
 });
 ```
-
-This basic setup uses the default settings. Visit the [Memory documentation](../memory/overview.mdx) for more configuration info.
 
 ## Memory in agent calls
 
@@ -47,8 +87,8 @@ These fields tell the agent where to store and retrieve context, enabling persis
 ```typescript {3-4}
 const response = await testAgent.generate("Remember my favorite color is blue.", {
   memory: {
-    resource: "user_alice",
-    thread: "preferences_thread",
+    thread: "user-123",
+    resource: "test-123"
   }
 });
 ```
@@ -58,94 +98,29 @@ To recall information stored in memory, call the agent with the same `resource` 
 ```typescript {3-4}
 const response = await testAgent.generate("What's my favorite color?", {
   memory: {
-    resource: "user_alice",
-    thread: "preferences_thread",
+    thread: "user-123",
+    resource: "test-123"
   }
 });
 ```
 
-## Memory with `RuntimeContext`
+## Using `RuntimeContext`
 
-You can configure memory dynamically using [RuntimeContext](./runtime-context.mdx), just like `instructions`, `models`, and `tools`. This gives you fine-grained control over memory behavior. For example, you can select different memory systems per user, enable features conditionally, or adapt configurations across environments.
+Use `RuntimeContext` to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
 
-### Agent configuration
+```typescript filename="src/mastra/agents/memory-agent.ts" showLineNumbers
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
 
-```typescript {18-20} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/libsql";
-import { openai } from "@ai-sdk/openai";
-
-const premiumMemory = new Memory({
- // ...
-});
-
-const standardMemory = new Memory({
+export const memoryAgent = new Agent({
   // ...
-});
-
-export const testAgent = new Agent({
-  name: "test-agent",
-  instructions: "You are a helpful assistant with tiered memory capabilities.",
-  model: openai("gpt-4o"),
   memory: ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("userTier");
-    return userTier === "premium" ? premiumMemory : standardMemory;
-  }
-});
-```
+    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
 
-### Agent usage
-
-Pass a configured `RuntimeContext` instance to an agent to enable conditional logic during execution. This allows the agent to adapt its behavior based on runtime values.
-
-```typescript {1,4,6, 13} showLineNumbers copy
-import { RuntimeContext } from "@mastra/core/runtime-context";
-
-const testAgent = mastra.getAgent("testAgent");
-const runtimeContext = new RuntimeContext();
-
-runtimeContext.set("userTier", "premium");
-
-const response = await testAgent.generate("Remember my favorite color is blue.", {
-  memory: {
-    resource: "user_alice",
-    thread: { id: "preferences_thread" }
-  },
-  runtimeContext
-});
-```
-
-
-## Async memory configuration
-
-Memory can be configured asynchronously to support use cases like fetching user-specific settings from a database, validating access with Auth, or loading additional data from a remote service.
-
-```typescript {18, 22} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/libsql";
-import { openai } from "@ai-sdk/openai";
-
-const premiumMemory = new Memory({
- // ...
-});
-
-const standardMemory = new Memory({
-  // ...
-});
-
-export const testAgent = new Agent({
-  name: "test-agent",
-  instructions: "You are a helpful assistant with tiered memory capabilities.",
-  model: openai("gpt-4o"),
-  memory: async ({ runtimeContext }) => {
-    const userId = runtimeContext.get("userId");
-
-    // Example database lookup using `userId`
-    const userTier = await query(`SELECT user_tier FROM users WHERE userId = $1`, [userId]);
-
-    return userTier === "premium" ? premiumMemory : standardMemory;
+    return userTier === "enterprise"
+      ? premiumMemory
+      : standardMemory;
   }
 });
 ```
@@ -155,3 +130,4 @@ export const testAgent = new Agent({
 - [Working Memory](../memory/working-memory.mdx)
 - [Semantic Recall](../memory/semantic-recall.mdx)
 - [Threads and Resources](../memory/threads-and-resources.mdx)
+- [Runtime Context](../server-db/runtime-context.mdx)
