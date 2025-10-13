@@ -17,11 +17,7 @@ import { writeTelemetryConfig } from '../build/telemetry';
 import { getPackageRootPath } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
-import {
-  collectTransitiveWorkspaceDependencies,
-  getWorkspaceInformation,
-  packWorkspaceDependencies,
-} from './workspaceDependencies';
+import { getWorkspaceInformation } from './workspaceDependencies';
 
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
@@ -288,6 +284,11 @@ export abstract class Bundler extends MastraBundler {
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+
+      if (error instanceof MastraError) {
+        throw error;
+      }
+
       throw new MastraError(
         {
           id: 'DEPLOYER_BUNDLER_ANALYZE_FAILED',
@@ -356,11 +357,9 @@ export abstract class Bundler extends MastraBundler {
       dependenciesToInstall.set(external, 'latest');
     }
 
-    const workspaceDependencies = new Set<string>();
     for (const dep of analyzedBundleInfo.externalDependencies) {
       try {
         if (analyzedBundleInfo.workspaceMap.has(dep)) {
-          workspaceDependencies.add(dep);
           continue;
         }
 
@@ -372,8 +371,6 @@ export abstract class Bundler extends MastraBundler {
         dependenciesToInstall.set(dep, 'latest');
       }
     }
-
-    // TODO: workspace dependencies are not being packaged anymore - remove
 
     try {
       await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);

@@ -44,7 +44,6 @@ async function validateOutput(
   logger: IMastraLogger,
 ) {
   const result = {
-    invalidChunks: new Set<string>(),
     dependencies: new Map<string, string>(),
     externalDependencies: new Set<string>(),
     workspaceMap,
@@ -104,8 +103,6 @@ export const new Mastra({
           });
         }
       }
-      // @ts-ignore
-      console.log('mssage:', err.message);
     }
   }
 
