@@ -113,6 +113,14 @@ export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
 
+const premiumMemory = new Memory({
+ // ...
+});
+
+const standardMemory = new Memory({
+  // ...
+});
+
 export const memoryAgent = new Agent({
   // ...
   memory: ({ runtimeContext }) => {
