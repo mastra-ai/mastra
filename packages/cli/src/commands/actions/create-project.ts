@@ -4,7 +4,20 @@ import { create } from '../create/create';
 
 const origin = process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN;
 
-export const createProject = async (projectNameArg: any, args: any) => {
+interface CreateProjectArgs {
+  default?: boolean;
+  components?: string;
+  llm?: string;
+  llmApiKey?: string;
+  example?: boolean;
+  timeout?: string | boolean;
+  dir?: string;
+  projectName?: string;
+  mcp?: string;
+  template?: string | boolean;
+}
+
+export const createProject = async (projectNameArg: string | undefined, args: CreateProjectArgs) => {
   const projectName = projectNameArg || args.projectName;
   await analytics.trackCommandExecution({
     command: 'create',
@@ -17,6 +30,7 @@ export const createProject = async (projectNameArg: any, args: any) => {
           llmProvider: 'openai',
           addExample: true,
           timeout,
+          // @ts-expect-error: TODO - Fix this
           mcpServer: args.mcp,
           template: args.template,
         });
@@ -24,12 +38,14 @@ export const createProject = async (projectNameArg: any, args: any) => {
       }
       await create({
         components: args.components ? args.components.split(',') : [],
+        // @ts-expect-error: TODO - Fix this
         llmProvider: args.llm,
         addExample: args.example,
         llmApiKey: args.llmApiKey,
         timeout,
         projectName,
         directory: args.dir,
+        // @ts-expect-error: TODO - Fix this
         mcpServer: args.mcp,
         template: args.template,
       });

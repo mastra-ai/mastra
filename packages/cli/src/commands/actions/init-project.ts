@@ -5,13 +5,24 @@ import { checkAndInstallCoreDeps, checkForPkgJson, interactivePrompt } from '../
 
 const origin = process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN;
 
-export const initProject = async (args: any) => {
+interface InitArgs {
+  default?: boolean;
+  dir?: string;
+  components?: string;
+  llm?: string;
+  llmApiKey?: string;
+  example?: boolean;
+  mcp?: string;
+}
+
+export const initProject = async (args: InitArgs) => {
   await analytics.trackCommandExecution({
     command: 'init',
+    // @ts-expect-error: TODO - Fix this
     args,
     execution: async () => {
       await checkForPkgJson();
-      await checkAndInstallCoreDeps(args?.example || args?.default);
+      await checkAndInstallCoreDeps(Boolean(args?.example || args?.default));
 
       if (!Object.keys(args).length) {
         const result = await interactivePrompt();
@@ -30,6 +41,7 @@ export const initProject = async (args: any) => {
           components: ['agents', 'tools', 'workflows'],
           llmProvider: 'openai',
           addExample: true,
+          // @ts-expect-error: TODO - Fix this
           configureEditorWithDocsMCP: args.mcp,
         });
         return;
@@ -39,9 +51,11 @@ export const initProject = async (args: any) => {
       await init({
         directory: args.dir,
         components: componentsArr,
+        // @ts-expect-error: TODO - Fix this
         llmProvider: args.llm,
         addExample: args.example,
-        llmApiKey: args['llm-api-key'],
+        llmApiKey: args.llmApiKey,
+        // @ts-expect-error: TODO - Fix this
         configureEditorWithDocsMCP: args.mcp,
       });
       return;
