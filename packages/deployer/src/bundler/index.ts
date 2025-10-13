@@ -374,7 +374,6 @@ export abstract class Bundler extends MastraBundler {
     }
 
     // TODO: workspace dependencies are not being packaged anymore - remove
-    let resolutions: Record<string, string> = {};
 
     try {
       await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
