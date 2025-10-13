@@ -44,12 +44,12 @@ jobs:
         with:
           app-id: ${{ vars.DANE_APP_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
-          permission-pull-requests: write
-          permission-issues: write
-          permission-security-events: write
-          permission-statuses: write
-          permission-contents: write
-          permission-workflows: write
+          #permission-pull-requests: write
+          #permission-issues: write
+          #permission-security-events: write
+          #permission-statuses: write
+          #permission-contents: write
+          #permission-workflows: write
 
       - name: Get GitHub App User ID
         id: get-user-id
