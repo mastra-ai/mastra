@@ -4,6 +4,7 @@ import { Clippy } from "@/components/svgs/clippy";
 import { ArrowLeftIcon } from "@/components/svgs/Icons";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import { Markdown } from "@copilotkit/react-ui";
 import "@copilotkit/react-ui/styles.css";
 import { useChat } from "@kapaai/react-sdk";
@@ -14,9 +15,11 @@ import { useStickToBottom } from "use-stick-to-bottom";
 export function KapaChat({
   setIsAgentMode,
   searchQuery,
+  show,
 }: {
   setIsAgentMode: (isAgentMode: boolean) => void;
   searchQuery: string;
+  show?: boolean;
 }) {
   const {
     conversation,
@@ -29,11 +32,9 @@ export function KapaChat({
   const [inputValue, setInputValue] = useState("");
 
   useEffect(() => {
-    console.log({ searchQuery });
     if (searchQuery) {
       if (searchQuery.trim()) {
-        submitQuery(inputValue);
-        setInputValue("");
+        submitQuery(searchQuery);
       }
     }
   }, [searchQuery]);
@@ -72,7 +73,12 @@ export function KapaChat({
   const { scrollRef, contentRef } = useStickToBottom();
 
   return (
-    <div className="flex relative flex-col w-full h-[700px]">
+    <div
+      className={cn(
+        "flex relative flex-col w-full h-[700px]",
+        !show && "hidden",
+      )}
+    >
       {/* Chat header */}
       <div className="flex absolute top-0 right-0 left-0 z-20 px-5 py-3 w-full backdrop-blur-md dark:bg-surface-6">
         <Button
@@ -192,7 +198,7 @@ export function KapaChat({
         </form>
 
         {/* Compliance text */}
-        <div className="mt-2 px-2 text-center">
+        <div className="px-2 mt-2 text-center">
           <p className="text-[10px] text-icons-2 dark:text-icons-2">
             Powered by{" "}
             <a

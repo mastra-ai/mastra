@@ -142,20 +142,23 @@ export const SearchWrapper = ({
                 Search
               </DialogTitle>
               <div className="w-full">
-                {isAgentMode && isKapaChatbotEnabled ? (
-                  <KapaChat
-                    searchQuery={searchQuery}
-                    setIsAgentMode={setIsAgentMode}
-                  />
-                ) : isKapaChatbotEnabled ? (
-                  <div className="p-[10px]">
-                    <CustomSearch
-                      placeholder={getSearchPlaceholder(locale)}
-                      searchOptions={searchOptions}
-                      onUseAgent={handleUseAgent}
-                      closeModal={close}
+                {isKapaChatbotEnabled ? (
+                  <>
+                    <KapaChat
+                      searchQuery={searchQuery}
+                      setIsAgentMode={setIsAgentMode}
+                      show={isAgentMode && isKapaChatbotEnabled}
                     />
-                  </div>
+                    <div className="p-[10px]">
+                      <CustomSearch
+                        placeholder={getSearchPlaceholder(locale)}
+                        searchOptions={searchOptions}
+                        onUseAgent={handleUseAgent}
+                        closeModal={close}
+                        show={!isAgentMode && isKapaChatbotEnabled}
+                      />
+                    </div>
+                  </>
                 ) : (
                   <div className="p-[10px]">
                     <CustomSearchWithoutAI

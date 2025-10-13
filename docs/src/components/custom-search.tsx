@@ -45,6 +45,7 @@ type SearchProps = {
   searchOptions?: AlgoliaSearchOptions;
   onUseAgent: ({ searchQuery }: { searchQuery: string }) => void;
   closeModal: () => void;
+  show?: boolean;
 };
 
 // Type for flattened search results
@@ -71,6 +72,7 @@ export const CustomSearch: FC<SearchProps> = ({
   searchOptions,
   onUseAgent,
   closeModal,
+  show,
 }) => {
   const { isSearchLoading, results, search, setSearch } = useAlgoliaSearch(
     300,
@@ -81,6 +83,8 @@ export const CustomSearch: FC<SearchProps> = ({
   const inputRef = useRef<HTMLInputElement>(null!);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+
+  const resolvedSearch = search || "mastra";
 
   // Ensure input is focused when component mounts
   useEffect(() => {
@@ -133,7 +137,7 @@ export const CustomSearch: FC<SearchProps> = ({
   const handleSelect = (searchResult: SearchResult | null) => {
     if (!searchResult) return;
     if (searchResult.url === "use-ai") {
-      onUseAgent({ searchQuery: `Tell me about ${search}` });
+      onUseAgent({ searchQuery: `Tell me about ${resolvedSearch}` });
       setSearch("");
       return;
     }
@@ -204,7 +208,9 @@ export const CustomSearch: FC<SearchProps> = ({
   const showLoader = isSearchLoading && !!search && !results.length;
 
   return (
-    <div className="overflow-hidden w-full max-h-[600px]">
+    <div
+      className={cn("overflow-hidden w-full max-h-[600px]", !show && "hidden")}
+    >
       <div
         className={cn(
           className,
@@ -297,7 +303,7 @@ export const CustomSearch: FC<SearchProps> = ({
                                     Tell me about{" "}
                                   </span>
                                   <span className="dark:text-accent-green text-accent-green-2">
-                                    {search || "mastra"}
+                                    {resolvedSearch}
                                   </span>
                                 </span>
                                 <span className="text-icons-3 max-w-[150px] md:max-w-full truncate text-sm md:text-[15px] text-left font-normal">
