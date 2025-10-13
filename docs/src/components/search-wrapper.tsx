@@ -82,7 +82,38 @@ export const SearchWrapper = ({
   };
 
   return (
-    <>
+    <KapaProvider
+      integrationId={process.env.NEXT_PUBLIC_KAPA_INTEGRATION_ID!}
+      callbacks={{
+        askAI: {
+          onQuerySubmit({ question, threadId, conversation }) {
+            posthog.capture("DOCS_CHATBOT_QUESTION", {
+              question,
+              thread_id: threadId,
+              conversation_length: conversation.length,
+              timestamp: new Date().toISOString(),
+            });
+          },
+          onAnswerGenerationCompleted({
+            answer,
+            question,
+            threadId,
+            questionAnswerId,
+            conversation,
+          }) {
+            posthog.capture("DOCS_CHATBOT_RESPONSE", {
+              answer,
+              question,
+              question_answer_id: questionAnswerId,
+              thread_id: threadId,
+              conversation_length: conversation.length,
+              answer_length: answer.length,
+              timestamp: new Date().toISOString(),
+            });
+          },
+        },
+      }}
+    >
       <div className="hidden md:block absolute inset-0 m-auto w-[460px] h-fit">
         <Button
           onClick={open}
@@ -112,43 +143,10 @@ export const SearchWrapper = ({
               </DialogTitle>
               <div className="w-full">
                 {isAgentMode && isKapaChatbotEnabled ? (
-                  <KapaProvider
-                    integrationId={process.env.NEXT_PUBLIC_KAPA_INTEGRATION_ID!}
-                    callbacks={{
-                      askAI: {
-                        onQuerySubmit({ question, threadId, conversation }) {
-                          posthog.capture("DOCS_CHATBOT_QUESTION", {
-                            question,
-                            thread_id: threadId,
-                            conversation_length: conversation.length,
-                            timestamp: new Date().toISOString(),
-                          });
-                        },
-                        onAnswerGenerationCompleted({
-                          answer,
-                          question,
-                          threadId,
-                          questionAnswerId,
-                          conversation,
-                        }) {
-                          posthog.capture("DOCS_CHATBOT_RESPONSE", {
-                            answer,
-                            question,
-                            question_answer_id: questionAnswerId,
-                            thread_id: threadId,
-                            conversation_length: conversation.length,
-                            answer_length: answer.length,
-                            timestamp: new Date().toISOString(),
-                          });
-                        },
-                      },
-                    }}
-                  >
-                    <KapaChat
-                      searchQuery={searchQuery}
-                      setIsAgentMode={setIsAgentMode}
-                    />
-                  </KapaProvider>
+                  <KapaChat
+                    searchQuery={searchQuery}
+                    setIsAgentMode={setIsAgentMode}
+                  />
                 ) : isKapaChatbotEnabled ? (
                   <div className="p-[10px]">
                     <CustomSearch
@@ -172,6 +170,6 @@ export const SearchWrapper = ({
           </div>
         </div>
       </Dialog>
-    </>
+    </KapaProvider>
   );
 };

@@ -8,7 +8,7 @@ import { Markdown } from "@copilotkit/react-ui";
 import "@copilotkit/react-ui/styles.css";
 import { useChat } from "@kapaai/react-sdk";
 import { ArrowUp, ThumbsUp, ThumbsDown, Square } from "lucide-react";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useStickToBottom } from "use-stick-to-bottom";
 
 export function KapaChat({
@@ -26,7 +26,17 @@ export function KapaChat({
     stopGeneration,
     addFeedback,
   } = useChat();
-  const [inputValue, setInputValue] = useState(searchQuery || "");
+  const [inputValue, setInputValue] = useState("");
+
+  useEffect(() => {
+    console.log({ searchQuery });
+    if (searchQuery) {
+      if (searchQuery.trim()) {
+        submitQuery(inputValue);
+        setInputValue("");
+      }
+    }
+  }, [searchQuery]);
 
   const isLoading = isGeneratingAnswer || isPreparingAnswer;
 
