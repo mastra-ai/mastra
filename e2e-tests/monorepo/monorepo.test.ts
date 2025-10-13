@@ -89,7 +89,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     });
   }
 
-  describe.only('dev', async () => {
+  describe.sequential('dev', async () => {
     let port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;
     const controller = new AbortController();
@@ -135,7 +135,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     runApiTests(port);
   });
 
-  describe.sequential('build', async () => {
+  describe.only.sequential('build', async () => {
     let port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;
     const controller = new AbortController();
@@ -144,6 +144,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     beforeAll(async () => {
       await runBuild(fixturePath);
 
+      console.log('build is done');
       const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
       proc = execaNode('index.mjs', {
         cwd: inputFile,
@@ -156,7 +157,11 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
       activeProcesses.push({ controller, proc });
 
-      await new Promise<void>(resolve => {
+      await new Promise<void>((resolve, reject) => {
+        proc!.stderr?.on('data', data => {
+          console.log(data?.toString());
+          reject(new Error('failed to start'));
+        });
         proc!.stdout?.on('data', data => {
           console.log(data?.toString());
           if (data?.toString()?.includes(`http://localhost:${port}`)) {
