@@ -72,6 +72,7 @@ export async function getInputOptions(
             return null;
           }
 
+          // TODO: invalidChunks should be empty cause we do not do any validation anymore
           const isInvalidChunk = analyzedBundleInfo.invalidChunks.has(analyzedBundleInfo.dependencies.get(id)!);
           if (isInvalidChunk) {
             return {

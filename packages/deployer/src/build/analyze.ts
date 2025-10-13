@@ -63,24 +63,8 @@ async function validateOutput(
       continue;
     }
 
-    try {
-      logger.debug(`Validating if ${file.fileName} is a valid module.`);
-      if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
-        result.dependencies.set(reverseVirtualReferenceMap.get(file.name)!, file.fileName);
-      }
-
-      if (!file.isDynamicEntry && file.isEntry) {
-        // validate if the chunk is actually valid, a failsafe to make sure bundling didn't make any mistakes
-        await validate(join(projectRoot, file.fileName));
-      }
-    } catch (err) {
-      result.invalidChunks.add(file.fileName);
-      if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
-        const reference = reverseVirtualReferenceMap.get(file.name)!;
-        const dep = reference.startsWith('@') ? reference.split('/').slice(0, 2).join('/') : reference.split('/')[0];
-
-        result.externalDependencies.add(dep!);
-      }
+    if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
+      result.dependencies.set(reverseVirtualReferenceMap.get(file.name)!, file.fileName);
     }
   }
 

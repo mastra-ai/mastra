@@ -373,39 +373,8 @@ export abstract class Bundler extends MastraBundler {
       }
     }
 
+    // TODO: workspace dependencies are not being packaged anymore - remove
     let resolutions: Record<string, string> = {};
-    if (workspaceDependencies.size > 0) {
-      try {
-        const result = collectTransitiveWorkspaceDependencies({
-          workspaceMap: analyzedBundleInfo.workspaceMap,
-          initialDependencies: workspaceDependencies,
-          logger: this.logger,
-        });
-        resolutions = result.resolutions;
-
-        // Update dependenciesToInstall with the resolved TGZ paths
-        Object.entries(resolutions).forEach(([pkgName, tgzPath]) => {
-          dependenciesToInstall.set(pkgName, tgzPath);
-        });
-
-        await packWorkspaceDependencies({
-          workspaceMap: analyzedBundleInfo.workspaceMap,
-          usedWorkspacePackages: result.usedWorkspacePackages,
-          bundleOutputDir: join(outputDirectory, this.outputDir),
-          logger: this.logger,
-        });
-      } catch (error) {
-        throw new MastraError(
-          {
-            id: 'DEPLOYER_BUNDLER_WORKSPACE_DEPS_FAILED',
-            text: `Failed to collect and pack workspace dependencies.`,
-            domain: ErrorDomain.DEPLOYER,
-            category: ErrorCategory.USER,
-          },
-          error,
-        );
-      }
-    }
 
     try {
       await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall, resolutions);
