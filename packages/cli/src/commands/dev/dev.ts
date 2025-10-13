@@ -287,7 +287,6 @@ async function rebundleAndRestart(
 }
 
 export async function dev({
-  port,
   dir,
   root,
   tools,
@@ -299,7 +298,6 @@ export async function dev({
 }: {
   dir?: string;
   root?: string;
-  port: number | null;
   tools?: string[];
   env?: string;
   inspect?: boolean;
@@ -336,7 +334,7 @@ export async function dev({
   }
 
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
-  let portToUse = port ?? serverOptions?.port ?? process.env.PORT;
+  let portToUse = serverOptions?.port ?? process.env.PORT;
   let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
   if (!portToUse || isNaN(Number(portToUse))) {
     const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);

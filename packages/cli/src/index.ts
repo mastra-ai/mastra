@@ -92,7 +92,6 @@ program
   .option('-d, --dir <dir>', 'Path to your mastra folder')
   .option('-r, --root <root>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
-  .option('-p, --port <port>', 'deprecated: Port number for the development server (defaults to 4111)')
   .option('-e, --env <env>', 'Custom env file to include in the dev server')
   .option('-i, --inspect', 'Start the dev server in inspect mode')
   .option('-b, --inspect-brk', 'Start the dev server in inspect mode and break at the beginning of the script')
