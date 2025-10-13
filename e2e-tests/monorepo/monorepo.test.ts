@@ -159,8 +159,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
       await new Promise<void>((resolve, reject) => {
         proc!.stderr?.on('data', data => {
-          console.log(data?.toString());
-          reject(new Error('failed to start'));
+          reject(new Error('failed to start: ' + data?.toString()));
         });
         proc!.stdout?.on('data', data => {
           console.log(data?.toString());
