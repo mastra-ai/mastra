@@ -31,6 +31,9 @@ import Scorer from './pages/scorers/scorer';
 import Observability from './pages/observability';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
+import Explorer from './pages/explorer';
+import WorkflowRuns from './pages/explorer/workflow-runs';
+import AgentConversations from './pages/explorer/agent-conversations';
 import { MastraReactProvider } from '@mastra/react';
 
 const paths: LinkComponentProviderProps['paths'] = {
@@ -102,6 +105,17 @@ function App() {
                   }
                 >
                   <Route path="/observability" element={<Observability />} />
+                </Route>
+                <Route
+                  element={
+                    <Layout>
+                      <Outlet />
+                    </Layout>
+                  }
+                >
+                  <Route path="/explorer" element={<Explorer />} />
+                  <Route path="/explorer/workflow-runs" element={<WorkflowRuns />} />
+                  <Route path="/explorer/agent-conversations" element={<AgentConversations />} />
                 </Route>
                 <Route
                   element={

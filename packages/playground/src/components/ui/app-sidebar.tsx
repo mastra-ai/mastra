@@ -146,6 +146,11 @@ const links = [
     icon: EyeIcon,
   },
   {
+    name: 'Explorer',
+    url: '/explorer',
+    icon: Network,
+  },
+  {
     name: 'Runtime Context',
     url: '/runtime-context',
     icon: Globe,
