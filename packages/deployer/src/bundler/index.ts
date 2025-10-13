@@ -377,7 +377,7 @@ export abstract class Bundler extends MastraBundler {
     let resolutions: Record<string, string> = {};
 
     try {
-      await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall, resolutions);
+      await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
 
       this.logger.info('Bundling Mastra application');
       const inputOptions: InputOptions = await this.getBundlerOptions(
