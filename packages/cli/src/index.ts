@@ -9,7 +9,6 @@ import { PosthogAnalytics, setAnalytics } from './analytics/index';
 import { addScorer } from './commands/actions/add-scorer';
 import { buildProject } from './commands/actions/build-project';
 import { createProject } from './commands/actions/create-project';
-import { deployProject } from './commands/actions/deploy-project';
 import { initProject } from './commands/actions/init-project';
 import { lintProject } from './commands/actions/lint-project';
 import { listScorers } from './commands/actions/list-scorers';
@@ -112,12 +111,6 @@ program
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .option('-e, --env <env>', 'Custom env file to include in the build')
   .action(buildProject);
-
-program
-  .command('deploy')
-  .description('Deploy your Mastra project')
-  .option('-d, --dir <path>', 'Path to directory')
-  .action(deployProject);
 
 program
   .command('start')
