@@ -5,14 +5,14 @@ import {
   DialogPanel,
   DialogTitle,
 } from "@headlessui/react";
+import { KapaProvider } from "@kapaai/react-sdk";
+import { usePostHog } from "posthog-js/react";
 import { useEffect, useState } from "react";
 import { CustomSearch } from "./custom-search";
+import { CustomSearchWithoutAI } from "./custom-search-without-ai";
 import { getSearchPlaceholder } from "./search-placeholder";
 import { Shortcut } from "./shortcut";
 import { Button } from "./ui/button";
-import { KapaProvider } from "@kapaai/react-sdk";
-import { usePostHog } from "posthog-js/react";
-import { CustomSearchWithoutAI } from "./custom-search-without-ai";
 
 const INPUTS = new Set(["INPUT", "SELECT", "BUTTON", "TEXTAREA"]);
 

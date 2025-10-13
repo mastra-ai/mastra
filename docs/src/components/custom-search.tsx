@@ -12,7 +12,6 @@ import {
   useAlgoliaSearch,
 } from "../hooks/use-algolia-search";
 import { BookIcon, BurgerIcon, JarvisIcon } from "./svgs/Icons";
-import { SpinnerIcon } from "./svgs/spinner";
 import { Button } from "./ui/button";
 
 // Custom hook for responsive design
