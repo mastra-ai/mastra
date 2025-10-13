@@ -7,15 +7,15 @@
  */
 
 import type {
-  AITracingExporter,
   AITracingEvent,
+  AITracingExporter,
   AnyExportedAISpan,
   LLMGenerationAttributes,
 } from '@mastra/core/ai-tracing';
 import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
 import { ConsoleLogger } from '@mastra/core/logger';
+import type { LangfuseEventClient, LangfuseGenerationClient, LangfuseSpanClient, LangfuseTraceClient } from 'langfuse';
 import { Langfuse } from 'langfuse';
-import type { LangfuseTraceClient, LangfuseSpanClient, LangfuseGenerationClient, LangfuseEventClient } from 'langfuse';
 
 export interface LangfuseExporterConfig {
   /** Langfuse API key */
@@ -308,6 +308,12 @@ export class LangfuseExporter implements AITracingExporter {
 
     if (span.type === AISpanType.LLM_GENERATION) {
       const llmAttr = attributes as LLMGenerationAttributes;
+      const langfuseAttr = span.attributes?.langfuse as Record<string, any>;
+
+      if (langfuseAttr) {
+        payload.langfuse = langfuseAttr;
+        attributesToOmit.push('langfuse');
+      }
 
       if (llmAttr.model !== undefined) {
         payload.model = llmAttr.model;
