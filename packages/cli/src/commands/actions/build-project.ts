@@ -11,6 +11,7 @@ export const buildProject = async (args: any) => {
         root: args?.root,
         tools: args?.tools ? args.tools.split(',') : [],
         env: args?.env,
+        debug: args?.debug || false,
       });
     },
     origin,

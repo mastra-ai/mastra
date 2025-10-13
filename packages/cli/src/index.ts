@@ -102,6 +102,7 @@ program
     'Comma-separated list of custom arguments to pass to the dev server. IE: --experimental-transform-types',
   )
   .option('-s, --https', 'Enable local HTTPS')
+  .option('--debug', 'Enable debug logs', false)
   .action(startDevServer);
 
 program
@@ -111,6 +112,7 @@ program
   .option('-r, --root <path>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .option('-e, --env <env>', 'Custom env file to include in the build')
+  .option('--debug', 'Enable debug logs', false)
   .action(buildProject);
 
 program

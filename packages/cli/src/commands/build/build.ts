@@ -4,22 +4,26 @@ import { FileService } from '../../services/service.file';
 
 import { BuildBundler } from './BuildBundler';
 import { getDeployer } from '@mastra/deployer';
-import { logger } from '../../utils/logger';
+import { createLogger } from '../../utils/logger';
+import { MastraError } from '@mastra/core/error';
 
 export async function build({
   dir,
   tools,
   root,
   env,
+  debug,
 }: {
   dir?: string;
   tools?: string[];
   root?: string;
   env?: string;
+  debug?: boolean;
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(rootDir, dir)) : join(rootDir, 'src', 'mastra');
   const outputDirectory = join(rootDir, '.mastra');
+  const logger = createLogger(debug);
 
   if (env) {
     logger.warn(`The --env flag is deprecated. To start the build output with a custom env use the mastra start --env <env> command instead.
@@ -67,7 +71,10 @@ export async function build({
     });
     logger.info('You can now deploy the .mastra/output directory to your target platform.');
   } catch (error) {
-    if (error instanceof Error) {
+    if (error instanceof MastraError) {
+      const { message, ...details } = error.toJSONDetails();
+      logger.error(`${message}`, details);
+    } else if (error instanceof Error) {
       logger.error(`Mastra Build failed`, { error });
     }
     process.exit(1);
